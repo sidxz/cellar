@@ -73,4 +73,32 @@ describe("NameFlagNotice", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.getByText("resazurin")).toBeInTheDocument();
   });
+
+  it.each(["needs_discriminator", "name_conflict"])(
+    "%s offers to edit the discriminator when the protocol can be edited",
+    (flag) => {
+      const onEditName = vi.fn();
+      render(
+        <OverviewTab
+          protocol={protocol({ name_flag: flag })}
+          protocolId="p1"
+          onTabChange={vi.fn()}
+          onEditName={onEditName}
+        />,
+      );
+      fireEvent.click(screen.getByRole("button", { name: /discriminator/i }));
+      expect(onEditName).toHaveBeenCalled();
+    },
+  );
+
+  it("offers no edit when the protocol cannot be edited", () => {
+    render(
+      <OverviewTab
+        protocol={protocol({ name_flag: "needs_discriminator" })}
+        protocolId="p1"
+        onTabChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: /discriminator/i })).not.toBeInTheDocument();
+  });
 });

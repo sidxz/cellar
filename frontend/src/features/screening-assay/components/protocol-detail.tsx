@@ -56,14 +56,14 @@ import {
   useUpdateProtocol,
   useVersionProtocol,
 } from "../hooks/use-protocols";
-import type { ProtocolStatus } from "../types";
+import type { Protocol, ProtocolStatus } from "../types";
 import { CorrectProtocolDialog } from "./correct-protocol-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
-import { ProtocolNamePreview } from "./protocol-name-preview";
+import { ProtocolNamePreview, useRequiredNameSlots } from "./protocol-name-preview";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -102,6 +102,23 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
   const query = { data: protocol, isLoading };
 
+  const openEditDetails = (p: Protocol) => {
+    setEditDescription(p.description ?? "");
+    setEditCategory(p.category ?? "");
+    setEditDiscriminator(p.discriminator ?? "");
+    setEditOpen(true);
+  };
+  // The discriminator is edited where the protocol's state allows: a draft's details, or a
+  // correction on an unlocked published protocol. Locked and retired protocols cannot change it.
+  const editName = (p: Protocol) =>
+    p.is_locked
+      ? undefined
+      : p.status === "draft"
+        ? () => openEditDetails(p)
+        : p.status === "active"
+          ? () => setCorrectOpen(true)
+          : undefined;
+
   // Live name while editing a draft. Missing facts are fine on a draft (they only
   // block publishing); a clash or an invalid discriminator is not.
   const preview = useProtocolNamePreview(
@@ -115,6 +132,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         }
       : null,
   );
+  const editNeeds = useRequiredNameSlots(editCategory);
   const draftSavable =
     !!preview.data &&
     !preview.data.clash &&
@@ -163,15 +181,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
           if (!locked && s === "draft") {
             neutralItems.push(
-              <DropdownMenuItem
-                key="edit"
-                onClick={() => {
-                  setEditDescription(p.description ?? "");
-                  setEditCategory(p.category ?? "");
-                  setEditDiscriminator(p.discriminator ?? "");
-                  setEditOpen(true);
-                }}
-              >
+              <DropdownMenuItem key="edit" onClick={() => openEditDetails(p)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit details
               </DropdownMenuItem>,
@@ -334,7 +344,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             </TabsList>
 
             <TabsContent value="overview">
-              <OverviewTab protocol={protocol} protocolId={protocolId} onTabChange={setActiveTab} />
+              <OverviewTab
+                protocol={protocol}
+                protocolId={protocolId}
+                onTabChange={setActiveTab}
+                onEditName={editName(protocol)}
+              />
             </TabsContent>
             <TabsContent value="activity">
               <ActivityTab protocol={protocol} protocolId={protocolId} />
@@ -448,14 +463,18 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <ProtocolCategoryInput value={editCategory} onChange={setEditCategory} />
             </div>
             <div className="grid gap-2">
-              <Label>Discriminator (optional)</Label>
+              <Label>Discriminator{editNeeds.has("discriminator") ? "" : " (optional)"}</Label>
               <DiscriminatorInput
                 value={editDiscriminator}
                 onChange={setEditDiscriminator}
                 base={preview.data?.base ?? null}
               />
             </div>
-            <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
+            <ProtocolNamePreview
+              preview={preview.data}
+              isFetching={preview.isFetching}
+              code={protocol?.code}
+            />
           </div>
           <DialogFooter>
             <Button

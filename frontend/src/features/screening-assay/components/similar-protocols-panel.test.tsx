@@ -33,4 +33,11 @@ describe("SimilarProtocolsPanel", () => {
     fireEvent.click(screen.getByLabelText("Dismiss suggestions"));
     expect(screen.queryByText("RNAP core IC50")).not.toBeInTheDocument();
   });
+
+  it("labels the protocol type instead of showing its enum value", () => {
+    data.mockReturnValueOnce([{ ...match, is_run_candidate: false, protocol_type: "whole_cell" }]);
+    render(<SimilarProtocolsPanel draft={{ name: "RNAP core IC50" }} onLogRun={vi.fn()} />);
+    expect(screen.getByText("Whole-cell")).toBeInTheDocument();
+    expect(screen.queryByText("whole_cell")).not.toBeInTheDocument();
+  });
 });

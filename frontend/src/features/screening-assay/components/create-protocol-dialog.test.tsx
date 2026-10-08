@@ -34,7 +34,20 @@ vi.mock("../hooks/use-targets", () => ({ useTargets: () => ({ data: [] }) }));
 vi.mock("../hooks/use-protocol-projects", () => ({
   useAssignProtocolToProject: () => ({ mutateAsync: vi.fn() }),
 }));
-vi.mock("../hooks/use-protocol-facet-slots", () => ({ useProtocolFacetSlots: () => [] }));
+vi.mock("../hooks/use-protocol-facet-slots", () => ({
+  useProtocolFacetSlots: () => [
+    {
+      id: "std:organism",
+      name: "organism",
+      label: "Organism",
+      ontology_sources: ["NCBITAXON"],
+      root_concept_id: null,
+      allow_free_text: true,
+      is_required: false,
+    },
+  ],
+}));
+vi.mock("@/shared/components/ontology-search-input", () => ({ OntologySearchInput: () => null }));
 vi.mock("@/features/research-organization/hooks/use-projects", () => ({
   useProjects: () => ({ data: [] }),
 }));
@@ -42,7 +55,14 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
   useProtocolForms: () => ({ data: [] }),
 }));
 vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
-  useProtocolCategories: () => ({ data: [{ label: "Growth inhibition" }] }),
+  useProtocolCategories: () => ({
+    data: [
+      { label: "Growth inhibition", name_pattern: "{organism} growth inhibition" },
+      { label: "Enzyme inhibition", name_pattern: "{target} inhibition" },
+      { label: "Detection interference", name_pattern: "{discriminator} interference" },
+      { label: "Solubility", name_pattern: "{discriminator?} solubility" },
+    ],
+  }),
 }));
 vi.mock("./similar-protocols-panel", () => ({ SimilarProtocolsPanel: () => null }));
 vi.mock("./vocabulary-autocomplete", () => ({
@@ -96,5 +116,34 @@ describe("CreateProtocolDialog", () => {
     expect(screen.getByText("New protocol from PRT-00007")).toBeInTheDocument();
     expect(screen.getByDisplayValue("Percent inhibition")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("FP")).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["Enzyme inhibition", "Targets", true],
+    ["Growth inhibition", "Targets", false],
+    ["Detection interference", "Discriminator", true],
+    ["Solubility", "Discriminator", false],
+    ["Growth inhibition", "Facets", true],
+    ["Enzyme inhibition", "Facets", false],
+  ])("with %s, %s is optional unless the name needs it (needed: %s)", (category, field, needed) => {
+    const prefill = {
+      id: "p1",
+      code: "PRT-00007",
+      name: "x",
+      discriminator: null,
+      protocol_type: "biochemical",
+      category,
+      description: null,
+      dose_unit: "uM",
+      targets: [],
+      readout_definitions: [],
+      condition_definitions: [],
+      ontology_annotations: null,
+    } as unknown as Protocol;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    const label = (text: string) =>
+      screen.queryAllByText((_, el) => el?.tagName === "LABEL" && el.textContent === text);
+    expect(label(field)).toHaveLength(needed ? 1 : 0);
+    expect(label(`${field} (optional)`)).toHaveLength(needed ? 0 : 1);
   });
 });

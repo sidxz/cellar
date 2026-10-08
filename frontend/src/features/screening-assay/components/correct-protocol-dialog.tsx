@@ -21,7 +21,11 @@ import { type CorrectProtocolInput, useCorrectProtocol } from "../hooks/use-prot
 import type { Protocol } from "../types";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
-import { ProtocolNamePreview, isPreviewSavable } from "./protocol-name-preview";
+import {
+  ProtocolNamePreview,
+  isPreviewSavable,
+  useRequiredNameSlots,
+} from "./protocol-name-preview";
 import { TargetMultiSelect } from "./target-multi-select";
 
 /** Facet slots that feed the generated name. */
@@ -60,6 +64,7 @@ export function CorrectProtocolDialog({
   const original = protocol.ontology_annotations ?? {};
 
   const [category, setCategory] = useState(protocol.category ?? "");
+  const needs = useRequiredNameSlots(category);
   const [discriminator, setDiscriminator] = useState(protocol.discriminator ?? "");
   const [annotations, setAnnotations] = useState<Record<string, OntologyTerm[]>>(original);
   const [targetIds, setTargetIds] = useState<string[]>(directIds);
@@ -182,14 +187,18 @@ export function CorrectProtocolDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label>Discriminator (optional)</Label>
+              <Label>Discriminator{needs.has("discriminator") ? "" : " (optional)"}</Label>
               <DiscriminatorInput
                 value={discriminator}
                 onChange={setDiscriminator}
                 base={preview.data?.base ?? null}
               />
             </div>
-            <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
+            <ProtocolNamePreview
+              preview={preview.data}
+              isFetching={preview.isFetching}
+              code={protocol.code}
+            />
             <div className="grid gap-2">
               <Label htmlFor="correction-reason">Reason</Label>
               <Textarea

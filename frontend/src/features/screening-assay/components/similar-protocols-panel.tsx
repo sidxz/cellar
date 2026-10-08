@@ -9,6 +9,9 @@ import {
   type SimilarProtocolDraft,
   useSimilarProtocols,
 } from "../hooks/use-similar-protocols";
+import { PROTOCOL_TYPE_LABELS, type ProtocolType } from "../types";
+
+const typeLabel = (t: string) => PROTOCOL_TYPE_LABELS[t as ProtocolType] ?? t;
 
 interface Props {
   draft: SimilarProtocolDraft;
@@ -44,7 +47,7 @@ export function SimilarProtocolsPanel({ draft, onLogRun }: Props) {
         <div className="mb-2 rounded border bg-white p-2">
           <div className="flex items-center gap-2">
             <span className="font-medium">{runCandidate.name}</span>
-            <Badge variant="secondary">{runCandidate.protocol_type}</Badge>
+            <Badge variant="secondary">{typeLabel(runCandidate.protocol_type)}</Badge>
             {runCandidate.targets.map((t) => (
               <Badge key={t.id} variant="outline">
                 {t.name}
@@ -67,7 +70,7 @@ export function SimilarProtocolsPanel({ draft, onLogRun }: Props) {
           {others.map((m) => (
             <li key={m.id} className="flex items-center gap-2 text-muted-foreground">
               <span>{m.name}</span>
-              <Badge variant="outline">{m.protocol_type}</Badge>
+              <Badge variant="outline">{typeLabel(m.protocol_type)}</Badge>
             </li>
           ))}
         </ul>

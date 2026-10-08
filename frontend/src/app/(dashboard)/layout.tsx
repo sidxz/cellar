@@ -45,7 +45,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider open={!sidebarCollapsed} onOpenChange={(open) => setSidebarCollapsed(!open)}>
       <AppSidebar />
-      <SidebarInset>
+      {/* min-w-0: a flex child otherwise grows to its widest nowrap line and the page scrolls sideways. */}
+      <SidebarInset className="min-w-0">
         <Header />
         <main className="flex-1 overflow-auto p-4">
           <RouteAccess>{children}</RouteAccess>

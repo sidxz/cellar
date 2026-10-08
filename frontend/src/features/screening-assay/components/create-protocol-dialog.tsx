@@ -67,7 +67,11 @@ import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { ProtocolCategoryInput } from "./protocol-category-input";
-import { ProtocolNamePreview, isPreviewSavable } from "./protocol-name-preview";
+import {
+  ProtocolNamePreview,
+  isPreviewSavable,
+  useRequiredNameSlots,
+} from "./protocol-name-preview";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
@@ -365,6 +369,8 @@ export function CreateProtocolDialog({
   // ---- derived validation ----
 
   const categoryValue = form.watch("category") || null;
+  const needs = useRequiredNameSlots(categoryValue);
+  const needsFacet = ["organism", "cell_line", "matrix"].some((slot) => needs.has(slot));
   const preview = useProtocolNamePreview(
     categoryValue
       ? {
@@ -490,7 +496,9 @@ export function CreateProtocolDialog({
           {/* Basic info */}
           <div className="grid gap-2">
             <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
-            <Label htmlFor="protocol-discriminator">Discriminator (optional)</Label>
+            <Label htmlFor="protocol-discriminator">
+              Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+            </Label>
             <Controller
               control={form.control}
               name="discriminator"
@@ -583,7 +591,7 @@ export function CreateProtocolDialog({
             </div>
 
             <div className="grid gap-2">
-              <Label>Targets (optional)</Label>
+              <Label>Targets{needs.has("target") ? "" : " (optional)"}</Label>
               <Controller
                 control={form.control}
                 name="target_ids"
@@ -654,7 +662,10 @@ export function CreateProtocolDialog({
             <>
               <Separator />
               <Label className="text-base font-semibold">
-                Facets <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+                Facets
+                {!needsFacet && (
+                  <span className="text-xs font-normal text-muted-foreground"> (optional)</span>
+                )}
               </Label>
               <div className="space-y-3">
                 {mergedFacetSlots.map((slot) => (

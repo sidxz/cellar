@@ -50,4 +50,28 @@ describe("ProtocolNamePreview", () => {
     render(<ProtocolNamePreview preview={p} isFetching={false} />);
     expect(screen.getByText(/add a discriminator/i)).toBeInTheDocument();
   });
+
+  it("shows an existing protocol's code instead of the create hint", () => {
+    render(<ProtocolNamePreview preview={base} isFetching={false} code="PRT-00012" />);
+    expect(screen.getByText(/PRT-00012/)).toBeInTheDocument();
+    expect(screen.queryByText(/assigned when you create/i)).not.toBeInTheDocument();
+  });
+
+  it("names each sibling by its full name", () => {
+    const sib = {
+      protocol_id: "y",
+      code: "PRT-00019",
+      name: "Microsomal stability [human]",
+      discriminator: "human",
+    };
+    const p = {
+      ...base,
+      name: "Microsomal stability",
+      base: "Microsomal stability",
+      siblings: [sib],
+      needs_discriminator: true,
+    };
+    render(<ProtocolNamePreview preview={p} isFetching={false} />);
+    expect(screen.getByText(/PRT-00019 Microsomal stability \[human\]/)).toBeInTheDocument();
+  });
 });

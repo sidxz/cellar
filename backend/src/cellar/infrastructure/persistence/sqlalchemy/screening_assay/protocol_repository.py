@@ -72,6 +72,10 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
 _NAME_BLOCK_FLOOR = 0.3
 _RUN_READOUT_JACCARD = 0.5  # run-candidate (targets present): minimum readout-schema overlap
 _RUN_NAME_FLOOR = 0.6  # run-candidate (no targets yet): minimum name match
+# Below this a match has little beyond shared name words. Generated names share their
+# category words across organisms ("growth inhibition"), so name overlap alone is noise.
+# Measured on the ChEMBL fit test: other-organism matches <= 0.18, true siblings >= 0.30.
+_MIN_SCORE = 0.3
 _RUN_MIN_SHARED_READOUTS = 2  # run-candidate (no targets yet): minimum shared readout kinds
 
 
@@ -368,6 +372,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                     shared_readout_kinds=tuple(sorted(shared_readouts)),
                 )
             )
+        matches = [m for m in matches if m.score >= _MIN_SCORE or m.is_run_candidate]
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches[:limit]
 

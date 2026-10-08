@@ -43,6 +43,9 @@ vi.mock("./target-multi-select", () => ({
   ),
 }));
 vi.mock("./protocol-category-input", () => ({ ProtocolCategoryInput: () => null }));
+vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
+  useProtocolCategories: () => ({ data: [] }),
+}));
 
 const protocol = {
   id: "p1",

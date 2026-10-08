@@ -66,9 +66,11 @@ const FLAG_TEXT: Record<string, string> = {
 function NameFlagNotice({
   protocol,
   onTabChange,
+  onEditName,
 }: {
   protocol: Protocol;
   onTabChange: (tab: string) => void;
+  onEditName?: () => void;
 }) {
   if (!protocol.name_flag) return null;
   return (
@@ -80,6 +82,11 @@ function NameFlagNotice({
       {protocol.name_flag === "needs_facts" && (
         <button type="button" className="underline" onClick={() => onTabChange("design")}>
           Open the Design tab
+        </button>
+      )}
+      {protocol.name_flag !== "needs_facts" && onEditName && (
+        <button type="button" className="underline" onClick={onEditName}>
+          {protocol.discriminator ? "Change the discriminator" : "Add a discriminator"}
         </button>
       )}
     </div>
@@ -126,9 +133,11 @@ interface OverviewTabProps {
   protocol: Protocol;
   protocolId: string;
   onTabChange: (tab: string) => void;
+  /** Opens the editor that can set the discriminator; absent when the protocol cannot be edited. */
+  onEditName?: () => void;
 }
 
-export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabProps) {
+export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: OverviewTabProps) {
   const { data: stats, isLoading } = useProtocolStats(protocolId);
   const { data: coverage } = useProtocolCollectionCoverage(protocolId);
   const canEditTags = useAuthzHasRole("editor");
@@ -136,7 +145,7 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
 
   return (
     <div className="space-y-6">
-      <NameFlagNotice protocol={protocol} onTabChange={onTabChange} />
+      <NameFlagNotice protocol={protocol} onTabChange={onTabChange} onEditName={onEditName} />
       {/* Stats Cards */}
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
