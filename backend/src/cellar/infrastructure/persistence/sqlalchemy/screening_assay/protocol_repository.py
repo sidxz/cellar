@@ -689,6 +689,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         return bool(result.rowcount)
 
+    async def find_protocol_ids_by_direct_target(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        result = await self._session.execute(
+            select(protocol_targets.c.protocol_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.target_id == target_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
+        )
+        return list(result.scalars().all())
+
     async def find_direct_target_ids(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[uuid.UUID]:

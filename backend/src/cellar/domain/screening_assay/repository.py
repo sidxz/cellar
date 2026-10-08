@@ -214,6 +214,12 @@ class ProtocolRepository(Protocol):
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[uuid.UUID]: ...
 
+    async def find_protocol_ids_by_direct_target(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """Every protocol (all versions) that links ``target_id`` directly."""
+        ...
+
     async def find_effective_targets(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[EffectiveTarget]:

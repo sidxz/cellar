@@ -5,6 +5,8 @@ primitives, plate map, fit curves, ontology search/annotations, import run reado
 
 from __future__ import annotations
 
+import uuid
+
 import httpx
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -155,6 +157,7 @@ from cellar.application.screening.protocol_naming_service import ProtocolNameSer
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
+from cellar.application.screening.rederive_protocol_names import RederiveProtocolNames
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
@@ -181,6 +184,7 @@ from cellar.application.screening.set_run_hit_criteria import (
     SetRunHitCriteria,
 )
 from cellar.application.screening.sync_targets import SyncFreshness, SyncTargetsFromProtCellar
+from cellar.application.screening.target_renamed_handler import TargetRenamedHandler
 from cellar.application.screening.target_source import TargetSource
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.shared.molecule_resolver import MoleculeResolver
@@ -287,6 +291,25 @@ def _name_service(uow) -> ProtocolNameService:
     )
 
 
+def register_protocol_naming_handlers(container: Container) -> None:
+    """Registry renames re-derive linked protocol names (after the sync commits)."""
+    from cellar.domain.screening_assay.events import TargetRenamed
+
+    session_factory = container[async_sessionmaker]
+
+    async def _ids_for_target(workspace_id: uuid.UUID, target_id: uuid.UUID) -> list[uuid.UUID]:
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            return await SQLAlchemyProtocolRepository(uow).find_protocol_ids_by_direct_target(
+                workspace_id, target_id
+            )
+
+    container[EventDispatcher].register(
+        TargetRenamed,
+        TargetRenamedHandler(lambda: container[RederiveProtocolNames], _ids_for_target),
+    )
+
+
 def register_screening(container: Container) -> None:
     # Force cascade rules to register at DI bootstrap.
     import cellar.infrastructure.cascade.rules_screening_assay  # noqa: F401
@@ -354,6 +377,15 @@ def register_screening(container: Container) -> None:
     container.define(UpdateProtocol, _protocol_named(UpdateProtocol))
     container.define(SetProtocolDiscriminator, _protocol_named(SetProtocolDiscriminator))
     container.define(CorrectProtocol, _protocol_named(CorrectProtocol))
+    container.define(
+        RederiveProtocolNames,
+        lambda c: RederiveProtocolNames(
+            uow_factory=lambda: AsyncUnitOfWork(c[async_sessionmaker]),
+            names_factory=_name_service,
+            repo_factory=SQLAlchemyProtocolRepository,
+            dispatcher=c[EventDispatcher],
+        ),
+    )
     container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
     container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
@@ -437,7 +469,11 @@ def register_screening(container: Container) -> None:
     def _sync_targets(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SyncTargetsFromProtCellar(
-            uow, SQLAlchemyTargetRepository(uow), c[TargetSource], c[SyncFreshness]
+            uow,
+            SQLAlchemyTargetRepository(uow),
+            c[TargetSource],
+            c[SyncFreshness],
+            c[EventDispatcher],
         )
 
     def _list_targets(c: Container):

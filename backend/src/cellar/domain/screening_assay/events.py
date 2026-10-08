@@ -36,6 +36,16 @@ class ProtocolRetired(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class TargetRenamed(DomainEvent):
+    """A registry target's name or organism changed on sync; its protocols' names follow."""
+
+    old_name: str
+    new_name: str
+    old_organism: str | None
+    new_organism: str | None
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProtocolRenamed(DomainEvent):
     """The generated name changed. Audited with the old name, the new one and why."""
 

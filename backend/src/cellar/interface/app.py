@@ -58,6 +58,10 @@ def create_app() -> FastAPI:
         session_factory = container[async_sm]
         dispatcher.register(DomainEvent, AuditEventHandler(session_factory))
 
+        from cellar.infrastructure.di._screening import register_protocol_naming_handlers
+
+        register_protocol_naming_handlers(container)
+
         # Temporal client — graceful fallback to None for local dev without Temporal
         from cellar.infrastructure.temporal import TemporalSettings, create_temporal_client
 

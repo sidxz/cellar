@@ -30,8 +30,10 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.screening.target_source import TargetSource
 from cellar.application.shared.command import Command
+from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import TargetType
+from cellar.domain.screening_assay.events import TargetRenamed
 from cellar.domain.screening_assay.repository import TargetRepository
 from cellar.domain.screening_assay.target import Target
 from cellar.domain.shared.errors import DomainError, ServiceUnavailableError
@@ -84,11 +86,13 @@ class SyncTargetsFromProtCellar:
         repo: TargetRepository,
         source: TargetSource,
         freshness: SyncFreshness,
+        dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._source = source
         self._freshness = freshness
+        self._dispatcher = dispatcher
 
     async def __call__(
         self, input: SyncTargetsCommand, auth: AuthContext | None = None
@@ -116,6 +120,7 @@ class SyncTargetsFromProtCellar:
             )
 
         created = updated = skipped = 0
+        renamed: list[TargetRenamed] = []
         async with self._uow:
             existing = {t.id: t for t in await self._repo.find_by_workspace(input.workspace_id)}
             for st in fetched:
@@ -138,7 +143,21 @@ class SyncTargetsFromProtCellar:
                     created += 1
                 else:
                     updated += 1
+                    if current.name != st.name or current.organism != st.organism:
+                        renamed.append(
+                            TargetRenamed(
+                                aggregate_id=st.id,
+                                aggregate_type="Target",
+                                workspace_id=input.workspace_id,
+                                old_name=current.name,
+                                new_name=st.name,
+                                old_organism=current.organism,
+                                new_organism=st.organism,
+                            )
+                        )
             await self._uow.commit()
+        # After commit: protocol names re-derive from the saved registry rows.
+        await self._dispatcher.dispatch_all(list(renamed))
 
         report = SyncReport(
             fetched=len(fetched), created=created, updated=updated, skipped=skipped
