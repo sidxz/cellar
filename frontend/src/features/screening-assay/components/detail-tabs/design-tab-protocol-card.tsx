@@ -1,6 +1,5 @@
 "use client";
 
-import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
 import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { Badge } from "@/shared/components/ui/badge";
 import {
@@ -19,6 +18,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
+import { useProtocolFacetSlots } from "../../hooks/use-protocol-facet-slots";
 import {
   invalidateProtocolTargetQueries,
   useAddProtocolTarget,
@@ -68,7 +68,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const addProtocolTarget = useAddProtocolTarget(protocolId);
   const removeProtocolTarget = useRemoveProtocolTarget(protocolId);
 
-  const { data: ontologySlots } = useOntologySlots();
+  const ontologySlots = useProtocolFacetSlots();
 
   // Provenance (is_direct / run_count) only exists on the rich
   // GET /protocols/{id}/targets payload — protocol.targets is the
@@ -155,7 +155,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
       </Card>
 
       {/* ── 1. Ontology Annotations ─────────────────────────────────────── */}
-      {ontologySlots && ontologySlots.length > 0 && (
+      {ontologySlots.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Ontology Annotations</CardTitle>

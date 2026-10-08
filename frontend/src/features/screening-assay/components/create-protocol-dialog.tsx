@@ -1,12 +1,10 @@
 "use client";
 
 import { useProjects } from "@/features/research-organization/hooks/use-projects";
-import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
 import {
   type ProtocolForm,
   useProtocolForms,
 } from "@/features/workspace-config/hooks/use-protocol-forms";
-import { useVocabularies } from "@/features/workspace-config/hooks/use-vocabularies";
 import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { SearchableSelect } from "@/shared/components/searchable-select";
 import { Button } from "@/shared/components/ui/button";
@@ -36,6 +34,7 @@ import { Plus, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
+import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
@@ -65,27 +64,11 @@ import {
 import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
+import { ProtocolCategoryInput } from "./protocol-category-input";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
 import { VocabularyAutocomplete } from "./vocabulary-autocomplete";
-
-// ---------------------------------------------------------------------------
-// Standard facet slots (spec §5.3) — always present in the create dialog.
-// Admin-configured slots (useOntologySlots) override these by name.
-// allow_free_text so a chemist is never blocked when a term isn't in the ontology.
-// ---------------------------------------------------------------------------
-
-const STANDARD_FACET_SLOTS = [
-  { name: "organism", label: "Organism", ontology_sources: ["NCBITAXON"], allow_free_text: true },
-  { name: "assay_format", label: "Assay format", ontology_sources: ["BAO"], allow_free_text: true },
-  {
-    name: "detection",
-    label: "Detection method",
-    ontology_sources: ["BAO"],
-    allow_free_text: true,
-  },
-] as const;
 
 // ---------------------------------------------------------------------------
 // Zod schemas
@@ -192,26 +175,11 @@ export function CreateProtocolDialog({
   const createMutation = useCreateProtocol();
   const assignToProject = useAssignProtocolToProject();
   const { data: projects } = useProjects();
-  const { data: vocabularies } = useVocabularies();
   const { data: protocolForms } = useProtocolForms();
-  const { data: ontologySlots } = useOntologySlots();
-  const mergedFacetSlots = useMemo(() => {
-    const adminNames = new Set((ontologySlots ?? []).map((s) => s.name));
-    const standards = STANDARD_FACET_SLOTS.filter((s) => !adminNames.has(s.name)).map((s) => ({
-      id: `std:${s.name}`,
-      name: s.name,
-      label: s.label,
-      ontology_sources: [...s.ontology_sources],
-      root_concept_id: null as string | null,
-      allow_free_text: s.allow_free_text,
-      is_required: false,
-    }));
-    return [...(ontologySlots ?? []), ...standards];
-  }, [ontologySlots]);
+  const mergedFacetSlots = useProtocolFacetSlots();
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
   const crossProtocolNames = useMemo(() => (allProtocols ?? []).map((p) => p.name), [allProtocols]);
-  const categoryTerms = vocabularies?.find((v) => v.name === "Protocol Categories")?.terms ?? [];
 
   // Form-template selection and project assignment live outside the zod form:
   // selectedFormId is pure UI state (triggers applyForm); projectId is POSTed
@@ -607,34 +575,13 @@ export function CreateProtocolDialog({
             </div>
             <div className="grid gap-2">
               <Label>Category (optional)</Label>
-              {categoryTerms.length > 0 ? (
-                <Controller
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <SearchableSelect
-                      options={categoryTerms.map((t) => ({ value: t, label: t }))}
-                      value={field.value || null}
-                      onValueChange={(v) => field.onChange(v ?? "")}
-                      placeholder="Select category..."
-                      searchPlaceholder="Search categories..."
-                    />
-                  )}
-                />
-              ) : (
-                <Controller
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <VocabularyAutocomplete
-                      value={field.value ?? ""}
-                      onChange={field.onChange}
-                      placeholder="e.g., Primary Screen, Counter Screen"
-                      field="category"
-                    />
-                  )}
-                />
-              )}
+              <Controller
+                control={form.control}
+                name="category"
+                render={({ field }) => (
+                  <ProtocolCategoryInput value={field.value ?? ""} onChange={field.onChange} />
+                )}
+              />
             </div>
           </div>
 

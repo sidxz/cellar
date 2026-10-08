@@ -87,7 +87,7 @@ function OntologyDropdown({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
-  const { data: descendants, isLoading } = useOntologyDescendants(ontology, rootConceptId);
+  const { data: descendants, isLoading, error } = useOntologyDescendants(ontology, rootConceptId);
 
   const addTerm = useCallback(
     (term: OntologyTerm) => {
@@ -137,6 +137,8 @@ function OntologyDropdown({
             <CommandList>
               {isLoading ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+              ) : error ? (
+                <div className="px-3 py-2 text-sm text-destructive">{error.message}</div>
               ) : (
                 <>
                   <CommandEmpty>
@@ -187,12 +189,11 @@ function OntologySearchMode({
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const { data: results, isLoading } = useOntologySearch(
-    debouncedQuery,
-    ontologySources,
-    showDropdown,
-    rootConceptId,
-  );
+  const {
+    data: results,
+    isLoading,
+    error,
+  } = useOntologySearch(debouncedQuery, ontologySources, showDropdown, rootConceptId);
 
   const addTerm = useCallback(
     (term: OntologyTerm) => {
@@ -272,7 +273,7 @@ function OntologySearchMode({
           if (query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
         }}
         placeholder={placeholder}
-        emptyMessage="No results found."
+        emptyMessage={error ? error.message : "No results found."}
         footer={
           allowFreeText && query.trim() ? (
             <div className="border-t">

@@ -114,3 +114,30 @@ describe("DesignTabProtocolCard targets partition", () => {
     expect(screen.getByText("Pks13")).toBeInTheDocument();
   });
 });
+
+// The standard facets (Organism, Assay format, Detection method) are always
+// offered on create; the protocol page must show them too, or a workspace with
+// no admin-configured slots has no way to see or edit a protocol's BAO terms.
+describe("DesignTabProtocolCard ontology annotations", () => {
+  it("shows the standard facets when the workspace configured no slots", () => {
+    const protocol = makeProtocol({
+      ontology_annotations: {
+        assay_format: [
+          {
+            term_id: "http://www.bioassayontology.org/bao#BAO_0000217",
+            label: "biochemical format",
+            ontology_source: "BAO",
+            uri: "http://www.bioassayontology.org/bao#BAO_0000217",
+          },
+        ],
+      },
+    });
+    render(<DesignTabProtocolCard protocol={protocol} protocolId="p-1" />);
+
+    expect(screen.getByText("Ontology Annotations")).toBeInTheDocument();
+    expect(screen.getByText("Organism")).toBeInTheDocument();
+    expect(screen.getByText("Assay format")).toBeInTheDocument();
+    expect(screen.getByText("Detection method")).toBeInTheDocument();
+    expect(screen.getByText("biochemical format")).toBeInTheDocument();
+  });
+});

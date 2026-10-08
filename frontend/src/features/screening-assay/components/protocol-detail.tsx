@@ -59,6 +59,7 @@ import {
 import type { ProtocolStatus } from "../types";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
+import { ProtocolCategoryInput } from "./protocol-category-input";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -402,11 +403,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             </div>
             <div className="grid gap-2">
               <Label>Category</Label>
-              <Input
-                value={editCategory}
-                onChange={(e) => setEditCategory(e.target.value)}
-                placeholder="Optional"
-              />
+              <ProtocolCategoryInput value={editCategory} onChange={setEditCategory} />
             </div>
           </div>
           <DialogFooter>
