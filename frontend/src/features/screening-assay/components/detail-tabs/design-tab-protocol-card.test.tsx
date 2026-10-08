@@ -128,6 +128,7 @@ describe("DesignTabProtocolCard targets partition", () => {
     );
     expect(screen.queryByText(/targets selected|target selected/i)).not.toBeInTheDocument();
     expect(screen.getByText("Pks13")).toBeInTheDocument();
+    expect(screen.getAllByText(/use correct details in the more menu/i).length).toBeGreaterThan(0);
   });
 });
 

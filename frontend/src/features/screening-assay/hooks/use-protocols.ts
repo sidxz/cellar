@@ -1,5 +1,6 @@
 "use client";
 
+import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { ProtocolSummaryResponse } from "@/shared/lib/api/model";
@@ -331,6 +332,34 @@ export function useSetOntologyAnnotation(protocolId: string) {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Annotation updated");
     },
+  });
+}
+
+export interface CorrectProtocolInput {
+  reason: string;
+  category?: string | null;
+  discriminator?: string | null;
+  /** slot -> replacement; an empty list clears the slot. */
+  ontology_annotations?: Record<string, OntologyTerm[]>;
+  /** The full set of direct targets. */
+  target_ids?: string[];
+}
+
+/** Fix a published protocol's recorded facts with a reason (same code). */
+export function useCorrectProtocol(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: CorrectProtocolInput) =>
+      customInstance<Protocol>({
+        url: `${API_V1}/protocols/${protocolId}/correct`,
+        method: "POST",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Protocol corrected");
+    },
+    onError: (err: Error) => showError(err.message),
   });
 }
 

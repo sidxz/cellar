@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
+from cellar.application.screening.correct_protocol import CorrectProtocolCommand
 from cellar.application.screening.create_protocol import CreateProtocolCommand
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocolsQuery
 from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
@@ -82,6 +83,7 @@ from cellar.interface.dependencies import (
     AddReadoutDefinitionDep,
     AuthDep,
     ConditionGroupingServiceDep,
+    CorrectProtocolDep,
     CreateProtocolDep,
     DeleteProtocolDep,
     FindSimilarProtocolsDep,
@@ -924,6 +926,47 @@ async def set_protocol_discriminator(
         protocol_id=protocol_id,
         discriminator=body.discriminator,
         reason=body.reason,
+    )
+    result = await uc(cmd, auth=auth)
+    return await _protocol_response(targets_uc, auth, result)
+
+
+class CorrectProtocolRequest(BaseModel):
+    reason: str
+    category: str | None = None
+    discriminator: str | None = None
+    # slot -> full replacement; an empty list clears the slot
+    ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
+    # the full set of direct targets
+    target_ids: list[uuid.UUID] | None = None
+    model_config = {"extra": "forbid"}
+
+
+@router.post(
+    "/protocols/{protocol_id}/correct", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def correct_protocol(
+    protocol_id: uuid.UUID,
+    body: CorrectProtocolRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: CorrectProtocolDep,
+) -> ProtocolResponse:
+    """Fix a published protocol's recorded facts (same code); the name re-derives once."""
+    sent = body.model_fields_set
+    cmd = CorrectProtocolCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        reason=body.reason,
+        category=body.category if "category" in sent else UNSET,
+        discriminator=body.discriminator if "discriminator" in sent else UNSET,
+        ontology_annotations={
+            slot: [t.model_dump() for t in terms]
+            for slot, terms in (body.ontology_annotations or {}).items()
+        }
+        if "ontology_annotations" in sent
+        else UNSET,
+        target_ids=(body.target_ids or []) if "target_ids" in sent else UNSET,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)

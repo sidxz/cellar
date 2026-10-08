@@ -57,6 +57,8 @@ import {
   useVersionProtocol,
 } from "../hooks/use-protocols";
 import type { ProtocolStatus } from "../types";
+import { CorrectProtocolDialog } from "./correct-protocol-dialog";
+import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
 import { DiscriminatorInput } from "./discriminator-input";
@@ -95,6 +97,8 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [lockReason, setLockReason] = useState("");
   const [lockMode, setLockMode] = useState<"lock" | "unlock">("lock");
   const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [newAssayOpen, setNewAssayOpen] = useState(false);
 
   const query = { data: protocol, isLoading };
 
@@ -199,6 +203,10 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
           if (!locked && s === "active") {
             neutralItems.push(
+              <DropdownMenuItem key="correct" onClick={() => setCorrectOpen(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Correct details…
+              </DropdownMenuItem>,
               <DropdownMenuItem
                 key="version"
                 onClick={() => versionMutation.mutate({ id: protocolId })}
@@ -343,6 +351,22 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           </Tabs>
         )}
       </DetailShell>
+
+      {protocol && (
+        <>
+          <CorrectProtocolDialog
+            protocol={protocol}
+            open={correctOpen}
+            onOpenChange={setCorrectOpen}
+            onNewAssay={() => setNewAssayOpen(true)}
+          />
+          <CreateProtocolDialog
+            open={newAssayOpen}
+            onOpenChange={setNewAssayOpen}
+            prefill={protocol}
+          />
+        </>
+      )}
 
       <CreateRunDialog
         protocolId={protocolId}

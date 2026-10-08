@@ -9,6 +9,7 @@ from fastapi import Depends
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
+from cellar.application.screening.correct_protocol import CorrectProtocol
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
 from cellar.application.screening.create_dose_response import CreateDoseResponseCurve
 from cellar.application.screening.create_protocol import CreateProtocol
@@ -143,6 +144,7 @@ __all__ = [
     "CompleteRunDep",
     # Runs
     "ConditionGroupingServiceDep",
+    "CorrectProtocolDep",
     "CreateCompoundFlagDep",
     "CreateDoseResponseCurveDep",
     # Plate templates
@@ -284,6 +286,7 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+CorrectProtocolDep = Annotated[CorrectProtocol, Depends(_get_use_case(CorrectProtocol))]
 PreviewProtocolNameDep = Annotated[
     PreviewProtocolName, Depends(_get_use_case(PreviewProtocolName))
 ]

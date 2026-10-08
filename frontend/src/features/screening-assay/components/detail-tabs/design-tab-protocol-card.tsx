@@ -60,6 +60,8 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   // Targets feed the generated name: drafts edit them here; a published protocol
   // changes them through a correction with a reason.
   const canEditTargets = isDraft && !isLocked;
+  // These facts feed the name; a published protocol changes them through a correction.
+  const correctable = status === "active" && !isLocked;
 
   const qc = useQueryClient();
   const updateProtocol = useUpdateProtocol(protocolId);
@@ -113,6 +115,11 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
             references them; inherited targets come from this protocol&apos;s runs and prune
             automatically when their last referencing run drops them.
           </CardDescription>
+          {correctable && (
+            <p className="text-xs text-muted-foreground">
+              Published: use Correct details in the More menu.
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {inheritedTargets.length > 0 && (
@@ -160,6 +167,11 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
           <CardHeader>
             <CardTitle>Ontology Annotations</CardTitle>
             <CardDescription>Controlled vocabulary terms for this protocol.</CardDescription>
+            {correctable && (
+              <p className="text-xs text-muted-foreground">
+                Published: use Correct details in the More menu.
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             {ontologySlots.map((slot) => {

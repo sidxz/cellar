@@ -32,6 +32,7 @@ from cellar.application.screening.bulk_create_readout_data import BulkCreateRead
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.compound_curves_reader import CompoundCurvesReader
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
+from cellar.application.screening.correct_protocol import CorrectProtocol
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
 from cellar.application.screening.create_dose_response import CreateDoseResponseCurve
 from cellar.application.screening.create_protocol import CreateProtocol
@@ -352,6 +353,7 @@ def register_screening(container: Container) -> None:
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
     container.define(UpdateProtocol, _protocol_named(UpdateProtocol))
     container.define(SetProtocolDiscriminator, _protocol_named(SetProtocolDiscriminator))
+    container.define(CorrectProtocol, _protocol_named(CorrectProtocol))
     container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
     container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))

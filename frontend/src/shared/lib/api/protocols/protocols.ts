@@ -29,6 +29,7 @@ import type {
   AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams,
   AddReadoutDefinitionRequest,
   ConditionGroupsResponse,
+  CorrectProtocolRequest,
   CreateProtocolRequest,
   EffectiveCollectionCoverageResponse,
   FindSimilarProtocolsRequest,
@@ -1241,6 +1242,72 @@ export const useSetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut
       > => {
 
       const mutationOptions = getSetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPutMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Fix a published protocol's recorded facts (same code); the name re-derives once.
+ * @summary Correct Protocol
+ */
+export const correctProtocolApiV1ProtocolsProtocolIdCorrectPost = (
+    protocolId: string,
+    correctProtocolRequest: CorrectProtocolRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ProtocolResponse>(
+      {url: `/api/v1/protocols/${protocolId}/correct`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: correctProtocolRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getCorrectProtocolApiV1ProtocolsProtocolIdCorrectPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctProtocolApiV1ProtocolsProtocolIdCorrectPost>>, TError,{protocolId: string;data: CorrectProtocolRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof correctProtocolApiV1ProtocolsProtocolIdCorrectPost>>, TError,{protocolId: string;data: CorrectProtocolRequest}, TContext> => {
+
+const mutationKey = ['correctProtocolApiV1ProtocolsProtocolIdCorrectPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof correctProtocolApiV1ProtocolsProtocolIdCorrectPost>>, {protocolId: string;data: CorrectProtocolRequest}> = (props) => {
+          const {protocolId,data} = props ?? {};
+
+          return  correctProtocolApiV1ProtocolsProtocolIdCorrectPost(protocolId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CorrectProtocolApiV1ProtocolsProtocolIdCorrectPostMutationResult = NonNullable<Awaited<ReturnType<typeof correctProtocolApiV1ProtocolsProtocolIdCorrectPost>>>
+    export type CorrectProtocolApiV1ProtocolsProtocolIdCorrectPostMutationBody = CorrectProtocolRequest
+    export type CorrectProtocolApiV1ProtocolsProtocolIdCorrectPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Correct Protocol
+ */
+export const useCorrectProtocolApiV1ProtocolsProtocolIdCorrectPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof correctProtocolApiV1ProtocolsProtocolIdCorrectPost>>, TError,{protocolId: string;data: CorrectProtocolRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof correctProtocolApiV1ProtocolsProtocolIdCorrectPost>>,
+        TError,
+        {protocolId: string;data: CorrectProtocolRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getCorrectProtocolApiV1ProtocolsProtocolIdCorrectPostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
