@@ -82,6 +82,8 @@ class ShippedLabel:
 
 SHIPPED_SHORT_LABELS: tuple[ShippedLabel, ...] = (
     ShippedLabel(f"{NCBITAXON}9606", "Homo sapiens", "Human"),
+    ShippedLabel(f"{NCBITAXON}10090", "Mus musculus", "Mouse"),
+    ShippedLabel(f"{NCBITAXON}10116", "Rattus norvegicus", "Rat"),
     ShippedLabel(
         f"{NCBITAXON}694009", "Severe acute respiratory syndrome-related coronavirus", "SARS-CoV-2"
     ),
@@ -157,12 +159,24 @@ def generic_pattern(category_label: str) -> str:
 
 
 def _taxon_short(label: str) -> str:
+    # Virus names are not binomials: "Zika virus" stays whole.
+    if re.search(r"vir(us|oid)|phage", label, re.IGNORECASE):
+        return label
     words = label.split()
-    if len(words) == 2 and words[1].islower():
-        return f"{words[0][0]}. {words[1]}"
+    if len(words) >= 2 and words[0].isalpha() and words[0][0].isupper() and words[1].islower():
+        # Species and below (strain, variant): "Plasmodium falciparum 3D7" -> "P. falciparum 3D7".
+        return f"{words[0][0]}. {' '.join(words[1:])}"
     if len(words) == 1:
         return f"{words[0]} spp."
     return label
+
+
+def _capitalize(name: str) -> str:
+    """Capitalize a plain lowercase first word; leave "pLDH", "mRNA" and non-ASCII ("β") alone."""
+    first = name.split(" ", 1)[0]
+    if "a" <= name[:1] <= "z" and first == first.lower():
+        return name[0].upper() + name[1:]
+    return name
 
 
 def short_label(term: NamingTerm, ctx: NamingContext) -> str:
@@ -250,7 +264,7 @@ def render_protocol_name(pattern: str, inputs: NamingInputs, ctx: NamingContext)
     pieces.append(pattern[pos:])
     base = normalize_name_text("".join(pieces))
     if base and not keeps_case:
-        base = base[0].upper() + base[1:]
+        base = _capitalize(base)
     discriminator = values["discriminator"]
     name = base if discriminator_in_pattern or not discriminator else f"{base} [{discriminator}]"
     return RenderedName(

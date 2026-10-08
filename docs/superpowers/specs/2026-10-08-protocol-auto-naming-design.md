@@ -42,9 +42,10 @@ has one, it is appended as ` [discriminator]`.
 | `{discriminator}` | The protocol's discriminator. |
 
 `{slot?}` is optional and dropped when empty. A slot without `?` makes its field **required**: create and edit
-refuse to save without it, and the form names the missing field. Rendering collapses whitespace. The first letter is
-capitalized only when the name starts with pattern text; slot values keep their own case (`hERG inhibition`,
-`M. tuberculosis growth inhibition`).
+refuse to save without it, and the form names the missing field. Rendering collapses whitespace. A registry target
+at the start keeps its own case (`hERG inhibition`). Otherwise the first letter is capitalized only when the first
+word is plain lowercase ASCII (`Kinetic solubility`, `Macrophage cytotoxicity`); a word with its own capitals or a
+non-ASCII letter is left alone (`pLDH interference`, `β-Hematin formation inhibition`).
 
 ### Shipped default patterns
 
@@ -84,11 +85,13 @@ A category an admin adds gets the generic pattern `{subject?} {category}` until 
 
 Each ontology term used in a name has a short label: admin-editable overrides on top of computed defaults.
 
-- NCBITaxon two-word species label: `Genus epithet` → `G. epithet` (`M. smegmatis`).
+- NCBITaxon species label: `Genus epithet` → `G. epithet` (`M. smegmatis`); below species the rest is kept
+  (`Plasmodium falciparum 3D7` → `P. falciparum 3D7`).
 - NCBITaxon one-word label (genus): `Genus spp.` (`Mycobacterium spp.`).
+- Virus names are never abbreviated (`Zika virus`).
 - CLO labels drop a trailing ` cell` (`Vero cell` → `Vero`).
 - BAO format labels drop ` format`.
-- Shipped overrides: Homo sapiens → `Human`; Severe acute respiratory syndrome-related coronavirus → `SARS-CoV-2`;
+- Shipped overrides: Homo sapiens → `Human`; Mus musculus → `Mouse`; Rattus norvegicus → `Rat`; Severe acute respiratory syndrome-related coronavirus → `SARS-CoV-2`;
   Middle East respiratory syndrome-related coronavirus → `MERS-CoV`; Bacteria → `Bacterial`; Alphavirus →
   `Alphavirus`; Cryptosporidium → `Cryptosporidium`; microsome format → `Microsomal`; plasma format → `Plasma`.
 - Registry targets carry organism as text, not a taxon id: the target organism's short label is the override for

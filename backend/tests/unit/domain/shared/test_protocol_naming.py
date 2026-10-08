@@ -234,3 +234,62 @@ def test_every_default_pattern_is_valid_and_has_27_categories():
 
 def test_generic_pattern_for_new_categories():
     assert generic_pattern("Biofilm inhibition") == "{subject?} biofilm inhibition"
+
+
+@pytest.mark.parametrize(
+    ("pattern", "discriminator", "expected"),
+    [
+        ("{discriminator} interference", "pLDH", "pLDH interference"),
+        ("{discriminator?} solubility", "mRNA-based", "mRNA-based solubility"),
+        ("{discriminator?} solubility", "kinetic", "Kinetic solubility"),
+    ],
+)
+def test_leading_discriminator_with_its_own_capitals_keeps_its_case(
+    pattern, discriminator, expected
+):
+    assert _render(pattern, discriminator=discriminator).name == expected
+
+
+def test_non_ascii_first_letter_is_not_uppercased():
+    assert _render("β-hematin formation inhibition").name == "β-hematin formation inhibition"
+    assert (
+        _render(generic_pattern("β-Hematin formation inhibition")).name
+        == "β-Hematin formation inhibition"
+    )
+
+
+@pytest.mark.parametrize(
+    ("label", "expected"),
+    [
+        ("Plasmodium falciparum 3D7", "P. falciparum 3D7"),
+        ("Mycobacterium tuberculosis H37Rv", "M. tuberculosis H37Rv"),
+        ("Mycobacterium tuberculosis variant bovis BCG", "M. tuberculosis variant bovis BCG"),
+        ("Escherichia coli K-12", "E. coli K-12"),
+        ("Zika virus", "Zika virus"),
+        ("Dengue virus", "Dengue virus"),
+        ("Japanese encephalitis virus", "Japanese encephalitis virus"),
+        ("Human immunodeficiency virus 1", "Human immunodeficiency virus 1"),
+        ("Alphavirus", "Alphavirus"),
+        ("[Mycobacterium] stephanolepidis", "[Mycobacterium] stephanolepidis"),
+    ],
+)
+def test_taxon_short_label(label, expected):
+    term = NamingTerm(f"{NCBITAXON}0", label, "NCBITAXON")
+    assert _render("{organism} growth inhibition", organisms=(term,)).name == (
+        f"{expected} growth inhibition"
+    )
+
+
+@pytest.mark.parametrize(
+    ("taxon_id", "label", "expected"),
+    [("10090", "Mus musculus", "Mouse"), ("10116", "Rattus norvegicus", "Rat")],
+)
+def test_lab_animals_ship_common_names(taxon_id, label, expected):
+    term = NamingTerm(f"{NCBITAXON}{taxon_id}", label, "NCBITAXON")
+    assert _render("{organism?} pharmacokinetics", organisms=(term,)).name == (
+        f"{expected} pharmacokinetics"
+    )
+    target = NamingTarget("Cyp3a11", label)
+    assert _render("{target} inhibition", ctx=NamingContext(), targets=(target,)).name == (
+        f"{expected} Cyp3a11 inhibition"
+    )
