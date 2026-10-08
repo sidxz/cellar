@@ -7,6 +7,7 @@ export type FacetDimension =
   | "assay_format"
   | "detection"
   | "organism"
+  | "cell_line"
   | "status"
   | "readout_kind";
 
@@ -27,6 +28,7 @@ export const FACET_DIMENSIONS: { dimension: FacetDimension; label: string }[] = 
   { dimension: "assay_format", label: "Assay format" },
   { dimension: "detection", label: "Detection" },
   { dimension: "organism", label: "Organism" },
+  { dimension: "cell_line", label: "Cell line" },
   { dimension: "status", label: "Status" },
   { dimension: "readout_kind", label: "Readout kind" },
 ];
@@ -35,6 +37,7 @@ const ONTOLOGY_SLOTS: Partial<Record<FacetDimension, string>> = {
   assay_format: "assay_format",
   detection: "detection",
   organism: "organism",
+  cell_line: "cell_line",
 };
 
 /** Canonical comparable key: lower / trim / collapse-ws. Mirrors the backend

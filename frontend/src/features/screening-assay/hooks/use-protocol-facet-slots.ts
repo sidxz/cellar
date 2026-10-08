@@ -8,6 +8,7 @@ import { useMemo } from "react";
 // allow_free_text so a chemist is never blocked when a term isn't in the ontology.
 const STANDARD_FACET_SLOTS = [
   { name: "organism", label: "Organism", ontology_sources: ["NCBITAXON"] },
+  { name: "cell_line", label: "Cell line", ontology_sources: ["CLO", "CL"] },
   { name: "assay_format", label: "Assay format", ontology_sources: ["BAO"] },
   { name: "detection", label: "Detection method", ontology_sources: ["BAO"] },
 ] as const;

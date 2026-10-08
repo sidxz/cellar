@@ -250,3 +250,14 @@ describe("protocolTextMatch", () => {
     expect(matchesProtocolText(p, "luciferase")).toBe(false);
   });
 });
+
+describe("cell line facet", () => {
+  it("reads the cell_line annotation", () => {
+    const p = proto({
+      ontology_annotations: {
+        cell_line: [{ term_id: "c1", label: "HepG2 cell", ontology_source: "CLO", uri: null }],
+      },
+    });
+    expect(extractFacetItems(p, "cell_line")).toEqual([{ value: "c1", label: "HepG2 cell" }]);
+  });
+});

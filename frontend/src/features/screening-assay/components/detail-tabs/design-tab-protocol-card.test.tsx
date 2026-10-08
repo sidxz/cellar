@@ -136,6 +136,7 @@ describe("DesignTabProtocolCard ontology annotations", () => {
 
     expect(screen.getByText("Ontology Annotations")).toBeInTheDocument();
     expect(screen.getByText("Organism")).toBeInTheDocument();
+    expect(screen.getByText("Cell line")).toBeInTheDocument();
     expect(screen.getByText("Assay format")).toBeInTheDocument();
     expect(screen.getByText("Detection method")).toBeInTheDocument();
     expect(screen.getByText("biochemical format")).toBeInTheDocument();
