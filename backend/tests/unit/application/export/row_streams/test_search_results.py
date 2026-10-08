@@ -346,7 +346,8 @@ async def test_intercepts_collapse_to_one_column_per_label():
     ic_ec90 = MagicMock(); ic_ec90.kind.value = "ec"; ic_ec90.level = 90.0; ic_ec90.label = None
     drc_cfg = MagicMock(); drc_cfg.intercepts = [ic_ec50, ic_ec90]
     rd = MagicMock(); rd.id = rd_id; rd.name = "Resazurin"; rd.unit = "µM"; rd.dose_response_config = drc_cfg
-    proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.code = None; proto.readout_definitions = [rd]
+    proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.readout_definitions = [rd]
+    proto.code = None
     proto.dose_unit = "uM"  # potencies are labelled with the protocol dose unit
 
     page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
