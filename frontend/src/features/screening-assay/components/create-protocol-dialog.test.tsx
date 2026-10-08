@@ -58,6 +58,12 @@ describe("CreateProtocolDialog", () => {
     expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
   });
 
+  it("does not label the category optional, since the name needs it", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    expect(screen.getByText("Category")).toBeInTheDocument();
+    expect(screen.queryByText("Category (optional)")).not.toBeInTheDocument();
+  });
+
   it("starts a new assay from an existing protocol's facts", () => {
     const prefill = {
       id: "p1",

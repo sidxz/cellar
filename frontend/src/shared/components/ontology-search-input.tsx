@@ -24,6 +24,9 @@ import { useCallback, useState } from "react";
 
 export type { OntologyTerm };
 
+// ApiError.message reads "API error: 503 — <detail>"; the detail alone tells the chemist what to do.
+const errorText = (error: Error) => error.message.replace(/^API error: \d+ — /, "");
+
 export interface OntologySearchInputProps {
   ontologySources: string[];
   rootConceptId?: string | null;
@@ -138,7 +141,7 @@ function OntologyDropdown({
               {isLoading ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
               ) : error ? (
-                <div className="px-3 py-2 text-sm text-destructive">{error.message}</div>
+                <div className="px-3 py-2 text-sm text-destructive">{errorText(error)}</div>
               ) : (
                 <>
                   <CommandEmpty>
@@ -273,7 +276,7 @@ function OntologySearchMode({
           if (query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
         }}
         placeholder={placeholder}
-        emptyMessage={error ? error.message : "No results found."}
+        emptyMessage={error ? errorText(error) : "No results found."}
         footer={
           allowFreeText && query.trim() ? (
             <div className="border-t">

@@ -633,7 +633,7 @@ export function CreateProtocolDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label>Category (optional)</Label>
+              <Label>Category</Label>
               <Controller
                 control={form.control}
                 name="category"

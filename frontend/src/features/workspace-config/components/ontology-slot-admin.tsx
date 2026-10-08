@@ -48,6 +48,7 @@ const ONTOLOGY_OPTIONS = [
   { value: "BAO", label: "BAO — BioAssay Ontology" },
   { value: "GO", label: "GO — Gene Ontology" },
   { value: "CLO", label: "CLO — Cell Line Ontology" },
+  { value: "CL", label: "CL — Cell Ontology" },
   { value: "DOID", label: "DOID — Disease Ontology" },
   { value: "CHEBI", label: "CHEBI — Chemical Entities" },
   { value: "OBI", label: "OBI — Biomedical Investigation" },
