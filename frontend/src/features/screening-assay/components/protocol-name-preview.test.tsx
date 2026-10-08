@@ -1,0 +1,53 @@
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { ProtocolNamePreview, isPreviewSavable } from "./protocol-name-preview";
+
+const base = {
+  name: "M. tuberculosis growth inhibition [resazurin]",
+  base: "M. tuberculosis growth inhibition",
+  missing: [],
+  missing_labels: [],
+  clash: null,
+  siblings: [],
+  needs_discriminator: false,
+  discriminator_error: null,
+  discriminator_in_pattern: false,
+};
+
+describe("ProtocolNamePreview", () => {
+  it("shows the name and that the code comes on save", () => {
+    render(<ProtocolNamePreview preview={base} isFetching={false} />);
+    expect(screen.getByText("M. tuberculosis growth inhibition [resazurin]")).toBeInTheDocument();
+    expect(screen.getByText(/code is assigned when you create/i)).toBeInTheDocument();
+    expect(isPreviewSavable(base)).toBe(true);
+  });
+
+  it("lists what is missing", () => {
+    const p = { ...base, missing: ["organism"], missing_labels: ["an organism"] };
+    render(<ProtocolNamePreview preview={p} isFetching={false} />);
+    expect(screen.getByText(/needs an organism/i)).toBeInTheDocument();
+    expect(isPreviewSavable(p)).toBe(false);
+  });
+
+  it("explains a clash with the other code", () => {
+    const p = {
+      ...base,
+      clash: { protocol_id: "x", code: "PRT-00002", name: base.name, discriminator: "resazurin" },
+    };
+    render(<ProtocolNamePreview preview={p} isFetching={false} />);
+    expect(screen.getByText(/PRT-00002/)).toBeInTheDocument();
+    expect(isPreviewSavable(p)).toBe(false);
+  });
+
+  it("asks for a discriminator when siblings share the name", () => {
+    const sib = {
+      protocol_id: "y",
+      code: "PRT-00003",
+      name: "M. tuberculosis growth inhibition [OD600]",
+      discriminator: "OD600",
+    };
+    const p = { ...base, name: base.base, siblings: [sib], needs_discriminator: true };
+    render(<ProtocolNamePreview preview={p} isFetching={false} />);
+    expect(screen.getByText(/add a discriminator/i)).toBeInTheDocument();
+  });
+});

@@ -31,10 +31,11 @@ import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Plus, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { z } from "zod";
 import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
+import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { useTargets } from "../hooks/use-targets";
@@ -55,15 +56,18 @@ import {
   NORMALIZATION_SCOPE_LABELS,
   PROTOCOL_TYPE_LABELS,
   type PickListValue,
+  type Protocol,
   type ProtocolType,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
   type ReadoutNormalization,
 } from "../types";
+import { DiscriminatorInput } from "./discriminator-input";
 import { FormulaInput } from "./formula-input";
 import { InterceptsEditor } from "./intercepts-editor";
 import { PickListEditor } from "./pick-list-editor";
 import { ProtocolCategoryInput } from "./protocol-category-input";
+import { ProtocolNamePreview, isPreviewSavable } from "./protocol-name-preview";
 import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
@@ -111,6 +115,7 @@ const conditionSchema = z.object({
 
 const protocolSchema = z.object({
   protocol_type: z.string(),
+  discriminator: z.string(),
   target_ids: z.array(z.string()),
   category: z.string(),
   description: z.string(),
@@ -162,6 +167,9 @@ interface CreateProtocolDialogProps {
   /** Called when the user clicks "Log a run of this" on a suggestion.
    *  The dialog closes itself before calling this. */
   onLogRun?: (protocolId: string) => void;
+  /** Start from an existing protocol (a new assay): copies its facts, not its
+   *  discriminator, code or name. */
+  prefill?: Protocol;
 }
 
 export function CreateProtocolDialog({
@@ -169,6 +177,7 @@ export function CreateProtocolDialog({
   onOpenChange,
   defaultProjectId,
   onLogRun,
+  prefill,
 }: CreateProtocolDialogProps) {
   const createMutation = useCreateProtocol();
   const assignToProject = useAssignProtocolToProject();
@@ -203,6 +212,7 @@ export function CreateProtocolDialog({
     resolver: zodResolver(protocolSchema),
     defaultValues: {
       protocol_type: "biochemical",
+      discriminator: "",
       target_ids: [],
       category: "",
       description: "",
@@ -238,6 +248,7 @@ export function CreateProtocolDialog({
   const resetForm = () => {
     form.reset({
       protocol_type: "biochemical",
+      discriminator: "",
       target_ids: [],
       category: "",
       description: "",
@@ -249,6 +260,52 @@ export function CreateProtocolDialog({
     setProjectId(defaultProjectId ?? null);
     setOntologyAnnotations({});
   };
+
+  // A new assay starts from the protocol it replaces: same facts, its own discriminator.
+  useEffect(() => {
+    if (!open || !prefill) return;
+    form.reset({
+      protocol_type: prefill.protocol_type,
+      discriminator: "",
+      target_ids: (prefill.targets ?? []).map((t) => t.id),
+      category: prefill.category ?? "",
+      description: prefill.description ?? "",
+      dose_unit: prefill.dose_unit,
+      readouts: prefill.readout_definitions.map((rd, i) => {
+        const dr = rd.dose_response_config;
+        return {
+          ...defaultReadout(i + 1),
+          name: rd.name,
+          data_type: rd.data_type,
+          unit: rd.unit ?? "",
+          aggregation: rd.aggregation ?? "none",
+          normalizations: rd.normalizations ?? [],
+          is_calculated: rd.is_calculated,
+          calculation_formula: rd.calculation_formula ?? "",
+          display_order: rd.display_order ?? i + 1,
+          pick_list_values: rd.pick_list_values ?? [],
+          ...(dr
+            ? {
+                dr_curve_type: dr.curve_type,
+                dr_x_readout: dr.x_readout_name ?? WELL_CONC_X,
+                dr_y_readout: dr.y_readout_name,
+                dr_hill_constraint: dr.hill_slope_constraint,
+                dr_normalization_scope: dr.normalization_scope,
+                dr_activity_threshold:
+                  dr.activity_threshold != null ? String(dr.activity_threshold) : "",
+                dr_intercepts: dr.intercepts ?? [],
+              }
+            : {}),
+        };
+      }),
+      conditions: prefill.condition_definitions.map((cd) => ({
+        name: cd.name,
+        data_type: cd.data_type,
+        unit: cd.unit ?? "",
+      })),
+    });
+    setOntologyAnnotations(prefill.ontology_annotations ?? {});
+  }, [open, prefill, form]);
 
   const applyForm = (template: ProtocolForm) => {
     if (template.protocol_type) {
@@ -307,10 +364,25 @@ export function CreateProtocolDialog({
 
   // ---- derived validation ----
 
+  const categoryValue = form.watch("category") || null;
+  const preview = useProtocolNamePreview(
+    categoryValue
+      ? {
+          category: categoryValue,
+          target_ids: form.watch("target_ids") ?? [],
+          ontology_annotations: ontologyAnnotations,
+          discriminator: form.watch("discriminator").trim() || null,
+        }
+      : null,
+  );
+
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
   const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
   const canSubmit =
-    validReadouts.length > 0 && !hasReservedReadoutName && !createMutation.isPending;
+    validReadouts.length > 0 &&
+    !hasReservedReadoutName &&
+    isPreviewSavable(preview.data) &&
+    !createMutation.isPending;
 
   // ---- submit handler ----
 
@@ -370,6 +442,7 @@ export function CreateProtocolDialog({
     createMutation.mutate(
       {
         protocol_type: values.protocol_type as ProtocolType,
+        discriminator: values.discriminator.trim() || null,
         target_ids: values.target_ids,
         category: values.category || null,
         description: values.description || null,
@@ -405,7 +478,9 @@ export function CreateProtocolDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(95vw,1100px)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>New Protocol</DialogTitle>
+          <DialogTitle>
+            {prefill ? `New protocol from ${prefill.code ?? prefill.name}` : "New Protocol"}
+          </DialogTitle>
           <DialogDescription>
             Define a screening protocol with readout definitions.
           </DialogDescription>
@@ -414,12 +489,26 @@ export function CreateProtocolDialog({
         <div className="grid gap-4 py-4">
           {/* Basic info */}
           <div className="grid gap-2">
+            <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
+            <Label htmlFor="protocol-discriminator">Discriminator (optional)</Label>
+            <Controller
+              control={form.control}
+              name="discriminator"
+              render={({ field }) => (
+                <DiscriminatorInput
+                  value={field.value}
+                  onChange={field.onChange}
+                  base={preview.data?.base ?? null}
+                />
+              )}
+            />
             <p className="text-xs text-muted-foreground">
-              The name is generated from the category and fields below.
+              Only needed when another protocol would get the same name. A method or a fixed
+              condition, never a stage, library or date.
             </p>
             <SimilarProtocolsPanel
               draft={{
-                name: "",
+                name: preview.data?.name ?? "",
                 protocol_type: form.watch("protocol_type") || null,
                 target_ids: form.watch("target_ids") ?? [],
                 readout_names: (form.watch("readouts") ?? [])

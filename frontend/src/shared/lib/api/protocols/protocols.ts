@@ -34,10 +34,13 @@ import type {
   FindSimilarProtocolsRequest,
   GetConditionGroupsApiV1ProtocolsProtocolIdConditionGroupsGetParams,
   HTTPValidationError,
+  ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams,
   ListProtocolSummariesApiV1ProtocolsSummaryGetParams,
   ListProtocolVocabularyApiV1ProtocolsVocabularyGetParams,
   ListProtocolsApiV1ProtocolsGetParams,
   LockProtocolRequest,
+  NamePreviewRequest,
+  NamePreviewResponse,
   PaginatedResponseProtocolResponse,
   ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams,
   ProtocolResponse,
@@ -463,6 +466,165 @@ export function useListProtocolVocabularyApiV1ProtocolsVocabularyGet<TData = Awa
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getListProtocolVocabularyApiV1ProtocolsVocabularyGetQueryOptions(params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * The name these facts would generate, what is missing, and any collision.
+ * @summary Preview Protocol Name
+ */
+export const previewProtocolNameApiV1ProtocolsNamePreviewPost = (
+    namePreviewRequest: NamePreviewRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<NamePreviewResponse>(
+      {url: `/api/v1/protocols/name-preview`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: namePreviewRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getPreviewProtocolNameApiV1ProtocolsNamePreviewPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewProtocolNameApiV1ProtocolsNamePreviewPost>>, TError,{data: NamePreviewRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof previewProtocolNameApiV1ProtocolsNamePreviewPost>>, TError,{data: NamePreviewRequest}, TContext> => {
+
+const mutationKey = ['previewProtocolNameApiV1ProtocolsNamePreviewPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewProtocolNameApiV1ProtocolsNamePreviewPost>>, {data: NamePreviewRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  previewProtocolNameApiV1ProtocolsNamePreviewPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewProtocolNameApiV1ProtocolsNamePreviewPostMutationResult = NonNullable<Awaited<ReturnType<typeof previewProtocolNameApiV1ProtocolsNamePreviewPost>>>
+    export type PreviewProtocolNameApiV1ProtocolsNamePreviewPostMutationBody = NamePreviewRequest
+    export type PreviewProtocolNameApiV1ProtocolsNamePreviewPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Preview Protocol Name
+ */
+export const usePreviewProtocolNameApiV1ProtocolsNamePreviewPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewProtocolNameApiV1ProtocolsNamePreviewPost>>, TError,{data: NamePreviewRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof previewProtocolNameApiV1ProtocolsNamePreviewPost>>,
+        TError,
+        {data: NamePreviewRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getPreviewProtocolNameApiV1ProtocolsNamePreviewPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Discriminators already in use (for the picker); ``base`` narrows to one base name.
+ * @summary List Protocol Discriminators
+ */
+export const listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet = (
+    params?: ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<string[]>(
+      {url: `/api/v1/protocols/discriminators`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetQueryKey = (params?: ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams,) => {
+    return [
+    `/api/v1/protocols/discriminators`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetQueryOptions = <TData = Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError = HTTPValidationError>(params?: ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetQueryKey(params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>> = ({ signal }) => listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet(params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>>
+export type ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetQueryError = HTTPValidationError
+
+
+export function useListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet<TData = Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError = HTTPValidationError>(
+ params: undefined |  ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet<TData = Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError = HTTPValidationError>(
+ params?: ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet<TData = Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError = HTTPValidationError>(
+ params?: ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Protocol Discriminators
+ */
+
+export function useListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet<TData = Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError = HTTPValidationError>(
+ params?: ListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListProtocolDiscriminatorsApiV1ProtocolsDiscriminatorsGetQueryOptions(params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
