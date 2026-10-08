@@ -24,6 +24,7 @@ from cellar.domain.screening_assay.repository import (
 from cellar.domain.shared.errors import ConflictError, DomainError, ValidationError
 from cellar.domain.shared.ontology import OntologyTerm
 from cellar.domain.shared.protocol_naming import (
+    MAX_NAME_LENGTH,
     NamingContext,
     NamingInputs,
     NamingTarget,
@@ -166,6 +167,15 @@ class ProtocolNameService:
             if person and not allow_incomplete:
                 needs = ", ".join(MISSING_FIELD_LABELS.get(m, m) for m in r.missing)
                 return Failure(ValidationError(f"This protocol's name needs {needs}"))
+            return Success(NameFlag.NEEDS_FACTS)
+        if len(r.name) > MAX_NAME_LENGTH:
+            if person:
+                return Failure(
+                    ValidationError(
+                        f"The generated name is longer than {MAX_NAME_LENGTH} characters; "
+                        "shorten the discriminator or a short label"
+                    )
+                )
             return Success(NameFlag.NEEDS_FACTS)
         if derivation.clash is not None:
             if person:

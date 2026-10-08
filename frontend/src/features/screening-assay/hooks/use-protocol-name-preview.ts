@@ -1,19 +1,13 @@
 "use client";
 
-import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import { useDebounce } from "@/shared/hooks/use-debounce";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { NamePreviewResponse } from "@/shared/lib/api/model";
+import type { NamePreviewRequest, NamePreviewResponse } from "@/shared/lib/api/model";
 import { SEARCH_DEBOUNCE_MS } from "@/shared/lib/timing";
 import { useQuery } from "@tanstack/react-query";
 
-export interface NamePreviewDraft {
-  category: string | null;
-  target_ids: string[];
-  ontology_annotations: Record<string, OntologyTerm[]>;
-  discriminator: string | null;
-  protocol_id?: string;
-}
+/** The facts a name would be generated from. Typed off the DTO. */
+export type NamePreviewDraft = NamePreviewRequest;
 
 /** The name these facts would generate. Debounces the draft by value (its JSON), so a
  *  caller may pass a fresh object every render without restarting the timer. */

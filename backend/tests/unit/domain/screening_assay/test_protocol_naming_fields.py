@@ -110,3 +110,25 @@ def test_publish_refused_while_facts_missing():
     p.flag_name(NameFlag.NEEDS_FACTS)
     with pytest.raises(ConflictError, match="name"):
         p.publish()
+
+
+def test_a_published_correction_is_recorded_with_its_reason_even_without_a_rename():
+    from cellar.domain.screening_assay.events import ProtocolCorrected
+
+    p = _protocol()
+    p.set_category("Binding")
+    p.publish()
+    p.clear_events()
+    p.set_category("Enzyme inhibition", reason="It was always an enzyme assay")
+    (event,) = [e for e in p.collect_events() if isinstance(e, ProtocolCorrected)]
+    assert event.audit_reason == "It was always an enzyme assay"
+    assert event.audit_changes() == [("category", "Binding", "Enzyme inhibition")]
+
+
+def test_draft_edits_are_not_corrections():
+    from cellar.domain.screening_assay.events import ProtocolCorrected
+
+    p = _protocol()
+    p.set_category("Binding")
+    p.set_discriminator("FP")
+    assert not [e for e in p.collect_events() if isinstance(e, ProtocolCorrected)]

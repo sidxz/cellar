@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 from types import TracebackType
 from typing import Self
 from unittest.mock import AsyncMock
@@ -28,6 +29,7 @@ from cellar.application.screening.manage_run_targets import (
     RemoveRunTarget,
     RemoveRunTargetCommand,
 )
+from cellar.domain.screening_assay.enums import ProtocolStatus
 from cellar.domain.screening_assay.events import (
     ProtocolTargetAdded,
     ProtocolTargetRemoved,
@@ -335,3 +337,22 @@ class TestRunTargets:
         )
         assert isinstance(result2, Success)
         assert dispatcher2.events == []
+
+
+async def test_a_published_target_correction_keeps_its_reason() -> None:
+    uc, repo, _, dispatcher = _protocol_uc(AddProtocolTarget, lock_state=(False, "active"))
+    repo.find_by_id_in_workspace = AsyncMock(
+        return_value=SimpleNamespace(
+            status=ProtocolStatus.ACTIVE, name="n", name_base="n", name_flag=None
+        )
+    )
+    await uc(
+        AddProtocolTargetCommand(
+            workspace_id=WS, protocol_id=PID, target_id=TID, reason="Wrong target recorded"
+        ),
+        auth=FakeAuth(),
+    )
+    (event,) = [e for e in dispatcher.events if isinstance(e, ProtocolTargetAdded)]
+    assert event.audit_reason == "Wrong target recorded"
+    assert uc.names.apply.call_args.kwargs["reason"] == "Correction: Wrong target recorded"
+    assert uc.names.apply.call_args.kwargs["allow_incomplete"] is False

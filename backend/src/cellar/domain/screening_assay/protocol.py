@@ -21,6 +21,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
 )
 from cellar.domain.screening_assay.events import (
+    ProtocolCorrected,
     ProtocolCreated,
     ProtocolLocked,
     ProtocolPublished,
@@ -43,9 +44,15 @@ from cellar.domain.shared.protocol_naming import (
     validate_name_text,
 )
 
-
 # Sentinel used by partial-update mutators to distinguish "leave unchanged"
 # (default) from "explicitly set to None".
+
+
+def _term_labels(terms: list[OntologyTerm] | None) -> str | None:
+    """Audit form of an annotation slot's terms."""
+    return "; ".join(t.label for t in terms) if terms else None
+
+
 class _UnsetT:
     pass
 
@@ -492,6 +499,8 @@ class Protocol(AggregateRoot):
     ) -> Protocol:
         if not readout_definitions:
             raise ValidationError("Protocol must have at least one ReadoutDefinition")
+        if len(name.strip()) > MAX_NAME_LENGTH:
+            raise ValidationError(f"Protocol name must be at most {MAX_NAME_LENGTH} characters")
 
         protocol = cls(
             workspace_id=workspace_id,
@@ -591,8 +600,10 @@ class Protocol(AggregateRoot):
 
     def set_category(self, category: str | None, *, reason: str | None = None) -> None:
         self._guard_correction(reason)
+        old = self.category
         self.category = " ".join(category.split()) if category and category.strip() else None
         self.updated_at = datetime.now(UTC)
+        self._record_correction("category", old, self.category, reason)
 
     def relabel_category(self, label: str) -> None:
         """A category renamed by an admin: the same fact under a new word (any status)."""
@@ -601,8 +612,29 @@ class Protocol(AggregateRoot):
 
     def set_discriminator(self, value: str | None, *, reason: str | None = None) -> None:
         self._guard_correction(reason)
+        old = self.discriminator
         self.discriminator = clean_discriminator(value)
         self.updated_at = datetime.now(UTC)
+        self._record_correction("discriminator", old, self.discriminator, reason)
+
+    def _record_correction(
+        self, field: str, old: str | None, new: str | None, reason: str | None
+    ) -> None:
+        """A published protocol's facts change only through a correction: audit it with its
+        reason even when the generated name stays the same."""
+        if self.status != ProtocolStatus.ACTIVE or old == new:
+            return
+        self.register_event(
+            ProtocolCorrected(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                field=field,
+                old_value=old,
+                new_value=new,
+                reason=reason or "",
+            )
+        )
 
     def flag_name(self, flag: NameFlag | None) -> None:
         self.name_flag = flag
@@ -1140,12 +1172,15 @@ class Protocol(AggregateRoot):
         self._guard_correction(reason)
         if not slot or not slot.strip():
             raise ValidationError("Ontology annotation slot name must not be empty")
+        old = _term_labels(self.ontology_annotations.get(slot.strip()))
         self.ontology_annotations[slot.strip()] = terms
         self.updated_at = datetime.now(UTC)
+        self._record_correction(slot.strip(), old, _term_labels(terms), reason)
 
     def remove_ontology_annotation(self, slot: str, *, reason: str | None = None) -> None:
         """Remove all ontology terms for a named annotation slot."""
         self._guard_correction(reason)
         if slot in self.ontology_annotations:
-            del self.ontology_annotations[slot]
+            old = _term_labels(self.ontology_annotations.pop(slot))
             self.updated_at = datetime.now(UTC)
+            self._record_correction(slot, old, None, reason)

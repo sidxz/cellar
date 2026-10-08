@@ -46,3 +46,24 @@ async def test_home_organism_drops_the_prefix(client, make_target):
     assert ("M. tuberculosis PptT inhibition", "PptT inhibition") in {(x["before"], x["after"]) for x in preview["changes"]}
     assert (await client.put("/api/v1/settings/home-organism", json={"term": MTB})).status_code == 200
     assert (await client.get(f"/api/v1/protocols/{p['id']}")).json()["name"] == "PptT inhibition"
+
+
+async def test_a_relabel_that_swaps_two_names_applies_cleanly(client, make_target):
+    await client.post("/api/v1/protocol-categories/defaults")
+    human = {"term_id": "http://purl.bioontology.org/ontology/NCBITAXON/9606", "label": "Homo sapiens", "ontology_source": "NCBITAXON"}
+    assert (await client.put("/api/v1/settings/home-organism", json={"term": MTB})).status_code == 200
+    mtb_dhfr = await make_target("DHFR", organism="Mycobacterium tuberculosis")
+    human_dhfr = await make_target("DHFR", organism="Homo sapiens")
+    body = {"protocol_type": "biochemical", "category": "Enzyme inhibition", "readout_definitions": [{"name": "Signal", "data_type": "numeric"}]}
+    a = (await client.post("/api/v1/protocols", json=body | {"target_ids": [mtb_dhfr]})).json()
+    b = (await client.post("/api/v1/protocols", json=body | {"target_ids": [human_dhfr]})).json()
+    assert (a["name"], b["name"]) == ("DHFR inhibition", "Human DHFR inhibition")
+
+    preview = (await client.post("/api/v1/protocol-names/preview-change", json={"kind": "home_organism", "term": human})).json()
+    assert preview["collisions"] == []
+    r = await client.put("/api/v1/settings/home-organism", json={"term": human})
+    assert r.status_code == 200, r.text
+    a2 = (await client.get(f"/api/v1/protocols/{a['id']}")).json()
+    b2 = (await client.get(f"/api/v1/protocols/{b['id']}")).json()
+    assert (a2["name"], b2["name"]) == ("M. tuberculosis DHFR inhibition", "DHFR inhibition")
+    assert (a2["name_flag"], b2["name_flag"]) == (None, None)

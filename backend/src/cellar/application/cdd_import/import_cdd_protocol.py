@@ -39,6 +39,7 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
+from cellar.domain.shared.protocol_naming import normalize_name_text
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 
 
@@ -177,7 +178,8 @@ class ImportCddProtocol:
             )
             # The vault's name stays findable: it becomes a nickname.
             with contextlib.suppress(ConflictError):  # the generated name may equal it
-                protocol.add_nickname(input.name_override or mapping.name)
+                # Legacy names may carry the middle dot or long dashes names never use: normalize.
+                protocol.add_nickname(normalize_name_text(input.name_override or mapping.name))
             await self._names.flag_siblings(input.workspace_id, derivation)
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()

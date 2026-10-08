@@ -66,6 +66,13 @@ export function CorrectProtocolDialog({
   const [reason, setReason] = useState("");
   const correct = useCorrectProtocol(protocol.id);
 
+  // Targets follow the server until the user edits them; every opening forgets edits.
+  const [targetsTouched, setTargetsTouched] = useState(false);
+  const directKey = directIds.join(",");
+  useEffect(() => {
+    if (!targetsTouched) setTargetIds(directKey ? directKey.split(",") : []);
+  }, [directKey, targetsTouched]);
+
   // Every opening starts from the protocol as it is now.
   useEffect(() => {
     if (!open) return;
@@ -74,11 +81,9 @@ export function CorrectProtocolDialog({
     setCategory(protocol.category ?? "");
     setDiscriminator(protocol.discriminator ?? "");
     setAnnotations(protocol.ontology_annotations ?? {});
+    setTargetsTouched(false);
     setReason("");
   }, [open, protocol]);
-  // Keyed by value: a refetch that returns the same targets must not reset edits.
-  const directKey = directIds.join(",");
-  useEffect(() => setTargetIds(directKey ? directKey.split(",") : []), [directKey]);
 
   const preview = useProtocolNamePreview(
     open && step === "correct"
@@ -168,7 +173,13 @@ export function CorrectProtocolDialog({
             ))}
             <div className="grid gap-2">
               <Label>Targets</Label>
-              <TargetMultiSelect value={targetIds} onChange={setTargetIds} />
+              <TargetMultiSelect
+                value={targetIds}
+                onChange={(ids) => {
+                  setTargetsTouched(true);
+                  setTargetIds(ids);
+                }}
+              />
             </div>
             <div className="grid gap-2">
               <Label>Discriminator (optional)</Label>

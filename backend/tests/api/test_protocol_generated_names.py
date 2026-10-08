@@ -104,3 +104,15 @@ async def test_category_and_discriminator_change_together(client, categories):
     )
     assert both.status_code == 200, both.text
     assert both.json()["name"] == "M. tuberculosis growth inhibition [resazurin]"
+
+
+async def test_a_name_over_400_characters_is_422_not_500(client, categories, make_target):
+    ids = [await make_target(letter * 150) for letter in "ABC"]
+    body = {
+        "protocol_type": "biochemical",
+        "category": "Enzyme inhibition",
+        "readout_definitions": READOUTS,
+        "target_ids": ids,
+    }
+    r = await client.post("/api/v1/protocols", json=body)
+    assert r.status_code == 422 and "400" in r.text

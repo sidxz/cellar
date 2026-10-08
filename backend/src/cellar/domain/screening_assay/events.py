@@ -46,6 +46,24 @@ class TargetRenamed(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ProtocolCorrected(DomainEvent):
+    """A fact on a published protocol was corrected. Audited with the reason, whether or not
+    the generated name changes."""
+
+    field: str
+    old_value: str | None
+    new_value: str | None
+    reason: str
+
+    @property
+    def audit_reason(self) -> str:
+        return self.reason
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [(self.field, self.old_value, self.new_value)]
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProtocolRenamed(DomainEvent):
     """The generated name changed. Audited with the old name, the new one and why."""
 
@@ -86,12 +104,22 @@ class ProtocolTargetAdded(DomainEvent):
 
     target_id: uuid.UUID
     user_id: uuid.UUID | None = None
+    reason: str | None = None  # a correction on a published protocol
+
+    @property
+    def audit_reason(self) -> str | None:
+        return self.reason
 
 
 @dataclass(frozen=True, kw_only=True)
 class ProtocolTargetRemoved(DomainEvent):
     target_id: uuid.UUID
     user_id: uuid.UUID | None = None
+    reason: str | None = None  # a correction on a published protocol
+
+    @property
+    def audit_reason(self) -> str | None:
+        return self.reason
 
 
 # ---------------------------------------------------------------------------

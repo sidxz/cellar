@@ -31,8 +31,17 @@ vi.mock("../hooks/use-protocol-name-preview", () => ({
   useDiscriminatorSuggestions: () => [],
 }));
 vi.mock("../hooks/use-protocol-facet-slots", () => ({ useProtocolFacetSlots: () => [] }));
-vi.mock("../hooks/use-protocol-targets", () => ({ useProtocolTargets: () => ({ data: [] }) }));
-vi.mock("./target-multi-select", () => ({ TargetMultiSelect: () => null }));
+const direct = vi.hoisted(() => ({
+  data: [{ id: "t1", name: "PptT", target_type: "single_protein", is_direct: true, run_count: 0 }],
+}));
+vi.mock("../hooks/use-protocol-targets", () => ({ useProtocolTargets: () => direct }));
+vi.mock("./target-multi-select", () => ({
+  TargetMultiSelect: ({ onChange }: { onChange: (ids: string[]) => void }) => (
+    <button type="button" onClick={() => onChange([])}>
+      remove all targets
+    </button>
+  ),
+}));
 vi.mock("./protocol-category-input", () => ({ ProtocolCategoryInput: () => null }));
 
 const protocol = {
@@ -73,5 +82,23 @@ describe("CorrectProtocolDialog", () => {
       target: { value: "Strain was misrecorded" },
     });
     expect(save).toBeEnabled();
+  });
+
+  it("a cancelled session's target edits do not carry into the next correction", () => {
+    correct.mockReset();
+    const { rerender } = render(
+      <CorrectProtocolDialog protocol={protocol} open onOpenChange={() => {}} />,
+    );
+    fireEvent.click(screen.getByLabelText(/correction: it was always this/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.click(screen.getByRole("button", { name: "remove all targets" }));
+    rerender(<CorrectProtocolDialog protocol={protocol} open={false} onOpenChange={() => {}} />);
+    rerender(<CorrectProtocolDialog protocol={protocol} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByLabelText(/correction: it was always this/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: "Typo in category" } });
+    fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
+    expect(correct).toHaveBeenCalledTimes(1);
+    expect(correct.mock.calls[0][0]).not.toHaveProperty("target_ids");
   });
 });

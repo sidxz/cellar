@@ -304,6 +304,12 @@ class SetProtocolDiscriminatorCommand(Command):
 _NEEDS_REASON = "A published protocol can only be corrected with a reason"
 
 
+def correction_reason(given: str | None, generic: str) -> str:
+    """The audit reason for a rename: the person's correction reason when there is one."""
+    given = " ".join((given or "").split())
+    return f"Correction: {given}" if given else generic
+
+
 async def _rederive_after_link_change(
     repo: ProtocolRepository,
     names: ProtocolNameService,
@@ -318,7 +324,12 @@ async def _rederive_after_link_change(
         return Failure(NotFoundError("Protocol", str(input.protocol_id)))
     before = (protocol.name, protocol.name_base, protocol.name_flag)
     renamed = await names.apply(
-        protocol, reason=reason, person=True, allow_incomplete=True, user_id=user_id
+        protocol,
+        reason=correction_reason(input.reason, reason),
+        person=True,
+        # A draft may be incomplete for a while; a published name must stay complete.
+        allow_incomplete=protocol.status != ProtocolStatus.ACTIVE,
+        user_id=user_id,
     )
     if isinstance(renamed, Failure):
         return renamed
@@ -562,6 +573,7 @@ class AddProtocolTarget:
                     workspace_id=input.workspace_id,
                     target_id=input.target_id,
                     user_id=auth.user_id if auth else None,
+                    reason=input.reason,
                 )
             )
         await self._dispatcher.dispatch_all(events)
@@ -626,6 +638,7 @@ class RemoveProtocolTarget:
                     workspace_id=input.workspace_id,
                     target_id=input.target_id,
                     user_id=auth.user_id if auth else None,
+                    reason=input.reason,
                 )
             )
         await self._dispatcher.dispatch_all(events)

@@ -45,3 +45,26 @@ async def test_correction_into_a_clash_is_409(client):
     b = await _published(client, discriminator="OD600")
     r = await client.post(f"/api/v1/protocols/{b['id']}/correct", json={"reason": "same method", "discriminator": "resazurin"})
     assert r.status_code == 409 and a["code"] in r.text
+
+
+async def test_a_locked_protocol_refuses_target_corrections(client, make_target):
+    p = await _published(client)
+    other = await make_target("DHFR", organism="Homo sapiens")
+    assert (await client.post(f"/api/v1/protocols/{p['id']}/lock", json={"reason": "review"})).status_code == 200
+    r = await client.post(
+        f"/api/v1/protocols/{p['id']}/correct", json={"reason": "wrong target", "target_ids": [other]}
+    )
+    assert r.status_code == 409
+    after = (await client.get(f"/api/v1/protocols/{p['id']}")).json()
+    assert after["name"] == p["name"] and after["targets"] == []
+
+
+async def test_a_published_name_cannot_be_left_incomplete_by_a_single_field_edit(client):
+    p = await _published(client)
+    r = await client.delete(
+        f"/api/v1/protocols/{p['id']}/ontology-annotations/organism",
+        params={"reason": "Organism was wrong"},
+    )
+    assert r.status_code == 422
+    after = (await client.get(f"/api/v1/protocols/{p['id']}")).json()
+    assert after["name"] == p["name"] and after["ontology_annotations"]["organism"]

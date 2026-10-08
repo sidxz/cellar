@@ -413,3 +413,19 @@ class TestStartCddMoleculeImport:
         result = await uc(self._make_command(), auth=_make_auth())
         assert isinstance(result, Failure)
         orchestrator.start.assert_not_called()
+
+
+class TestImportCddProtocolLegacyNames:
+    @pytest.mark.asyncio
+    async def test_vault_name_with_forbidden_characters_becomes_a_clean_nickname(self):
+        uc, _ = TestImportCddProtocol()._make_uc()
+        result = await uc(
+            ImportCddProtocolCommand(
+                workspace_id=WORKSPACE_ID,
+                external_protocol_id=1,
+                name_override="Kinase · IC50 — 2019",
+            ),
+            auth=_make_auth(),
+        )
+        assert isinstance(result, Success)
+        assert [a.label for a in result.unwrap().aliases] == ["Kinase IC50 - 2019"]

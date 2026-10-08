@@ -18,6 +18,7 @@ from cellar.application.auth import AuthContext, require_admin, require_same_wor
 from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.enums import NameFlag
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
@@ -190,24 +191,74 @@ async def apply_naming_change(
     also_save: list[Protocol] | None = None,
 ) -> None:
     """Rename what the preview said would change (system relabel: flags, never refuses).
-    ``also_save``: protocols the caller changed otherwise (a renamed category); each protocol
-    is saved once."""
+
+    Two passes. First every renamed protocol takes its new name with no sibling checks (the
+    preview already checked collisions against the after-state) and is saved; then flags are
+    worked out against that saved after-state, so no sibling check sees a name that is going
+    away. Siblings are flagged on the plan's own copies, never a second loaded copy.
+    ``also_save``: protocols the caller changed otherwise (a renamed category).
+    """
     by_id = {p.id: p for p in plan.protocols}
     touched = {p.id: p for p in also_save or []}
+    renamed: list[Protocol] = []
+    if plan.protocols:
+        await protocol_repo.lock_naming(plan.protocols[0].workspace_id)
     for change in preview.changes:
         protocol = by_id[change.protocol_id]
-        await names.apply(
-            protocol,
+        d = await _derive(protocol_repo, names, plan, protocol, check_siblings=False)
+        protocol.apply_derived_name(
+            name=d.rendered.name,
+            base=d.rendered.base,
+            flag=protocol.name_flag,
             reason=reason,
-            person=False,
-            allow_incomplete=True,
             user_id=user_id,
-            pattern=plan.pattern_for(protocol),
-            ctx=plan.ctx,
         )
         touched[protocol.id] = protocol
+        renamed.append(protocol)
     for protocol in touched.values():
         await protocol_repo.save(protocol)
+
+    flagged: dict[uuid.UUID, Protocol] = {}
+    for protocol in renamed:
+        d = await _derive(protocol_repo, names, plan, protocol, check_siblings=True)
+        flag = names.check(d, person=False, allow_incomplete=True).unwrap()
+        if protocol.name_flag != flag:
+            protocol.flag_name(flag)
+            flagged[protocol.id] = protocol
+        wanted = [(s, NameFlag.NEEDS_DISCRIMINATOR) for s in d.bare_siblings]
+        if flag == NameFlag.NAME_CONFLICT and d.clash is not None:
+            wanted.append((d.clash, NameFlag.NAME_CONFLICT))
+        for sibling, sibling_flag in wanted:
+            other = by_id.get(sibling.protocol_id) or await protocol_repo.find_by_id_in_workspace(
+                protocol.workspace_id, sibling.protocol_id
+            )
+            if other is not None and other.name_flag != sibling_flag:
+                other.flag_name(sibling_flag)
+                by_id[other.id] = other
+                flagged[other.id] = other
+    for protocol in flagged.values():
+        await protocol_repo.save(protocol)
+
+
+async def _derive(
+    protocol_repo: ProtocolRepository,
+    names: ProtocolNameService,
+    plan: NamingPlan,
+    protocol: Protocol,
+    *,
+    check_siblings: bool,
+):
+    return await names.derive(
+        protocol.workspace_id,
+        category=protocol.category,
+        target_ids=await protocol_repo.find_direct_target_ids(protocol.workspace_id, protocol.id),
+        annotations=protocol.ontology_annotations,
+        discriminator=protocol.discriminator,
+        exclude_code=protocol.code,
+        pattern=plan.pattern_for(protocol),
+        ctx=plan.ctx,
+        check_siblings=check_siblings,
+    )
 
 
 @dataclass(frozen=True, kw_only=True)

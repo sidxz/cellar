@@ -214,14 +214,17 @@ def register_workspace_config(container: Container) -> None:
     container.define(ListProtocolCategories, _list_categories)
     container.define(CreateProtocolCategory, _category_cmd(CreateProtocolCategory))
 
-    def _relabeling(uc_cls: type, repo_cls: type, *, dispatcher: bool = True):
+    def _relabeling(uc_cls: type, repo_cls: type):
         """Admin edits that relabel protocols: their repo plus protocols + the name service."""
 
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
-            args = (uow, repo_cls(uow), c[EventDispatcher]) if dispatcher else (uow, repo_cls(uow))
             return uc_cls(
-                *args, protocol_repo=SQLAlchemyProtocolRepository(uow), names=_name_service(uow)
+                uow,
+                repo_cls(uow),
+                c[EventDispatcher],
+                protocol_repo=SQLAlchemyProtocolRepository(uow),
+                names=_name_service(uow),
             )
 
         return _f
@@ -266,7 +269,7 @@ def register_workspace_config(container: Container) -> None:
     container.define(ListNamingLabels, _label_plain(ListNamingLabels))
     container.define(
         DeleteNamingLabel,
-        _relabeling(DeleteNamingLabel, SQLAlchemyNamingLabelRepository, dispatcher=False),
+        _relabeling(DeleteNamingLabel, SQLAlchemyNamingLabelRepository),
     )
     container.define(
         CreateNamingLabel, _relabeling(CreateNamingLabel, SQLAlchemyNamingLabelRepository)

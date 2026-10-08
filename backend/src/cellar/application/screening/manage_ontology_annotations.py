@@ -8,10 +8,12 @@ from dataclasses import dataclass, field
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.screening.manage_protocol import correction_reason
 from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.enums import ProtocolStatus
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
@@ -77,9 +79,12 @@ class SetOntologyAnnotation:
 
             renamed = await self._names.apply(
                 protocol,
-                reason=f"{SLOT_LABELS.get(input.slot, input.slot)} changed",
+                reason=correction_reason(
+                    input.reason, f"{SLOT_LABELS.get(input.slot, input.slot)} changed"
+                ),
                 person=True,
-                allow_incomplete=True,
+                # A draft may be incomplete for a while; a published name must stay complete.
+                allow_incomplete=protocol.status != ProtocolStatus.ACTIVE,
                 user_id=auth.user_id if auth else None,
             )
             if isinstance(renamed, Failure):
@@ -133,9 +138,12 @@ class RemoveOntologyAnnotation:
 
             renamed = await self._names.apply(
                 protocol,
-                reason=f"{SLOT_LABELS.get(input.slot, input.slot)} changed",
+                reason=correction_reason(
+                    input.reason, f"{SLOT_LABELS.get(input.slot, input.slot)} changed"
+                ),
                 person=True,
-                allow_incomplete=True,
+                # A draft may be incomplete for a while; a published name must stay complete.
+                allow_incomplete=protocol.status != ProtocolStatus.ACTIVE,
                 user_id=auth.user_id if auth else None,
             )
             if isinstance(renamed, Failure):

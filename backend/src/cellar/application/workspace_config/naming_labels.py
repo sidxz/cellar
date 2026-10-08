@@ -293,12 +293,14 @@ class DeleteNamingLabel:
         self,
         uow: UnitOfWork,
         repo: NamingLabelRepository,
+        dispatcher: EventDispatcherProtocol,
         *,
         protocol_repo: ProtocolRepository,
         names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
+        self._dispatcher = dispatcher
         self._protocols = protocol_repo
         self._names = names
 
@@ -323,5 +325,7 @@ class DeleteNamingLabel:
             if isinstance(relabeled, Failure):
                 return relabeled
             await self._repo.delete(input.workspace_id, label.id)
-            await self._uow.commit()
+            # The relabel's ProtocolRenamed events are the audit record of each rename.
+            events = await self._uow.commit()
+        await self._dispatcher.dispatch_all(events)
         return Success(None)

@@ -370,7 +370,7 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
     source_run_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     source_curve_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     source_readout_id: Mapped[uuid.UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
-    protocol_name_snapshot: Mapped[str] = mapped_column(String(255), nullable=False)
+    protocol_name_snapshot: Mapped[str] = mapped_column(String(400), nullable=False)
     protocol_version_snapshot: Mapped[int] = mapped_column(Integer, nullable=False)
     run_date_snapshot: Mapped[date | None] = mapped_column(Date, nullable=True)
 

@@ -1,9 +1,12 @@
 "use client";
 
-import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { ProtocolSummaryResponse } from "@/shared/lib/api/model";
+import type {
+  CorrectProtocolRequest,
+  ProtocolSummaryResponse,
+  SetDiscriminatorRequest,
+} from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { unwrapList } from "@/shared/types/pagination";
@@ -335,15 +338,9 @@ export function useSetOntologyAnnotation(protocolId: string) {
   });
 }
 
-export interface CorrectProtocolInput {
-  reason: string;
-  category?: string | null;
-  discriminator?: string | null;
-  /** slot -> replacement; an empty list clears the slot. */
-  ontology_annotations?: Record<string, OntologyTerm[]>;
-  /** The full set of direct targets. */
-  target_ids?: string[];
-}
+/** Only the fields that changed; ontology_annotations: slot -> replacement ([] clears it);
+ *  target_ids: the full set of direct targets. Typed off the DTO. */
+export type CorrectProtocolInput = CorrectProtocolRequest;
 
 /** Fix a published protocol's recorded facts with a reason (same code). */
 export function useCorrectProtocol(protocolId: string) {
@@ -367,7 +364,7 @@ export function useCorrectProtocol(protocolId: string) {
 export function useSetProtocolDiscriminator(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { discriminator: string | null; reason?: string | null }) =>
+    mutationFn: (data: SetDiscriminatorRequest) =>
       customInstance<Protocol>({
         url: `${API_V1}/protocols/${protocolId}/discriminator`,
         method: "PUT",

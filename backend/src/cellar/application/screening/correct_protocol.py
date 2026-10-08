@@ -72,6 +72,13 @@ class CorrectProtocol:
                 return Failure(
                     ConflictError("Only published protocols are corrected; edit a draft directly")
                 )
+            if protocol.is_locked:
+                return Failure(
+                    ConflictError(
+                        f"Protocol is locked. Reason: {protocol.lock_reason or '(none)'}. "
+                        "Unlock to correct it."
+                    )
+                )
             if input.category is not UNSET:
                 protocol.set_category(input.category, reason=reason)  # type: ignore[arg-type]
             if input.discriminator is not UNSET:
@@ -116,6 +123,7 @@ class CorrectProtocol:
                             workspace_id=input.workspace_id,
                             target_id=target_id,
                             user_id=user_id,
+                            reason=reason,
                         )
                     )
                 for target_id in current - wanted:
@@ -129,6 +137,7 @@ class CorrectProtocol:
                             workspace_id=input.workspace_id,
                             target_id=target_id,
                             user_id=user_id,
+                            reason=reason,
                         )
                     )
             # A published name must stay complete: no allow_incomplete here.
