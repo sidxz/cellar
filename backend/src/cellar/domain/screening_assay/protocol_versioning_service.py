@@ -83,6 +83,7 @@ class ProtocolVersioningService:
             id=new_protocol_id,
             workspace_id=parent.workspace_id,
             name=parent.name,
+            code=parent.code,
             description=parent.description,
             protocol_type=parent.protocol_type,
             category=parent.category,

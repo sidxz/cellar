@@ -182,6 +182,7 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     __tablename__ = "protocols"
 
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(20))
     description: Mapped[str | None] = mapped_column(Text)
     protocol_type: Mapped[str] = mapped_column(String(30), nullable=False)
     category: Mapped[str | None] = mapped_column(String(100))
@@ -227,6 +228,7 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     __table_args__ = (
         Index("ix_protocol_ws_name", "workspace_id", "name"),
+        Index("uq_protocol_ws_code_version", "workspace_id", "code", "protocol_version", unique=True),
         Index("ix_protocol_parent", "parent_protocol_id"),
         Index("ix_protocol_ws_status", "workspace_id", "status"),
     )

@@ -42,6 +42,7 @@ class ProtocolSummary:
     targets: list[TargetRef] = field(default_factory=list)
     run_count: int = 0
     last_run_date: date | None = None
+    code: str | None = None
 
 
 class ListProtocolSummaries:
@@ -85,6 +86,7 @@ class ListProtocolSummaries:
                 ProtocolSummary(
                     id=p.id,
                     name=p.name,
+                    code=p.code,
                     status=p.status.value,
                     protocol_type=p.protocol_type.value,
                     description=p.description,

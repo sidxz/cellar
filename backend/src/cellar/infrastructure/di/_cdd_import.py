@@ -62,6 +62,9 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.data_source_r
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (  # noqa: E501
     SQLAlchemyExternalApiKeyRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
+    SQLAlchemyWorkspaceSettingsRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 
@@ -96,6 +99,7 @@ def register_cdd_import(container: Container) -> None:
             uow=uow,
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             dispatcher=c[EventDispatcher],
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
         )
 
     container.define(ListCddProtocols, _cdd_query(ListCddProtocols))

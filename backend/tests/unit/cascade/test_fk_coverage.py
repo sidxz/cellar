@@ -575,6 +575,7 @@ LEFT_ALONE: dict[str, str] = {
     "workspace_settings.custom_field_definitions": _NO_IDS,
     "workspace_settings.formulation_number_scheme": _NO_IDS,
     "workspace_settings.registration_rules": _NO_IDS,
+    "workspace_settings.protocol_naming": _NO_IDS,
     "dose_response_curves.dose_response_config_snapshot": _BY_NAME,
     "protocols.ontology_annotations": _BY_NAME,
     "protocols.recommended_hit_criteria": _BY_NAME,

@@ -304,6 +304,7 @@ class Protocol(AggregateRoot):
         id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         name: str,
+        code: str | None = None,
         description: str | None = None,
         protocol_type: ProtocolType,
         category: str | None = None,
@@ -334,6 +335,8 @@ class Protocol(AggregateRoot):
 
         self.workspace_id = workspace_id
         self.name = name.strip()
+        # Immutable citation handle shared by every version (PRT-00142)
+        self.code = code
         self.description = description
         self.protocol_type = protocol_type
         self.category = category
@@ -428,6 +431,7 @@ class Protocol(AggregateRoot):
         *,
         workspace_id: uuid.UUID,
         name: str,
+        code: str | None = None,
         protocol_type: ProtocolType,
         created_by: uuid.UUID,
         description: str | None = None,
@@ -444,6 +448,7 @@ class Protocol(AggregateRoot):
         protocol = cls(
             workspace_id=workspace_id,
             name=name,
+            code=code,
             description=description,
             protocol_type=protocol_type,
             category=category,

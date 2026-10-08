@@ -247,6 +247,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
     SQLAlchemyTargetRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
+    SQLAlchemyWorkspaceSettingsRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.prot_cellar.settings import ProtCellarSettings
 from cellar.infrastructure.prot_cellar.target_source import HttpTargetSource
@@ -275,7 +278,16 @@ def register_screening(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return FindSimilarProtocols(uow, SQLAlchemyProtocolRepository(uow))
 
-    container.define(CreateProtocol, _protocol_cmd(CreateProtocol))
+    def _create_protocol(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateProtocol(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            c[EventDispatcher],
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+        )
+
+    container.define(CreateProtocol, _create_protocol)
     container.define(GetProtocol, _protocol_query(GetProtocol))
     container.define(ListProtocols, _protocol_query(ListProtocols))
     container.define(ListProtocolVocabulary, _protocol_query(ListProtocolVocabulary))

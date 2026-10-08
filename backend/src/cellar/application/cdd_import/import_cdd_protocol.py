@@ -18,6 +18,7 @@ from cellar.application.cdd_import._check_config import check_cdd_configured
 from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from cellar.application.cdd_import.gateway import CddProtocolGateway
 from cellar.application.cdd_import.mapper import map_cdd_protocol
+from cellar.application.screening.protocol_codes import mint_protocol_code
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -36,6 +37,7 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
+from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -53,12 +55,14 @@ class ImportCddProtocol:
         uow: UnitOfWork,
         protocol_repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        settings_repo: WorkspaceSettingsRepository | None = None,
     ) -> None:
         self._gateway = gateway
         self._get_data_source = get_data_source
         self._uow = uow
         self._protocol_repo = protocol_repo
         self._dispatcher = dispatcher
+        self._settings_repo = settings_repo
 
     async def __call__(
         self, input: ImportCddProtocolCommand, auth: AuthContext | None = None
@@ -135,9 +139,15 @@ class ImportCddProtocol:
                 with contextlib.suppress(ValueError):  # keep default BIOCHEMICAL
                     protocol_type = ProtocolType(cat_normalized)
 
+            code = await mint_protocol_code(
+                settings_repo=self._settings_repo,
+                protocol_repo=self._protocol_repo,
+                workspace_id=input.workspace_id,
+            )
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
                 name=input.name_override or mapping.name,
+                code=code,
                 description=mapping.description,
                 protocol_type=protocol_type,
                 category=mapping.category,

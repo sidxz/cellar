@@ -194,6 +194,7 @@ class ProtocolResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     name: str
+    code: str | None = None
     description: str | None = None
     protocol_type: str
     # Effective targets (direct union run-derived), lightweight for display.
@@ -255,6 +256,7 @@ class ProtocolResponse(BaseModel):
             id=p.id,
             workspace_id=p.workspace_id,
             name=p.name,
+            code=p.code,
             description=p.description,
             protocol_type=p.protocol_type.value,
             targets=targets or [],
@@ -454,6 +456,7 @@ class ProtocolSummaryResponse(BaseModel):
 
     id: uuid.UUID
     name: str
+    code: str | None = None
     status: str
     protocol_type: str
     description: str | None = None
@@ -489,6 +492,7 @@ async def list_protocol_summaries(
         ProtocolSummaryResponse(
             id=s.id,
             name=s.name,
+            code=s.code,
             status=s.status,
             protocol_type=s.protocol_type,
             description=s.description,

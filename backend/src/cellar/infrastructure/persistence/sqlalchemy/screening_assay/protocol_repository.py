@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 
+import sqlalchemy as sa
 from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
@@ -97,6 +98,27 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         if model is None:
             return None
         return self._to_domain_tracked(model)
+
+    async def next_protocol_code(self, workspace_id: uuid.UUID, *, prefix: str, width: int) -> str:
+        # Serialize per workspace: the MAX+1 read and the INSERT share this transaction and the
+        # advisory lock is held until commit. The same lock guards name checks
+        # (ProtocolNameService).
+        # ponytail: one protocol create at a time per workspace; a SEQUENCE if throughput matters.
+        await self._session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"protocol_naming:{workspace_id}")))
+        )
+        stmt = select(
+            func.coalesce(
+                func.max(
+                    func.cast(
+                        func.substring(ProtocolModel.code, sa.literal(r"[0-9]+$")), sa.Integer
+                    )
+                ),
+                0,
+            )
+        ).where(ProtocolModel.workspace_id == workspace_id)
+        max_num: int = (await self._session.execute(stmt)).scalar_one()
+        return f"{prefix}{max_num + 1:0{width}d}"
 
     @staticmethod
     def _norm_readout(name: str) -> str:
@@ -755,6 +777,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             id=model.id,
             workspace_id=model.workspace_id,
             name=model.name,
+            code=model.code,
             description=model.description,
             protocol_type=ProtocolType(model.protocol_type),
             category=model.category,
@@ -814,6 +837,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             id=aggregate.id,
             workspace_id=aggregate.workspace_id,
             name=aggregate.name,
+            code=aggregate.code,
             description=aggregate.description,
             protocol_type=aggregate.protocol_type.value,
             category=aggregate.category,
@@ -847,6 +871,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
 
     def _update_model(self, model: ProtocolModel, aggregate: Protocol) -> None:
         model.name = aggregate.name
+        model.code = aggregate.code
         model.description = aggregate.description
         model.protocol_type = aggregate.protocol_type.value
         model.category = aggregate.category

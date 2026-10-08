@@ -17,6 +17,7 @@ from cellar.application.auth import (
 from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
+from cellar.application.screening.protocol_codes import mint_protocol_code
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -43,6 +44,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from cellar.domain.shared.ontology import OntologyTerm
+from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -69,10 +71,13 @@ class CreateProtocol:
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        settings_repo: WorkspaceSettingsRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._settings_repo = settings_repo
 
     async def __call__(
         self, input: CreateProtocolCommand, auth: AuthContext | None = None
@@ -166,9 +171,15 @@ class CreateProtocol:
         }
 
         async with self._uow:
+            code = await mint_protocol_code(
+                settings_repo=self._settings_repo,
+                protocol_repo=self._repo,
+                workspace_id=input.workspace_id,
+            )
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
                 name=input.name,
+                code=code,
                 description=input.description,
                 protocol_type=ProtocolType(input.protocol_type),
                 category=input.category,
