@@ -27,6 +27,7 @@ export function ProtocolGrid({
 }: ProtocolGridProps) {
   const columnDefs = useMemo<ColDef<Protocol>[]>(
     () => [
+      { headerName: "Code", field: "code", width: 110, cellClass: "font-mono text-xs" },
       { headerName: "Name", field: "name", flex: 1, minWidth: 180 },
       {
         headerName: "Type",

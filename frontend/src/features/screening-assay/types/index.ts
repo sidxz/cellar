@@ -419,6 +419,8 @@ export interface Protocol {
    *  any draft for an admin, that nothing still uses). Only GET /protocols/{id}
    *  fills it; absent/null elsewhere means "not computed". Typed off the DTO. */
   can_delete?: ProtocolResponse["can_delete"];
+  /** Immutable citation handle shared by every version (`PRT-00142`). Typed off the DTO. */
+  code: ProtocolResponse["code"];
 }
 
 /** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never

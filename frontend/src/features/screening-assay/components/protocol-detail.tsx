@@ -103,6 +103,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
+        subtitle={(p) => (p.code ? <span className="font-mono">{p.code}</span> : null)}
         breadcrumbTrail={() => [{ label: "Protocols", href: "/assays" }]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
@@ -432,7 +433,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           <DialogHeader>
             <DialogTitle>Delete Draft Protocol</DialogTitle>
             <DialogDescription>
-              This will permanently delete &quot;{protocol?.name}&quot; (v
+              This will permanently delete &quot;{protocol?.name}&quot; ({protocol?.code}, v
               {protocol?.protocol_version}). This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -462,7 +463,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         <CascadeDeleteDialog
           entityType="protocol"
           entityId={protocolId}
-          entityLabel={protocol.name}
+          entityLabel={protocol.code ?? protocol.name}
           onDeleted={() => router.push("/assays")}
           open={forceDeleteOpen}
           onOpenChange={setForceDeleteOpen}

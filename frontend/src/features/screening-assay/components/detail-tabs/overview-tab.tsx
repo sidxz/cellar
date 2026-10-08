@@ -226,6 +226,10 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
           )}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
+              <p className="text-sm text-muted-foreground">Code</p>
+              <p className="font-mono font-medium">{protocol.code ?? "\u2014"}</p>
+            </div>
+            <div>
               <p className="text-sm text-muted-foreground">Type</p>
               <p className="font-medium">
                 {PROTOCOL_TYPE_LABELS[protocol.protocol_type as ProtocolType] ??
