@@ -86,6 +86,7 @@ def _create_test_app(
     from cellar.interface.routes.organizations import router as org_router
     from cellar.interface.routes.settings import router as settings_router
     from cellar.interface.routes.vocabularies import router as vocab_router
+    from cellar.interface.routes.protocol_categories import router as protocol_categories_router
     from cellar.interface.routes.molecules import router as mol_router
     from cellar.interface.routes.bulk_registration import router as bulk_reg_router
     from cellar.interface.routes.attachments import router as attachment_router
@@ -154,6 +155,7 @@ def _create_test_app(
     app.include_router(org_directory_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
+    app.include_router(protocol_categories_router)
     app.include_router(mol_router)
     app.include_router(attachment_router)
     app.include_router(disclosure_router)

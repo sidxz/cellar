@@ -12,6 +12,7 @@ from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.external_api_key import ExternalApiKey
 from cellar.domain.workspace_config.ontology_slot_definition import OntologySlotDefinition
 from cellar.domain.workspace_config.organization import Organization
+from cellar.domain.workspace_config.protocol_category import ProtocolCategory
 from cellar.domain.workspace_config.protocol_form import ProtocolForm
 from cellar.domain.workspace_config.registration_form import RegistrationForm
 from cellar.domain.workspace_config.salt_entry import SaltEntry
@@ -50,6 +51,25 @@ class WorkspaceSettingsRepository(Protocol):
     async def find_by_workspace_id(self, workspace_id: uuid.UUID) -> WorkspaceSettings | None: ...
 
     async def save(self, aggregate: WorkspaceSettings) -> None: ...
+
+
+@runtime_checkable
+class ProtocolCategoryRepository(Protocol):
+    """Repository for ProtocolCategory aggregates."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> ProtocolCategory | None: ...
+
+    async def save(self, aggregate: ProtocolCategory) -> None: ...
+
+    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[ProtocolCategory]: ...
+
+    async def find_by_label(
+        self, workspace_id: uuid.UUID, label: str
+    ) -> ProtocolCategory | None: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
 
 @runtime_checkable

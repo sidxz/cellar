@@ -43,6 +43,13 @@ from cellar.application.workspace_config.list_protocol_forms import ListProtocol
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.protocol_categories import (
+    CreateProtocolCategory,
+    DeleteProtocolCategory,
+    ListProtocolCategories,
+    SeedDefaultProtocolCategories,
+    UpdateProtocolCategory,
+)
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
@@ -66,6 +73,9 @@ from cellar.application.workspace_config.update_workspace_settings import (
 )
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
     SQLAlchemyTagBrowseRepository,
 )
@@ -92,6 +102,9 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.ontology_slot
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
     SQLAlchemyOrganizationRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_category_repository import (  # noqa: E501
+    SQLAlchemyProtocolCategoryRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (  # noqa: E501
     SQLAlchemyProtocolFormRepository,
@@ -163,6 +176,30 @@ def register_workspace_config(container: Container) -> None:
         return _f
 
     container.define(CreateVocabulary, _vocab_cmd(CreateVocabulary))
+
+    # --- Protocol categories ---
+    def _category_cmd(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyProtocolCategoryRepository(uow), c[EventDispatcher])
+
+        return _f
+
+    def _list_categories(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListProtocolCategories(uow, SQLAlchemyProtocolCategoryRepository(uow))
+
+    def _delete_category(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteProtocolCategory(
+            uow, SQLAlchemyProtocolCategoryRepository(uow), SQLAlchemyProtocolRepository(uow)
+        )
+
+    container.define(ListProtocolCategories, _list_categories)
+    container.define(CreateProtocolCategory, _category_cmd(CreateProtocolCategory))
+    container.define(UpdateProtocolCategory, _category_cmd(UpdateProtocolCategory))
+    container.define(SeedDefaultProtocolCategories, _category_cmd(SeedDefaultProtocolCategories))
+    container.define(DeleteProtocolCategory, _delete_category)
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))
 

@@ -203,3 +203,16 @@ class DataSourceModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         UniqueConstraint("workspace_id", "name", name="uq_data_source_ws_name"),
         Index("ix_data_source_ws_type", "workspace_id", "source_type"),
     )
+
+
+class ProtocolCategoryModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """A protocol category and the name pattern its protocols follow.
+
+    Labels are unique per workspace case-insensitively: the functional unique index
+    ``uq_protocol_category_ws_label`` (workspace_id, lower(label)) lives in migration 084.
+    """
+
+    __tablename__ = "protocol_categories"
+
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_pattern: Mapped[str] = mapped_column(String(400), nullable=False)

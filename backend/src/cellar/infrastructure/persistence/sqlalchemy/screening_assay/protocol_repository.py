@@ -109,6 +109,13 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             return None
         return self._to_domain_tracked(model)
 
+    async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int:
+        stmt = select(func.count()).where(
+            ProtocolModel.workspace_id == workspace_id,
+            func.lower(ProtocolModel.category) == " ".join(label.split()).lower(),
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
+
     async def next_protocol_code(self, workspace_id: uuid.UUID, *, prefix: str, width: int) -> str:
         # Serialize per workspace: the MAX+1 read and the INSERT share this transaction and the
         # advisory lock is held until commit. The same lock guards name checks

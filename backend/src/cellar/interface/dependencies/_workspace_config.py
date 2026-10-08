@@ -47,6 +47,13 @@ from cellar.application.workspace_config.list_protocol_forms import (
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.protocol_categories import (
+    CreateProtocolCategory,
+    DeleteProtocolCategory,
+    ListProtocolCategories,
+    SeedDefaultProtocolCategories,
+    UpdateProtocolCategory,
+)
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
@@ -84,6 +91,7 @@ __all__ = [
     # Workspace config
     "CreateOrganizationDep",
     # Protocol forms
+    "CreateProtocolCategoryDep",
     "CreateProtocolFormDep",
     "CreateRegistrationFormDep",
     "CreateSaltEntryDep",
@@ -92,6 +100,7 @@ __all__ = [
     "DeleteDataSourceDep",
     "DeleteExternalApiKeyDep",
     "DeleteOntologySlotDep",
+    "DeleteProtocolCategoryDep",
     "DeleteProtocolFormDep",
     "DeleteRegistrationFormDep",
     "DeleteSaltEntryDep",
@@ -108,6 +117,7 @@ __all__ = [
     "ListOntologyDescendantsDep",
     "ListOntologySlotsDep",
     "ListOrganizationsDep",
+    "ListProtocolCategoriesDep",
     "ListProtocolFormsDep",
     "ListRegistrationFormsDep",
     "ListSaltEntriesDep",
@@ -119,6 +129,7 @@ __all__ = [
     "RenameTagDep",
     # Ontology search + annotations
     "SearchOntologyDep",
+    "SeedDefaultProtocolCategoriesDep",
     "SetEntityTagsDep",
     "SetOntologyAnnotationDep",
     "UnassignTagDep",
@@ -127,6 +138,7 @@ __all__ = [
     "UpdateExternalApiKeyDep",
     "UpdateOntologySlotDep",
     "UpdateOrganizationDep",
+    "UpdateProtocolCategoryDep",
     "UpdateProtocolFormDep",
     "UpdateRegistrationFormDep",
     "UpdateSaltEntryDep",
@@ -146,6 +158,21 @@ UpdateWorkspaceSettingsDep = Annotated[
     UpdateWorkspaceSettings, Depends(_get_use_case(UpdateWorkspaceSettings))
 ]
 CreateVocabularyDep = Annotated[CreateVocabulary, Depends(_get_use_case(CreateVocabulary))]
+CreateProtocolCategoryDep = Annotated[
+    CreateProtocolCategory, Depends(_get_use_case(CreateProtocolCategory))
+]
+DeleteProtocolCategoryDep = Annotated[
+    DeleteProtocolCategory, Depends(_get_use_case(DeleteProtocolCategory))
+]
+ListProtocolCategoriesDep = Annotated[
+    ListProtocolCategories, Depends(_get_use_case(ListProtocolCategories))
+]
+SeedDefaultProtocolCategoriesDep = Annotated[
+    SeedDefaultProtocolCategories, Depends(_get_use_case(SeedDefaultProtocolCategories))
+]
+UpdateProtocolCategoryDep = Annotated[
+    UpdateProtocolCategory, Depends(_get_use_case(UpdateProtocolCategory))
+]
 UpdateVocabularyDep = Annotated[UpdateVocabulary, Depends(_get_use_case(UpdateVocabulary))]
 ListVocabulariesDep = Annotated[ListVocabularies, Depends(_get_use_case(ListVocabularies))]
 DeleteVocabularyDep = Annotated[DeleteVocabulary, Depends(_get_use_case(DeleteVocabulary))]

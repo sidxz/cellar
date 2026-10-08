@@ -1,11 +1,8 @@
 "use client";
 
-import { useVocabularyTerms } from "@/features/workspace-config/hooks/use-vocabularies";
+import { useProtocolCategories } from "@/features/workspace-config/hooks/use-protocol-categories";
 import { SearchableSelect } from "@/shared/components/searchable-select";
 import { VocabularyAutocomplete } from "./vocabulary-autocomplete";
-
-/** Workspace vocabulary that turns the protocol Category field into a fixed dropdown. */
-export const PROTOCOL_CATEGORIES_VOCABULARY = "Protocol Categories";
 
 interface ProtocolCategoryInputProps {
   value: string;
@@ -13,12 +10,13 @@ interface ProtocolCategoryInputProps {
 }
 
 /**
- * Category picker shared by create and edit: a dropdown of the workspace's
- * "Protocol Categories" vocabulary, or free-text autocomplete over existing
- * categories when the workspace hasn't defined one.
+ * Category picker shared by create and edit: a dropdown of the workspace's protocol
+ * categories (Admin > Protocol Categories), or free-text autocomplete over existing
+ * categories when the workspace has none yet.
  */
 export function ProtocolCategoryInput({ value, onChange }: ProtocolCategoryInputProps) {
-  const terms = useVocabularyTerms(PROTOCOL_CATEGORIES_VOCABULARY);
+  const { data: categories } = useProtocolCategories();
+  const terms = (categories ?? []).map((c) => c.label);
 
   if (terms.length === 0) {
     return (

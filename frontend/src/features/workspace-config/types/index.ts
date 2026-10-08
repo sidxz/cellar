@@ -1,9 +1,12 @@
 import type {
   CreateOrganizationBody,
+  CreateProtocolCategoryBody,
   CreateVocabularyBody,
   OrganizationResponse,
   OrganizationType as OrganizationTypeModel,
+  ProtocolCategoryResponse,
   UpdateOrganizationBody,
+  UpdateProtocolCategoryBody,
   UpdateVocabularyBody,
   VocabularyResponse,
   WorkspaceSettingsResponse,
@@ -66,3 +69,8 @@ export type WorkspaceSettings = WorkspaceSettingsResponse;
 export type Vocabulary = VocabularyResponse;
 export type CreateVocabularyInput = CreateVocabularyBody;
 export type UpdateVocabularyInput = UpdateVocabularyBody;
+
+// Protocol categories (orval aliases): label + the name pattern its protocols follow.
+export type ProtocolCategory = ProtocolCategoryResponse;
+export type CreateProtocolCategoryInput = CreateProtocolCategoryBody;
+export type UpdateProtocolCategoryInput = UpdateProtocolCategoryBody;
