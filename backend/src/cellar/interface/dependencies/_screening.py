@@ -99,6 +99,10 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_protocol_name import (
+    ListDiscriminators,
+    PreviewProtocolName,
+)
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
@@ -174,6 +178,7 @@ __all__ = [
     "LinkRunPlateDep",
     # Compound flags
     "ListCompoundFlagsDep",
+    "ListDiscriminatorsDep",
     "ListDoseResponseByRunDep",
     "ListDoseResponseEnrichedDep",
     "ListPlateTemplatesDep",
@@ -191,6 +196,7 @@ __all__ = [
     "MoleculeActivityServiceDep",
     # Plate setup + readout import
     "ParsePlateMapFileDep",
+    "PreviewProtocolNameDep",
     "PreviewSummaryFileDep",
     "PreviewSummaryImportDep",
     "PublishProtocolDep",
@@ -278,6 +284,10 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+PreviewProtocolNameDep = Annotated[
+    PreviewProtocolName, Depends(_get_use_case(PreviewProtocolName))
+]
+ListDiscriminatorsDep = Annotated[ListDiscriminators, Depends(_get_use_case(ListDiscriminators))]
 SetProtocolDiscriminatorDep = Annotated[
     SetProtocolDiscriminator, Depends(_get_use_case(SetProtocolDiscriminator))
 ]

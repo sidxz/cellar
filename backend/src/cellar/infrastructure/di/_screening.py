@@ -143,6 +143,10 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_protocol_name import (
+    ListDiscriminators,
+    PreviewProtocolName,
+)
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.protocol_activity_reader import ProtocolActivityReader
@@ -330,6 +334,13 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(CreateProtocol, _create_protocol)
+
+    def _preview_name(c: Container) -> PreviewProtocolName:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewProtocolName(uow, SQLAlchemyProtocolRepository(uow), _name_service(uow))
+
+    container.define(PreviewProtocolName, _preview_name)
+    container.define(ListDiscriminators, _protocol_query(ListDiscriminators))
     container.define(GetProtocol, _protocol_query(GetProtocol))
     container.define(ListProtocols, _protocol_query(ListProtocols))
     container.define(ListProtocolVocabulary, _protocol_query(ListProtocolVocabulary))

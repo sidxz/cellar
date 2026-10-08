@@ -59,6 +59,11 @@ from cellar.application.screening.manage_readout_definitions import (
     RemoveReadoutDefinitionCommand,
     UpdateReadoutDefinitionCommand,
 )
+from cellar.application.screening.preview_protocol_name import (
+    ListDiscriminatorsQuery,
+    NamePreview,
+    PreviewProtocolNameQuery,
+)
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverageQuery,
 )
@@ -68,6 +73,7 @@ from cellar.application.screening.resolve_target_links import (
 )
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.protocol import Protocol
+from cellar.domain.screening_assay.repository import NameSibling
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
     AddProtocolNicknameDep,
@@ -83,11 +89,13 @@ from cellar.interface.dependencies import (
     GetProtocolCollectionGapDep,
     GetProtocolDep,
     GetProtocolTargetsDep,
+    ListDiscriminatorsDep,
     ListProtocolsByProjectDep,
     ListProtocolsDep,
     ListProtocolSummariesDep,
     ListProtocolVocabularyDep,
     LockProtocolDep,
+    PreviewProtocolNameDep,
     PublishProtocolDep,
     RemoveConditionDefinitionDep,
     RemoveControlLayoutDep,
@@ -645,6 +653,86 @@ async def list_protocols(
         ],
         next_cursor=page.next_cursor,
     )
+
+
+class NamePreviewRequest(BaseModel):
+    category: str | None = None
+    target_ids: list[uuid.UUID] = []
+    ontology_annotations: dict[str, list[OntologyTermRequest]] = {}
+    discriminator: str | None = None
+    # The protocol being corrected, so it does not clash with itself.
+    protocol_id: uuid.UUID | None = None
+    model_config = {"extra": "forbid"}
+
+
+class NameSiblingResponse(BaseModel):
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    discriminator: str | None
+
+    @classmethod
+    def from_domain(cls, s: NameSibling) -> NameSiblingResponse:
+        return cls(
+            protocol_id=s.protocol_id, code=s.code, name=s.name, discriminator=s.discriminator
+        )
+
+
+class NamePreviewResponse(BaseModel):
+    name: str
+    base: str
+    missing: list[str]
+    missing_labels: list[str]
+    clash: NameSiblingResponse | None
+    siblings: list[NameSiblingResponse]
+    needs_discriminator: bool
+    discriminator_error: str | None
+    discriminator_in_pattern: bool
+
+    @classmethod
+    def from_domain(cls, p: NamePreview) -> NamePreviewResponse:
+        return cls(
+            name=p.name,
+            base=p.base,
+            missing=p.missing,
+            missing_labels=p.missing_labels,
+            clash=NameSiblingResponse.from_domain(p.clash) if p.clash else None,
+            siblings=[NameSiblingResponse.from_domain(s) for s in p.siblings],
+            needs_discriminator=p.needs_discriminator,
+            discriminator_error=p.discriminator_error,
+            discriminator_in_pattern=p.discriminator_in_pattern,
+        )
+
+
+@router.post("/protocols/name-preview", response_model=NamePreviewResponse, tags=["protocols"])
+async def preview_protocol_name(
+    body: NamePreviewRequest, auth: AuthDep, uc: PreviewProtocolNameDep
+) -> NamePreviewResponse:
+    """The name these facts would generate, what is missing, and any collision."""
+    query = PreviewProtocolNameQuery(
+        workspace_id=auth.workspace_id,
+        category=body.category,
+        target_ids=body.target_ids,
+        ontology_annotations={
+            slot: [t.model_dump() for t in terms]
+            for slot, terms in body.ontology_annotations.items()
+        },
+        discriminator=body.discriminator,
+        protocol_id=body.protocol_id,
+    )
+    return NamePreviewResponse.from_domain(result_to_response(await uc(query, auth=auth)))
+
+
+@router.get("/protocols/discriminators", response_model=list[str], tags=["protocols"])
+async def list_protocol_discriminators(
+    auth: AuthDep,
+    uc: ListDiscriminatorsDep,
+    base: str | None = Query(None),
+    q: str | None = Query(None),
+) -> list[str]:
+    """Discriminators already in use (for the picker); ``base`` narrows to one base name."""
+    query = ListDiscriminatorsQuery(workspace_id=auth.workspace_id, base=base, q=q)
+    return result_to_response(await uc(query, auth=auth))
 
 
 @router.get("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])

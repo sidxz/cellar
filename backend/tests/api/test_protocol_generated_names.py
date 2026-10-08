@@ -2,7 +2,11 @@
 
 import pytest
 
-MTB = {"term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1773", "label": "Mycobacterium tuberculosis", "ontology_source": "NCBITAXON"}
+MTB = {
+    "term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1773",
+    "label": "Mycobacterium tuberculosis",
+    "ontology_source": "NCBITAXON",
+}
 READOUTS = [{"name": "Signal", "data_type": "numeric"}]
 
 
@@ -13,7 +17,9 @@ async def categories(client):
 
 def _body(**over):
     body = {
-        "protocol_type": "whole_cell", "category": "Growth inhibition", "readout_definitions": READOUTS,
+        "protocol_type": "whole_cell",
+        "category": "Growth inhibition",
+        "readout_definitions": READOUTS,
         "ontology_annotations": {"organism": [MTB]},
     }
     return body | over
@@ -51,17 +57,30 @@ async def test_name_field_is_rejected(client, categories):
 
 async def test_changing_the_organism_renames_and_keeps_the_old_name_as_alias(client, categories):
     p = (await client.post("/api/v1/protocols", json=_body(discriminator="resazurin"))).json()
-    smeg = {"term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1772", "label": "Mycolicibacterium smegmatis", "ontology_source": "NCBITAXON"}
-    r = await client.put(f"/api/v1/protocols/{p['id']}/ontology-annotations", json={"slot": "organism", "terms": [smeg]})
+    smeg = {
+        "term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1772",
+        "label": "Mycolicibacterium smegmatis",
+        "ontology_source": "NCBITAXON",
+    }
+    r = await client.put(
+        f"/api/v1/protocols/{p['id']}/ontology-annotations",
+        json={"slot": "organism", "terms": [smeg]},
+    )
     assert r.json()["name"] == "M. smegmatis growth inhibition [resazurin]"
     assert r.json()["aliases"][0]["label"] == "M. tuberculosis growth inhibition [resazurin]"
 
 
 async def test_discriminator_route(client, categories):
     p = (await client.post("/api/v1/protocols", json=_body())).json()
-    r = await client.put(f"/api/v1/protocols/{p['id']}/discriminator", json={"discriminator": "OD600"})
+    r = await client.put(
+        f"/api/v1/protocols/{p['id']}/discriminator", json={"discriminator": "OD600"}
+    )
     assert r.json()["name"] == "M. tuberculosis growth inhibition [OD600]"
-    assert (await client.put(f"/api/v1/protocols/{p['id']}/discriminator", json={"discriminator": "HTS"})).status_code == 422
+    assert (
+        await client.put(
+            f"/api/v1/protocols/{p['id']}/discriminator", json={"discriminator": "HTS"}
+        )
+    ).status_code == 422
 
 
 async def test_publish_refused_while_incomplete(client, categories):
