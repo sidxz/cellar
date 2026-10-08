@@ -1,15 +1,14 @@
-"""CrossProtocolResolver — resolves @ProtocolName.ReadoutName references in formulas.
+"""CrossProtocolResolver — resolves @CODE.Readout references in formulas.
 
-Cross-protocol formula references use the syntax:
-  - ``@ProtocolName.ReadoutName``         (simple names, no spaces)
-  - ``@{Protocol Name}.{Readout Name}``   (braces for names with spaces)
+Cross-protocol formula references name the protocol by its immutable code (names are
+generated and change; codes never do):
+  - ``@PRT-00142.IC50``             (bare code, identifier-safe readout)
+  - ``@{PRT-00142}.{IC50 nM}``      (braces; required for readouts with spaces)
 
-Resolution is performed at query time, looking up the most recent active
-protocol with the given name and fetching the readout data for the target
-molecule.
+Resolution is performed at query time, looking up the latest active version of the
+protocol with that code and fetching the readout data for the target molecule.
 
-Binding keys use double-underscore to stay safe for asteval:
-  ``{protocol_name}__{readout_name}``
+Binding keys are asteval identifiers: ``PRT_00142__IC50_nM`` (see ``binding_key``).
 """
 
 from __future__ import annotations
@@ -27,11 +26,15 @@ from cellar.domain.screening_assay.repository import (
 )
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
-# Matches both forms:
-#   @ProtocolName.ReadoutName
-#   @{Protocol Name}.{Readout Name}
-# Groups: (braced_protocol, bare_protocol, braced_readout, bare_readout)
-_REF_RE = re.compile(r"@(?:\{([^}]+)\}|(\w+))\.(?:\{([^}]+)\}|(\w+))")
+_CODE = r"[A-Z]{2,8}-\d+"
+# @{PRT-00142}.{IC50 nM} or @PRT-00142.IC50
+# Groups: (braced code, bare code, braced readout, bare readout)
+_REF_RE = re.compile(rf"@(?:\{{({_CODE})\}}|({_CODE}))\.(?:\{{([^}}]+)\}}|(\w+))")
+
+
+def binding_key(code: str, readout: str) -> str:
+    """asteval identifier for a reference: PRT-00142 + IC50 nM -> PRT_00142__IC50_nM."""
+    return re.sub(r"\W", "_", f"{code}__{readout}")
 
 
 class CrossProtocolResolver:
@@ -93,17 +96,16 @@ class CrossProtocolResolver:
         bindings: dict[str, float] = {}
 
         for protocol_name, readout_name in refs:
-            # Look up the active protocol by name
-            protocol = await self._protocol_repo.find_by_name(workspace_id, protocol_name)
+            # protocol_name holds the protocol code; look up its latest active version
+            protocol = await self._protocol_repo.find_latest_active_by_code(
+                workspace_id, protocol_name
+            )
             if protocol is None or protocol.status != ProtocolStatus.ACTIVE:
                 return Failure(
                     NotFoundError(
                         "Protocol",
                         protocol_name,
-                        detail=(
-                            f"No active protocol named '{protocol_name}' found "
-                            f"in workspace {workspace_id}"
-                        ),
+                        detail=f"Protocol {protocol_name} has no active version",
                     )
                 )
 
@@ -146,25 +148,21 @@ class CrossProtocolResolver:
                     )
                 )
 
-            binding_key = f"{protocol_name}__{readout_name}"
-            bindings[binding_key] = point.value.value
+            bindings[binding_key(protocol_name, readout_name)] = point.value.value
 
         return Success(bindings)
 
     def rewrite_formula(self, formula: str) -> str:
-        """Replace ``@Protocol.Readout`` tokens with ``Protocol__Readout`` identifiers.
-
-        This produces a formula string that is safe for asteval, where the
-        bindings dict uses double-underscore keys.
+        """Replace ``@CODE.Readout`` tokens with asteval-safe ``binding_key`` identifiers.
 
         Example:
-            ``@TargetAssay.IC50 * 2``  →  ``TargetAssay__IC50 * 2``
+            ``@PRT-00142.IC50 * 2``  →  ``PRT_00142__IC50 * 2``
         """
 
         def _substitute(match: re.Match) -> str:
-            protocol_name = match.group(1) or match.group(2)
+            code = match.group(1) or match.group(2)
             readout_name = match.group(3) or match.group(4)
-            return f"{protocol_name}__{readout_name}"
+            return binding_key(code, readout_name)
 
         return _REF_RE.sub(_substitute, formula)
 

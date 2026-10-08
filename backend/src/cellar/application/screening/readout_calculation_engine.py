@@ -46,7 +46,7 @@ from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationEr
 from cellar.domain.shared.value_objects import QualifiedValue
 
 # Regex to detect cross-protocol references: @ProtocolName.ReadoutName or @{Protocol Name}.Readout
-_CROSS_PROTOCOL_RE = re.compile(r"@\{?[\w\s]+\}?\.[\w\s]+")
+_CROSS_PROTOCOL_RE = re.compile(r"@\{?[A-Z]{2,8}-\d+\}?\.")
 
 
 @dataclass(frozen=True)

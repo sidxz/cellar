@@ -179,7 +179,13 @@ export function CreateProtocolDialog({
   const mergedFacetSlots = useProtocolFacetSlots();
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
-  const crossProtocolNames = useMemo(() => (allProtocols ?? []).map((p) => p.name), [allProtocols]);
+  const crossProtocols = useMemo(
+    () =>
+      (allProtocols ?? [])
+        .filter((p) => p.code)
+        .map((p) => ({ code: p.code as string, name: p.name })),
+    [allProtocols],
+  );
 
   // Form-template selection and project assignment live outside the zod form:
   // selectedFormId is pure UI state (triggers applyForm); projectId is POSTed
@@ -784,7 +790,7 @@ export function CreateProtocolDialog({
                                   availableReadoutNames={readoutValues
                                     .filter((other, i) => i !== index && other.name.trim())
                                     .map((r) => r.name.trim())}
-                                  protocolNames={crossProtocolNames}
+                                  protocols={crossProtocols}
                                 />
                               )}
                             />

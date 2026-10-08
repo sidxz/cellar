@@ -90,14 +90,21 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             return None
         return self._to_domain_tracked(model)
 
-    async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> Protocol | None:
-        """Find a protocol by exact name within a workspace."""
-        stmt = select(ProtocolModel).where(
-            ProtocolModel.workspace_id == workspace_id,
-            ProtocolModel.name == name,
+    async def find_latest_active_by_code(
+        self, workspace_id: uuid.UUID, code: str
+    ) -> Protocol | None:
+        """The active version of the protocol with this code (formula references)."""
+        stmt = (
+            select(ProtocolModel)
+            .where(
+                ProtocolModel.workspace_id == workspace_id,
+                ProtocolModel.code == code,
+                ProtocolModel.status == ProtocolStatus.ACTIVE.value,
+            )
+            .order_by(ProtocolModel.protocol_version.desc())
+            .limit(1)
         )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return None
         return self._to_domain_tracked(model)

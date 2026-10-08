@@ -28,9 +28,15 @@ export const FORMULA_MATH_SYMBOLS: readonly string[] = [
   "e",
 ] as const;
 
-/** Cross-protocol reference: `@Protocol.Readout` or `@{Protocol Name}.Readout`.
- *  Mirrored from `backend/src/cellar/application/screening/readout_calculation_engine.py:_CROSS_PROTOCOL_RE`. */
-const CROSS_PROTOCOL_RE = /@\{?[\w\s]+\}?\.[\w\s]+/g;
+/** Cross-protocol reference by protocol code: `@PRT-00142.IC50` or `@{PRT-00142}.{IC50 nM}`.
+ *  Mirrors `backend/src/cellar/application/screening/cross_protocol_resolver.py:_REF_RE`. */
+const CROSS_PROTOCOL_RE = /@\{?[A-Z]{2,8}-\d+\}?\.(?:\{[^}]+\}|\w+)/g;
+
+/** A protocol a formula can reference: by code, found by code or name. */
+export interface ProtocolRef {
+  code: string;
+  name: string;
+}
 
 /** Bracket-wrapped reference: `[Name With Spaces]`. Lets formulas reference
  *  readouts whose names aren't valid Python identifiers. Mirrored from
@@ -180,7 +186,7 @@ export function tokenAtCursor(formula: string, cursorPos: number): CurrentToken 
     };
   }
   // Match a trailing `@<word>?` (cross-protocol mode) or trailing `<word>`.
-  const atMatch = before.match(/@[\w]*$/);
+  const atMatch = before.match(/@[\w-]*$/);
   if (atMatch) {
     return {
       kind: "@protocol",
@@ -230,24 +236,26 @@ function formatReadoutRef(name: string): string {
  *  - `bracket`   → user is inside `[…]`; match against ALL readout names
  *                  (substring), commit replaces the partial bracket with
  *                  the closed `[Name]` form
- *  - `@protocol` → match against protocol names; suggest with trailing `.`
+ *  - `@protocol` → match protocols by code or name; insert `@{CODE}.`
  *  - `none`      → empty list
  */
 export function buildSuggestions(
   token: CurrentToken,
   readoutNames: readonly string[],
-  protocolNames: readonly string[],
+  protocols: readonly ProtocolRef[],
 ): FormulaSuggestion[] {
   if (token.kind === "none") return [];
 
   if (token.kind === "@protocol") {
     const partial = token.raw.slice(1).toLowerCase();
-    const matches = protocolNames.filter((n) => n.toLowerCase().includes(partial));
-    return matches.slice(0, MAX_SUGGESTIONS).map((n) => ({
-      // Names with spaces use `@{Name}.` syntax per the BE regex.
-      value: n.includes(" ") ? `@{${n}}.` : `@${n}.`,
+    const matches = protocols.filter(
+      (p) => p.code.toLowerCase().includes(partial) || p.name.toLowerCase().includes(partial),
+    );
+    return matches.slice(0, MAX_SUGGESTIONS).map((p) => ({
+      // Codes never change; names are generated and do.
+      value: `@{${p.code}}.`,
       kind: "protocol",
-      hint: "protocol",
+      hint: p.name,
     }));
   }
 

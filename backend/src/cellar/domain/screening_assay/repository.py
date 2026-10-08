@@ -64,7 +64,9 @@ class ProtocolRepository(Protocol):
     async def find_active_by_lineage(
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
-    async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> AssayProtocol | None: ...
+    async def find_latest_active_by_code(
+        self, workspace_id: uuid.UUID, code: str
+    ) -> AssayProtocol | None: ...
 
     async def next_protocol_code(
         self, workspace_id: uuid.UUID, *, prefix: str, width: int

@@ -6,6 +6,7 @@ import { cn } from "@/shared/lib/utils";
 import { type KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   type FormulaSuggestion,
+  type ProtocolRef,
   buildSuggestions,
   tokenAtCursor,
   validateFormula,
@@ -32,9 +33,9 @@ interface FormulaInputProps {
    *  can't reference itself) and any other calculated readouts that
    *  haven't been resolved yet (caller's call). */
   availableReadoutNames: readonly string[];
-  /** Workspace protocol names for `@`-completion. Empty list disables that
-   *  branch — the user can still type cross-protocol refs by hand. */
-  protocolNames?: readonly string[];
+  /** Workspace protocols for `@`-completion (found by code or name, inserted by
+   *  code). Empty list disables that branch; refs can still be typed by hand. */
+  protocols?: readonly ProtocolRef[];
   disabled?: boolean;
   placeholder?: string;
   className?: string;
@@ -44,7 +45,7 @@ export function FormulaInput({
   value,
   onChange,
   availableReadoutNames,
-  protocolNames = [],
+  protocols = [],
   disabled = false,
   placeholder = "e.g. 100 * (1 - Raw / Control)",
   className,
@@ -59,8 +60,8 @@ export function FormulaInput({
 
   const token = useMemo(() => tokenAtCursor(value, cursorPos), [value, cursorPos]);
   const suggestions = useMemo(
-    () => buildSuggestions(token, availableReadoutNames, protocolNames),
-    [token, availableReadoutNames, protocolNames],
+    () => buildSuggestions(token, availableReadoutNames, protocols),
+    [token, availableReadoutNames, protocols],
   );
   const validation = useMemo(
     () => validateFormula(value, availableReadoutNames),

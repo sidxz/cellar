@@ -110,7 +110,7 @@ class TestResolvesSimpleReference:
         readout_data = _make_readout_data(mol_id, rd.id, 5.0)
 
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = protocol
+        protocol_repo.find_latest_active_by_code.return_value = protocol
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_molecule_and_definition.return_value = [readout_data]
@@ -118,14 +118,14 @@ class TestResolvesSimpleReference:
         resolver = _make_resolver(protocol_repo, readout_data_repo)
 
         # -- Act --
-        result = await resolver.resolve(WS, mol_id, "@TargetAssay.IC50")
+        result = await resolver.resolve(WS, mol_id, "@PRT-00001.IC50")
 
         # -- Assert --
         assert isinstance(result, Success)
         bindings = result.unwrap()
-        assert bindings == {"TargetAssay__IC50": 5.0}
+        assert bindings == {"PRT_00001__IC50": 5.0}
 
-        protocol_repo.find_by_name.assert_awaited_once_with(WS, "TargetAssay")
+        protocol_repo.find_latest_active_by_code.assert_awaited_once_with(WS, "PRT-00001")
         readout_data_repo.find_by_molecule_and_definition.assert_awaited_once_with(
             WS, mol_id, rd.id
         )
@@ -137,16 +137,16 @@ class TestMissingProtocolFails:
     @pytest.mark.asyncio
     async def test_missing_protocol_fails(self) -> None:
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = None  # not found
+        protocol_repo.find_latest_active_by_code.return_value = None  # not found
 
         resolver = _make_resolver(protocol_repo=protocol_repo)
 
-        result = await resolver.resolve(WS, uuid.uuid4(), "@MissingProto.IC50")
+        result = await resolver.resolve(WS, uuid.uuid4(), "@PRT-00999.IC50")
 
         assert isinstance(result, Failure)
         err = result.failure()
         assert isinstance(err, NotFoundError)
-        assert "MissingProto" in err.message
+        assert "PRT-00999" in err.message
 
 
 class TestInactiveProtocolFails:
@@ -166,11 +166,11 @@ class TestInactiveProtocolFails:
         assert draft_protocol.status == ProtocolStatus.DRAFT
 
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = draft_protocol
+        protocol_repo.find_latest_active_by_code.return_value = draft_protocol
 
         resolver = _make_resolver(protocol_repo=protocol_repo)
 
-        result = await resolver.resolve(WS, uuid.uuid4(), "@DraftProto.IC50")
+        result = await resolver.resolve(WS, uuid.uuid4(), "@PRT-00002.IC50")
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -186,14 +186,14 @@ class TestNoDataForMoleculeFails:
         protocol = _make_protocol("TargetAssay", [rd_ic50])
 
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = protocol
+        protocol_repo.find_latest_active_by_code.return_value = protocol
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_molecule_and_definition.return_value = []  # no data
 
         resolver = _make_resolver(protocol_repo, readout_data_repo)
 
-        result = await resolver.resolve(WS, uuid.uuid4(), "@TargetAssay.IC50")
+        result = await resolver.resolve(WS, uuid.uuid4(), "@PRT-00001.IC50")
 
         assert isinstance(result, Failure)
         err = result.failure()
@@ -215,7 +215,7 @@ class TestNoCrossRefsReturnsEmpty:
         assert isinstance(result, Success)
         assert result.unwrap() == {}
 
-        protocol_repo.find_by_name.assert_not_awaited()
+        protocol_repo.find_latest_active_by_code.assert_not_awaited()
         readout_data_repo.find_by_molecule_and_definition.assert_not_awaited()
 
 
@@ -224,20 +224,20 @@ class TestRewriteFormula:
 
     def test_rewrite_simple_reference(self) -> None:
         resolver = _make_resolver()
-        rewritten = resolver.rewrite_formula("@TargetAssay.IC50 * 2")
-        assert rewritten == "TargetAssay__IC50 * 2"
+        rewritten = resolver.rewrite_formula("@PRT-00001.IC50 * 2")
+        assert rewritten == "PRT_00001__IC50 * 2"
 
     def test_rewrite_braced_reference(self) -> None:
         resolver = _make_resolver()
-        rewritten = resolver.rewrite_formula("@{Target Assay}.{IC50 nM}")
-        assert rewritten == "Target Assay__IC50 nM"
+        rewritten = resolver.rewrite_formula("@{PRT-00007}.{IC50 nM}")
+        assert rewritten == "PRT_00007__IC50_nM"
 
     def test_rewrite_multiple_references(self) -> None:
         resolver = _make_resolver()
         rewritten = resolver.rewrite_formula(
-            "@ProtoA.ReadoutX + @ProtoB.ReadoutY"
+            "@PRT-00001.ReadoutX + @{PRT-00002}.{Readout Y}"
         )
-        assert rewritten == "ProtoA__ReadoutX + ProtoB__ReadoutY"
+        assert rewritten == "PRT_00001__ReadoutX + PRT_00002__Readout_Y"
 
     def test_rewrite_no_refs_unchanged(self) -> None:
         resolver = _make_resolver()
@@ -258,7 +258,7 @@ class TestResolveBracedReference:
         readout_data = _make_readout_data(mol_id, rd.id, 12.5)
 
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = protocol
+        protocol_repo.find_latest_active_by_code.return_value = protocol
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_molecule_and_definition.return_value = [readout_data]
@@ -266,14 +266,14 @@ class TestResolveBracedReference:
         resolver = _make_resolver(protocol_repo, readout_data_repo)
 
         result = await resolver.resolve(
-            WS, mol_id, "@{Target Assay}.{IC50 nM} + 1"
+            WS, mol_id, "@{PRT-00007}.{IC50 nM} + 1"
         )
 
         assert isinstance(result, Success)
         bindings = result.unwrap()
-        assert bindings == {"Target Assay__IC50 nM": 12.5}
+        assert bindings == {"PRT_00007__IC50_nM": 12.5}
 
-        protocol_repo.find_by_name.assert_awaited_once_with(WS, "Target Assay")
+        protocol_repo.find_latest_active_by_code.assert_awaited_once_with(WS, "PRT-00007")
 
 
 class TestDedupReferences:
@@ -289,7 +289,7 @@ class TestDedupReferences:
         readout_data = _make_readout_data(mol_id, rd.id, 7.0)
 
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = protocol
+        protocol_repo.find_latest_active_by_code.return_value = protocol
 
         readout_data_repo = AsyncMock()
         readout_data_repo.find_by_molecule_and_definition.return_value = [readout_data]
@@ -297,13 +297,13 @@ class TestDedupReferences:
         resolver = _make_resolver(protocol_repo, readout_data_repo)
 
         result = await resolver.resolve(
-            WS, mol_id, "@TargetAssay.IC50 + @TargetAssay.IC50"
+            WS, mol_id, "@PRT-00001.IC50 + @PRT-00001.IC50"
         )
 
         assert isinstance(result, Success)
-        # find_by_name only called once despite two occurrences
-        assert protocol_repo.find_by_name.await_count == 1
-        assert result.unwrap() == {"TargetAssay__IC50": 7.0}
+        # find_latest_active_by_code only called once despite two occurrences
+        assert protocol_repo.find_latest_active_by_code.await_count == 1
+        assert result.unwrap() == {"PRT_00001__IC50": 7.0}
 
 
 class TestMissingReadoutDefinitionFails:
@@ -315,14 +315,26 @@ class TestMissingReadoutDefinitionFails:
         protocol = _make_protocol("TargetAssay", [rd_raw])
 
         protocol_repo = AsyncMock()
-        protocol_repo.find_by_name.return_value = protocol
+        protocol_repo.find_latest_active_by_code.return_value = protocol
 
         resolver = _make_resolver(protocol_repo=protocol_repo)
 
         # Ask for "IC50" which does not exist in this protocol
-        result = await resolver.resolve(WS, uuid.uuid4(), "@TargetAssay.IC50")
+        result = await resolver.resolve(WS, uuid.uuid4(), "@PRT-00001.IC50")
 
         assert isinstance(result, Failure)
         err = result.failure()
         assert isinstance(err, NotFoundError)
         assert "IC50" in err.message
+
+
+class TestNamesAreNotReferences:
+    """Protocol names change; only codes are references."""
+
+    def test_a_braced_name_is_not_a_reference(self) -> None:
+        resolver = _make_resolver()
+        assert resolver._extract_refs("@{Target Assay}.IC50") == []
+
+    def test_a_bare_name_is_not_a_reference(self) -> None:
+        resolver = _make_resolver()
+        assert resolver._extract_refs("@TargetAssay.IC50") == []
