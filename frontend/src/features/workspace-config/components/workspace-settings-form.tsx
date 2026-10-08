@@ -29,6 +29,7 @@ import type {
   RegistrationRules,
 } from "../types";
 import { CustomFieldBuilder } from "./custom-field-builder";
+import { HomeOrganismSetting } from "./home-organism-setting";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -310,6 +311,9 @@ export function WorkspaceSettingsForm() {
                 <code>PRT-99999</code>.
               </p>
             </div>
+            <HomeOrganismSetting
+              current={(settings?.protocol_naming as ProtocolNamingSettings)?.home_organism ?? null}
+            />
           </div>
         </Card>
 

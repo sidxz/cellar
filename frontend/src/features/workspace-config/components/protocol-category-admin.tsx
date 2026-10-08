@@ -25,6 +25,7 @@ import {
 } from "@/shared/components/ui/table";
 import { BookOpen, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { usePreviewNamingChange } from "../hooks/use-naming-changes";
 import {
   useCreateProtocolCategory,
   useDeleteProtocolCategory,
@@ -33,6 +34,7 @@ import {
   useUpdateProtocolCategory,
 } from "../hooks/use-protocol-categories";
 import type { ProtocolCategory } from "../types";
+import { NamingChangePreview } from "./naming-change-preview";
 
 const SLOT_HELP: [string, string][] = [
   ["{target}", "the linked registry target(s), with their organism when not the home one"],
@@ -56,6 +58,8 @@ function CategoryDialog({
   const [pattern, setPattern] = useState("");
   const create = useCreateProtocolCategory();
   const update = useUpdateProtocolCategory(category?.id ?? "");
+  const preview = usePreviewNamingChange();
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -65,75 +69,100 @@ function CategoryDialog({
   }, [open, category]);
 
   const save = async () => {
-    if (category) {
-      await update.mutateAsync({ label: label.trim(), name_pattern: pattern.trim() });
-    } else {
+    if (!category) {
       await create.mutateAsync({ label: label.trim(), name_pattern: pattern.trim() || null });
+      onOpenChange(false);
+      return;
     }
+    // An edit relabels the category's protocols: show them first; Apply saves.
+    preview.mutate(
+      {
+        kind: "category",
+        category_id: category.id,
+        ...(label.trim() !== category.label ? { label: label.trim() } : {}),
+        ...(pattern.trim() !== category.name_pattern ? { name_pattern: pattern.trim() } : {}),
+      },
+      { onSuccess: () => setConfirmOpen(true) },
+    );
+  };
+
+  const apply = async () => {
+    await update.mutateAsync({ label: label.trim(), name_pattern: pattern.trim() });
+    setConfirmOpen(false);
     onOpenChange(false);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>{category ? "Edit category" : "New category"}</DialogTitle>
-          <DialogDescription>
-            The pattern builds the name of every protocol in this category.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="category-label">Label</Label>
-            <Input
-              id="category-label"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Biofilm inhibition"
-            />
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{category ? "Edit category" : "New category"}</DialogTitle>
+            <DialogDescription>
+              The pattern builds the name of every protocol in this category.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="category-label">Label</Label>
+              <Input
+                id="category-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="e.g. Biofilm inhibition"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="category-pattern">Name pattern</Label>
+              <Input
+                id="category-pattern"
+                value={pattern}
+                onChange={(e) => setPattern(e.target.value)}
+                placeholder={category ? "" : "Leave empty for the default"}
+                className="font-mono"
+              />
+              {category && (
+                <div>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    className="h-auto p-0"
+                    onClick={() => setPattern(category.default_pattern)}
+                  >
+                    Reset to default
+                  </Button>
+                </div>
+              )}
+              <ul className="text-xs text-muted-foreground">
+                {SLOT_HELP.map(([slot, meaning]) => (
+                  <li key={slot}>
+                    <code>{slot}</code> {meaning}
+                  </li>
+                ))}
+                <li>Add ? to make a slot optional, e.g. {"{cell_line?}"}.</li>
+              </ul>
+            </div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="category-pattern">Name pattern</Label>
-            <Input
-              id="category-pattern"
-              value={pattern}
-              onChange={(e) => setPattern(e.target.value)}
-              placeholder={category ? "" : "Leave empty for the default"}
-              className="font-mono"
-            />
-            {category && (
-              <div>
-                <Button
-                  type="button"
-                  variant="link"
-                  size="sm"
-                  className="h-auto p-0"
-                  onClick={() => setPattern(category.default_pattern)}
-                >
-                  Reset to default
-                </Button>
-              </div>
-            )}
-            <ul className="text-xs text-muted-foreground">
-              {SLOT_HELP.map(([slot, meaning]) => (
-                <li key={slot}>
-                  <code>{slot}</code> {meaning}
-                </li>
-              ))}
-              <li>Add ? to make a slot optional, e.g. {"{cell_line?}"}.</li>
-            </ul>
-          </div>
-        </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={!label.trim() || create.isPending || update.isPending}>
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={!label.trim() || create.isPending || update.isPending}>
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <NamingChangePreview
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        preview={preview.data}
+        isLoading={preview.isPending}
+        onApply={apply}
+        isApplying={update.isPending}
+      />
+    </>
   );
 }
 

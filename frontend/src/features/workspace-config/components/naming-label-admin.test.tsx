@@ -30,6 +30,17 @@ const state = vi.hoisted(() => ({
   ],
 }));
 
+const previewRequests: unknown[] = [];
+vi.mock("../hooks/use-naming-changes", () => ({
+  usePreviewNamingChange: () => ({
+    mutate: (req: unknown, opts?: { onSuccess?: () => void }) => {
+      previewRequests.push(req);
+      opts?.onSuccess?.();
+    },
+    data: { changes: [], collisions: [] },
+    isPending: false,
+  }),
+}));
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/naming-labels" }));
 vi.mock("../hooks/use-naming-labels", () => ({
   useNamingTermsInUse: () => ({ data: state.terms, isLoading: false }),
@@ -65,6 +76,9 @@ describe("NamingLabelAdmin", () => {
     fireEvent.click(within(mtb).getByRole("button", { name: /edit/i }));
     fireEvent.change(screen.getByLabelText("Short label"), { target: { value: "Mtb" } });
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    expect(previewRequests.at(-1)).toMatchObject({ kind: "label", short_label: "Mtb" });
+    expect(create).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(create).toHaveBeenCalledWith({
       term_id: "http://purl.bioontology.org/ontology/NCBITAXON/1773",
       term_label: "Mycobacterium tuberculosis",
@@ -78,6 +92,8 @@ describe("NamingLabelAdmin", () => {
     const hep = screen.getByText("HepG2 cell").closest("tr") as HTMLElement;
     fireEvent.click(within(hep).getByRole("button", { name: /edit/i }));
     fireEvent.click(screen.getByRole("button", { name: /reset to default/i }));
+    expect(previewRequests.at(-1)).toMatchObject({ kind: "label", short_label: null });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(remove).toHaveBeenCalledWith("o1");
   });
 });

@@ -47,6 +47,7 @@ from cellar.application.workspace_config.list_protocol_forms import (
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.naming_changes import PreviewNamingChange
 from cellar.application.workspace_config.naming_labels import (
     CreateNamingLabel,
     DeleteNamingLabel,
@@ -61,6 +62,7 @@ from cellar.application.workspace_config.protocol_categories import (
     SeedDefaultProtocolCategories,
     UpdateProtocolCategory,
 )
+from cellar.application.workspace_config.set_home_organism import SetHomeOrganism
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
@@ -136,12 +138,14 @@ __all__ = [
     "ListTagsDep",
     "ListVocabulariesDep",
     "MergeTagsDep",
+    "PreviewNamingChangeDep",
     "RemoveOntologyAnnotationDep",
     "RenameTagDep",
     # Ontology search + annotations
     "SearchOntologyDep",
     "SeedDefaultProtocolCategoriesDep",
     "SetEntityTagsDep",
+    "SetHomeOrganismDep",
     "SetOntologyAnnotationDep",
     "UnassignTagDep",
     "UpdateCustomFieldDep",
@@ -166,6 +170,10 @@ ListOrganizationsDep = Annotated[ListOrganizations, Depends(_get_use_case(ListOr
 GetWorkspaceSettingsDep = Annotated[
     GetWorkspaceSettings, Depends(_get_use_case(GetWorkspaceSettings))
 ]
+PreviewNamingChangeDep = Annotated[
+    PreviewNamingChange, Depends(_get_use_case(PreviewNamingChange))
+]
+SetHomeOrganismDep = Annotated[SetHomeOrganism, Depends(_get_use_case(SetHomeOrganism))]
 UpdateWorkspaceSettingsDep = Annotated[
     UpdateWorkspaceSettings, Depends(_get_use_case(UpdateWorkspaceSettings))
 ]

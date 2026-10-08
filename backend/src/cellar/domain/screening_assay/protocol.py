@@ -594,6 +594,11 @@ class Protocol(AggregateRoot):
         self.category = " ".join(category.split()) if category and category.strip() else None
         self.updated_at = datetime.now(UTC)
 
+    def relabel_category(self, label: str) -> None:
+        """A category renamed by an admin: the same fact under a new word (any status)."""
+        self.category = " ".join(label.split())
+        self.updated_at = datetime.now(UTC)
+
     def set_discriminator(self, value: str | None, *, reason: str | None = None) -> None:
         self._guard_correction(reason)
         self.discriminator = clean_discriminator(value)

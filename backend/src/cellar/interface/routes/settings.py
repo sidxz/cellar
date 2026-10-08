@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from cellar.application.workspace_config.get_workspace_settings import (
     GetWorkspaceSettingsQuery,
 )
+from cellar.application.workspace_config.set_home_organism import SetHomeOrganismCommand
 from cellar.application.workspace_config.update_workspace_settings import (
     UpdateWorkspaceSettingsCommand,
 )
@@ -15,6 +16,7 @@ from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 from cellar.interface.dependencies import (
     AuthDep,
     GetWorkspaceSettingsDep,
+    SetHomeOrganismDep,
     UpdateWorkspaceSettingsDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -96,4 +98,27 @@ async def update_settings(
         },
     )
     settings = result_to_response(await use_case(command, auth=auth))
+    return WorkspaceSettingsResponse.from_domain(settings)
+
+
+class HomeOrganismTerm(BaseModel):
+    term_id: str
+    label: str
+    ontology_source: str = "NCBITAXON"
+
+
+class SetHomeOrganismRequest(BaseModel):
+    term: HomeOrganismTerm | None
+    model_config = {"extra": "forbid"}
+
+
+@router.put("/home-organism", response_model=WorkspaceSettingsResponse)
+async def set_home_organism(
+    body: SetHomeOrganismRequest, auth: AuthDep, use_case: SetHomeOrganismDep
+) -> WorkspaceSettingsResponse:
+    """Targets from this organism are named without it; relabels protocols (refused on a clash)."""
+    cmd = SetHomeOrganismCommand(
+        workspace_id=auth.workspace_id, term=body.term.model_dump() if body.term else None
+    )
+    settings = result_to_response(await use_case(cmd, auth=auth))
     return WorkspaceSettingsResponse.from_domain(settings)

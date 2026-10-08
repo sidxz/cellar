@@ -43,6 +43,7 @@ from cellar.application.workspace_config.list_protocol_forms import ListProtocol
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.naming_changes import PreviewNamingChange
 from cellar.application.workspace_config.naming_labels import (
     CreateNamingLabel,
     DeleteNamingLabel,
@@ -57,6 +58,7 @@ from cellar.application.workspace_config.protocol_categories import (
     SeedDefaultProtocolCategories,
     UpdateProtocolCategory,
 )
+from cellar.application.workspace_config.set_home_organism import SetHomeOrganism
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
@@ -79,6 +81,7 @@ from cellar.application.workspace_config.update_workspace_settings import (
     UpdateWorkspaceSettings,
 )
 from cellar.domain.shared.secret_provider import SecretProvider
+from cellar.infrastructure.di._screening import _name_service
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -210,18 +213,40 @@ def register_workspace_config(container: Container) -> None:
 
     container.define(ListProtocolCategories, _list_categories)
     container.define(CreateProtocolCategory, _category_cmd(CreateProtocolCategory))
-    container.define(UpdateProtocolCategory, _category_cmd(UpdateProtocolCategory))
+
+    def _relabeling(uc_cls: type, repo_cls: type, *, dispatcher: bool = True):
+        """Admin edits that relabel protocols: their repo plus protocols + the name service."""
+
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            args = (uow, repo_cls(uow), c[EventDispatcher]) if dispatcher else (uow, repo_cls(uow))
+            return uc_cls(
+                *args, protocol_repo=SQLAlchemyProtocolRepository(uow), names=_name_service(uow)
+            )
+
+        return _f
+
+    def _preview_naming_change(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewNamingChange(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            SQLAlchemyProtocolCategoryRepository(uow),
+            _name_service(uow),
+        )
+
+    container.define(
+        UpdateProtocolCategory,
+        _relabeling(UpdateProtocolCategory, SQLAlchemyProtocolCategoryRepository),
+    )
+    container.define(PreviewNamingChange, _preview_naming_change)
+    container.define(
+        SetHomeOrganism, _relabeling(SetHomeOrganism, SQLAlchemyWorkspaceSettingsRepository)
+    )
     container.define(SeedDefaultProtocolCategories, _category_cmd(SeedDefaultProtocolCategories))
     container.define(DeleteProtocolCategory, _delete_category)
 
     # --- Short labels ---
-    def _label_cmd(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyNamingLabelRepository(uow), c[EventDispatcher])
-
-        return _f
-
     def _label_plain(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -239,9 +264,16 @@ def register_workspace_config(container: Container) -> None:
         )
 
     container.define(ListNamingLabels, _label_plain(ListNamingLabels))
-    container.define(DeleteNamingLabel, _label_plain(DeleteNamingLabel))
-    container.define(CreateNamingLabel, _label_cmd(CreateNamingLabel))
-    container.define(UpdateNamingLabel, _label_cmd(UpdateNamingLabel))
+    container.define(
+        DeleteNamingLabel,
+        _relabeling(DeleteNamingLabel, SQLAlchemyNamingLabelRepository, dispatcher=False),
+    )
+    container.define(
+        CreateNamingLabel, _relabeling(CreateNamingLabel, SQLAlchemyNamingLabelRepository)
+    )
+    container.define(
+        UpdateNamingLabel, _relabeling(UpdateNamingLabel, SQLAlchemyNamingLabelRepository)
+    )
     container.define(ListNamingTermsInUse, _terms_in_use)
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))

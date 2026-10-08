@@ -27,6 +27,17 @@ const state = vi.hoisted(() => ({
   ],
 }));
 
+const previewRequests: unknown[] = [];
+vi.mock("../hooks/use-naming-changes", () => ({
+  usePreviewNamingChange: () => ({
+    mutate: (req: unknown, opts?: { onSuccess?: () => void }) => {
+      previewRequests.push(req);
+      opts?.onSuccess?.();
+    },
+    data: { changes: [], collisions: [] },
+    isPending: false,
+  }),
+}));
 vi.mock("next/navigation", () => ({ usePathname: () => "/admin/protocol-categories" }));
 vi.mock("../hooks/use-protocol-categories", () => ({
   useProtocolCategories: () => ({ data: state.categories, isLoading: false }),
@@ -71,6 +82,14 @@ describe("ProtocolCategoryAdmin", () => {
       "{discriminator?} solubility",
     );
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    // Saving a pattern first previews the protocols it renames; Apply saves.
+    expect(previewRequests.at(-1)).toEqual({
+      kind: "category",
+      category_id: "c2",
+      name_pattern: "{discriminator?} solubility",
+    });
+    expect(update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(update).toHaveBeenCalledWith({
       label: "Solubility",
       name_pattern: "{discriminator?} solubility",

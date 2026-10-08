@@ -13,10 +13,17 @@ from cellar.application.auth import (
     require_same_workspace,
     require_workspace_role,
 )
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.workspace_config.naming_changes import (
+    apply_naming_change,
+    compute_naming_change,
+    plan_category,
+    refuse_collisions,
+)
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.protocol_naming import DEFAULT_CATEGORY_PATTERNS
@@ -98,15 +105,23 @@ class CreateProtocolCategory:
 
 
 class UpdateProtocolCategory:
+    """Renaming a category or editing its pattern relabels its protocols, so the edit is
+    refused when two protocols would end up with the same name."""
+
     def __init__(
         self,
         uow: UnitOfWork,
         repo: ProtocolCategoryRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        protocol_repo: ProtocolRepository,
+        names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._protocols = protocol_repo
+        self._names = names
 
     async def __call__(
         self, input: UpdateProtocolCategoryCommand, auth: AuthContext | None = None
@@ -125,7 +140,40 @@ class UpdateProtocolCategory:
                     return Failure(
                         ConflictError(f"Category '{input.label.strip()}' already exists")
                     )
+            old_label, old_pattern = category.label, category.name_pattern
             category.update(label=input.label, name_pattern=input.name_pattern)
+            plan = await plan_category(
+                workspace_id=input.workspace_id,
+                protocol_repo=self._protocols,
+                names=self._names,
+                label=old_label,
+                pattern=category.name_pattern,
+            )
+            preview = await compute_naming_change(
+                workspace_id=input.workspace_id,
+                protocol_repo=self._protocols,
+                names=self._names,
+                plan=plan,
+            )
+            refused = refuse_collisions(preview)
+            if isinstance(refused, Failure):
+                return refused
+            relabeled = []
+            if category.label != old_label:
+                for protocol in plan.protocols:
+                    protocol.relabel_category(category.label)
+                relabeled = plan.protocols
+            await apply_naming_change(
+                protocol_repo=self._protocols,
+                names=self._names,
+                plan=plan,
+                preview=preview,
+                reason="Category pattern changed"
+                if category.name_pattern != old_pattern
+                else "Category renamed",
+                user_id=auth.user_id if auth else None,
+                also_save=relabeled,
+            )
             await self._repo.save(category)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)

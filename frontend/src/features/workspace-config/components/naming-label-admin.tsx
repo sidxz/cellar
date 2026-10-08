@@ -24,6 +24,7 @@ import {
 } from "@/shared/components/ui/table";
 import { BookOpen } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
+import { usePreviewNamingChange } from "../hooks/use-naming-changes";
 import {
   useCreateNamingLabel,
   useDeleteNamingLabel,
@@ -31,6 +32,7 @@ import {
   useUpdateNamingLabel,
 } from "../hooks/use-naming-labels";
 import type { NamingTermInUse } from "../types";
+import { NamingChangePreview } from "./naming-change-preview";
 
 const SLOT_TITLES: Record<string, string> = {
   organism: "Organism",
@@ -50,12 +52,27 @@ function ShortLabelDialog({
   const create = useCreateNamingLabel();
   const update = useUpdateNamingLabel(term?.override_id ?? "");
   const remove = useDeleteNamingLabel();
+  const preview = usePreviewNamingChange();
+  // What Apply does once the admin has seen the renames: save, or reset to the default.
+  const [pending, setPending] = useState<"save" | "reset" | null>(null);
 
   useEffect(() => {
     setValue(term?.override_short_label ?? term?.default_short_label ?? "");
   }, [term]);
 
   if (!term) return null;
+
+  const showRenames = (shortLabel: string | null, action: "save" | "reset") =>
+    preview.mutate(
+      {
+        kind: "label",
+        term_id: term.term_id,
+        term_label: term.term_label,
+        ontology_source: term.ontology_source,
+        short_label: shortLabel,
+      },
+      { onSuccess: () => setPending(action) },
+    );
 
   const save = async () => {
     if (term.override_id) {
@@ -68,42 +85,61 @@ function ShortLabelDialog({
         short_label: value.trim(),
       });
     }
+    setPending(null);
     onOpenChange(false);
   };
 
   const reset = async () => {
     if (term.override_id) await remove.mutateAsync(term.override_id);
+    setPending(null);
     onOpenChange(false);
   };
 
   return (
-    <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>{term.term_label}</DialogTitle>
-          <DialogDescription>
-            How this term reads inside protocol names. Default: {term.default_short_label}
-          </DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-2">
-          <Label htmlFor="short-label">Short label</Label>
-          <Input id="short-label" value={value} onChange={(e) => setValue(e.target.value)} />
-        </div>
-        <DialogFooter>
-          {term.override_id && (
-            <Button variant="outline" onClick={reset} disabled={remove.isPending}>
-              Reset to default
+    <>
+      <Dialog open onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{term.term_label}</DialogTitle>
+            <DialogDescription>
+              How this term reads inside protocol names. Default: {term.default_short_label}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <Label htmlFor="short-label">Short label</Label>
+            <Input id="short-label" value={value} onChange={(e) => setValue(e.target.value)} />
+          </div>
+          <DialogFooter>
+            {term.override_id && (
+              <Button
+                variant="outline"
+                onClick={() => showRenames(null, "reset")}
+                disabled={remove.isPending}
+              >
+                Reset to default
+              </Button>
+            )}
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
             </Button>
-          )}
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={save} disabled={!value.trim() || create.isPending || update.isPending}>
-            Save
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            <Button
+              onClick={() => showRenames(value.trim(), "save")}
+              disabled={!value.trim() || create.isPending || update.isPending}
+            >
+              Save
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <NamingChangePreview
+        open={pending !== null}
+        onOpenChange={(o) => !o && setPending(null)}
+        preview={preview.data}
+        isLoading={preview.isPending}
+        onApply={pending === "reset" ? reset : save}
+        isApplying={create.isPending || update.isPending || remove.isPending}
+      />
+    </>
   );
 }
 

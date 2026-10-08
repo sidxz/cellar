@@ -13,7 +13,7 @@ from cellar.domain.workspace_config.events import NamingLabelCreated, NamingLabe
 _MAX_SHORT_LABEL = 60
 
 
-def _clean_short_label(value: str) -> str:
+def clean_short_label(value: str) -> str:
     if not value or not value.strip():
         raise ValidationError("Short label must not be empty")
     validate_name_text(value, what="Short label")
@@ -51,7 +51,7 @@ class NamingLabel(AggregateRoot):
         self.term_id = term_id.strip()
         self.term_label = " ".join(term_label.split())
         self.ontology_source = ontology_source.strip()
-        self.short_label = _clean_short_label(short_label)
+        self.short_label = clean_short_label(short_label)
 
     @classmethod
     def create(
@@ -81,7 +81,7 @@ class NamingLabel(AggregateRoot):
         return label
 
     def update(self, *, short_label: str) -> None:
-        self.short_label = _clean_short_label(short_label)
+        self.short_label = clean_short_label(short_label)
         self.updated_at = datetime.now(UTC)
         self.register_event(
             NamingLabelUpdated(

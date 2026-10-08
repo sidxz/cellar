@@ -13,10 +13,17 @@ from cellar.application.auth import (
     require_same_workspace,
     require_workspace_role,
 )
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.application.workspace_config.naming_changes import (
+    apply_naming_change,
+    compute_naming_change,
+    plan_label,
+    refuse_collisions,
+)
 from cellar.domain.screening_assay.repository import ProtocolRepository, TargetRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.protocol_naming import (
@@ -152,13 +159,57 @@ class ListNamingTermsInUse:
         return Success(out)
 
 
+async def _relabel(
+    protocols: ProtocolRepository,
+    names: ProtocolNameService,
+    *,
+    workspace_id: uuid.UUID,
+    term_id: str,
+    term_label: str,
+    short_label: str | None,
+    user_id: uuid.UUID | None,
+) -> Result[None, DomainError]:
+    """Plan, refuse a collision, then rename: the same steps the admin's preview showed."""
+    plan = await plan_label(
+        workspace_id=workspace_id,
+        protocol_repo=protocols,
+        names=names,
+        term_id=term_id,
+        term_label=term_label,
+        short_label=short_label,
+    )
+    preview = await compute_naming_change(
+        workspace_id=workspace_id, protocol_repo=protocols, names=names, plan=plan
+    )
+    refused = refuse_collisions(preview)
+    if isinstance(refused, Failure):
+        return refused
+    await apply_naming_change(
+        protocol_repo=protocols,
+        names=names,
+        plan=plan,
+        preview=preview,
+        reason=f"Short label changed: {term_label}",
+        user_id=user_id,
+    )
+    return Success(None)
+
+
 class CreateNamingLabel:
     def __init__(
-        self, uow: UnitOfWork, repo: NamingLabelRepository, dispatcher: EventDispatcherProtocol
+        self,
+        uow: UnitOfWork,
+        repo: NamingLabelRepository,
+        dispatcher: EventDispatcherProtocol,
+        *,
+        protocol_repo: ProtocolRepository,
+        names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._protocols = protocol_repo
+        self._names = names
 
     async def __call__(
         self, input: CreateNamingLabelCommand, auth: AuthContext | None = None
@@ -175,6 +226,17 @@ class CreateNamingLabel:
                 ontology_source=input.ontology_source,
                 short_label=input.short_label,
             )
+            relabeled = await _relabel(
+                self._protocols,
+                self._names,
+                workspace_id=input.workspace_id,
+                term_id=label.term_id,
+                term_label=label.term_label,
+                short_label=label.short_label,
+                user_id=auth.user_id if auth else None,
+            )
+            if isinstance(relabeled, Failure):
+                return relabeled
             await self._repo.save(label)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
@@ -183,11 +245,19 @@ class CreateNamingLabel:
 
 class UpdateNamingLabel:
     def __init__(
-        self, uow: UnitOfWork, repo: NamingLabelRepository, dispatcher: EventDispatcherProtocol
+        self,
+        uow: UnitOfWork,
+        repo: NamingLabelRepository,
+        dispatcher: EventDispatcherProtocol,
+        *,
+        protocol_repo: ProtocolRepository,
+        names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._protocols = protocol_repo
+        self._names = names
 
     async def __call__(
         self, input: UpdateNamingLabelCommand, auth: AuthContext | None = None
@@ -199,6 +269,17 @@ class UpdateNamingLabel:
             if label is None:
                 return Failure(NotFoundError("NamingLabel", str(input.label_id)))
             label.update(short_label=input.short_label)
+            relabeled = await _relabel(
+                self._protocols,
+                self._names,
+                workspace_id=input.workspace_id,
+                term_id=label.term_id,
+                term_label=label.term_label,
+                short_label=label.short_label,
+                user_id=auth.user_id if auth else None,
+            )
+            if isinstance(relabeled, Failure):
+                return relabeled
             await self._repo.save(label)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
@@ -206,9 +287,20 @@ class UpdateNamingLabel:
 
 
 class DeleteNamingLabel:
-    def __init__(self, uow: UnitOfWork, repo: NamingLabelRepository) -> None:
+    """Back to the computed default; relabels like any other short label change."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: NamingLabelRepository,
+        *,
+        protocol_repo: ProtocolRepository,
+        names: ProtocolNameService,
+    ) -> None:
         self._uow = uow
         self._repo = repo
+        self._protocols = protocol_repo
+        self._names = names
 
     async def __call__(
         self, input: DeleteNamingLabelCommand, auth: AuthContext | None = None
@@ -219,6 +311,17 @@ class DeleteNamingLabel:
             label = await self._repo.find_by_id_in_workspace(input.workspace_id, input.label_id)
             if label is None:
                 return Failure(NotFoundError("NamingLabel", str(input.label_id)))
+            relabeled = await _relabel(
+                self._protocols,
+                self._names,
+                workspace_id=input.workspace_id,
+                term_id=label.term_id,
+                term_label=label.term_label,
+                short_label=None,
+                user_id=auth.user_id if auth else None,
+            )
+            if isinstance(relabeled, Failure):
+                return relabeled
             await self._repo.delete(input.workspace_id, label.id)
             await self._uow.commit()
         return Success(None)

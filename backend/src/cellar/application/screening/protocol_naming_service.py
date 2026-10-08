@@ -111,9 +111,18 @@ class ProtocolNameService:
         annotations: Mapping[str, Sequence[OntologyTerm]],
         discriminator: str | None,
         exclude_code: str | None = None,
+        pattern: str | None = None,
+        ctx: NamingContext | None = None,
+        check_siblings: bool = True,
     ) -> NameDerivation:
-        found = await self._categories.find_by_label(workspace_id, category) if category else None
-        if found is None:
+        """``pattern``/``ctx`` override the saved category pattern and labels, so an admin edit
+        can be rendered before it is saved; ``check_siblings=False`` skips collision lookups."""
+        if pattern is None:
+            found = (
+                await self._categories.find_by_label(workspace_id, category) if category else None
+            )
+            pattern = found.name_pattern if found else None
+        if pattern is None:
             label = "(category needed)" + (f" [{discriminator}]" if discriminator else "")
             rendered = RenderedName(
                 name=label,
@@ -133,10 +142,8 @@ class ProtocolNameService:
             matrices=_terms(annotations.get("assay_format")),
             discriminator=discriminator,
         )
-        rendered = render_protocol_name(
-            found.name_pattern, inputs, await self.context(workspace_id)
-        )
-        if not rendered.complete:
+        rendered = render_protocol_name(pattern, inputs, ctx or await self.context(workspace_id))
+        if not rendered.complete or not check_siblings:
             return NameDerivation(rendered, None, (), (), False)
         siblings = tuple(
             await self._protocols.find_name_siblings(
@@ -204,6 +211,8 @@ class ProtocolNameService:
         person: bool,
         allow_incomplete: bool,
         user_id: uuid.UUID | None = None,
+        pattern: str | None = None,
+        ctx: NamingContext | None = None,
     ) -> Result[NameDerivation, DomainError]:
         await self._protocols.lock_naming(protocol.workspace_id)
         derivation = await self.derive(
@@ -215,6 +224,8 @@ class ProtocolNameService:
             annotations=protocol.ontology_annotations,
             discriminator=protocol.discriminator,
             exclude_code=protocol.code,
+            pattern=pattern,
+            ctx=ctx,
         )
         checked = self.check(derivation, person=person, allow_incomplete=allow_incomplete)
         if isinstance(checked, Failure):
