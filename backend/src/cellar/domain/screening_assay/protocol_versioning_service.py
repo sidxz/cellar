@@ -84,6 +84,7 @@ class ProtocolVersioningService:
             workspace_id=parent.workspace_id,
             name=parent.name,
             code=parent.code,
+            aliases=list(parent.aliases),
             description=parent.description,
             protocol_type=parent.protocol_type,
             category=parent.category,

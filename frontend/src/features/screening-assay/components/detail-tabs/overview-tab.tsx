@@ -21,6 +21,7 @@ import {
 } from "../../types";
 import { CoverageBar } from "../coverage-bar";
 import { CoverageGapDialog } from "../coverage-gap-dialog";
+import { ProtocolAliasesCard } from "../protocol-aliases-card";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -251,6 +252,8 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
           </div>
         </CardContent>
       </Card>
+
+      <ProtocolAliasesCard protocol={protocol} canEdit={canEditTags} />
 
       {/* Tags */}
       <TagTable entity="protocols" entityId={protocolId} canEdit={canEditTags} />

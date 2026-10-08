@@ -66,6 +66,10 @@ from cellar.application.screening.manage_protocol import (
     UpdateProtocol,
     VersionProtocol,
 )
+from cellar.application.screening.manage_protocol_aliases import (
+    AddProtocolNickname,
+    RemoveProtocolNickname,
+)
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     RemoveReadoutDefinition,
@@ -122,6 +126,7 @@ from ._core import _get_use_case
 
 __all__ = [
     "AddConditionDefinitionDep",
+    "AddProtocolNicknameDep",
     "AddProtocolTargetDep",
     "AddProtocolToProjectDep",
     "AddReadoutDefinitionDep",
@@ -195,6 +200,7 @@ __all__ = [
     "RemoveConditionDefinitionDep",
     "RemoveControlLayoutDep",
     "RemoveProtocolFromProjectDep",
+    "RemoveProtocolNicknameDep",
     "RemoveProtocolTargetDep",
     "RemoveReadoutDefinitionDep",
     "RemoveRunCollectionDep",
@@ -270,6 +276,12 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+AddProtocolNicknameDep = Annotated[
+    AddProtocolNickname, Depends(_get_use_case(AddProtocolNickname))
+]
+RemoveProtocolNicknameDep = Annotated[
+    RemoveProtocolNickname, Depends(_get_use_case(RemoveProtocolNickname))
+]
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[
     AddReadoutDefinition, Depends(_get_use_case(AddReadoutDefinition))

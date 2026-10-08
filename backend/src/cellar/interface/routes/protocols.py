@@ -52,6 +52,7 @@ from cellar.application.screening.manage_protocol import (
     UpdateProtocolCommand,
     VersionProtocolCommand,
 )
+from cellar.application.screening.manage_protocol_aliases import ProtocolNicknameCommand
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
     RemoveReadoutDefinitionCommand,
@@ -68,6 +69,7 @@ from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
+    AddProtocolNicknameDep,
     AddProtocolTargetDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
@@ -90,6 +92,7 @@ from cellar.interface.dependencies import (
     RemoveControlLayoutDep,
     RemoveOntologyAnnotationDep,
     RemoveProtocolFromProjectDep,
+    RemoveProtocolNicknameDep,
     RemoveProtocolTargetDep,
     RemoveReadoutDefinitionDep,
     ResolveProtocolTargetsDep,
@@ -190,6 +193,13 @@ class ConditionDefinitionResponse(BaseModel):
     pick_list_values: list[str] | None = None
 
 
+class ProtocolAliasResponse(BaseModel):
+    label: str
+    kind: str
+    recorded_at: datetime
+    reason: str | None = None
+
+
 class ProtocolResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -226,6 +236,7 @@ class ProtocolResponse(BaseModel):
     # any draft, for an admin) that nothing still uses. Filled only by
     # GET /protocols/{id}; null on every other response means "not computed".
     can_delete: bool | None = None
+    aliases: list[ProtocolAliasResponse] = []
 
     @classmethod
     def from_domain(
@@ -316,6 +327,12 @@ class ProtocolResponse(BaseModel):
             lock_reason=p.lock_reason,
             locked_at=p.locked_at,
             can_delete=can_delete,
+            aliases=[
+                ProtocolAliasResponse(
+                    label=a.label, kind=a.kind.value, recorded_at=a.recorded_at, reason=a.reason
+                )
+                for a in p.aliases
+            ],
         )
 
 
@@ -457,6 +474,7 @@ class ProtocolSummaryResponse(BaseModel):
     id: uuid.UUID
     name: str
     code: str | None = None
+    aliases: list[str] = []
     status: str
     protocol_type: str
     description: str | None = None
@@ -493,6 +511,7 @@ async def list_protocol_summaries(
             id=s.id,
             name=s.name,
             code=s.code,
+            aliases=s.aliases,
             status=s.status,
             protocol_type=s.protocol_type,
             description=s.description,
@@ -784,6 +803,44 @@ async def update_protocol(
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
+
+
+class AddNicknameRequest(BaseModel):
+    label: str
+    model_config = {"extra": "forbid"}
+
+
+@router.post(
+    "/protocols/{protocol_id}/nicknames", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def add_protocol_nickname(
+    protocol_id: uuid.UUID,
+    body: AddNicknameRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: AddProtocolNicknameDep,
+) -> ProtocolResponse:
+    """Add a name people use for this protocol. Searchable; never its name."""
+    cmd = ProtocolNicknameCommand(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id, label=body.label
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/nicknames", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def remove_protocol_nickname(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: RemoveProtocolNicknameDep,
+    label: str = Query(..., min_length=1),
+) -> ProtocolResponse:
+    cmd = ProtocolNicknameCommand(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id, label=label
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
 
 
 @router.delete("/protocols/{protocol_id}", status_code=204, tags=["protocols"])

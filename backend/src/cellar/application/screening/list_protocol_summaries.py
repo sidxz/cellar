@@ -43,6 +43,7 @@ class ProtocolSummary:
     run_count: int = 0
     last_run_date: date | None = None
     code: str | None = None
+    aliases: list[str] = field(default_factory=list)
 
 
 class ListProtocolSummaries:
@@ -87,6 +88,7 @@ class ListProtocolSummaries:
                     id=p.id,
                     name=p.name,
                     code=p.code,
+                    aliases=[a.label for a in p.aliases],
                     status=p.status.value,
                     protocol_type=p.protocol_type.value,
                     description=p.description,

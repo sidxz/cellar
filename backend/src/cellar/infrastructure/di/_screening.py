@@ -109,6 +109,10 @@ from cellar.application.screening.manage_protocol import (
     UpdateProtocol,
     VersionProtocol,
 )
+from cellar.application.screening.manage_protocol_aliases import (
+    AddProtocolNickname,
+    RemoveProtocolNickname,
+)
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     RemoveReadoutDefinition,
@@ -298,6 +302,8 @@ def register_screening(container: Container) -> None:
     container.define(UnlockProtocol, _protocol_cmd(UnlockProtocol))
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
     container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
+    container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
+    container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
     container.define(ListProtocolsByProject, _protocol_query(ListProtocolsByProject))
 

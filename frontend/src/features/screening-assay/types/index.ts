@@ -421,6 +421,8 @@ export interface Protocol {
   can_delete?: ProtocolResponse["can_delete"];
   /** Immutable citation handle shared by every version (`PRT-00142`). Typed off the DTO. */
   code: ProtocolResponse["code"];
+  /** Former names (recorded on rename) and nicknames. Searchable; never the name. */
+  aliases: ProtocolResponse["aliases"];
 }
 
 /** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never

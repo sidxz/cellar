@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
+    AliasKind,
     ConditionDataType,
     PlateFormat,
     PosControlSignal,
@@ -33,6 +34,7 @@ from cellar.domain.shared.hit_criterion import (
     validate_hit_criteria,
 )
 from cellar.domain.shared.ontology import OntologyTerm
+from cellar.domain.shared.protocol_naming import validate_name_text
 
 
 # Sentinel used by partial-update mutators to distinguish "leave unchanged"
@@ -88,6 +90,19 @@ _is_reserved_readout_name = is_reserved_readout_name
 # ---------------------------------------------------------------------------
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+_MAX_ALIAS_LENGTH = 400
+
+
+@dataclass(frozen=True)
+class ProtocolAlias:
+    """Another name a protocol answers to. Searchable; never rendered as the name."""
+
+    label: str
+    kind: AliasKind
+    recorded_at: datetime
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -318,6 +333,7 @@ class Protocol(AggregateRoot):
         condition_definitions: list[ConditionDefinition] | None = None,
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
+        aliases: list[ProtocolAlias] | None = None,
         recommended_hit_criteria: list[HitCriterion] | None = None,
         fingerprint: dict | None = None,
         is_locked: bool = False,
@@ -355,6 +371,7 @@ class Protocol(AggregateRoot):
         self.condition_definitions: list[ConditionDefinition] = condition_definitions or []
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
+        self.aliases: list[ProtocolAlias] = list(aliases or [])
         self.recommended_hit_criteria: list[HitCriterion] | None = recommended_hit_criteria
         # Authoritative-derived structural signature — recomputed by the
         # repository on every save (see compute_protocol_fingerprint). Held
@@ -990,6 +1007,34 @@ class Protocol(AggregateRoot):
     # ------------------------------------------------------------------
     # Ontology annotation management
     # ------------------------------------------------------------------
+
+    def add_nickname(self, label: str) -> None:
+        """What people call this protocol. Cosmetic: allowed in any status, even locked."""
+        validate_name_text(label, what="Nickname")
+        cleaned = " ".join(label.split())
+        if not cleaned:
+            raise ValidationError("Nickname must not be empty")
+        if len(cleaned) > _MAX_ALIAS_LENGTH:
+            raise ValidationError(f"Nickname must be at most {_MAX_ALIAS_LENGTH} characters")
+        key = cleaned.lower()
+        if key == self.name.lower() or any(a.label.lower() == key for a in self.aliases):
+            raise ConflictError(f"'{cleaned}' is already a name or alias of this protocol")
+        self.aliases.append(
+            ProtocolAlias(label=cleaned, kind=AliasKind.NICKNAME, recorded_at=datetime.now(UTC))
+        )
+        self.updated_at = datetime.now(UTC)
+
+    def remove_nickname(self, label: str) -> None:
+        key = " ".join(label.split()).lower()
+        keep = [
+            a
+            for a in self.aliases
+            if not (a.kind == AliasKind.NICKNAME and a.label.lower() == key)
+        ]
+        if len(keep) == len(self.aliases):
+            raise NotFoundError("Nickname", label)
+        self.aliases = keep
+        self.updated_at = datetime.now(UTC)
 
     def set_ontology_annotation(self, slot: str, terms: list[OntologyTerm]) -> None:
         """Set ontology terms for a named annotation slot."""

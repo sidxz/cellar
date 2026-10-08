@@ -16,6 +16,13 @@ class ProtocolType(StrEnum):
     IN_SILICO = "in_silico"  # predictions (QSAR, docking): never pooled with measurements
 
 
+class AliasKind(StrEnum):
+    """Why a protocol answers to another name."""
+
+    FORMER = "former"  # a name it had before a rename (recorded automatically)
+    NICKNAME = "nickname"  # what people call it (MABA, LORA, HLM CLint)
+
+
 class ProtocolStatus(StrEnum):
     """Lifecycle status of a protocol."""
 

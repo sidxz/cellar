@@ -3,7 +3,7 @@
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { ProtocolSummaryResponse } from "@/shared/lib/api/model";
-import { showSuccess } from "@/shared/lib/toast";
+import { showError, showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -331,6 +331,40 @@ export function useSetOntologyAnnotation(protocolId: string) {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Annotation updated");
     },
+  });
+}
+
+export function useAddProtocolNickname(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (label: string) =>
+      customInstance<Protocol>({
+        url: `${API_V1}/protocols/${protocolId}/nicknames`,
+        method: "POST",
+        data: { label },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Nickname added");
+    },
+    onError: (err: Error) => showError(err.message),
+  });
+}
+
+export function useRemoveProtocolNickname(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (label: string) =>
+      customInstance<Protocol>({
+        url: `${API_V1}/protocols/${protocolId}/nicknames`,
+        method: "DELETE",
+        params: { label },
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Nickname removed");
+    },
+    onError: (err: Error) => showError(err.message),
   });
 }
 

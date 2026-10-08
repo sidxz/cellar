@@ -16,6 +16,7 @@ export interface ProtocolSummaryResponse {
   id: string;
   name: string;
   code?: ProtocolSummaryResponseCode;
+  aliases?: string[];
   status: string;
   protocol_type: string;
   description?: ProtocolSummaryResponseDescription;

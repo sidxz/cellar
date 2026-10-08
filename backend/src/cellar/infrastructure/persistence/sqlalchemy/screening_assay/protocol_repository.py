@@ -14,6 +14,7 @@ from cellar.application.screening._dose_response_config_serde import (
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
+    AliasKind,
     ConditionDataType,
     PosControlSignal,
     ProtocolStatus,
@@ -25,6 +26,7 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
+    ProtocolAlias,
     ReadoutDefinition,
 )
 from cellar.domain.screening_assay.protocol_fingerprint import (
@@ -42,6 +44,7 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ConditionDefinitionModel,
+    ProtocolAliasModel,
     ProtocolModel,
     ReadoutDefinitionModel,
     RunModel,
@@ -119,6 +122,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         ).where(ProtocolModel.workspace_id == workspace_id)
         max_num: int = (await self._session.execute(stmt)).scalar_one()
         return f"{prefix}{max_num + 1:0{width}d}"
+
+    @staticmethod
+    def _aliases_to_model(aggregate: Protocol) -> list[ProtocolAliasModel]:
+        return [
+            ProtocolAliasModel(
+                position=i,
+                label=a.label,
+                kind=a.kind.value,
+                recorded_at=a.recorded_at,
+                reason=a.reason,
+            )
+            for i, a in enumerate(aggregate.aliases)
+        ]
 
     @staticmethod
     def _norm_readout(name: str) -> str:
@@ -791,6 +807,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             condition_definitions=condition_defs,
             control_layouts=control_layouts,
             ontology_annotations=ontology_annotations,
+            aliases=[
+                ProtocolAlias(
+                    label=a.label,
+                    kind=AliasKind(a.kind),
+                    recorded_at=a.recorded_at,
+                    reason=a.reason,
+                )
+                for a in model.aliases
+            ],
             recommended_hit_criteria=[
                 HitCriterion.from_dict(c) for c in (model.recommended_hit_criteria or [])
             ]
@@ -867,6 +892,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.condition_definitions = [
             self._condition_def_to_model(cd) for cd in aggregate.condition_definitions
         ]
+        model.aliases = self._aliases_to_model(aggregate)
         return model
 
     def _update_model(self, model: ProtocolModel, aggregate: Protocol) -> None:
@@ -902,6 +928,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.condition_definitions = [
             self._condition_def_to_model(cd) for cd in aggregate.condition_definitions
         ]
+        model.aliases = self._aliases_to_model(aggregate)
 
     # ------------------------------------------------------------------
     # Owned entity mapping helpers
