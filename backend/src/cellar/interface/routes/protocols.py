@@ -862,6 +862,7 @@ async def version_protocol(
 class UpdateProtocolRequest(BaseModel):
     description: str | None = None
     category: str | None = None
+    discriminator: str | None = None
     recommended_hit_criteria: list[dict] | None = None
     # Allowed on ACTIVE protocols (unlike the other fields above which are
     # DRAFT-only). The use case applies it via Protocol.set_pos_control_signal.
@@ -891,6 +892,7 @@ async def update_protocol(
         protocol_id=protocol_id,
         description=body.description if "description" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
+        discriminator=body.discriminator if "discriminator" in body.model_fields_set else UNSET,
         recommended_hit_criteria=body.recommended_hit_criteria
         if "recommended_hit_criteria" in body.model_fields_set
         else UNSET,

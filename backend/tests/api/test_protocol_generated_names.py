@@ -87,3 +87,20 @@ async def test_publish_refused_while_incomplete(client, categories):
     p = (await client.post("/api/v1/protocols", json=_body())).json()
     await client.delete(f"/api/v1/protocols/{p['id']}/ontology-annotations/organism")
     assert (await client.post(f"/api/v1/protocols/{p['id']}/publish")).status_code == 409
+
+
+async def test_category_and_discriminator_change_together(client, categories):
+    await client.post("/api/v1/protocols", json=_body(discriminator="OD600"))
+    p = (
+        await client.post(
+            "/api/v1/protocols", json=_body(category="Bactericidal activity", discriminator="OD600")
+        )
+    ).json()
+    alone = await client.patch(f"/api/v1/protocols/{p['id']}", json={"category": "Growth inhibition"})
+    assert alone.status_code == 409  # same name as the first protocol
+    both = await client.patch(
+        f"/api/v1/protocols/{p['id']}",
+        json={"category": "Growth inhibition", "discriminator": "resazurin"},
+    )
+    assert both.status_code == 200, both.text
+    assert both.json()["name"] == "M. tuberculosis growth inhibition [resazurin]"

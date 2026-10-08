@@ -6,12 +6,14 @@
  */
 import type { UpdateProtocolRequestDescription } from './updateProtocolRequestDescription';
 import type { UpdateProtocolRequestCategory } from './updateProtocolRequestCategory';
+import type { UpdateProtocolRequestDiscriminator } from './updateProtocolRequestDiscriminator';
 import type { UpdateProtocolRequestRecommendedHitCriteria } from './updateProtocolRequestRecommendedHitCriteria';
 import type { UpdateProtocolRequestPosControlSignal } from './updateProtocolRequestPosControlSignal';
 
 export interface UpdateProtocolRequest {
   description?: UpdateProtocolRequestDescription;
   category?: UpdateProtocolRequestCategory;
+  discriminator?: UpdateProtocolRequestDiscriminator;
   recommended_hit_criteria?: UpdateProtocolRequestRecommendedHitCriteria;
   pos_control_signal?: UpdateProtocolRequestPosControlSignal;
 }

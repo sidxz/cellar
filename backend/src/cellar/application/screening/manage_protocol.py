@@ -171,6 +171,8 @@ class UpdateProtocolCommand(Command):
     protocol_id: uuid.UUID
     description: str | object | None = UNSET
     category: str | object | None = UNSET
+    # With category in one command, so the name is derived once from both.
+    discriminator: str | object | None = UNSET
     recommended_hit_criteria: list[dict] | object | None = UNSET
     pos_control_signal: str | None = None
 
@@ -205,11 +207,21 @@ class UpdateProtocol:
 
             if input.description is not UNSET:
                 protocol.update(description=input.description)  # Guards: only DRAFT allowed
+            changed = []
             if input.category is not UNSET:
                 protocol.set_category(input.category)  # type: ignore[arg-type]
+                changed.append("Category")
+            if input.discriminator is not UNSET:
+                value = await self._names.clean_discriminator(
+                    input.workspace_id,
+                    input.discriminator,  # type: ignore[arg-type]
+                )
+                protocol.set_discriminator(value)
+                changed.append("Discriminator")
+            if changed:
                 renamed = await self._names.apply(
                     protocol,
-                    reason="Category changed",
+                    reason=f"{' and '.join(changed)} changed",
                     person=True,
                     allow_incomplete=True,
                     user_id=auth.user_id if auth else None,

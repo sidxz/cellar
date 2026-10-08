@@ -101,6 +101,7 @@ export type ProtocolMatchField =
   | "name"
   | "code"
   | "alias"
+  | "discriminator"
   | "target"
   | "organism"
   | "cell line"
@@ -128,6 +129,7 @@ export function protocolTextMatch(p: Protocol, query: string): ProtocolTextMatch
     ["name", [p.name]],
     ["code", p.code ? [p.code] : []],
     ["alias", (p.aliases ?? []).map((a) => a.label)],
+    ["discriminator", p.discriminator ? [p.discriminator] : []],
     ["target", p.targets.map((t) => t.name)],
     ["organism", termLabels(p, "organism")],
     ["cell line", termLabels(p, "cell_line")],

@@ -16,6 +16,7 @@ const protocolHooks = createCrudHooks<
   {
     description?: string | null;
     category?: string | null;
+    discriminator?: string | null;
     pos_control_signal?: "high" | "low";
   }
 >({
@@ -330,6 +331,24 @@ export function useSetOntologyAnnotation(protocolId: string) {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Annotation updated");
     },
+  });
+}
+
+/** The free part of the generated name; the server re-derives the name. */
+export function useSetProtocolDiscriminator(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { discriminator: string | null; reason?: string | null }) =>
+      customInstance<Protocol>({
+        url: `${API_V1}/protocols/${protocolId}/discriminator`,
+        method: "PUT",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Discriminator saved");
+    },
+    onError: (err: Error) => showError(err.message),
   });
 }
 

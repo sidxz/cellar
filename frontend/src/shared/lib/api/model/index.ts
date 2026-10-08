@@ -1689,6 +1689,7 @@ export * from './updateProtocolFormBodyReadoutTemplatesAnyOfItem';
 export * from './updateProtocolRequest';
 export * from './updateProtocolRequestCategory';
 export * from './updateProtocolRequestDescription';
+export * from './updateProtocolRequestDiscriminator';
 export * from './updateProtocolRequestName';
 export * from './updateProtocolRequestPosControlSignal';
 export * from './updateProtocolRequestRecommendedHitCriteria';

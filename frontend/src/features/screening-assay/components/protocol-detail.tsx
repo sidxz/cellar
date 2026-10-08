@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
+import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import {
   useDeleteProtocol,
   useLockProtocol,
@@ -58,7 +59,9 @@ import {
 import type { ProtocolStatus } from "../types";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
+import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
+import { ProtocolNamePreview } from "./protocol-name-preview";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -87,12 +90,32 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editDiscriminator, setEditDiscriminator] = useState("");
   const [lockOpen, setLockOpen] = useState(false);
   const [lockReason, setLockReason] = useState("");
   const [lockMode, setLockMode] = useState<"lock" | "unlock">("lock");
   const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
 
   const query = { data: protocol, isLoading };
+
+  // Live name while editing a draft. Missing facts are fine on a draft (they only
+  // block publishing); a clash or an invalid discriminator is not.
+  const preview = useProtocolNamePreview(
+    editOpen && protocol
+      ? {
+          category: editCategory || null,
+          target_ids: protocol.targets.map((t) => t.id),
+          ontology_annotations: protocol.ontology_annotations ?? {},
+          discriminator: editDiscriminator.trim() || null,
+          protocol_id: protocol.id,
+        }
+      : null,
+  );
+  const draftSavable =
+    !!preview.data &&
+    !preview.data.clash &&
+    !preview.data.needs_discriminator &&
+    !preview.data.discriminator_error;
 
   return (
     <>
@@ -141,6 +164,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                 onClick={() => {
                   setEditDescription(p.description ?? "");
                   setEditCategory(p.category ?? "");
+                  setEditDiscriminator(p.discriminator ?? "");
                   setEditOpen(true);
                 }}
               >
@@ -399,6 +423,15 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <Label>Category</Label>
               <ProtocolCategoryInput value={editCategory} onChange={setEditCategory} />
             </div>
+            <div className="grid gap-2">
+              <Label>Discriminator (optional)</Label>
+              <DiscriminatorInput
+                value={editDiscriminator}
+                onChange={setEditDiscriminator}
+                base={preview.data?.base ?? null}
+              />
+            </div>
+            <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
           </div>
           <DialogFooter>
             <Button
@@ -407,11 +440,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                   {
                     description: editDescription || null,
                     category: editCategory || null,
+                    discriminator: editDiscriminator.trim() || null,
                   },
                   { onSuccess: () => setEditOpen(false) },
                 );
               }}
-              disabled={updateMutation.isPending}
+              disabled={!draftSavable || updateMutation.isPending}
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>

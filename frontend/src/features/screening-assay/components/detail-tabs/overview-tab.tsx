@@ -54,6 +54,38 @@ function zPrimeBadge(zPrime: number | null) {
 // Stats card
 // ---------------------------------------------------------------------------
 
+const FLAG_TEXT: Record<string, string> = {
+  needs_facts:
+    "This protocol's name is missing a field its category needs. Fill it in on the Design tab; it cannot be published until then.",
+  needs_discriminator:
+    "Other protocols share this name. Add a discriminator (the method, or a fixed condition) so each one reads differently.",
+  name_conflict:
+    "A registry rename gave another protocol the exact same name. Change one of the discriminators.",
+};
+
+function NameFlagNotice({
+  protocol,
+  onTabChange,
+}: {
+  protocol: Protocol;
+  onTabChange: (tab: string) => void;
+}) {
+  if (!protocol.name_flag) return null;
+  return (
+    <div
+      role="status"
+      className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
+    >
+      {FLAG_TEXT[protocol.name_flag] ?? protocol.name_flag}{" "}
+      {protocol.name_flag === "needs_facts" && (
+        <button type="button" className="underline" onClick={() => onTabChange("design")}>
+          Open the Design tab
+        </button>
+      )}
+    </div>
+  );
+}
+
 function StatsCard({
   icon: Icon,
   label,
@@ -104,6 +136,7 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
 
   return (
     <div className="space-y-6">
+      <NameFlagNotice protocol={protocol} onTabChange={onTabChange} />
       {/* Stats Cards */}
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -229,6 +262,10 @@ export function OverviewTab({ protocol, protocolId, onTabChange }: OverviewTabPr
             <div>
               <p className="text-sm text-muted-foreground">Code</p>
               <p className="font-mono font-medium">{protocol.code ?? "\u2014"}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Discriminator</p>
+              <p className="font-medium">{protocol.discriminator ?? "\u2014"}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Type</p>

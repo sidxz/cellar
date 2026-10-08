@@ -1,6 +1,7 @@
 "use client";
 
 import { StatusBadge } from "@/shared/components/status-badge";
+import { Badge } from "@/shared/components/ui/badge";
 import { protocolTextMatch } from "../lib/protocol-facets";
 import { PROTOCOL_TYPE_LABELS, type Protocol } from "../types";
 import { TargetChips } from "./target-chips";
@@ -11,6 +12,12 @@ interface ProtocolLibraryRowProps {
   /** Active library search; a non-name hit says which field matched. */
   search?: string;
 }
+
+const NAME_FLAG_BADGE: Record<string, string> = {
+  needs_facts: "incomplete name",
+  needs_discriminator: "needs discriminator",
+  name_conflict: "name conflict",
+};
 
 export function ProtocolLibraryRow({ protocol, onSelect, search }: ProtocolLibraryRowProps) {
   const match = search ? protocolTextMatch(protocol, search) : null;
@@ -23,6 +30,11 @@ export function ProtocolLibraryRow({ protocol, onSelect, search }: ProtocolLibra
       <span className="w-24 shrink-0 font-mono text-xs text-muted-foreground">{protocol.code}</span>
       <span className="min-w-0 flex-1 truncate">
         <span className="font-medium">{protocol.name}</span>
+        {protocol.name_flag && (
+          <Badge variant="warning" className="ml-2">
+            {NAME_FLAG_BADGE[protocol.name_flag] ?? protocol.name_flag}
+          </Badge>
+        )}
         {match && match.field !== "name" && (
           <span className="ml-2 text-xs text-muted-foreground">
             matched {match.field}: {match.value}

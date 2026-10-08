@@ -204,6 +204,7 @@ describe("protocolTextMatch", () => {
   const p = proto({
     name: "M. tuberculosis growth inhibition [resazurin]",
     code: "PRT-00142",
+    discriminator: "hypoxia",
     aliases: [
       { label: "MABA", kind: "nickname", recorded_at: "2026-10-08T00:00:00Z", reason: null },
     ],
@@ -234,6 +235,7 @@ describe("protocolTextMatch", () => {
     ["growth", "name"],
     ["prt-00142", "code"],
     ["maba", "alias"],
+    ["hypox", "discriminator"],
     ["mycobacterium", "organism"],
     ["thp-1", "cell line"],
     ["seca1", "condition"],
