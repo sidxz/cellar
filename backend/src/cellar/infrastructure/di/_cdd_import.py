@@ -46,6 +46,7 @@ from cellar.application.workspace_config.get_data_source_for_import import (
 )
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.cdd.client import CddVaultClient
+from cellar.infrastructure.di._screening import _name_service
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.cdd_molecule_import_repository import (  # noqa: E501
     SQLAlchemyCddMoleculeImportRepository,
@@ -100,6 +101,7 @@ def register_cdd_import(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             dispatcher=c[EventDispatcher],
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            names=_name_service(uow),
         )
 
     container.define(ListCddProtocols, _cdd_query(ListCddProtocols))

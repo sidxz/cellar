@@ -19,6 +19,7 @@ from cellar.application.cdd_import.errors import CddAuthError, CddConnectionErro
 from cellar.application.cdd_import.gateway import CddProtocolGateway
 from cellar.application.cdd_import.mapper import map_cdd_protocol
 from cellar.application.screening.protocol_codes import mint_protocol_code
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -33,6 +34,7 @@ from cellar.domain.screening_assay.protocol import (
 )
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
+    ConflictError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -56,6 +58,8 @@ class ImportCddProtocol:
         protocol_repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
         settings_repo: WorkspaceSettingsRepository | None = None,
+        *,
+        names: ProtocolNameService,
     ) -> None:
         self._gateway = gateway
         self._get_data_source = get_data_source
@@ -63,6 +67,7 @@ class ImportCddProtocol:
         self._protocol_repo = protocol_repo
         self._dispatcher = dispatcher
         self._settings_repo = settings_repo
+        self._names = names
 
     async def __call__(
         self, input: ImportCddProtocolCommand, auth: AuthContext | None = None
@@ -139,6 +144,19 @@ class ImportCddProtocol:
                 with contextlib.suppress(ValueError):  # keep default BIOCHEMICAL
                     protocol_type = ProtocolType(cat_normalized)
 
+            # The name is generated; the import only knows the category, so the protocol
+            # usually lands flagged (needs facts) until someone fills in its fields.
+            await self._protocol_repo.lock_naming(input.workspace_id)
+            derivation = await self._names.derive(
+                input.workspace_id,
+                category=mapping.category,
+                target_ids=[],
+                annotations={},
+                discriminator=None,
+            )
+            checked = self._names.check(derivation, person=True, allow_incomplete=True)
+            if isinstance(checked, Failure):
+                return checked
             code = await mint_protocol_code(
                 settings_repo=self._settings_repo,
                 protocol_repo=self._protocol_repo,
@@ -146,7 +164,9 @@ class ImportCddProtocol:
             )
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
-                name=input.name_override or mapping.name,
+                name=derivation.rendered.name,
+                name_base=derivation.rendered.base,
+                name_flag=checked.unwrap(),
                 code=code,
                 description=mapping.description,
                 protocol_type=protocol_type,
@@ -155,6 +175,10 @@ class ImportCddProtocol:
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs,
             )
+            # The vault's name stays findable: it becomes a nickname.
+            with contextlib.suppress(ConflictError):  # the generated name may equal it
+                protocol.add_nickname(input.name_override or mapping.name)
+            await self._names.flag_siblings(input.workspace_id, derivation)
             await self._protocol_repo.save(protocol)
             events = await self._uow.commit()
 

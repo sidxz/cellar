@@ -18,6 +18,7 @@ from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
 from cellar.application.screening.protocol_codes import mint_protocol_code
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -50,7 +51,6 @@ from cellar.domain.workspace_config.repository import WorkspaceSettingsRepositor
 @dataclass(frozen=True, kw_only=True)
 class CreateProtocolCommand(Command):
     workspace_id: uuid.UUID
-    name: str
     description: str | None = None
     protocol_type: str
     target_ids: list[uuid.UUID] = field(default_factory=list)
@@ -63,6 +63,10 @@ class CreateProtocolCommand(Command):
     # uri?}. Persisted as part of the create transaction so the fingerprint is
     # computed once with facets in place and multi-slot sets can't race.
     ontology_annotations: dict[str, list[dict]] = field(default_factory=dict)
+    # The free part of the generated name (method or fixed condition).
+    discriminator: str | None = None
+    # Importers may create a protocol whose name still needs facts (flagged, cannot publish).
+    allow_incomplete: bool = False
 
 
 class CreateProtocol:
@@ -72,11 +76,13 @@ class CreateProtocol:
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
         *,
+        names: ProtocolNameService,
         settings_repo: WorkspaceSettingsRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._names = names
         self._settings_repo = settings_repo
 
     async def __call__(
@@ -170,7 +176,24 @@ class CreateProtocol:
             if terms
         }
 
+        target_ids = list(dict.fromkeys(input.target_ids))
         async with self._uow:
+            await self._repo.lock_naming(input.workspace_id)
+            discriminator = await self._names.clean_discriminator(
+                input.workspace_id, input.discriminator
+            )
+            derivation = await self._names.derive(
+                input.workspace_id,
+                category=input.category,
+                target_ids=target_ids,
+                annotations=ontology_annotations,
+                discriminator=discriminator,
+            )
+            checked = self._names.check(
+                derivation, person=True, allow_incomplete=input.allow_incomplete
+            )
+            if isinstance(checked, Failure):
+                return checked
             code = await mint_protocol_code(
                 settings_repo=self._settings_repo,
                 protocol_repo=self._repo,
@@ -178,7 +201,10 @@ class CreateProtocol:
             )
             protocol = Protocol.create(
                 workspace_id=input.workspace_id,
-                name=input.name,
+                name=derivation.rendered.name,
+                name_base=derivation.rendered.base,
+                name_flag=checked.unwrap(),
+                discriminator=discriminator,
                 code=code,
                 description=input.description,
                 protocol_type=ProtocolType(input.protocol_type),
@@ -194,12 +220,13 @@ class CreateProtocol:
             # Initial direct targets — idempotent, workspace-checked in the repo.
             # An unknown/cross-workspace target aborts the create (404) instead
             # of being silently dropped from the new protocol.
-            for target_id in dict.fromkeys(input.target_ids):
+            for target_id in target_ids:
                 link = await self._repo.add_direct_target(
                     input.workspace_id, protocol.id, target_id
                 )
                 if link is TargetLinkResult.TARGET_NOT_FOUND:
                     return Failure(NotFoundError("Target", str(target_id)))
+            await self._names.flag_siblings(input.workspace_id, derivation)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

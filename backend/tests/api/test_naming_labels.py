@@ -1,5 +1,7 @@
 """Short labels: admin overrides of how ontology terms read inside protocol names."""
 
+from tests.api._protocols import seed_protocol_categories
+
 MTB = {
     "term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1773",
     "label": "Mycobacterium tuberculosis",
@@ -8,8 +10,9 @@ MTB = {
 
 
 async def _mtb_protocol(client):
+    await seed_protocol_categories(client)
     body = {
-        "name": "M. tuberculosis growth inhibition",
+        "category": "Growth inhibition",
         "protocol_type": "whole_cell",
         "readout_definitions": [{"name": "Signal", "data_type": "numeric"}],
         "ontology_annotations": {"organism": [MTB]},

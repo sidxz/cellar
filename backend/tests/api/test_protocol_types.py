@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from tests.api._protocols import protocol_body
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -13,7 +15,7 @@ async def test_create_protocol_accepts_type(client: AsyncClient, protocol_type: 
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": f"Type check {protocol_type}",
+            **await protocol_body(client),
             "protocol_type": protocol_type,
             "readout_definitions": [
                 {"name": "% Inhibition", "data_type": "numeric", "display_order": 0}

@@ -106,6 +106,7 @@ from cellar.application.screening.manage_protocol import (
     RemoveProtocolFromProject,
     RemoveProtocolTarget,
     RetireProtocol,
+    SetProtocolDiscriminator,
     UpdateProtocol,
     VersionProtocol,
 )
@@ -293,6 +294,20 @@ def register_screening(container: Container) -> None:
 
         return _f
 
+    def _protocol_named(uc_cls: type):
+        """Protocol commands that re-derive the generated name (name service on the same uow)."""
+
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProtocolRepository(uow),
+                c[EventDispatcher],
+                names=_name_service(uow),
+            )
+
+        return _f
+
     def _protocol_query(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -310,6 +325,7 @@ def register_screening(container: Container) -> None:
             uow,
             SQLAlchemyProtocolRepository(uow),
             c[EventDispatcher],
+            names=_name_service(uow),
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
         )
 
@@ -323,7 +339,8 @@ def register_screening(container: Container) -> None:
     container.define(LockProtocol, _protocol_cmd(LockProtocol))
     container.define(UnlockProtocol, _protocol_cmd(UnlockProtocol))
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
-    container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
+    container.define(UpdateProtocol, _protocol_named(UpdateProtocol))
+    container.define(SetProtocolDiscriminator, _protocol_named(SetProtocolDiscriminator))
     container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
     container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
@@ -340,8 +357,8 @@ def register_screening(container: Container) -> None:
     container.define(ListProtocolSummaries, _list_protocol_summaries)
     container.define(AddProtocolToProject, _protocol_cmd(AddProtocolToProject))
     container.define(RemoveProtocolFromProject, _protocol_cmd(RemoveProtocolFromProject))
-    container.define(AddProtocolTarget, _protocol_cmd(AddProtocolTarget))
-    container.define(RemoveProtocolTarget, _protocol_cmd(RemoveProtocolTarget))
+    container.define(AddProtocolTarget, _protocol_named(AddProtocolTarget))
+    container.define(RemoveProtocolTarget, _protocol_named(RemoveProtocolTarget))
     container.define(GetProtocolTargets, _protocol_query(GetProtocolTargets))
     container.define(ResolveProtocolTargets, _protocol_query(ResolveProtocolTargets))
 
@@ -1076,11 +1093,15 @@ def register_screening(container: Container) -> None:
 
     def _set_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return SetOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+        return SetOntologyAnnotation(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], names=_name_service(uow)
+        )
 
     def _remove_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return RemoveOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+        return RemoveOntologyAnnotation(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], names=_name_service(uow)
+        )
 
     container.define(SetOntologyAnnotation, _set_ontology_annotation)
     container.define(RemoveOntologyAnnotation, _remove_ontology_annotation)

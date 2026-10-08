@@ -13,6 +13,7 @@ from cellar.application.auth import (
     require_same_workspace,
 )
 from cellar.application.screening.get_protocol import ProtocolWithTargets, may_delete_protocol
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.pagination import PageResult
@@ -29,6 +30,7 @@ from cellar.domain.shared.errors import (
     ConflictError,
     DomainError,
     NotFoundError,
+    ValidationError,
 )
 from cellar.domain.shared.hit_criterion import HitCriterion
 
@@ -181,10 +183,13 @@ class UpdateProtocol:
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._names = names
 
     async def __call__(
         self, input: UpdateProtocolCommand, auth: AuthContext | None = None
@@ -202,6 +207,15 @@ class UpdateProtocol:
                 protocol.update(description=input.description)  # Guards: only DRAFT allowed
             if input.category is not UNSET:
                 protocol.set_category(input.category)  # type: ignore[arg-type]
+                renamed = await self._names.apply(
+                    protocol,
+                    reason="Category changed",
+                    person=True,
+                    allow_incomplete=True,
+                    user_id=auth.user_id if auth else None,
+                )
+                if isinstance(renamed, Failure):
+                    return renamed
 
             if input.recommended_hit_criteria is not UNSET:
                 criteria = None
@@ -256,6 +270,7 @@ class AddProtocolTargetCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     target_id: uuid.UUID
+    reason: str | None = None  # required to correct a published protocol
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -263,6 +278,41 @@ class RemoveProtocolTargetCommand(Command):
     workspace_id: uuid.UUID
     protocol_id: uuid.UUID
     target_id: uuid.UUID
+    reason: str | None = None  # required to correct a published protocol
+
+
+@dataclass(frozen=True, kw_only=True)
+class SetProtocolDiscriminatorCommand(Command):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
+    discriminator: str | None
+    reason: str | None = None  # required to correct a published protocol
+
+
+_NEEDS_REASON = "A published protocol can only be corrected with a reason"
+
+
+async def _rederive_after_link_change(
+    repo: ProtocolRepository,
+    names: ProtocolNameService,
+    input: AddProtocolTargetCommand | RemoveProtocolTargetCommand,
+    reason: str,
+    user_id: uuid.UUID | None,
+) -> Result[None, DomainError]:
+    """Targets feed the name. Saves only when the name or its flag changed, so an idempotent
+    link edit still never bumps the protocol's version."""
+    protocol = await repo.find_by_id_in_workspace(input.workspace_id, input.protocol_id)
+    if protocol is None:
+        return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+    before = (protocol.name, protocol.name_base, protocol.name_flag)
+    renamed = await names.apply(
+        protocol, reason=reason, person=True, allow_incomplete=True, user_id=user_id
+    )
+    if isinstance(renamed, Failure):
+        return renamed
+    if (protocol.name, protocol.name_base, protocol.name_flag) != before:
+        await repo.save(protocol)
+    return Success(None)
 
 
 class DeleteProtocol:
@@ -447,10 +497,13 @@ class AddProtocolTarget:
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._names = names
 
     async def __call__(
         self, input: AddProtocolTargetCommand, auth: AuthContext | None = None
@@ -466,6 +519,10 @@ class AddProtocolTarget:
                 return Failure(ConflictError("Protocol is locked — unlock to change targets"))
             if status == ProtocolStatus.RETIRED.value:
                 return Failure(ConflictError("Cannot change targets on a retired protocol"))
+            reasoned = bool(input.reason and input.reason.strip())
+            if status == ProtocolStatus.ACTIVE.value and not reasoned:
+                return Failure(ValidationError(_NEEDS_REASON))
+            target_name = await self._names.target_name(input.workspace_id, input.target_id)
             link = await self._repo.add_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
@@ -473,6 +530,16 @@ class AddProtocolTarget:
                 return Failure(NotFoundError("Target", str(input.target_id)))
             if link is TargetLinkResult.OWNER_NOT_FOUND:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+            if link is TargetLinkResult.ADDED:
+                rederived = await _rederive_after_link_change(
+                    self._repo,
+                    self._names,
+                    input,
+                    f"Target added: {target_name}",
+                    auth.user_id if auth else None,
+                )
+                if isinstance(rederived, Failure):
+                    return rederived
             events = await self._uow.commit()
 
         if link is TargetLinkResult.ADDED:
@@ -498,10 +565,13 @@ class RemoveProtocolTarget:
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        names: ProtocolNameService,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._names = names
 
     async def __call__(
         self, input: RemoveProtocolTargetCommand, auth: AuthContext | None = None
@@ -517,9 +587,23 @@ class RemoveProtocolTarget:
                 return Failure(ConflictError("Protocol is locked — unlock to change targets"))
             if status == ProtocolStatus.RETIRED.value:
                 return Failure(ConflictError("Cannot change targets on a retired protocol"))
+            reasoned = bool(input.reason and input.reason.strip())
+            if status == ProtocolStatus.ACTIVE.value and not reasoned:
+                return Failure(ValidationError(_NEEDS_REASON))
+            target_name = await self._names.target_name(input.workspace_id, input.target_id)
             removed = await self._repo.remove_direct_target(
                 input.workspace_id, input.protocol_id, input.target_id
             )
+            if removed:
+                rederived = await _rederive_after_link_change(
+                    self._repo,
+                    self._names,
+                    input,
+                    f"Target removed: {target_name}",
+                    auth.user_id if auth else None,
+                )
+                if isinstance(rederived, Failure):
+                    return rederived
             events = await self._uow.commit()
 
         if removed:
@@ -534,3 +618,47 @@ class RemoveProtocolTarget:
             )
         await self._dispatcher.dispatch_all(events)
         return Success(None)
+
+
+class SetProtocolDiscriminator:
+    """Set the free part of the generated name (method or fixed condition)."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ProtocolRepository,
+        dispatcher: EventDispatcherProtocol,
+        *,
+        names: ProtocolNameService,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+        self._names = names
+
+    async def __call__(
+        self, input: SetProtocolDiscriminatorCommand, auth: AuthContext | None = None
+    ) -> Result[Protocol, DomainError]:
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
+        async with self._uow:
+            protocol = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+            value = await self._names.clean_discriminator(input.workspace_id, input.discriminator)
+            protocol.set_discriminator(value, reason=input.reason)
+            renamed = await self._names.apply(
+                protocol,
+                reason=input.reason or "Discriminator changed",
+                person=True,
+                allow_incomplete=True,
+                user_id=auth.user_id if auth else None,
+            )
+            if isinstance(renamed, Failure):
+                return renamed
+            await self._repo.save(protocol)
+            events = await self._uow.commit()
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)

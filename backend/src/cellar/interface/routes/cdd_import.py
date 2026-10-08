@@ -126,6 +126,7 @@ class CddProtocolMappingResultResponse(BaseModel):
 
 
 class ImportCddProtocolBody(BaseModel):
+    # Recorded as a nickname; protocol names are generated.
     name_override: str | None = None
 
 

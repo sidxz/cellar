@@ -44,7 +44,6 @@ import {
   WELL_CONC_X,
   isReservedReadoutName,
 } from "../lib/readout-constants";
-import { suggestProtocolName } from "../lib/suggest-protocol-name";
 import {
   CURVE_TYPE_LABELS,
   type CreateReadoutDefinitionInput,
@@ -111,7 +110,6 @@ const conditionSchema = z.object({
 });
 
 const protocolSchema = z.object({
-  name: z.string().min(1, "Protocol name is required"),
   protocol_type: z.string(),
   target_ids: z.array(z.string()),
   category: z.string(),
@@ -204,7 +202,6 @@ export function CreateProtocolDialog({
   const form = useForm<ProtocolFormValues>({
     resolver: zodResolver(protocolSchema),
     defaultValues: {
-      name: "",
       protocol_type: "biochemical",
       target_ids: [],
       category: "",
@@ -240,7 +237,6 @@ export function CreateProtocolDialog({
 
   const resetForm = () => {
     form.reset({
-      name: "",
       protocol_type: "biochemical",
       target_ids: [],
       category: "",
@@ -313,28 +309,8 @@ export function CreateProtocolDialog({
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
   const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
-  const nameValue = form.watch("name");
   const canSubmit =
-    nameValue.trim() &&
-    validReadouts.length > 0 &&
-    !hasReservedReadoutName &&
-    !createMutation.isPending;
-
-  const targetIdsValue = form.watch("target_ids");
-  const protocolTypeValue = form.watch("protocol_type");
-  const suggestedName = useMemo(() => {
-    const targetNames = (targetIdsValue ?? [])
-      .map((id) => (targets ?? []).find((t) => t.id === id)?.name)
-      .filter((n): n is string => Boolean(n));
-    const readoutNames = (readoutValues ?? []).map((r) => r.name).filter(Boolean);
-    return suggestProtocolName({
-      targetNames,
-      readoutNames,
-      typeLabel: protocolTypeValue
-        ? (PROTOCOL_TYPE_LABELS[protocolTypeValue as ProtocolType] ?? protocolTypeValue)
-        : "",
-    });
-  }, [targetIdsValue, readoutValues, targets, protocolTypeValue]);
+    validReadouts.length > 0 && !hasReservedReadoutName && !createMutation.isPending;
 
   // ---- submit handler ----
 
@@ -393,7 +369,6 @@ export function CreateProtocolDialog({
 
     createMutation.mutate(
       {
-        name: values.name.trim(),
         protocol_type: values.protocol_type as ProtocolType,
         target_ids: values.target_ids,
         category: values.category || null,
@@ -439,14 +414,12 @@ export function CreateProtocolDialog({
         <div className="grid gap-4 py-4">
           {/* Basic info */}
           <div className="grid gap-2">
-            <Label>Name</Label>
-            <Input placeholder="e.g., EGFR Kinase IC50" {...form.register("name")} />
-            {form.formState.errors.name && (
-              <p className="text-[11px] text-destructive">{form.formState.errors.name.message}</p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              The name is generated from the category and fields below.
+            </p>
             <SimilarProtocolsPanel
               draft={{
-                name: form.watch("name") ?? "",
+                name: "",
                 protocol_type: form.watch("protocol_type") || null,
                 target_ids: form.watch("target_ids") ?? [],
                 readout_names: (form.watch("readouts") ?? [])
@@ -461,15 +434,6 @@ export function CreateProtocolDialog({
                 onLogRun?.(protocolId);
               }}
             />
-            {!nameValue?.trim() && suggestedName && (
-              <button
-                type="button"
-                onClick={() => form.setValue("name", suggestedName, { shouldValidate: true })}
-                className="self-start text-xs text-muted-foreground hover:text-foreground"
-              >
-                Suggest name: <span className="font-medium">{suggestedName}</span>
-              </button>
-            )}
           </div>
 
           {/* Protocol Form Selector */}

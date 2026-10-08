@@ -35,7 +35,7 @@ from cellar.domain.screening_assay.events import (
     RunTargetRemoved,
 )
 from cellar.domain.screening_assay.repository import TargetLinkResult
-from cellar.domain.shared.errors import ConflictError, NotFoundError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 
 pytestmark = pytest.mark.asyncio
@@ -104,7 +104,12 @@ def _protocol_uc(
     repo.remove_direct_target = AsyncMock(return_value=removed)
     uow = FakeUoW()
     dispatcher = FakeDispatcher()
-    return uc_class(uow=uow, repo=repo, dispatcher=dispatcher), repo, uow, dispatcher
+    names = AsyncMock()
+    names.target_name = AsyncMock(return_value="PptT")
+    names.apply = AsyncMock(return_value=Success(None))
+    uc = uc_class(uow=uow, repo=repo, dispatcher=dispatcher, names=names)
+    uc.names = names  # test handle
+    return uc, repo, uow, dispatcher
 
 
 def _run_uc(
@@ -135,6 +140,24 @@ TID = uuid.uuid4()
 
 
 class TestAddProtocolTarget:
+    async def test_added_target_renames_with_its_name_as_reason(self) -> None:
+        uc, _, _, _ = _protocol_uc(AddProtocolTarget, lock_state=(False, "draft"))
+        await uc(
+            AddProtocolTargetCommand(workspace_id=WS, protocol_id=PID, target_id=TID),
+            auth=FakeAuth(),
+        )
+        assert uc.names.apply.call_args.kwargs["reason"] == "Target added: PptT"
+
+    async def test_published_protocol_needs_a_reason(self) -> None:
+        uc, repo, uow, _ = _protocol_uc(AddProtocolTarget, lock_state=(False, "active"))
+        result = await uc(
+            AddProtocolTargetCommand(workspace_id=WS, protocol_id=PID, target_id=TID),
+            auth=FakeAuth(),
+        )
+        assert isinstance(result.failure(), ValidationError)
+        repo.add_direct_target.assert_not_called()
+        assert not uow.committed
+
     async def test_added_emits_audit_event(self) -> None:
         uc, _, uow, dispatcher = _protocol_uc(AddProtocolTarget, lock_state=(False, "draft"))
         auth = FakeAuth(workspace_id=WS)
@@ -158,7 +181,9 @@ class TestAddProtocolTarget:
             link=TargetLinkResult.ALREADY_LINKED,
         )
         result = await uc(
-            AddProtocolTargetCommand(workspace_id=WS, protocol_id=PID, target_id=TID),
+            AddProtocolTargetCommand(
+                workspace_id=WS, protocol_id=PID, target_id=TID, reason="Wrong target"
+            ),
             auth=FakeAuth(),
         )
         assert isinstance(result, Success)
@@ -215,7 +240,9 @@ class TestRemoveProtocolTarget:
     async def test_removed_emits_audit_event(self) -> None:
         uc, _, _, dispatcher = _protocol_uc(RemoveProtocolTarget, lock_state=(False, "active"))
         result = await uc(
-            RemoveProtocolTargetCommand(workspace_id=WS, protocol_id=PID, target_id=TID),
+            RemoveProtocolTargetCommand(
+                workspace_id=WS, protocol_id=PID, target_id=TID, reason="Wrong target"
+            ),
             auth=FakeAuth(),
         )
         assert isinstance(result, Success)
@@ -228,7 +255,9 @@ class TestRemoveProtocolTarget:
             RemoveProtocolTarget, lock_state=(False, "active"), removed=False
         )
         result = await uc(
-            RemoveProtocolTargetCommand(workspace_id=WS, protocol_id=PID, target_id=TID),
+            RemoveProtocolTargetCommand(
+                workspace_id=WS, protocol_id=PID, target_id=TID, reason="Wrong target"
+            ),
             auth=FakeAuth(),
         )
         assert isinstance(result, Success)

@@ -57,9 +57,9 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const isLocked = protocol.is_locked;
   // Destructive / structural ops — strict DRAFT only. Lock blocks DRAFT too.
   const canStructurallyEdit = isDraft && !isLocked;
-  // Metadata-like ops (targets, annotations) — allowed post-publish, blocked
-  // only by lock or retirement (mirrors the backend add/remove-target guard).
-  const canEditTargets = !isLocked && !isRetired;
+  // Targets feed the generated name: drafts edit them here; a published protocol
+  // changes them through a correction with a reason.
+  const canEditTargets = isDraft && !isLocked;
 
   const qc = useQueryClient();
   const updateProtocol = useUpdateProtocol(protocolId);

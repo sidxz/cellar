@@ -34,7 +34,7 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CampaignResultModel,
     CampaignStageModel,
 )
-
+from tests.api._protocols import protocol_body
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -133,7 +133,7 @@ async def _make_published_protocol(client: AsyncClient) -> str:
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "Target Proto",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },
@@ -150,7 +150,7 @@ async def _make_published_protocol_with_readout(client: AsyncClient) -> tuple[st
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "Close Test Proto",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },
@@ -170,7 +170,7 @@ async def _make_protocol_with_recommended_hit_criteria(client: AsyncClient) -> s
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "Stage Mirror Proto",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },

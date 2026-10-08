@@ -26,6 +26,7 @@ import type {
 import type {
   AddConditionDefinitionRequest,
   AddNicknameRequest,
+  AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams,
   AddReadoutDefinitionRequest,
   ConditionGroupsResponse,
   CreateProtocolRequest,
@@ -44,8 +45,10 @@ import type {
   ProtocolTargetRefResponse,
   RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams,
   RemoveProtocolNicknameApiV1ProtocolsProtocolIdNicknamesDeleteParams,
+  RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams,
   RetireRequest,
   SetControlLayoutRequest,
+  SetDiscriminatorRequest,
   SetOntologyAnnotationRequest,
   SimilarProtocolResponse,
   UpdateConditionDefinitionRequest,
@@ -1011,6 +1014,71 @@ export const useVersionProtocolApiV1ProtocolsProtocolIdVersionPost = <TError = H
       > => {
 
       const mutationOptions = getVersionProtocolApiV1ProtocolsProtocolIdVersionPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Set the free part of the generated name; the name re-derives.
+ * @summary Set Protocol Discriminator
+ */
+export const setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut = (
+    protocolId: string,
+    setDiscriminatorRequest: SetDiscriminatorRequest,
+ ) => {
+      
+      
+      return customInstance<ProtocolResponse>(
+      {url: `/api/v1/protocols/${protocolId}/discriminator`, method: 'PUT',
+      headers: {'Content-Type': 'application/json', },
+      data: setDiscriminatorRequest
+    },
+      );
+    }
+  
+
+
+export const getSetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPutMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut>>, TError,{protocolId: string;data: SetDiscriminatorRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut>>, TError,{protocolId: string;data: SetDiscriminatorRequest}, TContext> => {
+
+const mutationKey = ['setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut>>, {protocolId: string;data: SetDiscriminatorRequest}> = (props) => {
+          const {protocolId,data} = props ?? {};
+
+          return  setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut(protocolId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type SetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPutMutationResult = NonNullable<Awaited<ReturnType<typeof setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut>>>
+    export type SetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPutMutationBody = SetDiscriminatorRequest
+    export type SetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPutMutationError = HTTPValidationError
+
+    /**
+ * @summary Set Protocol Discriminator
+ */
+export const useSetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut>>, TError,{protocolId: string;data: SetDiscriminatorRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof setProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPut>>,
+        TError,
+        {protocolId: string;data: SetDiscriminatorRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getSetProtocolDiscriminatorApiV1ProtocolsProtocolIdDiscriminatorPutMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }
@@ -2012,18 +2080,20 @@ export function useListProtocolTargetsApiV1ProtocolsProtocolIdTargetsGet<TData =
 
 
 /**
- * Attach a direct target to a protocol (idempotent).
+ * Attach a direct target to a protocol (idempotent; a published one needs a reason).
  * @summary Add Protocol Target
  */
 export const addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost = (
     protocolId: string,
     targetId: string,
+    params?: AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams,
  signal?: AbortSignal
 ) => {
       
       
       return customInstance<void>(
-      {url: `/api/v1/protocols/${protocolId}/targets/${targetId}`, method: 'POST', signal
+      {url: `/api/v1/protocols/${protocolId}/targets/${targetId}`, method: 'POST',
+        params, signal
     },
       );
     }
@@ -2031,8 +2101,8 @@ export const addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost = (
 
 
 export const getAddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string;params?: AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string;params?: AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams}, TContext> => {
 
 const mutationKey = ['addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost'];
 const {mutation: mutationOptions} = options ?
@@ -2044,10 +2114,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, {protocolId: string;targetId: string}> = (props) => {
-          const {protocolId,targetId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, {protocolId: string;targetId: string;params?: AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams}> = (props) => {
+          const {protocolId,targetId,params} = props ?? {};
 
-          return  addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost(protocolId,targetId,)
+          return  addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost(protocolId,targetId,params,)
         }
 
         
@@ -2063,11 +2133,11 @@ const {mutation: mutationOptions} = options ?
  * @summary Add Protocol Target
  */
 export const useAddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string}, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>, TError,{protocolId: string;targetId: string;params?: AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof addProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost>>,
         TError,
-        {protocolId: string;targetId: string},
+        {protocolId: string;targetId: string;params?: AddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPostParams},
         TContext
       > => {
 
@@ -2076,17 +2146,19 @@ export const useAddProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdPost = <
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Remove a direct target from a protocol.
+ * Remove a direct target from a protocol (a published one needs a reason).
  * @summary Remove Protocol Target
  */
 export const removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete = (
     protocolId: string,
     targetId: string,
+    params?: RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams,
  ) => {
       
       
       return customInstance<void>(
-      {url: `/api/v1/protocols/${protocolId}/targets/${targetId}`, method: 'DELETE'
+      {url: `/api/v1/protocols/${protocolId}/targets/${targetId}`, method: 'DELETE',
+        params
     },
       );
     }
@@ -2094,8 +2166,8 @@ export const removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete =
 
 
 export const getRemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string}, TContext>, }
-): UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string}, TContext> => {
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string;params?: RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string;params?: RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams}, TContext> => {
 
 const mutationKey = ['removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete'];
 const {mutation: mutationOptions} = options ?
@@ -2107,10 +2179,10 @@ const {mutation: mutationOptions} = options ?
       
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, {protocolId: string;targetId: string}> = (props) => {
-          const {protocolId,targetId} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, {protocolId: string;targetId: string;params?: RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams}> = (props) => {
+          const {protocolId,targetId,params} = props ?? {};
 
-          return  removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete(protocolId,targetId,)
+          return  removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete(protocolId,targetId,params,)
         }
 
         
@@ -2126,11 +2198,11 @@ const {mutation: mutationOptions} = options ?
  * @summary Remove Protocol Target
  */
 export const useRemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string}, TContext>, }
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>, TError,{protocolId: string;targetId: string;params?: RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams}, TContext>, }
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof removeProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDelete>>,
         TError,
-        {protocolId: string;targetId: string},
+        {protocolId: string;targetId: string;params?: RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams},
         TContext
       > => {
 

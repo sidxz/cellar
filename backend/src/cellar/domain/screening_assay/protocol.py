@@ -532,7 +532,8 @@ class Protocol(AggregateRoot):
             raise ConflictError("Cannot publish a locked protocol — unlock first")
         if self.name_flag in (NameFlag.NEEDS_FACTS, NameFlag.NAME_CONFLICT):
             raise ConflictError(
-                "This protocol's name is incomplete or clashes with another; fix it before publishing"
+                "This protocol's name is incomplete or clashes with another; "
+                "fix it before publishing"
             )
         self._guard_transition(ProtocolStatus.ACTIVE)
         self.status = ProtocolStatus.ACTIVE

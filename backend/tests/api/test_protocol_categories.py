@@ -36,11 +36,16 @@ async def test_bad_pattern_is_422(client):
 async def test_category_in_use_cannot_be_deleted(client):
     cats = (await client.post("/api/v1/protocol-categories/defaults")).json()
     cyto = next(c for c in cats if c["label"] == "Cytotoxicity")
+    hepg2 = {
+        "term_id": "http://purl.obolibrary.org/obo/CLO_0003703",
+        "label": "HepG2 cell",
+        "ontology_source": "CLO",
+    }
     body = {
-        "name": "HepG2 cytotoxicity",
         "protocol_type": "cell_based",
         "category": "Cytotoxicity",
         "readout_definitions": [{"name": "Signal", "data_type": "numeric"}],
+        "ontology_annotations": {"cell_line": [hepg2]},
     }
     assert (await client.post("/api/v1/protocols", json=body)).status_code == 201
     r = await client.delete(f"/api/v1/protocol-categories/{cyto['id']}")

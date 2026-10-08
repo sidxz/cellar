@@ -89,6 +89,11 @@ class ProtocolNameService:
             home_organism_label=settings.home_organism_label if settings else None,
         )
 
+    async def target_name(self, workspace_id: uuid.UUID, target_id: uuid.UUID) -> str:
+        """For audit reasons ("Target added: PptT"); falls back to the id."""
+        found = await self._targets.find_by_ids(workspace_id, [target_id])
+        return found[0].name if found else str(target_id)
+
     async def clean_discriminator(self, workspace_id: uuid.UUID, value: str | None) -> str | None:
         libraries = [
             c.name

@@ -7,6 +7,8 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from tests.api._protocols import protocol_body
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -14,7 +16,7 @@ async def _make_protocol(client: AsyncClient, *, target_ids: list[str] | None = 
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "TargetProto",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "target_ids": target_ids or [],
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
@@ -45,7 +47,7 @@ class TestProtocolTargets:
         created = await client.post(
             "/api/v1/protocols",
             json={
-                "name": "TargetProtoCreate",
+                **await protocol_body(client),
                 "protocol_type": "biochemical",
                 "target_ids": [t3],
                 "readout_definitions": [
@@ -180,7 +182,7 @@ class TestUnknownTarget404:
         resp = await client.post(
             "/api/v1/protocols",
             json={
-                "name": "BadTargetProto",
+                **await protocol_body(client),
                 "protocol_type": "biochemical",
                 "target_ids": [str(uuid.uuid4())],
                 "readout_definitions": [
@@ -231,7 +233,7 @@ class TestRemovedTargetIdField:
         resp = await client.post(
             "/api/v1/protocols",
             json={
-                "name": "OldShapeProto",
+                **await protocol_body(client),
                 "protocol_type": "biochemical",
                 "target_id": t1,
                 "readout_definitions": [

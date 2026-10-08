@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from returns.result import Failure, Success
@@ -25,6 +25,7 @@ from cellar.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImport,
     StartCddMoleculeImportCommand,
 )
+from cellar.application.screening.protocol_naming_service import NameDerivation
 from cellar.application.workspace_config.get_data_source_for_import import (
     DataSourceImportConfig,
 )
@@ -34,6 +35,7 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
+from cellar.domain.shared.protocol_naming import RenderedName
 from tests.fakes.fake_auth import FakeAuth
 
 WORKSPACE_ID = uuid.uuid4()
@@ -260,12 +262,30 @@ class TestImportCddProtocol:
             dispatcher = AsyncMock()
             dispatcher.dispatch_all = AsyncMock()
 
+        names = MagicMock()
+        names.derive = AsyncMock(
+            return_value=NameDerivation(
+                RenderedName(
+                    name="Generated name",
+                    base="Generated name",
+                    missing=(),
+                    discriminator_in_pattern=False,
+                ),
+                None,
+                (),
+                (),
+                False,
+            )
+        )
+        names.check = MagicMock(return_value=Success(None))
+        names.flag_siblings = AsyncMock()
         return ImportCddProtocol(
             gateway=FakeGateway(detail=detail or _protocol_detail()),
             get_data_source=FakeGetDataSource(),
             uow=uow,
             protocol_repo=repo,
             dispatcher=dispatcher,
+            names=names,
         ), repo
 
     @pytest.mark.asyncio
@@ -277,7 +297,9 @@ class TestImportCddProtocol:
         )
         assert isinstance(result, Success)
         protocol = result.unwrap()
-        assert protocol.name == "Kinase IC50"
+        # names are generated; the vault's name is kept as a nickname
+        assert protocol.name == "Generated name"
+        assert [a.label for a in protocol.aliases] == ["Kinase IC50"]
         assert protocol.status.value == "draft"
         assert len(protocol.readout_definitions) == 2
         repo.save.assert_called_once()
@@ -294,7 +316,9 @@ class TestImportCddProtocol:
             auth=_make_auth(),
         )
         assert isinstance(result, Success)
-        assert result.unwrap().name == "My Custom Name"
+        # names are generated; the override is kept as a nickname
+        assert result.unwrap().name == "Generated name"
+        assert [a.label for a in result.unwrap().aliases] == ["My Custom Name"]
 
     @pytest.mark.asyncio
     async def test_no_mappable_readouts_fails(self):

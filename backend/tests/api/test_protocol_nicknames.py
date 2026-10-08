@@ -1,14 +1,10 @@
 """Nicknames: POST/DELETE /protocols/{id}/nicknames."""
 
-BODY = {
-    "name": "M. tuberculosis growth inhibition",
-    "protocol_type": "whole_cell",
-    "readout_definitions": [{"name": "Signal", "data_type": "numeric"}],
-}
+from tests.api._protocols import protocol_body
 
 
 async def _protocol(client):
-    r = await client.post("/api/v1/protocols", json=BODY)
+    r = await client.post("/api/v1/protocols", json=await protocol_body(client))
     assert r.status_code == 201, r.text
     return r.json()
 

@@ -581,8 +581,9 @@ export interface CreateConditionDefinitionInput {
 }
 
 export interface CreateProtocolInput {
-  name: string;
   protocol_type: ProtocolType;
+  /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
+  discriminator?: string | null;
   description?: string | null;
   /** Direct targets to attach on create (each rolled up to the protocol). */
   target_ids?: string[];

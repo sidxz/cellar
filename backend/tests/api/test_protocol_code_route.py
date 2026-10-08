@@ -2,11 +2,11 @@
 
 import re
 
-BODY = {"name": "x", "protocol_type": "biochemical", "readout_definitions": [{"name": "Signal", "data_type": "numeric"}]}
+from tests.api._protocols import protocol_body
 
 
 async def test_create_mints_sequential_codes(client):
-    a = (await client.post("/api/v1/protocols", json=BODY | {"name": "A"})).json()
-    b = (await client.post("/api/v1/protocols", json=BODY | {"name": "B"})).json()
+    a = (await client.post("/api/v1/protocols", json=await protocol_body(client))).json()
+    b = (await client.post("/api/v1/protocols", json=await protocol_body(client))).json()
     assert re.fullmatch(r"PRT-\d{5}", a["code"])
     assert int(b["code"][4:]) == int(a["code"][4:]) + 1

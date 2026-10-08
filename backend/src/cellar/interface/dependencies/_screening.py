@@ -63,6 +63,7 @@ from cellar.application.screening.manage_protocol import (
     RemoveProtocolFromProject,
     RemoveProtocolTarget,
     RetireProtocol,
+    SetProtocolDiscriminator,
     UpdateProtocol,
     VersionProtocol,
 )
@@ -212,6 +213,7 @@ __all__ = [
     "ResolveRunTargetsDep",
     "RetireProtocolDep",
     "SetControlLayoutDep",
+    "SetProtocolDiscriminatorDep",
     "SetRunHitCriteriaDep",
     "SetUpRunPlateDep",
     "StartRunDep",
@@ -276,6 +278,9 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+SetProtocolDiscriminatorDep = Annotated[
+    SetProtocolDiscriminator, Depends(_get_use_case(SetProtocolDiscriminator))
+]
 AddProtocolNicknameDep = Annotated[
     AddProtocolNickname, Depends(_get_use_case(AddProtocolNickname))
 ]

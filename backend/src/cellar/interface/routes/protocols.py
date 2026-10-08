@@ -49,6 +49,7 @@ from cellar.application.screening.manage_protocol import (
     RemoveProtocolFromProjectCommand,
     RemoveProtocolTargetCommand,
     RetireProtocolCommand,
+    SetProtocolDiscriminatorCommand,
     UpdateProtocolCommand,
     VersionProtocolCommand,
 )
@@ -99,6 +100,7 @@ from cellar.interface.dependencies import (
     RetireProtocolDep,
     SetControlLayoutDep,
     SetOntologyAnnotationDep,
+    SetProtocolDiscriminatorDep,
     UnlockProtocolDep,
     UpdateConditionDefinitionDep,
     UpdateProtocolDep,
@@ -380,7 +382,7 @@ class OntologyTermRequest(BaseModel):
 
 
 class CreateProtocolRequest(BaseModel):
-    name: str
+    # No name: it is generated from the category pattern and the facts below.
     description: str | None = None
     protocol_type: str
     target_ids: list[uuid.UUID] = []
@@ -393,6 +395,8 @@ class CreateProtocolRequest(BaseModel):
     # with the protocol so multi-slot facet sets can't race/drop (the per-slot
     # PUT endpoint remains for interactive single-slot edits).
     ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
+    # The free part of the name (method or fixed condition), needed when names collide.
+    discriminator: str | None = None
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -455,7 +459,6 @@ async def create_protocol(
 ) -> ProtocolResponse:
     cmd = CreateProtocolCommand(
         workspace_id=auth.workspace_id,
-        name=body.name,
         description=body.description,
         protocol_type=body.protocol_type,
         target_ids=body.target_ids,
@@ -468,6 +471,7 @@ async def create_protocol(
             slot: [t.model_dump() for t in terms]
             for slot, terms in (body.ontology_annotations or {}).items()
         },
+        discriminator=body.discriminator,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -791,7 +795,7 @@ async def update_protocol(
 ) -> ProtocolResponse:
     """Update a DRAFT protocol's metadata."""
 
-    # ``name`` and ``pos_control_signal`` are typed as ``str | None`` on the
+    # ``pos_control_signal`` is typed as ``str | None`` on the
     # command — None means "leave unchanged". The other fields are nullable
     # and use UNSET to distinguish omission from "set to null".
     cmd = UpdateProtocolCommand(
@@ -803,6 +807,33 @@ async def update_protocol(
         if "recommended_hit_criteria" in body.model_fields_set
         else UNSET,
         pos_control_signal=body.pos_control_signal,
+    )
+    result = await uc(cmd, auth=auth)
+    return await _protocol_response(targets_uc, auth, result)
+
+
+class SetDiscriminatorRequest(BaseModel):
+    discriminator: str | None
+    reason: str | None = None  # required to correct a published protocol
+    model_config = {"extra": "forbid"}
+
+
+@router.put(
+    "/protocols/{protocol_id}/discriminator", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def set_protocol_discriminator(
+    protocol_id: uuid.UUID,
+    body: SetDiscriminatorRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: SetProtocolDiscriminatorDep,
+) -> ProtocolResponse:
+    """Set the free part of the generated name; the name re-derives."""
+    cmd = SetProtocolDiscriminatorCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        discriminator=body.discriminator,
+        reason=body.reason,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1269,13 +1300,15 @@ async def add_protocol_target(
     target_id: uuid.UUID,
     auth: AuthDep,
     uc: AddProtocolTargetDep,
+    reason: str | None = Query(None),
 ) -> Response:
-    """Attach a direct target to a protocol (idempotent)."""
+    """Attach a direct target to a protocol (idempotent; a published one needs a reason)."""
     result = await uc(
         AddProtocolTargetCommand(
             workspace_id=auth.workspace_id,
             protocol_id=protocol_id,
             target_id=target_id,
+            reason=reason,
         ),
         auth=auth,
     )
@@ -1293,13 +1326,15 @@ async def remove_protocol_target(
     target_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveProtocolTargetDep,
+    reason: str | None = Query(None),
 ) -> Response:
-    """Remove a direct target from a protocol."""
+    """Remove a direct target from a protocol (a published one needs a reason)."""
     result = await uc(
         RemoveProtocolTargetCommand(
             workspace_id=auth.workspace_id,
             protocol_id=protocol_id,
             target_id=target_id,
+            reason=reason,
         ),
         auth=auth,
     )
