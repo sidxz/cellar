@@ -145,6 +145,7 @@ from cellar.application.screening.plate_templates import (
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.protocol_activity_reader import ProtocolActivityReader
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
@@ -206,6 +207,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_read_model_rea
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
+    SQLAlchemyCollectionRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_curves_reader import (
     SQLAlchemyCompoundCurvesReader,
 )
@@ -251,12 +255,30 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
     SQLAlchemyTargetRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_repository import (
+    SQLAlchemyNamingLabelRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_category_repository import (  # noqa: E501
+    SQLAlchemyProtocolCategoryRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
     SQLAlchemyWorkspaceSettingsRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.prot_cellar.settings import ProtCellarSettings
 from cellar.infrastructure.prot_cellar.target_source import HttpTargetSource
+
+
+def _name_service(uow) -> ProtocolNameService:
+    """The one name deriver every protocol use case shares (all repos on the same unit of work)."""
+    return ProtocolNameService(
+        protocol_repo=SQLAlchemyProtocolRepository(uow),
+        target_repo=SQLAlchemyTargetRepository(uow),
+        category_repo=SQLAlchemyProtocolCategoryRepository(uow),
+        label_repo=SQLAlchemyNamingLabelRepository(uow),
+        settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+        collection_repo=SQLAlchemyCollectionRepository(uow),
+    )
 
 
 def register_screening(container: Container) -> None:

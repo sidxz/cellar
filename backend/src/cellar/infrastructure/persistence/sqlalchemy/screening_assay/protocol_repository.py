@@ -36,7 +36,11 @@ from cellar.domain.screening_assay.protocol_fingerprint import (
     normalize_facet_id,
 )
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
-from cellar.domain.screening_assay.repository import AnnotationTermUse, TargetLinkResult
+from cellar.domain.screening_assay.repository import (
+    AnnotationTermUse,
+    NameSibling,
+    TargetLinkResult,
+)
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion
@@ -143,6 +147,50 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             )
             for r in rows
         ]
+
+    async def lock_naming(self, workspace_id: uuid.UUID) -> None:
+        # Same key as next_protocol_code: one create-or-rename name check at a time per workspace.
+        await self._session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"protocol_naming:{workspace_id}")))
+        )
+
+    async def find_name_siblings(
+        self, workspace_id: uuid.UUID, *, base: str, exclude_code: str | None
+    ) -> list[NameSibling]:
+        stmt = select(
+            ProtocolModel.id, ProtocolModel.code, ProtocolModel.name, ProtocolModel.discriminator
+        ).where(
+            ProtocolModel.workspace_id == workspace_id,
+            func.lower(ProtocolModel.name_base) == base.strip().lower(),
+        )
+        if exclude_code is not None:
+            stmt = stmt.where(ProtocolModel.code.is_distinct_from(exclude_code))
+        seen: dict[str, NameSibling] = {}
+        rows = await self._session.execute(stmt.order_by(ProtocolModel.protocol_version.desc()))
+        for row in rows.all():
+            seen.setdefault(
+                row.code or str(row.id),
+                NameSibling(
+                    protocol_id=row.id,
+                    code=row.code,
+                    name=row.name,
+                    discriminator=row.discriminator,
+                ),
+            )
+        return list(seen.values())
+
+    async def list_discriminators(
+        self, workspace_id: uuid.UUID, *, base: str | None, q: str | None, limit: int = 20
+    ) -> list[str]:
+        stmt = select(ProtocolModel.discriminator).where(
+            ProtocolModel.workspace_id == workspace_id, ProtocolModel.discriminator.is_not(None)
+        )
+        if base:
+            stmt = stmt.where(func.lower(ProtocolModel.name_base) == base.strip().lower())
+        if q:
+            stmt = stmt.where(ProtocolModel.discriminator.ilike(f"%{q.strip()}%"))
+        stmt = stmt.distinct().order_by(ProtocolModel.discriminator).limit(limit)
+        return list((await self._session.execute(stmt)).scalars())
 
     async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int:
         stmt = select(func.count()).where(

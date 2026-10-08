@@ -36,6 +36,16 @@ class AnnotationTermUse:
     protocol_count: int
 
 
+@dataclass(frozen=True)
+class NameSibling:
+    """Another protocol (by code) whose generated base name equals this one's."""
+
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    discriminator: str | None
+
+
 class TargetLinkResult(Enum):
     """Outcome of an add-target link operation.
 
@@ -82,6 +92,20 @@ class ProtocolRepository(Protocol):
     ) -> AssayProtocol | None: ...
 
     async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int: ...
+
+    async def find_name_siblings(
+        self, workspace_id: uuid.UUID, *, base: str, exclude_code: str | None
+    ) -> list[NameSibling]:
+        """Protocols whose base name equals ``base`` (case-insensitive), one per code."""
+        ...
+
+    async def lock_naming(self, workspace_id: uuid.UUID) -> None:
+        """Serialize name checks (and code minting) per workspace until commit."""
+        ...
+
+    async def list_discriminators(
+        self, workspace_id: uuid.UUID, *, base: str | None, q: str | None, limit: int = 20
+    ) -> list[str]: ...
 
     async def list_annotation_terms(
         self, workspace_id: uuid.UUID, slots: Sequence[str]
@@ -225,6 +249,9 @@ class TargetRepository(Protocol):
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
     async def list_organisms(self, workspace_id: uuid.UUID) -> list[str]: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: Sequence[uuid.UUID]
+    ) -> list[Target]: ...
 
 
 @runtime_checkable

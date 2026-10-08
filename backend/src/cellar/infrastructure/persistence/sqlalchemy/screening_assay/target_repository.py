@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 from sqlalchemy import select
 
@@ -79,3 +80,11 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
             .order_by(TargetModel.organism)
         )
         return list((await self._session.execute(stmt)).scalars())
+
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: Sequence[uuid.UUID]) -> list[Target]:
+        if not ids:
+            return []
+        stmt = select(TargetModel).where(
+            TargetModel.workspace_id == workspace_id, TargetModel.id.in_(list(ids))
+        )
+        return [self._to_domain(m) for m in (await self._session.execute(stmt)).scalars()]
