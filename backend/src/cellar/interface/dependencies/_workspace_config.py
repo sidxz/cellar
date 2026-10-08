@@ -10,7 +10,7 @@ from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
 )
-from cellar.application.screening.search_ontology import SearchOntology
+from cellar.application.screening.search_ontology import ListOntologyDescendants, SearchOntology
 from cellar.application.workspace_config.create_custom_field import CreateCustomField
 from cellar.application.workspace_config.create_data_source import CreateDataSource
 from cellar.application.workspace_config.create_external_api_key import CreateExternalApiKey
@@ -105,6 +105,7 @@ __all__ = [
     "ListCustomFieldsDep",
     "ListDataSourcesDep",
     "ListExternalApiKeysDep",
+    "ListOntologyDescendantsDep",
     "ListOntologySlotsDep",
     "ListOrganizationsDep",
     "ListProtocolFormsDep",
@@ -201,6 +202,9 @@ DeleteOntologySlotDep = Annotated[DeleteOntologySlot, Depends(_get_use_case(Dele
 
 # --- Ontology Search + Annotation dependencies ---
 SearchOntologyDep = Annotated[SearchOntology, Depends(_get_use_case(SearchOntology))]
+ListOntologyDescendantsDep = Annotated[
+    ListOntologyDescendants, Depends(_get_use_case(ListOntologyDescendants))
+]
 SetOntologyAnnotationDep = Annotated[
     SetOntologyAnnotation, Depends(_get_use_case(SetOntologyAnnotation))
 ]

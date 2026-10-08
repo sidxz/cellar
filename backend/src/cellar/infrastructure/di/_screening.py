@@ -164,7 +164,7 @@ from cellar.application.screening.run_import_templates import (
     ListRunImportTemplates,
     UpdateRunImportTemplate,
 )
-from cellar.application.screening.search_ontology import SearchOntology
+from cellar.application.screening.search_ontology import ListOntologyDescendants, SearchOntology
 from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
@@ -1030,6 +1030,9 @@ def register_screening(container: Container) -> None:
     # --- Ontology Search & Annotations ---
     container.define(BioPortalClient, lambda c: BioPortalClient(c[SecretProvider]))
     container.define(SearchOntology, lambda c: SearchOntology(c[BioPortalClient]))
+    container.define(
+        ListOntologyDescendants, lambda c: ListOntologyDescendants(c[BioPortalClient])
+    )
 
     def _set_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
