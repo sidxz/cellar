@@ -1,3 +1,4 @@
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import {
   Select,
   SelectContent,
@@ -6,7 +7,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 
-export type ScaffoldColorProtocol = { id: string; name: string };
+export type ScaffoldColorProtocol = { id: string; name: string; code?: string | null };
 
 type Props = {
   protocols: ScaffoldColorProtocol[];
@@ -39,7 +40,7 @@ export function ScaffoldColorPicker({ protocols, value, onChange }: Props) {
           <SelectItem value={NONE}>none</SelectItem>
           {protocols.map((p) => (
             <SelectItem key={p.id} value={p.id}>
-              {p.name}
+              <ProtocolOptionLabel code={p.code} name={p.name} />
             </SelectItem>
           ))}
         </SelectContent>

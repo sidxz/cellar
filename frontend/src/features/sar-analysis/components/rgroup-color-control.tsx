@@ -11,6 +11,7 @@ import { AggregationControl } from "@/features/research-organization/components/
  */
 import { buildActivityWhereOptions } from "@/features/research-organization/lib/activity-where-options";
 import type { AggregationMode } from "@/features/research-organization/lib/use-aggregation-mode";
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import {
   Select,
@@ -94,7 +95,7 @@ export function RGroupColorControl({
         <SelectContent>
           {protocols.map((p) => (
             <SelectItem key={p.id} value={p.id} className="text-xs">
-              {p.name}
+              <ProtocolOptionLabel code={p.code} name={p.name} />
             </SelectItem>
           ))}
         </SelectContent>

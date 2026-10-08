@@ -21,6 +21,7 @@ interface GroupedProtocolListProps {
   groupBy: GroupBy;
   onGroupByChange: (g: GroupBy) => void;
   onSelect?: (protocolId: string) => void;
+  search?: string;
 }
 
 export function GroupedProtocolList({
@@ -28,6 +29,7 @@ export function GroupedProtocolList({
   groupBy,
   onGroupByChange,
   onSelect,
+  search,
 }: GroupedProtocolListProps) {
   const total = groups.reduce((n, g) => n + g.count, 0);
   return (
@@ -62,7 +64,7 @@ export function GroupedProtocolList({
           </CollapsibleTrigger>
           <CollapsibleContent>
             {group.protocols.map((p) => (
-              <ProtocolLibraryRow key={p.id} protocol={p} onSelect={onSelect} />
+              <ProtocolLibraryRow key={p.id} protocol={p} onSelect={onSelect} search={search} />
             ))}
           </CollapsibleContent>
         </Collapsible>

@@ -22,3 +22,4 @@ export { useProtocolSummaries } from "./hooks/use-protocols";
 export { DoseResponseSparkline } from "./components/dose-response-sparkline";
 export { CurveClassBadge } from "./components/curve-class-badge";
 export type { CurveSnapshot } from "./components/dose-response-figure";
+export { ProtocolOptionLabel } from "./components/protocol-option-label";

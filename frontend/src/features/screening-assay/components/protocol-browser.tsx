@@ -118,7 +118,7 @@ export function ProtocolBrowser({ onSelect }: ProtocolBrowserProps) {
       ) : isLoading || !protocols ? (
         <div className="py-12 text-center text-sm text-muted-foreground">Loading protocols…</div>
       ) : (
-        <ProtocolLibraryView protocols={librarySource} onSelect={onSelect} />
+        <ProtocolLibraryView protocols={librarySource} onSelect={onSelect} search={search} />
       )}
     </div>
   );

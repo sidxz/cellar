@@ -6,6 +6,7 @@ import {
   matchesProtocolText,
   normFacet,
   protocolMatchesSelections,
+  protocolTextMatch,
 } from "./protocol-facets";
 
 // Minimal Protocol factory — only the fields faceting reads.
@@ -196,5 +197,56 @@ describe("groupProtocols", () => {
     const groups = groupProtocols([a, b, c], "none");
     expect(groups).toHaveLength(1);
     expect(groups[0].protocols).toHaveLength(3);
+  });
+});
+
+describe("protocolTextMatch", () => {
+  const p = proto({
+    name: "M. tuberculosis growth inhibition [resazurin]",
+    code: "PRT-00142",
+    aliases: [
+      { label: "MABA", kind: "nickname", recorded_at: "2026-10-08T00:00:00Z", reason: null },
+    ],
+    ontology_annotations: {
+      organism: [
+        {
+          term_id: "t1",
+          label: "Mycobacterium tuberculosis",
+          ontology_source: "NCBITAXON",
+          uri: null,
+        },
+      ],
+      cell_line: [{ term_id: "c1", label: "THP-1 cell", ontology_source: "CLO", uri: null }],
+    },
+    condition_definitions: [
+      {
+        id: "c",
+        protocol_id: "p",
+        name: "Genetic perturbation",
+        data_type: "pick_list",
+        unit: null,
+        pick_list_values: ["SecA1 knockdown"],
+      },
+    ] as unknown as Protocol["condition_definitions"],
+  });
+
+  it.each([
+    ["growth", "name"],
+    ["prt-00142", "code"],
+    ["maba", "alias"],
+    ["mycobacterium", "organism"],
+    ["thp-1", "cell line"],
+    ["seca1", "condition"],
+  ])("matches %s on %s", (q, field) => {
+    expect(protocolTextMatch(p, q)?.field).toBe(field);
+  });
+
+  it("reports the matched value", () => {
+    expect(protocolTextMatch(p, "maba")?.value).toBe("MABA");
+  });
+
+  it("returns null when nothing matches", () => {
+    expect(protocolTextMatch(p, "luciferase")).toBeNull();
+    expect(matchesProtocolText(p, "luciferase")).toBe(false);
   });
 });

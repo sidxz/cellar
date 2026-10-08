@@ -28,7 +28,14 @@ export function ProtocolGrid({
   const columnDefs = useMemo<ColDef<Protocol>[]>(
     () => [
       { headerName: "Code", field: "code", width: 110, cellClass: "font-mono text-xs" },
-      { headerName: "Name", field: "name", flex: 1, minWidth: 180 },
+      {
+        headerName: "Name",
+        field: "name",
+        flex: 1,
+        minWidth: 180,
+        getQuickFilterText: (p) =>
+          [p.data?.name, p.data?.code, ...(p.data?.aliases ?? []).map((a) => a.label)].join(" "),
+      },
       {
         headerName: "Type",
         field: "protocol_type",

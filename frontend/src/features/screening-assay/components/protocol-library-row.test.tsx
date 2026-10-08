@@ -21,3 +21,21 @@ describe("ProtocolLibraryRow", () => {
     expect(screen.getByText("PptT inhibition [FP]")).toBeInTheDocument();
   });
 });
+
+describe("ProtocolLibraryRow search match", () => {
+  it("says which field matched when it is not the name", () => {
+    const withAlias = {
+      ...protocol,
+      aliases: [
+        { label: "MABA", kind: "nickname", recorded_at: "2026-10-08T00:00:00Z", reason: null },
+      ],
+    } as unknown as Protocol;
+    render(<ProtocolLibraryRow protocol={withAlias} search="maba" />);
+    expect(screen.getByText("matched alias: MABA")).toBeInTheDocument();
+  });
+
+  it("says nothing extra when the name matched", () => {
+    render(<ProtocolLibraryRow protocol={protocol} search="pptt" />);
+    expect(screen.queryByText(/matched/)).not.toBeInTheDocument();
+  });
+});

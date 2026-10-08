@@ -1,5 +1,6 @@
 "use client";
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocol, useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { StructureEditorDialog, StructureRenderer } from "@/shared/components/chemistry";
@@ -223,7 +224,7 @@ export function SelectivityCriterionRow({
             <SelectContent>
               {activeProtocols?.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  <ProtocolOptionLabel code={p.code} name={p.name} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -270,7 +271,7 @@ export function SelectivityCriterionRow({
             <SelectContent>
               {activeProtocols?.map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  <ProtocolOptionLabel code={p.code} name={p.name} />
                 </SelectItem>
               ))}
             </SelectContent>
