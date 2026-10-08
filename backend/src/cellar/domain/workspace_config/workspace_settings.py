@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from cellar.domain.shared.entity import AggregateRoot
+from cellar.domain.shared.errors import ValidationError
 from cellar.domain.workspace_config.events import WorkspaceSettingsUpdated
 
 _PREFIX_PATTERN = re.compile(r"^[A-Z]{2,8}-$")
@@ -22,6 +23,11 @@ _WIDTH_MAX = 8
 _DEFAULT_BATCH_WIDTH = 3
 _BATCH_WIDTH_MIN = 2
 _BATCH_WIDTH_MAX = 6
+_DEFAULT_PROTOCOL_CODE_PREFIX = "PRT-"
+_DEFAULT_PROTOCOL_CODE_WIDTH = 5
+_PROTOCOL_CODE_WIDTH_MIN = 3
+_PROTOCOL_CODE_WIDTH_MAX = 8
+_PROTOCOL_NAMING_KEYS = frozenset({"code_prefix", "code_width"})
 
 
 class WorkspaceSettings(AggregateRoot):
@@ -43,6 +49,7 @@ class WorkspaceSettings(AggregateRoot):
         audit_retention_days: int | None = None,
         formulation_number_scheme: str | None = None,
         cdd_vault_id: str | None = None,
+        protocol_naming: dict[str, Any] | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -62,6 +69,7 @@ class WorkspaceSettings(AggregateRoot):
             formulation_number_scheme if isinstance(formulation_number_scheme, str) else None
         )
         self.cdd_vault_id = cdd_vault_id
+        self.protocol_naming: dict[str, Any] = protocol_naming or {}
 
     @property
     def workspace_id(self) -> uuid.UUID:
@@ -110,6 +118,90 @@ class WorkspaceSettings(AggregateRoot):
             return raw
         return _DEFAULT_BATCH_WIDTH
 
+    @property
+    def protocol_code_prefix(self) -> str:
+        """Prefix of newly minted protocol codes (``PRT-`` -> PRT-00142)."""
+        raw = self.protocol_naming.get("code_prefix")
+        return raw if isinstance(raw, str) and raw else _DEFAULT_PROTOCOL_CODE_PREFIX
+
+    @property
+    def protocol_code_width(self) -> int:
+        """Zero-pad width of the protocol code's number. Bounded ``[3, 8]``."""
+        raw = self.protocol_naming.get("code_width")
+        if isinstance(raw, int) and not isinstance(raw, bool):
+            return raw
+        return _DEFAULT_PROTOCOL_CODE_WIDTH
+
+    @property
+    def home_organism(self) -> dict[str, Any] | None:
+        """The organism protocol names leave unstated, as an ontology term dict."""
+        raw = self.protocol_naming.get("home_organism")
+        if isinstance(raw, dict) and raw.get("term_id") and raw.get("label"):
+            return raw
+        return None
+
+    @property
+    def home_organism_label(self) -> str | None:
+        home = self.home_organism
+        return home["label"] if home else None
+
+    def set_home_organism(self, term: dict[str, Any] | None) -> None:
+        """Targets from this organism get no organism prefix in protocol names.
+        Changing it relabels protocols, so it has its own path (preview + confirm)."""
+        naming = dict(self.protocol_naming)
+        if term is None:
+            naming.pop("home_organism", None)
+        else:
+            if not (term.get("term_id") and term.get("label")):
+                raise ValidationError("Home organism needs a term id and a label")
+            naming["home_organism"] = {
+                "term_id": term["term_id"],
+                "label": term["label"],
+                "ontology_source": term.get("ontology_source") or "NCBITAXON",
+            }
+        self.protocol_naming = naming
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            WorkspaceSettingsUpdated(
+                aggregate_id=self.id,
+                aggregate_type="WorkspaceSettings",
+                workspace_id=self.workspace_id,
+            )
+        )
+
+    @staticmethod
+    def _merged_protocol_naming(current: dict[str, Any], incoming: object) -> dict[str, Any]:
+        if not isinstance(incoming, dict):
+            raise ValidationError("protocol_naming must be an object")
+        if "home_organism" in incoming:
+            raise ValidationError(
+                "Set the home organism through its own setting (it relabels protocols)"
+            )
+        unknown = set(incoming) - _PROTOCOL_NAMING_KEYS
+        if unknown:
+            raise ValidationError(
+                f"Unknown protocol naming setting(s): {', '.join(sorted(unknown))}"
+            )
+        if "code_prefix" in incoming:
+            pfx = incoming["code_prefix"]
+            if not isinstance(pfx, str) or not _PREFIX_PATTERN.match(pfx):
+                raise ValidationError(
+                    "Protocol code prefix must look like PRT- "
+                    f"(2-8 capital letters and a hyphen); got {pfx!r}"
+                )
+        if "code_width" in incoming:
+            width = incoming["code_width"]
+            if (
+                not isinstance(width, int)
+                or isinstance(width, bool)
+                or not _PROTOCOL_CODE_WIDTH_MIN <= width <= _PROTOCOL_CODE_WIDTH_MAX
+            ):
+                raise ValidationError(
+                    f"Protocol code width must be {_PROTOCOL_CODE_WIDTH_MIN}-"
+                    f"{_PROTOCOL_CODE_WIDTH_MAX} digits; got {width!r}"
+                )
+        return {**current, **incoming}
+
     @classmethod
     def create_default(cls, *, workspace_id: uuid.UUID) -> WorkspaceSettings:
         """Factory for a new workspace with all default settings."""
@@ -155,6 +247,11 @@ class WorkspaceSettings(AggregateRoot):
                             f"[{_BATCH_WIDTH_MIN}, {_BATCH_WIDTH_MAX}] (got: {bw})"
                         )
 
+        if "protocol_naming" in fields:
+            fields["protocol_naming"] = self._merged_protocol_naming(
+                self.protocol_naming, fields["protocol_naming"]
+            )
+
         for key in (
             "registration_rules",
             "custom_field_definitions",
@@ -164,6 +261,7 @@ class WorkspaceSettings(AggregateRoot):
             "audit_retention_days",
             "formulation_number_scheme",
             "cdd_vault_id",
+            "protocol_naming",
         ):
             if key in fields:
                 setattr(self, key, fields[key])

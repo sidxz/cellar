@@ -42,6 +42,13 @@ export interface CustomFieldDefinition {
   vocabulary_name?: string | null;
 }
 
+/** WorkspaceSettings.protocol_naming: the backend types it as an opaque dict. */
+export interface ProtocolNamingSettings {
+  code_prefix?: string;
+  code_width?: number;
+  home_organism?: { term_id: string; label: string; ontology_source: string };
+}
+
 export interface RegistrationRules {
   create_batch_on_duplicate?: boolean;
   registration_number_prefix?: string;
