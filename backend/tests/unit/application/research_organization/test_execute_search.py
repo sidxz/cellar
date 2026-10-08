@@ -18,7 +18,6 @@ from cellar.domain.research_organization.saved_search import SavedSearch
 from cellar.domain.shared.events import DomainEvent
 from tests.fakes.fake_auth import FakeAuth
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

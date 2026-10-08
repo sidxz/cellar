@@ -72,6 +72,7 @@
         "properties": {
           "id":      { "type": "string", "format": "uuid" },
           "name":    { "type": "string" },
+          "code":    { "type": ["string", "null"] },
           "version": { "type": ["integer", "number", "null"] },
           "target": {
             "oneOf": [
@@ -120,6 +121,7 @@
             "properties": {
               "id":      { "type": "string", "format": "uuid" },
               "name":    { "type": ["string", "null"] },
+              "code":    { "type": ["string", "null"] },
               "version": { "type": ["integer", "number", "null"] }
             }
           },

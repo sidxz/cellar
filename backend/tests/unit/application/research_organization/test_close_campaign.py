@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Callable
+from collections.abc import Callable
 from unittest.mock import AsyncMock
 
 import pytest
@@ -186,6 +186,7 @@ def _make_fake_protocol(
     protocol = AsyncMock()
     protocol.id = protocol_id
     protocol.name = "Test Protocol"
+    protocol.code = "PRT-00007"
     protocol.protocol_version = protocol_version
     protocol.target_id = None
 
@@ -297,6 +298,7 @@ class TestCloseCampaign:
         assert len(c.source_protocols) == 1
         assert c.source_protocols[0]["id"] == str(pid)
         assert c.source_protocols[0]["name"] == "Test Protocol"
+        assert c.source_protocols[0]["code"] == "PRT-00007"
 
         dispatcher = uc._dispatcher
         dispatcher.dispatch_all.assert_awaited_once()

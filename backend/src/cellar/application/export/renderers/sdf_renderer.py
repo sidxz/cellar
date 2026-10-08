@@ -37,7 +37,7 @@ class SdfRenderer:
                         v = row.cells.get(col.key)
                         if v is None or v == "":
                             continue
-                        mol.SetProp(col.display_header, _serialize(v))
+                        mol.SetProp(col.flat_header, _serialize(v))
                     writer.write(mol)
         finally:
             writer.close()

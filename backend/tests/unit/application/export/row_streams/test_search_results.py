@@ -1,16 +1,17 @@
 from __future__ import annotations
+
 import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from cellar.application.export.row_streams.base import ColumnSpec
 from cellar.application.export.row_streams.search_results import (
     SearchResultsRowStream,
     _activity_parent_token,
     _cell_value,
     _expand_protocol_column,
 )
-from cellar.application.export.row_streams.base import ColumnSpec
 
 
 # ---------------------------------------------------------------------------
@@ -54,6 +55,7 @@ async def test_total_count_populates_columns_before_iter_batches():
     proto = MagicMock()
     proto.id = uuid.uuid4()
     proto.name = "Mtb_WCA"
+    proto.code = None
     proto.readout_definitions = [rd]
 
     page_one = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
@@ -135,6 +137,7 @@ def _mol(reg: str):
 
 def _success(page):
     from returns.result import Success
+
     from cellar.application.shared.pagination import EnrichedPageResult
     return Success(EnrichedPageResult(
         items=page.items,
@@ -343,7 +346,7 @@ async def test_intercepts_collapse_to_one_column_per_label():
     ic_ec90 = MagicMock(); ic_ec90.kind.value = "ec"; ic_ec90.level = 90.0; ic_ec90.label = None
     drc_cfg = MagicMock(); drc_cfg.intercepts = [ic_ec50, ic_ec90]
     rd = MagicMock(); rd.id = rd_id; rd.name = "Resazurin"; rd.unit = "µM"; rd.dose_response_config = drc_cfg
-    proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.readout_definitions = [rd]
+    proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.code = None; proto.readout_definitions = [rd]
     proto.dose_unit = "uM"  # potencies are labelled with the protocol dose unit
 
     page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
@@ -508,3 +511,39 @@ async def test_every_customizer_field_reaches_the_export_row():
     assert rows[0].cells["lifecycle_stage"] == "lead"
     assert rows[0].cells["ro5_violations"] == 1
     assert rows[0].cells["heavy_atom_count"] == 3
+
+
+async def test_protocol_column_group_carries_the_code():
+    workspace = uuid.uuid4()
+    rd_id = uuid.uuid4()
+    ic50 = MagicMock()
+    ic50.kind.value = "ic"
+    ic50.level = 50.0
+    ic50.label = None
+    drc_cfg = MagicMock()
+    drc_cfg.intercepts = [ic50]
+    rd = MagicMock()
+    rd.id = rd_id
+    rd.name = "Signal"
+    rd.unit = "µM"
+    rd.dose_response_config = drc_cfg
+    proto = MagicMock()
+    proto.id = uuid.uuid4()
+    proto.name = "PptT inhibition [FP]"
+    proto.code = "PRT-00042"
+    proto.readout_definitions = [rd]
+    proto.dose_unit = "uM"
+
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1)
+    stream = SearchResultsRowStream(
+        workspace_id=workspace,
+        payload={"query": {"criteria": []}, "protocol_columns": [f"drc:{rd_id}"]},
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[proto]),
+        requested_by=uuid.uuid4(),
+    )
+    await stream.total_count()
+
+    value_col = next(c for c in stream.columns if c.key.endswith("::value"))
+    assert value_col.group == "PRT-00042 PptT inhibition [FP]"
+    assert value_col.flat_header == "IC50 (uM) [PRT-00042]"

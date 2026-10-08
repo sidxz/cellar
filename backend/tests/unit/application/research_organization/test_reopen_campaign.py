@@ -26,7 +26,6 @@ from tests.unit.application.research_organization._helpers import (
     make_campaign_repo,
 )
 
-
 # ---------------------------------------------------------------------------
 # Builder helpers
 # ---------------------------------------------------------------------------

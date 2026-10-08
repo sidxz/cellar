@@ -1,6 +1,6 @@
 from __future__ import annotations
+
 from pathlib import Path
-from typing import AsyncIterator
 from unittest.mock import patch
 
 import pytest
@@ -8,8 +8,8 @@ from openpyxl import load_workbook
 
 from cellar.application.export.renderers.base import RenderOptions
 from cellar.application.export.renderers.excel_renderer import (
-    ExcelRenderer,
     SPARKLINE_ROW_CAP,
+    ExcelRenderer,
 )
 from cellar.application.export.renderers.sparkline import (
     av_to_sparkline_snapshot as _av_to_sparkline_snapshot,

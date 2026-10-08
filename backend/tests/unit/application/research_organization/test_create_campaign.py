@@ -6,7 +6,7 @@ import uuid
 from unittest.mock import AsyncMock
 
 import pytest
-from returns.result import Failure, Success
+from returns.result import Success
 
 from cellar.application.research_organization.create_campaign import (
     CreateCampaign,

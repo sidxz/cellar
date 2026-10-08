@@ -7,13 +7,13 @@ every test file can import and compose freely.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Callable
 from types import TracebackType
-from typing import Callable, Self
+from typing import Self
 from unittest.mock import AsyncMock
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.shared.events import DomainEvent
-
 
 # ---------------------------------------------------------------------------
 # FakeUnitOfWork

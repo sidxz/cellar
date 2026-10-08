@@ -276,6 +276,8 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         )
         rd_name = rd.name if rd else "Readout"
         proto_name = proto.name if proto else "Protocol"
+        proto_code = proto.code if proto else None
+        group_label = f"{proto_code} {proto_name}" if proto_code else proto_name
         # 4-segment token = a normalized layer ("raw AU (% Inhibition)"), whose
         # values are not in the readout's raw unit.
         normalization = parts[3] if len(parts) > 3 else None
@@ -289,7 +291,8 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                 ),
                 kind="number",
                 unit=None if normalization else getattr(rd, "unit", None),
-                group=proto_name,
+                group=group_label,
+                group_code=proto_code,
             )
         ]
     if parts[0] == "drc":
@@ -313,6 +316,8 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
         )
         rd_name = rd.name if rd else "Readout"
         proto_name = proto.name if proto else "Protocol"
+        proto_code = proto.code if proto else None
+        group_label = f"{proto_code} {proto_name}" if proto_code else proto_name
         # When a protocol has a single DR readout the FE drops the readout
         # name from the header ("EC50" alone is unambiguous). When there
         # are multiple, we disambiguate with "{readout} {label}".
@@ -344,7 +349,8 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                     # (the grid shows the same); the readout's own unit field
                     # can disagree (COX-2: "nM" on µM values).
                     unit=str(proto.dose_unit) if proto else getattr(rd, "unit", None),
-                    group=proto_name,
+                    group=group_label,
+                    group_code=proto_code,
                 )
             )
         # One Plot column per readout-def — matches the frontend grid.
@@ -356,7 +362,8 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                     key=f"drc:{rd_id}::plot",
                     header=f"{prefix}Plot",
                     kind="image_curve",
-                    group=proto_name,
+                    group=group_label,
+                    group_code=proto_code,
                 )
             )
         return cols
@@ -446,6 +453,8 @@ def _format_any_entries(entries: list[dict]) -> str:
             unit = e.get("unit") or ""
             shown = f"{q}{num}{' ' + unit if unit else ''}"
         protocol_name = e.get("protocol_name") or "Protocol"
+        if e.get("protocol_code"):
+            protocol_name = f"{e['protocol_code']} {protocol_name}"
         label = e.get("label") or ""
         parts.append(f"{protocol_name}: {label} {shown}".rstrip())
     return "; ".join(parts)

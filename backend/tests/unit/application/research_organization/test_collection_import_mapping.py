@@ -1,5 +1,4 @@
 from cellar.application.research_organization.collection_import_mapping import (
-    HeaderSuggestion,
     suggest_column_mapping,
 )
 

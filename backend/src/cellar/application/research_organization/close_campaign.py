@@ -148,6 +148,7 @@ class CloseCampaign:
                     {
                         "id": str(p.id),
                         "name": p.name,
+                        "code": p.code,
                         "version": p.protocol_version,
                         "targets": [
                             {"id": str(t.id), "name": t.name}

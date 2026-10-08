@@ -917,6 +917,7 @@ def _make_protocol(*, protocol_id: uuid.UUID, name: str, dose_unit: str, readout
     return SimpleNamespace(
         id=protocol_id,
         name=name,
+        code=None,
         protocol_type=SimpleNamespace(value="biochemical"),
         dose_unit=ConcentrationUnit(dose_unit),
         readout_definitions=readout_defs or [],

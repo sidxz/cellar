@@ -81,7 +81,7 @@ async def test_list_sets_download_url_only_for_ready():
 
 @pytest.mark.asyncio
 async def test_list_passes_cursor_to_repo():
-    from datetime import datetime, UTC
+    from datetime import UTC, datetime
 
     workspace = uuid.uuid4()
     cursor = datetime.now(UTC)
