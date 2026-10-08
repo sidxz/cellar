@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 import sqlalchemy as sa
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.application.screening._dose_response_config_serde import (
@@ -34,7 +35,7 @@ from cellar.domain.screening_assay.protocol_fingerprint import (
     normalize_facet_id,
 )
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
-from cellar.domain.screening_assay.repository import TargetLinkResult
+from cellar.domain.screening_assay.repository import AnnotationTermUse, TargetLinkResult
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion
@@ -108,6 +109,39 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         if model is None:
             return None
         return self._to_domain_tracked(model)
+
+    async def list_annotation_terms(
+        self, workspace_id: uuid.UUID, slots: Sequence[str]
+    ) -> list[AnnotationTermUse]:
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    select a.key as slot, t->>'term_id' as term_id, min(t->>'label') as label,
+                           min(t->>'ontology_source') as source, count(distinct p.id) as n
+                    from protocols p
+                    cross join lateral jsonb_each(p.ontology_annotations) as a(key, terms)
+                    cross join lateral jsonb_array_elements(a.terms) as t
+                    where p.workspace_id = :ws
+                      and jsonb_typeof(p.ontology_annotations) = 'object'
+                      and a.key = any(:slots)
+                    group by a.key, t->>'term_id'
+                    order by a.key, min(t->>'label')
+                    """
+                ),
+                {"ws": workspace_id, "slots": list(slots)},
+            )
+        ).all()
+        return [
+            AnnotationTermUse(
+                slot=r.slot,
+                term_id=r.term_id,
+                label=r.label,
+                ontology_source=r.source,
+                protocol_count=r.n,
+            )
+            for r in rows
+        ]
 
     async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int:
         stmt = select(func.count()).where(

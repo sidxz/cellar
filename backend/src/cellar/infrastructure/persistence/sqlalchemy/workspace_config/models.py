@@ -216,3 +216,16 @@ class ProtocolCategoryModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMix
 
     label: Mapped[str] = mapped_column(String(100), nullable=False)
     name_pattern: Mapped[str] = mapped_column(String(400), nullable=False)
+
+
+class NamingLabelModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """Admin override of how one ontology term reads inside protocol names."""
+
+    __tablename__ = "naming_labels"
+
+    term_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    term_label: Mapped[str] = mapped_column(String(300), nullable=False)
+    ontology_source: Mapped[str] = mapped_column(String(40), nullable=False)
+    short_label: Mapped[str] = mapped_column(String(60), nullable=False)
+
+    __table_args__ = (UniqueConstraint("workspace_id", "term_id", name="uq_naming_label_ws_term"),)

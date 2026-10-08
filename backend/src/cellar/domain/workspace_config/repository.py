@@ -10,6 +10,7 @@ from cellar.domain.workspace_config.custom_field_definition import CustomFieldDe
 from cellar.domain.workspace_config.data_source import DataSource
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.external_api_key import ExternalApiKey
+from cellar.domain.workspace_config.naming_label import NamingLabel
 from cellar.domain.workspace_config.ontology_slot_definition import OntologySlotDefinition
 from cellar.domain.workspace_config.organization import Organization
 from cellar.domain.workspace_config.protocol_category import ProtocolCategory
@@ -51,6 +52,23 @@ class WorkspaceSettingsRepository(Protocol):
     async def find_by_workspace_id(self, workspace_id: uuid.UUID) -> WorkspaceSettings | None: ...
 
     async def save(self, aggregate: WorkspaceSettings) -> None: ...
+
+
+@runtime_checkable
+class NamingLabelRepository(Protocol):
+    """Repository for NamingLabel aggregates."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> NamingLabel | None: ...
+
+    async def save(self, aggregate: NamingLabel) -> None: ...
+
+    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[NamingLabel]: ...
+
+    async def find_by_term(self, workspace_id: uuid.UUID, term_id: str) -> NamingLabel | None: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
 
 @runtime_checkable

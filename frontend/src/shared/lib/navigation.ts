@@ -170,6 +170,12 @@ export const navigation: NavGroup[] = [
             icon: BookOpen,
             requires: "admin",
           },
+          {
+            title: "Short Labels",
+            href: "/admin/naming-labels",
+            icon: BookOpen,
+            requires: "admin",
+          },
           { title: "Tags", href: "/admin/tags", icon: Tag, requires: "admin" },
         ],
       },

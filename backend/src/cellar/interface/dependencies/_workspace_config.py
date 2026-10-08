@@ -47,6 +47,13 @@ from cellar.application.workspace_config.list_protocol_forms import (
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.naming_labels import (
+    CreateNamingLabel,
+    DeleteNamingLabel,
+    ListNamingLabels,
+    ListNamingTermsInUse,
+    UpdateNamingLabel,
+)
 from cellar.application.workspace_config.protocol_categories import (
     CreateProtocolCategory,
     DeleteProtocolCategory,
@@ -87,6 +94,7 @@ __all__ = [
     # External API keys
     "CreateExternalApiKeyDep",
     # Ontology slots
+    "CreateNamingLabelDep",
     "CreateOntologySlotDep",
     # Workspace config
     "CreateOrganizationDep",
@@ -99,6 +107,7 @@ __all__ = [
     "DeleteCustomFieldDep",
     "DeleteDataSourceDep",
     "DeleteExternalApiKeyDep",
+    "DeleteNamingLabelDep",
     "DeleteOntologySlotDep",
     "DeleteProtocolCategoryDep",
     "DeleteProtocolFormDep",
@@ -114,6 +123,8 @@ __all__ = [
     "ListCustomFieldsDep",
     "ListDataSourcesDep",
     "ListExternalApiKeysDep",
+    "ListNamingLabelsDep",
+    "ListNamingTermsInUseDep",
     "ListOntologyDescendantsDep",
     "ListOntologySlotsDep",
     "ListOrganizationsDep",
@@ -136,6 +147,7 @@ __all__ = [
     "UpdateCustomFieldDep",
     "UpdateDataSourceDep",
     "UpdateExternalApiKeyDep",
+    "UpdateNamingLabelDep",
     "UpdateOntologySlotDep",
     "UpdateOrganizationDep",
     "UpdateProtocolCategoryDep",
@@ -158,6 +170,13 @@ UpdateWorkspaceSettingsDep = Annotated[
     UpdateWorkspaceSettings, Depends(_get_use_case(UpdateWorkspaceSettings))
 ]
 CreateVocabularyDep = Annotated[CreateVocabulary, Depends(_get_use_case(CreateVocabulary))]
+CreateNamingLabelDep = Annotated[CreateNamingLabel, Depends(_get_use_case(CreateNamingLabel))]
+DeleteNamingLabelDep = Annotated[DeleteNamingLabel, Depends(_get_use_case(DeleteNamingLabel))]
+ListNamingLabelsDep = Annotated[ListNamingLabels, Depends(_get_use_case(ListNamingLabels))]
+ListNamingTermsInUseDep = Annotated[
+    ListNamingTermsInUse, Depends(_get_use_case(ListNamingTermsInUse))
+]
+UpdateNamingLabelDep = Annotated[UpdateNamingLabel, Depends(_get_use_case(UpdateNamingLabel))]
 CreateProtocolCategoryDep = Annotated[
     CreateProtocolCategory, Depends(_get_use_case(CreateProtocolCategory))
 ]

@@ -244,6 +244,7 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.disclosures import router as disclosure_router
     from cellar.interface.routes.merge import router as merge_router
     from cellar.interface.routes.molecules import router as mol_router
+    from cellar.interface.routes.naming_labels import router as naming_labels_router
     from cellar.interface.routes.org_directory import router as org_directory_router
     from cellar.interface.routes.organizations import router as org_router
     from cellar.interface.routes.protocol_categories import router as protocol_categories_router
@@ -268,6 +269,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router)
     app.include_router(vocab_router)
     app.include_router(protocol_categories_router)
+    app.include_router(naming_labels_router)
     from cellar.interface.routes.export import legacy_router as export_legacy_router
     from cellar.interface.routes.export import router as export_router
 

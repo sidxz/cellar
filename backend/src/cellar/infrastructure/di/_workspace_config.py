@@ -43,6 +43,13 @@ from cellar.application.workspace_config.list_protocol_forms import ListProtocol
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.naming_labels import (
+    CreateNamingLabel,
+    DeleteNamingLabel,
+    ListNamingLabels,
+    ListNamingTermsInUse,
+    UpdateNamingLabel,
+)
 from cellar.application.workspace_config.protocol_categories import (
     CreateProtocolCategory,
     DeleteProtocolCategory,
@@ -76,6 +83,9 @@ from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
+    SQLAlchemyTargetRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
     SQLAlchemyTagBrowseRepository,
 )
@@ -96,6 +106,9 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.data_source_r
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (  # noqa: E501
     SQLAlchemyExternalApiKeyRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_repository import (
+    SQLAlchemyNamingLabelRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.ontology_slot_definition_repository import (  # noqa: E501
     SQLAlchemyOntologySlotDefinitionRepository,
@@ -200,6 +213,36 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateProtocolCategory, _category_cmd(UpdateProtocolCategory))
     container.define(SeedDefaultProtocolCategories, _category_cmd(SeedDefaultProtocolCategories))
     container.define(DeleteProtocolCategory, _delete_category)
+
+    # --- Short labels ---
+    def _label_cmd(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyNamingLabelRepository(uow), c[EventDispatcher])
+
+        return _f
+
+    def _label_plain(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyNamingLabelRepository(uow))
+
+        return _f
+
+    def _terms_in_use(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListNamingTermsInUse(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            SQLAlchemyTargetRepository(uow),
+            SQLAlchemyNamingLabelRepository(uow),
+        )
+
+    container.define(ListNamingLabels, _label_plain(ListNamingLabels))
+    container.define(DeleteNamingLabel, _label_plain(DeleteNamingLabel))
+    container.define(CreateNamingLabel, _label_cmd(CreateNamingLabel))
+    container.define(UpdateNamingLabel, _label_cmd(UpdateNamingLabel))
+    container.define(ListNamingTermsInUse, _terms_in_use)
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))
 

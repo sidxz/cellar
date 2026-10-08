@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from typing import Protocol, runtime_checkable
@@ -21,6 +23,17 @@ from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.screening_assay.target import EffectiveTarget, Target, TargetRef
+
+
+@dataclass(frozen=True)
+class AnnotationTermUse:
+    """An ontology term used by protocols in one annotation slot, with how many use it."""
+
+    slot: str
+    term_id: str
+    label: str
+    ontology_source: str
+    protocol_count: int
 
 
 class TargetLinkResult(Enum):
@@ -69,6 +82,10 @@ class ProtocolRepository(Protocol):
     ) -> AssayProtocol | None: ...
 
     async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int: ...
+
+    async def list_annotation_terms(
+        self, workspace_id: uuid.UUID, slots: Sequence[str]
+    ) -> list[AnnotationTermUse]: ...
 
     async def next_protocol_code(
         self, workspace_id: uuid.UUID, *, prefix: str, width: int
@@ -207,6 +224,7 @@ class TargetRepository(Protocol):
     ) -> list[Target]: ...
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+    async def list_organisms(self, workspace_id: uuid.UUID) -> list[str]: ...
 
 
 @runtime_checkable

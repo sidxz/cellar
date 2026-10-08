@@ -160,3 +160,17 @@ class ProtocolCategoryCreated(DomainEvent):
 class ProtocolCategoryUpdated(DomainEvent):
     label: str
     name_pattern: str
+
+
+# --- Naming Labels ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamingLabelCreated(DomainEvent):
+    term_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamingLabelUpdated(DomainEvent):
+    term_id: str
+    short_label: str

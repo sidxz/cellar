@@ -1,10 +1,14 @@
 import type {
+  CreateNamingLabelBody,
   CreateOrganizationBody,
   CreateProtocolCategoryBody,
   CreateVocabularyBody,
+  NamingLabelResponse,
+  NamingTermInUseResponse,
   OrganizationResponse,
   OrganizationType as OrganizationTypeModel,
   ProtocolCategoryResponse,
+  UpdateNamingLabelBody,
   UpdateOrganizationBody,
   UpdateProtocolCategoryBody,
   UpdateVocabularyBody,
@@ -74,3 +78,9 @@ export type UpdateVocabularyInput = UpdateVocabularyBody;
 export type ProtocolCategory = ProtocolCategoryResponse;
 export type CreateProtocolCategoryInput = CreateProtocolCategoryBody;
 export type UpdateProtocolCategoryInput = UpdateProtocolCategoryBody;
+
+// Short labels (orval aliases): how ontology terms read inside protocol names.
+export type NamingLabel = NamingLabelResponse;
+export type NamingTermInUse = NamingTermInUseResponse;
+export type CreateNamingLabelInput = CreateNamingLabelBody;
+export type UpdateNamingLabelInput = UpdateNamingLabelBody;
