@@ -4449,7 +4449,7 @@ Through the running app (these are also walkthrough steps): set Home organism = 
 
 - [ ] **Step 2: Missing targets list → user**
 
-From `catalog.json` list every protocol whose curated target is not linked (`target_in_registry` false or unmatched) with: target name in registry style (gene symbol where one exists, per the naming rule memory), organism, and the protocols needing it. Write it to `naming_facts.json` → `"missing_targets"` and show the user the table. Ask: create these in prot-cellar? (a) the user imports them through prot-cellar's own UI from a CSV I prepare (`backend/data/vault-protocols/curated/prot_cellar_targets.csv`: `pref_name,gene_symbol,organism`), or (b) the user authorizes me to create them through prot-cellar's API. Do nothing in prot-cellar before the answer.
+From `catalog.json` list every protocol whose curated target is not linked (`target_in_registry` false or unmatched) with: target name in registry style (gene symbol where one exists, per the naming rule memory), organism, and the protocols needing it. Write it to `naming_facts.json` → `"missing_targets"` and show the user the table. **User ruling (2026-10-08): import them into prot-cellar.** Prepare `backend/data/vault-protocols/curated/prot_cellar_targets.csv` (`pref_name,gene_symbol,organism`) and import it through prot-cellar's own import path; show the user the list right before running the import.
 
 - [ ] **Step 3: Sync and link**
 
@@ -4465,7 +4465,7 @@ After the targets exist: `POST /api/v1/targets/sync` (force), then `load_curated
 
 - [ ] **Step 5: The 19 older protocols**
 
-Read each one individually (name, description, readouts, conditions, runs), the same way the 195 were curated (rule: curate by hand, not by regex). Record one decision per protocol in `older_protocols.json` (category, organism / cell line / format, target, discriminator, or "leave as needs_facts" with a reason). Show the user the table; apply only after approval.
+Read each one individually (name, description, readouts, conditions, runs), the same way the 195 were curated (rule: curate by hand, not by regex). Record one decision per protocol in `older_protocols.json` (category, organism / cell line / format, target, discriminator, or "leave as needs_facts" with a reason). **User ruling (2026-10-08):** protocols that fit get their facts applied; those that don't fit go on a "revisit later" list (`older_protocols.json` → `"revisit_later"`, each with the reason) and keep `needs_facts`. Show the user both lists at the end of the task.
 
 - [ ] **Step 6: Record**
 
