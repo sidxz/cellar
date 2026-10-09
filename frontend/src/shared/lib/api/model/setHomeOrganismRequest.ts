@@ -4,8 +4,14 @@
  * Cellar
  * OpenAPI spec version: 1.3.0-17-gd9da37bb-dirty
  */
+import type { SetHomeOrganismRequestTerms } from './setHomeOrganismRequestTerms';
 import type { SetHomeOrganismRequestTerm } from './setHomeOrganismRequestTerm';
 
+/**
+ * ``terms``: the home organisms (empty clears them). ``term`` is the older single shape
+(null clears); external callers may still send it.
+ */
 export interface SetHomeOrganismRequest {
-  term: SetHomeOrganismRequestTerm;
+  terms?: SetHomeOrganismRequestTerms;
+  term?: SetHomeOrganismRequestTerm;
 }

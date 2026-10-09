@@ -13,10 +13,12 @@ import type { NamingChangeRequestTermLabel } from './namingChangeRequestTermLabe
 import type { NamingChangeRequestOntologySource } from './namingChangeRequestOntologySource';
 import type { NamingChangeRequestShortLabel } from './namingChangeRequestShortLabel';
 import type { NamingChangeRequestTerm } from './namingChangeRequestTerm';
+import type { NamingChangeRequestTerms } from './namingChangeRequestTerms';
 
 /**
  * One admin naming edit. ``category``: category_id + new label and/or name_pattern.
-``label``: the term + short_label (null = back to the default). ``home_organism``: term.
+``label``: the term + short_label (null = back to the default).
+``home_organism``: terms (a list; the older single ``term`` is still read).
  */
 export interface NamingChangeRequest {
   kind: NamingChangeRequestKind;
@@ -28,4 +30,5 @@ export interface NamingChangeRequest {
   ontology_source?: NamingChangeRequestOntologySource;
   short_label?: NamingChangeRequestShortLabel;
   term?: NamingChangeRequestTerm;
+  terms?: NamingChangeRequestTerms;
 }

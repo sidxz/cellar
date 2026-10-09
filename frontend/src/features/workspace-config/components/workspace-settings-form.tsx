@@ -29,7 +29,7 @@ import type {
   RegistrationRules,
 } from "../types";
 import { CustomFieldBuilder } from "./custom-field-builder";
-import { HomeOrganismSetting } from "./home-organism-setting";
+import { HomeOrganismSetting, homeOrganismsFrom } from "./home-organism-setting";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -312,7 +312,7 @@ export function WorkspaceSettingsForm() {
               </p>
             </div>
             <HomeOrganismSetting
-              current={(settings?.protocol_naming as ProtocolNamingSettings)?.home_organism ?? null}
+              current={homeOrganismsFrom(settings?.protocol_naming as ProtocolNamingSettings)}
             />
           </div>
         </Card>
