@@ -81,6 +81,7 @@ from cellar.application.workspace_config.update_vocabulary import UpdateVocabula
 from cellar.application.workspace_config.update_workspace_settings import (
     UpdateWorkspaceSettings,
 )
+from cellar.application.workspace_config.workspace_setup import GetWorkspaceSetup
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.di._screening import _name_service
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -263,6 +264,19 @@ def register_workspace_config(container: Container) -> None:
         )
 
     container.define(SeedDefaultProtocolCategories, _seed_default_categories)
+
+    def _workspace_setup(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetWorkspaceSetup(
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            SQLAlchemyProtocolFormRepository(uow),
+            SQLAlchemyExternalApiKeyRepository(uow),
+            SQLAlchemyWorkspaceSettingsRepository(uow),
+            SQLAlchemyTargetRepository(uow),
+        )
+
+    container.define(GetWorkspaceSetup, _workspace_setup)
     container.define(DeleteProtocolCategory, _delete_category)
 
     # --- Short labels ---

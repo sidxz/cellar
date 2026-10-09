@@ -141,6 +141,11 @@ class WorkspaceSettings(AggregateRoot):
         return None
 
     @property
+    def home_organism_count(self) -> int:
+        """How many home organisms are set. The one accessor to switch when the list form lands."""
+        return 0 if self.home_organism is None else 1
+
+    @property
     def home_organism_label(self) -> str | None:
         home = self.home_organism
         return home["label"] if home else None

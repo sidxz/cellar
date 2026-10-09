@@ -88,6 +88,7 @@ from cellar.application.workspace_config.update_registration_form import UpdateR
 from cellar.application.workspace_config.update_salt_entry import UpdateSaltEntry
 from cellar.application.workspace_config.update_vocabulary import UpdateVocabulary
 from cellar.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
+from cellar.application.workspace_config.workspace_setup import GetWorkspaceSetup
 
 from ._core import _get_use_case
 
@@ -148,6 +149,7 @@ __all__ = [
     "RenameTagDep",
     # Ontology search + annotations
     "SearchOntologyDep",
+    "GetWorkspaceSetupDep",
     "SeedDefaultProtocolCategoriesDep",
     "SeedDefaultProtocolFormsDep",
     "SetEntityTagsDep",
@@ -200,6 +202,7 @@ DeleteProtocolCategoryDep = Annotated[
 ListProtocolCategoriesDep = Annotated[
     ListProtocolCategories, Depends(_get_use_case(ListProtocolCategories))
 ]
+GetWorkspaceSetupDep = Annotated[GetWorkspaceSetup, Depends(_get_use_case(GetWorkspaceSetup))]
 SeedDefaultProtocolCategoriesDep = Annotated[
     SeedDefaultProtocolCategories, Depends(_get_use_case(SeedDefaultProtocolCategories))
 ]
