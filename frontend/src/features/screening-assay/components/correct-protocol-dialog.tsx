@@ -213,6 +213,10 @@ export function CorrectProtocolDialog({
                 value={discriminator}
                 onChange={setDiscriminator}
                 base={preview.data?.base ?? null}
+                conditions={protocol.condition_definitions.map((cd) => ({
+                  ...cd,
+                  fixed_value: fixed[cd.id] ?? "",
+                }))}
               />
             </div>
             {protocol.condition_definitions.length > 0 && (

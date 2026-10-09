@@ -514,6 +514,7 @@ export function CreateProtocolDialog({
                     value={field.value}
                     onChange={field.onChange}
                     base={preview.data?.base ?? null}
+                    conditions={conditionValues}
                     placeholder={discriminatorInName ? "Part of this category's name" : undefined}
                   />
                 )}

@@ -587,6 +587,62 @@ describe("CreateProtocolDialog", () => {
     ]);
   });
 
+  it("suggests the protocol's fixed condition values as discriminators", () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "Oxygen",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["Hypoxia", "Normoxia"],
+          fixed_value: "Hypoxia",
+        },
+        {
+          id: "c2",
+          name: "Incubation time",
+          data_type: "numeric",
+          unit: "h",
+          pick_list_values: null,
+          fixed_value: "72",
+        },
+        {
+          id: "c3",
+          name: "Plate",
+          data_type: "text",
+          unit: null,
+          pick_list_values: null,
+          fixed_value: null,
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    fireEvent.click(screen.getByRole("button", { name: /method or condition/ }));
+    expect(screen.getByRole("button", { name: "hypoxia" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "normoxia" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "72 h" }));
+    expect(screen.getByLabelText("Discriminator (optional)")).toHaveValue("72 h");
+  });
+
+  it("moves a concentration out of a readout name into the Test concentration condition", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("% inhibition at 2 µM", "numeric")],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    expect(screen.getByText("Test concentration belongs in a condition")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    expect(screen.queryByText("Test concentration belongs in a condition")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g., % Inhibition")).toHaveValue("% inhibition");
+    const payload = await submit();
+    expect(payload.readout_definitions[0].name).toBe("% inhibition");
+    expect(payload.condition_definitions).toEqual([
+      { name: "Test concentration", data_type: "numeric", unit: "µM", fixed_value: "2" },
+    ]);
+  });
+
   it("will not create a protocol whose fixed pick is not one of its values", () => {
     state.preview = complete;
     const prefill = protocol({

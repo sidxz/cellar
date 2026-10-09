@@ -128,4 +128,13 @@ describe("CorrectProtocolDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
     expect(correct.mock.calls[0][0].condition_fixed_values).toEqual({ c1: "48" });
   });
+
+  it("offers the fixed condition values as discriminators, following an edit", () => {
+    render(<CorrectProtocolDialog protocol={protocol} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByLabelText(/correction: it was always this/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.change(screen.getByLabelText("Incubation time (h)"), { target: { value: "48" } });
+    fireEvent.click(screen.getByRole("button", { name: "48 h" }));
+    expect(screen.getByLabelText(/^Discriminator/)).toHaveValue("48 h");
+  });
 });
