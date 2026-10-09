@@ -357,6 +357,14 @@ describe("CreateProtocolDialog", () => {
     expect(labels()).toContain("Discriminator (optional)");
   });
 
+  it("links the Discriminator label to its input", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Detection interference");
+    expect(screen.getByLabelText("Discriminator")).toBe(
+      screen.getByPlaceholderText("Part of this category's name"),
+    );
+  });
+
   it("explains a discriminator the pattern requires as part of the category's name", () => {
     render(<CreateProtocolDialog open onOpenChange={() => {}} />);
     pickCategory("Detection interference");

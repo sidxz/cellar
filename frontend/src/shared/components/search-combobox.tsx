@@ -50,6 +50,8 @@ export interface SearchComboboxProps<T> {
   footer?: ReactNode;
   inputRef?: RefObject<HTMLInputElement | null>;
   className?: string;
+  /** Forwarded to the underlying input so a `<Label htmlFor>` can target it. */
+  id?: string;
   /** Tailwind classes for the input element. */
   inputClassName?: string;
 }
@@ -90,6 +92,7 @@ export function SearchCombobox<T>({
   footer,
   inputRef,
   className,
+  id,
   inputClassName,
 }: SearchComboboxProps<T>) {
   const internalInputRef = useRef<HTMLInputElement>(null);
@@ -101,6 +104,7 @@ export function SearchCombobox<T>({
       <PopoverAnchor asChild>
         <div className={cn("relative", className)}>
           <Input
+            id={id}
             ref={resolvedInputRef}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -129,7 +133,7 @@ export function SearchCombobox<T>({
       </PopoverAnchor>
       <PopoverContent
         id={listId}
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0"
         align="start"
         // Keep focus in the input so the user can keep typing; cmdk still
         // tracks the highlighted item for arrow-key navigation.

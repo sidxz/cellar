@@ -10,6 +10,8 @@ interface DiscriminatorInputProps {
   /** The generated base name; suggestions already used on it come first. */
   base: string | null;
   placeholder?: string;
+  /** Forwarded to the input so a label can target it. */
+  id?: string;
 }
 
 /** The one free part of a protocol name: a method or a fixed defining condition. */
@@ -17,6 +19,7 @@ export function DiscriminatorInput({
   value,
   onChange,
   base,
+  id,
   placeholder = "e.g. resazurin, hypoxia (only when needed)",
 }: DiscriminatorInputProps) {
   const [focused, setFocused] = useState(false);
@@ -40,6 +43,7 @@ export function DiscriminatorInput({
       }}
       onInputFocus={() => setFocused(true)}
       placeholder={placeholder}
+      id={id}
       inputClassName="h-9"
     />
   );

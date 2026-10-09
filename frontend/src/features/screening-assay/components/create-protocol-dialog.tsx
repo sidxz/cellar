@@ -493,6 +493,7 @@ export function CreateProtocolDialog({
                 name="discriminator"
                 render={({ field }) => (
                   <DiscriminatorInput
+                    id="protocol-discriminator"
                     value={field.value}
                     onChange={field.onChange}
                     base={preview.data?.base ?? null}

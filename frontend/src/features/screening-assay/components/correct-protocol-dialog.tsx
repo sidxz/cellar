@@ -188,8 +188,11 @@ export function CorrectProtocolDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label>Discriminator{needs.has("discriminator") ? "" : " (optional)"}</Label>
+              <Label htmlFor="correct-discriminator">
+                Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+              </Label>
               <DiscriminatorInput
+                id="correct-discriminator"
                 value={discriminator}
                 onChange={setDiscriminator}
                 base={preview.data?.base ?? null}
