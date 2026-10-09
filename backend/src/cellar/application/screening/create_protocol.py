@@ -49,6 +49,7 @@ from cellar.domain.screening_assay.repository import (
 )
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import (
+    ConcurrencyConflictError,
     ConflictError,
     DomainError,
     NotFoundError,
@@ -59,6 +60,13 @@ from cellar.domain.workspace_config.repository import (
     ProtocolFormRepository,
     WorkspaceSettingsRepository,
 )
+
+
+def _about(label: str, error: DomainError) -> DomainError:
+    """The same error (type, detail, retry hint), saying which sibling it is about."""
+    error.message = f"{label}: {error.message}"
+    error.args = (error.message,)
+    return error
 
 
 @dataclass(frozen=True)
@@ -295,17 +303,16 @@ class CreateProtocol:
             await self._names.flag_siblings(input.workspace_id, derivation)
             offered = {s.protocol_id for s in derivation.bare_siblings}
             for item in input.sibling_discriminators:
-                if item.protocol_id not in offered:
-                    return Failure(
-                        ValidationError(
-                            f"Protocol {item.protocol_id} does not share this protocol's name"
-                        )
-                    )
+                # Every failure below names the sibling, and returning before the commit
+                # rolls back the new protocol with it.
                 sibling = await self._repo.find_by_id_in_workspace(
                     input.workspace_id, item.protocol_id
                 )
                 if sibling is None:
                     return Failure(NotFoundError("Protocol", str(item.protocol_id)))
+                label = sibling.code or sibling.name
+                if item.protocol_id not in offered:
+                    return Failure(ValidationError(f"{label} does not share this protocol's name"))
                 try:
                     renamed = await set_discriminator_and_rename(
                         self._names,
@@ -317,12 +324,12 @@ class CreateProtocol:
                         ),
                         user_id=auth.user_id if auth else None,
                     )
-                except (ConflictError, ValidationError) as exc:
-                    # Published, locked or retired since the preview: say which sibling.
-                    raise type(exc)(f"{sibling.code or sibling.name}: {exc.message}") from exc
-                if isinstance(renamed, Failure):
-                    return renamed
-                await self._repo.save(sibling)
+                    if isinstance(renamed, Failure):  # its new name clashes
+                        return Failure(_about(label, renamed.failure()))
+                    await self._repo.save(sibling)
+                except (ConflictError, ValidationError, ConcurrencyConflictError) as exc:
+                    # Published, locked or retired since the preview, or saved meanwhile.
+                    return Failure(_about(label, exc))
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

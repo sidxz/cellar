@@ -2,7 +2,6 @@
 
 import uuid
 
-import pytest
 from returns.result import Failure
 
 from cellar.application.screening.create_protocol import (
@@ -17,7 +16,12 @@ from cellar.application.screening.preview_protocol_name import (
 )
 from cellar.domain.screening_assay.enums import NameFlag, ProtocolType, ReadoutDataType
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.errors import (
+    ConcurrencyConflictError,
+    ConflictError,
+    DomainError,
+    ValidationError,
+)
 from cellar.domain.shared.ontology import OntologyTerm
 from cellar.domain.workspace_config.protocol_category import ProtocolCategory
 from cellar.infrastructure.di._screening import _name_service
@@ -43,7 +47,9 @@ class _NoEvents:
         return None
 
 
-async def _seed_bare(session_factory, ws, user, *, status="draft", locked=False):
+async def _seed_bare(
+    session_factory, ws, user, *, status="draft", locked=False, discriminator=None
+):
     uow = AsyncUnitOfWork(session_factory)
     async with uow:
         await SQLAlchemyProtocolCategoryRepository(uow).save(
@@ -52,8 +58,9 @@ async def _seed_bare(session_factory, ws, user, *, status="draft", locked=False)
         pid = uuid.uuid4()
         p = Protocol.create(
             workspace_id=ws,
-            name=BASE,
+            name=f"{BASE} [{discriminator}]" if discriminator else BASE,
             name_base=BASE,
+            discriminator=discriminator,
             protocol_type=ProtocolType.WHOLE_CELL,
             category="Growth inhibition",
             created_by=user,
@@ -72,11 +79,9 @@ async def _seed_bare(session_factory, ws, user, *, status="draft", locked=False)
     return p
 
 
-def _uc(session_factory):
+def _uc(session_factory, repo_cls=SQLAlchemyProtocolRepository):
     uow = AsyncUnitOfWork(session_factory)
-    return CreateProtocol(
-        uow, SQLAlchemyProtocolRepository(uow), _NoEvents(), names=_name_service(uow)
-    )
+    return CreateProtocol(uow, repo_cls(uow), _NoEvents(), names=_name_service(uow))
 
 
 def _cmd(ws, **kw):
@@ -190,18 +195,74 @@ async def test_locked_sibling_is_refused_and_nothing_is_saved(
     assert (await _load(session_factory, workspace_id, bare.id)).name == BASE
 
 
+async def _names_in(session_factory, ws):
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        return [p.name for p in await SQLAlchemyProtocolRepository(uow).find_by_workspace(ws)]
+
+
+async def _sibling_failure(session_factory, ws, user, sibling_id, discriminator, uc=None):
+    """Create with one sibling rename that must fail: the failure, after checking nothing saved."""
+    before = await _names_in(session_factory, ws)
+    result = await (uc or _uc(session_factory))(
+        _cmd(
+            ws,
+            sibling_discriminators=[
+                SiblingDiscriminator(
+                    protocol_id=sibling_id, discriminator=discriminator, reason="x"
+                )
+            ],
+        ),
+        auth=admin_auth(ws, user),
+    )
+    assert isinstance(result, Failure)
+    assert await _names_in(session_factory, ws) == before  # rolled back
+    return result.failure()
+
+
 async def test_refused_sibling_is_named_in_the_error(session_factory, workspace_id, user_id):
     bare = await _seed_bare(session_factory, workspace_id, user_id, status="active", locked=True)
-    with pytest.raises(DomainError, match="PRT-00001"):
-        await _uc(session_factory)(
-            _cmd(
-                workspace_id,
-                sibling_discriminators=[
-                    SiblingDiscriminator(protocol_id=bare.id, discriminator="MABA", reason="x")
-                ],
-            ),
-            auth=admin_auth(workspace_id, user_id),
-        )
+    error = await _sibling_failure(session_factory, workspace_id, user_id, bare.id, "MABA")
+    assert isinstance(error, ConflictError) and error.message.startswith("PRT-00001: ")
+
+
+async def test_a_sibling_no_longer_bare_is_named_by_its_code(
+    session_factory, workspace_id, user_id
+):
+    other = await _seed_bare(session_factory, workspace_id, user_id, discriminator="MABA")
+    error = await _sibling_failure(session_factory, workspace_id, user_id, other.id, "REMA")
+    assert isinstance(error, ValidationError)
+    assert error.message == "PRT-00001 does not share this protocol's name"
+
+
+async def test_a_sibling_name_clash_names_the_sibling(session_factory, workspace_id, user_id):
+    bare = await _seed_bare(session_factory, workspace_id, user_id)
+    error = await _sibling_failure(session_factory, workspace_id, user_id, bare.id, "hypoxia")
+    assert isinstance(error, ConflictError) and error.message.startswith("PRT-00001: ")
+
+
+class _StaleRepo(SQLAlchemyProtocolRepository):
+    """Hands out the sibling as someone else saved it after it was loaded."""
+
+    async def find_by_id_in_workspace(self, workspace_id, id):
+        protocol = await super().find_by_id_in_workspace(workspace_id, id)
+        if protocol is not None and protocol.code == "PRT-00001":
+            protocol.version -= 1
+        return protocol
+
+
+async def test_a_sibling_changed_meanwhile_is_named(session_factory, workspace_id, user_id):
+    bare = await _seed_bare(session_factory, workspace_id, user_id)
+    error = await _sibling_failure(
+        session_factory,
+        workspace_id,
+        user_id,
+        bare.id,
+        "MABA",
+        uc=_uc(session_factory, _StaleRepo),
+    )
+    assert isinstance(error, ConcurrencyConflictError)
+    assert error.message.startswith("PRT-00001: ")
 
 
 async def _preview(session_factory, ws, user, bare, proposed):
