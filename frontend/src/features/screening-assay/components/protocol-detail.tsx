@@ -76,6 +76,7 @@ interface ProtocolDetailProps {
 export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const router = useRouter();
   const isAdmin = useAuthzHasRole("admin");
+  const canCreate = useAuthzHasRole("editor");
   const { data: protocol, isLoading } = useProtocol(protocolId);
   const publishMutation = usePublishProtocol();
   const retireMutation = useRetireProtocol();
@@ -185,14 +186,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit details
               </DropdownMenuItem>,
-              <DropdownMenuItem
-                key="duplicate"
-                onClick={() => versionMutation.mutate({ id: protocolId })}
-                disabled={versionMutation.isPending}
-              >
-                <Copy className="mr-2 h-4 w-4" />
-                Duplicate
-              </DropdownMenuItem>,
             );
           }
 
@@ -237,6 +230,17 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               >
                 <Archive className="mr-2 h-4 w-4" />
                 Retire
+              </DropdownMenuItem>,
+            );
+          }
+
+          // Any protocol can seed a sibling assay (a draft cannot be versioned, so this is its
+          // way to a copy); it is a create, so only roles that can create protocols see it.
+          if (canCreate) {
+            neutralItems.push(
+              <DropdownMenuItem key="new-from" onClick={() => setNewAssayOpen(true)}>
+                <Copy className="mr-2 h-4 w-4" />
+                New protocol from this
               </DropdownMenuItem>,
             );
           }

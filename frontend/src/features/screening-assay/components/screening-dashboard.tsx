@@ -4,11 +4,13 @@ import { SetupChecklist } from "@/features/workspace-config/components/setup-che
 import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { Crosshair, Download, Plus, Settings2, TestTubes } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
+import type { Protocol } from "../types";
 import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
@@ -20,6 +22,8 @@ export function ScreeningDashboard() {
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [cddImportOpen, setCddImportOpen] = useState(false);
+  const [newFrom, setNewFrom] = useState<Protocol | null>(null);
+  const canCreate = useAuthzHasRole("editor");
   const [createRunForProtocol, setCreateRunForProtocol] = useState<string | null>(null);
   const { enabled: cddEnabled } = useCddEnabled();
 
@@ -67,6 +71,7 @@ export function ScreeningDashboard() {
         <TabsContent value="protocols" className="mt-4">
           <SetupChecklist />
           <ProtocolBrowser
+            onNewFrom={canCreate ? setNewFrom : undefined}
             onSelect={(protocolId) => {
               router.push(`/assays/protocols/${protocolId}`);
             }}
@@ -83,6 +88,16 @@ export function ScreeningDashboard() {
         onOpenChange={setCreateProtocolOpen}
         onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)}
       />
+      {newFrom && (
+        <CreateProtocolDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setNewFrom(null);
+          }}
+          prefill={newFrom}
+          onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)}
+        />
+      )}
       {createRunForProtocol && (
         <CreateRunDialog
           protocolId={createRunForProtocol}

@@ -46,7 +46,7 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { UnitPicker } from "@/shared/components/unit-picker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
@@ -61,6 +61,7 @@ import {
   pickFormForCategory,
   readoutsFromForm,
 } from "../lib/protocol-form-apply";
+import { prefillFromProtocol } from "../lib/protocol-prefill";
 import { WELL_CONC_X, isReservedReadoutName } from "../lib/readout-constants";
 import {
   type CreateReadoutDefinitionInput,
@@ -215,50 +216,11 @@ export function CreateProtocolDialog({
   // A new assay starts from the protocol it replaces: same facts, its own discriminator.
   useEffect(() => {
     if (!open || !prefill) return;
-    form.reset({
-      protocol_type: prefill.protocol_type,
-      discriminator: "",
-      target_ids: (prefill.targets ?? []).map((t) => t.id),
-      category: prefill.category ?? "",
-      description: prefill.description ?? "",
-      dose_unit: prefill.dose_unit,
-      readouts: prefill.readout_definitions.map((rd, i) => {
-        const dr = rd.dose_response_config;
-        return {
-          ...defaultReadout(i + 1),
-          name: rd.name,
-          data_type: rd.data_type,
-          unit: rd.unit ?? "",
-          aggregation: rd.aggregation ?? "none",
-          normalizations: rd.normalizations ?? [],
-          is_calculated: rd.is_calculated,
-          calculation_formula: rd.calculation_formula ?? "",
-          display_order: rd.display_order ?? i + 1,
-          pick_list_values: rd.pick_list_values ?? [],
-          ...(dr
-            ? {
-                dr_curve_type: dr.curve_type,
-                dr_x_readout: dr.x_readout_name ?? WELL_CONC_X,
-                dr_y_readout: dr.y_readout_name,
-                dr_hill_constraint: dr.hill_slope_constraint,
-                dr_normalization_scope: dr.normalization_scope,
-                dr_activity_threshold:
-                  dr.activity_threshold != null ? String(dr.activity_threshold) : "",
-                dr_intercepts: dr.intercepts ?? [],
-              }
-            : {}),
-        };
-      }),
-      conditions: prefill.condition_definitions.map((cd) => ({
-        name: cd.name,
-        data_type: cd.data_type,
-        unit: cd.unit ?? "",
-        pick_list_values: cd.pick_list_values ?? [],
-        fixed_value: cd.fixed_value ?? "",
-      })),
-    });
+    const start = prefillFromProtocol(prefill);
+    form.reset(start.values);
     setAppliedReadouts(JSON.stringify(form.getValues("readouts")));
-    setOntologyAnnotations(prefill.ontology_annotations ?? {});
+    setOntologyAnnotations(start.ontologyAnnotations);
+    setReferences(start.references);
   }, [open, prefill, form]);
 
   // ---- forms: picking a category applies its form ----
@@ -337,6 +299,29 @@ export function CreateProtocolDialog({
     siblings.length > 0 ||
     showDiscriminator ||
     discriminatorValue.trim() !== "";
+
+  // A new assay needs its own discriminator, or its strain when the pattern has no discriminator
+  // field showing: focus whichever is there once it renders (the portal mounts a tick after
+  // open, so this checks on every render until it lands).
+  const focusTarget = showDiscriminatorField
+    ? "discriminator"
+    : nameFactSlots.includes("strain")
+      ? "strain"
+      : null;
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!open || !prefill) {
+      focused.current = false;
+      return;
+    }
+    if (focused.current || !focusTarget) return;
+    const el =
+      focusTarget === "discriminator"
+        ? document.getElementById("protocol-discriminator")
+        : document.querySelector<HTMLElement>('[data-facet-slot="strain"] input');
+    el?.focus();
+    focused.current = !!el;
+  });
 
   // Facts the pattern does not place, assay format first.
   const moreSlots = facetSlots
@@ -463,7 +448,10 @@ export function CreateProtocolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(95vw,1100px)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        onOpenAutoFocus={(e) => prefill && e.preventDefault()}
+        className="w-[min(95vw,1100px)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>
             {prefill ? `New protocol from ${prefill.code ?? prefill.name}` : "New Protocol"}

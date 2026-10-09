@@ -818,6 +818,39 @@ describe("CreateProtocolDialog", () => {
     expect((await submit()).references).toEqual([{ kind: "doi", value: "10.1021/jm901137j" }]);
   });
 
+  it("starts from another protocol with its paper-level references, no nicknames and no discriminator", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      discriminator: "FP",
+      aliases: [{ label: "MABA", kind: "nickname" }],
+      references: [
+        { kind: "doi", value: "10.1021/jm901137j" },
+        { kind: "chembl_assay", value: "CHEMBL1054500" },
+      ],
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    const payload = await submit();
+    expect(payload.references).toEqual([{ kind: "doi", value: "10.1021/jm901137j" }]);
+    expect(payload.nicknames).toEqual([]);
+    expect(payload.discriminator).toBeNull();
+  });
+
+  it("focuses the discriminator when starting from another protocol", async () => {
+    state.preview = { ...complete, siblings: [{ protocol_id: "s1", code: "PRT-1", name: "n" }] };
+    const prefill = protocol({ category: "Detection interference" });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    await waitFor(() => expect(screen.getByLabelText("Discriminator")).toHaveFocus());
+  });
+
+  it("focuses the strain when the pattern names one and no discriminator is shown", async () => {
+    const prefill = protocol({ category: "Parasite growth inhibition" });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("Type a strain or pick one used here")).toHaveFocus(),
+    );
+  });
+
   it("creates with the form, nicknames and the siblings' discriminators in one save", async () => {
     const sibling = {
       protocol_id: "s1",

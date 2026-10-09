@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../types";
 import { ProtocolLibraryRow } from "./protocol-library-row";
 
@@ -37,5 +37,24 @@ describe("ProtocolLibraryRow search match", () => {
   it("says nothing extra when the name matched", () => {
     render(<ProtocolLibraryRow protocol={protocol} search="pptt" />);
     expect(screen.queryByText(/matched/)).not.toBeInTheDocument();
+  });
+});
+
+describe("ProtocolLibraryRow menu", () => {
+  it("offers New protocol from this, without selecting the row", () => {
+    const onNewFrom = vi.fn();
+    const onSelect = vi.fn();
+    render(<ProtocolLibraryRow protocol={protocol} onSelect={onSelect} onNewFrom={onNewFrom} />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Actions for PRT-00042" }), {
+      key: "Enter",
+    });
+    fireEvent.click(screen.getByRole("menuitem", { name: "New protocol from this" }));
+    expect(onNewFrom).toHaveBeenCalledWith(protocol);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("has no menu when the caller cannot create protocols", () => {
+    render(<ProtocolLibraryRow protocol={protocol} />);
+    expect(screen.queryByRole("button", { name: /Actions for/ })).not.toBeInTheDocument();
   });
 });

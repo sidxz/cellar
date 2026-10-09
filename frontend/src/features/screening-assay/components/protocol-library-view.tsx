@@ -45,9 +45,15 @@ interface ProtocolLibraryViewProps {
   protocols: Protocol[];
   onSelect?: (protocolId: string) => void;
   search?: string;
+  onNewFrom?: (protocol: Protocol) => void;
 }
 
-export function ProtocolLibraryView({ protocols, onSelect, search }: ProtocolLibraryViewProps) {
+export function ProtocolLibraryView({
+  protocols,
+  onSelect,
+  search,
+  onNewFrom,
+}: ProtocolLibraryViewProps) {
   const hasRetired = protocols.some((p) => p.status === "retired");
   // Default: pre-exclude retired (only when some exist, else no status preset).
   const [selections, setSelections] = useState<FacetSelections>(() =>
@@ -92,6 +98,7 @@ export function ProtocolLibraryView({ protocols, onSelect, search }: ProtocolLib
         onGroupByChange={changeGroupBy}
         onSelect={onSelect}
         search={search}
+        onNewFrom={onNewFrom}
       />
     </div>
   );

@@ -39,7 +39,7 @@ export function FacetField({
   optional?: boolean;
 }) {
   return (
-    <div className="grid gap-1.5">
+    <div className="grid gap-1.5" data-facet-slot={slot.name}>
       <Label>
         {slot.label}
         {optional && " (optional)"}
