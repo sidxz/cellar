@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../types";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
@@ -34,16 +35,27 @@ const { ORGANISM_BASED, CELL_BASED } = vi.hoisted(() => {
     CELL_BASED: bao("BAO_0000219", "cell based format"),
   };
 });
-const state = vi.hoisted(() => ({ preview: null as unknown, mutate: vi.fn() }));
+const state = vi.hoisted(() => ({ preview: null as unknown, mutate: vi.fn(), realPreview: false }));
 state.preview = incomplete;
 afterEach(() => {
   state.preview = incomplete;
+  state.realPreview = false;
   state.mutate.mockReset();
 });
 
-vi.mock("../hooks/use-protocol-name-preview", () => ({
-  useProtocolNamePreview: () => ({ data: state.preview, isFetching: false }),
-  useDiscriminatorSuggestions: () => [],
+// The preview is canned, unless a test runs the real hook against the canned server response.
+vi.mock("../hooks/use-protocol-name-preview", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../hooks/use-protocol-name-preview")>();
+  const canned = () => ({ data: state.preview, isFetching: false });
+  return {
+    useProtocolNamePreview: (draft: Parameters<typeof real.useProtocolNamePreview>[0]) =>
+      (state.realPreview ? real.useProtocolNamePreview : canned)(draft),
+    useDiscriminatorSuggestions: () => [],
+  };
+});
+vi.mock("@/shared/lib/api/custom-instance", () => ({
+  API_V1: "/api/v1",
+  customInstance: async () => state.preview,
 }));
 vi.mock("../hooks/use-protocols", () => ({
   useCreateProtocol: () => ({ mutate: state.mutate, isPending: false }),
@@ -391,6 +403,41 @@ describe("CreateProtocolDialog", () => {
     expect(payload.condition_definitions).toEqual([
       { name: "Incubation time (aerobic)", data_type: "numeric", unit: "h" },
     ]);
+  });
+
+  it("reopens clean after a create: no name and no clash until a category is picked", async () => {
+    state.realPreview = true;
+    const named = { ...complete, name: "M. tuberculosis growth inhibition" };
+    state.preview = named;
+    state.mutate.mockImplementation((_body, opts: { onSuccess: (p: unknown) => void }) =>
+      opts.onSuccess({ id: "p-new" }),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const dialog = (open: boolean) => (
+      <QueryClientProvider client={qc}>
+        <CreateProtocolDialog open={open} onOpenChange={() => {}} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(dialog(true));
+    pickCategory("Growth inhibition");
+    expect(await screen.findByText(named.name)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create Protocol" }));
+    await waitFor(() => expect(state.mutate).toHaveBeenCalled());
+    // As after a real create: the name is now taken, and the create invalidates ["protocols"].
+    state.preview = {
+      ...named,
+      clash: { protocol_id: "p-new", code: "PRT-00031", name: named.name },
+    };
+    await act(() => qc.invalidateQueries({ queryKey: ["protocols"] }));
+    rerender(dialog(false));
+    await act(() => new Promise((r) => setTimeout(r, 400))); // past the preview debounce
+    rerender(dialog(true));
+
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("");
+    expect(screen.getByText("Pick a category to see the name.")).toBeInTheDocument();
+    expect(screen.queryByText(named.name)).not.toBeInTheDocument();
+    expect(screen.queryByText(/already has this exact name/)).not.toBeInTheDocument();
   });
 
   it("hides Dose unit until a readout fits dose-response curves", () => {

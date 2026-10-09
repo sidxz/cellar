@@ -10,9 +10,11 @@ import { useQuery } from "@tanstack/react-query";
 export type NamePreviewDraft = NamePreviewRequest;
 
 /** The name these facts would generate. Debounces the draft by value (its JSON), so a
- *  caller may pass a fresh object every render without restarting the timer. */
+ *  caller may pass a fresh object every render without restarting the timer. No draft
+ *  (null) means no preview at once: the last name is not kept for a cleared form. */
 export function useProtocolNamePreview(draft: NamePreviewDraft | null) {
-  const key = useDebounce(draft ? JSON.stringify(draft) : null, 300);
+  const debounced = useDebounce(draft ? JSON.stringify(draft) : null, 300);
+  const key = draft ? debounced : null;
   return useQuery({
     queryKey: ["protocols", "name-preview", key],
     queryFn: () =>
@@ -22,7 +24,7 @@ export function useProtocolNamePreview(draft: NamePreviewDraft | null) {
         data: JSON.parse(key as string),
       }),
     enabled: key !== null,
-    placeholderData: (previous) => previous,
+    placeholderData: (previous) => (key === null ? undefined : previous),
   });
 }
 
