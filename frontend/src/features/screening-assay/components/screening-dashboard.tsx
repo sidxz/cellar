@@ -5,7 +5,7 @@ import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
-import { Crosshair, Download, Plus, Settings2, TestTubes } from "lucide-react";
+import { Crosshair, Download, Plus, Settings2, TestTubes, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -15,6 +15,7 @@ import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ProtocolBrowser } from "./protocol-browser";
+import { ProtocolCsvImportDialog } from "./protocol-csv-import/protocol-csv-import-dialog";
 import { TargetList } from "./target-list";
 
 export function ScreeningDashboard() {
@@ -22,6 +23,7 @@ export function ScreeningDashboard() {
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [cddImportOpen, setCddImportOpen] = useState(false);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
   const [newFrom, setNewFrom] = useState<Protocol | null>(null);
   const canCreate = useAuthzHasRole("editor");
   const [createRunForProtocol, setCreateRunForProtocol] = useState<string | null>(null);
@@ -50,6 +52,12 @@ export function ScreeningDashboard() {
                 <Button variant="outline" onClick={() => setCddImportOpen(true)}>
                   <Download className="mr-2 h-4 w-4" />
                   Import from CDD
+                </Button>
+              )}
+              {canCreate && (
+                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import protocols (CSV)
                 </Button>
               )}
               <Button onClick={() => setCreateProtocolOpen(true)}>
@@ -107,6 +115,7 @@ export function ScreeningDashboard() {
           }}
         />
       )}
+      {csvImportOpen && <ProtocolCsvImportDialog open onOpenChange={setCsvImportOpen} />}
       <CddImportDialog
         open={cddImportOpen}
         onOpenChange={setCddImportOpen}
