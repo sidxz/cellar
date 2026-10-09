@@ -5,7 +5,7 @@ import {
   defaultCondition,
   defaultReadout,
 } from "../components/create-protocol/form-values";
-import type { PickListValue, ReadoutNormalization } from "../types";
+import type { InterceptSpec, PickListValue, ReadoutNormalization } from "../types";
 import { WELL_CONC_X } from "./readout-constants";
 
 export function formsForCategory(forms: ProtocolForm[], categoryId: string | null) {
@@ -56,6 +56,7 @@ export function readoutsFromForm(form: ProtocolForm): ProtocolFormValues["readou
             dr_normalization_scope: String(dr.normalization_scope ?? "per_plate"),
             dr_activity_threshold:
               dr.activity_threshold != null ? String(dr.activity_threshold) : "",
+            dr_intercepts: (dr.intercepts as InterceptSpec[] | undefined) ?? [],
           }
         : {}),
     };

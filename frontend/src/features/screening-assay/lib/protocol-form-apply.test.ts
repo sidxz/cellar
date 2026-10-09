@@ -83,6 +83,10 @@ describe("readoutsFromForm", () => {
             curve_type: "ic50",
             y_readout_name: "Signal",
             hill_slope_constraint: "unconstrained",
+            intercepts: [
+              { kind: "ic", level: 50, basis: "relative_percent" },
+              { kind: "ic", level: 90, basis: "relative_percent", label: "IC90" },
+            ],
           },
         },
       ],
@@ -92,6 +96,11 @@ describe("readoutsFromForm", () => {
     expect(ic50.unit).toBe("µM");
     expect(ic50.dr_curve_type).toBe("ic50");
     expect(ic50.dr_y_readout).toBe("Signal");
+    expect(ic50.dr_intercepts).toEqual([
+      { kind: "ic", level: 50, basis: "relative_percent" },
+      { kind: "ic", level: 90, basis: "relative_percent", label: "IC90" },
+    ]);
+    expect(signal.dr_intercepts).toEqual([]);
   });
 });
 
