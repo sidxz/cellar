@@ -163,7 +163,12 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         self, workspace_id: uuid.UUID, *, base: str, exclude_code: str | None
     ) -> list[NameSibling]:
         stmt = select(
-            ProtocolModel.id, ProtocolModel.code, ProtocolModel.name, ProtocolModel.discriminator
+            ProtocolModel.id,
+            ProtocolModel.code,
+            ProtocolModel.name,
+            ProtocolModel.discriminator,
+            ProtocolModel.status,
+            ProtocolModel.is_locked,
         ).where(
             ProtocolModel.workspace_id == workspace_id,
             func.lower(ProtocolModel.name_base) == base.strip().lower(),
@@ -180,6 +185,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                     code=row.code,
                     name=row.name,
                     discriminator=row.discriminator,
+                    status=row.status,
+                    is_locked=row.is_locked,
                 ),
             )
         return list(seen.values())

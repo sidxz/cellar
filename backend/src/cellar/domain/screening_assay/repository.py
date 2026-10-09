@@ -44,6 +44,8 @@ class NameSibling:
     code: str | None
     name: str
     discriminator: str | None
+    status: str | None = None
+    is_locked: bool = False
 
 
 @dataclass(frozen=True)

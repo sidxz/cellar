@@ -216,6 +216,11 @@ def _joined(terms: tuple[NamingTerm, ...], ctx: NamingContext) -> str | None:
     return "/".join(short_label(t, ctx) for t in terms) or None
 
 
+def with_discriminator(base: str, discriminator: str) -> str:
+    """The name a protocol gets when its discriminator trails the base in brackets."""
+    return f"{base} [{discriminator}]"
+
+
 def render_protocol_name(pattern: str, inputs: NamingInputs, ctx: NamingContext) -> RenderedName:
     target = "/".join(_target_label(t, ctx) for t in inputs.targets) or None
     organism = _joined(inputs.organisms, ctx)
@@ -266,7 +271,11 @@ def render_protocol_name(pattern: str, inputs: NamingInputs, ctx: NamingContext)
     if base and not keeps_case:
         base = _capitalize(base)
     discriminator = values["discriminator"]
-    name = base if discriminator_in_pattern or not discriminator else f"{base} [{discriminator}]"
+    name = (
+        base
+        if discriminator_in_pattern or not discriminator
+        else with_discriminator(base, discriminator)
+    )
     return RenderedName(
         name=name,
         base=base,

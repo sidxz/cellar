@@ -17,6 +17,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import NameSibling, ProtocolRepository
 from cellar.domain.shared.errors import DomainError, ValidationError
 from cellar.domain.shared.ontology import OntologyTerm
+from cellar.domain.shared.protocol_naming import with_discriminator
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -28,6 +29,8 @@ class PreviewProtocolNameQuery(Query):
     discriminator: str | None = None
     # The protocol being corrected, so it does not clash with itself.
     protocol_id: uuid.UUID | None = None
+    # Discriminators proposed for the bare siblings, keyed by sibling protocol id.
+    sibling_discriminators: dict[uuid.UUID, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -35,6 +38,14 @@ class ListDiscriminatorsQuery(Query):
     workspace_id: uuid.UUID
     base: str | None = None
     q: str | None = None
+
+
+@dataclass(frozen=True)
+class SiblingRename:
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str | None
+    error: str | None
 
 
 @dataclass(frozen=True)
@@ -48,6 +59,7 @@ class NamePreview:
     needs_discriminator: bool
     discriminator_error: str | None
     discriminator_in_pattern: bool
+    sibling_renames: list[SiblingRename]
 
 
 class PreviewProtocolName:
@@ -97,6 +109,25 @@ class PreviewProtocolName:
                 discriminator=discriminator,
                 exclude_code=exclude_code,
             )
+            renames: list[SiblingRename] = []
+            taken = {d.rendered.name.lower()} | {
+                s.name.lower()
+                for s in d.siblings
+                if s.protocol_id not in input.sibling_discriminators
+            }
+            for s in d.bare_siblings:
+                raw = input.sibling_discriminators.get(s.protocol_id)
+                if not raw or not raw.strip():
+                    continue
+                try:
+                    cleaned = await self._names.clean_discriminator(input.workspace_id, raw)
+                except ValidationError as exc:
+                    renames.append(SiblingRename(s.protocol_id, s.code, None, exc.message))
+                    continue
+                name = with_discriminator(d.rendered.base, cleaned)
+                error = "Same name as another protocol" if name.lower() in taken else None
+                taken.add(name.lower())
+                renames.append(SiblingRename(s.protocol_id, s.code, name, error))
         return Success(
             NamePreview(
                 name=d.rendered.name,
@@ -108,6 +139,7 @@ class PreviewProtocolName:
                 needs_discriminator=d.needs_discriminator,
                 discriminator_error=discriminator_error,
                 discriminator_in_pattern=d.rendered.discriminator_in_pattern,
+                sibling_renames=renames,
             )
         )
 

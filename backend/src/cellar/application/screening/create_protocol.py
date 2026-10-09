@@ -17,6 +17,10 @@ from cellar.application.auth import (
 from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
+from cellar.application.screening.manage_protocol import (
+    correction_reason,
+    set_discriminator_and_rename,
+)
 from cellar.application.screening.protocol_codes import mint_protocol_code
 from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.shared.command import Command
@@ -45,6 +49,7 @@ from cellar.domain.screening_assay.repository import (
 )
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import (
+    ConflictError,
     DomainError,
     NotFoundError,
     ValidationError,
@@ -54,6 +59,15 @@ from cellar.domain.workspace_config.repository import (
     ProtocolFormRepository,
     WorkspaceSettingsRepository,
 )
+
+
+@dataclass(frozen=True)
+class SiblingDiscriminator:
+    """A discriminator for a bare sibling, set in the same save as the new protocol."""
+
+    protocol_id: uuid.UUID
+    discriminator: str
+    reason: str | None = None  # required when the sibling is published
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -77,6 +91,8 @@ class CreateProtocolCommand(Command):
     allow_incomplete: bool = False
     # The form the dialog started from; decides whether the assay format follows the targets.
     form_id: uuid.UUID | None = None
+    # Bare siblings (same base name, no discriminator) told apart in the same save.
+    sibling_discriminators: list[SiblingDiscriminator] = field(default_factory=list)
 
 
 class CreateProtocol:
@@ -273,6 +289,36 @@ class CreateProtocol:
                 if link is TargetLinkResult.TARGET_NOT_FOUND:
                     return Failure(NotFoundError("Target", str(target_id)))
             await self._names.flag_siblings(input.workspace_id, derivation)
+            offered = {s.protocol_id for s in derivation.bare_siblings}
+            for item in input.sibling_discriminators:
+                if item.protocol_id not in offered:
+                    return Failure(
+                        ValidationError(
+                            f"Protocol {item.protocol_id} does not share this protocol's name"
+                        )
+                    )
+                sibling = await self._repo.find_by_id_in_workspace(
+                    input.workspace_id, item.protocol_id
+                )
+                if sibling is None:
+                    return Failure(NotFoundError("Protocol", str(item.protocol_id)))
+                try:
+                    renamed = await set_discriminator_and_rename(
+                        self._names,
+                        sibling,
+                        item.discriminator,
+                        reason=item.reason,
+                        audit_reason=correction_reason(
+                            item.reason, f"Distinguished from {protocol.code}"
+                        ),
+                        user_id=auth.user_id if auth else None,
+                    )
+                except (ConflictError, ValidationError) as exc:
+                    # Published, locked or retired since the preview: say which sibling.
+                    raise type(exc)(f"{sibling.code or sibling.name}: {exc.message}") from exc
+                if isinstance(renamed, Failure):
+                    return renamed
+                await self._repo.save(sibling)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)

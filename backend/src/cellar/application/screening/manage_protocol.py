@@ -310,6 +310,27 @@ def correction_reason(given: str | None, generic: str) -> str:
     return f"Correction: {given}" if given else generic
 
 
+async def set_discriminator_and_rename(
+    names: ProtocolNameService,
+    protocol: Protocol,
+    value: str | None,
+    *,
+    reason: str | None,
+    audit_reason: str,
+    user_id: uuid.UUID | None,
+) -> Result[Protocol, DomainError]:
+    """The one way a discriminator changes: guard (draft, or a correction with a reason),
+    then re-derive the name through the naming service."""
+    cleaned = await names.clean_discriminator(protocol.workspace_id, value)
+    protocol.set_discriminator(cleaned, reason=reason)
+    renamed = await names.apply(
+        protocol, reason=audit_reason, person=True, allow_incomplete=True, user_id=user_id
+    )
+    if isinstance(renamed, Failure):
+        return renamed
+    return Success(protocol)
+
+
 async def _rederive_after_link_change(
     repo: ProtocolRepository,
     names: ProtocolNameService,
@@ -672,13 +693,12 @@ class SetProtocolDiscriminator:
             )
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            value = await self._names.clean_discriminator(input.workspace_id, input.discriminator)
-            protocol.set_discriminator(value, reason=input.reason)
-            renamed = await self._names.apply(
+            renamed = await set_discriminator_and_rename(
+                self._names,
                 protocol,
-                reason=input.reason or "Discriminator changed",
-                person=True,
-                allow_incomplete=True,
+                input.discriminator,
+                reason=input.reason,
+                audit_reason=input.reason or "Discriminator changed",
                 user_id=auth.user_id if auth else None,
             )
             if isinstance(renamed, Failure):
