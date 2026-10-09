@@ -41,6 +41,7 @@ export function FacetField({
       <OntologySearchInput
         ontologySources={slot.ontology_sources}
         rootConceptId={slot.root_concept_id}
+        slot={slot.name}
         value={value}
         onChange={onChange}
         allowFreeText={slot.allow_free_text}

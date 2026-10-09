@@ -335,6 +335,7 @@ function FormDialog({ open, onOpenChange, editing, categories }: FormDialogProps
                 <OntologySearchInput
                   ontologySources={slot.ontology_sources}
                   rootConceptId={slot.root_concept_id}
+                  slot={slot.name}
                   value={ontologyDefaults[slot.name] ?? []}
                   onChange={(terms) =>
                     setOntologyDefaults((prev) => ({ ...prev, [slot.name]: terms }))

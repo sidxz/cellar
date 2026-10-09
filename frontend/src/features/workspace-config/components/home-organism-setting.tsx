@@ -34,6 +34,7 @@ export function HomeOrganismSetting({ current }: { current: Home | null }) {
       <Label>Home organism</Label>
       <OntologySearchInput
         ontologySources={["NCBITAXON"]}
+        slot="organism"
         value={picked}
         onChange={(terms) => setPicked(terms.slice(-1))}
         placeholder="e.g. Mycobacterium tuberculosis"

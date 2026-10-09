@@ -5,7 +5,7 @@ import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/shared/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
 import { X } from "lucide-react";
-import { type ReactNode, type RefObject, useId, useRef } from "react";
+import { Fragment, type ReactNode, type RefObject, useId, useRef } from "react";
 
 export interface SearchComboboxProps<T> {
   /** Current text in the search box (controlled by the caller). */
@@ -18,6 +18,8 @@ export interface SearchComboboxProps<T> {
   getItemKey: (item: T) => string;
   /** Render the visible content of a result row. */
   renderItem: (item: T) => ReactNode;
+  /** Optional group heading for a row; a heading shows wherever the group changes. */
+  getGroup?: (item: T) => string | undefined;
   /** Called when the user picks a row (click or Enter on the highlighted row). */
   onSelect: (item: T) => void;
   /** True while the caller's query is in flight. */
@@ -71,6 +73,7 @@ export function SearchCombobox<T>({
   items,
   getItemKey,
   renderItem,
+  getGroup,
   onSelect,
   isLoading = false,
   open,
@@ -139,17 +142,24 @@ export function SearchCombobox<T>({
             ) : items.length === 0 ? (
               <CommandEmpty>{emptyMessage}</CommandEmpty>
             ) : (
-              items.map((item) => {
+              items.map((item, i) => {
                 const key = getItemKey(item);
+                const group = getGroup?.(item);
                 return (
-                  <CommandItem
-                    key={key}
-                    value={key}
-                    onSelect={() => onSelect(item)}
-                    className="cursor-pointer"
-                  >
-                    {renderItem(item)}
-                  </CommandItem>
+                  <Fragment key={key}>
+                    {group && (i === 0 || group !== getGroup?.(items[i - 1] as T)) && (
+                      <div className="px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
+                        {group}
+                      </div>
+                    )}
+                    <CommandItem
+                      value={key}
+                      onSelect={() => onSelect(item)}
+                      className="cursor-pointer"
+                    >
+                      {renderItem(item)}
+                    </CommandItem>
+                  </Fragment>
                 );
               })
             )}

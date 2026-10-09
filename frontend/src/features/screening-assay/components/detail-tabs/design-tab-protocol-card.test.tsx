@@ -55,6 +55,7 @@ vi.mock("@/features/workspace-config/hooks/use-ontology-slots", () => ({
 
 vi.mock("@/features/workspace-config/hooks/use-ontology-search", () => ({
   useOntologySearch: () => ({ data: [], isLoading: false, isFetching: false }),
+  useTermsInUse: () => ({ data: [] }),
 }));
 
 vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({

@@ -170,6 +170,7 @@ export function CorrectProtocolDialog({
                 <OntologySearchInput
                   ontologySources={slot.ontology_sources}
                   rootConceptId={slot.root_concept_id}
+                  slot={slot.name}
                   value={annotations[slot.name] ?? []}
                   onChange={(terms) => setAnnotations((a) => ({ ...a, [slot.name]: terms }))}
                   allowFreeText={slot.allow_free_text}

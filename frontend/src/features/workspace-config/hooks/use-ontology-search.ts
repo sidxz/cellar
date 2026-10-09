@@ -1,13 +1,32 @@
 "use client";
 
+import { PROTOCOLS_KEY } from "@/features/screening-assay/hooks/query-keys";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { OntologyTermResponse } from "@/shared/lib/api/model";
+import type { OntologyTermResponse, TermInUseResponse } from "@/shared/lib/api/model";
 import { STALE_TIME } from "@/shared/lib/query-defaults";
 import { SEARCH_MIN_QUERY_LEN } from "@/shared/lib/timing";
 import { useQuery } from "@tanstack/react-query";
 
 // Alias of the orval-generated DTO (source of truth).
 export type OntologyTerm = OntologyTermResponse;
+
+export type TermInUse = TermInUseResponse;
+
+/** Terms protocols already use in one annotation slot ("Used here"). Keyed under the protocols
+ *  key, so creating or editing a protocol refetches it. */
+export function useTermsInUse(slot: string | undefined) {
+  return useQuery({
+    queryKey: [...PROTOCOLS_KEY, "terms-in-use", slot],
+    queryFn: () =>
+      customInstance<TermInUse[]>({
+        url: `${API_V1}/ontology/terms-in-use`,
+        method: "GET",
+        params: { slot },
+      }),
+    enabled: !!slot,
+    staleTime: STALE_TIME.LONG,
+  });
+}
 
 export function useOntologyDescendants(ontology: string, rootConceptId: string, enabled?: boolean) {
   return useQuery({

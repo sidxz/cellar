@@ -4,6 +4,7 @@ import {
   type OntologyTerm,
   useOntologyDescendants,
   useOntologySearch,
+  useTermsInUse,
 } from "@/features/workspace-config/hooks/use-ontology-search";
 import { SearchCombobox } from "@/shared/components/search-combobox";
 import { Badge } from "@/shared/components/ui/badge";
@@ -34,7 +35,15 @@ export interface OntologySearchInputProps {
   onChange: (terms: OntologyTerm[]) => void;
   allowFreeText?: boolean;
   placeholder?: string;
+  /** Annotation slot this picker fills. With it the dropdown lists the terms protocols already
+   *  use there ("Used here") before the ontology results. */
+  slot?: string;
 }
+
+const USED_HERE = "Used here";
+const FROM_ONTOLOGY = "From ontology";
+
+type Row = { term: OntologyTerm; protocolCount?: number };
 
 export function OntologySearchInput({
   ontologySources,
@@ -43,6 +52,7 @@ export function OntologySearchInput({
   onChange,
   allowFreeText = false,
   placeholder = "Search ontology terms...",
+  slot,
 }: OntologySearchInputProps) {
   // When rootConceptId is set, use dropdown mode (finite list of descendants)
   // Otherwise, use search mode (type-ahead against BioPortal)
@@ -68,6 +78,7 @@ export function OntologySearchInput({
       onChange={onChange}
       allowFreeText={allowFreeText}
       placeholder={placeholder}
+      slot={slot}
     />
   );
 }
@@ -180,6 +191,7 @@ function OntologySearchMode({
   onChange,
   allowFreeText,
   placeholder,
+  slot,
 }: {
   ontologySources: string[];
   rootConceptId?: string | null;
@@ -187,6 +199,7 @@ function OntologySearchMode({
   onChange: (terms: OntologyTerm[]) => void;
   allowFreeText: boolean;
   placeholder: string;
+  slot?: string;
 }) {
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS);
@@ -228,9 +241,36 @@ function OntologySearchMode({
     addTerm(term);
   };
 
-  const filteredResults = (results ?? []).filter(
-    (r) => !value.some((v) => v.term_id === r.term_id),
-  );
+  // "Used here" is filtered client-side as the chemist types; it needs no network round trip.
+  const { data: inUse } = useTermsInUse(slot);
+  const needle = query.trim().toLowerCase();
+  const usedRows: Row[] = (inUse ?? [])
+    .filter(
+      (t) =>
+        !value.some((v) => v.term_id === t.term_id) &&
+        (!needle ||
+          [t.label, t.short_label, t.term_id].some((f) => f.toLowerCase().includes(needle))),
+    )
+    .map((t) => ({
+      term: {
+        term_id: t.term_id,
+        label: t.label,
+        ontology_source: t.ontology_source,
+        uri: t.uri ?? null,
+      },
+      protocolCount: t.protocol_count,
+    }));
+  const rows: Row[] = [
+    ...usedRows,
+    ...(results ?? [])
+      .filter(
+        (r) =>
+          !value.some((v) => v.term_id === r.term_id) &&
+          !usedRows.some((u) => u.term.term_id === r.term_id),
+      )
+      .map((term) => ({ term })),
+  ];
+  const searching = debouncedQuery.length >= SEARCH_MIN_QUERY_LEN;
 
   return (
     <div className="relative">
@@ -258,22 +298,29 @@ function OntologySearchMode({
           setQuery(value);
           setShowDropdown(true);
         }}
-        items={filteredResults}
-        getItemKey={(term) => term.term_id}
-        renderItem={(term) => (
+        items={rows}
+        getItemKey={(row) => row.term.term_id}
+        getGroup={slot ? (row) => (row.protocolCount ? USED_HERE : FROM_ONTOLOGY) : undefined}
+        renderItem={({ term, protocolCount }) => (
           <span className="flex w-full items-center justify-between text-sm">
             <span>{term.label}</span>
-            <Badge variant="outline" className="ml-2 text-[10px]">
-              {term.ontology_source}
-            </Badge>
+            {protocolCount ? (
+              <span className="ml-2 text-xs text-muted-foreground">
+                {protocolCount} {protocolCount === 1 ? "protocol" : "protocols"}
+              </span>
+            ) : (
+              <Badge variant="outline" className="ml-2 text-[10px]">
+                {term.ontology_source}
+              </Badge>
+            )}
           </span>
         )}
-        onSelect={addTerm}
-        isLoading={isLoading}
-        open={showDropdown && debouncedQuery.length >= SEARCH_MIN_QUERY_LEN}
+        onSelect={(row) => addTerm(row.term)}
+        isLoading={isLoading && searching && usedRows.length === 0}
+        open={showDropdown && (searching || usedRows.length > 0)}
         onOpenChange={setShowDropdown}
         onInputFocus={() => {
-          if (query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
+          if (slot || query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
         }}
         placeholder={placeholder}
         emptyMessage={error ? errorText(error) : "No results found."}
