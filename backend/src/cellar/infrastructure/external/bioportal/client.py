@@ -20,6 +20,11 @@ BIOPORTAL_SEARCH_URL = f"{BIOPORTAL_BASE_URL}/search"
 _MAX_DESCENDANT_PAGES = 20
 
 
+def _norm(text: str) -> str:
+    """Case-, space-, hyphen- and dot-insensitive form for exact-term comparison."""
+    return "".join(c for c in text.lower() if c not in " -.")
+
+
 class BioPortalClient:
     """Search BioPortal for ontology terms.
 
@@ -80,7 +85,7 @@ class BioPortalClient:
         params: dict[str, Any] = {
             "q": query,
             "pagesize": page_size,
-            "include": "prefLabel",
+            "include": "prefLabel,synonym",
         }
         if subtree_root_id and ontology_sources:
             # BioPortal requires "ontology" (singular) with subtree_root_id
@@ -90,6 +95,8 @@ class BioPortalClient:
             params["ontologies"] = ",".join(ontology_sources)
 
         data = await self._get(BIOPORTAL_SEARCH_URL, params, workspace_id, timeout=10.0)
+        wanted = _norm(query)
+        exact: list[OntologyTerm] = []
         results: list[OntologyTerm] = []
         for item in data.get("collection", []):
             term_id = item.get("@id", "")
@@ -110,16 +117,19 @@ class BioPortalClient:
                     ontology_source = "unknown"
 
             if term_id and label and ontology_source:
-                results.append(
-                    OntologyTerm(
-                        term_id=term_id,
-                        label=label,
-                        ontology_source=ontology_source,
-                        uri=term_id,
-                    )
+                term = OntologyTerm(
+                    term_id=term_id,
+                    label=label,
+                    ontology_source=ontology_source,
+                    uri=term_id,
                 )
+                # Synonyms are used only to rank: BioPortal favours partial label matches,
+                # which buries the parental term ("Hep G2 cell" has synonym "HepG2").
+                names = [label, *(item.get("synonym") or [])]
+                is_exact = any(_norm(n) == wanted for n in names if isinstance(n, str))
+                (exact if is_exact else results).append(term)
 
-        return results
+        return exact + results
 
     async def list_descendants(
         self,

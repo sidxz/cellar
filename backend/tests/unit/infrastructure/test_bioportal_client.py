@@ -64,3 +64,59 @@ async def test_http_failure_raises():
     client = _client(lambda r: httpx.Response(401, json={"errors": ["bad key"]}))
     with pytest.raises(ServiceUnavailableError, match="BioPortal lookup failed"):
         await client.search("fluorescence", ["BAO"], workspace_id=WS)
+
+
+def _hit(term_id: str, label: str, synonyms: list[str] | None = None) -> dict:
+    return {
+        "@id": term_id,
+        "prefLabel": label,
+        "synonym": synonyms or [],
+        "links": {"ontology": "https://data.bioontology.org/ontologies/CLO"},
+    }
+
+
+async def _search_labels(query: str, collection: list[dict]) -> list[str]:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.update(request.url.params)
+        return httpx.Response(200, json={"collection": collection})
+
+    terms = await _client(handler).search(query, ["CLO"], workspace_id=WS)
+    assert seen["include"] == "prefLabel,synonym"
+    return [t.label for t in terms]
+
+
+@pytest.mark.asyncio
+async def test_search_synonym_match_ranks_first():
+    labels = await _search_labels(
+        "HepG2",
+        [
+            _hit("http://x/1", "HepG2-AhR-luc"),
+            _hit("http://x/2", "ARE-bla HepG2"),
+            _hit("http://x/3", "HepG2-CYP2B6-hCAR"),
+            _hit("http://x/4", "Hep G2 cell", ["HepG2", "Hep-G2"]),
+        ],
+    )
+    assert labels == ["Hep G2 cell", "HepG2-AhR-luc", "ARE-bla HepG2", "HepG2-CYP2B6-hCAR"]
+
+
+@pytest.mark.asyncio
+async def test_search_exact_preflabel_ranks_first_ignoring_case_and_punctuation():
+    labels = await _search_labels(
+        "mus musculus",
+        [
+            _hit("http://x/1", "Mus musculus musculus"),
+            _hit("http://x/2", "Mus musculus"),
+        ],
+    )
+    assert labels == ["Mus musculus", "Mus musculus musculus"]
+
+
+@pytest.mark.asyncio
+async def test_search_without_exact_match_keeps_bioportal_order():
+    labels = await _search_labels(
+        "kinase",
+        [_hit("http://x/1", "kinase assay"), _hit("http://x/2", "protein kinase", ["PK"])],
+    )
+    assert labels == ["kinase assay", "protein kinase"]
