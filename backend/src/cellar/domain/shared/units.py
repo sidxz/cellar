@@ -105,12 +105,13 @@ def _group(group: str, *units: str) -> tuple[UnitSuggestion, ...]:
 
 
 COMMON_UNITS: tuple[UnitSuggestion, ...] = (
-    *_group("Concentration", f"{MICRO}M", "nM", "mM", "pM", "M"),
+    *_group("Concentration", f"{MICRO}M", "nM", "mM", "pM", "M", "×MIC"),
     *_group("Mass concentration", f"{MICRO}g/mL", "ng/mL", "mg/mL"),
     *_group("Dose", "mg/kg"),
     *_group("Percent and ratio", "%", "fold", "fraction"),
     *_group("Counts", "log10 CFU", "CFU/mL"),
     *_group("Time", "h", "min", "s", "d"),
+    *_group("Rate constant", "s⁻¹", "M⁻¹s⁻¹"),
     *_group("Clearance", f"{MICRO}L/min/mg", "mL/min/kg"),
     *_group("Permeability", "×10⁻⁶ cm/s"),
     *_group("Exposure", "ng·h/mL"),

@@ -226,8 +226,8 @@ def test_pattern_validation(bad):
         validate_pattern(bad)
 
 
-def test_every_default_pattern_is_valid_and_has_27_categories():
-    assert len(DEFAULT_CATEGORY_PATTERNS) == 27
+def test_every_default_pattern_is_valid_and_has_47_categories():
+    assert len(DEFAULT_CATEGORY_PATTERNS) == 47
     for pattern in DEFAULT_CATEGORY_PATTERNS.values():
         validate_pattern(pattern)
 
