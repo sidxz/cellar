@@ -127,6 +127,7 @@ __all__ = [
     "GetRegistrationFormDep",
     "GetTagsForEntityDep",
     "GetWorkspaceSettingsDep",
+    "GetWorkspaceSetupDep",
     "ListCustomFieldsDep",
     "ListDataSourcesDep",
     "ListExternalApiKeysDep",
@@ -149,7 +150,6 @@ __all__ = [
     "RenameTagDep",
     # Ontology search + annotations
     "SearchOntologyDep",
-    "GetWorkspaceSetupDep",
     "SeedDefaultProtocolCategoriesDep",
     "SeedDefaultProtocolFormsDep",
     "SetEntityTagsDep",

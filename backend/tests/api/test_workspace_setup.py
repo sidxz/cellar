@@ -1,8 +1,33 @@
 """Setup checklist: what an admin still has to configure, reported as counts and flags."""
 
+import pytest
+
 from cellar.domain.shared.protocol_naming import DEFAULT_CATEGORY_PATTERNS
 
 URL = "/api/v1/workspace-setup"
+
+
+@pytest.fixture(autouse=True)
+def _no_env_key(monkeypatch):
+    monkeypatch.delenv("BIOPORTAL_API_KEY", raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _stored_secrets(api_app, monkeypatch):
+    """The test container's provider reads env only; give it a store so saved keys resolve."""
+    from cellar.domain.shared.secret_provider import SecretProvider
+
+    store: dict[str, str] = {}
+    provider = api_app.state.container[SecretProvider]
+
+    async def get_secret(key):
+        return store.get(key)
+
+    async def set_secret(key, value):
+        store[key] = value
+
+    monkeypatch.setattr(provider, "get_secret", get_secret)
+    monkeypatch.setattr(provider, "set_secret", set_secret)
 
 
 async def test_fresh_workspace_reports_everything_missing(client):
@@ -49,13 +74,11 @@ async def test_after_seeding_a_key_a_home_organism_and_a_target_it_is_done(clien
     assert "s3cret-value" not in resp.text
 
 
-async def test_an_inactive_key_does_not_count(client):
-    created = await client.post(
-        "/api/v1/api-keys",
-        json={"key_name": "bioportal", "label": "BioPortal", "secret_value": "x-y-z"},
-    )
-    await client.patch(f"/api/v1/api-keys/{created.json()['id']}", json={"is_active": False})
-    assert (await client.get(URL)).json()["bioportal_key"] is False
+async def test_an_env_configured_key_counts_without_a_workspace_key(client, monkeypatch):
+    monkeypatch.setenv("BIOPORTAL_API_KEY", "env-secret-value")
+    resp = await client.get(URL)
+    assert resp.json()["bioportal_key"] is True
+    assert "env-secret-value" not in resp.text
 
 
 async def test_only_admins_may_read_it(editor_client, viewer_client):

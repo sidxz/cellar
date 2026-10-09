@@ -84,6 +84,7 @@ from cellar.application.workspace_config.update_workspace_settings import (
 from cellar.application.workspace_config.workspace_setup import GetWorkspaceSetup
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.di._screening import _name_service
+from cellar.infrastructure.external.bioportal.client import BioPortalClient
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -271,7 +272,7 @@ def register_workspace_config(container: Container) -> None:
             uow,
             SQLAlchemyProtocolCategoryRepository(uow),
             SQLAlchemyProtocolFormRepository(uow),
-            SQLAlchemyExternalApiKeyRepository(uow),
+            c[BioPortalClient],
             SQLAlchemyWorkspaceSettingsRepository(uow),
             SQLAlchemyTargetRepository(uow),
         )

@@ -26,6 +26,10 @@ class OntologySearchService(Protocol):
         workspace_id: uuid.UUID | None = None,
     ) -> list[OntologyTerm]: ...
 
+    async def has_api_key(self, workspace_id: uuid.UUID | None) -> bool:
+        """Whether a lookup can authenticate (never exposes the key itself)."""
+        ...
+
     async def list_descendants(
         self,
         ontology: str,

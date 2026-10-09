@@ -60,6 +60,14 @@ class BioPortalClient:
             )
         return key
 
+    async def has_api_key(self, workspace_id: uuid.UUID | None) -> bool:
+        """Presence only, by the same resolution rule searches use."""
+        try:
+            await self._resolve_api_key(workspace_id)
+        except ServiceUnavailableError:
+            return False
+        return True
+
     async def _get(
         self, url: str, params: dict[str, Any], workspace_id: uuid.UUID | None, timeout: float
     ) -> Any:

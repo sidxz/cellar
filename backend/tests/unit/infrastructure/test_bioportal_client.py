@@ -120,3 +120,13 @@ async def test_search_without_exact_match_keeps_bioportal_order():
         [_hit("http://x/1", "kinase assay"), _hit("http://x/2", "protein kinase", ["PK"])],
     )
     assert labels == ["kinase assay", "protein kinase"]
+
+
+@pytest.mark.asyncio
+async def test_has_api_key_follows_the_search_resolution_rule(monkeypatch):
+    handler = lambda request: httpx.Response(200, json={})  # noqa: E731
+    monkeypatch.delenv("BIOPORTAL_API_KEY", raising=False)
+    assert await _client(handler, key=None).has_api_key(WS) is False
+    assert await _client(handler, key="k").has_api_key(WS) is True
+    monkeypatch.setenv("BIOPORTAL_API_KEY", "from-env")
+    assert await _client(handler, key=None).has_api_key(WS) is True

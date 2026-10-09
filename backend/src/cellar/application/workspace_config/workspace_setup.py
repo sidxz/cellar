@@ -13,9 +13,9 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.application.workspace_config.protocol_form_defaults import missing_default_forms
 from cellar.domain.screening_assay.repository import TargetRepository
 from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.ontology_search_service import OntologySearchService
 from cellar.domain.shared.protocol_naming import DEFAULT_CATEGORY_PATTERNS
 from cellar.domain.workspace_config.repository import (
-    ExternalApiKeyRepository,
     ProtocolCategoryRepository,
     ProtocolFormRepository,
     WorkspaceSettingsRepository,
@@ -31,7 +31,7 @@ class GetWorkspaceSetupQuery(Query):
 class WorkspaceSetup:
     missing_default_categories: list[str]
     missing_default_forms: int
-    bioportal_key: bool  # presence only, the secret is never read
+    bioportal_key: bool  # ontology search can authenticate; presence only, never the value
     home_organisms: int
     targets: int
 
@@ -42,14 +42,14 @@ class GetWorkspaceSetup:
         uow: UnitOfWork,
         categories: ProtocolCategoryRepository,
         forms: ProtocolFormRepository,
-        api_keys: ExternalApiKeyRepository,
+        ontology: OntologySearchService,
         settings: WorkspaceSettingsRepository,
         targets: TargetRepository,
     ) -> None:
         self._uow = uow
         self._categories = categories
         self._forms = forms
-        self._api_keys = api_keys
+        self._ontology = ontology
         self._settings = settings
         self._targets = targets
 
@@ -62,7 +62,6 @@ class GetWorkspaceSetup:
         async with self._uow:
             categories = await self._categories.find_by_workspace(ws)
             have = {c.label.lower() for c in categories}
-            key = await self._api_keys.find_by_key_name(ws, "bioportal")
             settings = await self._settings.find_by_workspace_id(ws)
             return Success(
                 WorkspaceSetup(
@@ -72,7 +71,7 @@ class GetWorkspaceSetup:
                     missing_default_forms=len(
                         missing_default_forms(categories, await self._forms.find_by_workspace(ws))
                     ),
-                    bioportal_key=key is not None and key.is_active,
+                    bioportal_key=await self._ontology.has_api_key(ws),
                     home_organisms=settings.home_organism_count if settings else 0,
                     targets=await self._targets.count_by_workspace(ws),
                 )
