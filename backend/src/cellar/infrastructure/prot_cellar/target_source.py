@@ -114,6 +114,7 @@ class HttpTargetSource(TargetSource):
                 "is not in ProtCellar. Add the organism there first.",
             ),
         )
+        organism_id = _resolved_id(organism, "organism")
         components: list[dict[str, str]] = []
         if request.protein_identifier:
             protein = await self._write_step(
@@ -126,7 +127,9 @@ class HttpTargetSource(TargetSource):
                     message=f"Protein {request.protein_identifier} is not in ProtCellar",
                 ),
             )
-            components = [{"protein_id": protein["id"], "relationship": "single_protein"}]
+            components = [
+                {"protein_id": _resolved_id(protein, "protein"), "relationship": "single_protein"}
+            ]
         created = await self._write_step(
             "POST",
             "/api/v1/targets",
@@ -134,7 +137,7 @@ class HttpTargetSource(TargetSource):
             json={
                 "pref_name": request.name,
                 "target_type": request.target_type,
-                "organism_id": organism["id"],
+                "organism_id": organism_id,
                 "chembl_id": request.chembl_id,
                 "components": components,
             },
@@ -231,6 +234,17 @@ class HttpTargetSource(TargetSource):
                 f"prot-cellar returned non-JSON for {path}",
                 detail=resp.text[:200],
             ) from exc
+
+
+def _resolved_id(data: object, what: str) -> str:
+    """The ``id`` of a resolve response; a malformed body is the service's fault, not a 500."""
+    try:
+        return data["id"]  # type: ignore[index,no-any-return]
+    except (KeyError, TypeError) as exc:
+        raise ServiceUnavailableError(
+            f"prot-cellar returned an unusable {what} lookup",
+            detail=repr(exc)[:200],
+        ) from exc
 
 
 def _detail(resp: httpx.Response) -> str:

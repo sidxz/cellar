@@ -334,3 +334,30 @@ async def test_create_malformed_success_body_raises_service_unavailable():
     src = _source(_create_handler(calls, post_json={"unexpected": True}))
     with pytest.raises(ServiceUnavailableError):
         await src.create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/v1/organisms/resolve/9606", {"scientific_name": "Homo sapiens"}),
+        ("/api/v1/organisms/resolve/9606", ["not", "an", "object"]),
+        ("/api/v1/proteins/resolve/Q12809", {"primary_accession": "Q12809"}),
+        ("/api/v1/proteins/resolve/Q12809", "Q12809"),
+    ],
+)
+async def test_create_malformed_resolve_body_raises_service_unavailable_without_posting(
+    path: str, body: object
+):
+    calls: list[httpx.Request] = []
+    good = _create_handler(calls)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == path:
+            calls.append(req)
+            return httpx.Response(200, json=body)
+        return good(req)
+
+    with pytest.raises(ServiceUnavailableError):
+        await _source(handler).create_target(_request(), forwarded_headers=HEADERS)
+    assert all(c.method == "GET" for c in calls), "must not POST after a malformed lookup"
