@@ -11,6 +11,9 @@ import type {
 } from "../types";
 
 const PROTOCOL_CATEGORIES_KEY = ["protocol-categories"];
+// Creating a category can copy forms ("start like"), the defaults seed forms, and a deleted
+// category's forms turn generic: every category write refreshes the forms too.
+const PROTOCOL_FORMS_KEY = ["protocol-forms"];
 
 const categoryHooks = createCrudHooks<
   ProtocolCategory,
@@ -20,6 +23,7 @@ const categoryHooks = createCrudHooks<
   entityName: "Category",
   baseUrl: `${API_V1}/protocol-categories`,
   queryKey: PROTOCOL_CATEGORIES_KEY,
+  parentQueryKeys: [PROTOCOL_FORMS_KEY],
 });
 
 export const useProtocolCategories = categoryHooks.useList;
@@ -38,6 +42,7 @@ export function useSeedDefaultProtocolCategories() {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PROTOCOL_CATEGORIES_KEY });
+      qc.invalidateQueries({ queryKey: PROTOCOL_FORMS_KEY });
       showSuccess("Default categories added");
     },
     onError: (err: Error) => showError(err.message),
