@@ -191,7 +191,9 @@ def test_several_home_organisms_drop_every_home_prefix():
 
 
 def test_admin_override_beats_rule_and_shipped_label():
-    ctx = NamingContext(overrides_by_term={MTB.term_id: "Mtb"}, home_organism_labels=frozenset({MTB_ORG.lower()}))
+    ctx = NamingContext(
+        overrides_by_term={MTB.term_id: "Mtb"}, home_organism_labels=frozenset({MTB_ORG.lower()})
+    )
     assert (
         render_protocol_name(
             "{organism} growth inhibition", NamingInputs(organisms=(MTB,)), ctx
@@ -201,7 +203,10 @@ def test_admin_override_beats_rule_and_shipped_label():
 
 
 def test_target_organism_override_by_label():
-    ctx = NamingContext(overrides_by_label={"homo sapiens": "hs"}, home_organism_labels=frozenset({MTB_ORG.lower()}))
+    ctx = NamingContext(
+        overrides_by_label={"homo sapiens": "hs"},
+        home_organism_labels=frozenset({MTB_ORG.lower()}),
+    )
     r = render_protocol_name(
         "{target} inhibition", NamingInputs(targets=(NamingTarget("MDH2", "Homo sapiens"),)), ctx
     )

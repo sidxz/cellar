@@ -44,7 +44,8 @@ async def test_home_organism_drops_the_prefix(client, make_target):
     assert p["name"] == "M. tuberculosis PptT inhibition"
     preview = (await client.post("/api/v1/protocol-names/preview-change", json={"kind": "home_organism", "terms": [MTB]})).json()
     assert ("M. tuberculosis PptT inhibition", "PptT inhibition") in {(x["before"], x["after"]) for x in preview["changes"]}
-    assert (await client.get(f"/api/v1/protocols/{p['id']}")).json()["name"] == "M. tuberculosis PptT inhibition"  # preview renames nothing
+    still = (await client.get(f"/api/v1/protocols/{p['id']}")).json()["name"]
+    assert still == "M. tuberculosis PptT inhibition"  # preview renames nothing
     assert (await client.put("/api/v1/settings/home-organism", json={"terms": [MTB]})).status_code == 200
     assert (await client.get(f"/api/v1/protocols/{p['id']}")).json()["name"] == "PptT inhibition"
 
@@ -70,41 +71,61 @@ async def test_a_relabel_that_swaps_two_names_applies_cleanly(client, make_targe
     assert (a2["name_flag"], b2["name_flag"]) == (None, None)
 
 
+HUMAN = {
+    "term_id": "http://purl.bioontology.org/ontology/NCBITAXON/9606",
+    "label": "Homo sapiens",
+    "ontology_source": "NCBITAXON",
+}
+PREVIEW = "/api/v1/protocol-names/preview-change"
+HOME = "/api/v1/settings/home-organism"
+
+
+async def _name(client, protocol):
+    return (await client.get(f"/api/v1/protocols/{protocol['id']}")).json()["name"]
+
+
 async def test_several_home_organisms_name_both_without_a_prefix(client, make_target):
     await client.post("/api/v1/protocol-categories/defaults")
-    human = {"term_id": "http://purl.bioontology.org/ontology/NCBITAXON/9606", "label": "Homo sapiens", "ontology_source": "NCBITAXON"}
     inha = await make_target("InhA", organism="Mycobacterium tuberculosis")
     herg = await make_target("hERG", organism="Homo sapiens")
-    body = {"protocol_type": "biochemical", "category": "Enzyme inhibition", "readout_definitions": [{"name": "Signal", "data_type": "numeric"}]}
+    body = {
+        "protocol_type": "biochemical",
+        "category": "Enzyme inhibition",
+        "readout_definitions": [{"name": "Signal", "data_type": "numeric"}],
+    }
     a = (await client.post("/api/v1/protocols", json=body | {"target_ids": [inha]})).json()
     b = (await client.post("/api/v1/protocols", json=body | {"target_ids": [herg]})).json()
     assert (a["name"], b["name"]) == ("M. tuberculosis InhA inhibition", "Human hERG inhibition")
 
-    preview = (await client.post("/api/v1/protocol-names/preview-change", json={"kind": "home_organism", "terms": [MTB, human]})).json()
+    req = {"kind": "home_organism", "terms": [MTB, HUMAN]}
+    preview = (await client.post(PREVIEW, json=req)).json()
     assert {(x["before"], x["after"]) for x in preview["changes"]} == {
         ("M. tuberculosis InhA inhibition", "InhA inhibition"),
         ("Human hERG inhibition", "hERG inhibition"),
     }
-    for p, before in ((a, "M. tuberculosis InhA inhibition"), (b, "Human hERG inhibition")):
-        assert (await client.get(f"/api/v1/protocols/{p['id']}")).json()["name"] == before  # nothing renamed before confirm
+    # nothing is renamed before confirm
+    assert await _name(client, a) == "M. tuberculosis InhA inhibition"
+    assert await _name(client, b) == "Human hERG inhibition"
 
-    r = await client.put("/api/v1/settings/home-organism", json={"terms": [MTB, human]})
+    r = await client.put(HOME, json={"terms": [MTB, HUMAN]})
     assert r.status_code == 200, r.text
-    assert [t["label"] for t in r.json()["protocol_naming"]["home_organisms"]] == ["Mycobacterium tuberculosis", "Homo sapiens"]
-    assert "home_organism" not in r.json()["protocol_naming"]
-    assert (await client.get(f"/api/v1/protocols/{a['id']}")).json()["name"] == "InhA inhibition"
-    assert (await client.get(f"/api/v1/protocols/{b['id']}")).json()["name"] == "hERG inhibition"
+    naming = r.json()["protocol_naming"]
+    assert [t["label"] for t in naming["home_organisms"]] == [MTB["label"], HUMAN["label"]]
+    assert "home_organism" not in naming
+    assert await _name(client, a) == "InhA inhibition"
+    assert await _name(client, b) == "hERG inhibition"
 
 
 async def test_the_single_term_shape_is_still_accepted(client):
-    r = await client.put("/api/v1/settings/home-organism", json={"term": MTB})
+    r = await client.put(HOME, json={"term": MTB})
     assert r.status_code == 200, r.text
-    assert [t["label"] for t in r.json()["protocol_naming"]["home_organisms"]] == ["Mycobacterium tuberculosis"]
-    preview = await client.post("/api/v1/protocol-names/preview-change", json={"kind": "home_organism", "term": MTB})
+    assert [t["label"] for t in r.json()["protocol_naming"]["home_organisms"]] == [MTB["label"]]
+    preview = await client.post(PREVIEW, json={"kind": "home_organism", "term": MTB})
     assert preview.status_code == 200, preview.text
-    cleared = await client.put("/api/v1/settings/home-organism", json={"term": None})
-    assert cleared.status_code == 200 and cleared.json()["protocol_naming"].get("home_organisms") in (None, [])
+    cleared = await client.put(HOME, json={"term": None})
+    assert cleared.status_code == 200
+    assert cleared.json()["protocol_naming"].get("home_organisms") in (None, [])
 
 
 async def test_a_home_organism_request_needs_a_list_or_a_term(client):
-    assert (await client.put("/api/v1/settings/home-organism", json={})).status_code == 422
+    assert (await client.put(HOME, json={})).status_code == 422
