@@ -40,6 +40,7 @@ export const conditionSchema = z.object({
   name: z.string(),
   data_type: z.string(),
   unit: z.string(),
+  pick_list_values: z.array(z.string()),
 });
 
 export const protocolSchema = z.object({
@@ -81,7 +82,7 @@ export function defaultReadout(order: number): ProtocolFormValues["readouts"][nu
 }
 
 export function defaultCondition(): ProtocolFormValues["conditions"][number] {
-  return { name: "", data_type: "text", unit: "" };
+  return { name: "", data_type: "text", unit: "", pick_list_values: [] };
 }
 
 export const DEFAULT_VALUES: ProtocolFormValues = {

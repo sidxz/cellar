@@ -488,6 +488,78 @@ describe("CreateProtocolDialog", () => {
     ]);
   });
 
+  it("sends a pick-list condition's values from a form, with any the chemist adds", async () => {
+    state.preview = complete;
+    state.extraForms = [
+      {
+        id: "ames",
+        workspace_id: "w1",
+        name: "Ames",
+        category_id: "c-sol",
+        is_default: true,
+        assay_format_from_target: false,
+        version: 1,
+        readout_templates: [{ name: "Revertants", data_type: "numeric" }],
+        condition_templates: [
+          { name: "S9", data_type: "pick_list", unit: null, pick_list_values: ["with", "without"] },
+        ],
+        ontology_defaults: [],
+      },
+    ];
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Solubility");
+    openMoreDetails();
+    const box = screen.getByPlaceholderText("Type a value, press Enter");
+    fireEvent.change(box, { target: { value: "Both" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    const payload = await submit();
+    expect(payload.condition_definitions).toEqual([
+      {
+        name: "S9",
+        data_type: "pick_list",
+        unit: null,
+        pick_list_values: ["with", "without", "Both"],
+      },
+    ]);
+  });
+
+  it("keeps a pick-list condition's values when starting from another protocol", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "S9",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["with", "without"],
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    expect(screen.getByText("with")).toBeInTheDocument();
+    const payload = await submit();
+    expect(payload.condition_definitions).toEqual([
+      { name: "S9", data_type: "pick_list", unit: null, pick_list_values: ["with", "without"] },
+    ]);
+  });
+
+  it("will not create a protocol whose pick-list condition has no values", () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        { id: "c1", name: "S9", data_type: "pick_list", unit: null, pick_list_values: null },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    expect(screen.getByText("Add at least one value.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
+  });
+
   it("reopens clean after a create: no name and no clash until a category is picked", async () => {
     state.realPreview = true;
     const named = { ...complete, name: "M. tuberculosis growth inhibition" };

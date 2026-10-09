@@ -69,6 +69,7 @@ export function conditionsFromForm(form: ProtocolForm): ProtocolFormValues["cond
     name: tpl.name,
     data_type: tpl.data_type,
     unit: tpl.unit ?? "",
+    pick_list_values: tpl.pick_list_values ?? [],
   }));
 }
 

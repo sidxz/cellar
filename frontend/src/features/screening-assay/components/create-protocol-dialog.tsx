@@ -7,6 +7,7 @@ import {
   useProtocolForms,
 } from "@/features/workspace-config/hooks/use-protocol-forms";
 import type { OntologyTerm } from "@/shared/components/ontology-search-input";
+import { PickListValuesInput } from "@/shared/components/pick-list-values-input";
 import { SearchableSelect } from "@/shared/components/searchable-select";
 import {
   AlertDialog,
@@ -246,6 +247,7 @@ export function CreateProtocolDialog({
         name: cd.name,
         data_type: cd.data_type,
         unit: cd.unit ?? "",
+        pick_list_values: cd.pick_list_values ?? [],
       })),
     });
     setAppliedReadouts(JSON.stringify(form.getValues("readouts")));
@@ -336,8 +338,14 @@ export function CreateProtocolDialog({
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
   const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
+  const conditionValues = form.watch("conditions");
+  // The backend refuses a pick list with no values.
+  const hasEmptyPickList = conditionValues.some(
+    (cd) => cd.name.trim() && cd.data_type === "pick_list" && cd.pick_list_values.length === 0,
+  );
   const canSubmit =
     validReadouts.length > 0 &&
+    !hasEmptyPickList &&
     !hasReservedReadoutName &&
     isPreviewSavable(preview.data) &&
     !createMutation.isPending;
@@ -395,6 +403,7 @@ export function CreateProtocolDialog({
         name: cd.name.trim(),
         data_type: cd.data_type,
         unit: cd.unit || null,
+        ...(cd.data_type === "pick_list" ? { pick_list_values: cd.pick_list_values } : {}),
       }));
 
     createMutation.mutate(
@@ -645,53 +654,64 @@ export function CreateProtocolDialog({
                   </Button>
                 </div>
                 {conditionFields.map((field, index) => (
-                  <div key={field.id} className="flex items-end gap-2">
-                    <div className="grid flex-1 gap-1">
-                      <Label className="text-xs">Name</Label>
-                      <Input
-                        placeholder="e.g., Incubation time"
-                        {...form.register(`conditions.${index}.name`)}
-                      />
+                  <div key={field.id} className="grid gap-2">
+                    <div className="flex items-end gap-2">
+                      <div className="grid flex-1 gap-1">
+                        <Label className="text-xs">Name</Label>
+                        <Input
+                          placeholder="e.g., Incubation time"
+                          {...form.register(`conditions.${index}.name`)}
+                        />
+                      </div>
+                      <div className="grid w-[130px] gap-1">
+                        <Label className="text-xs">Type</Label>
+                        <Controller
+                          control={form.control}
+                          name={`conditions.${index}.data_type`}
+                          render={({ field: f }) => (
+                            <Select value={f.value} onValueChange={f.onChange}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="numeric">Numeric</SelectItem>
+                                <SelectItem value="pick_list">Pick List</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </div>
+                      <div className="grid w-40 gap-1">
+                        <Label className="text-xs">Unit</Label>
+                        <Controller
+                          control={form.control}
+                          name={`conditions.${index}.unit`}
+                          render={({ field: f }) => (
+                            <UnitPicker value={f.value} onChange={f.onChange} />
+                          )}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove condition"
+                        className="shrink-0"
+                        onClick={() => removeCondition(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </div>
-                    <div className="grid w-[130px] gap-1">
-                      <Label className="text-xs">Type</Label>
+                    {conditionValues[index]?.data_type === "pick_list" && (
                       <Controller
                         control={form.control}
-                        name={`conditions.${index}.data_type`}
+                        name={`conditions.${index}.pick_list_values`}
                         render={({ field: f }) => (
-                          <Select value={f.value} onValueChange={f.onChange}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="text">Text</SelectItem>
-                              <SelectItem value="numeric">Numeric</SelectItem>
-                              <SelectItem value="pick_list">Pick List</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <PickListValuesInput values={f.value} onChange={f.onChange} />
                         )}
                       />
-                    </div>
-                    <div className="grid w-40 gap-1">
-                      <Label className="text-xs">Unit</Label>
-                      <Controller
-                        control={form.control}
-                        name={`conditions.${index}.unit`}
-                        render={({ field: f }) => (
-                          <UnitPicker value={f.value} onChange={f.onChange} />
-                        )}
-                      />
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Remove condition"
-                      className="shrink-0"
-                      onClick={() => removeCondition(index)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    )}
                   </div>
                 ))}
               </div>

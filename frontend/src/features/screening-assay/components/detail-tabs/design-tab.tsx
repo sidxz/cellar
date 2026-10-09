@@ -123,6 +123,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [cdName, setCdName] = useState("");
   const [cdDataType, setCdDataType] = useState("text");
   const [cdUnit, setCdUnit] = useState("");
+  const [cdValues, setCdValues] = useState<string[]>([]);
 
   // --- Control layout form fields ---
   const [clFormat, setClFormat] = useState("96");
@@ -144,6 +145,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setCdName(cd.name);
     setCdDataType(cd.data_type);
     setCdUnit(cd.unit ?? "");
+    setCdValues(cd.pick_list_values ?? []);
     setEditingConditionId(cdId);
   };
 
@@ -152,6 +154,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setCdName("");
     setCdDataType("text");
     setCdUnit("");
+    setCdValues([]);
   };
 
   return (
@@ -691,6 +694,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setCdDataType={setCdDataType}
         cdUnit={cdUnit}
         setCdUnit={setCdUnit}
+        cdValues={cdValues}
+        setCdValues={setCdValues}
         isSaving={addConditionDef.isPending}
         onSave={() => {
           addConditionDef.mutate(
@@ -698,12 +703,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               name: cdName.trim(),
               data_type: cdDataType,
               unit: cdUnit.trim() || undefined,
+              ...(cdDataType === "pick_list" ? { pick_list_values: cdValues } : {}),
             },
             {
               onSuccess: () => {
                 setCdName("");
                 setCdDataType("text");
                 setCdUnit("");
+                setCdValues([]);
                 setAddConditionOpen(false);
               },
             },
@@ -725,6 +732,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setCdDataType={setCdDataType}
         cdUnit={cdUnit}
         setCdUnit={setCdUnit}
+        cdValues={cdValues}
+        setCdValues={setCdValues}
         isSaving={updateConditionDef.isPending}
         onSave={() => {
           if (!editingConditionId) return;
@@ -735,6 +744,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 name: cdName.trim(),
                 data_type: cdDataType,
                 unit: cdUnit.trim() || null,
+                pick_list_values: cdDataType === "pick_list" ? cdValues : null,
               },
             },
             { onSuccess: closeEditCondition },
