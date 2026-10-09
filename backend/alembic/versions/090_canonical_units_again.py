@@ -5,9 +5,10 @@ Revises: 089_protocol_form_category
 Create Date: 2026-10-08
 
 Re-runs 088's rewrite, which is idempotent, so databases already past 088 pick up the rules
-added since (dotted abbreviations and a lone "um" stay as typed; ASCII power-of-ten factors
-become ×10⁻⁶). Then rewrites the units inside saved searches' any-protocol readout criteria:
-saved searches are live queries, and their units must match the stored readouts' spelling.
+added since: dotted abbreviations and a lone "um" stay as typed; a power-of-ten factor with
+an explicit marker (10^-6, 1e-6, x10-6) becomes ×10⁻⁶, while a bare 10-6 stays. Then
+rewrites the units inside saved searches' any-protocol readout criteria: saved searches are
+live queries, and their units must match the stored readouts' spelling.
 """
 
 from __future__ import annotations

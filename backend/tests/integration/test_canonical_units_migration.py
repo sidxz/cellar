@@ -140,7 +140,7 @@ async def test_saved_search_criterion_units_are_rewritten(session_factory, works
             {
                 "type": "activity",
                 "protocol_id": None,
-                "where": [readout("Papp", "10-6 cm/s"), readout("Signal", "U/mL")],
+                "where": [readout("Papp", "x10-6 cm/s"), readout("Signal", "U/mL")],
             },
             {"type": "text", "field": "name", "operator": "contains", "value": "uM"},
         ],

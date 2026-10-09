@@ -41,12 +41,15 @@ MICRO = "µ"  # micro sign
         ("  µM  ", f"{MICRO}M"),
         ("ug.mL-1", f"{MICRO}g·mL-1"),
         ("ng.h.mL-1", "ng·h·mL-1"),
-        ("10-6 cm/s", "×10⁻⁶ cm/s"),
+        # A power of ten is rewritten only with an explicit marker: ^, e, or a leading ×.
         ("10^-6 cm/s", "×10⁻⁶ cm/s"),
         ("x10-6 cm/s", "×10⁻⁶ cm/s"),
+        ("×10-6 cm/s", "×10⁻⁶ cm/s"),
+        ("*10^-6 cm/s", "×10⁻⁶ cm/s"),
         ("X 10^-6 cm/s", "×10⁻⁶ cm/s"),
         ("1e-6 cm/s", "×10⁻⁶ cm/s"),
         ("1E-6cm/sec", "×10⁻⁶ cm/s"),
+        ("10^6 cells/mL", "×10⁶ cells/mL"),
     ],
 )
 def test_spelling_variants_collapse(raw, expected):
@@ -70,6 +73,8 @@ def test_spelling_variants_collapse(raw, expected):
         "Da",
         "1.5 h",
         "100 mL",
+        "10-6 cm/s",  # a bare hyphen could be a range: no marker, no rewrite
+        "10-15 min",
         "a.u.",  # dotted abbreviations are not products
         "A.U.",
         "O.D.",

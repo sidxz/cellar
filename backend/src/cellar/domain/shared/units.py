@@ -41,9 +41,16 @@ _SEPARATOR = re.compile(
     )""",
     re.VERBOSE,
 )
-# An ASCII power-of-ten factor before a unit ('10-6', '10^-6', 'x10-6', '1e-6') is written ×10⁻⁶.
+# A power-of-ten factor before a unit is written ×10ⁿ, but only with an explicit marker: '^'
+# ('10^-6'), scientific 'e' ('1e-6') or a leading multiplication sign ('x10-6'). A bare
+# '10-6' could be a range ('10-15 min'), so it stays as typed.
 _POWER_OF_TEN = re.compile(
-    r"^(?:[x×*]\s*)?(?:10\s*\^\s*|10(?=-)|1e)([-+]?\d+)\s*(?=[^\W\d_])", re.IGNORECASE
+    r"""^(?:
+        [x×*]\s*10\s*\^?\s*(?=[-+])  # x10-6, ×10^-6
+        | [x×*]?\s*10\s*\^\s*        # 10^-6, 10^6, x10^6
+        | 1e                          # 1e-6
+    )([-+]?\d+)\s*(?=[^\W\d_])""",
+    re.IGNORECASE | re.VERBOSE,
 )
 _SUPERSCRIPT = str.maketrans("-0123456789", "⁻⁰¹²³⁴⁵⁶⁷⁸⁹", "+")
 _MOLAR = re.compile(r"(?<![A-Za-z])([pnµm]?)mol/L(?![A-Za-z])")
