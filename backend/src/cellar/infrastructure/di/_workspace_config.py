@@ -195,12 +195,14 @@ def register_workspace_config(container: Container) -> None:
     container.define(CreateVocabulary, _vocab_cmd(CreateVocabulary))
 
     # --- Protocol categories ---
-    def _category_cmd(uc_cls: type):
-        def _f(c: Container):
-            uow = AsyncUnitOfWork(c[async_sessionmaker])
-            return uc_cls(uow, SQLAlchemyProtocolCategoryRepository(uow), c[EventDispatcher])
-
-        return _f
+    def _create_category(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateProtocolCategory(
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            c[EventDispatcher],
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+        )
 
     def _list_categories(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -216,7 +218,7 @@ def register_workspace_config(container: Container) -> None:
         )
 
     container.define(ListProtocolCategories, _list_categories)
-    container.define(CreateProtocolCategory, _category_cmd(CreateProtocolCategory))
+    container.define(CreateProtocolCategory, _create_category)
 
     def _relabeling(uc_cls: type, repo_cls: type):
         """Admin edits that relabel protocols: their repo plus protocols + the name service."""

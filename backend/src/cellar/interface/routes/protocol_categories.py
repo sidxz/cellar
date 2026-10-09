@@ -51,6 +51,7 @@ class ProtocolCategoryResponse(BaseModel):
 class CreateProtocolCategoryBody(BaseModel):
     label: str
     name_pattern: str | None = None
+    start_like_category_id: uuid.UUID | None = None
     model_config = {"extra": "forbid"}
 
 
@@ -74,7 +75,10 @@ async def create_protocol_category(
     body: CreateProtocolCategoryBody, auth: AuthDep, use_case: CreateProtocolCategoryDep
 ) -> ProtocolCategoryResponse:
     cmd = CreateProtocolCategoryCommand(
-        workspace_id=auth.workspace_id, label=body.label, name_pattern=body.name_pattern
+        workspace_id=auth.workspace_id,
+        label=body.label,
+        name_pattern=body.name_pattern,
+        start_like_category_id=body.start_like_category_id,
     )
     return ProtocolCategoryResponse.from_domain(result_to_response(await use_case(cmd, auth=auth)))
 

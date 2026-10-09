@@ -29,6 +29,7 @@ from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.protocol_naming import DEFAULT_CATEGORY_PATTERNS
 from cellar.domain.workspace_config.protocol_category import ProtocolCategory
+from cellar.domain.workspace_config.protocol_form import ProtocolForm
 from cellar.domain.workspace_config.repository import (
     ProtocolCategoryRepository,
     ProtocolFormRepository,
@@ -45,6 +46,7 @@ class CreateProtocolCategoryCommand(Command):
     workspace_id: uuid.UUID
     label: str
     name_pattern: str | None = None
+    start_like_category_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -81,15 +83,20 @@ class ListProtocolCategories:
 
 
 class CreateProtocolCategory:
+    """With ``start_like_category_id``, the new category gets copies of that category's forms."""
+
     def __init__(
         self,
         uow: UnitOfWork,
         repo: ProtocolCategoryRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        form_repo: ProtocolFormRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._forms = form_repo
 
     async def __call__(
         self, input: CreateProtocolCategoryCommand, auth: AuthContext | None = None
@@ -99,10 +106,37 @@ class CreateProtocolCategory:
         async with self._uow:
             if await self._repo.find_by_label(input.workspace_id, input.label):
                 return Failure(ConflictError(f"Category '{input.label.strip()}' already exists"))
+            source = None
+            if input.start_like_category_id is not None:
+                source = await self._repo.find_by_id_in_workspace(
+                    input.workspace_id, input.start_like_category_id
+                )
+                if source is None:
+                    return Failure(
+                        NotFoundError("ProtocolCategory", str(input.start_like_category_id))
+                    )
             category = ProtocolCategory.create(
                 workspace_id=input.workspace_id, label=input.label, name_pattern=input.name_pattern
             )
             await self._repo.save(category)
+            if source is not None and self._forms is not None:
+                for f in await self._forms.find_by_workspace(input.workspace_id):
+                    if f.category_id != source.id:
+                        continue
+                    await self._forms.save(
+                        ProtocolForm.create(
+                            workspace_id=input.workspace_id,
+                            name=f.name,
+                            description=f.description,
+                            protocol_type=f.protocol_type,
+                            category_id=category.id,
+                            assay_format_from_target=f.assay_format_from_target,
+                            is_default=f.is_default,
+                            readout_templates=f.readout_templates,
+                            condition_templates=f.condition_templates or None,
+                            ontology_defaults=f.ontology_defaults or None,
+                        )
+                    )
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
         return Success(category)

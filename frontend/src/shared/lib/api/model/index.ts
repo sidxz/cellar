@@ -451,6 +451,7 @@ export * from './createProjectBody';
 export * from './createProjectBodyDescription';
 export * from './createProtocolCategoryBody';
 export * from './createProtocolCategoryBodyNamePattern';
+export * from './createProtocolCategoryBodyStartLikeCategoryId';
 export * from './createProtocolFormBody';
 export * from './createProtocolFormBodyCategoryId';
 export * from './createProtocolFormBodyConditionTemplates';
