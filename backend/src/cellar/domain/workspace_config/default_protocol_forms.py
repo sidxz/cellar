@@ -60,6 +60,7 @@ _PHYSCHEM = ("BAO_0000100", "small-molecule physicochemical format")
 _PLASMA = ("BAO_0020003", "plasma format")
 
 _INH, _ACT, _CTRL = "percent_inhibition", "percent_activation", "percent_control"
+_IN_VIVO_DOSING = (_cond("Dose", unit="mg/kg"), _cond("Route", "text"))
 
 
 def _dr(category, name, ptype, fmt, curve, norm, **kw) -> DefaultForm:
@@ -271,7 +272,7 @@ DEFAULT_PROTOCOL_FORMS: tuple[DefaultForm, ...] = (
         "Permeability",
         "Permeability",
         "admet",
-        (_value("Papp", "10-6 cm/s"),),
+        (_value("Papp", "×10⁻⁶ cm/s"),),
         assay_format=_CELL,
         is_default=True,
     ),
@@ -306,18 +307,26 @@ DEFAULT_PROTOCOL_FORMS: tuple[DefaultForm, ...] = (
         "Pharmacokinetics",
         "in_vivo",
         (_value("Cmax", "ng/mL"), _value("AUC", "ng·h/mL"), _value("t1/2", "h")),
-        (_cond("Dose", unit="mg/kg"), _cond("Route", "text")),
+        _IN_VIVO_DOSING,
         assay_format=_ORGANISM,
         is_default=True,
     ),
-    DefaultForm(
-        "In vivo efficacy",
-        "In vivo efficacy",
-        "in_vivo",
-        (_value("Efficacy"),),
-        (_cond("Dose", unit="mg/kg"), _cond("Route", "text")),
-        assay_format=_ORGANISM,
-        is_default=True,
+    # Efficacy is read three common ways (bacterial burden, parasitemia, tumour growth); each is
+    # its own form and none is preselected.
+    *(
+        DefaultForm(
+            "In vivo efficacy",
+            name,
+            "in_vivo",
+            (readout,),
+            _IN_VIVO_DOSING,
+            assay_format=_ORGANISM,
+        )
+        for name, readout in (
+            ("log₁₀ CFU reduction", _value("log₁₀ CFU reduction")),
+            ("% parasitemia reduction", _value("% parasitemia reduction", "%")),
+            ("% tumour growth inhibition", _value("TGI", "%")),
+        )
     ),
     DefaultForm(
         "Prediction",
