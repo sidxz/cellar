@@ -318,8 +318,10 @@ export function CreateProtocolDialog({
       : null,
   );
   const siblings = preview.data?.siblings ?? [];
+  // The pattern places it: then it is part of every name in the category, not a tie-breaker.
+  const discriminatorInName = needs.has("discriminator");
   const showDiscriminatorField =
-    needs.has("discriminator") ||
+    discriminatorInName ||
     siblings.length > 0 ||
     showDiscriminator ||
     discriminatorValue.trim() !== "";
@@ -481,7 +483,7 @@ export function CreateProtocolDialog({
           {showDiscriminatorField ? (
             <div className="grid gap-2">
               <Label htmlFor="protocol-discriminator">
-                Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+                Discriminator{discriminatorInName ? "" : " (optional)"}
               </Label>
               <Controller
                 control={form.control}
@@ -491,12 +493,14 @@ export function CreateProtocolDialog({
                     value={field.value}
                     onChange={field.onChange}
                     base={preview.data?.base ?? null}
+                    placeholder={discriminatorInName ? "Part of this category's name" : undefined}
                   />
                 )}
               />
               <p className="text-xs text-muted-foreground">
-                Only needed when another protocol would get the same name. A method or a fixed
-                condition, never a stage, library or date.
+                {discriminatorInName
+                  ? "Part of this category's name, so every protocol in it needs one."
+                  : "Only needed when another protocol would get the same name. A method or a fixed condition, never a stage, library or date."}
               </p>
             </div>
           ) : (

@@ -9,10 +9,16 @@ interface DiscriminatorInputProps {
   onChange: (value: string) => void;
   /** The generated base name; suggestions already used on it come first. */
   base: string | null;
+  placeholder?: string;
 }
 
 /** The one free part of a protocol name: a method or a fixed defining condition. */
-export function DiscriminatorInput({ value, onChange, base }: DiscriminatorInputProps) {
+export function DiscriminatorInput({
+  value,
+  onChange,
+  base,
+  placeholder = "e.g. resazurin, hypoxia (only when needed)",
+}: DiscriminatorInputProps) {
   const [focused, setFocused] = useState(false);
   const suggestions = useDiscriminatorSuggestions(base, value)
     .filter((s) => s.toLowerCase() !== value.toLowerCase())
@@ -33,7 +39,7 @@ export function DiscriminatorInput({ value, onChange, base }: DiscriminatorInput
         if (!o) setFocused(false);
       }}
       onInputFocus={() => setFocused(true)}
-      placeholder="e.g. resazurin, hypoxia (only when needed)"
+      placeholder={placeholder}
       inputClassName="h-9"
     />
   );

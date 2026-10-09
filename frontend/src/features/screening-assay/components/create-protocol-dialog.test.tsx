@@ -332,6 +332,23 @@ describe("CreateProtocolDialog", () => {
     expect(labels()).toContain("Discriminator (optional)");
   });
 
+  it("explains a discriminator the pattern requires as part of the category's name", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Detection interference");
+    expect(
+      screen.getByText("Part of this category's name, so every protocol in it needs one."),
+    ).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Part of this category's name")).toBeInTheDocument();
+    expect(screen.queryByText(/Only needed when another protocol/)).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/resazurin/)).not.toBeInTheDocument();
+
+    // An optional or trailing discriminator keeps the usual guidance.
+    pickCategory("Solubility");
+    fireEvent.click(screen.getByRole("button", { name: /method or condition/ }));
+    expect(screen.getByText(/Only needed when another protocol/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/resazurin/)).toBeInTheDocument();
+  });
+
   it("starts from the category's default form", () => {
     render(<CreateProtocolDialog open onOpenChange={() => {}} />);
     expect(screen.queryByText("Starts from")).not.toBeInTheDocument();
