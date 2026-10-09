@@ -10,13 +10,18 @@ import { useState } from "react";
 export function NicknameInput({
   value,
   onChange,
+  name,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
+  /** The protocol's generated name: a nickname equal to it is refused. */
+  name?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const isName = !!name && draft.trim().toLowerCase() === name.trim().toLowerCase();
   const add = () => {
     const label = draft.trim();
+    if (isName) return;
     setDraft("");
     if (!label || value.some((n) => n.toLowerCase() === label.toLowerCase())) return;
     onChange([...value, label]);
@@ -53,7 +58,14 @@ export function NicknameInput({
         onBlur={add}
         placeholder="e.g. MABA, HLM CLint (Enter to add)"
         className="max-w-sm"
+        aria-invalid={isName}
+        aria-describedby={isName ? "protocol-nicknames-hint" : undefined}
       />
+      {isName && (
+        <p id="protocol-nicknames-hint" className="text-xs text-destructive">
+          That is already the protocol's name; a nickname must differ.
+        </p>
+      )}
     </div>
   );
 }

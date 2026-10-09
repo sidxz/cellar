@@ -549,6 +549,23 @@ describe("CreateProtocolDialog", () => {
     expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("");
   });
 
+  it("refuses a nickname that is the protocol's own name", async () => {
+    state.preview = { ...complete, name: "M. abscessus growth inhibition" };
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    const nickname = screen.getByLabelText("Also known as");
+    fireEvent.change(nickname, { target: { value: " m. abscessus GROWTH inhibition " } });
+    fireEvent.keyDown(nickname, { key: "Enter" });
+    expect(screen.getByText(/already the protocol's name/)).toBeInTheDocument();
+    expect(nickname).toHaveAttribute("aria-invalid", "true");
+    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+
+    fireEvent.change(nickname, { target: { value: "Mabs MIC" } });
+    expect(screen.queryByText(/already the protocol's name/)).not.toBeInTheDocument();
+    fireEvent.keyDown(nickname, { key: "Enter" });
+    expect((await submit()).nicknames).toEqual(["Mabs MIC"]);
+  });
+
   it("creates with the form, nicknames and the siblings' discriminators in one save", async () => {
     const sibling = {
       protocol_id: "s1",

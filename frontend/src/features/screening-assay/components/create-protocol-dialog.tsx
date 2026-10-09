@@ -555,7 +555,7 @@ export function CreateProtocolDialog({
             ))}
           </div>
 
-          <NicknameInput value={nicknames} onChange={setNicknames} />
+          <NicknameInput value={nicknames} onChange={setNicknames} name={preview.data?.name} />
 
           <Collapsible>
             <CollapsibleTrigger asChild>
