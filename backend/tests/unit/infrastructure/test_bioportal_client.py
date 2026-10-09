@@ -130,3 +130,17 @@ async def test_has_api_key_follows_the_search_resolution_rule(monkeypatch):
     assert await _client(handler, key="k").has_api_key(WS) is True
     monkeypatch.setenv("BIOPORTAL_API_KEY", "from-env")
     assert await _client(handler, key=None).has_api_key(WS) is True
+
+
+@pytest.mark.asyncio
+async def test_search_exact_only_returns_just_the_exact_group():
+    collection = [
+        _hit("http://x/1", "HepG2-AhR-luc"),
+        _hit("http://x/4", "Hep G2 cell", ["HepG2"]),
+        _hit("http://x/2", "ARE-bla HepG2"),
+    ]
+    client = _client(lambda r: httpx.Response(200, json={"collection": collection}))
+    terms = await client.search("HepG2", ["CLO"], workspace_id=WS, exact_only=True)
+    assert [t.label for t in terms] == ["Hep G2 cell"]
+    none = await client.search("kinase", ["CLO"], workspace_id=WS, exact_only=True)
+    assert none == []

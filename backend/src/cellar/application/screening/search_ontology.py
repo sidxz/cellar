@@ -25,6 +25,8 @@ class SearchOntologyQuery(Query):
     ontology_sources: list[str] = field(default_factory=list)
     subtree_root_id: str | None = None
     page_size: int = 10
+    # Only terms whose label or synonym equals the query (a common organism name wins outright).
+    exact_only: bool = False
 
 
 class SearchOntology:
@@ -37,6 +39,8 @@ class SearchOntology:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
         local = self._common_organism_hits(input)
+        if input.exact_only and local:
+            return Success(local)
         try:
             results = await self._search_service.search(
                 query=input.query,
@@ -44,6 +48,7 @@ class SearchOntology:
                 page_size=input.page_size,
                 subtree_root_id=input.subtree_root_id,
                 workspace_id=input.workspace_id,
+                exact_only=input.exact_only,
             )
         except DomainError as exc:
             if not local:

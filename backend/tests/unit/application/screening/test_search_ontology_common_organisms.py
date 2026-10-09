@@ -82,3 +82,39 @@ async def test_subtree_scoped_search_skips_local_hits():
         auth=_auth(),
     )
     assert result.unwrap() == []
+
+
+async def _exact(fake, q, sources):
+    return await SearchOntology(fake)(
+        SearchOntologyQuery(workspace_id=WS, query=q, ontology_sources=sources, exact_only=True),
+        auth=_auth(),
+    )
+
+
+class _ExactFake(_FakeSearch):
+    """Records the exact_only flag; returns `results` as the BioPortal exact group."""
+
+    async def search(self, **kwargs):
+        self.exact_only = kwargs.get("exact_only")
+        return await super().search(**kwargs)
+
+
+async def test_exact_only_returns_local_hit_without_asking_bioportal():
+    fake = _ExactFake([OntologyTerm(term_id="http://x/1", label="mouse", ontology_source="X")])
+    terms = (await _exact(fake, "mouse", ["NCBITAXON"])).unwrap()
+    assert [t.term_id for t in terms] == [MOUSE_URI]
+    assert fake.calls == 0
+
+
+async def test_exact_only_without_local_hit_returns_bioportal_exact_group():
+    hep = OntologyTerm(term_id="http://x/hep", label="Hep G2 cell", ontology_source="CLO")
+    fake = _ExactFake([hep])
+    terms = (await _exact(fake, "HepG2", ["CLO"])).unwrap()
+    assert terms == [hep]
+    assert fake.exact_only is True
+
+
+async def test_default_search_asks_for_the_full_list():
+    fake = _ExactFake()
+    await _search(fake, "kinase", ["CLO"])
+    assert fake.exact_only is False

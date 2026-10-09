@@ -41,6 +41,7 @@ import { customInstance } from '.././custom-instance';
 
 
 /**
+ * Matching terms; with `exact_only`, just a common organism name's term or exact matches.
  * @summary Search Ontology
  */
 export const searchOntologyApiV1OntologySearchGet = (

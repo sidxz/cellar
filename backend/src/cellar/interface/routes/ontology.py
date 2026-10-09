@@ -136,13 +136,16 @@ async def search_ontology(
     q: str = Query(..., min_length=1),
     ontologies: str = Query(default=""),
     subtree_root_id: str | None = Query(default=None),
+    exact_only: bool = Query(default=False),
 ) -> list[OntologyTermResponse]:
+    """Matching terms; with `exact_only`, just a common organism name's term or exact matches."""
     sources = [s.strip() for s in ontologies.split(",") if s.strip()] if ontologies else []
     query = SearchOntologyQuery(
         workspace_id=auth.workspace_id,
         query=q,
         ontology_sources=sources,
         subtree_root_id=subtree_root_id,
+        exact_only=exact_only,
     )
     terms = result_to_response(await use_case(query, auth=auth))
     return [OntologyTermResponse.from_domain(t) for t in terms]

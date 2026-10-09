@@ -88,8 +88,9 @@ class BioPortalClient:
         subtree_root_id: str | None = None,
         *,
         workspace_id: uuid.UUID | None = None,
+        exact_only: bool = False,
     ) -> list[OntologyTerm]:
-        """Search BioPortal and map results to OntologyTerm VOs."""
+        """Search BioPortal and map results to OntologyTerm VOs; only exact matches when asked."""
         params: dict[str, Any] = {
             "q": query,
             "pagesize": page_size,
@@ -137,7 +138,7 @@ class BioPortalClient:
                 is_exact = any(_norm(n) == wanted for n in names if isinstance(n, str))
                 (exact if is_exact else results).append(term)
 
-        return exact + results
+        return exact if exact_only else exact + results
 
     async def list_descendants(
         self,
