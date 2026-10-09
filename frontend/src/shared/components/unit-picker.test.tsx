@@ -23,6 +23,16 @@ describe("unitMatches", () => {
     expect(unitMatches("µg/mL", "ug/ml")).toBe(true);
     expect(unitMatches("mg/kg", "uM")).toBe(false);
   });
+
+  it.each([
+    ["RLU", "rlu"],
+    ["AU", "au"],
+    ["CFU/mL", "cfu"],
+    ["log10 CFU", "cfu"],
+    ["µM", "UM"],
+  ])("finds %s for a query in another case (%s)", (unit, query) => {
+    expect(unitMatches(unit, query)).toBe(true);
+  });
 });
 
 describe("UnitPicker", () => {

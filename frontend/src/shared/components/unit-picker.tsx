@@ -4,7 +4,8 @@ import { SearchCombobox } from "@/shared/components/search-combobox";
 import { type UnitSuggestion, useUnits } from "@/shared/hooks/use-units";
 import { useState } from "react";
 
-const fold = (s: string) => s.replace(/[uμ]/g, "µ").toLowerCase();
+// Lowercase first, so a capital U (RLU, AU, CFU) folds to µ like the query's u does.
+const fold = (s: string) => s.toLowerCase().replace(/[uμ]/g, "µ");
 
 /** Spelling-tolerant match: "uM" finds µM, "ug/ml" finds µg/mL. The backend stores the canonical spelling. */
 export function unitMatches(unit: string, query: string): boolean {
@@ -30,7 +31,8 @@ export function UnitPicker({ value, onChange, placeholder = "Unit" }: Props) {
       items={items}
       getItemKey={(u) => u.unit}
       renderItem={(u) => (
-        <span className="flex w-full justify-between">
+        // The popover is as wide as its rows, so the gap is what keeps "µM" and its group apart.
+        <span className="flex w-full justify-between gap-4">
           <span>{u.unit}</span>
           <span className="text-xs text-muted-foreground">{u.group}</span>
         </span>
