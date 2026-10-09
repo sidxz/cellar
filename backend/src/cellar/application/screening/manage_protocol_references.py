@@ -54,7 +54,10 @@ class _ReferenceUseCase:
             )
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
-            self._apply(protocol, input)
+            try:
+                self._apply(protocol, input)
+            except DomainError as exc:
+                return Failure(exc)
             await self._repo.save(protocol)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)

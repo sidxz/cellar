@@ -262,24 +262,27 @@ class CreateProtocol:
                 protocol_repo=self._repo,
                 workspace_id=input.workspace_id,
             )
-            protocol = Protocol.create(
-                workspace_id=input.workspace_id,
-                name=derivation.rendered.name,
-                name_base=derivation.rendered.base,
-                name_flag=checked.unwrap(),
-                discriminator=discriminator,
-                code=code,
-                description=input.description,
-                protocol_type=ProtocolType(input.protocol_type),
-                category=input.category,
-                created_by=auth.user_id,
-                dose_unit=ConcentrationUnit(input.dose_unit),
-                pos_control_signal=PosControlSignal(input.pos_control_signal),
-                readout_definitions=readout_defs,
-                condition_definitions=condition_defs or None,
-                ontology_annotations=ontology_annotations or None,
-                references=references,
-            )
+            try:
+                protocol = Protocol.create(
+                    workspace_id=input.workspace_id,
+                    name=derivation.rendered.name,
+                    name_base=derivation.rendered.base,
+                    name_flag=checked.unwrap(),
+                    discriminator=discriminator,
+                    code=code,
+                    description=input.description,
+                    protocol_type=ProtocolType(input.protocol_type),
+                    category=input.category,
+                    created_by=auth.user_id,
+                    dose_unit=ConcentrationUnit(input.dose_unit),
+                    pos_control_signal=PosControlSignal(input.pos_control_signal),
+                    readout_definitions=readout_defs,
+                    condition_definitions=condition_defs or None,
+                    ontology_annotations=ontology_annotations or None,
+                    references=references,
+                )
+            except DomainError as exc:  # e.g. two readouts or two conditions with one name
+                return Failure(exc)
             for nickname in input.nicknames:
                 protocol.add_nickname(nickname)
             await self._repo.save(protocol)

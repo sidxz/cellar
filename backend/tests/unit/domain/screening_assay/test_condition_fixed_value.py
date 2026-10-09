@@ -57,7 +57,28 @@ class TestValidation:
         assert _cd(fixed_value=" 72 ", unit="h").fixed_value == "72"
         assert _cd(fixed_value="1e-3").fixed_value == "1e-3"
 
-    @pytest.mark.parametrize("raw", ["72h", "abc", "nan", "inf"])
+    # Same vectors as frontend lib/conditions.test.ts: one strict decimal rule on both sides.
+    @pytest.mark.parametrize("raw", ["72", "-0.5", "+2", ".5", "1.", "1e-3", "1E6"])
+    def test_numeric_takes_plain_decimals(self, raw: str) -> None:
+        assert _cd(fixed_value=raw).fixed_value == raw
+
+    @pytest.mark.parametrize(
+        "raw",
+        [
+            "72h",
+            "abc",
+            "nan",
+            "inf",
+            "Infinity",
+            "0x10",
+            "1_000",
+            "1,000",
+            "1e999",
+            "1e",
+            "-",
+            ".",
+        ],
+    )
     def test_numeric_must_be_a_number(self, raw: str) -> None:
         with pytest.raises(ValidationError, match="number"):
             _cd(fixed_value=raw)

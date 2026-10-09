@@ -907,7 +907,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         ]
 
         condition_defs = [
-            ConditionDefinition(
+            ConditionDefinition.from_stored(
                 id=cd.id,
                 protocol_id=cd.protocol_id,
                 name=cd.name,
@@ -972,7 +972,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 )
                 for a in model.aliases
             ],
-            references=[ProtocolReference.from_dict(r) for r in model.references or []],
+            references=[ProtocolReference.from_stored(r) for r in model.references or []],
             discriminator=model.discriminator,
             name_base=model.name_base,
             name_flag=NameFlag(model.name_flag) if model.name_flag else None,

@@ -7,6 +7,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
@@ -173,8 +174,13 @@ class ProtocolReference:
         return {"kind": self.kind.value, "value": self.value}
 
     @classmethod
-    def from_dict(cls, raw: dict[str, str]) -> ProtocolReference:
-        return cls(kind=ReferenceKind(raw["kind"]), value=raw["value"])
+    def from_stored(cls, raw: dict[str, str]) -> ProtocolReference:
+        """Hydrate a stored reference as is: it was validated when it was written, and a later,
+        stricter rule must not make an existing protocol unreadable."""
+        ref = object.__new__(cls)
+        object.__setattr__(ref, "kind", ReferenceKind(raw["kind"]))
+        object.__setattr__(ref, "value", raw["value"])
+        return ref
 
 
 @dataclass(frozen=True)
@@ -369,12 +375,24 @@ class ConditionDefinition(Entity):
         self.pick_list_values = pick_list_values
         self.fixed_value = _clean_fixed_value(fixed_value, data_type, pick_list_values, self.name)
 
+    @classmethod
+    def from_stored(cls, *, fixed_value: str | None, **fields: Any) -> ConditionDefinition:
+        """Hydrate a stored definition: its fixed value was validated when it was written, and a
+        later, stricter rule must not make an existing protocol unreadable."""
+        definition = cls(**fields)
+        definition.fixed_value = fixed_value or None
+        return definition
+
     @property
     def fixed_run_value(self) -> str | None:
         """The fixed value as a run stores it: the unit after a space (``72 h``)."""
         if self.fixed_value is None:
             return None
         return f"{self.fixed_value} {self.unit}" if self.unit else self.fixed_value
+
+
+# A plain decimal, as frontend lib/conditions.ts accepts it (no 0x10, 1_000, inf or nan).
+_DECIMAL_RE = re.compile(r"[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?")
 
 
 def _clean_fixed_value(
@@ -388,11 +406,7 @@ def _clean_fixed_value(
     if not value:
         return None
     if data_type == ConditionDataType.NUMERIC:
-        try:
-            finite = math.isfinite(float(value))
-        except ValueError:
-            finite = False
-        if not finite:
+        if not (_DECIMAL_RE.fullmatch(value) and math.isfinite(float(value))):
             raise ValidationError(f"Fixed value of '{name}' must be a number, got '{value}'")
     elif data_type == ConditionDataType.PICK_LIST and value not in (pick_list_values or []):
         raise ValidationError(f"Fixed value of '{name}' must be one of its pick-list values")
@@ -595,6 +609,16 @@ class Protocol(AggregateRoot):
         references = list(references or [])
         if len({r.key for r in references}) != len(references):
             raise ConflictError("The same reference is listed twice")
+        # Same rule as add_readout_definition / add_condition_definition (names are trimmed).
+        for kind, defs in (
+            ("ReadoutDefinition", readout_definitions),
+            ("ConditionDefinition", condition_definitions or []),
+        ):
+            seen: set[str] = set()
+            for d in defs:
+                if d.name in seen:
+                    raise ConflictError(f"{kind} with name '{d.name}' already exists")
+                seen.add(d.name)
         if len(name.strip()) > MAX_NAME_LENGTH:
             raise ValidationError(f"Protocol name must be at most {MAX_NAME_LENGTH} characters")
 

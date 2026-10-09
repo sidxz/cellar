@@ -194,6 +194,24 @@ class TestProtocolCreation:
         protocol = _make_protocol(workspace_id, user_id, name="  Kinase Assay  ")
         assert protocol.name == "Kinase Assay"
 
+    def test_create_refuses_two_readouts_with_one_name(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        # Names are trimmed, as add_readout_definition compares them.
+        readouts = [_make_readout(name="% inhibition"), _make_readout(name=" % inhibition ")]
+        with pytest.raises(ConflictError, match="'% inhibition' already exists"):
+            _make_protocol(workspace_id, user_id, readout_definitions=readouts)
+
+    def test_create_refuses_two_conditions_with_one_name(
+        self, workspace_id: uuid.UUID, user_id: uuid.UUID
+    ) -> None:
+        conditions = [
+            _make_condition(name="Test concentration", data_type=ConditionDataType.NUMERIC),
+            _make_condition(name="Test concentration ", data_type=ConditionDataType.NUMERIC),
+        ]
+        with pytest.raises(ConflictError, match="'Test concentration' already exists"):
+            _make_protocol(workspace_id, user_id, condition_definitions=conditions)
+
 
 # ---------------------------------------------------------------------------
 # TestReadoutDefinition

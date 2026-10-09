@@ -76,8 +76,13 @@ def test_invalid_references_rejected(kind, raw):
 
 def test_round_trips_through_a_dict():
     ref = ProtocolReference(kind="doi", value="doi:10.1021/jm901137j")
-    assert ProtocolReference.from_dict(ref.to_dict()) == ref
+    assert ProtocolReference.from_stored(ref.to_dict()) == ref
     assert ref.to_dict() == {"kind": "doi", "value": "10.1021/jm901137j"}
+
+
+def test_a_stored_value_loads_even_if_input_rules_now_refuse_it():
+    ref = ProtocolReference.from_stored({"kind": "doi", "value": "doi-under-old-rules"})
+    assert (ref.kind, ref.key) == (ReferenceKind.DOI, "doi:doi-under-old-rules")
 
 
 def test_create_takes_references_and_refuses_duplicates():
