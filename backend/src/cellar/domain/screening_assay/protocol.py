@@ -43,6 +43,7 @@ from cellar.domain.shared.protocol_naming import (
     normalize_name_text,
     validate_name_text,
 )
+from cellar.domain.shared.units import canonical_unit
 
 # Sentinel used by partial-update mutators to distinguish "leave unchanged"
 # (default) from "explicitly set to None".
@@ -255,7 +256,7 @@ class ReadoutDefinition(Entity):
         # interpretation depends on it.
         self.description = description.strip() if description else None
         self.data_type = data_type
-        self.unit = unit
+        self.unit = canonical_unit(unit)
         self.aggregation = aggregation
         self.precision = precision
         self.normalizations = resolved_normalizations
@@ -305,7 +306,7 @@ class ConditionDefinition(Entity):
         self.protocol_id = protocol_id
         self.name = name.strip()
         self.data_type = data_type
-        self.unit = unit
+        self.unit = canonical_unit(unit)
         self.pick_list_values = pick_list_values
 
 

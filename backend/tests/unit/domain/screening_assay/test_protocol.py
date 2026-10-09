@@ -303,7 +303,7 @@ class TestConditionDefinition:
             data_type=ConditionDataType.NUMERIC,
             unit="hours",
         )
-        assert cd.unit == "hours"
+        assert cd.unit == "h"
 
     def test_name_is_stripped(self) -> None:
         cd = ConditionDefinition(

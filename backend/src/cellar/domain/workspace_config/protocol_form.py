@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ValidationError
+from cellar.domain.shared.units import canonical_unit
 from cellar.domain.workspace_config.events import (
     ProtocolFormCreated,
     ProtocolFormUpdated,
@@ -47,6 +48,9 @@ class ProtocolFormReadout:
         None  # stored as dict, converted to DoseResponseConfig at protocol creation
     )
 
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "unit", canonical_unit(self.unit))
+
 
 @dataclass(frozen=True)
 class ProtocolFormCondition:
@@ -56,6 +60,9 @@ class ProtocolFormCondition:
     data_type: str  # "text", "numeric", "pick_list"
     unit: str | None = None
     pick_list_values: list[str] | None = None
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "unit", canonical_unit(self.unit))
 
 
 @dataclass(frozen=True)
