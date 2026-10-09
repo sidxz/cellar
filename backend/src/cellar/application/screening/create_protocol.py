@@ -17,6 +17,7 @@ from cellar.application.auth import (
 from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
+from cellar.application.screening.form_assay_format import assay_format_from_form
 from cellar.application.screening.manage_protocol import (
     correction_reason,
     set_discriminator_and_rename,
@@ -26,7 +27,6 @@ from cellar.application.screening.protocol_naming_service import ProtocolNameSer
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.screening_assay.assay_format import assay_format_for_targets
 from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     PosControlSignal,
@@ -113,9 +113,9 @@ class CreateProtocol:
         dispatcher: EventDispatcherProtocol,
         *,
         names: ProtocolNameService,
+        form_repo: ProtocolFormRepository,
+        target_repo: TargetRepository,
         settings_repo: WorkspaceSettingsRepository | None = None,
-        form_repo: ProtocolFormRepository | None = None,
-        target_repo: TargetRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -219,38 +219,18 @@ class CreateProtocol:
         target_ids = list(dict.fromkeys(input.target_ids))
         async with self._uow:
             await self._repo.lock_naming(input.workspace_id)
-            if input.form_id is not None and "assay_format" not in ontology_annotations:
-                form = (
-                    await self._forms.find_by_id_in_workspace(input.workspace_id, input.form_id)
-                    if self._forms
-                    else None
-                )
-                if form is None:
-                    return Failure(NotFoundError("ProtocolForm", str(input.form_id)))
-                if form.assay_format_from_target:
-                    targets = (
-                        await self._targets.find_by_ids(input.workspace_id, target_ids)
-                        if self._targets and target_ids
-                        else []
-                    )
-                    fmt = assay_format_for_targets(t.target_type for t in targets)
-                    if fmt is None:
-                        fmt = next(
-                            (
-                                OntologyTerm(
-                                    term_id=t["term_id"],
-                                    label=t["label"],
-                                    ontology_source=t["ontology_source"],
-                                    uri=t.get("uri"),
-                                )
-                                for d in form.ontology_defaults
-                                if d.slot_name == "assay_format"
-                                for t in d.terms
-                            ),
-                            None,
-                        )
-                    if fmt is not None:
-                        ontology_annotations["assay_format"] = [fmt]
+            fmt = await assay_format_from_form(
+                self._forms,
+                self._targets,
+                input.workspace_id,
+                input.form_id,
+                target_ids,
+                ontology_annotations,
+            )
+            if isinstance(fmt, Failure):
+                return fmt
+            if fmt.unwrap() is not None:
+                ontology_annotations["assay_format"] = [fmt.unwrap()]
             discriminator = await self._names.clean_discriminator(
                 input.workspace_id, input.discriminator
             )

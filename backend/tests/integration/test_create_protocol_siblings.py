@@ -28,8 +28,14 @@ from cellar.infrastructure.di._screening import _name_service
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
+    SQLAlchemyTargetRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_category_repository import (  # noqa: E501
     SQLAlchemyProtocolCategoryRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (  # noqa: E501
+    SQLAlchemyProtocolFormRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests._auth import admin_auth
@@ -81,7 +87,14 @@ async def _seed_bare(
 
 def _uc(session_factory, repo_cls=SQLAlchemyProtocolRepository):
     uow = AsyncUnitOfWork(session_factory)
-    return CreateProtocol(uow, repo_cls(uow), _NoEvents(), names=_name_service(uow))
+    return CreateProtocol(
+        uow,
+        repo_cls(uow),
+        _NoEvents(),
+        names=_name_service(uow),
+        form_repo=SQLAlchemyProtocolFormRepository(uow),
+        target_repo=SQLAlchemyTargetRepository(uow),
+    )
 
 
 def _cmd(ws, **kw):
@@ -267,7 +280,13 @@ async def test_a_sibling_changed_meanwhile_is_named(session_factory, workspace_i
 
 async def _preview(session_factory, ws, user, bare, proposed):
     uow = AsyncUnitOfWork(session_factory)
-    uc = PreviewProtocolName(uow, SQLAlchemyProtocolRepository(uow), _name_service(uow))
+    uc = PreviewProtocolName(
+        uow,
+        SQLAlchemyProtocolRepository(uow),
+        _name_service(uow),
+        form_repo=SQLAlchemyProtocolFormRepository(uow),
+        target_repo=SQLAlchemyTargetRepository(uow),
+    )
     result = await uc(
         PreviewProtocolNameQuery(
             workspace_id=ws,

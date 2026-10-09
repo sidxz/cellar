@@ -421,7 +421,8 @@ class CreateProtocolRequest(BaseModel):
     discriminator: str | None = None
     # The form the dialog started from; decides whether the assay format follows the targets.
     form_id: uuid.UUID | None = None
-    # Bare siblings renamed in the same save, so a second protocol can take the base name.
+    # Discriminators for bare siblings (same base name), set in the same save; while siblings
+    # share the base name the new protocol carries a discriminator too.
     sibling_discriminators: list[SiblingDiscriminatorRequest] = []
     nicknames: list[str] = []
 
@@ -691,6 +692,8 @@ class NamePreviewRequest(BaseModel):
     protocol_id: uuid.UUID | None = None
     # Discriminators proposed for the bare siblings, to preview their new names.
     sibling_discriminators: list[SiblingDiscriminatorRequest] = []
+    # The form the dialog started from; its assay format may follow the targets, as at create.
+    form_id: uuid.UUID | None = None
     model_config = {"extra": "forbid"}
 
 
@@ -767,6 +770,7 @@ async def preview_protocol_name(
         sibling_discriminators={
             s.protocol_id: s.discriminator for s in body.sibling_discriminators
         },
+        form_id=body.form_id,
     )
     return NamePreviewResponse.from_domain(result_to_response(await uc(query, auth=auth)))
 

@@ -371,7 +371,13 @@ def register_screening(container: Container) -> None:
 
     def _preview_name(c: Container) -> PreviewProtocolName:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return PreviewProtocolName(uow, SQLAlchemyProtocolRepository(uow), _name_service(uow))
+        return PreviewProtocolName(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            _name_service(uow),
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+            target_repo=SQLAlchemyTargetRepository(uow),
+        )
 
     container.define(PreviewProtocolName, _preview_name)
     container.define(ListDiscriminators, _protocol_query(ListDiscriminators))

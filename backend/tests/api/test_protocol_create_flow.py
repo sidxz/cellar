@@ -182,3 +182,35 @@ async def test_preview_reports_a_sibling_name_clash(client):
         )
     ).json()
     assert preview["sibling_renames"][0]["error"]
+
+
+async def test_preview_applies_the_format_a_follow_target_form_gives(client, make_target):
+    await seed_protocol_categories(client)
+    form = await _enzyme_form(client)
+    target_id = await make_target(
+        "PptT", target_type="single_protein", organism="Mycobacterium tuberculosis"
+    )
+
+    async def preview(**extra):
+        body = {"category": "Enzyme inhibition", "target_ids": [target_id], **extra}
+        r = await client.post("/api/v1/protocols/name-preview", json=body)
+        assert r.status_code == 200, r.text
+        return r.json()
+
+    # The shipped pattern has no {matrix}: the form changes nothing.
+    assert (await preview(form_id=form["id"]))["name"] == (await preview())["name"]
+
+    categories = (await client.get("/api/v1/protocol-categories")).json()
+    enzyme = next(c for c in categories if c["label"] == "Enzyme inhibition")
+    r = await client.patch(
+        f"/api/v1/protocol-categories/{enzyme['id']}",
+        json={"name_pattern": "{target} {matrix} inhibition"},
+    )
+    assert r.status_code == 200, r.text
+    assert (await preview())["missing"] == ["matrix"]
+    named = await preview(form_id=form["id"])
+    assert named["missing"] == []
+    assert named["name"] == "M. tuberculosis PptT single protein inhibition"
+    created = await client.post("/api/v1/protocols", json=_enzyme_body(form, target_id))
+    assert created.status_code == 201, created.text
+    assert created.json()["name"] == named["name"]

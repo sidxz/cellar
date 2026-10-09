@@ -5,19 +5,25 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.screening.form_assay_format import assay_format_from_form
 from cellar.application.screening.protocol_naming_service import (
     MISSING_FIELD_LABELS,
     ProtocolNameService,
 )
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.screening_assay.repository import NameSibling, ProtocolRepository
+from cellar.domain.screening_assay.repository import (
+    NameSibling,
+    ProtocolRepository,
+    TargetRepository,
+)
 from cellar.domain.shared.errors import DomainError, ValidationError
 from cellar.domain.shared.ontology import OntologyTerm
 from cellar.domain.shared.protocol_naming import with_discriminator
+from cellar.domain.workspace_config.repository import ProtocolFormRepository
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -31,6 +37,8 @@ class PreviewProtocolNameQuery(Query):
     protocol_id: uuid.UUID | None = None
     # Discriminators proposed for the bare siblings, keyed by sibling protocol id.
     sibling_discriminators: dict[uuid.UUID, str] = field(default_factory=dict)
+    # The form the dialog started from: its assay format may follow the targets ({matrix}).
+    form_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -64,11 +72,19 @@ class NamePreview:
 
 class PreviewProtocolName:
     def __init__(
-        self, uow: UnitOfWork, protocol_repo: ProtocolRepository, names: ProtocolNameService
+        self,
+        uow: UnitOfWork,
+        protocol_repo: ProtocolRepository,
+        names: ProtocolNameService,
+        *,
+        form_repo: ProtocolFormRepository,
+        target_repo: TargetRepository,
     ) -> None:
         self._uow = uow
         self._protocols = protocol_repo
         self._names = names
+        self._forms = form_repo
+        self._targets = target_repo
 
     async def __call__(
         self, input: PreviewProtocolNameQuery, auth: AuthContext | None = None
@@ -101,6 +117,18 @@ class PreviewProtocolName:
                 ]
                 for slot, terms in input.ontology_annotations.items()
             }
+            fmt = await assay_format_from_form(
+                self._forms,
+                self._targets,
+                input.workspace_id,
+                input.form_id,
+                input.target_ids,
+                annotations,
+            )
+            if isinstance(fmt, Failure):
+                return fmt
+            if fmt.unwrap() is not None:
+                annotations["assay_format"] = [fmt.unwrap()]
             d = await self._names.derive(
                 input.workspace_id,
                 category=input.category,
