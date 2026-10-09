@@ -14,10 +14,11 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { useAppConfig } from "@/shared/lib/app-config";
 import { cn } from "@/shared/lib/utils";
-import { Check, ChevronsUpDown, ExternalLink, X } from "lucide-react";
+import { Check, ChevronsUpDown, ExternalLink, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useTargets } from "../hooks/use-targets";
 import { TARGET_TYPE_LABELS, type Target, type TargetType } from "../types";
+import { RequestTargetDialog } from "./request-target-dialog";
 
 interface TargetMultiSelectProps {
   /** Currently-selected target ids. */
@@ -35,9 +36,9 @@ function typeLabel(t: Target): string {
 /**
  * Multi-select picker for biological targets — built on the same Command +
  * Popover primitives as `SearchableSelect`, but selecting many. Selected
- * targets render below as removable chips; an inline "Manage in Prot-Cellar"
- * action opens the catalog owner in a new tab — targets are not created
- * here. No UUID entry.
+ * targets render below as removable chips. "Request a new target" creates a
+ * missing one in ProtCellar and selects it; "Manage in Prot-Cellar" opens the
+ * catalog owner in a new tab. No UUID entry.
  */
 export function TargetMultiSelect({
   value,
@@ -49,6 +50,7 @@ export function TargetMultiSelect({
   const { data: targets } = useTargets();
   const { protCellarUrl } = useAppConfig();
   const [open, setOpen] = useState(false);
+  const [requesting, setRequesting] = useState(false);
 
   const byId = new Map((targets ?? []).map((t) => [t.id, t] as const));
   const selected = value.map((id) => byId.get(id)).filter((t): t is Target => Boolean(t));
@@ -119,6 +121,18 @@ export function TargetMultiSelect({
               <CommandSeparator />
               <CommandGroup>
                 <CommandItem
+                  value="__request_target__"
+                  // Kept while searching: a search that finds nothing is when it's needed.
+                  forceMount
+                  onSelect={() => {
+                    setOpen(false);
+                    setRequesting(true);
+                  }}
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Request a new target
+                </CommandItem>
+                <CommandItem
                   value="__manage_targets__"
                   onSelect={() => {
                     setOpen(false);
@@ -133,6 +147,18 @@ export function TargetMultiSelect({
           </Command>
         </PopoverContent>
       </Popover>
+
+      {/* Mounted only while open: the dialog owns the mutation and its form state. */}
+      {requesting && (
+        <RequestTargetDialog
+          open
+          onOpenChange={setRequesting}
+          onCreated={(t) => {
+            setRequesting(false);
+            if (!value.includes(t.id)) onChange([...value, t.id]);
+          }}
+        />
+      )}
 
       {selected.length > 0 && (
         <div className="flex flex-wrap gap-1">

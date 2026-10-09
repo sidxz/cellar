@@ -191,7 +191,7 @@ export const useUpdateSettingsApiV1SettingsPatch = <TError = HTTPValidationError
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Targets from this organism are named without it; relabels protocols (refused on a clash).
+ * Targets from these organisms are named without them; relabels protocols.
  * @summary Set Home Organism
  */
 export const setHomeOrganismApiV1SettingsHomeOrganismPut = (
