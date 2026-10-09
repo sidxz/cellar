@@ -1,4 +1,4 @@
-"""Target API routes — read-only mirror of prot-cellar's catalog (see sync_targets)."""
+"""Target API routes — mirror of prot-cellar's catalog (see sync_targets, request_target)."""
 
 from __future__ import annotations
 
@@ -11,12 +11,14 @@ from cellar.application.screening.get_target import (
     GetTargetQuery,
     ListTargetsQuery,
 )
+from cellar.application.screening.request_target import RequestTargetCommand
 from cellar.application.screening.sync_targets import SyncReport, SyncTargetsCommand
 from cellar.domain.screening_assay.target import Target
 from cellar.interface.dependencies import (
     AuthDep,
     GetTargetDep,
     ListTargetsDep,
+    RequestTargetDep,
     SyncTargetsDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -67,6 +69,17 @@ class TargetResponse(BaseModel):
         )
 
 
+class RequestTargetBody(BaseModel):
+    name: str
+    target_type: str
+    organism_term_id: str
+    """The picked NCBITaxon term id (``.../NCBITAXON/<tax_id>``)."""
+    organism_label: str
+    chembl_id: str | None = None
+    protein_identifier: str | None = None
+    """UniProt accession or entry name; required for single-protein and domain targets."""
+
+
 class TargetSyncReportResponse(BaseModel):
     fetched: int
     created: int
@@ -113,6 +126,24 @@ async def sync_targets(
         workspace_id=auth.workspace_id, forwarded_headers=_forwarded_auth(request), force=True
     )
     return TargetSyncReportResponse.from_report(result_to_response(await uc(cmd, auth=auth)))
+
+
+@router.post("/targets/request", response_model=TargetResponse, status_code=201, tags=["targets"])
+async def request_target(
+    body: RequestTargetBody, request: Request, auth: AuthDep, uc: RequestTargetDep
+) -> TargetResponse:
+    """Editor: create a missing target in prot-cellar as the caller and mirror it at once."""
+    cmd = RequestTargetCommand(
+        workspace_id=auth.workspace_id,
+        name=body.name,
+        target_type=body.target_type,
+        organism_term_id=body.organism_term_id,
+        organism_label=body.organism_label,
+        chembl_id=body.chembl_id,
+        protein_identifier=body.protein_identifier,
+        forwarded_headers=_forwarded_auth(request),
+    )
+    return TargetResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
 
 
 @router.get("/targets/{target_id}", response_model=TargetResponse, tags=["targets"])

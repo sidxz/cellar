@@ -172,6 +172,7 @@ from cellar.application.screening.refit_dose_response import RefitDoseResponseCu
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
+from cellar.application.screening.request_target import RequestTarget
 from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverage,
@@ -518,7 +519,12 @@ def register_screening(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetTarget(uow, SQLAlchemyTargetRepository(uow))
 
+    def _request_target(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RequestTarget(uow, SQLAlchemyTargetRepository(uow), c[TargetSource])
+
     container.define(SyncTargetsFromProtCellar, _sync_targets)
+    container.define(RequestTarget, _request_target)
     container.define(ListTargets, _list_targets)
     container.define(GetTarget, _get_target)
 

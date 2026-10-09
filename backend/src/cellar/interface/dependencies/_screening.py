@@ -120,6 +120,7 @@ from cellar.application.screening.refit_dose_response import RefitDoseResponseCu
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
+from cellar.application.screening.request_target import RequestTarget
 from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverage,
@@ -228,6 +229,7 @@ __all__ = [
     "RemoveReadoutDefinitionDep",
     "RemoveRunCollectionDep",
     "RemoveRunTargetDep",
+    "RequestTargetDep",
     "ResetRunDataDep",
     "ResetRunHitCriteriaDep",
     "ResolveProtocolTargetsDep",
@@ -352,6 +354,7 @@ ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]
 SyncTargetsDep = Annotated[
     SyncTargetsFromProtCellar, Depends(_get_use_case(SyncTargetsFromProtCellar))
 ]
+RequestTargetDep = Annotated[RequestTarget, Depends(_get_use_case(RequestTarget))]
 ConditionGroupingServiceDep = Annotated[
     ConditionGroupingService, Depends(_get_use_case(ConditionGroupingService))
 ]
