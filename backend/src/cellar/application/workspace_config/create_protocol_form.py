@@ -5,20 +5,23 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass, field
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_admin, require_same_workspace
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.errors import DomainError, NotFoundError
 from cellar.domain.workspace_config.protocol_form import (
     ProtocolForm,
     ProtocolFormCondition,
     ProtocolFormOntologyDefault,
     ProtocolFormReadout,
 )
-from cellar.domain.workspace_config.repository import ProtocolFormRepository
+from cellar.domain.workspace_config.repository import (
+    ProtocolCategoryRepository,
+    ProtocolFormRepository,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -28,6 +31,8 @@ class CreateProtocolFormCommand(Command):
     description: str | None = None
     protocol_type: str | None = None
     is_default: bool = False
+    category_id: uuid.UUID | None = None
+    assay_format_from_target: bool = False
     readout_templates: list[dict] = field(default_factory=list)
     condition_templates: list[dict] | None = None
     ontology_defaults: list[dict] | None = None
@@ -39,10 +44,13 @@ class CreateProtocolForm:
         uow: UnitOfWork,
         repo: ProtocolFormRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        category_repo: ProtocolCategoryRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._categories = category_repo
 
     async def __call__(
         self, input: CreateProtocolFormCommand, auth: AuthContext | None = None
@@ -88,16 +96,30 @@ class CreateProtocolForm:
             ]
 
         async with self._uow:
+            if (
+                input.category_id is not None
+                and not await self._categories.find_by_id_in_workspace(
+                    input.workspace_id, input.category_id
+                )
+            ):
+                return Failure(NotFoundError("ProtocolCategory", str(input.category_id)))
             form = ProtocolForm.create(
                 workspace_id=input.workspace_id,
                 name=input.name,
                 description=input.description,
                 protocol_type=input.protocol_type,
                 is_default=input.is_default,
+                category_id=input.category_id,
+                assay_format_from_target=input.assay_format_from_target,
                 readout_templates=readouts,
                 condition_templates=conditions,
                 ontology_defaults=ontology_defaults,
             )
+            if form.is_default:
+                # Bulk UPDATE first: it runs before the new row is flushed.
+                await self._repo.clear_default(
+                    form.workspace_id, form.category_id, except_id=form.id
+                )
             await self._repo.save(form)
             events = await self._uow.commit()
 

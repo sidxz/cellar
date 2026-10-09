@@ -28,7 +28,10 @@ from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.protocol_naming import DEFAULT_CATEGORY_PATTERNS
 from cellar.domain.workspace_config.protocol_category import ProtocolCategory
-from cellar.domain.workspace_config.repository import ProtocolCategoryRepository
+from cellar.domain.workspace_config.repository import (
+    ProtocolCategoryRepository,
+    ProtocolFormRepository,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -186,10 +189,13 @@ class DeleteProtocolCategory:
         uow: UnitOfWork,
         repo: ProtocolCategoryRepository,
         protocol_repo: ProtocolRepository,
+        *,
+        form_repo: ProtocolFormRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._protocol_repo = protocol_repo
+        self._form_repo = form_repo
 
     async def __call__(
         self, input: DeleteProtocolCategoryCommand, auth: AuthContext | None = None
@@ -212,6 +218,8 @@ class DeleteProtocolCategory:
                         "move them to another category first"
                     )
                 )
+            # Its forms turn generic (FK SET NULL); none may collide with the generic default.
+            await self._form_repo.clear_category_defaults(input.workspace_id, category.id)
             await self._repo.delete(input.workspace_id, category.id)
             await self._uow.commit()
         return Success(None)

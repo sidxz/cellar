@@ -208,7 +208,10 @@ def register_workspace_config(container: Container) -> None:
     def _delete_category(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteProtocolCategory(
-            uow, SQLAlchemyProtocolCategoryRepository(uow), SQLAlchemyProtocolRepository(uow)
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            SQLAlchemyProtocolRepository(uow),
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
         )
 
     container.define(ListProtocolCategories, _list_categories)
@@ -467,8 +470,20 @@ def register_workspace_config(container: Container) -> None:
 
         return _f
 
-    container.define(CreateProtocolForm, _pf_cmd(CreateProtocolForm))
-    container.define(UpdateProtocolForm, _pf_cmd(UpdateProtocolForm))
+    def _pf_with_categories(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProtocolFormRepository(uow),
+                c[EventDispatcher],
+                category_repo=SQLAlchemyProtocolCategoryRepository(uow),
+            )
+
+        return _f
+
+    container.define(CreateProtocolForm, _pf_with_categories(CreateProtocolForm))
+    container.define(UpdateProtocolForm, _pf_with_categories(UpdateProtocolForm))
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
 

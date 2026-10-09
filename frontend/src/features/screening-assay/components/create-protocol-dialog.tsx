@@ -319,14 +319,10 @@ export function CreateProtocolDialog({
       form.setValue(
         "readouts",
         template.readout_templates.map((tpl, i) => {
-          const tplNormalizations = tpl.normalizations as ReadoutNormalization[] | undefined;
-          const tplLegacy = tpl.normalization as string | undefined;
+          // The API template carries a single `normalization` (it never had a list).
+          const tplLegacy = tpl.normalization;
           const resolvedNormalizations: ReadoutNormalization[] =
-            tplNormalizations && tplNormalizations.length > 0
-              ? tplNormalizations
-              : tplLegacy && tplLegacy !== "none"
-                ? [tplLegacy as ReadoutNormalization]
-                : [];
+            tplLegacy && tplLegacy !== "none" ? [tplLegacy as ReadoutNormalization] : [];
           return {
             ...defaultReadout(i + 1),
             name: (tpl.name as string) ?? "",

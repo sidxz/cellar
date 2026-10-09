@@ -196,6 +196,8 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # SET NULL by design — a deleted loan detaches the shipments that carried it
     # (migration 071); the shipment record itself survives.
     ("shipments", "loan_id", "plate_loans"),
+    # SET NULL: a deleted category turns its forms generic (Task 4)
+    ("protocol_forms", "category_id", "protocol_categories"),
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete
     # -------------------------------------------------------------------------

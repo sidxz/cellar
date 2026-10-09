@@ -90,6 +90,7 @@ def _create_test_app(
     from cellar.interface.routes.protocol_names import router as protocol_names_router
     from cellar.interface.routes.units import router as units_router
     from cellar.interface.routes.protocol_categories import router as protocol_categories_router
+    from cellar.interface.routes.protocol_forms import router as protocol_forms_router
     from cellar.interface.routes.molecules import router as mol_router
     from cellar.interface.routes.bulk_registration import router as bulk_reg_router
     from cellar.interface.routes.attachments import router as attachment_router
@@ -159,6 +160,7 @@ def _create_test_app(
     app.include_router(settings_router)
     app.include_router(vocab_router)
     app.include_router(protocol_categories_router)
+    app.include_router(protocol_forms_router)
     app.include_router(naming_labels_router)
     app.include_router(protocol_names_router)
     app.include_router(units_router)

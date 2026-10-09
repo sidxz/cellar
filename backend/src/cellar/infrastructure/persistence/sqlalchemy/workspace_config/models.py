@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -179,11 +180,27 @@ class ProtocolFormModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     description: Mapped[str | None] = mapped_column(Text)
     protocol_type: Mapped[str | None] = mapped_column(String(30))
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("protocol_categories.id", ondelete="SET NULL")
+    )
+    assay_format_from_target: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     readout_templates: Mapped[list] = mapped_column(JSONB, nullable=False)
     condition_templates: Mapped[list | None] = mapped_column(JSONB)
     ontology_defaults: Mapped[list | None] = mapped_column(JSONB)
 
-    __table_args__ = (Index("ix_protocol_form_ws", "workspace_id"),)
+    __table_args__ = (
+        Index("ix_protocol_form_ws", "workspace_id"),
+        # One default per category, one generic: NULL category coalesces to the nil uuid.
+        Index(
+            "ux_protocol_form_default",
+            "workspace_id",
+            text("coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
 
 
 class DataSourceModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):

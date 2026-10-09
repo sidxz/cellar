@@ -85,7 +85,7 @@ class ProtocolForm(AggregateRoot):
 
     Pre-fills readout definitions, condition definitions, and ontology
     annotations when a user selects this form during protocol creation.
-    At most one form per workspace may be flagged as ``is_default``.
+    At most one form per category (and one generic form) may be ``is_default``.
     """
 
     def __init__(
@@ -97,6 +97,8 @@ class ProtocolForm(AggregateRoot):
         description: str | None = None,
         protocol_type: str | None = None,
         is_default: bool = False,
+        category_id: uuid.UUID | None = None,
+        assay_format_from_target: bool = False,
         readout_templates: list[ProtocolFormReadout] | None = None,
         condition_templates: list[ProtocolFormCondition] | None = None,
         ontology_defaults: list[ProtocolFormOntologyDefault] | None = None,
@@ -115,6 +117,8 @@ class ProtocolForm(AggregateRoot):
         self.description = description
         self.protocol_type = protocol_type
         self.is_default = is_default
+        self.category_id = category_id
+        self.assay_format_from_target = assay_format_from_target
         self.readout_templates: list[ProtocolFormReadout] = (
             list(readout_templates) if readout_templates else []
         )
@@ -138,6 +142,8 @@ class ProtocolForm(AggregateRoot):
         description: str | None = None,
         protocol_type: str | None = None,
         is_default: bool = False,
+        category_id: uuid.UUID | None = None,
+        assay_format_from_target: bool = False,
         readout_templates: list[ProtocolFormReadout] | None = None,
         condition_templates: list[ProtocolFormCondition] | None = None,
         ontology_defaults: list[ProtocolFormOntologyDefault] | None = None,
@@ -160,6 +166,8 @@ class ProtocolForm(AggregateRoot):
             description=description,
             protocol_type=protocol_type,
             is_default=is_default,
+            category_id=category_id,
+            assay_format_from_target=assay_format_from_target,
             readout_templates=templates,
             condition_templates=condition_templates,
             ontology_defaults=ontology_defaults,
@@ -185,6 +193,8 @@ class ProtocolForm(AggregateRoot):
         description: str | object | None = UNSET,
         protocol_type: str | object | None = UNSET,
         is_default: bool | object = UNSET,
+        category_id: uuid.UUID | object | None = UNSET,
+        assay_format_from_target: bool | object = UNSET,
         readout_templates: list[ProtocolFormReadout] | object | None = UNSET,
         condition_templates: list[ProtocolFormCondition] | object | None = UNSET,
         ontology_defaults: list[ProtocolFormOntologyDefault] | object | None = UNSET,
@@ -203,6 +213,12 @@ class ProtocolForm(AggregateRoot):
 
         if is_default is not UNSET:
             self.is_default = bool(is_default)
+
+        if category_id is not UNSET:
+            self.category_id = category_id  # type: ignore[assignment]
+
+        if assay_format_from_target is not UNSET:
+            self.assay_format_from_target = bool(assay_format_from_target)
 
         if readout_templates is not UNSET:
             templates = list(readout_templates) if readout_templates else []  # type: ignore[arg-type]

@@ -35,6 +35,30 @@ from cellar.interface.error_handlers import result_to_response
 router = APIRouter(prefix="/api/v1/protocol-forms", tags=["protocol-forms"])
 
 
+class ProtocolFormReadoutTemplate(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    aggregation: str = "none"
+    normalization: str = "none"
+    is_calculated: bool = False
+    calculation_formula: str | None = None
+    pick_list_values: list[Any] | None = None
+    dose_response_config: dict[str, Any] | None = None
+
+
+class ProtocolFormConditionTemplate(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    pick_list_values: list[str] | None = None
+
+
+class ProtocolFormOntologyDefaultTemplate(BaseModel):
+    slot_name: str
+    terms: list[dict[str, Any]] = []
+
+
 class ProtocolFormResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
@@ -42,9 +66,11 @@ class ProtocolFormResponse(BaseModel):
     description: str | None = None
     protocol_type: str | None = None
     is_default: bool
-    readout_templates: list[dict]
-    condition_templates: list[dict] | None = None
-    ontology_defaults: list[dict] | None = None
+    category_id: uuid.UUID | None = None
+    assay_format_from_target: bool = False
+    readout_templates: list[ProtocolFormReadoutTemplate]
+    condition_templates: list[ProtocolFormConditionTemplate] | None = None
+    ontology_defaults: list[ProtocolFormOntologyDefaultTemplate] | None = None
     version: int
 
     @classmethod
@@ -56,11 +82,19 @@ class ProtocolFormResponse(BaseModel):
             description=form.description,
             protocol_type=form.protocol_type,
             is_default=form.is_default,
-            readout_templates=[asdict(r) for r in form.readout_templates],
-            condition_templates=[asdict(c) for c in form.condition_templates]
+            category_id=form.category_id,
+            assay_format_from_target=form.assay_format_from_target,
+            readout_templates=[
+                ProtocolFormReadoutTemplate(**asdict(r)) for r in form.readout_templates
+            ],
+            condition_templates=[
+                ProtocolFormConditionTemplate(**asdict(c)) for c in form.condition_templates
+            ]
             if form.condition_templates
             else None,
-            ontology_defaults=[asdict(o) for o in form.ontology_defaults]
+            ontology_defaults=[
+                ProtocolFormOntologyDefaultTemplate(**asdict(o)) for o in form.ontology_defaults
+            ]
             if form.ontology_defaults
             else None,
             version=form.version,
@@ -72,9 +106,11 @@ class CreateProtocolFormBody(BaseModel):
     description: str | None = None
     protocol_type: str | None = None
     is_default: bool = False
-    readout_templates: list[dict]
-    condition_templates: list[dict] | None = None
-    ontology_defaults: list[dict] | None = None
+    category_id: uuid.UUID | None = None
+    assay_format_from_target: bool = False
+    readout_templates: list[ProtocolFormReadoutTemplate]
+    condition_templates: list[ProtocolFormConditionTemplate] | None = None
+    ontology_defaults: list[ProtocolFormOntologyDefaultTemplate] | None = None
 
 
 class UpdateProtocolFormBody(BaseModel):
@@ -82,9 +118,11 @@ class UpdateProtocolFormBody(BaseModel):
     description: str | None = None
     protocol_type: str | None = None
     is_default: bool | None = None
-    readout_templates: list[dict] | None = None
-    condition_templates: list[dict] | None = None
-    ontology_defaults: list[dict] | None = None
+    category_id: uuid.UUID | None = None
+    assay_format_from_target: bool | None = None
+    readout_templates: list[ProtocolFormReadoutTemplate] | None = None
+    condition_templates: list[ProtocolFormConditionTemplate] | None = None
+    ontology_defaults: list[ProtocolFormOntologyDefaultTemplate] | None = None
 
 
 @router.get("", response_model=list[ProtocolFormResponse])
@@ -109,9 +147,15 @@ async def create_protocol_form(
         description=body.description,
         protocol_type=body.protocol_type,
         is_default=body.is_default,
-        readout_templates=body.readout_templates,
-        condition_templates=body.condition_templates,
-        ontology_defaults=body.ontology_defaults,
+        category_id=body.category_id,
+        assay_format_from_target=body.assay_format_from_target,
+        readout_templates=[t.model_dump() for t in body.readout_templates],
+        condition_templates=[t.model_dump() for t in body.condition_templates]
+        if body.condition_templates is not None
+        else None,
+        ontology_defaults=[t.model_dump() for t in body.ontology_defaults]
+        if body.ontology_defaults is not None
+        else None,
     )
     form = result_to_response(await use_case(command, auth=auth))
     return ProtocolFormResponse.from_domain(form)
@@ -134,11 +178,16 @@ async def update_protocol_form(
         "description",
         "protocol_type",
         "is_default",
-        "readout_templates",
-        "condition_templates",
-        "ontology_defaults",
+        "category_id",
+        "assay_format_from_target",
     ):
         cmd_fields[attr] = getattr(body, attr) if attr in body.model_fields_set else UNSET
+    for attr in ("readout_templates", "condition_templates", "ontology_defaults"):
+        if attr in body.model_fields_set:
+            templates = getattr(body, attr)
+            cmd_fields[attr] = None if templates is None else [t.model_dump() for t in templates]
+        else:
+            cmd_fields[attr] = UNSET
 
     command = UpdateProtocolFormCommand(**cmd_fields)
     form = result_to_response(await use_case(command, auth=auth))

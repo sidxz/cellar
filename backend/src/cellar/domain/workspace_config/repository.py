@@ -223,6 +223,22 @@ class ProtocolFormRepository(Protocol):
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
 
+    async def clear_default(
+        self,
+        workspace_id: uuid.UUID,
+        category_id: uuid.UUID | None,
+        *,
+        except_id: uuid.UUID | None,
+    ) -> None:
+        """Unset is_default on the category's forms (generic forms when None), except one."""
+        ...
+
+    async def clear_category_defaults(
+        self, workspace_id: uuid.UUID, category_id: uuid.UUID
+    ) -> None:
+        """Before a category is deleted, so its forms turn generic without a second default."""
+        ...
+
 
 @runtime_checkable
 class DataSourceRepository(Protocol):

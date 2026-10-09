@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 
 from cellar.domain.workspace_config.protocol_form import (
     ProtocolForm,
@@ -108,6 +108,8 @@ class SQLAlchemyProtocolFormRepository(SQLAlchemyRepository[ProtocolForm, Protoc
             description=model.description,
             protocol_type=model.protocol_type,
             is_default=model.is_default,
+            category_id=model.category_id,
+            assay_format_from_target=model.assay_format_from_target,
             readout_templates=self._readouts_to_domain(model.readout_templates),
             condition_templates=self._conditions_to_domain(model.condition_templates),
             ontology_defaults=self._ontology_defaults_to_domain(model.ontology_defaults),
@@ -124,6 +126,8 @@ class SQLAlchemyProtocolFormRepository(SQLAlchemyRepository[ProtocolForm, Protoc
             description=aggregate.description,
             protocol_type=aggregate.protocol_type,
             is_default=aggregate.is_default,
+            category_id=aggregate.category_id,
+            assay_format_from_target=aggregate.assay_format_from_target,
             readout_templates=self._readouts_to_json(aggregate.readout_templates),
             condition_templates=self._conditions_to_json(aggregate.condition_templates),
             ontology_defaults=self._ontology_defaults_to_json(aggregate.ontology_defaults),
@@ -135,6 +139,8 @@ class SQLAlchemyProtocolFormRepository(SQLAlchemyRepository[ProtocolForm, Protoc
         model.description = aggregate.description
         model.protocol_type = aggregate.protocol_type
         model.is_default = aggregate.is_default
+        model.category_id = aggregate.category_id
+        model.assay_format_from_target = aggregate.assay_format_from_target
         model.readout_templates = self._readouts_to_json(aggregate.readout_templates)
         model.condition_templates = self._conditions_to_json(aggregate.condition_templates)
         model.ontology_defaults = self._ontology_defaults_to_json(aggregate.ontology_defaults)
@@ -161,3 +167,30 @@ class SQLAlchemyProtocolFormRepository(SQLAlchemyRepository[ProtocolForm, Protoc
             ProtocolFormModel.id == id,
         )
         await self._session.execute(stmt)
+
+    async def clear_default(
+        self,
+        workspace_id: uuid.UUID,
+        category_id: uuid.UUID | None,
+        *,
+        except_id: uuid.UUID | None,
+    ) -> None:
+        stmt = (
+            update(ProtocolFormModel)
+            .where(
+                ProtocolFormModel.workspace_id == workspace_id,
+                ProtocolFormModel.is_default.is_(True),
+                ProtocolFormModel.category_id.is_(None)
+                if category_id is None
+                else ProtocolFormModel.category_id == category_id,
+            )
+            .values(is_default=False, version=ProtocolFormModel.version + 1)
+        )
+        if except_id is not None:
+            stmt = stmt.where(ProtocolFormModel.id != except_id)
+        await self._session.execute(stmt)
+
+    async def clear_category_defaults(
+        self, workspace_id: uuid.UUID, category_id: uuid.UUID
+    ) -> None:
+        await self.clear_default(workspace_id, category_id, except_id=None)
