@@ -152,3 +152,19 @@ Admin: "Biofilm inhibition" created with "Start protocols like: Growth inhibitio
 - **W7 (spec gap):** optional pattern slots (`{organism?}`, `{cell_line?}`, `{subject?}`) are only reachable under More
   details although they change the name; Pharmacokinetics names itself "Pharmacokinetics" unless the chemist finds
   Organism there.
+
+### After the final review's fix waves
+
+The final review added two silent-wrong-result issues: I1, "any protocol" readout searches compared raw unit strings;
+I2, switching category or form kept the previous form's assay format and conditions. Both are fixed, along with the
+review's minor items and walk findings W1, W2, W6 and W7. Browser recheck in SACLAB-IT:
+- **Category switching (I2).** Cytotoxicity → Bactericidal activity → Pharmacokinetics → Detection interference →
+  Pharmacokinetics, then created **PRT-00032 Rat pharmacokinetics**. The saved record carries only Pharmacokinetics
+  values: in vivo, organism-based format, Dose and Route, Cmax/AUC/t½. Nothing leaked from the earlier categories.
+  3 interactions.
+- **Optional organism (W7).** "Organism (optional)" sits inline for Pharmacokinetics.
+- **Required discriminator (W6).** Detection interference explains the discriminator is part of the category's name.
+- **Reopening the dialog (W1).** After a create, the dialog reopens clean.
+
+Suites after the waves: backend unit 3679 passed; integration + API 1260 passed, 2 failed (pre-existing
+TestMoleculeTestCounts); frontend vitest 1385 passed; lint and tsc exit 0.
