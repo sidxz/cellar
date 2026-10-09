@@ -1,7 +1,9 @@
 import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import type {
+  AddConditionDefinitionRequest,
   ClassifyDoseResponseCurveRequest,
   CollectionCoverageResponse,
+  ConditionDefinitionResponse,
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
@@ -338,13 +340,9 @@ export interface PickListValue {
   color?: string | null;
 }
 
-export interface ConditionDefinition {
-  id: string;
-  name: string;
-  data_type: string;
-  unit: string | null;
-  pick_list_values: string[] | null;
-}
+/** A protocol's condition; `fixed_value` is the value that defines the protocol (Hypoxia: yes,
+ *  72 h) and a run without a value for it takes it. Aliases the generated type. */
+export type ConditionDefinition = ConditionDefinitionResponse;
 
 export interface OntologyAnnotationTerm {
   term_id: string;
@@ -574,12 +572,7 @@ export interface CreateReadoutDefinitionInput {
   dose_response_config?: DoseResponseConfig | null;
 }
 
-export interface CreateConditionDefinitionInput {
-  name: string;
-  data_type: string;
-  unit?: string | null;
-  pick_list_values?: string[] | null;
-}
+export type CreateConditionDefinitionInput = AddConditionDefinitionRequest;
 
 /** The form started from, same-named siblings' discriminators and nicknames: typed off the DTO. */
 export interface CreateProtocolInput

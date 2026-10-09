@@ -159,8 +159,14 @@ describe("conditionsFromForm", () => {
       ],
     });
     expect(conditionsFromForm(f)).toEqual([
-      { name: "S9", data_type: "pick_list", unit: "", pick_list_values: ["with", "without"] },
-      { name: "Time", data_type: "numeric", unit: "h", pick_list_values: [] },
+      {
+        name: "S9",
+        data_type: "pick_list",
+        unit: "",
+        pick_list_values: ["with", "without"],
+        fixed_value: "",
+      },
+      { name: "Time", data_type: "numeric", unit: "h", pick_list_values: [], fixed_value: "" },
     ]);
   });
 });

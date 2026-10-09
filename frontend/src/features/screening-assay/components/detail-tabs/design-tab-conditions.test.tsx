@@ -1,9 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../../types";
 import { DesignTab } from "./design-tab";
 
 const update = vi.hoisted(() => ({ mutate: vi.fn() }));
+const add = vi.hoisted(() => ({ mutate: vi.fn() }));
 
 vi.mock("../../hooks/use-protocols", () => {
   const idle = () => ({ mutate: vi.fn(), isPending: false });
@@ -12,7 +13,7 @@ vi.mock("../../hooks/use-protocols", () => {
     useRemoveReadoutDefinition: idle,
     useUpdateReadoutDefinition: idle,
     useProtocols: () => ({ data: [] }),
-    useAddConditionDefinition: idle,
+    useAddConditionDefinition: () => ({ mutate: add.mutate, isPending: false }),
     useRemoveConditionDefinition: idle,
     useUpdateConditionDefinition: () => ({ mutate: update.mutate, isPending: false }),
     useSetControlLayout: idle,
@@ -45,6 +46,15 @@ const protocol = {
       data_type: "pick_list",
       unit: null,
       pick_list_values: ["with", "without"],
+      fixed_value: null,
+    },
+    {
+      id: "c2",
+      name: "Incubation time",
+      data_type: "numeric",
+      unit: "h",
+      pick_list_values: null,
+      fixed_value: "72",
     },
   ],
 } as unknown as Protocol;
@@ -65,6 +75,7 @@ describe("DesignTab condition dialog", () => {
         data_type: "pick_list",
         unit: null,
         pick_list_values: ["with", "without", "both"],
+        fixed_value: null,
       },
     });
 
@@ -73,5 +84,39 @@ describe("DesignTab condition dialog", () => {
     }
     expect(screen.getByText("Add at least one value.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("shows a fixed value with its unit, and one that varies per run", () => {
+    render(<DesignTab protocol={protocol} protocolId="p1" />);
+    expect(screen.getByText("72 h")).toBeInTheDocument();
+    expect(screen.getByText("Varies per run")).toBeInTheDocument();
+  });
+
+  it("edits a fixed value", () => {
+    render(<DesignTab protocol={protocol} protocolId="p1" />);
+    const row = screen.getByText("Incubation time").closest("tr") as HTMLElement;
+    fireEvent.click(row.querySelectorAll("button")[0]);
+    const fixed = screen.getByLabelText("Fixed for this protocol");
+    expect(fixed).toHaveValue(72);
+    fireEvent.change(fixed, { target: { value: "48" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(update.mutate.mock.calls.at(-1)?.[0].data.fixed_value).toBe("48");
+  });
+
+  it("adds a condition with a fixed value", () => {
+    render(<DesignTab protocol={protocol} protocolId="p1" />);
+    const header = screen.getByText("Condition Definitions").parentElement?.parentElement;
+    fireEvent.click(within(header as HTMLElement).getByRole("button", { name: /Add/ }));
+    fireEvent.change(screen.getByPlaceholderText(/Cell Passage/), { target: { value: "Medium" } });
+    fireEvent.change(screen.getByLabelText("Fixed for this protocol"), {
+      target: { value: "7H9" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    expect(add.mutate.mock.calls[0][0]).toEqual({
+      name: "Medium",
+      data_type: "text",
+      unit: undefined,
+      fixed_value: "7H9",
+    });
   });
 });

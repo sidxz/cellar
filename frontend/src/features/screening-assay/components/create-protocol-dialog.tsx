@@ -52,6 +52,7 @@ import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
+import { isFixedValueValid } from "../lib/conditions";
 import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
 import {
   applyFormFacets,
@@ -68,6 +69,7 @@ import {
   type Protocol,
   type ProtocolType,
 } from "../types";
+import { ConditionValueInput } from "./condition-fields";
 import {
   DEFAULT_VALUES,
   type ProtocolFormValues,
@@ -248,6 +250,7 @@ export function CreateProtocolDialog({
         data_type: cd.data_type,
         unit: cd.unit ?? "",
         pick_list_values: cd.pick_list_values ?? [],
+        fixed_value: cd.fixed_value ?? "",
       })),
     });
     setAppliedReadouts(JSON.stringify(form.getValues("readouts")));
@@ -343,9 +346,13 @@ export function CreateProtocolDialog({
   const hasEmptyPickList = conditionValues.some(
     (cd) => cd.name.trim() && cd.data_type === "pick_list" && cd.pick_list_values.length === 0,
   );
+  const hasInvalidFixedValue = conditionValues.some(
+    (cd) => cd.name.trim() && !isFixedValueValid(cd),
+  );
   const canSubmit =
     validReadouts.length > 0 &&
     !hasEmptyPickList &&
+    !hasInvalidFixedValue &&
     !hasReservedReadoutName &&
     isPreviewSavable(preview.data) &&
     !createMutation.isPending;
@@ -404,6 +411,7 @@ export function CreateProtocolDialog({
         data_type: cd.data_type,
         unit: cd.unit || null,
         ...(cd.data_type === "pick_list" ? { pick_list_values: cd.pick_list_values } : {}),
+        ...(cd.fixed_value.trim() ? { fixed_value: cd.fixed_value.trim() } : {}),
       }));
 
     createMutation.mutate(
@@ -712,6 +720,29 @@ export function CreateProtocolDialog({
                         )}
                       />
                     )}
+                    <div className="grid gap-1">
+                      <Label className="text-xs">Fixed for this protocol (optional)</Label>
+                      <Controller
+                        control={form.control}
+                        name={`conditions.${index}.fixed_value`}
+                        render={({ field: f }) => (
+                          <ConditionValueInput
+                            def={conditionValues[index] ?? defaultCondition()}
+                            value={f.value}
+                            onChange={f.onChange}
+                            noneLabel="(varies per run)"
+                            aria-label="Fixed for this protocol"
+                          />
+                        )}
+                      />
+                      {conditionValues[index] && !isFixedValueValid(conditionValues[index]) && (
+                        <p className="text-xs text-destructive">
+                          {conditionValues[index].data_type === "numeric"
+                            ? "Must be a number."
+                            : "Must be one of the values."}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

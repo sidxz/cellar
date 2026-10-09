@@ -3,9 +3,11 @@
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  AddConditionDefinitionRequest,
   CorrectProtocolRequest,
   ProtocolSummaryResponse,
   SetDiscriminatorRequest,
+  UpdateConditionDefinitionRequest,
 } from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
@@ -217,12 +219,7 @@ export function useRemoveReadoutDefinition(protocolId: string) {
 export function useAddConditionDefinition(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      name: string;
-      data_type: string;
-      unit?: string | null;
-      pick_list_values?: string[] | null;
-    }) =>
+    mutationFn: (data: AddConditionDefinitionRequest) =>
       customInstance<Protocol>({
         url: `${API_V1}/protocols/${protocolId}/condition-definitions`,
         method: "POST",
@@ -243,12 +240,7 @@ export function useUpdateConditionDefinition(protocolId: string) {
       data,
     }: {
       definitionId: string;
-      data: {
-        name?: string;
-        data_type?: string;
-        unit?: string | null;
-        pick_list_values?: string[] | null;
-      };
+      data: UpdateConditionDefinitionRequest;
     }) =>
       customInstance<Protocol>({
         url: `${API_V1}/protocols/${protocolId}/condition-definitions/${definitionId}`,

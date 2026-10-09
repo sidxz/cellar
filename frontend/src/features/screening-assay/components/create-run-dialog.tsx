@@ -26,7 +26,7 @@ import { Controller, useForm } from "react-hook-form";
 import { z } from "zod";
 import { usePlateTemplates } from "../hooks/use-plate-templates";
 import { useCreateRun } from "../hooks/use-runs";
-import { buildConditionsPayload } from "../lib/conditions";
+import { buildConditionsPayload, fixedConditionValues } from "../lib/conditions";
 import { type ConditionDefinition, PLATE_FORMAT_LABELS, type PlateFormat } from "../types";
 import { ConditionFields } from "./condition-fields";
 import { TargetMultiSelect } from "./target-multi-select";
@@ -113,10 +113,11 @@ export function CreateRunDialog({
       plateFormat: fmt,
       plateTemplateId: protocolControlLayouts?.[fmt] ?? "",
       notes: "",
-      conditionValues: {},
+      // A condition the protocol fixes starts at its fixed value; the run can still change it.
+      conditionValues: fixedConditionValues(conditionDefinitions ?? []),
       targetIds: [],
     });
-  }, [open, protocolControlLayouts, reset]);
+  }, [open, protocolControlLayouts, conditionDefinitions, reset]);
 
   const plateFormat = watch("plateFormat");
   const plateTemplateId = watch("plateTemplateId");

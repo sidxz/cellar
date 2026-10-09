@@ -5,7 +5,10 @@ import {
   buildConditionsPayload,
   deriveConditionColumns,
   editableConditionDefs,
+  fixedConditionValues,
   formatConditionEntries,
+  formatFixedCondition,
+  isFixedValueValid,
   parseConditionValue,
   readConditionCell,
   seedConditionValues,
@@ -17,6 +20,7 @@ const def = (over: Partial<ConditionDefinition> & { name: string }): ConditionDe
   data_type: over.data_type ?? "text",
   unit: over.unit ?? null,
   pick_list_values: over.pick_list_values ?? null,
+  fixed_value: over.fixed_value ?? null,
 });
 
 // ─── parseConditionValue ───────────────────────────────────────────────────────
@@ -195,5 +199,40 @@ describe("readConditionCell", () => {
     expect(readConditionCell({ Strain: "H37Rv" }, text)).toBe("H37Rv");
     expect(readConditionCell({ Strain: "  " }, text)).toBeNull();
     expect(readConditionCell({}, text)).toBeNull();
+  });
+});
+
+// ─── Fixed values ──────────────────────────────────────────────────────────────
+
+describe("fixed values", () => {
+  const time = def({ name: "Incubation time", data_type: "numeric", unit: "h", fixed_value: "72" });
+  const hypoxia = def({
+    name: "Hypoxia",
+    data_type: "pick_list",
+    pick_list_values: ["yes", "no"],
+    fixed_value: "yes",
+  });
+
+  it("formats value then unit with a space", () => {
+    expect(formatFixedCondition(hypoxia)).toBe("Hypoxia: yes");
+    expect(formatFixedCondition(time)).toBe("Incubation time: 72 h");
+  });
+
+  it("seeds a run's inputs with the bare fixed values", () => {
+    expect(fixedConditionValues([time, hypoxia, def({ name: "Medium" })])).toEqual({
+      "Incubation time": "72",
+      Hypoxia: "yes",
+    });
+  });
+
+  it.each([
+    [{ data_type: "numeric", fixed_value: "" }, true],
+    [{ data_type: "numeric", fixed_value: " 1e-3 " }, true],
+    [{ data_type: "numeric", fixed_value: "72h" }, false],
+    [{ data_type: "pick_list", pick_list_values: ["yes", "no"], fixed_value: "yes" }, true],
+    [{ data_type: "pick_list", pick_list_values: ["yes", "no"], fixed_value: "maybe" }, false],
+    [{ data_type: "text", fixed_value: "anything" }, true],
+  ])("validates %o against its type", (over, ok) => {
+    expect(isFixedValueValid(def({ name: "c", ...over }))).toBe(ok);
   });
 });

@@ -68,6 +68,7 @@ export function syntheticDefForKey(key: string): ConditionDefinition {
     data_type: "text",
     unit: null,
     pick_list_values: null,
+    fixed_value: null,
   };
 }
 
@@ -167,4 +168,32 @@ export function readConditionCell(
     return Number.isFinite(n) ? n : null;
   }
   return String(raw);
+}
+
+// ─── Fixed values ───────────────────────────────────────────────────────────────
+
+type FixedValueShape = Pick<ConditionDefinition, "data_type" | "pick_list_values"> & {
+  fixed_value?: string | null;
+};
+
+/** "Hypoxia: yes", "Incubation time: 72 h": the value that defines the protocol. */
+export function formatFixedCondition(cd: ConditionDefinition): string {
+  const unit = cd.unit?.trim();
+  return `${cd.name}: ${cd.fixed_value}${unit ? ` ${unit}` : ""}`;
+}
+
+/** name → bare fixed value, to seed a new run's condition inputs. */
+export function fixedConditionValues(defs: ConditionDefinition[]): Record<string, string> {
+  return Object.fromEntries(
+    defs.filter((cd) => cd.fixed_value).map((cd) => [cd.name, cd.fixed_value as string]),
+  );
+}
+
+/** Mirrors the backend: blank is no value, a number must parse, a pick is one of the values. */
+export function isFixedValueValid(cd: FixedValueShape): boolean {
+  const v = (cd.fixed_value ?? "").trim();
+  if (!v) return true;
+  if (cd.data_type === "numeric") return Number.isFinite(Number(v));
+  if (cd.data_type === "pick_list") return (cd.pick_list_values ?? []).includes(v);
+  return true;
 }

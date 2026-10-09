@@ -22,6 +22,7 @@ const def = (over: Partial<ConditionDefinition> & { name: string }): ConditionDe
   data_type: over.data_type ?? "text",
   unit: over.unit ?? null,
   pick_list_values: over.pick_list_values ?? null,
+  fixed_value: over.fixed_value ?? null,
 });
 
 const protocol = (defs: ConditionDefinition[]): Protocol =>

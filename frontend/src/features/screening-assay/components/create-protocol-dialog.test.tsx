@@ -546,6 +546,67 @@ describe("CreateProtocolDialog", () => {
     ]);
   });
 
+  it("keeps a condition's fixed value when starting from another protocol, and sends one typed beside it", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "Hypoxia",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["yes", "no"],
+          fixed_value: "yes",
+        },
+        {
+          id: "c2",
+          name: "Incubation time",
+          data_type: "numeric",
+          unit: "h",
+          pick_list_values: null,
+          fixed_value: null,
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    fireEvent.change(screen.getAllByLabelText("Fixed for this protocol")[1], {
+      target: { value: "72" },
+    });
+    const payload = await submit();
+    expect(payload.condition_definitions).toEqual([
+      {
+        name: "Hypoxia",
+        data_type: "pick_list",
+        unit: null,
+        pick_list_values: ["yes", "no"],
+        fixed_value: "yes",
+      },
+      { name: "Incubation time", data_type: "numeric", unit: "h", fixed_value: "72" },
+    ]);
+  });
+
+  it("will not create a protocol whose fixed pick is not one of its values", () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "Hypoxia",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["yes", "no"],
+          fixed_value: "maybe",
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
+  });
+
   it("will not create a protocol whose pick-list condition has no values", () => {
     state.preview = complete;
     const prefill = protocol({
