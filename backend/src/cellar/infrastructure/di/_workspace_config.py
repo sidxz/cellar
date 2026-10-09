@@ -58,6 +58,7 @@ from cellar.application.workspace_config.protocol_categories import (
     SeedDefaultProtocolCategories,
     UpdateProtocolCategory,
 )
+from cellar.application.workspace_config.protocol_form_defaults import SeedDefaultProtocolForms
 from cellar.application.workspace_config.set_home_organism import SetHomeOrganism
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
@@ -249,7 +250,17 @@ def register_workspace_config(container: Container) -> None:
     container.define(
         SetHomeOrganism, _relabeling(SetHomeOrganism, SQLAlchemyWorkspaceSettingsRepository)
     )
-    container.define(SeedDefaultProtocolCategories, _category_cmd(SeedDefaultProtocolCategories))
+
+    def _seed_default_categories(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SeedDefaultProtocolCategories(
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            c[EventDispatcher],
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+        )
+
+    container.define(SeedDefaultProtocolCategories, _seed_default_categories)
     container.define(DeleteProtocolCategory, _delete_category)
 
     # --- Short labels ---
@@ -486,6 +497,17 @@ def register_workspace_config(container: Container) -> None:
     container.define(UpdateProtocolForm, _pf_with_categories(UpdateProtocolForm))
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
+
+    def _seed_default_forms(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SeedDefaultProtocolForms(
+            uow,
+            SQLAlchemyProtocolFormRepository(uow),
+            SQLAlchemyProtocolCategoryRepository(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(SeedDefaultProtocolForms, _seed_default_forms)
 
     # --- Tags ---
     def _tag_assign(uc_cls: type):

@@ -62,6 +62,9 @@ from cellar.application.workspace_config.protocol_categories import (
     SeedDefaultProtocolCategories,
     UpdateProtocolCategory,
 )
+from cellar.application.workspace_config.protocol_form_defaults import (
+    SeedDefaultProtocolForms as SeedDefaultProtocolFormsUC,
+)
 from cellar.application.workspace_config.set_home_organism import SetHomeOrganism
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
@@ -144,6 +147,7 @@ __all__ = [
     # Ontology search + annotations
     "SearchOntologyDep",
     "SeedDefaultProtocolCategoriesDep",
+    "SeedDefaultProtocolFormsDep",
     "SetEntityTagsDep",
     "SetHomeOrganismDep",
     "SetOntologyAnnotationDep",
@@ -271,6 +275,9 @@ CreateProtocolFormDep = Annotated[
     CreateProtocolFormUC, Depends(_get_use_case(CreateProtocolFormUC))
 ]
 ListProtocolFormsDep = Annotated[ListProtocolFormsUC, Depends(_get_use_case(ListProtocolFormsUC))]
+SeedDefaultProtocolFormsDep = Annotated[
+    SeedDefaultProtocolFormsUC, Depends(_get_use_case(SeedDefaultProtocolFormsUC))
+]
 UpdateProtocolFormDep = Annotated[
     UpdateProtocolFormUC, Depends(_get_use_case(UpdateProtocolFormUC))
 ]

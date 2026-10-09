@@ -192,6 +192,69 @@ export const useCreateProtocolFormApiV1ProtocolFormsPost = <TError = HTTPValidat
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * Add every shipped default form the workspace lacks (existing forms untouched).
+ * @summary Add Default Protocol Forms
+ */
+export const addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost = (
+    
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ProtocolFormResponse[]>(
+      {url: `/api/v1/protocol-forms/defaults`, method: 'POST', signal
+    },
+      );
+    }
+  
+
+
+export const getAddDefaultProtocolFormsApiV1ProtocolFormsDefaultsPostMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost>>, TError,void, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost>>, TError,void, TContext> => {
+
+const mutationKey = ['addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost>>, void> = () => {
+          
+
+          return  addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost()
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddDefaultProtocolFormsApiV1ProtocolFormsDefaultsPostMutationResult = NonNullable<Awaited<ReturnType<typeof addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost>>>
+    
+    export type AddDefaultProtocolFormsApiV1ProtocolFormsDefaultsPostMutationError = unknown
+
+    /**
+ * @summary Add Default Protocol Forms
+ */
+export const useAddDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost>>, TError,void, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addDefaultProtocolFormsApiV1ProtocolFormsDefaultsPost>>,
+        TError,
+        void,
+        TContext
+      > => {
+
+      const mutationOptions = getAddDefaultProtocolFormsApiV1ProtocolFormsDefaultsPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
  * @summary Update Protocol Form
  */
 export const updateProtocolFormApiV1ProtocolFormsFormIdPatch = (

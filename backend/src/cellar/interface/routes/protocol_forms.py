@@ -19,6 +19,9 @@ from cellar.application.workspace_config.delete_protocol_form import (
 from cellar.application.workspace_config.list_protocol_forms import (
     ListProtocolFormsQuery,
 )
+from cellar.application.workspace_config.protocol_form_defaults import (
+    SeedDefaultProtocolFormsCommand,
+)
 from cellar.application.workspace_config.update_protocol_form import (
     UpdateProtocolFormCommand,
 )
@@ -28,6 +31,7 @@ from cellar.interface.dependencies import (
     CreateProtocolFormDep,
     DeleteProtocolFormDep,
     ListProtocolFormsDep,
+    SeedDefaultProtocolFormsDep,
     UpdateProtocolFormDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -159,6 +163,17 @@ async def create_protocol_form(
     )
     form = result_to_response(await use_case(command, auth=auth))
     return ProtocolFormResponse.from_domain(form)
+
+
+@router.post("/defaults", response_model=list[ProtocolFormResponse])
+async def add_default_protocol_forms(
+    auth: AuthDep, use_case: SeedDefaultProtocolFormsDep
+) -> list[ProtocolFormResponse]:
+    """Add every shipped default form the workspace lacks (existing forms untouched)."""
+    forms = result_to_response(
+        await use_case(SeedDefaultProtocolFormsCommand(workspace_id=auth.workspace_id), auth=auth)
+    )
+    return [ProtocolFormResponse.from_domain(f) for f in forms]
 
 
 @router.patch("/{form_id}", response_model=ProtocolFormResponse)

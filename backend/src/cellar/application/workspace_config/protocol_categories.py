@@ -24,6 +24,7 @@ from cellar.application.workspace_config.naming_changes import (
     plan_category,
     refuse_collisions,
 )
+from cellar.application.workspace_config.protocol_form_defaults import seed_default_forms
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
 from cellar.domain.shared.protocol_naming import DEFAULT_CATEGORY_PATTERNS
@@ -226,17 +227,21 @@ class DeleteProtocolCategory:
 
 
 class SeedDefaultProtocolCategories:
-    """Adds any shipped default category the workspace lacks. Never edits existing ones."""
+    """Adds any shipped default category the workspace lacks, with its shipped forms.
+    Never edits existing ones."""
 
     def __init__(
         self,
         uow: UnitOfWork,
         repo: ProtocolCategoryRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        form_repo: ProtocolFormRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._forms = form_repo
 
     async def __call__(
         self, input: SeedDefaultProtocolCategoriesCommand, auth: AuthContext | None = None
@@ -249,6 +254,8 @@ class SeedDefaultProtocolCategories:
                     await self._repo.save(
                         ProtocolCategory.create(workspace_id=input.workspace_id, label=label)
                     )
+            if self._forms is not None:
+                await seed_default_forms(self._forms, self._repo, input.workspace_id)
             categories = await self._repo.find_by_workspace(input.workspace_id)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
