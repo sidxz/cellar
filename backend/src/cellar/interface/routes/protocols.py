@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
@@ -12,7 +13,11 @@ from pydantic import BaseModel
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
-from cellar.application.screening.create_protocol import CreateProtocolCommand
+from cellar.application.screening.correct_protocol import CorrectProtocolCommand
+from cellar.application.screening.create_protocol import (
+    CreateProtocolCommand,
+    SiblingDiscriminator,
+)
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocolsQuery
 from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
 from cellar.application.screening.get_protocol import (
@@ -49,13 +54,20 @@ from cellar.application.screening.manage_protocol import (
     RemoveProtocolFromProjectCommand,
     RemoveProtocolTargetCommand,
     RetireProtocolCommand,
+    SetProtocolDiscriminatorCommand,
     UpdateProtocolCommand,
     VersionProtocolCommand,
 )
+from cellar.application.screening.manage_protocol_aliases import ProtocolNicknameCommand
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
     RemoveReadoutDefinitionCommand,
     UpdateReadoutDefinitionCommand,
+)
+from cellar.application.screening.preview_protocol_name import (
+    ListDiscriminatorsQuery,
+    NamePreview,
+    PreviewProtocolNameQuery,
 )
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverageQuery,
@@ -66,13 +78,16 @@ from cellar.application.screening.resolve_target_links import (
 )
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.protocol import Protocol
+from cellar.domain.screening_assay.repository import NameSibling
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
+    AddProtocolNicknameDep,
     AddProtocolTargetDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
     AuthDep,
     ConditionGroupingServiceDep,
+    CorrectProtocolDep,
     CreateProtocolDep,
     DeleteProtocolDep,
     FindSimilarProtocolsDep,
@@ -80,22 +95,26 @@ from cellar.interface.dependencies import (
     GetProtocolCollectionGapDep,
     GetProtocolDep,
     GetProtocolTargetsDep,
+    ListDiscriminatorsDep,
     ListProtocolsByProjectDep,
     ListProtocolsDep,
     ListProtocolSummariesDep,
     ListProtocolVocabularyDep,
     LockProtocolDep,
+    PreviewProtocolNameDep,
     PublishProtocolDep,
     RemoveConditionDefinitionDep,
     RemoveControlLayoutDep,
     RemoveOntologyAnnotationDep,
     RemoveProtocolFromProjectDep,
+    RemoveProtocolNicknameDep,
     RemoveProtocolTargetDep,
     RemoveReadoutDefinitionDep,
     ResolveProtocolTargetsDep,
     RetireProtocolDep,
     SetControlLayoutDep,
     SetOntologyAnnotationDep,
+    SetProtocolDiscriminatorDep,
     UnlockProtocolDep,
     UpdateConditionDefinitionDep,
     UpdateProtocolDep,
@@ -190,10 +209,21 @@ class ConditionDefinitionResponse(BaseModel):
     pick_list_values: list[str] | None = None
 
 
+class ProtocolAliasResponse(BaseModel):
+    label: str
+    kind: str
+    recorded_at: datetime
+    reason: str | None = None
+
+
 class ProtocolResponse(BaseModel):
     id: uuid.UUID
     workspace_id: uuid.UUID
     name: str
+    code: str | None = None
+    discriminator: str | None = None
+    # needs_facts | needs_discriminator | name_conflict
+    name_flag: str | None = None
     description: str | None = None
     protocol_type: str
     # Effective targets (direct union run-derived), lightweight for display.
@@ -225,6 +255,7 @@ class ProtocolResponse(BaseModel):
     # any draft, for an admin) that nothing still uses. Filled only by
     # GET /protocols/{id}; null on every other response means "not computed".
     can_delete: bool | None = None
+    aliases: list[ProtocolAliasResponse] = []
 
     @classmethod
     def from_domain(
@@ -255,6 +286,9 @@ class ProtocolResponse(BaseModel):
             id=p.id,
             workspace_id=p.workspace_id,
             name=p.name,
+            code=p.code,
+            discriminator=p.discriminator,
+            name_flag=p.name_flag.value if p.name_flag else None,
             description=p.description,
             protocol_type=p.protocol_type.value,
             targets=targets or [],
@@ -314,6 +348,12 @@ class ProtocolResponse(BaseModel):
             lock_reason=p.lock_reason,
             locked_at=p.locked_at,
             can_delete=can_delete,
+            aliases=[
+                ProtocolAliasResponse(
+                    label=a.label, kind=a.kind.value, recorded_at=a.recorded_at, reason=a.reason
+                )
+                for a in p.aliases
+            ],
         )
 
 
@@ -355,8 +395,16 @@ class OntologyTermRequest(BaseModel):
     uri: str | None = None
 
 
+class SiblingDiscriminatorRequest(BaseModel):
+    """A discriminator for a bare sibling that has to be renamed alongside a new protocol."""
+
+    protocol_id: uuid.UUID
+    discriminator: str
+    reason: str | None = None
+
+
 class CreateProtocolRequest(BaseModel):
-    name: str
+    # No name: it is generated from the category pattern and the facts below.
     description: str | None = None
     protocol_type: str
     target_ids: list[uuid.UUID] = []
@@ -369,6 +417,14 @@ class CreateProtocolRequest(BaseModel):
     # with the protocol so multi-slot facet sets can't race/drop (the per-slot
     # PUT endpoint remains for interactive single-slot edits).
     ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
+    # The free part of the name (method or fixed condition), needed when names collide.
+    discriminator: str | None = None
+    # The form the dialog started from; decides whether the assay format follows the targets.
+    form_id: uuid.UUID | None = None
+    # Discriminators for bare siblings (same base name), set in the same save; while siblings
+    # share the base name the new protocol carries a discriminator too.
+    sibling_discriminators: list[SiblingDiscriminatorRequest] = []
+    nicknames: list[str] = []
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -431,7 +487,6 @@ async def create_protocol(
 ) -> ProtocolResponse:
     cmd = CreateProtocolCommand(
         workspace_id=auth.workspace_id,
-        name=body.name,
         description=body.description,
         protocol_type=body.protocol_type,
         target_ids=body.target_ids,
@@ -444,6 +499,15 @@ async def create_protocol(
             slot: [t.model_dump() for t in terms]
             for slot, terms in (body.ontology_annotations or {}).items()
         },
+        discriminator=body.discriminator,
+        form_id=body.form_id,
+        sibling_discriminators=[
+            SiblingDiscriminator(
+                protocol_id=s.protocol_id, discriminator=s.discriminator, reason=s.reason
+            )
+            for s in body.sibling_discriminators
+        ],
+        nicknames=body.nicknames,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -454,6 +518,8 @@ class ProtocolSummaryResponse(BaseModel):
 
     id: uuid.UUID
     name: str
+    code: str | None = None
+    aliases: list[str] = []
     status: str
     protocol_type: str
     description: str | None = None
@@ -489,6 +555,8 @@ async def list_protocol_summaries(
         ProtocolSummaryResponse(
             id=s.id,
             name=s.name,
+            code=s.code,
+            aliases=s.aliases,
             status=s.status,
             protocol_type=s.protocol_type,
             description=s.description,
@@ -613,6 +681,110 @@ async def list_protocols(
         ],
         next_cursor=page.next_cursor,
     )
+
+
+class NamePreviewRequest(BaseModel):
+    category: str | None = None
+    target_ids: list[uuid.UUID] = []
+    ontology_annotations: dict[str, list[OntologyTermRequest]] = {}
+    discriminator: str | None = None
+    # The protocol being corrected, so it does not clash with itself.
+    protocol_id: uuid.UUID | None = None
+    # Discriminators proposed for the bare siblings, to preview their new names.
+    sibling_discriminators: list[SiblingDiscriminatorRequest] = []
+    # The form the dialog started from; its assay format may follow the targets, as at create.
+    form_id: uuid.UUID | None = None
+    model_config = {"extra": "forbid"}
+
+
+class NameSiblingResponse(BaseModel):
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    discriminator: str | None
+    status: str | None
+    is_locked: bool
+
+    @classmethod
+    def from_domain(cls, s: NameSibling) -> NameSiblingResponse:
+        return cls(
+            protocol_id=s.protocol_id,
+            code=s.code,
+            name=s.name,
+            discriminator=s.discriminator,
+            status=s.status,
+            is_locked=s.is_locked,
+        )
+
+
+class SiblingRenameResponse(BaseModel):
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str | None
+    error: str | None
+
+
+class NamePreviewResponse(BaseModel):
+    name: str
+    base: str
+    missing: list[str]
+    missing_labels: list[str]
+    clash: NameSiblingResponse | None
+    siblings: list[NameSiblingResponse]
+    needs_discriminator: bool
+    discriminator_error: str | None
+    discriminator_in_pattern: bool
+    sibling_renames: list[SiblingRenameResponse]
+
+    @classmethod
+    def from_domain(cls, p: NamePreview) -> NamePreviewResponse:
+        return cls(
+            name=p.name,
+            base=p.base,
+            missing=p.missing,
+            missing_labels=p.missing_labels,
+            clash=NameSiblingResponse.from_domain(p.clash) if p.clash else None,
+            siblings=[NameSiblingResponse.from_domain(s) for s in p.siblings],
+            needs_discriminator=p.needs_discriminator,
+            discriminator_error=p.discriminator_error,
+            discriminator_in_pattern=p.discriminator_in_pattern,
+            sibling_renames=[SiblingRenameResponse(**asdict(r)) for r in p.sibling_renames],
+        )
+
+
+@router.post("/protocols/name-preview", response_model=NamePreviewResponse, tags=["protocols"])
+async def preview_protocol_name(
+    body: NamePreviewRequest, auth: AuthDep, uc: PreviewProtocolNameDep
+) -> NamePreviewResponse:
+    """The name these facts would generate, what is missing, and any collision."""
+    query = PreviewProtocolNameQuery(
+        workspace_id=auth.workspace_id,
+        category=body.category,
+        target_ids=body.target_ids,
+        ontology_annotations={
+            slot: [t.model_dump() for t in terms]
+            for slot, terms in body.ontology_annotations.items()
+        },
+        discriminator=body.discriminator,
+        protocol_id=body.protocol_id,
+        sibling_discriminators={
+            s.protocol_id: s.discriminator for s in body.sibling_discriminators
+        },
+        form_id=body.form_id,
+    )
+    return NamePreviewResponse.from_domain(result_to_response(await uc(query, auth=auth)))
+
+
+@router.get("/protocols/discriminators", response_model=list[str], tags=["protocols"])
+async def list_protocol_discriminators(
+    auth: AuthDep,
+    uc: ListDiscriminatorsDep,
+    base: str | None = Query(None),
+    q: str | None = Query(None),
+) -> list[str]:
+    """Discriminators already in use (for the picker); ``base`` narrows to one base name."""
+    query = ListDiscriminatorsQuery(workspace_id=auth.workspace_id, base=base, q=q)
+    return result_to_response(await uc(query, auth=auth))
 
 
 @router.get("/protocols/{protocol_id}", response_model=ProtocolResponse, tags=["protocols"])
@@ -740,9 +912,9 @@ async def version_protocol(
 
 
 class UpdateProtocolRequest(BaseModel):
-    name: str | None = None
     description: str | None = None
     category: str | None = None
+    discriminator: str | None = None
     recommended_hit_criteria: list[dict] | None = None
     # Allowed on ACTIVE protocols (unlike the other fields above which are
     # DRAFT-only). The use case applies it via Protocol.set_pos_control_signal.
@@ -764,15 +936,15 @@ async def update_protocol(
 ) -> ProtocolResponse:
     """Update a DRAFT protocol's metadata."""
 
-    # ``name`` and ``pos_control_signal`` are typed as ``str | None`` on the
+    # ``pos_control_signal`` is typed as ``str | None`` on the
     # command — None means "leave unchanged". The other fields are nullable
     # and use UNSET to distinguish omission from "set to null".
     cmd = UpdateProtocolCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
-        name=body.name,
         description=body.description if "description" in body.model_fields_set else UNSET,
         category=body.category if "category" in body.model_fields_set else UNSET,
+        discriminator=body.discriminator if "discriminator" in body.model_fields_set else UNSET,
         recommended_hit_criteria=body.recommended_hit_criteria
         if "recommended_hit_criteria" in body.model_fields_set
         else UNSET,
@@ -780,6 +952,112 @@ async def update_protocol(
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
+
+
+class SetDiscriminatorRequest(BaseModel):
+    discriminator: str | None
+    reason: str | None = None  # required to correct a published protocol
+    model_config = {"extra": "forbid"}
+
+
+@router.put(
+    "/protocols/{protocol_id}/discriminator", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def set_protocol_discriminator(
+    protocol_id: uuid.UUID,
+    body: SetDiscriminatorRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: SetProtocolDiscriminatorDep,
+) -> ProtocolResponse:
+    """Set the free part of the generated name; the name re-derives."""
+    cmd = SetProtocolDiscriminatorCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        discriminator=body.discriminator,
+        reason=body.reason,
+    )
+    result = await uc(cmd, auth=auth)
+    return await _protocol_response(targets_uc, auth, result)
+
+
+class CorrectProtocolRequest(BaseModel):
+    reason: str
+    category: str | None = None
+    discriminator: str | None = None
+    # slot -> full replacement; an empty list clears the slot
+    ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
+    # the full set of direct targets
+    target_ids: list[uuid.UUID] | None = None
+    model_config = {"extra": "forbid"}
+
+
+@router.post(
+    "/protocols/{protocol_id}/correct", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def correct_protocol(
+    protocol_id: uuid.UUID,
+    body: CorrectProtocolRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: CorrectProtocolDep,
+) -> ProtocolResponse:
+    """Fix a published protocol's recorded facts (same code); the name re-derives once."""
+    sent = body.model_fields_set
+    cmd = CorrectProtocolCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        reason=body.reason,
+        category=body.category if "category" in sent else UNSET,
+        discriminator=body.discriminator if "discriminator" in sent else UNSET,
+        ontology_annotations={
+            slot: [t.model_dump() for t in terms]
+            for slot, terms in (body.ontology_annotations or {}).items()
+        }
+        if "ontology_annotations" in sent
+        else UNSET,
+        target_ids=(body.target_ids or []) if "target_ids" in sent else UNSET,
+    )
+    result = await uc(cmd, auth=auth)
+    return await _protocol_response(targets_uc, auth, result)
+
+
+class AddNicknameRequest(BaseModel):
+    label: str
+    model_config = {"extra": "forbid"}
+
+
+@router.post(
+    "/protocols/{protocol_id}/nicknames", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def add_protocol_nickname(
+    protocol_id: uuid.UUID,
+    body: AddNicknameRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: AddProtocolNicknameDep,
+) -> ProtocolResponse:
+    """Add a name people use for this protocol. Searchable; never its name."""
+    cmd = ProtocolNicknameCommand(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id, label=body.label
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/nicknames", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def remove_protocol_nickname(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: RemoveProtocolNicknameDep,
+    label: str = Query(..., min_length=1),
+) -> ProtocolResponse:
+    cmd = ProtocolNicknameCommand(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id, label=label
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
 
 
 @router.delete("/protocols/{protocol_id}", status_code=204, tags=["protocols"])
@@ -1068,6 +1346,7 @@ async def remove_control_layout(
 class SetOntologyAnnotationRequest(BaseModel):
     slot: str
     terms: list[OntologyTermRequest]
+    reason: str | None = None  # required to correct a published protocol
 
 
 @router.put(
@@ -1088,6 +1367,7 @@ async def set_ontology_annotation(
         protocol_id=protocol_id,
         slot=body.slot,
         terms=[t.model_dump() for t in body.terms],
+        reason=body.reason,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1104,12 +1384,14 @@ async def remove_ontology_annotation(
     auth: AuthDep,
     targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveOntologyAnnotationDep,
+    reason: str | None = Query(None),
 ) -> ProtocolResponse:
-    """Remove all ontology terms for a slot from a DRAFT protocol."""
+    """Remove all ontology terms for a slot (a published protocol needs a reason)."""
     cmd = RemoveOntologyAnnotationCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
         slot=slot,
+        reason=reason,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1201,13 +1483,15 @@ async def add_protocol_target(
     target_id: uuid.UUID,
     auth: AuthDep,
     uc: AddProtocolTargetDep,
+    reason: str | None = Query(None),
 ) -> Response:
-    """Attach a direct target to a protocol (idempotent)."""
+    """Attach a direct target to a protocol (idempotent; a published one needs a reason)."""
     result = await uc(
         AddProtocolTargetCommand(
             workspace_id=auth.workspace_id,
             protocol_id=protocol_id,
             target_id=target_id,
+            reason=reason,
         ),
         auth=auth,
     )
@@ -1225,13 +1509,15 @@ async def remove_protocol_target(
     target_id: uuid.UUID,
     auth: AuthDep,
     uc: RemoveProtocolTargetDep,
+    reason: str | None = Query(None),
 ) -> Response:
-    """Remove a direct target from a protocol."""
+    """Remove a direct target from a protocol (a published one needs a reason)."""
     result = await uc(
         RemoveProtocolTargetCommand(
             workspace_id=auth.workspace_id,
             protocol_id=protocol_id,
             target_id=target_id,
+            reason=reason,
         ),
         auth=auth,
     )

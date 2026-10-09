@@ -10,9 +10,10 @@ import { GroupedProtocolList } from "./grouped-protocol-list";
 interface ProtocolLibraryViewProps {
   protocols: Protocol[];
   onSelect?: (protocolId: string) => void;
+  search?: string;
 }
 
-export function ProtocolLibraryView({ protocols, onSelect }: ProtocolLibraryViewProps) {
+export function ProtocolLibraryView({ protocols, onSelect, search }: ProtocolLibraryViewProps) {
   const hasRetired = protocols.some((p) => p.status === "retired");
   // Default: pre-exclude retired (only when some exist, else no status preset).
   const [selections, setSelections] = useState<FacetSelections>(() =>
@@ -46,6 +47,7 @@ export function ProtocolLibraryView({ protocols, onSelect }: ProtocolLibraryView
         groupBy={groupBy}
         onGroupByChange={setGroupBy}
         onSelect={onSelect}
+        search={search}
       />
     </div>
   );

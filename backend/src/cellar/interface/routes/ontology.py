@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from cellar.application.screening.search_ontology import (
+    ListOntologyDescendantsQuery,
     SearchOntologyQuery,
 )
 from cellar.application.shared.sentinel import UNSET
@@ -30,6 +31,7 @@ from cellar.interface.dependencies import (
     AuthDep,
     CreateOntologySlotDep,
     DeleteOntologySlotDep,
+    ListOntologyDescendantsDep,
     ListOntologySlotsDep,
     SearchOntologyDep,
     UpdateOntologySlotDep,
@@ -134,18 +136,17 @@ async def search_ontology(
 @router.get("/ontology/descendants", response_model=list[OntologyTermResponse])
 async def list_ontology_descendants(
     auth: AuthDep,
-    use_case: SearchOntologyDep,
+    use_case: ListOntologyDescendantsDep,
     ontology: str = Query(...),
     root_concept_id: str = Query(...),
 ) -> list[OntologyTermResponse]:
     """List all descendants of a concept — for dropdown-style selection."""
-    # Access the BioPortalClient through the search service (same DI instance)
-    bioportal = use_case._search_service  # type: ignore[attr-defined]
-    terms = await bioportal.list_descendants(
+    query = ListOntologyDescendantsQuery(
+        workspace_id=auth.workspace_id,
         ontology=ontology,
         root_concept_id=root_concept_id,
-        workspace_id=auth.workspace_id,
     )
+    terms = result_to_response(await use_case(query, auth=auth))
     return [OntologyTermResponse.from_domain(t) for t in terms]
 
 

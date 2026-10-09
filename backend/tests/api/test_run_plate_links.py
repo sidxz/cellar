@@ -11,6 +11,8 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from tests.api._protocols import protocol_body
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -31,7 +33,7 @@ async def _mk_run(client: AsyncClient) -> str:
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": f"LinkProto-{uuid.uuid4().hex[:6]}",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },

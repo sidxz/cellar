@@ -135,6 +135,7 @@ class AnyProtocolEntry:
     value_um: float | None
     curve_class: str | None  # DR only
     run_count: int
+    protocol_code: str | None = None
 
 
 @dataclass(frozen=True)

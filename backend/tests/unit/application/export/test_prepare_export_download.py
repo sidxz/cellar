@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, UTC
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest

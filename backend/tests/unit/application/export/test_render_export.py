@@ -1,12 +1,13 @@
 from __future__ import annotations
+
 import uuid
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from cellar.application.export.render_export import RenderExport
-from cellar.application.export.row_streams.base import ColumnSpec, ExportRow, RowStream
+from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 from cellar.domain.export.enums import ExportFormat, ExportSource, ExportStatus
 from cellar.domain.export.export_job import ExportJob
 

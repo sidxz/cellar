@@ -1,6 +1,7 @@
 "use client";
 
 import type { ColorMode } from "@/features/sar-analysis/types";
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import {
   Select,
   SelectContent,
@@ -12,6 +13,7 @@ import {
 export interface ProtocolOption {
   id: string;
   name: string;
+  code?: string | null;
 }
 
 interface ColorModePickerProps {
@@ -52,7 +54,7 @@ export function ColorModePicker({ mode, protocolId, protocols, onChange }: Color
           <SelectContent>
             {protocols.map((p) => (
               <SelectItem key={p.id} value={p.id}>
-                {p.name}
+                <ProtocolOptionLabel code={p.code} name={p.name} />
               </SelectItem>
             ))}
           </SelectContent>

@@ -19,7 +19,10 @@ from cellar.domain.workspace_config.protocol_form import (
     ProtocolFormOntologyDefault,
     ProtocolFormReadout,
 )
-from cellar.domain.workspace_config.repository import ProtocolFormRepository
+from cellar.domain.workspace_config.repository import (
+    ProtocolCategoryRepository,
+    ProtocolFormRepository,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -30,6 +33,8 @@ class UpdateProtocolFormCommand(Command):
     description: str | object | None = UNSET
     protocol_type: str | object | None = UNSET
     is_default: bool | object = UNSET
+    category_id: uuid.UUID | object | None = UNSET
+    assay_format_from_target: bool | object = UNSET
     readout_templates: list[dict] | object | None = UNSET
     condition_templates: list[dict] | object | None = UNSET
     ontology_defaults: list[dict] | object | None = UNSET
@@ -41,10 +46,13 @@ class UpdateProtocolForm:
         uow: UnitOfWork,
         repo: ProtocolFormRepository,
         dispatcher: EventDispatcherProtocol,
+        *,
+        category_repo: ProtocolCategoryRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._categories = category_repo
 
     async def __call__(
         self, input: UpdateProtocolFormCommand, auth: AuthContext | None = None
@@ -67,6 +75,18 @@ class UpdateProtocolForm:
                 update_kwargs["protocol_type"] = input.protocol_type
             if input.is_default is not UNSET:
                 update_kwargs["is_default"] = input.is_default
+            if input.category_id is not UNSET:
+                if (
+                    input.category_id is not None
+                    and not await self._categories.find_by_id_in_workspace(
+                        input.workspace_id,
+                        input.category_id,  # type: ignore[arg-type]
+                    )
+                ):
+                    return Failure(NotFoundError("ProtocolCategory", str(input.category_id)))
+                update_kwargs["category_id"] = input.category_id
+            if input.assay_format_from_target is not UNSET:
+                update_kwargs["assay_format_from_target"] = input.assay_format_from_target
 
             if input.readout_templates is not UNSET:
                 if input.readout_templates:
@@ -116,6 +136,11 @@ class UpdateProtocolForm:
             if update_kwargs:
                 form.update(**update_kwargs)
 
+            if form.is_default:
+                # Bulk UPDATE first: it runs before this form's change is flushed.
+                await self._repo.clear_default(
+                    form.workspace_id, form.category_id, except_id=form.id
+                )
             await self._repo.save(form)
             events = await self._uow.commit()
 

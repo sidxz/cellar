@@ -187,9 +187,9 @@ async def _seed_protocol_with_run(
         await session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, protocol_version, created_by) "
-                "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+                "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', "
                 "false, 'uM', 'high', 1, 1, :user)"
             ),
             {

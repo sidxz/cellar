@@ -1,11 +1,11 @@
-"""SearchOntology query — proxy search to OntologySearchService."""
+"""Ontology lookups — proxy search and subtree listing to OntologySearchService."""
 
 from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
 
-from returns.result import Result, Success
+from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.shared.query import Query
@@ -32,11 +32,43 @@ class SearchOntology:
     ) -> Result[list[OntologyTerm], DomainError]:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
-        results = await self._search_service.search(
-            query=input.query,
-            ontology_sources=input.ontology_sources,
-            page_size=input.page_size,
-            subtree_root_id=input.subtree_root_id,
-            workspace_id=input.workspace_id,
-        )
+        try:
+            results = await self._search_service.search(
+                query=input.query,
+                ontology_sources=input.ontology_sources,
+                page_size=input.page_size,
+                subtree_root_id=input.subtree_root_id,
+                workspace_id=input.workspace_id,
+            )
+        except DomainError as exc:
+            return Failure(exc)
         return Success(results)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListOntologyDescendantsQuery(Query):
+    workspace_id: uuid.UUID
+    ontology: str
+    root_concept_id: str
+
+
+class ListOntologyDescendants:
+    """Every term under a root concept — backs dropdown-mode ontology slots."""
+
+    def __init__(self, search_service: OntologySearchService) -> None:
+        self._search_service = search_service
+
+    async def __call__(
+        self, input: ListOntologyDescendantsQuery, auth: AuthContext | None = None
+    ) -> Result[list[OntologyTerm], DomainError]:
+        require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
+        try:
+            terms = await self._search_service.list_descendants(
+                ontology=input.ontology,
+                root_concept_id=input.root_concept_id,
+                workspace_id=input.workspace_id,
+            )
+        except DomainError as exc:
+            return Failure(exc)
+        return Success(terms)

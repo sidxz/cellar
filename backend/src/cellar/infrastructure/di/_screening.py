@@ -5,6 +5,8 @@ primitives, plate map, fit curves, ontology search/annotations, import run reado
 
 from __future__ import annotations
 
+import uuid
+
 import httpx
 from lagom import Container, Singleton
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -32,6 +34,7 @@ from cellar.application.screening.bulk_create_readout_data import BulkCreateRead
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.compound_curves_reader import CompoundCurvesReader
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
+from cellar.application.screening.correct_protocol import CorrectProtocol
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
 from cellar.application.screening.create_dose_response import CreateDoseResponseCurve
 from cellar.application.screening.create_protocol import CreateProtocol
@@ -79,6 +82,7 @@ from cellar.application.screening.list_protocol_summaries import ListProtocolSum
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.list_units import ListUnits
 from cellar.application.screening.lock_protocol import (
     LockProtocol,
     UnlockProtocol,
@@ -106,8 +110,13 @@ from cellar.application.screening.manage_protocol import (
     RemoveProtocolFromProject,
     RemoveProtocolTarget,
     RetireProtocol,
+    SetProtocolDiscriminator,
     UpdateProtocol,
     VersionProtocol,
+)
+from cellar.application.screening.manage_protocol_aliases import (
+    AddProtocolNickname,
+    RemoveProtocolNickname,
 )
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
@@ -138,12 +147,22 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_protocol_name import (
+    ListDiscriminators,
+    PreviewProtocolName,
+)
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.protocol_activity_reader import ProtocolActivityReader
+from cellar.application.screening.protocol_naming_service import ProtocolNameService
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
+from cellar.application.screening.rederive_protocol_names import (
+    ListNameFlags,
+    RederiveAllProtocolNames,
+    RederiveProtocolNames,
+)
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
@@ -164,12 +183,13 @@ from cellar.application.screening.run_import_templates import (
     ListRunImportTemplates,
     UpdateRunImportTemplate,
 )
-from cellar.application.screening.search_ontology import SearchOntology
+from cellar.application.screening.search_ontology import ListOntologyDescendants, SearchOntology
 from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
 from cellar.application.screening.sync_targets import SyncFreshness, SyncTargetsFromProtCellar
+from cellar.application.screening.target_renamed_handler import TargetRenamedHandler
 from cellar.application.screening.target_source import TargetSource
 from cellar.application.screening.update_run import UpdateRun
 from cellar.application.shared.molecule_resolver import MoleculeResolver
@@ -201,6 +221,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_read_model_rea
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
+    SQLAlchemyCollectionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_curves_reader import (
     SQLAlchemyCompoundCurvesReader,
@@ -247,9 +270,52 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
     SQLAlchemyTargetRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_repository import (
+    SQLAlchemyNamingLabelRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_category_repository import (  # noqa: E501
+    SQLAlchemyProtocolCategoryRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (  # noqa: E501
+    SQLAlchemyProtocolFormRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
+    SQLAlchemyWorkspaceSettingsRepository,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.prot_cellar.settings import ProtCellarSettings
 from cellar.infrastructure.prot_cellar.target_source import HttpTargetSource
+
+
+def _name_service(uow) -> ProtocolNameService:
+    """The one name deriver every protocol use case shares (all repos on the same unit of work)."""
+    return ProtocolNameService(
+        protocol_repo=SQLAlchemyProtocolRepository(uow),
+        target_repo=SQLAlchemyTargetRepository(uow),
+        category_repo=SQLAlchemyProtocolCategoryRepository(uow),
+        label_repo=SQLAlchemyNamingLabelRepository(uow),
+        settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+        collection_repo=SQLAlchemyCollectionRepository(uow),
+    )
+
+
+def register_protocol_naming_handlers(container: Container) -> None:
+    """Registry renames re-derive linked protocol names (after the sync commits)."""
+    from cellar.domain.screening_assay.events import TargetRenamed
+
+    session_factory = container[async_sessionmaker]
+
+    async def _ids_for_target(workspace_id: uuid.UUID, target_id: uuid.UUID) -> list[uuid.UUID]:
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            return await SQLAlchemyProtocolRepository(uow).find_protocol_ids_by_direct_target(
+                workspace_id, target_id
+            )
+
+    container[EventDispatcher].register(
+        TargetRenamed,
+        TargetRenamedHandler(lambda: container[RederiveProtocolNames], _ids_for_target),
+    )
 
 
 def register_screening(container: Container) -> None:
@@ -264,6 +330,20 @@ def register_screening(container: Container) -> None:
 
         return _f
 
+    def _protocol_named(uc_cls: type):
+        """Protocol commands that re-derive the generated name (name service on the same uow)."""
+
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProtocolRepository(uow),
+                c[EventDispatcher],
+                names=_name_service(uow),
+            )
+
+        return _f
+
     def _protocol_query(uc_cls: type):
         def _f(c: Container):
             uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -275,17 +355,66 @@ def register_screening(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return FindSimilarProtocols(uow, SQLAlchemyProtocolRepository(uow))
 
-    container.define(CreateProtocol, _protocol_cmd(CreateProtocol))
+    def _create_protocol(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateProtocol(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            c[EventDispatcher],
+            names=_name_service(uow),
+            settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+            target_repo=SQLAlchemyTargetRepository(uow),
+        )
+
+    container.define(CreateProtocol, _create_protocol)
+
+    def _preview_name(c: Container) -> PreviewProtocolName:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewProtocolName(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            _name_service(uow),
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+            target_repo=SQLAlchemyTargetRepository(uow),
+        )
+
+    container.define(PreviewProtocolName, _preview_name)
+    container.define(ListDiscriminators, _protocol_query(ListDiscriminators))
     container.define(GetProtocol, _protocol_query(GetProtocol))
     container.define(ListProtocols, _protocol_query(ListProtocols))
     container.define(ListProtocolVocabulary, _protocol_query(ListProtocolVocabulary))
+    container.define(ListUnits, lambda c: ListUnits())
     container.define(FindSimilarProtocols, _find_similar_protocols)
     container.define(PublishProtocol, _protocol_cmd(PublishProtocol))
     container.define(RetireProtocol, _protocol_cmd(RetireProtocol))
     container.define(LockProtocol, _protocol_cmd(LockProtocol))
     container.define(UnlockProtocol, _protocol_cmd(UnlockProtocol))
     container.define(VersionProtocol, _protocol_cmd(VersionProtocol))
-    container.define(UpdateProtocol, _protocol_cmd(UpdateProtocol))
+    container.define(UpdateProtocol, _protocol_named(UpdateProtocol))
+    container.define(SetProtocolDiscriminator, _protocol_named(SetProtocolDiscriminator))
+    container.define(CorrectProtocol, _protocol_named(CorrectProtocol))
+    container.define(
+        RederiveProtocolNames,
+        lambda c: RederiveProtocolNames(
+            uow_factory=lambda: AsyncUnitOfWork(c[async_sessionmaker]),
+            names_factory=_name_service,
+            repo_factory=SQLAlchemyProtocolRepository,
+            dispatcher=c[EventDispatcher],
+        ),
+    )
+    container.define(
+        RederiveAllProtocolNames,
+        lambda c: RederiveAllProtocolNames(
+            uow_factory=lambda: AsyncUnitOfWork(c[async_sessionmaker]),
+            names_factory=_name_service,
+            repo_factory=SQLAlchemyProtocolRepository,
+            rederive=c[RederiveProtocolNames],
+        ),
+    )
+    container.define(ListNameFlags, _protocol_query(ListNameFlags))
+    container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
+    container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
     container.define(ListProtocolsByProject, _protocol_query(ListProtocolsByProject))
 
@@ -300,8 +429,8 @@ def register_screening(container: Container) -> None:
     container.define(ListProtocolSummaries, _list_protocol_summaries)
     container.define(AddProtocolToProject, _protocol_cmd(AddProtocolToProject))
     container.define(RemoveProtocolFromProject, _protocol_cmd(RemoveProtocolFromProject))
-    container.define(AddProtocolTarget, _protocol_cmd(AddProtocolTarget))
-    container.define(RemoveProtocolTarget, _protocol_cmd(RemoveProtocolTarget))
+    container.define(AddProtocolTarget, _protocol_named(AddProtocolTarget))
+    container.define(RemoveProtocolTarget, _protocol_named(RemoveProtocolTarget))
     container.define(GetProtocolTargets, _protocol_query(GetProtocolTargets))
     container.define(ResolveProtocolTargets, _protocol_query(ResolveProtocolTargets))
 
@@ -367,7 +496,11 @@ def register_screening(container: Container) -> None:
     def _sync_targets(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SyncTargetsFromProtCellar(
-            uow, SQLAlchemyTargetRepository(uow), c[TargetSource], c[SyncFreshness]
+            uow,
+            SQLAlchemyTargetRepository(uow),
+            c[TargetSource],
+            c[SyncFreshness],
+            c[EventDispatcher],
         )
 
     def _list_targets(c: Container):
@@ -1030,14 +1163,21 @@ def register_screening(container: Container) -> None:
     # --- Ontology Search & Annotations ---
     container.define(BioPortalClient, lambda c: BioPortalClient(c[SecretProvider]))
     container.define(SearchOntology, lambda c: SearchOntology(c[BioPortalClient]))
+    container.define(
+        ListOntologyDescendants, lambda c: ListOntologyDescendants(c[BioPortalClient])
+    )
 
     def _set_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return SetOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+        return SetOntologyAnnotation(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], names=_name_service(uow)
+        )
 
     def _remove_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return RemoveOntologyAnnotation(uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher])
+        return RemoveOntologyAnnotation(
+            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], names=_name_service(uow)
+        )
 
     container.define(SetOntologyAnnotation, _set_ontology_annotation)
     container.define(RemoveOntologyAnnotation, _remove_ontology_annotation)

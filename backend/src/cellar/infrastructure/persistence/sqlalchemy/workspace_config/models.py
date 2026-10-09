@@ -17,6 +17,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     Uuid,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
@@ -67,6 +68,7 @@ class WorkspaceSettingsModel(Base, EntityModelMixin, VersionMixin):
     audit_retention_days: Mapped[int | None] = mapped_column()
     formulation_number_scheme: Mapped[str | None] = mapped_column(JSON, nullable=True)
     cdd_vault_id: Mapped[str | None] = mapped_column(String(50))
+    protocol_naming: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
 
 class ControlledVocabularyModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
@@ -178,11 +180,27 @@ class ProtocolFormModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     description: Mapped[str | None] = mapped_column(Text)
     protocol_type: Mapped[str | None] = mapped_column(String(30))
     is_default: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    category_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("protocol_categories.id", ondelete="SET NULL")
+    )
+    assay_format_from_target: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default="false"
+    )
     readout_templates: Mapped[list] = mapped_column(JSONB, nullable=False)
     condition_templates: Mapped[list | None] = mapped_column(JSONB)
     ontology_defaults: Mapped[list | None] = mapped_column(JSONB)
 
-    __table_args__ = (Index("ix_protocol_form_ws", "workspace_id"),)
+    __table_args__ = (
+        Index("ix_protocol_form_ws", "workspace_id"),
+        # One default per category, one generic: NULL category coalesces to the nil uuid.
+        Index(
+            "ux_protocol_form_default",
+            "workspace_id",
+            text("coalesce(category_id, '00000000-0000-0000-0000-000000000000'::uuid)"),
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+    )
 
 
 class DataSourceModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
@@ -202,3 +220,29 @@ class DataSourceModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         UniqueConstraint("workspace_id", "name", name="uq_data_source_ws_name"),
         Index("ix_data_source_ws_type", "workspace_id", "source_type"),
     )
+
+
+class ProtocolCategoryModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """A protocol category and the name pattern its protocols follow.
+
+    Labels are unique per workspace case-insensitively: the functional unique index
+    ``uq_protocol_category_ws_label`` (workspace_id, lower(label)) lives in migration 084.
+    """
+
+    __tablename__ = "protocol_categories"
+
+    label: Mapped[str] = mapped_column(String(100), nullable=False)
+    name_pattern: Mapped[str] = mapped_column(String(400), nullable=False)
+
+
+class NamingLabelModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """Admin override of how one ontology term reads inside protocol names."""
+
+    __tablename__ = "naming_labels"
+
+    term_id: Mapped[str] = mapped_column(String(300), nullable=False)
+    term_label: Mapped[str] = mapped_column(String(300), nullable=False)
+    ontology_source: Mapped[str] = mapped_column(String(40), nullable=False)
+    short_label: Mapped[str] = mapped_column(String(60), nullable=False)
+
+    __table_args__ = (UniqueConstraint("workspace_id", "term_id", name="uq_naming_label_ws_term"),)

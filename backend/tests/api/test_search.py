@@ -400,10 +400,10 @@ async def _seed_multi_run_dr(
         await uow.session.execute(
             sa.text(
                 "INSERT INTO protocols "
-                "(id, workspace_id, name, protocol_type, status, "
+                "(id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, "
                 "protocol_version, created_by) "
-                "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+                "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', "
                 "false, :dose_unit, 'high', 1, 1, :user)"
             ),
             {
@@ -510,10 +510,10 @@ async def _seed_numeric_readout(
     async with uow:
         await uow.session.execute(
             sa.text(
-                "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, "
+                "INSERT INTO protocols (id, workspace_id, name, name_base, protocol_type, status, "
                 "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
                 "created_by) "
-                "VALUES (:id, :ws, :name, 'biochemical', 'active', false, 'uM', 'high', 1, 1, "
+                "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, 'uM', 'high', 1, 1, "
                 ":user)"
             ),
             {
@@ -958,6 +958,51 @@ class TestActivityAnyProtocol:
         assert entries[2]["label"] == "% Inhibition" and entries[2]["value"] == 77.0
         assert all(e["protocol_name"] for e in entries)
 
+    async def test_readout_unit_matches_by_canonical_spelling(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """Stored units are canonical (µM). A criterion still spelled "uM" (an older saved
+        search, an API client) matches them, in the filter and in the "any" column."""
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": "AnyRdUnitMol", "smiles": "CCCCCCCCCCO", "originating_org_id": org_id},
+        )
+        mol_id = str(resp.json()["molecule"]["id"])
+        await _seed_numeric_readout(
+            uow,
+            workspace_id=workspace_id,
+            molecule_id=uuid.UUID(mol_id),
+            readout_name="IC50",
+            unit="µM",
+            value=0.5,
+        )
+        body = {
+            "query": {
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": None,
+                        "where": [
+                            {
+                                "source": "readout_data",
+                                "readout_name": "IC50",
+                                "unit": "uM",
+                                "operator": "lt",
+                                "value": 1,
+                            }
+                        ],
+                    }
+                ],
+                "logic": "and",
+            },
+            "protocol_columns": ["any"],
+        }
+        res = await client.post("/api/v1/search/execute", json=body)
+        assert res.status_code == 200, res.text
+        assert mol_id in {m["id"] for m in res.json()["items"]}
+        entries = res.json()["activity_data"][mol_id]["any"]["entries"]
+        assert [(e["label"], e["unit"], e["value"]) for e in entries] == [("IC50", "µM", 0.5)]
+
     async def test_readout_name_ignores_normalized_layer_rows(
         self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
     ) -> None:
@@ -988,10 +1033,10 @@ class TestActivityAnyProtocol:
         async with uow:
             await uow.session.execute(
                 sa.text(
-                    "INSERT INTO protocols (id, workspace_id, name, protocol_type, status, "
+                    "INSERT INTO protocols (id, workspace_id, name, name_base, protocol_type, status, "
                     "is_locked, dose_unit, pos_control_signal, version, protocol_version, "
                     "created_by) "
-                    "VALUES (:id, :ws, :name, 'biochemical', 'active', false, 'uM', 'high', 1, "
+                    "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, 'uM', 'high', 1, "
                     "1, :user)"
                 ),
                 {

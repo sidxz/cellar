@@ -7,6 +7,7 @@ export type FacetDimension =
   | "assay_format"
   | "detection"
   | "organism"
+  | "cell_line"
   | "status"
   | "readout_kind";
 
@@ -27,6 +28,7 @@ export const FACET_DIMENSIONS: { dimension: FacetDimension; label: string }[] = 
   { dimension: "assay_format", label: "Assay format" },
   { dimension: "detection", label: "Detection" },
   { dimension: "organism", label: "Organism" },
+  { dimension: "cell_line", label: "Cell line" },
   { dimension: "status", label: "Status" },
   { dimension: "readout_kind", label: "Readout kind" },
 ];
@@ -35,6 +37,7 @@ const ONTOLOGY_SLOTS: Partial<Record<FacetDimension, string>> = {
   assay_format: "assay_format",
   detection: "detection",
   organism: "organism",
+  cell_line: "cell_line",
 };
 
 /** Canonical comparable key: lower / trim / collapse-ws. Mirrors the backend
@@ -94,13 +97,56 @@ export function extractFacetItems(p: Protocol, dim: FacetDimension): FacetItem[]
   return out;
 }
 
-/** Substring match on name + target names + category (case-insensitive). */
-export function matchesProtocolText(p: Protocol, query: string): boolean {
+export type ProtocolMatchField =
+  | "name"
+  | "code"
+  | "alias"
+  | "discriminator"
+  | "target"
+  | "organism"
+  | "cell line"
+  | "category"
+  | "condition";
+
+export interface ProtocolTextMatch {
+  field: ProtocolMatchField;
+  value: string;
+}
+
+function termLabels(p: Protocol, slot: string): string[] {
+  return (p.ontology_annotations?.[slot] ?? []).map((t) => t.label);
+}
+
+function conditionTexts(p: Protocol): string[] {
+  return (p.condition_definitions ?? []).flatMap((c) => [c.name, ...(c.pick_list_values ?? [])]);
+}
+
+/** Which field a free-text query hits, in display priority. Null when none. */
+export function protocolTextMatch(p: Protocol, query: string): ProtocolTextMatch | null {
   const q = query.trim().toLowerCase();
-  if (!q) return true;
-  if (p.name.toLowerCase().includes(q)) return true;
-  if (p.category?.toLowerCase().includes(q)) return true;
-  return p.targets.some((t) => t.name.toLowerCase().includes(q));
+  if (!q) return { field: "name", value: p.name };
+  const candidates: [ProtocolMatchField, string[]][] = [
+    ["name", [p.name]],
+    ["code", p.code ? [p.code] : []],
+    ["alias", (p.aliases ?? []).map((a) => a.label)],
+    ["discriminator", p.discriminator ? [p.discriminator] : []],
+    ["target", p.targets.map((t) => t.name)],
+    ["organism", termLabels(p, "organism")],
+    ["cell line", termLabels(p, "cell_line")],
+    ["category", p.category ? [p.category] : []],
+    ["condition", conditionTexts(p)],
+  ];
+  for (const [field, values] of candidates) {
+    const value = values.find((v) => v.toLowerCase().includes(q));
+    if (value) return { field, value };
+  }
+  return null;
+}
+
+/** Substring match across name, code, aliases, targets, organism, cell line,
+ *  category and condition values (case-insensitive). */
+export function matchesProtocolText(p: Protocol, query: string): boolean {
+  return protocolTextMatch(p, query) !== null;
 }
 
 export function protocolMatchesSelections(p: Protocol, selections: FacetSelections): boolean {

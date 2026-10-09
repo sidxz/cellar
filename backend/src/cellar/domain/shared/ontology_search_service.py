@@ -25,3 +25,11 @@ class OntologySearchService(Protocol):
         *,
         workspace_id: uuid.UUID | None = None,
     ) -> list[OntologyTerm]: ...
+
+    async def list_descendants(
+        self,
+        ontology: str,
+        root_concept_id: str,
+        *,
+        workspace_id: uuid.UUID | None = None,
+    ) -> list[OntologyTerm]: ...

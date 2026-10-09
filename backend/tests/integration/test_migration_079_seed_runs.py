@@ -40,9 +40,9 @@ async def _insert_protocol(session, protocol_id: uuid.UUID, ws_id: uuid.UUID) ->
     await session.execute(
         sa.text(
             "INSERT INTO protocols "
-            "(id, workspace_id, name, protocol_type, status, "
+            "(id, workspace_id, name, name_base, protocol_type, status, "
             "is_locked, dose_unit, pos_control_signal, version, protocol_version, created_by) "
-            "VALUES (:id, :ws, :name, 'biochemical', 'active', "
+            "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', "
             "false, 'uM', 'high', 1, 1, :user)"
         ),
         {"id": protocol_id, "ws": ws_id, "name": f"P-{str(protocol_id)[:8]}", "user": _USER_ID},

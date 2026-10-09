@@ -18,8 +18,15 @@ beforeAll(() => {
 vi.mock("../hooks/use-targets", () => ({
   useTargets: () => ({
     data: [
-      { id: "t-1", name: "EGFR", target_type: "single_protein" },
-      { id: "t-2", name: "BRAF", target_type: "single_protein" },
+      { id: "t-1", name: "EGFR", target_type: "single_protein", organism: "Homo sapiens" },
+      { id: "t-2", name: "BRAF", target_type: "single_protein", organism: "Homo sapiens" },
+      { id: "t-3", name: "DHODH", target_type: "single_protein", organism: "Homo sapiens" },
+      {
+        id: "t-4",
+        name: "DHODH",
+        target_type: "single_protein",
+        organism: "Plasmodium falciparum",
+      },
     ],
   }),
 }));
@@ -100,5 +107,15 @@ describe("TargetMultiSelect", () => {
       "noopener,noreferrer",
     );
     open.mockRestore();
+  });
+
+  it("tells same-named targets apart by organism", () => {
+    const onChange = vi.fn();
+    render(<TargetMultiSelect value={[]} onChange={onChange} />);
+    openPopover();
+    const pf = screen.getByText("Plasmodium falciparum").closest("[data-slot='command-item']");
+    expect(pf).toHaveTextContent("DHODH");
+    fireEvent.click(pf as HTMLElement);
+    expect(onChange).toHaveBeenCalledWith(["t-4"]);
   });
 });

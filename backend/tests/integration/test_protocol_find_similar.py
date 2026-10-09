@@ -111,3 +111,42 @@ async def test_find_similar_free_text_facet_boost_round_trips(uow: AsyncUnitOfWo
         )
     by_name = {m.name: m.score for m in matches}
     assert by_name["MDH coupled assay"] > by_name["MDH coupled assay clone"]
+
+
+async def test_find_similar_drops_matches_that_share_only_name_words(uow: AsyncUnitOfWork) -> None:
+    """Generated names share their category words ("growth inhibition") across organisms;
+    that alone is not similarity."""
+    from cellar.domain.shared.ontology import OntologyTerm
+
+    def organism(p: Protocol, tid: str, label: str) -> Protocol:
+        p.set_ontology_annotation(
+            "organism", [OntologyTerm(term_id=tid, label=label, ontology_source="NCBITAXON")]
+        )
+        return p
+
+    ws = uuid.uuid4()
+    mtb = organism(
+        _make(ws, "M. tuberculosis growth inhibition [MABA]", ["MIC"]), "NCBITaxon:1773", "Mtb"
+    )
+    pf = organism(
+        _make(ws, "P. falciparum growth inhibition [3D7 pLDH]", ["EC50"]), "NCBITaxon:5833", "Pf"
+    )
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        await repo.save(mtb)
+        await repo.save(pf)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyProtocolRepository(uow)
+        matches = await repo.find_similar(
+            ws,
+            name="P. falciparum growth inhibition [Dd2 pLDH]",
+            protocol_type="biochemical",
+            target_ids=[],
+            readout_names=["EC50"],
+            facet_ids=["ncbitaxon:5833"],
+        )
+    names = [m.name for m in matches]
+    assert "P. falciparum growth inhibition [3D7 pLDH]" in names
+    assert "M. tuberculosis growth inhibition [MABA]" not in names

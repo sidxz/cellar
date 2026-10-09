@@ -18,6 +18,7 @@ from cellar.application.screening.sync_targets import (
 )
 from cellar.application.screening.target_source import SourceTarget
 from cellar.domain.screening_assay.enums import TargetType
+from cellar.domain.screening_assay.events import TargetRenamed
 from cellar.domain.screening_assay.target import Target
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ServiceUnavailableError
 from cellar.domain.shared.events import DomainEvent
@@ -93,9 +94,23 @@ def _src(tid: uuid.UUID, name: str, version: int = 1) -> SourceTarget:
     return SourceTarget(tid, name, "single_protein", "Mtb", None, version)
 
 
-def _build(source: FakeSource, existing: list[Target] | None = None, ttl: float = 300.0):
+class FakeDispatcher:
+    def __init__(self) -> None:
+        self.events: list = []
+
+    async def dispatch_all(self, events) -> None:
+        self.events.extend(events)
+
+
+def _build(
+    source: FakeSource,
+    existing: list[Target] | None = None,
+    ttl: float = 300.0,
+    dispatcher: FakeDispatcher | None = None,
+):
     uow, repo, fresh = FakeUoW(), FakeRepo(existing), SyncFreshness(ttl_seconds=ttl)
-    return SyncTargetsFromProtCellar(uow, repo, source, fresh), uow, repo, fresh
+    uc = SyncTargetsFromProtCellar(uow, repo, source, fresh, dispatcher or FakeDispatcher())
+    return uc, uow, repo, fresh
 
 
 async def test_creates_updates_and_skips_by_source_version():
@@ -203,3 +218,47 @@ async def test_rejects_other_workspace():
             SyncTargetsCommand(workspace_id=uuid.uuid4(), forwarded_headers=HEADERS, force=True),
             auth=FakeAuth(),
         )
+
+
+def _mirror(tid: uuid.UUID, name: str) -> Target:
+    return Target.from_mirror(
+        id=tid,
+        workspace_id=WS,
+        name=name,
+        target_type=TargetType.SINGLE_PROTEIN,
+        organism="Mtb",
+        chembl_id=None,
+        source_version=1,
+    )
+
+
+async def test_rename_emits_target_renamed_after_commit():
+    tid = uuid.uuid4()
+    dispatcher = FakeDispatcher()
+    uc, uow, _, _ = _build(
+        FakeSource([_src(tid, "Pks13 TE domain", version=2)]),
+        [_mirror(tid, "Pks13TE Domain")],
+        ttl=0,
+        dispatcher=dispatcher,
+    )
+    await uc(SyncTargetsCommand(workspace_id=WS, forwarded_headers={}, force=True), auth=FakeAuth())
+    (event,) = dispatcher.events
+    assert isinstance(event, TargetRenamed)
+    assert (event.old_name, event.new_name, event.aggregate_id) == (
+        "Pks13TE Domain",
+        "Pks13 TE domain",
+        tid,
+    )
+
+
+async def test_version_bump_without_rename_emits_nothing():
+    tid = uuid.uuid4()
+    dispatcher = FakeDispatcher()
+    uc, _, _, _ = _build(
+        FakeSource([_src(tid, "PptT", version=2)]),
+        [_mirror(tid, "PptT")],
+        ttl=0,
+        dispatcher=dispatcher,
+    )
+    await uc(SyncTargetsCommand(workspace_id=WS, forwarded_headers={}, force=True), auth=FakeAuth())
+    assert dispatcher.events == []

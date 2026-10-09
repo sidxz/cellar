@@ -235,8 +235,8 @@ async def _insert_protocol(uow: AsyncUnitOfWork, ws: uuid.UUID, name: str) -> uu
     await uow.session.execute(
         text(
             "INSERT INTO protocols "
-            "(id, workspace_id, name, protocol_type, protocol_version, created_by, version) "
-            "VALUES (:id, :ws, :n, 'biochemical', 1, :user, 1)"
+            "(id, workspace_id, name, name_base, protocol_type, protocol_version, created_by, version) "
+            "VALUES (:id, :ws, :n, :n, 'biochemical', 1, :user, 1)"
         ),
         {"id": pid, "ws": ws, "n": name, "user": uuid.uuid4()},
     )

@@ -89,14 +89,24 @@ export function TargetMultiSelect({
               <CommandEmpty>No targets found.</CommandEmpty>
               <CommandGroup>
                 {(targets ?? []).map((t) => (
-                  <CommandItem key={t.id} value={t.name} onSelect={() => toggle(t.id)}>
+                  <CommandItem
+                    key={t.id}
+                    // Unique per target: same-named targets in different organisms must not collide.
+                    value={`${t.name} ${t.organism ?? ""} ${t.id}`}
+                    onSelect={() => toggle(t.id)}
+                  >
                     <Check
                       className={cn(
                         "mr-2 h-4 w-4",
                         value.includes(t.id) ? "opacity-100" : "opacity-0",
                       )}
                     />
-                    <span className="flex-1 truncate">{t.name}</span>
+                    <span className="flex-1 truncate">
+                      {t.name}
+                      {t.organism && (
+                        <span className="ml-2 text-muted-foreground text-xs">{t.organism}</span>
+                      )}
+                    </span>
                     <span className="ml-2 shrink-0 text-muted-foreground text-xs">
                       {typeLabel(t)}
                     </span>

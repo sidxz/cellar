@@ -86,6 +86,11 @@ def _create_test_app(
     from cellar.interface.routes.organizations import router as org_router
     from cellar.interface.routes.settings import router as settings_router
     from cellar.interface.routes.vocabularies import router as vocab_router
+    from cellar.interface.routes.naming_labels import router as naming_labels_router
+    from cellar.interface.routes.protocol_names import router as protocol_names_router
+    from cellar.interface.routes.units import router as units_router
+    from cellar.interface.routes.protocol_categories import router as protocol_categories_router
+    from cellar.interface.routes.protocol_forms import router as protocol_forms_router
     from cellar.interface.routes.molecules import router as mol_router
     from cellar.interface.routes.bulk_registration import router as bulk_reg_router
     from cellar.interface.routes.attachments import router as attachment_router
@@ -154,6 +159,11 @@ def _create_test_app(
     app.include_router(org_directory_router)
     app.include_router(settings_router)
     app.include_router(vocab_router)
+    app.include_router(protocol_categories_router)
+    app.include_router(protocol_forms_router)
+    app.include_router(naming_labels_router)
+    app.include_router(protocol_names_router)
+    app.include_router(units_router)
     app.include_router(mol_router)
     app.include_router(attachment_router)
     app.include_router(disclosure_router)
@@ -259,13 +269,15 @@ async def client(api_app: FastAPI) -> AsyncIterator[AsyncClient]:
 def make_target(api_app: FastAPI, workspace_id: uuid.UUID):
     """Seed a mirror target row directly (there is no create route — prot-cellar owns targets).
 
-    Returns ``async (name, *, target_type="single_protein") -> str`` (the new id).
+    Returns ``async (name, *, target_type="single_protein", organism=None) -> str`` (the new id).
     """
     from sqlalchemy.ext.asyncio import async_sessionmaker
 
     from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import TargetModel
 
-    async def _make(name: str, *, target_type: str = "single_protein") -> str:
+    async def _make(
+        name: str, *, target_type: str = "single_protein", organism: str | None = None
+    ) -> str:
         tid = uuid.uuid4()
         factory = api_app.state.container[async_sessionmaker]
         async with factory() as session, session.begin():
@@ -275,6 +287,7 @@ def make_target(api_app: FastAPI, workspace_id: uuid.UUID):
                     workspace_id=workspace_id,
                     name=name,
                     target_type=target_type,
+                    organism=organism,
                     source_version=1,
                 )
             )

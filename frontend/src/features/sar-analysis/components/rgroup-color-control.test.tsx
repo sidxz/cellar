@@ -33,6 +33,10 @@ vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
 const TEST_PROTOCOL: Protocol = {
   id: "proto-1",
   workspace_id: "ws-1",
+  code: "PRT-00001",
+  discriminator: null,
+  name_flag: null,
+  aliases: [],
   name: "EGFR Biochemical",
   description: null,
   protocol_type: "biochemical",

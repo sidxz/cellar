@@ -478,7 +478,7 @@ class TestCrossProtocolFormulasSkipped:
             name="CrossCalc",
             data_type=ReadoutDataType.NUMERIC,
             is_calculated=True,
-            calculation_formula="@{Other Protocol}.IC50 * Raw",
+            calculation_formula="@{PRT-00001}.IC50 * Raw",
         )
 
         protocol = _make_protocol([raw_rd, cross_rd])

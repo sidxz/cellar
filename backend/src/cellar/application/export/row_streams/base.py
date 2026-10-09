@@ -23,12 +23,20 @@ class ColumnSpec:
     kind: ColumnKind
     unit: str | None = None
     group: str | None = None  # logical column-group (e.g. protocol name)
+    group_code: str | None = None  # protocol code of the group; flat formats append it
 
     @property
     def display_header(self) -> str:
         """Header with its unit — "IC50 (uM)". A bare "IC50" in a CSV handed
         to another tool loses the scale of every value under it."""
         return f"{self.header} ({self.unit})" if self.unit else self.header
+
+    @property
+    def flat_header(self) -> str:
+        """CSV and SDF have no group row: without the code, IC50 from two protocols collide."""
+        if self.group_code:
+            return f"{self.display_header} [{self.group_code}]"
+        return self.display_header
 
 
 @dataclass

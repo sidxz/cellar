@@ -1,6 +1,5 @@
 "use client";
 
-import { useOntologySlots } from "@/features/workspace-config/hooks/use-ontology-slots";
 import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { Badge } from "@/shared/components/ui/badge";
 import {
@@ -19,6 +18,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
+import { useProtocolFacetSlots } from "../../hooks/use-protocol-facet-slots";
 import {
   invalidateProtocolTargetQueries,
   useAddProtocolTarget,
@@ -57,9 +57,11 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const isLocked = protocol.is_locked;
   // Destructive / structural ops — strict DRAFT only. Lock blocks DRAFT too.
   const canStructurallyEdit = isDraft && !isLocked;
-  // Metadata-like ops (targets, annotations) — allowed post-publish, blocked
-  // only by lock or retirement (mirrors the backend add/remove-target guard).
-  const canEditTargets = !isLocked && !isRetired;
+  // Targets feed the generated name: drafts edit them here; a published protocol
+  // changes them through a correction with a reason.
+  const canEditTargets = isDraft && !isLocked;
+  // These facts feed the name; a published protocol changes them through a correction.
+  const correctable = status === "active" && !isLocked;
 
   const qc = useQueryClient();
   const updateProtocol = useUpdateProtocol(protocolId);
@@ -68,7 +70,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const addProtocolTarget = useAddProtocolTarget(protocolId);
   const removeProtocolTarget = useRemoveProtocolTarget(protocolId);
 
-  const { data: ontologySlots } = useOntologySlots();
+  const ontologySlots = useProtocolFacetSlots();
 
   // Provenance (is_direct / run_count) only exists on the rich
   // GET /protocols/{id}/targets payload — protocol.targets is the
@@ -113,6 +115,11 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
             references them; inherited targets come from this protocol&apos;s runs and prune
             automatically when their last referencing run drops them.
           </CardDescription>
+          {correctable && (
+            <p className="text-xs text-muted-foreground">
+              Published: use Correct details in the More menu.
+            </p>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {inheritedTargets.length > 0 && (
@@ -155,11 +162,16 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
       </Card>
 
       {/* ── 1. Ontology Annotations ─────────────────────────────────────── */}
-      {ontologySlots && ontologySlots.length > 0 && (
+      {ontologySlots.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Ontology Annotations</CardTitle>
             <CardDescription>Controlled vocabulary terms for this protocol.</CardDescription>
+            {correctable && (
+              <p className="text-xs text-muted-foreground">
+                Published: use Correct details in the More menu.
+              </p>
+            )}
           </CardHeader>
           <CardContent className="space-y-4">
             {ontologySlots.map((slot) => {

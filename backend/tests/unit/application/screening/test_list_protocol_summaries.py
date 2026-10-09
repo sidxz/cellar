@@ -64,6 +64,8 @@ class _FakeProtocol:
     ) -> None:
         self.id = id
         self.name = name
+        self.code = None
+        self.aliases = []
         # Simulate the .value-bearing enum on the real aggregate
         self.status = type("S", (), {"value": status})()
         self.target_id = target_id

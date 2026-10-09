@@ -44,6 +44,7 @@ class SQLAlchemyWorkspaceSettingsRepository(
             audit_retention_days=model.audit_retention_days,
             formulation_number_scheme=model.formulation_number_scheme,
             cdd_vault_id=model.cdd_vault_id,
+            protocol_naming=model.protocol_naming or {},
             created_at=model.created_at,
             updated_at=model.updated_at,
             version=model.version,
@@ -60,6 +61,7 @@ class SQLAlchemyWorkspaceSettingsRepository(
             audit_retention_days=aggregate.audit_retention_days,
             formulation_number_scheme=aggregate.formulation_number_scheme,
             cdd_vault_id=aggregate.cdd_vault_id,
+            protocol_naming=aggregate.protocol_naming,
             version=aggregate.version,
         )
 
@@ -72,3 +74,4 @@ class SQLAlchemyWorkspaceSettingsRepository(
         model.audit_retention_days = aggregate.audit_retention_days
         model.formulation_number_scheme = aggregate.formulation_number_scheme
         model.cdd_vault_id = aggregate.cdd_vault_id
+        model.protocol_naming = aggregate.protocol_naming

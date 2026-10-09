@@ -18,6 +18,7 @@ from sqlalchemy.sql import ColumnElement
 from cellar.domain.screening_assay.enums import CurveClass
 from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.enums import ConcentrationUnit
+from cellar.domain.shared.units import canonical_unit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
@@ -411,12 +412,13 @@ def _readout_name_any_protocol_clause(
 ) -> ColumnElement:
     """Molecules with a non-outlier readout value, in ANY protocol whose
     readout-def matches by normalized name + unit, satisfying the condition.
-    No unit conversion: the unit is part of the group identity."""
+    No unit conversion: the unit is part of the group identity, compared by its canonical
+    spelling (stored units are canonical; a criterion may still say "uM")."""
     name = cond.get("readout_name")
     if not isinstance(name, str) or not name.strip():
         msg = "any-protocol readout_data where needs a non-empty readout_name"
         raise ValueError(msg)
-    unit = cond.get("unit") or ""
+    unit = canonical_unit(cond.get("unit")) or ""
     sub = (
         sa.select(ReadoutDataModel.molecule_id)
         .join(

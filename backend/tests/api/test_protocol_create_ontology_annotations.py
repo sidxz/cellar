@@ -11,6 +11,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from tests.api._protocols import protocol_body
+
 pytestmark = pytest.mark.asyncio
 
 
@@ -20,7 +22,7 @@ async def test_create_protocol_persists_all_ontology_annotation_slots(
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "ArgB ArgC coupled NADPH",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [
                 {"name": "% Inhibition", "data_type": "numeric", "display_order": 0}
@@ -69,7 +71,7 @@ async def test_create_protocol_rejects_facet_term_missing_required_field(
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "Malformed facet term",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [
                 {"name": "IC50", "data_type": "numeric", "display_order": 0}
@@ -89,7 +91,7 @@ async def test_create_protocol_without_annotations_still_succeeds(
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "Plain protocol no facets",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [
                 {"name": "IC50", "data_type": "numeric", "display_order": 0}

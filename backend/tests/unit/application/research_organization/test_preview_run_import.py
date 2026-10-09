@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -28,14 +27,13 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from tests.unit.application.research_organization._helpers import (
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fakes

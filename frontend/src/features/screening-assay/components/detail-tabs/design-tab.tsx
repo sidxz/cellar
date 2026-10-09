@@ -91,10 +91,13 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const removeReadoutDef = useRemoveReadoutDefinition(protocolId);
   const updateReadoutDef = useUpdateReadoutDefinition(protocolId);
   // For @-completion in the formula editor: list of workspace protocols
-  // (names only; cross-protocol formulas reference them by name).
+  // (found by code or name; formulas reference them by code).
   const { data: allProtocols } = useProtocols();
-  const protocolNames = useMemo(
-    () => (allProtocols ?? []).filter((p) => p.id !== protocolId).map((p) => p.name),
+  const crossProtocols = useMemo(
+    () =>
+      (allProtocols ?? [])
+        .filter((p) => p.id !== protocolId && p.code)
+        .map((p) => ({ code: p.code as string, name: p.name })),
     [allProtocols, protocolId],
   );
   const addConditionDef = useAddConditionDefinition(protocolId);
@@ -551,7 +554,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         protocolId={protocolId}
         editingReadoutId={null}
         isDraft={isDraft}
-        protocolNames={protocolNames}
+        protocols={crossProtocols}
         form={rdForm}
         isSaving={addReadoutDef.isPending}
         onSave={() => {
@@ -631,7 +634,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         protocolId={protocolId}
         editingReadoutId={editingReadoutId}
         isDraft={isDraft}
-        protocolNames={protocolNames}
+        protocols={crossProtocols}
         form={rdForm}
         isSaving={updateReadoutDef.isPending}
         onSave={() => {

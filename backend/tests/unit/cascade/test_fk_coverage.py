@@ -196,6 +196,8 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     # SET NULL by design — a deleted loan detaches the shipments that carried it
     # (migration 071); the shipment record itself survives.
     ("shipments", "loan_id", "plate_loans"),
+    # SET NULL: a deleted category turns its forms generic (Task 4)
+    ("protocol_forms", "category_id", "protocol_categories"),
     # -------------------------------------------------------------------------
     # batches → salt_catalog: SET NULL on salt entry delete
     # -------------------------------------------------------------------------
@@ -575,6 +577,7 @@ LEFT_ALONE: dict[str, str] = {
     "workspace_settings.custom_field_definitions": _NO_IDS,
     "workspace_settings.formulation_number_scheme": _NO_IDS,
     "workspace_settings.registration_rules": _NO_IDS,
+    "workspace_settings.protocol_naming": _NO_IDS,
     "dose_response_curves.dose_response_config_snapshot": _BY_NAME,
     "protocols.ontology_annotations": _BY_NAME,
     "protocols.recommended_hit_criteria": _BY_NAME,

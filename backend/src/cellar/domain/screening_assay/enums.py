@@ -16,6 +16,21 @@ class ProtocolType(StrEnum):
     IN_SILICO = "in_silico"  # predictions (QSAR, docking): never pooled with measurements
 
 
+class AliasKind(StrEnum):
+    """Why a protocol answers to another name."""
+
+    FORMER = "former"  # a name it had before a rename (recorded automatically)
+    NICKNAME = "nickname"  # what people call it (MABA, LORA, HLM CLint)
+
+
+class NameFlag(StrEnum):
+    """Why a protocol's generated name needs attention."""
+
+    NEEDS_FACTS = "needs_facts"  # a field the category's pattern needs is empty; cannot publish
+    NEEDS_DISCRIMINATOR = "needs_discriminator"  # another protocol shares the base name
+    NAME_CONFLICT = "name_conflict"  # a registry rename made two names identical; cannot publish
+
+
 class ProtocolStatus(StrEnum):
     """Lifecycle status of a protocol."""
 

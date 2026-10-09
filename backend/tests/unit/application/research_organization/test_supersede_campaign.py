@@ -13,17 +13,8 @@ from cellar.application.research_organization.supersede_campaign import (
     SupersedeCampaignCommand,
 )
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
-from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
-    ChannelSourceKind,
-    QualifierHandling,
-    SelectionRule,
-    ValueQualifier,
 )
 from cellar.domain.research_organization.events import CampaignSuperseded
 from cellar.domain.shared.errors import (
@@ -36,7 +27,6 @@ from tests.unit.application.research_organization._helpers import (
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Builder helpers

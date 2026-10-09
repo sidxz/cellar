@@ -312,6 +312,7 @@ def _serialize_channel(
         protocol_ref: dict[str, Any] = {
             "id": str(proto.id),
             "name": proto.name,
+            "code": proto.code,
             "version": proto.protocol_version,
         }
     else:

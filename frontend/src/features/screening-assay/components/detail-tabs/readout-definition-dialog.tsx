@@ -25,6 +25,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
+import type { ProtocolRef } from "../../lib/formula-tokens";
 import {
   PERCENT_FIT_RANGES,
   VISIBLE_READOUT_DATA_TYPES,
@@ -699,7 +700,7 @@ export interface ReadoutDefinitionDialogProps {
   protocolId: string;
   editingReadoutId: string | null;
   isDraft: boolean;
-  protocolNames: string[];
+  protocols: readonly ProtocolRef[];
   form: ReturnType<typeof useReadoutDefinitionForm>;
   isSaving: boolean;
   onSave: () => void;
@@ -713,7 +714,7 @@ export function ReadoutDefinitionDialog({
   protocol,
   editingReadoutId,
   isDraft,
-  protocolNames,
+  protocols,
   form,
   isSaving,
   onSave,
@@ -878,7 +879,7 @@ export function ReadoutDefinitionDialog({
                             .filter((rd) => rd.id !== editingReadoutId)
                             .map((rd) => rd.name)
                     }
-                    protocolNames={protocolNames}
+                    protocols={protocols}
                     disabled={!isAdd && !isDraft}
                   />
                   <p className="text-[11px] text-muted-foreground">

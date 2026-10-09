@@ -123,7 +123,7 @@ function useDrReadoutGroups(): { protocol: string; readouts: DrReadoutOption[] }
   const { data: protocols } = useProtocols();
   return (protocols ?? [])
     .map((p) => ({
-      protocol: p.name,
+      protocol: `${p.code ?? ""} ${p.name}`.trim(),
       readouts: (p.readout_definitions ?? [])
         .filter((rd) => rd.dose_response_config)
         .map((rd) => {

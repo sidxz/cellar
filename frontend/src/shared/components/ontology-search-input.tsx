@@ -24,6 +24,9 @@ import { useCallback, useState } from "react";
 
 export type { OntologyTerm };
 
+// ApiError.message reads "API error: 503 — <detail>"; the detail alone tells the chemist what to do.
+const errorText = (error: Error) => error.message.replace(/^API error: \d+ — /, "");
+
 export interface OntologySearchInputProps {
   ontologySources: string[];
   rootConceptId?: string | null;
@@ -87,7 +90,7 @@ function OntologyDropdown({
   placeholder: string;
 }) {
   const [open, setOpen] = useState(false);
-  const { data: descendants, isLoading } = useOntologyDescendants(ontology, rootConceptId);
+  const { data: descendants, isLoading, error } = useOntologyDescendants(ontology, rootConceptId);
 
   const addTerm = useCallback(
     (term: OntologyTerm) => {
@@ -137,6 +140,8 @@ function OntologyDropdown({
             <CommandList>
               {isLoading ? (
                 <div className="px-3 py-2 text-sm text-muted-foreground">Loading...</div>
+              ) : error ? (
+                <div className="px-3 py-2 text-sm text-destructive">{errorText(error)}</div>
               ) : (
                 <>
                   <CommandEmpty>
@@ -187,12 +192,11 @@ function OntologySearchMode({
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS);
   const [showDropdown, setShowDropdown] = useState(false);
 
-  const { data: results, isLoading } = useOntologySearch(
-    debouncedQuery,
-    ontologySources,
-    showDropdown,
-    rootConceptId,
-  );
+  const {
+    data: results,
+    isLoading,
+    error,
+  } = useOntologySearch(debouncedQuery, ontologySources, showDropdown, rootConceptId);
 
   const addTerm = useCallback(
     (term: OntologyTerm) => {
@@ -272,7 +276,7 @@ function OntologySearchMode({
           if (query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
         }}
         placeholder={placeholder}
-        emptyMessage="No results found."
+        emptyMessage={error ? errorText(error) : "No results found."}
         footer={
           allowFreeText && query.trim() ? (
             <div className="border-t">

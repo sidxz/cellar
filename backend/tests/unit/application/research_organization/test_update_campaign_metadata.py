@@ -3,14 +3,12 @@
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 import pytest
 from returns.result import Failure, Success
 
 from cellar.application.research_organization.update_campaign_metadata import (
-    UNSET,
     UpdateCampaignMetadata,
     UpdateCampaignMetadataCommand,
 )
@@ -27,7 +25,6 @@ from tests.unit.application.research_organization._helpers import (
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helper

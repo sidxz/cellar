@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import date
 from enum import Enum
 from typing import Protocol, runtime_checkable
@@ -21,6 +23,39 @@ from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_import_template import RunImportTemplate
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.screening_assay.target import EffectiveTarget, Target, TargetRef
+
+
+@dataclass(frozen=True)
+class AnnotationTermUse:
+    """An ontology term used by protocols in one annotation slot, with how many use it."""
+
+    slot: str
+    term_id: str
+    label: str
+    ontology_source: str
+    protocol_count: int
+
+
+@dataclass(frozen=True)
+class NameSibling:
+    """Another protocol (by code) whose generated base name equals this one's."""
+
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    discriminator: str | None
+    status: str | None = None
+    is_locked: bool = False
+
+
+@dataclass(frozen=True)
+class FlaggedProtocol:
+    """A protocol (latest version of its code) whose generated name needs attention."""
+
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str
+    flag: str
 
 
 class TargetLinkResult(Enum):
@@ -64,7 +99,43 @@ class ProtocolRepository(Protocol):
     async def find_active_by_lineage(
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
-    async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> AssayProtocol | None: ...
+    async def find_latest_active_by_code(
+        self, workspace_id: uuid.UUID, code: str
+    ) -> AssayProtocol | None: ...
+
+    async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int: ...
+
+    async def find_name_siblings(
+        self, workspace_id: uuid.UUID, *, base: str, exclude_code: str | None
+    ) -> list[NameSibling]:
+        """Protocols whose base name equals ``base`` (case-insensitive), one per code."""
+        ...
+
+    async def lock_naming(self, workspace_id: uuid.UUID) -> None:
+        """Serialize name checks (and code minting) per workspace until commit."""
+        ...
+
+    async def list_discriminators(
+        self, workspace_id: uuid.UUID, *, base: str | None, q: str | None, limit: int = 20
+    ) -> list[str]: ...
+
+    async def find_flagged(self, workspace_id: uuid.UUID) -> list[FlaggedProtocol]: ...
+
+    async def list_lineage_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        """One id per code: the latest version."""
+        ...
+
+    async def list_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        """Every protocol id, all versions."""
+        ...
+
+    async def list_annotation_terms(
+        self, workspace_id: uuid.UUID, slots: Sequence[str]
+    ) -> list[AnnotationTermUse]: ...
+
+    async def next_protocol_code(
+        self, workspace_id: uuid.UUID, *, prefix: str, width: int
+    ) -> str: ...
     async def find_usages(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[str]:
         """What still points at this protocol, one chemist-readable phrase each
         (``'campaign "Test-2" (2 readouts)'``, ``'3 runs'``). Empty when nothing
@@ -165,6 +236,12 @@ class ProtocolRepository(Protocol):
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[uuid.UUID]: ...
 
+    async def find_protocol_ids_by_direct_target(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        """Every protocol (all versions) that links ``target_id`` directly."""
+        ...
+
     async def find_effective_targets(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[EffectiveTarget]:
@@ -199,6 +276,10 @@ class TargetRepository(Protocol):
     ) -> list[Target]: ...
     async def save(self, entity: Target) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+    async def list_organisms(self, workspace_id: uuid.UUID) -> list[str]: ...
+    async def find_by_ids(
+        self, workspace_id: uuid.UUID, ids: Sequence[uuid.UUID]
+    ) -> list[Target]: ...
 
 
 @runtime_checkable

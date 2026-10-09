@@ -22,8 +22,14 @@ import { useEffect } from "react";
 import { Controller, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 import { useUpdateWorkspaceSettings, useWorkspaceSettings } from "../hooks/use-workspace-settings";
-import type { AuditReasonPolicy, CustomFieldDefinition, RegistrationRules } from "../types";
+import type {
+  AuditReasonPolicy,
+  CustomFieldDefinition,
+  ProtocolNamingSettings,
+  RegistrationRules,
+} from "../types";
 import { CustomFieldBuilder } from "./custom-field-builder";
+import { HomeOrganismSetting } from "./home-organism-setting";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +54,10 @@ const schema = z.object({
     .regex(/^[A-Z]{2,8}-$/, "Prefix must be 2–8 uppercase letters followed by a dash"),
   regWidth: z.coerce.number().int().min(4).max(8),
   batchWidth: z.coerce.number().int().min(2).max(6),
+  protocolCodePrefix: z
+    .string()
+    .regex(/^[A-Z]{2,8}-$/, "2-8 capital letters then a hyphen, e.g. PRT-"),
+  protocolCodeWidth: z.coerce.number().int().min(3).max(8),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -93,6 +103,8 @@ export function WorkspaceSettingsForm() {
       regPrefix: "CC-",
       regWidth: 6,
       batchWidth: 3,
+      protocolCodePrefix: "PRT-",
+      protocolCodeWidth: 5,
     },
   });
 
@@ -102,6 +114,7 @@ export function WorkspaceSettingsForm() {
       // Backend types `registration_rules` as an opaque `dict`; read it as the
       // FE's structured RegistrationRules view at this boundary.
       const rules = (settings.registration_rules ?? {}) as RegistrationRules;
+      const naming = (settings.protocol_naming ?? {}) as ProtocolNamingSettings;
       reset({
         defaultMolType: settings.default_molecule_type ?? "",
         retentionDays: settings.audit_retention_days?.toString() ?? "",
@@ -115,6 +128,8 @@ export function WorkspaceSettingsForm() {
         regPrefix: rules.registration_number_prefix ?? "CC-",
         regWidth: rules.registration_number_width ?? 6,
         batchWidth: rules.batch_sequence_width ?? 3,
+        protocolCodePrefix: naming.code_prefix ?? "PRT-",
+        protocolCodeWidth: naming.code_width ?? 5,
       });
     }
   }, [settings, reset]);
@@ -142,6 +157,10 @@ export function WorkspaceSettingsForm() {
         registration_number_prefix: values.regPrefix,
         registration_number_width: values.regWidth,
         batch_sequence_width: values.batchWidth,
+      },
+      protocol_naming: {
+        code_prefix: values.protocolCodePrefix,
+        code_width: values.protocolCodeWidth,
       },
     });
   };
@@ -258,6 +277,43 @@ export function WorkspaceSettingsForm() {
                 )}
               />
             </div>
+          </div>
+        </Card>
+
+        {/* Protocols */}
+        <Card className="p-6">
+          <h2 className="text-lg font-semibold">Protocols</h2>
+          <div className="mt-4 grid gap-6 max-w-lg">
+            <div className="grid gap-2">
+              <Label htmlFor="protocolCodePrefix">Protocol Code Prefix</Label>
+              <Input
+                id="protocolCodePrefix"
+                {...register("protocolCodePrefix")}
+                placeholder="PRT-"
+                maxLength={9}
+                className="uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                New protocols get codes like <code>PRT-00142</code>. Existing codes never change.
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="protocolCodeWidth">Protocol Code Width</Label>
+              <Input
+                id="protocolCodeWidth"
+                type="number"
+                min={3}
+                max={8}
+                {...register("protocolCodeWidth")}
+              />
+              <p className="text-xs text-muted-foreground">
+                Zero-pad width for the number. 5 gives <code>PRT-00001</code> ..{" "}
+                <code>PRT-99999</code>.
+              </p>
+            </div>
+            <HomeOrganismSetting
+              current={(settings?.protocol_naming as ProtocolNamingSettings)?.home_organism ?? null}
+            />
           </div>
         </Card>
 

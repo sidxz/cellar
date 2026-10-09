@@ -18,6 +18,8 @@ interface DetailShellProps<T> {
   backHref?: string;
   backLabel?: string;
   title: (entity: T) => string;
+  /** Secondary line under the title (e.g. a protocol's code). */
+  subtitle?: (entity: T) => ReactNode;
   /** Explicit breadcrumb trail. When provided, overrides URL-based breadcrumbs.
    *  The entity title is automatically appended as the last crumb. */
   breadcrumbTrail?: (entity: T) => BreadcrumbCrumb[];
@@ -32,6 +34,7 @@ export function DetailShell<T>({
   backHref,
   backLabel = "Back",
   title,
+  subtitle,
   breadcrumbTrail,
   badge,
   actions,
@@ -95,9 +98,14 @@ export function DetailShell<T>({
       )}
 
       <div className="flex items-start justify-between">
-        <div className="flex items-center gap-3 flex-wrap">
-          <h1 className="text-2xl font-bold tracking-tight">{entityTitle}</h1>
-          {badgeProps && <StatusBadge status={badgeProps.status} label={badgeProps.label} />}
+        <div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h1 className="text-2xl font-bold tracking-tight">{entityTitle}</h1>
+            {badgeProps && <StatusBadge status={badgeProps.status} label={badgeProps.label} />}
+          </div>
+          {subtitle ? (
+            <div className="mt-1 text-sm text-muted-foreground">{subtitle(entity)}</div>
+          ) : null}
         </div>
         {actions && <div className="flex items-center gap-2">{actions(entity)}</div>}
       </div>

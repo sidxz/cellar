@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from unittest.mock import AsyncMock
 
 import pytest
@@ -34,7 +34,6 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.source_ref import (
     CollectionRef,
-    ManualRef,
     RunRef,
 )
 from cellar.domain.shared.errors import (
@@ -46,7 +45,6 @@ from tests.unit.application.research_organization._helpers import (
     fake_auth,
     make_campaign_repo,
 )
-
 
 # ---------------------------------------------------------------------------
 # Local builder helpers
@@ -100,6 +98,7 @@ def _make_fake_protocol(
     protocol = AsyncMock()
     protocol.id = protocol_id
     protocol.name = "EGFR Binding Assay"
+    protocol.code = "PRT-00042"
     protocol.protocol_version = 3
     protocol.target_id = None
 
@@ -141,7 +140,7 @@ def _make_closed_campaign(
                 "target_name": None,
             }
         ],
-        closed_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=timezone.utc),
+        closed_at=datetime(2026, 5, 10, 12, 0, 0, tzinfo=UTC),
         closed_by=uuid.uuid4(),
         close_note=close_note,
         created_by=uuid.uuid4(),
@@ -279,6 +278,9 @@ class TestGetPublishedCampaign:
         assert doc["campaign"]["status"] == "closed"
         assert "signature" not in doc["campaign"]
         assert doc["campaign"]["close_note"] == "Confirmed by wet lab"
+
+        # Channels name their protocol by stable code as well as name.
+        assert doc["channels"][0]["protocol_ref"]["code"] == "PRT-00042"
 
         # Results length.
         assert len(doc["results"]) == 2

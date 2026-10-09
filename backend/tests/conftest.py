@@ -52,7 +52,8 @@ def postgres_container() -> Iterator[PostgresContainer]:
         password="cellar",
         dbname="cellar",
         driver=None,
-    ) as container:
+    ).with_env("POSTGRES_INITDB_ARGS", "--encoding=UTF8") as container:
+        # UTF8 explicitly: the image's default is SQL_ASCII, which rejects non-ASCII JSONB (µM).
         yield container
 
 

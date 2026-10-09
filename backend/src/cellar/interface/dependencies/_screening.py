@@ -9,6 +9,7 @@ from fastapi import Depends
 from cellar.application.screening.bulk_create_readout_data import BulkCreateReadoutData
 from cellar.application.screening.classify_dose_response import ClassifyDoseResponseCurve
 from cellar.application.screening.condition_grouping_service import ConditionGroupingService
+from cellar.application.screening.correct_protocol import CorrectProtocol
 from cellar.application.screening.create_compound_flag import CreateCompoundFlag
 from cellar.application.screening.create_dose_response import CreateDoseResponseCurve
 from cellar.application.screening.create_protocol import CreateProtocol
@@ -43,6 +44,7 @@ from cellar.application.screening.list_protocol_summaries import ListProtocolSum
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.list_units import ListUnits
 from cellar.application.screening.lock_protocol import LockProtocol, UnlockProtocol
 from cellar.application.screening.lock_run import LockRun, UnlockRun
 from cellar.application.screening.manage_condition_definitions import (
@@ -63,8 +65,13 @@ from cellar.application.screening.manage_protocol import (
     RemoveProtocolFromProject,
     RemoveProtocolTarget,
     RetireProtocol,
+    SetProtocolDiscriminator,
     UpdateProtocol,
     VersionProtocol,
+)
+from cellar.application.screening.manage_protocol_aliases import (
+    AddProtocolNickname,
+    RemoveProtocolNickname,
 )
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
@@ -94,9 +101,17 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_protocol_name import (
+    ListDiscriminators,
+    PreviewProtocolName,
+)
 from cellar.application.screening.preview_summary_file import PreviewSummaryFile
 from cellar.application.screening.preview_summary_import import PreviewSummaryImport
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from cellar.application.screening.rederive_protocol_names import (
+    ListNameFlags,
+    RederiveAllProtocolNames,
+)
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
@@ -122,6 +137,7 @@ from ._core import _get_use_case
 
 __all__ = [
     "AddConditionDefinitionDep",
+    "AddProtocolNicknameDep",
     "AddProtocolTargetDep",
     "AddProtocolToProjectDep",
     "AddReadoutDefinitionDep",
@@ -133,6 +149,7 @@ __all__ = [
     "CompleteRunDep",
     # Runs
     "ConditionGroupingServiceDep",
+    "CorrectProtocolDep",
     "CreateCompoundFlagDep",
     "CreateDoseResponseCurveDep",
     # Plate templates
@@ -168,8 +185,10 @@ __all__ = [
     "LinkRunPlateDep",
     # Compound flags
     "ListCompoundFlagsDep",
+    "ListDiscriminatorsDep",
     "ListDoseResponseByRunDep",
     "ListDoseResponseEnrichedDep",
+    "ListNameFlagsDep",
     "ListPlateTemplatesDep",
     "ListProtocolSummariesDep",
     "ListProtocolVocabularyDep",
@@ -180,21 +199,25 @@ __all__ = [
     "ListRunsByProtocolDep",
     "ListRunsWithCountsDep",
     "ListTargetsDep",
+    "ListUnitsDep",
     "LockProtocolDep",
     "LockRunDep",
     "MoleculeActivityServiceDep",
     # Plate setup + readout import
     "ParsePlateMapFileDep",
+    "PreviewProtocolNameDep",
     "PreviewSummaryFileDep",
     "PreviewSummaryImportDep",
     "PublishProtocolDep",
     "ReadoutCalculationEngineDep",
+    "RederiveAllProtocolNamesDep",
     "RefitDoseResponseCurveDep",
     "RefitDoseResponseCurvePreviewDep",
     "RejectRunDep",
     "RemoveConditionDefinitionDep",
     "RemoveControlLayoutDep",
     "RemoveProtocolFromProjectDep",
+    "RemoveProtocolNicknameDep",
     "RemoveProtocolTargetDep",
     "RemoveReadoutDefinitionDep",
     "RemoveRunCollectionDep",
@@ -206,6 +229,7 @@ __all__ = [
     "ResolveRunTargetsDep",
     "RetireProtocolDep",
     "SetControlLayoutDep",
+    "SetProtocolDiscriminatorDep",
     "SetRunHitCriteriaDep",
     "SetUpRunPlateDep",
     "StartRunDep",
@@ -270,6 +294,24 @@ GetProtocolCollectionGapDep = Annotated[
     GetProtocolCollectionGap, Depends(_get_use_case(GetProtocolCollectionGap))
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
+ListNameFlagsDep = Annotated[ListNameFlags, Depends(_get_use_case(ListNameFlags))]
+RederiveAllProtocolNamesDep = Annotated[
+    RederiveAllProtocolNames, Depends(_get_use_case(RederiveAllProtocolNames))
+]
+CorrectProtocolDep = Annotated[CorrectProtocol, Depends(_get_use_case(CorrectProtocol))]
+PreviewProtocolNameDep = Annotated[
+    PreviewProtocolName, Depends(_get_use_case(PreviewProtocolName))
+]
+ListDiscriminatorsDep = Annotated[ListDiscriminators, Depends(_get_use_case(ListDiscriminators))]
+SetProtocolDiscriminatorDep = Annotated[
+    SetProtocolDiscriminator, Depends(_get_use_case(SetProtocolDiscriminator))
+]
+AddProtocolNicknameDep = Annotated[
+    AddProtocolNickname, Depends(_get_use_case(AddProtocolNickname))
+]
+RemoveProtocolNicknameDep = Annotated[
+    RemoveProtocolNickname, Depends(_get_use_case(RemoveProtocolNickname))
+]
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[
     AddReadoutDefinition, Depends(_get_use_case(AddReadoutDefinition))
@@ -377,6 +419,7 @@ FindSimilarProtocolsDep = Annotated[
 ListProtocolVocabularyDep = Annotated[
     ListProtocolVocabulary, Depends(_get_use_case(ListProtocolVocabulary))
 ]
+ListUnitsDep = Annotated[ListUnits, Depends(_get_use_case(ListUnits))]
 
 # --- Compound Flag dependencies ---
 ListCompoundFlagsDep = Annotated[ListCompoundFlags, Depends(_get_use_case(ListCompoundFlags))]

@@ -14,6 +14,7 @@
  * chip a button (edit) — both open ChannelPopoverForm in a Popover.
  */
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
@@ -470,7 +471,7 @@ function MirrorProtocolPopover({
             <SelectContent>
               {(protocols ?? []).map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  <ProtocolOptionLabel code={p.code} name={p.name} />
                 </SelectItem>
               ))}
             </SelectContent>

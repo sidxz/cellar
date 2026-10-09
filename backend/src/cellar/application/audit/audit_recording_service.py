@@ -123,6 +123,7 @@ class AuditRecordingService:
             status=AuditStatus.COMPLETED,
             started_at=event.occurred_at,
             completed_at=event.occurred_at,
+            reason=getattr(event, "audit_reason", None),
         )
 
         operation.add_entry(
@@ -135,6 +136,21 @@ class AuditRecordingService:
                 timestamp=event.occurred_at,
             )
         )
+        # Events that describe field changes (e.g. ProtocolRenamed) add one entry per change.
+        changes = getattr(event, "audit_changes", None)
+        if callable(changes):
+            for field_name, old_value, new_value in changes():
+                operation.add_entry(
+                    AuditEntry(
+                        entity_type=event.aggregate_type,
+                        entity_id=event.aggregate_id,
+                        field_name=field_name,
+                        action=AuditAction.UPDATE,
+                        old_value=old_value,
+                        new_value=new_value,
+                        timestamp=event.occurred_at,
+                    )
+                )
 
         await self._repository.save(operation)
 

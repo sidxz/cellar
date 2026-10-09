@@ -28,6 +28,7 @@ class UpdateWorkspaceSettingsCommand(Command):
     signature_required_for: list[str] | object = UNSET
     audit_retention_days: int | object | None = UNSET
     formulation_number_scheme: str | object | None = UNSET
+    protocol_naming: dict[str, Any] | object = UNSET
 
 
 class UpdateWorkspaceSettings:
@@ -62,6 +63,7 @@ class UpdateWorkspaceSettings:
                 "signature_required_for",
                 "audit_retention_days",
                 "formulation_number_scheme",
+                "protocol_naming",
             ):
                 val = getattr(input, key)
                 if val is not UNSET:

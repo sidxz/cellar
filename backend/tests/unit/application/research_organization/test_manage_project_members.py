@@ -28,7 +28,6 @@ from cellar.domain.research_organization.project_membership import (
 from cellar.domain.shared.errors import NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

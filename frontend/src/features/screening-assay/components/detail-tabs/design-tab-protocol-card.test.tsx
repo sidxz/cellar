@@ -53,6 +53,14 @@ vi.mock("@/features/workspace-config/hooks/use-ontology-slots", () => ({
   useOntologySlots: () => ({ data: [] }),
 }));
 
+vi.mock("@/features/workspace-config/hooks/use-ontology-search", () => ({
+  useOntologySearch: () => ({ data: [], isLoading: false, isFetching: false }),
+}));
+
+vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
+  useProtocolCategories: () => ({ data: [{ label: "Enzyme inhibition" }] }),
+}));
+
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
 }));
@@ -92,7 +100,7 @@ function makeProtocol(overrides: Partial<Protocol> = {}): Protocol {
 
 describe("DesignTabProtocolCard targets partition", () => {
   it("classifies direct vs inherited from the rich targets payload", () => {
-    render(<DesignTabProtocolCard protocol={makeProtocol()} protocolId="p-1" />);
+    render(<DesignTabProtocolCard protocol={makeProtocol({ status: "draft" })} protocolId="p-1" />);
 
     // The direct target seeds the multi-select (1 selected), not the
     // inherited section.
@@ -112,5 +120,42 @@ describe("DesignTabProtocolCard targets partition", () => {
     expect(screen.queryByText(/add a target/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/targets selected/i)).not.toBeInTheDocument();
     expect(screen.getByText("Pks13")).toBeInTheDocument();
+  });
+
+  it("a published protocol changes targets through a correction, not here", () => {
+    render(
+      <DesignTabProtocolCard protocol={makeProtocol({ status: "active" })} protocolId="p-1" />,
+    );
+    expect(screen.queryByText(/targets selected|target selected/i)).not.toBeInTheDocument();
+    expect(screen.getByText("Pks13")).toBeInTheDocument();
+    expect(screen.getAllByText(/use correct details in the more menu/i).length).toBeGreaterThan(0);
+  });
+});
+
+// The standard facets (Organism, Assay format, Detection method) are always
+// offered on create; the protocol page must show them too, or a workspace with
+// no admin-configured slots has no way to see or edit a protocol's BAO terms.
+describe("DesignTabProtocolCard ontology annotations", () => {
+  it("shows the standard facets when the workspace configured no slots", () => {
+    const protocol = makeProtocol({
+      ontology_annotations: {
+        assay_format: [
+          {
+            term_id: "http://www.bioassayontology.org/bao#BAO_0000217",
+            label: "biochemical format",
+            ontology_source: "BAO",
+            uri: "http://www.bioassayontology.org/bao#BAO_0000217",
+          },
+        ],
+      },
+    });
+    render(<DesignTabProtocolCard protocol={protocol} protocolId="p-1" />);
+
+    expect(screen.getByText("Ontology Annotations")).toBeInTheDocument();
+    expect(screen.getByText("Organism")).toBeInTheDocument();
+    expect(screen.getByText("Cell line")).toBeInTheDocument();
+    expect(screen.getByText("Assay format")).toBeInTheDocument();
+    expect(screen.getByText("Detection method")).toBeInTheDocument();
+    expect(screen.getByText("biochemical format")).toBeInTheDocument();
   });
 });

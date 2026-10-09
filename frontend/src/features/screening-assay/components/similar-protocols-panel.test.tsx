@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SimilarProtocol } from "../hooks/use-similar-protocols";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 
@@ -20,6 +20,9 @@ vi.mock("../hooks/use-similar-protocols", async () => ({
   useSimilarProtocols: () => ({ data: data() }),
 }));
 
+// mockReturnValue, not ...Once: expanding the line re-renders and calls the hook again.
+afterEach(() => data.mockReturnValue([match]));
+
 describe("SimilarProtocolsPanel", () => {
   it("fires onLogRun for a run candidate", () => {
     const onLogRun = vi.fn();
@@ -32,5 +35,22 @@ describe("SimilarProtocolsPanel", () => {
     render(<SimilarProtocolsPanel draft={{ name: "RNAP core IC50" }} onLogRun={vi.fn()} />);
     fireEvent.click(screen.getByLabelText("Dismiss suggestions"));
     expect(screen.queryByText("RNAP core IC50")).not.toBeInTheDocument();
+  });
+
+  it("labels the protocol type instead of showing its enum value", () => {
+    data.mockReturnValue([{ ...match, is_run_candidate: false, protocol_type: "whole_cell" }]);
+    render(<SimilarProtocolsPanel draft={{ name: "RNAP core IC50" }} onLogRun={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /1 similar protocol/ }));
+    expect(screen.getByText("Whole-cell")).toBeInTheDocument();
+    expect(screen.queryByText("whole_cell")).not.toBeInTheDocument();
+  });
+
+  it("collapses non-run suggestions to one line", () => {
+    data.mockReturnValue([{ ...match, is_run_candidate: false }]);
+    render(<SimilarProtocolsPanel draft={{ name: "RNAP core IC50" }} onLogRun={vi.fn()} />);
+    expect(screen.getByRole("button", { name: /1 similar protocol/ })).toBeInTheDocument();
+    expect(screen.queryByText("RNAP core IC50")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /1 similar protocol/ }));
+    expect(screen.getByText("RNAP core IC50")).toBeInTheDocument();
   });
 });

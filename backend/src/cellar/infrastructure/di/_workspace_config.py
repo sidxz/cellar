@@ -43,6 +43,23 @@ from cellar.application.workspace_config.list_protocol_forms import ListProtocol
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.naming_changes import PreviewNamingChange
+from cellar.application.workspace_config.naming_labels import (
+    CreateNamingLabel,
+    DeleteNamingLabel,
+    ListNamingLabels,
+    ListNamingTermsInUse,
+    UpdateNamingLabel,
+)
+from cellar.application.workspace_config.protocol_categories import (
+    CreateProtocolCategory,
+    DeleteProtocolCategory,
+    ListProtocolCategories,
+    SeedDefaultProtocolCategories,
+    UpdateProtocolCategory,
+)
+from cellar.application.workspace_config.protocol_form_defaults import SeedDefaultProtocolForms
+from cellar.application.workspace_config.set_home_organism import SetHomeOrganism
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
@@ -65,7 +82,14 @@ from cellar.application.workspace_config.update_workspace_settings import (
     UpdateWorkspaceSettings,
 )
 from cellar.domain.shared.secret_provider import SecretProvider
+from cellar.infrastructure.di._screening import _name_service
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
+    SQLAlchemyTargetRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_browse_repository import (
     SQLAlchemyTagBrowseRepository,
 )
@@ -87,11 +111,17 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.data_source_r
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.external_api_key_repository import (  # noqa: E501
     SQLAlchemyExternalApiKeyRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_repository import (
+    SQLAlchemyNamingLabelRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.ontology_slot_definition_repository import (  # noqa: E501
     SQLAlchemyOntologySlotDefinitionRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.organization_repository import (
     SQLAlchemyOrganizationRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_category_repository import (  # noqa: E501
+    SQLAlchemyProtocolCategoryRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (  # noqa: E501
     SQLAlchemyProtocolFormRepository,
@@ -163,6 +193,107 @@ def register_workspace_config(container: Container) -> None:
         return _f
 
     container.define(CreateVocabulary, _vocab_cmd(CreateVocabulary))
+
+    # --- Protocol categories ---
+    def _create_category(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateProtocolCategory(
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            c[EventDispatcher],
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+        )
+
+    def _list_categories(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListProtocolCategories(uow, SQLAlchemyProtocolCategoryRepository(uow))
+
+    def _delete_category(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return DeleteProtocolCategory(
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            SQLAlchemyProtocolRepository(uow),
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+        )
+
+    container.define(ListProtocolCategories, _list_categories)
+    container.define(CreateProtocolCategory, _create_category)
+
+    def _relabeling(uc_cls: type, repo_cls: type):
+        """Admin edits that relabel protocols: their repo plus protocols + the name service."""
+
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                repo_cls(uow),
+                c[EventDispatcher],
+                protocol_repo=SQLAlchemyProtocolRepository(uow),
+                names=_name_service(uow),
+            )
+
+        return _f
+
+    def _preview_naming_change(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewNamingChange(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            SQLAlchemyProtocolCategoryRepository(uow),
+            _name_service(uow),
+        )
+
+    container.define(
+        UpdateProtocolCategory,
+        _relabeling(UpdateProtocolCategory, SQLAlchemyProtocolCategoryRepository),
+    )
+    container.define(PreviewNamingChange, _preview_naming_change)
+    container.define(
+        SetHomeOrganism, _relabeling(SetHomeOrganism, SQLAlchemyWorkspaceSettingsRepository)
+    )
+
+    def _seed_default_categories(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SeedDefaultProtocolCategories(
+            uow,
+            SQLAlchemyProtocolCategoryRepository(uow),
+            c[EventDispatcher],
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+        )
+
+    container.define(SeedDefaultProtocolCategories, _seed_default_categories)
+    container.define(DeleteProtocolCategory, _delete_category)
+
+    # --- Short labels ---
+    def _label_plain(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(uow, SQLAlchemyNamingLabelRepository(uow))
+
+        return _f
+
+    def _terms_in_use(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListNamingTermsInUse(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            SQLAlchemyTargetRepository(uow),
+            SQLAlchemyNamingLabelRepository(uow),
+        )
+
+    container.define(ListNamingLabels, _label_plain(ListNamingLabels))
+    container.define(
+        DeleteNamingLabel,
+        _relabeling(DeleteNamingLabel, SQLAlchemyNamingLabelRepository),
+    )
+    container.define(
+        CreateNamingLabel, _relabeling(CreateNamingLabel, SQLAlchemyNamingLabelRepository)
+    )
+    container.define(
+        UpdateNamingLabel, _relabeling(UpdateNamingLabel, SQLAlchemyNamingLabelRepository)
+    )
+    container.define(ListNamingTermsInUse, _terms_in_use)
     container.define(UpdateVocabulary, _vocab_cmd(UpdateVocabulary))
     container.define(ListVocabularies, _vocab_query(ListVocabularies))
 
@@ -352,10 +483,33 @@ def register_workspace_config(container: Container) -> None:
 
         return _f
 
-    container.define(CreateProtocolForm, _pf_cmd(CreateProtocolForm))
-    container.define(UpdateProtocolForm, _pf_cmd(UpdateProtocolForm))
+    def _pf_with_categories(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow,
+                SQLAlchemyProtocolFormRepository(uow),
+                c[EventDispatcher],
+                category_repo=SQLAlchemyProtocolCategoryRepository(uow),
+            )
+
+        return _f
+
+    container.define(CreateProtocolForm, _pf_with_categories(CreateProtocolForm))
+    container.define(UpdateProtocolForm, _pf_with_categories(UpdateProtocolForm))
     container.define(DeleteProtocolForm, _pf_cmd(DeleteProtocolForm))
     container.define(ListProtocolForms, _pf_query(ListProtocolForms))
+
+    def _seed_default_forms(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SeedDefaultProtocolForms(
+            uow,
+            SQLAlchemyProtocolFormRepository(uow),
+            SQLAlchemyProtocolCategoryRepository(uow),
+            c[EventDispatcher],
+        )
+
+    container.define(SeedDefaultProtocolForms, _seed_default_forms)
 
     # --- Tags ---
     def _tag_assign(uc_cls: type):

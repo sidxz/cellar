@@ -196,13 +196,15 @@ class SQLAlchemyReadoutDataRepository:
         readout-def from every protocol that defines one, not just one.
         """
         from cellar.domain.screening_assay.readout_name import normalize_readout_name
+        from cellar.domain.shared.units import canonical_unit
         from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
             ReadoutDefinitionModel,
         )
 
         if not molecule_ids or not groups:
             return {}
-        wanted = {(normalize_readout_name(n), u or "") for n, u in groups}
+        # Stored units are canonical, so a group's unit is compared by its canonical spelling.
+        wanted = {(normalize_readout_name(n), canonical_unit(u) or "") for n, u in groups}
         norm_name = func.lower(
             func.btrim(func.regexp_replace(ReadoutDefinitionModel.name, r"\s+", " ", "g"))
         ).label("norm_name")

@@ -10,7 +10,7 @@ from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
 )
-from cellar.application.screening.search_ontology import SearchOntology
+from cellar.application.screening.search_ontology import ListOntologyDescendants, SearchOntology
 from cellar.application.workspace_config.create_custom_field import CreateCustomField
 from cellar.application.workspace_config.create_data_source import CreateDataSource
 from cellar.application.workspace_config.create_external_api_key import CreateExternalApiKey
@@ -47,6 +47,25 @@ from cellar.application.workspace_config.list_protocol_forms import (
 from cellar.application.workspace_config.list_registration_forms import ListRegistrationForms
 from cellar.application.workspace_config.list_salt_entries import ListSaltEntries
 from cellar.application.workspace_config.list_vocabularies import ListVocabularies
+from cellar.application.workspace_config.naming_changes import PreviewNamingChange
+from cellar.application.workspace_config.naming_labels import (
+    CreateNamingLabel,
+    DeleteNamingLabel,
+    ListNamingLabels,
+    ListNamingTermsInUse,
+    UpdateNamingLabel,
+)
+from cellar.application.workspace_config.protocol_categories import (
+    CreateProtocolCategory,
+    DeleteProtocolCategory,
+    ListProtocolCategories,
+    SeedDefaultProtocolCategories,
+    UpdateProtocolCategory,
+)
+from cellar.application.workspace_config.protocol_form_defaults import (
+    SeedDefaultProtocolForms as SeedDefaultProtocolFormsUC,
+)
+from cellar.application.workspace_config.set_home_organism import SetHomeOrganism
 from cellar.application.workspace_config.tagging.assign_tag import AssignTag
 from cellar.application.workspace_config.tagging.delete_tag import DeleteTag
 from cellar.application.workspace_config.tagging.get_tags_for_entity import GetTagsForEntity
@@ -80,10 +99,12 @@ __all__ = [
     # External API keys
     "CreateExternalApiKeyDep",
     # Ontology slots
+    "CreateNamingLabelDep",
     "CreateOntologySlotDep",
     # Workspace config
     "CreateOrganizationDep",
     # Protocol forms
+    "CreateProtocolCategoryDep",
     "CreateProtocolFormDep",
     "CreateRegistrationFormDep",
     "CreateSaltEntryDep",
@@ -91,7 +112,9 @@ __all__ = [
     "DeleteCustomFieldDep",
     "DeleteDataSourceDep",
     "DeleteExternalApiKeyDep",
+    "DeleteNamingLabelDep",
     "DeleteOntologySlotDep",
+    "DeleteProtocolCategoryDep",
     "DeleteProtocolFormDep",
     "DeleteRegistrationFormDep",
     "DeleteSaltEntryDep",
@@ -105,8 +128,12 @@ __all__ = [
     "ListCustomFieldsDep",
     "ListDataSourcesDep",
     "ListExternalApiKeysDep",
+    "ListNamingLabelsDep",
+    "ListNamingTermsInUseDep",
+    "ListOntologyDescendantsDep",
     "ListOntologySlotsDep",
     "ListOrganizationsDep",
+    "ListProtocolCategoriesDep",
     "ListProtocolFormsDep",
     "ListRegistrationFormsDep",
     "ListSaltEntriesDep",
@@ -114,18 +141,24 @@ __all__ = [
     "ListTagsDep",
     "ListVocabulariesDep",
     "MergeTagsDep",
+    "PreviewNamingChangeDep",
     "RemoveOntologyAnnotationDep",
     "RenameTagDep",
     # Ontology search + annotations
     "SearchOntologyDep",
+    "SeedDefaultProtocolCategoriesDep",
+    "SeedDefaultProtocolFormsDep",
     "SetEntityTagsDep",
+    "SetHomeOrganismDep",
     "SetOntologyAnnotationDep",
     "UnassignTagDep",
     "UpdateCustomFieldDep",
     "UpdateDataSourceDep",
     "UpdateExternalApiKeyDep",
+    "UpdateNamingLabelDep",
     "UpdateOntologySlotDep",
     "UpdateOrganizationDep",
+    "UpdateProtocolCategoryDep",
     "UpdateProtocolFormDep",
     "UpdateRegistrationFormDep",
     "UpdateSaltEntryDep",
@@ -141,10 +174,36 @@ ListOrganizationsDep = Annotated[ListOrganizations, Depends(_get_use_case(ListOr
 GetWorkspaceSettingsDep = Annotated[
     GetWorkspaceSettings, Depends(_get_use_case(GetWorkspaceSettings))
 ]
+PreviewNamingChangeDep = Annotated[
+    PreviewNamingChange, Depends(_get_use_case(PreviewNamingChange))
+]
+SetHomeOrganismDep = Annotated[SetHomeOrganism, Depends(_get_use_case(SetHomeOrganism))]
 UpdateWorkspaceSettingsDep = Annotated[
     UpdateWorkspaceSettings, Depends(_get_use_case(UpdateWorkspaceSettings))
 ]
 CreateVocabularyDep = Annotated[CreateVocabulary, Depends(_get_use_case(CreateVocabulary))]
+CreateNamingLabelDep = Annotated[CreateNamingLabel, Depends(_get_use_case(CreateNamingLabel))]
+DeleteNamingLabelDep = Annotated[DeleteNamingLabel, Depends(_get_use_case(DeleteNamingLabel))]
+ListNamingLabelsDep = Annotated[ListNamingLabels, Depends(_get_use_case(ListNamingLabels))]
+ListNamingTermsInUseDep = Annotated[
+    ListNamingTermsInUse, Depends(_get_use_case(ListNamingTermsInUse))
+]
+UpdateNamingLabelDep = Annotated[UpdateNamingLabel, Depends(_get_use_case(UpdateNamingLabel))]
+CreateProtocolCategoryDep = Annotated[
+    CreateProtocolCategory, Depends(_get_use_case(CreateProtocolCategory))
+]
+DeleteProtocolCategoryDep = Annotated[
+    DeleteProtocolCategory, Depends(_get_use_case(DeleteProtocolCategory))
+]
+ListProtocolCategoriesDep = Annotated[
+    ListProtocolCategories, Depends(_get_use_case(ListProtocolCategories))
+]
+SeedDefaultProtocolCategoriesDep = Annotated[
+    SeedDefaultProtocolCategories, Depends(_get_use_case(SeedDefaultProtocolCategories))
+]
+UpdateProtocolCategoryDep = Annotated[
+    UpdateProtocolCategory, Depends(_get_use_case(UpdateProtocolCategory))
+]
 UpdateVocabularyDep = Annotated[UpdateVocabulary, Depends(_get_use_case(UpdateVocabulary))]
 ListVocabulariesDep = Annotated[ListVocabularies, Depends(_get_use_case(ListVocabularies))]
 DeleteVocabularyDep = Annotated[DeleteVocabulary, Depends(_get_use_case(DeleteVocabulary))]
@@ -201,6 +260,9 @@ DeleteOntologySlotDep = Annotated[DeleteOntologySlot, Depends(_get_use_case(Dele
 
 # --- Ontology Search + Annotation dependencies ---
 SearchOntologyDep = Annotated[SearchOntology, Depends(_get_use_case(SearchOntology))]
+ListOntologyDescendantsDep = Annotated[
+    ListOntologyDescendants, Depends(_get_use_case(ListOntologyDescendants))
+]
 SetOntologyAnnotationDep = Annotated[
     SetOntologyAnnotation, Depends(_get_use_case(SetOntologyAnnotation))
 ]
@@ -213,6 +275,9 @@ CreateProtocolFormDep = Annotated[
     CreateProtocolFormUC, Depends(_get_use_case(CreateProtocolFormUC))
 ]
 ListProtocolFormsDep = Annotated[ListProtocolFormsUC, Depends(_get_use_case(ListProtocolFormsUC))]
+SeedDefaultProtocolFormsDep = Annotated[
+    SeedDefaultProtocolFormsUC, Depends(_get_use_case(SeedDefaultProtocolFormsUC))
+]
 UpdateProtocolFormDep = Annotated[
     UpdateProtocolFormUC, Depends(_get_use_case(UpdateProtocolFormUC))
 ]

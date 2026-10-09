@@ -828,6 +828,7 @@ class MoleculeActivityService:
                 AnyProtocolEntry(
                     protocol_id=curves[0].protocol_id,
                     protocol_name=proto.name if proto is not None else "",
+                    protocol_code=proto.code if proto is not None else None,
                     protocol_type=proto.protocol_type.value if proto is not None else "",
                     target_names=targets.get(curves[0].protocol_id, []),
                     label=_primary_intercept_label(av),
@@ -847,6 +848,7 @@ class MoleculeActivityService:
                 AnyProtocolEntry(
                     protocol_id=proto_id,
                     protocol_name=proto.name if proto is not None else "",
+                    protocol_code=proto.code if proto is not None else None,
                     protocol_type=proto.protocol_type.value if proto is not None else "",
                     target_names=targets.get(proto_id, []),
                     label=agg.readout_name,

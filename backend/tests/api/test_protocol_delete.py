@@ -11,6 +11,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
+from tests.api._protocols import protocol_body
 from tests.api.conftest import _create_test_app
 from tests.fakes.fake_auth import FakeAuth
 
@@ -28,11 +29,11 @@ async def _client_as(
     await app.state.container[AsyncEngine].dispose()
 
 
-async def _make_draft(client: AsyncClient) -> str:
+async def _make_draft(client: AsyncClient, seeder: AsyncClient | None = None) -> str:
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "Onboarding draft",
+            **await protocol_body(client, seeder=seeder),
             "protocol_type": "biochemical",
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },
@@ -45,8 +46,11 @@ async def test_the_creating_editor_sees_can_delete_and_deletes(
     database_url: str, _run_migrations: None, workspace_id: uuid.UUID
 ) -> None:
     creator = uuid.uuid4()
-    async with _client_as(database_url, workspace_id, role="editor", user_id=creator) as c:
-        pid = await _make_draft(c)
+    async with (
+        _client_as(database_url, workspace_id, role="admin") as admin,
+        _client_as(database_url, workspace_id, role="editor", user_id=creator) as c,
+    ):
+        pid = await _make_draft(c, seeder=admin)
 
         got = await c.get(f"/api/v1/protocols/{pid}")
         assert got.json()["can_delete"] is True
@@ -58,8 +62,11 @@ async def test_the_creating_editor_sees_can_delete_and_deletes(
 async def test_another_editor_gets_403_and_can_delete_false(
     database_url: str, _run_migrations: None, workspace_id: uuid.UUID
 ) -> None:
-    async with _client_as(database_url, workspace_id, role="editor", user_id=uuid.uuid4()) as c:
-        pid = await _make_draft(c)
+    async with (
+        _client_as(database_url, workspace_id, role="admin") as admin,
+        _client_as(database_url, workspace_id, role="editor", user_id=uuid.uuid4()) as c,
+    ):
+        pid = await _make_draft(c, seeder=admin)
     other = uuid.uuid4()
     async with _client_as(database_url, workspace_id, role="editor", user_id=other) as c2:
         assert (await c2.get(f"/api/v1/protocols/{pid}")).json()["can_delete"] is False

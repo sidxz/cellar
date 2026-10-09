@@ -1,5 +1,6 @@
 "use client";
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { TargetChips } from "@/features/screening-assay/components/target-chips";
 import {
   type ProtocolSummary,
@@ -124,7 +125,14 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
   const isArchived = protocol.status === "retired" || protocol.status === "archived";
   // Build a haystack so Command's filter can hit name + all targets + status.
   const targets = protocol.targets ?? [];
-  const value = [protocol.id, protocol.name, targets.map((t) => t.name).join(" "), protocol.status]
+  const value = [
+    protocol.id,
+    protocol.code,
+    protocol.name,
+    ...(protocol.aliases ?? []),
+    targets.map((t) => t.name).join(" "),
+    protocol.status,
+  ]
     .join(" ")
     .toLowerCase();
 
@@ -144,7 +152,7 @@ function ProtocolRow({ protocol, selected, onPick }: ProtocolRowProps) {
             <span
               className={cn("line-clamp-2 text-sm", isArchived && "text-muted-foreground italic")}
             >
-              {protocol.name}
+              <ProtocolOptionLabel code={protocol.code} name={protocol.name} />
             </span>
             {isArchived && (
               <span className="rounded-full border border-muted-foreground/20 px-1.5 text-[10px] uppercase tracking-wider text-muted-foreground shrink-0">
@@ -700,7 +708,12 @@ function ActivityRow({
                     )}
                     aria-hidden
                   />
-                  <span className="truncate">{selectedProtocol.name}</span>
+                  <span className="truncate">
+                    <ProtocolOptionLabel
+                      code={selectedProtocol.code}
+                      name={selectedProtocol.name}
+                    />
+                  </span>
                 </span>
               ) : (
                 <span className="truncate">Choose protocol…</span>

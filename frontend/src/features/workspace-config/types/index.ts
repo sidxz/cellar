@@ -1,9 +1,16 @@
 import type {
+  CreateNamingLabelBody,
   CreateOrganizationBody,
+  CreateProtocolCategoryBody,
   CreateVocabularyBody,
+  NamingLabelResponse,
+  NamingTermInUseResponse,
   OrganizationResponse,
   OrganizationType as OrganizationTypeModel,
+  ProtocolCategoryResponse,
+  UpdateNamingLabelBody,
   UpdateOrganizationBody,
+  UpdateProtocolCategoryBody,
   UpdateVocabularyBody,
   VocabularyResponse,
   WorkspaceSettingsResponse,
@@ -42,6 +49,13 @@ export interface CustomFieldDefinition {
   vocabulary_name?: string | null;
 }
 
+/** WorkspaceSettings.protocol_naming: the backend types it as an opaque dict. */
+export interface ProtocolNamingSettings {
+  code_prefix?: string;
+  code_width?: number;
+  home_organism?: { term_id: string; label: string; ontology_source: string };
+}
+
 export interface RegistrationRules {
   create_batch_on_duplicate?: boolean;
   registration_number_prefix?: string;
@@ -59,3 +73,14 @@ export type WorkspaceSettings = WorkspaceSettingsResponse;
 export type Vocabulary = VocabularyResponse;
 export type CreateVocabularyInput = CreateVocabularyBody;
 export type UpdateVocabularyInput = UpdateVocabularyBody;
+
+// Protocol categories (orval aliases): label + the name pattern its protocols follow.
+export type ProtocolCategory = ProtocolCategoryResponse;
+export type CreateProtocolCategoryInput = CreateProtocolCategoryBody;
+export type UpdateProtocolCategoryInput = UpdateProtocolCategoryBody;
+
+// Short labels (orval aliases): how ontology terms read inside protocol names.
+export type NamingLabel = NamingLabelResponse;
+export type NamingTermInUse = NamingTermInUseResponse;
+export type CreateNamingLabelInput = CreateNamingLabelBody;
+export type UpdateNamingLabelInput = UpdateNamingLabelBody;

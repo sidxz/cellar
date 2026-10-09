@@ -7,6 +7,7 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from tests.api._protocols import protocol_body
 from tests.api.conftest import OTHER_ORG_ID
 
 pytestmark = pytest.mark.asyncio
@@ -37,7 +38,7 @@ async def test_browse_returns_entities_across_types(client: AsyncClient) -> None
     proto = await client.post(
         "/api/v1/protocols",
         json={
-            "name": "BrowseProto",
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [
                 {"name": "IC50", "data_type": "numeric", "display_order": 0}
@@ -46,6 +47,7 @@ async def test_browse_returns_entities_across_types(client: AsyncClient) -> None
     )
     assert proto.status_code in (200, 201), proto.text
     protocol_id = proto.json()["id"]
+    protocol_name = proto.json()["name"]
     published = await client.post(f"/api/v1/protocols/{protocol_id}/publish")
     assert published.status_code in (200, 201), published.text
     run = await client.post(
@@ -81,7 +83,7 @@ async def test_browse_returns_entities_across_types(client: AsyncClient) -> None
     assert all(r["assigned_at"] for r in rows)
     # Run-branch label SQL executed: "<protocol name> · <run_date>".
     run_label = next(r["label"] for r in rows if r["entity_type"] == "Run")
-    assert "BrowseProto" in run_label
+    assert run_label.startswith(f"{protocol_name} · ")
     assert " · " in run_label
 
     only_proj = await client.get(

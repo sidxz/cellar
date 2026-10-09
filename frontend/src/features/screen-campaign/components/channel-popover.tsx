@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import {
   interceptKeyId,
@@ -314,7 +315,7 @@ export function ChannelPopoverForm({
                   <SelectContent>
                     {protocols?.map((p) => (
                       <SelectItem key={p.id} value={p.id}>
-                        {p.name}
+                        <ProtocolOptionLabel code={p.code} name={p.name} />
                       </SelectItem>
                     ))}
                   </SelectContent>

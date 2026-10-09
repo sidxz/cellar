@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
-from sqlalchemy import func, or_, select
+import sqlalchemy as sa
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.application.screening._dose_response_config_serde import (
@@ -13,7 +15,9 @@ from cellar.application.screening._dose_response_config_serde import (
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
+    AliasKind,
     ConditionDataType,
+    NameFlag,
     PosControlSignal,
     ProtocolStatus,
     ProtocolType,
@@ -24,6 +28,7 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
+    ProtocolAlias,
     ReadoutDefinition,
 )
 from cellar.domain.screening_assay.protocol_fingerprint import (
@@ -31,7 +36,12 @@ from cellar.domain.screening_assay.protocol_fingerprint import (
     normalize_facet_id,
 )
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
-from cellar.domain.screening_assay.repository import TargetLinkResult
+from cellar.domain.screening_assay.repository import (
+    AnnotationTermUse,
+    FlaggedProtocol,
+    NameSibling,
+    TargetLinkResult,
+)
 from cellar.domain.screening_assay.target import EffectiveTarget, TargetRef
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion
@@ -41,6 +51,7 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ConditionDefinitionModel,
+    ProtocolAliasModel,
     ProtocolModel,
     ReadoutDefinitionModel,
     RunModel,
@@ -61,6 +72,10 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
 _NAME_BLOCK_FLOOR = 0.3
 _RUN_READOUT_JACCARD = 0.5  # run-candidate (targets present): minimum readout-schema overlap
 _RUN_NAME_FLOOR = 0.6  # run-candidate (no targets yet): minimum name match
+# Below this a match has little beyond shared name words. Generated names share their
+# category words across organisms ("growth inhibition"), so name overlap alone is noise.
+# Measured on the ChEMBL fit test: other-organism matches <= 0.18, true siblings >= 0.30.
+_MIN_SCORE = 0.3
 _RUN_MIN_SHARED_READOUTS = 2  # run-candidate (no targets yet): minimum shared readout kinds
 
 
@@ -86,17 +101,178 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             return None
         return self._to_domain_tracked(model)
 
-    async def find_by_name(self, workspace_id: uuid.UUID, name: str) -> Protocol | None:
-        """Find a protocol by exact name within a workspace."""
-        stmt = select(ProtocolModel).where(
-            ProtocolModel.workspace_id == workspace_id,
-            ProtocolModel.name == name,
+    async def find_latest_active_by_code(
+        self, workspace_id: uuid.UUID, code: str
+    ) -> Protocol | None:
+        """The active version of the protocol with this code (formula references)."""
+        stmt = (
+            select(ProtocolModel)
+            .where(
+                ProtocolModel.workspace_id == workspace_id,
+                ProtocolModel.code == code,
+                ProtocolModel.status == ProtocolStatus.ACTIVE.value,
+            )
+            .order_by(ProtocolModel.protocol_version.desc())
+            .limit(1)
         )
-        result = await self._session.execute(stmt)
-        model = result.scalar_one_or_none()
+        model = (await self._session.execute(stmt)).scalar_one_or_none()
         if model is None:
             return None
         return self._to_domain_tracked(model)
+
+    async def list_annotation_terms(
+        self, workspace_id: uuid.UUID, slots: Sequence[str]
+    ) -> list[AnnotationTermUse]:
+        rows = (
+            await self._session.execute(
+                text(
+                    """
+                    select a.key as slot, t->>'term_id' as term_id, min(t->>'label') as label,
+                           min(t->>'ontology_source') as source, count(distinct p.id) as n
+                    from protocols p
+                    cross join lateral jsonb_each(p.ontology_annotations) as a(key, terms)
+                    cross join lateral jsonb_array_elements(a.terms) as t
+                    where p.workspace_id = :ws
+                      and jsonb_typeof(p.ontology_annotations) = 'object'
+                      and a.key = any(:slots)
+                    group by a.key, t->>'term_id'
+                    order by a.key, min(t->>'label')
+                    """
+                ),
+                {"ws": workspace_id, "slots": list(slots)},
+            )
+        ).all()
+        return [
+            AnnotationTermUse(
+                slot=r.slot,
+                term_id=r.term_id,
+                label=r.label,
+                ontology_source=r.source,
+                protocol_count=r.n,
+            )
+            for r in rows
+        ]
+
+    async def lock_naming(self, workspace_id: uuid.UUID) -> None:
+        # Same key as next_protocol_code: one create-or-rename name check at a time per workspace.
+        await self._session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"protocol_naming:{workspace_id}")))
+        )
+
+    async def find_name_siblings(
+        self, workspace_id: uuid.UUID, *, base: str, exclude_code: str | None
+    ) -> list[NameSibling]:
+        stmt = select(
+            ProtocolModel.id,
+            ProtocolModel.code,
+            ProtocolModel.name,
+            ProtocolModel.discriminator,
+            ProtocolModel.status,
+            ProtocolModel.is_locked,
+        ).where(
+            ProtocolModel.workspace_id == workspace_id,
+            func.lower(ProtocolModel.name_base) == base.strip().lower(),
+        )
+        if exclude_code is not None:
+            stmt = stmt.where(ProtocolModel.code.is_distinct_from(exclude_code))
+        seen: dict[str, NameSibling] = {}
+        rows = await self._session.execute(stmt.order_by(ProtocolModel.protocol_version.desc()))
+        for row in rows.all():
+            seen.setdefault(
+                row.code or str(row.id),
+                NameSibling(
+                    protocol_id=row.id,
+                    code=row.code,
+                    name=row.name,
+                    discriminator=row.discriminator,
+                    status=row.status,
+                    is_locked=row.is_locked,
+                ),
+            )
+        return list(seen.values())
+
+    async def list_discriminators(
+        self, workspace_id: uuid.UUID, *, base: str | None, q: str | None, limit: int = 20
+    ) -> list[str]:
+        stmt = select(ProtocolModel.discriminator).where(
+            ProtocolModel.workspace_id == workspace_id, ProtocolModel.discriminator.is_not(None)
+        )
+        if base:
+            stmt = stmt.where(func.lower(ProtocolModel.name_base) == base.strip().lower())
+        if q:
+            stmt = stmt.where(ProtocolModel.discriminator.ilike(f"%{q.strip()}%"))
+        stmt = stmt.distinct().order_by(ProtocolModel.discriminator).limit(limit)
+        return list((await self._session.execute(stmt)).scalars())
+
+    def _latest_per_code(self, workspace_id: uuid.UUID) -> sa.Select:
+        lineage = func.coalesce(ProtocolModel.code, sa.cast(ProtocolModel.id, sa.String))
+        return (
+            select(ProtocolModel)
+            .where(ProtocolModel.workspace_id == workspace_id)
+            .distinct(lineage)
+            .order_by(lineage, ProtocolModel.protocol_version.desc())
+        )
+
+    async def find_flagged(self, workspace_id: uuid.UUID) -> list[FlaggedProtocol]:
+        latest = self._latest_per_code(workspace_id).subquery()
+        rows = await self._session.execute(
+            select(latest.c.id, latest.c.code, latest.c.name, latest.c.name_flag)
+            .where(latest.c.name_flag.is_not(None))
+            .order_by(latest.c.code)
+        )
+        return [
+            FlaggedProtocol(protocol_id=r.id, code=r.code, name=r.name, flag=r.name_flag)
+            for r in rows.all()
+        ]
+
+    async def list_lineage_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        latest = self._latest_per_code(workspace_id).subquery()
+        return list((await self._session.execute(select(latest.c.id))).scalars())
+
+    async def list_ids(self, workspace_id: uuid.UUID) -> list[uuid.UUID]:
+        stmt = select(ProtocolModel.id).where(ProtocolModel.workspace_id == workspace_id)
+        return list((await self._session.execute(stmt)).scalars())
+
+    async def count_by_category(self, workspace_id: uuid.UUID, label: str) -> int:
+        stmt = select(func.count()).where(
+            ProtocolModel.workspace_id == workspace_id,
+            func.lower(ProtocolModel.category) == " ".join(label.split()).lower(),
+        )
+        return int((await self._session.execute(stmt)).scalar_one())
+
+    async def next_protocol_code(self, workspace_id: uuid.UUID, *, prefix: str, width: int) -> str:
+        # Serialize per workspace: the MAX+1 read and the INSERT share this transaction and the
+        # advisory lock is held until commit. The same lock guards name checks
+        # (ProtocolNameService).
+        # ponytail: one protocol create at a time per workspace; a SEQUENCE if throughput matters.
+        await self._session.execute(
+            select(func.pg_advisory_xact_lock(func.hashtext(f"protocol_naming:{workspace_id}")))
+        )
+        stmt = select(
+            func.coalesce(
+                func.max(
+                    func.cast(
+                        func.substring(ProtocolModel.code, sa.literal(r"[0-9]+$")), sa.Integer
+                    )
+                ),
+                0,
+            )
+        ).where(ProtocolModel.workspace_id == workspace_id)
+        max_num: int = (await self._session.execute(stmt)).scalar_one()
+        return f"{prefix}{max_num + 1:0{width}d}"
+
+    @staticmethod
+    def _aliases_to_model(aggregate: Protocol) -> list[ProtocolAliasModel]:
+        return [
+            ProtocolAliasModel(
+                position=i,
+                label=a.label,
+                kind=a.kind.value,
+                recorded_at=a.recorded_at,
+                reason=a.reason,
+            )
+            for i, a in enumerate(aggregate.aliases)
+        ]
 
     @staticmethod
     def _norm_readout(name: str) -> str:
@@ -203,6 +379,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                     shared_readout_kinds=tuple(sorted(shared_readouts)),
                 )
             )
+        matches = [m for m in matches if m.score >= _MIN_SCORE or m.is_run_candidate]
         matches.sort(key=lambda m: m.score, reverse=True)
         return matches[:limit]
 
@@ -554,6 +731,19 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         )
         return bool(result.rowcount)
 
+    async def find_protocol_ids_by_direct_target(
+        self, workspace_id: uuid.UUID, target_id: uuid.UUID
+    ) -> list[uuid.UUID]:
+        result = await self._session.execute(
+            select(protocol_targets.c.protocol_id)
+            .join(ProtocolModel, protocol_targets.c.protocol_id == ProtocolModel.id)
+            .where(
+                protocol_targets.c.target_id == target_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
+        )
+        return list(result.scalars().all())
+
     async def find_direct_target_ids(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> list[uuid.UUID]:
@@ -755,6 +945,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             id=model.id,
             workspace_id=model.workspace_id,
             name=model.name,
+            code=model.code,
             description=model.description,
             protocol_type=ProtocolType(model.protocol_type),
             category=model.category,
@@ -768,6 +959,18 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             condition_definitions=condition_defs,
             control_layouts=control_layouts,
             ontology_annotations=ontology_annotations,
+            aliases=[
+                ProtocolAlias(
+                    label=a.label,
+                    kind=AliasKind(a.kind),
+                    recorded_at=a.recorded_at,
+                    reason=a.reason,
+                )
+                for a in model.aliases
+            ],
+            discriminator=model.discriminator,
+            name_base=model.name_base,
+            name_flag=NameFlag(model.name_flag) if model.name_flag else None,
             recommended_hit_criteria=[
                 HitCriterion.from_dict(c) for c in (model.recommended_hit_criteria or [])
             ]
@@ -814,6 +1017,10 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             id=aggregate.id,
             workspace_id=aggregate.workspace_id,
             name=aggregate.name,
+            code=aggregate.code,
+            discriminator=aggregate.discriminator,
+            name_base=aggregate.name_base,
+            name_flag=aggregate.name_flag.value if aggregate.name_flag else None,
             description=aggregate.description,
             protocol_type=aggregate.protocol_type.value,
             category=aggregate.category,
@@ -843,10 +1050,15 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.condition_definitions = [
             self._condition_def_to_model(cd) for cd in aggregate.condition_definitions
         ]
+        model.aliases = self._aliases_to_model(aggregate)
         return model
 
     def _update_model(self, model: ProtocolModel, aggregate: Protocol) -> None:
         model.name = aggregate.name
+        model.code = aggregate.code
+        model.discriminator = aggregate.discriminator
+        model.name_base = aggregate.name_base
+        model.name_flag = aggregate.name_flag.value if aggregate.name_flag else None
         model.description = aggregate.description
         model.protocol_type = aggregate.protocol_type.value
         model.category = aggregate.category
@@ -877,6 +1089,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.condition_definitions = [
             self._condition_def_to_model(cd) for cd in aggregate.condition_definitions
         ]
+        model.aliases = self._aliases_to_model(aggregate)
 
     # ------------------------------------------------------------------
     # Owned entity mapping helpers

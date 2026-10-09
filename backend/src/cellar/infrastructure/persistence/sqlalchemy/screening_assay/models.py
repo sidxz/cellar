@@ -181,7 +181,11 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
 
     __tablename__ = "protocols"
 
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    name: Mapped[str] = mapped_column(String(400), nullable=False)
+    code: Mapped[str | None] = mapped_column(String(20))
+    discriminator: Mapped[str | None] = mapped_column(String(40))
+    name_base: Mapped[str] = mapped_column(String(400), nullable=False)
+    name_flag: Mapped[str | None] = mapped_column(String(30))
     description: Mapped[str | None] = mapped_column(Text)
     protocol_type: Mapped[str] = mapped_column(String(30), nullable=False)
     category: Mapped[str | None] = mapped_column(String(100))
@@ -224,12 +228,42 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         lazy="selectin",
         back_populates="protocol",
     )
+    aliases: Mapped[list[ProtocolAliasModel]] = relationship(
+        "ProtocolAliasModel",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="ProtocolAliasModel.position",
+        back_populates="protocol",
+    )
 
     __table_args__ = (
         Index("ix_protocol_ws_name", "workspace_id", "name"),
+        Index(
+            "uq_protocol_ws_code_version", "workspace_id", "code", "protocol_version", unique=True
+        ),
         Index("ix_protocol_parent", "parent_protocol_id"),
         Index("ix_protocol_ws_status", "workspace_id", "status"),
     )
+
+
+class ProtocolAliasModel(Base):
+    """Another name a protocol answers to (former name or nickname)."""
+
+    __tablename__ = "protocol_aliases"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
+    protocol_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("protocols.id", ondelete="CASCADE"), nullable=False
+    )
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    label: Mapped[str] = mapped_column(String(400), nullable=False)
+    kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text)
+
+    protocol: Mapped[ProtocolModel] = relationship(back_populates="aliases")
+
+    __table_args__ = (Index("ix_protocol_aliases_protocol", "protocol_id"),)
 
 
 class ReadoutDefinitionModel(Base, EntityModelMixin):

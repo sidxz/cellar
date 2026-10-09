@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Sequence
+
+from sqlalchemy import select
+
 from cellar.domain.screening_assay.enums import TargetType
 from cellar.domain.screening_assay.target import Target
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
@@ -65,3 +70,21 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
         model.sequence = entity.sequence
         model.chembl_id = entity.chembl_id
         model.source_version = entity.source_version
+
+    async def list_organisms(self, workspace_id: uuid.UUID) -> list[str]:
+        """Distinct organisms of the mirrored targets (registry text, not taxon ids)."""
+        stmt = (
+            select(TargetModel.organism)
+            .where(TargetModel.workspace_id == workspace_id, TargetModel.organism.is_not(None))
+            .distinct()
+            .order_by(TargetModel.organism)
+        )
+        return list((await self._session.execute(stmt)).scalars())
+
+    async def find_by_ids(self, workspace_id: uuid.UUID, ids: Sequence[uuid.UUID]) -> list[Target]:
+        if not ids:
+            return []
+        stmt = select(TargetModel).where(
+            TargetModel.workspace_id == workspace_id, TargetModel.id.in_(list(ids))
+        )
+        return [self._to_domain(m) for m in (await self._session.execute(stmt)).scalars()]

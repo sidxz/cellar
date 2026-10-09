@@ -246,3 +246,17 @@ class TestProtocolFormUpdate:
         form = self._make(ws_id)
         form.update(is_default=True)
         assert form.is_default is True
+
+
+def test_form_carries_category_and_assay_format_rule():
+    ws, cat = uuid.uuid4(), uuid.uuid4()
+    form = ProtocolForm.create(
+        workspace_id=ws,
+        name="IC50 dose-response",
+        category_id=cat,
+        assay_format_from_target=True,
+        readout_templates=[ProtocolFormReadout(name="Signal", data_type="numeric")],
+    )
+    assert form.category_id == cat and form.assay_format_from_target is True
+    form.update(category_id=None, assay_format_from_target=False)
+    assert form.category_id is None and form.assay_format_from_target is False

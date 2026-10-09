@@ -19,7 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
@@ -46,6 +45,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type ReactNode, useState } from "react";
+import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import {
   useDeleteProtocol,
   useLockProtocol,
@@ -56,9 +56,14 @@ import {
   useUpdateProtocol,
   useVersionProtocol,
 } from "../hooks/use-protocols";
-import type { ProtocolStatus } from "../types";
+import type { Protocol, ProtocolStatus } from "../types";
+import { CorrectProtocolDialog } from "./correct-protocol-dialog";
+import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
+import { DiscriminatorInput } from "./discriminator-input";
+import { ProtocolCategoryInput } from "./protocol-category-input";
+import { ProtocolNamePreview, useRequiredNameSlots } from "./protocol-name-preview";
 
 // ---------------------------------------------------------------------------
 // ProtocolDetail — tab shell
@@ -85,15 +90,54 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editName, setEditName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
+  const [editDiscriminator, setEditDiscriminator] = useState("");
   const [lockOpen, setLockOpen] = useState(false);
   const [lockReason, setLockReason] = useState("");
   const [lockMode, setLockMode] = useState<"lock" | "unlock">("lock");
   const [forceDeleteOpen, setForceDeleteOpen] = useState(false);
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [newAssayOpen, setNewAssayOpen] = useState(false);
 
   const query = { data: protocol, isLoading };
+
+  const openEditDetails = (p: Protocol) => {
+    setEditDescription(p.description ?? "");
+    setEditCategory(p.category ?? "");
+    setEditDiscriminator(p.discriminator ?? "");
+    setEditOpen(true);
+  };
+  // The discriminator is edited where the protocol's state allows: a draft's details, or a
+  // correction on an unlocked published protocol. Locked and retired protocols cannot change it.
+  const editName = (p: Protocol) =>
+    p.is_locked
+      ? undefined
+      : p.status === "draft"
+        ? () => openEditDetails(p)
+        : p.status === "active"
+          ? () => setCorrectOpen(true)
+          : undefined;
+
+  // Live name while editing a draft. Missing facts are fine on a draft (they only
+  // block publishing); a clash or an invalid discriminator is not.
+  const preview = useProtocolNamePreview(
+    editOpen && protocol
+      ? {
+          category: editCategory || null,
+          target_ids: protocol.targets.map((t) => t.id),
+          ontology_annotations: protocol.ontology_annotations ?? {},
+          discriminator: editDiscriminator.trim() || null,
+          protocol_id: protocol.id,
+        }
+      : null,
+  );
+  const editNeeds = useRequiredNameSlots(editCategory);
+  const draftSavable =
+    !!preview.data &&
+    !preview.data.clash &&
+    !preview.data.needs_discriminator &&
+    !preview.data.discriminator_error;
 
   return (
     <>
@@ -102,6 +146,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
+        subtitle={(p) => (p.code ? <span className="font-mono">{p.code}</span> : null)}
         breadcrumbTrail={() => [{ label: "Protocols", href: "/assays" }]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
@@ -136,15 +181,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
           if (!locked && s === "draft") {
             neutralItems.push(
-              <DropdownMenuItem
-                key="edit"
-                onClick={() => {
-                  setEditName(p.name);
-                  setEditDescription(p.description ?? "");
-                  setEditCategory(p.category ?? "");
-                  setEditOpen(true);
-                }}
-              >
+              <DropdownMenuItem key="edit" onClick={() => openEditDetails(p)}>
                 <Pencil className="mr-2 h-4 w-4" />
                 Edit details
               </DropdownMenuItem>,
@@ -176,6 +213,10 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
           if (!locked && s === "active") {
             neutralItems.push(
+              <DropdownMenuItem key="correct" onClick={() => setCorrectOpen(true)}>
+                <Pencil className="mr-2 h-4 w-4" />
+                Correct details…
+              </DropdownMenuItem>,
               <DropdownMenuItem
                 key="version"
                 onClick={() => versionMutation.mutate({ id: protocolId })}
@@ -303,7 +344,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             </TabsList>
 
             <TabsContent value="overview">
-              <OverviewTab protocol={protocol} protocolId={protocolId} onTabChange={setActiveTab} />
+              <OverviewTab
+                protocol={protocol}
+                protocolId={protocolId}
+                onTabChange={setActiveTab}
+                onEditName={editName(protocol)}
+              />
             </TabsContent>
             <TabsContent value="activity">
               <ActivityTab protocol={protocol} protocolId={protocolId} />
@@ -320,6 +366,22 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           </Tabs>
         )}
       </DetailShell>
+
+      {protocol && (
+        <>
+          <CorrectProtocolDialog
+            protocol={protocol}
+            open={correctOpen}
+            onOpenChange={setCorrectOpen}
+            onNewAssay={() => setNewAssayOpen(true)}
+          />
+          <CreateProtocolDialog
+            open={newAssayOpen}
+            onOpenChange={setNewAssayOpen}
+            prefill={protocol}
+          />
+        </>
+      )}
 
       <CreateRunDialog
         protocolId={protocolId}
@@ -388,10 +450,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
-              <Label>Name</Label>
-              <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div className="grid gap-2">
               <Label>Description</Label>
               <Textarea
                 value={editDescription}
@@ -402,26 +460,35 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
             </div>
             <div className="grid gap-2">
               <Label>Category</Label>
-              <Input
-                value={editCategory}
-                onChange={(e) => setEditCategory(e.target.value)}
-                placeholder="Optional"
+              <ProtocolCategoryInput value={editCategory} onChange={setEditCategory} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Discriminator{editNeeds.has("discriminator") ? "" : " (optional)"}</Label>
+              <DiscriminatorInput
+                value={editDiscriminator}
+                onChange={setEditDiscriminator}
+                base={preview.data?.base ?? null}
               />
             </div>
+            <ProtocolNamePreview
+              preview={preview.data}
+              isFetching={preview.isFetching}
+              code={protocol?.code}
+            />
           </div>
           <DialogFooter>
             <Button
               onClick={() => {
                 updateMutation.mutate(
                   {
-                    name: editName || undefined,
                     description: editDescription || null,
                     category: editCategory || null,
+                    discriminator: editDiscriminator.trim() || null,
                   },
                   { onSuccess: () => setEditOpen(false) },
                 );
               }}
-              disabled={!editName.trim() || updateMutation.isPending}
+              disabled={!draftSavable || updateMutation.isPending}
             >
               {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
@@ -435,7 +502,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
           <DialogHeader>
             <DialogTitle>Delete Draft Protocol</DialogTitle>
             <DialogDescription>
-              This will permanently delete &quot;{protocol?.name}&quot; (v
+              This will permanently delete &quot;{protocol?.name}&quot; ({protocol?.code}, v
               {protocol?.protocol_version}). This action cannot be undone.
             </DialogDescription>
           </DialogHeader>
@@ -465,7 +532,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         <CascadeDeleteDialog
           entityType="protocol"
           entityId={protocolId}
-          entityLabel={protocol.name}
+          entityLabel={protocol.code ?? protocol.name}
           onDeleted={() => router.push("/assays")}
           open={forceDeleteOpen}
           onOpenChange={setForceDeleteOpen}

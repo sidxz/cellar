@@ -14,6 +14,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import PlateModel
+from tests.api._protocols import protocol_body
 
 
 async def _mk_plate(client: AsyncClient, **overrides) -> dict:
@@ -33,7 +34,7 @@ async def _mk_protocol(client: AsyncClient, name: str = "PlateRunsProto") -> str
     resp = await client.post(
         "/api/v1/protocols",
         json={
-            "name": name,
+            **await protocol_body(client),
             "protocol_type": "biochemical",
             "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
         },
@@ -83,7 +84,8 @@ class TestPlateRuns:
         assert row["run_id"] == rid
         assert row["plate_number"] == 2
         assert row["protocol_id"] == pid
-        assert row["protocol_name"] == "PlateRunsProto"
+        protocol_name = (await client.get(f"/api/v1/protocols/{pid}")).json()["name"]
+        assert row["protocol_name"] == protocol_name
         assert row["run_date"] == "2026-06-07"
         assert row["run_status"] == "draft"
         assert row["created_at"]

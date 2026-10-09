@@ -42,6 +42,7 @@ async def _campaign_with_run_targets(session, ws, project_id, name, target_ids):
             id=protocol_id,
             workspace_id=ws,
             name="P",
+            name_base="P",
             protocol_type="biochemical",
             created_by=uuid.uuid4(),
         )

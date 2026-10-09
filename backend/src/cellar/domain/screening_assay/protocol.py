@@ -9,7 +9,9 @@ from datetime import UTC, datetime
 
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
+    AliasKind,
     ConditionDataType,
+    NameFlag,
     PlateFormat,
     PosControlSignal,
     ProtocolStatus,
@@ -19,9 +21,11 @@ from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
 )
 from cellar.domain.screening_assay.events import (
+    ProtocolCorrected,
     ProtocolCreated,
     ProtocolLocked,
     ProtocolPublished,
+    ProtocolRenamed,
     ProtocolRetired,
     ProtocolUnlocked,
 )
@@ -33,10 +37,23 @@ from cellar.domain.shared.hit_criterion import (
     validate_hit_criteria,
 )
 from cellar.domain.shared.ontology import OntologyTerm
-
+from cellar.domain.shared.protocol_naming import (
+    MAX_NAME_LENGTH,
+    clean_discriminator,
+    normalize_name_text,
+    validate_name_text,
+)
+from cellar.domain.shared.units import canonical_unit
 
 # Sentinel used by partial-update mutators to distinguish "leave unchanged"
 # (default) from "explicitly set to None".
+
+
+def _term_labels(terms: list[OntologyTerm] | None) -> str | None:
+    """Audit form of an annotation slot's terms."""
+    return "; ".join(t.label for t in terms) if terms else None
+
+
 class _UnsetT:
     pass
 
@@ -88,6 +105,19 @@ _is_reserved_readout_name = is_reserved_readout_name
 # ---------------------------------------------------------------------------
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+_MAX_ALIAS_LENGTH = 400
+
+
+@dataclass(frozen=True)
+class ProtocolAlias:
+    """Another name a protocol answers to. Searchable; never rendered as the name."""
+
+    label: str
+    kind: AliasKind
+    recorded_at: datetime
+    reason: str | None = None
 
 
 @dataclass(frozen=True)
@@ -226,7 +256,7 @@ class ReadoutDefinition(Entity):
         # interpretation depends on it.
         self.description = description.strip() if description else None
         self.data_type = data_type
-        self.unit = unit
+        self.unit = canonical_unit(unit)
         self.aggregation = aggregation
         self.precision = precision
         self.normalizations = resolved_normalizations
@@ -276,7 +306,7 @@ class ConditionDefinition(Entity):
         self.protocol_id = protocol_id
         self.name = name.strip()
         self.data_type = data_type
-        self.unit = unit
+        self.unit = canonical_unit(unit)
         self.pick_list_values = pick_list_values
 
 
@@ -304,6 +334,7 @@ class Protocol(AggregateRoot):
         id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         name: str,
+        code: str | None = None,
         description: str | None = None,
         protocol_type: ProtocolType,
         category: str | None = None,
@@ -317,6 +348,10 @@ class Protocol(AggregateRoot):
         condition_definitions: list[ConditionDefinition] | None = None,
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
+        aliases: list[ProtocolAlias] | None = None,
+        discriminator: str | None = None,
+        name_base: str | None = None,
+        name_flag: NameFlag | None = None,
         recommended_hit_criteria: list[HitCriterion] | None = None,
         fingerprint: dict | None = None,
         is_locked: bool = False,
@@ -334,6 +369,8 @@ class Protocol(AggregateRoot):
 
         self.workspace_id = workspace_id
         self.name = name.strip()
+        # Immutable citation handle shared by every version (PRT-00142)
+        self.code = code
         self.description = description
         self.protocol_type = protocol_type
         self.category = category
@@ -352,6 +389,12 @@ class Protocol(AggregateRoot):
         self.condition_definitions: list[ConditionDefinition] = condition_definitions or []
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
+        self.aliases: list[ProtocolAlias] = list(aliases or [])
+        # Generated-name parts: the free discriminator, the name without it (collision key),
+        # and why the name needs attention.
+        self.discriminator = discriminator
+        self.name_base = name_base or self.name
+        self.name_flag = name_flag
         self.recommended_hit_criteria: list[HitCriterion] | None = recommended_hit_criteria
         # Authoritative-derived structural signature — recomputed by the
         # repository on every save (see compute_protocol_fingerprint). Held
@@ -418,6 +461,19 @@ class Protocol(AggregateRoot):
         if self.status == ProtocolStatus.RETIRED:
             raise ConflictError("Cannot modify a retired protocol — version a successor instead")
 
+    def _guard_correction(self, reason: str | None) -> None:
+        """Facts that feed the generated name. Drafts change freely; a published protocol
+        only through a correction with a reason; locked and retired ones not at all."""
+        if self.is_locked:
+            raise ConflictError(
+                f"Protocol is locked. Reason: {self.lock_reason or '(none)'}. "
+                "Unlock to make changes."
+            )
+        if self.status == ProtocolStatus.RETIRED:
+            raise ConflictError("Cannot change a retired protocol")
+        if self.status == ProtocolStatus.ACTIVE and not (reason and reason.strip()):
+            raise ValidationError("A published protocol can only be corrected with a reason")
+
     # ------------------------------------------------------------------
     # Factory method
     # ------------------------------------------------------------------
@@ -428,6 +484,7 @@ class Protocol(AggregateRoot):
         *,
         workspace_id: uuid.UUID,
         name: str,
+        code: str | None = None,
         protocol_type: ProtocolType,
         created_by: uuid.UUID,
         description: str | None = None,
@@ -437,13 +494,19 @@ class Protocol(AggregateRoot):
         readout_definitions: list[ReadoutDefinition] | None = None,
         condition_definitions: list[ConditionDefinition] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
+        discriminator: str | None = None,
+        name_base: str | None = None,
+        name_flag: NameFlag | None = None,
     ) -> Protocol:
         if not readout_definitions:
             raise ValidationError("Protocol must have at least one ReadoutDefinition")
+        if len(name.strip()) > MAX_NAME_LENGTH:
+            raise ValidationError(f"Protocol name must be at most {MAX_NAME_LENGTH} characters")
 
         protocol = cls(
             workspace_id=workspace_id,
             name=name,
+            code=code,
             description=description,
             protocol_type=protocol_type,
             category=category,
@@ -453,6 +516,9 @@ class Protocol(AggregateRoot):
             readout_definitions=readout_definitions,
             condition_definitions=condition_definitions,
             ontology_annotations=ontology_annotations,
+            discriminator=discriminator,
+            name_base=name_base,
+            name_flag=name_flag,
         )
         protocol.register_event(
             ProtocolCreated(
@@ -474,6 +540,11 @@ class Protocol(AggregateRoot):
         """Promote a DRAFT protocol to ACTIVE."""
         if self.is_locked:
             raise ConflictError("Cannot publish a locked protocol — unlock first")
+        if self.name_flag in (NameFlag.NEEDS_FACTS, NameFlag.NAME_CONFLICT):
+            raise ConflictError(
+                "This protocol's name is incomplete or clashes with another; "
+                "fix it before publishing"
+            )
         self._guard_transition(ProtocolStatus.ACTIVE)
         self.status = ProtocolStatus.ACTIVE
         self.updated_at = datetime.now(UTC)
@@ -508,29 +579,110 @@ class Protocol(AggregateRoot):
     def update(
         self,
         *,
-        name: str | None = None,
         description: str | None = ...,  # type: ignore[assignment]
-        category: str | None = ...,  # type: ignore[assignment]
         pos_control_signal: PosControlSignal | None = None,
     ) -> None:
-        """Update mutable metadata fields.
+        """Update mutable metadata fields. The name is generated, never set here.
 
         Only DRAFT protocols can be updated.
         Uses sentinel ``...`` for nullable fields.
         """
         self._guard_draft()
 
-        if name is not None:
-            if not name.strip():
-                raise ValidationError("Protocol name must not be empty")
-            self.name = name.strip()
         if description is not ...:
             self.description = description
-        if category is not ...:
-            self.category = category
         if pos_control_signal is not None:
             self.pos_control_signal = pos_control_signal
         self.updated_at = datetime.now(UTC)
+
+    # ------------------------------------------------------------------
+    # Generated name
+    # ------------------------------------------------------------------
+
+    def set_category(self, category: str | None, *, reason: str | None = None) -> None:
+        self._guard_correction(reason)
+        old = self.category
+        self.category = " ".join(category.split()) if category and category.strip() else None
+        self.updated_at = datetime.now(UTC)
+        self._record_correction("category", old, self.category, reason)
+
+    def relabel_category(self, label: str) -> None:
+        """A category renamed by an admin: the same fact under a new word (any status)."""
+        self.category = " ".join(label.split())
+        self.updated_at = datetime.now(UTC)
+
+    def set_discriminator(self, value: str | None, *, reason: str | None = None) -> None:
+        self._guard_correction(reason)
+        old = self.discriminator
+        self.discriminator = clean_discriminator(value)
+        self.updated_at = datetime.now(UTC)
+        self._record_correction("discriminator", old, self.discriminator, reason)
+
+    def _record_correction(
+        self, field: str, old: str | None, new: str | None, reason: str | None
+    ) -> None:
+        """A published protocol's facts change only through a correction: audit it with its
+        reason even when the generated name stays the same."""
+        if self.status != ProtocolStatus.ACTIVE or old == new:
+            return
+        self.register_event(
+            ProtocolCorrected(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                field=field,
+                old_value=old,
+                new_value=new,
+                reason=reason or "",
+            )
+        )
+
+    def flag_name(self, flag: NameFlag | None) -> None:
+        self.name_flag = flag
+
+    def apply_derived_name(
+        self,
+        *,
+        name: str,
+        base: str,
+        flag: NameFlag | None,
+        reason: str,
+        user_id: uuid.UUID | None = None,
+    ) -> bool:
+        """Set the generated name. Allowed in any status: a relabel changes words, not facts."""
+        name, base = normalize_name_text(name), normalize_name_text(base)
+        if not name:
+            raise ValidationError("Protocol name must not be empty")
+        if len(name) > MAX_NAME_LENGTH:
+            raise ValidationError(
+                f"The generated name is longer than {MAX_NAME_LENGTH} characters; "
+                "shorten the discriminator or a short label"
+            )
+        self.name_base = base
+        self.name_flag = flag
+        if name == self.name:
+            return False
+        old = self.name
+        now = datetime.now(UTC)
+        self.aliases = [a for a in self.aliases if a.label.lower() != name.lower()]
+        if not any(a.label.lower() == old.lower() for a in self.aliases):
+            self.aliases.append(
+                ProtocolAlias(label=old, kind=AliasKind.FORMER, recorded_at=now, reason=reason)
+            )
+        self.name = name
+        self.updated_at = now
+        self.register_event(
+            ProtocolRenamed(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                old_name=old,
+                new_name=name,
+                reason=reason,
+                user_id=user_id,
+            )
+        )
+        return True
 
     # ------------------------------------------------------------------
     # Mutators allowed on ACTIVE (NOT draft-guarded)
@@ -986,17 +1138,50 @@ class Protocol(AggregateRoot):
     # Ontology annotation management
     # ------------------------------------------------------------------
 
-    def set_ontology_annotation(self, slot: str, terms: list[OntologyTerm]) -> None:
-        """Set ontology terms for a named annotation slot."""
-        self._guard_draft()
-        if not slot or not slot.strip():
-            raise ValidationError("Ontology annotation slot name must not be empty")
-        self.ontology_annotations[slot.strip()] = terms
+    def add_nickname(self, label: str) -> None:
+        """What people call this protocol. Cosmetic: allowed in any status, even locked."""
+        validate_name_text(label, what="Nickname")
+        cleaned = " ".join(label.split())
+        if not cleaned:
+            raise ValidationError("Nickname must not be empty")
+        if len(cleaned) > _MAX_ALIAS_LENGTH:
+            raise ValidationError(f"Nickname must be at most {_MAX_ALIAS_LENGTH} characters")
+        key = cleaned.lower()
+        if key == self.name.lower() or any(a.label.lower() == key for a in self.aliases):
+            raise ConflictError(f"'{cleaned}' is already a name or alias of this protocol")
+        self.aliases.append(
+            ProtocolAlias(label=cleaned, kind=AliasKind.NICKNAME, recorded_at=datetime.now(UTC))
+        )
         self.updated_at = datetime.now(UTC)
 
-    def remove_ontology_annotation(self, slot: str) -> None:
+    def remove_nickname(self, label: str) -> None:
+        key = " ".join(label.split()).lower()
+        keep = [
+            a
+            for a in self.aliases
+            if not (a.kind == AliasKind.NICKNAME and a.label.lower() == key)
+        ]
+        if len(keep) == len(self.aliases):
+            raise NotFoundError("Nickname", label)
+        self.aliases = keep
+        self.updated_at = datetime.now(UTC)
+
+    def set_ontology_annotation(
+        self, slot: str, terms: list[OntologyTerm], *, reason: str | None = None
+    ) -> None:
+        """Set ontology terms for a named annotation slot."""
+        self._guard_correction(reason)
+        if not slot or not slot.strip():
+            raise ValidationError("Ontology annotation slot name must not be empty")
+        old = _term_labels(self.ontology_annotations.get(slot.strip()))
+        self.ontology_annotations[slot.strip()] = terms
+        self.updated_at = datetime.now(UTC)
+        self._record_correction(slot.strip(), old, _term_labels(terms), reason)
+
+    def remove_ontology_annotation(self, slot: str, *, reason: str | None = None) -> None:
         """Remove all ontology terms for a named annotation slot."""
-        self._guard_draft()
+        self._guard_correction(reason)
         if slot in self.ontology_annotations:
-            del self.ontology_annotations[slot]
+            old = _term_labels(self.ontology_annotations.pop(slot))
             self.updated_at = datetime.now(UTC)
+            self._record_correction(slot, old, None, reason)

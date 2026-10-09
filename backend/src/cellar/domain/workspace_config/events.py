@@ -146,3 +146,31 @@ class DataSourceUpdated(DomainEvent):
 @dataclass(frozen=True, kw_only=True)
 class DataSourceDeactivated(DomainEvent):
     name: str
+
+
+# --- Protocol Categories ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProtocolCategoryCreated(DomainEvent):
+    label: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProtocolCategoryUpdated(DomainEvent):
+    label: str
+    name_pattern: str
+
+
+# --- Naming Labels ---
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamingLabelCreated(DomainEvent):
+    term_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class NamingLabelUpdated(DomainEvent):
+    term_id: str
+    short_label: str

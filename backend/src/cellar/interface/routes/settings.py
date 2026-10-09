@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from cellar.application.workspace_config.get_workspace_settings import (
     GetWorkspaceSettingsQuery,
 )
+from cellar.application.workspace_config.set_home_organism import SetHomeOrganismCommand
 from cellar.application.workspace_config.update_workspace_settings import (
     UpdateWorkspaceSettingsCommand,
 )
@@ -15,6 +16,7 @@ from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 from cellar.interface.dependencies import (
     AuthDep,
     GetWorkspaceSettingsDep,
+    SetHomeOrganismDep,
     UpdateWorkspaceSettingsDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -30,6 +32,7 @@ class WorkspaceSettingsResponse(BaseModel):
     signature_required_for: list[str]
     audit_retention_days: int | None = None
     formulation_number_scheme: str | None = None
+    protocol_naming: dict = {}
     version: int
 
     @classmethod
@@ -42,6 +45,7 @@ class WorkspaceSettingsResponse(BaseModel):
             signature_required_for=s.signature_required_for,
             audit_retention_days=s.audit_retention_days,
             formulation_number_scheme=s.formulation_number_scheme,
+            protocol_naming=s.protocol_naming,
             version=s.version,
         )
 
@@ -54,6 +58,7 @@ class UpdateWorkspaceSettingsBody(BaseModel):
     signature_required_for: list[str] | None = None
     audit_retention_days: int | None = None
     formulation_number_scheme: str | None = None
+    protocol_naming: dict | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -87,9 +92,33 @@ async def update_settings(
                 "signature_required_for",
                 "audit_retention_days",
                 "formulation_number_scheme",
+                "protocol_naming",
             )
             if key in provided
         },
     )
     settings = result_to_response(await use_case(command, auth=auth))
+    return WorkspaceSettingsResponse.from_domain(settings)
+
+
+class HomeOrganismTerm(BaseModel):
+    term_id: str
+    label: str
+    ontology_source: str = "NCBITAXON"
+
+
+class SetHomeOrganismRequest(BaseModel):
+    term: HomeOrganismTerm | None
+    model_config = {"extra": "forbid"}
+
+
+@router.put("/home-organism", response_model=WorkspaceSettingsResponse)
+async def set_home_organism(
+    body: SetHomeOrganismRequest, auth: AuthDep, use_case: SetHomeOrganismDep
+) -> WorkspaceSettingsResponse:
+    """Targets from this organism are named without it; relabels protocols (refused on a clash)."""
+    cmd = SetHomeOrganismCommand(
+        workspace_id=auth.workspace_id, term=body.term.model_dump() if body.term else None
+    )
+    settings = result_to_response(await use_case(cmd, auth=auth))
     return WorkspaceSettingsResponse.from_domain(settings)

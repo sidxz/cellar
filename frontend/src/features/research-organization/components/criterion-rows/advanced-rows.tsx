@@ -1,5 +1,6 @@
 "use client";
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocol, useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { CURVE_TYPE_LABELS } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
@@ -87,7 +88,7 @@ export function ActivityCriterionRow({
               ?.filter((p) => p.status === "active")
               .map((p) => (
                 <SelectItem key={p.id} value={p.id}>
-                  {p.name}
+                  <ProtocolOptionLabel code={p.code} name={p.name} />
                 </SelectItem>
               ))}
           </SelectContent>

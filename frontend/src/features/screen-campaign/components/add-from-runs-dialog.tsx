@@ -74,6 +74,7 @@ import {
 } from "@/shared/lib/api/campaigns/campaigns";
 import { useListRunsByProtocolApiV1ProtocolsProtocolIdRunsGet } from "@/shared/lib/api/runs/runs";
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { campaignKeys } from "../hooks/use-campaigns";
 import { stageNameNotice } from "../lib/stage-name-notice";
 import type { CampaignStageResponse } from "../types";
@@ -645,7 +646,7 @@ function ConfigureStep(p: ConfigureStepProps) {
           <SelectContent>
             {p.protocols.map((proto) => (
               <SelectItem key={proto.id} value={proto.id}>
-                {proto.name}
+                <ProtocolOptionLabel code={proto.code} name={proto.name} />
               </SelectItem>
             ))}
           </SelectContent>

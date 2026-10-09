@@ -1,5 +1,6 @@
 "use client";
 
+import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { PageHeader } from "@/shared/components/page-header";
@@ -388,7 +389,7 @@ export function ImportWizard() {
                         <SelectItem value="__none__">None</SelectItem>
                         {protocols.map((p) => (
                           <SelectItem key={p.id} value={p.id}>
-                            {p.name}
+                            <ProtocolOptionLabel code={p.code} name={p.name} />
                           </SelectItem>
                         ))}
                       </SelectContent>

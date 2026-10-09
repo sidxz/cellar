@@ -5,6 +5,7 @@ import type {
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
+  CreateProtocolRequest,
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
   HitCriterionDTO,
@@ -419,6 +420,14 @@ export interface Protocol {
    *  any draft for an admin, that nothing still uses). Only GET /protocols/{id}
    *  fills it; absent/null elsewhere means "not computed". Typed off the DTO. */
   can_delete?: ProtocolResponse["can_delete"];
+  /** Immutable citation handle shared by every version (`PRT-00142`). Typed off the DTO. */
+  code: ProtocolResponse["code"];
+  /** Former names (recorded on rename) and nicknames. Searchable; never the name. */
+  aliases: ProtocolResponse["aliases"];
+  /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
+  discriminator: ProtocolResponse["discriminator"];
+  /** Why the generated name needs attention (`needs_facts` | `needs_discriminator` | `name_conflict`). */
+  name_flag: ProtocolResponse["name_flag"];
 }
 
 /** Read-only mirror of a prot-cellar target. Aliases the orval DTO — never
@@ -572,9 +581,12 @@ export interface CreateConditionDefinitionInput {
   pick_list_values?: string[] | null;
 }
 
-export interface CreateProtocolInput {
-  name: string;
+/** The form started from, same-named siblings' discriminators and nicknames: typed off the DTO. */
+export interface CreateProtocolInput
+  extends Pick<CreateProtocolRequest, "form_id" | "sibling_discriminators" | "nicknames"> {
   protocol_type: ProtocolType;
+  /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
+  discriminator?: string | null;
   description?: string | null;
   /** Direct targets to attach on create (each rolled up to the protocol). */
   target_ids?: string[];
