@@ -92,8 +92,7 @@ class SeedDefaultProtocolForms:
         require_admin(auth)
         require_same_workspace(auth, input.workspace_id)
         async with self._uow:
-            await seed_default_forms(self._forms, self._categories, input.workspace_id)
-            forms = await self._forms.find_by_workspace(input.workspace_id)
+            created = await seed_default_forms(self._forms, self._categories, input.workspace_id)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
-        return Success(forms)
+        return Success(created)

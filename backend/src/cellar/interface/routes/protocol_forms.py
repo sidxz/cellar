@@ -169,7 +169,8 @@ async def create_protocol_form(
 async def add_default_protocol_forms(
     auth: AuthDep, use_case: SeedDefaultProtocolFormsDep
 ) -> list[ProtocolFormResponse]:
-    """Add every shipped default form the workspace lacks (existing forms untouched)."""
+    """Add every shipped default form the workspace lacks (existing forms untouched); returns
+    the forms it added."""
     forms = result_to_response(
         await use_case(SeedDefaultProtocolFormsCommand(workspace_id=auth.workspace_id), auth=auth)
     )
