@@ -8,6 +8,7 @@ import type { CorrectProtocolRequestCategory } from './correctProtocolRequestCat
 import type { CorrectProtocolRequestDiscriminator } from './correctProtocolRequestDiscriminator';
 import type { CorrectProtocolRequestOntologyAnnotations } from './correctProtocolRequestOntologyAnnotations';
 import type { CorrectProtocolRequestTargetIds } from './correctProtocolRequestTargetIds';
+import type { CorrectProtocolRequestConditionFixedValues } from './correctProtocolRequestConditionFixedValues';
 
 export interface CorrectProtocolRequest {
   reason: string;
@@ -15,4 +16,5 @@ export interface CorrectProtocolRequest {
   discriminator?: CorrectProtocolRequestDiscriminator;
   ontology_annotations?: CorrectProtocolRequestOntologyAnnotations;
   target_ids?: CorrectProtocolRequestTargetIds;
+  condition_fixed_values?: CorrectProtocolRequestConditionFixedValues;
 }

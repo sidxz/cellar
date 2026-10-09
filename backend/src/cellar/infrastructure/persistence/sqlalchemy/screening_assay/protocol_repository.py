@@ -913,6 +913,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 data_type=ConditionDataType(cd.data_type),
                 unit=cd.unit,
                 pick_list_values=cd.pick_list_values,
+                fixed_value=cd.fixed_value,
                 created_at=cd.created_at,
                 updated_at=cd.updated_at,
             )
@@ -1133,4 +1134,5 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             data_type=cd.data_type.value,
             unit=cd.unit,
             pick_list_values=cd.pick_list_values,
+            fixed_value=cd.fixed_value,
         )

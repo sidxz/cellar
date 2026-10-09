@@ -201,6 +201,7 @@ class CreateProtocol:
                 data_type=ConditionDataType(cd["data_type"]),
                 unit=cd.get("unit"),
                 pick_list_values=cd.get("pick_list_values"),
+                fixed_value=cd.get("fixed_value"),
             )
             for cd in input.condition_definitions
         ]

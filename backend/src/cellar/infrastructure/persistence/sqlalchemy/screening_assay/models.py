@@ -311,6 +311,7 @@ class ConditionDefinitionModel(Base, EntityModelMixin):
     data_type: Mapped[str] = mapped_column(String(20), nullable=False)
     unit: Mapped[str | None] = mapped_column(String(50))
     pick_list_values: Mapped[list | None] = mapped_column(JSONB)
+    fixed_value: Mapped[str | None] = mapped_column(Text)
 
     protocol: Mapped[ProtocolModel] = relationship(
         "ProtocolModel", back_populates="condition_definitions"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from dataclasses import dataclass
@@ -280,6 +281,7 @@ class ConditionDefinition(Entity):
     Invariants:
         - name cannot be empty
         - pick_list data type requires pick_list_values
+        - fixed_value (the protocol-level value, e.g. Hypoxia: yes) fits the data type
     """
 
     def __init__(
@@ -291,6 +293,7 @@ class ConditionDefinition(Entity):
         data_type: ConditionDataType,
         unit: str | None = None,
         pick_list_values: list[str] | None = None,
+        fixed_value: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -308,6 +311,36 @@ class ConditionDefinition(Entity):
         self.data_type = data_type
         self.unit = canonical_unit(unit)
         self.pick_list_values = pick_list_values
+        self.fixed_value = _clean_fixed_value(fixed_value, data_type, pick_list_values, self.name)
+
+    @property
+    def fixed_run_value(self) -> str | None:
+        """The fixed value as a run stores it: the unit after a space (``72 h``)."""
+        if self.fixed_value is None:
+            return None
+        return f"{self.fixed_value} {self.unit}" if self.unit else self.fixed_value
+
+
+def _clean_fixed_value(
+    value: str | None,
+    data_type: ConditionDataType,
+    pick_list_values: list[str] | None,
+    name: str,
+) -> str | None:
+    """Blank is no value; a number must parse (kept as typed); a pick is one of the values."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    if data_type == ConditionDataType.NUMERIC:
+        try:
+            finite = math.isfinite(float(value))
+        except ValueError:
+            finite = False
+        if not finite:
+            raise ValidationError(f"Fixed value of '{name}' must be a number, got '{value}'")
+    elif data_type == ConditionDataType.PICK_LIST and value not in (pick_list_values or []):
+        raise ValidationError(f"Fixed value of '{name}' must be one of its pick-list values")
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -1073,6 +1106,7 @@ class Protocol(AggregateRoot):
         data_type: ConditionDataType | None = None,
         unit: str | _UnsetT | None = _UNSET,
         pick_list_values: list[str] | _UnsetT | None = _UNSET,
+        fixed_value: str | _UnsetT | None = _UNSET,
     ) -> None:
         """Update fields on an existing condition definition."""
         self._guard_draft()
@@ -1100,10 +1134,25 @@ class Protocol(AggregateRoot):
             pick_list_values=(
                 existing.pick_list_values if pick_list_values is _UNSET else pick_list_values  # type: ignore[arg-type]
             ),
+            fixed_value=existing.fixed_value if fixed_value is _UNSET else fixed_value,  # type: ignore[arg-type]
             created_at=existing.created_at,
         )
         self.condition_definitions[idx] = replacement
         self.updated_at = datetime.now(UTC)
+
+    def set_condition_fixed_value(
+        self, definition_id: uuid.UUID, value: str | None, *, reason: str | None = None
+    ) -> None:
+        """The value that defines the protocol (Hypoxia: yes, 72 h). Drafts change it freely;
+        a published protocol only through a correction with a reason; locked ones not at all."""
+        self._guard_correction(reason)
+        cd = next((d for d in self.condition_definitions if d.id == definition_id), None)
+        if cd is None:
+            raise NotFoundError("ConditionDefinition", str(definition_id))
+        old = cd.fixed_value
+        cd.fixed_value = _clean_fixed_value(value, cd.data_type, cd.pick_list_values, cd.name)
+        self.updated_at = datetime.now(UTC)
+        self._record_correction(f"condition:{cd.name}", old, cd.fixed_value, reason)
 
     # ------------------------------------------------------------------
     # Control layout management

@@ -74,6 +74,7 @@ class ProtocolVersioningService:
                 data_type=cd.data_type,
                 unit=cd.unit,
                 pick_list_values=list(cd.pick_list_values) if cd.pick_list_values else None,
+                fixed_value=cd.fixed_value,
             )
             for cd in parent.condition_definitions
         ]

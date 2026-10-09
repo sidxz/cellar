@@ -19,7 +19,8 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.screening.create_run import CreateRun, CreateRunCommand
-from cellar.domain.screening_assay.enums import ProtocolStatus
+from cellar.domain.screening_assay.enums import ConditionDataType, ProtocolStatus
+from cellar.domain.screening_assay.protocol import ConditionDefinition
 from cellar.domain.screening_assay.repository import (
     CollectionLinkResult,
     TargetLinkResult,
@@ -70,18 +71,20 @@ class FakeAuth:
 @dataclass
 class FakeProtocol:
     status: ProtocolStatus = ProtocolStatus.ACTIVE
+    condition_definitions: list[ConditionDefinition] = field(default_factory=list)
 
 
 def _build_uc(
     *,
     collection_link: CollectionLinkResult = CollectionLinkResult.ADDED,
+    protocol: FakeProtocol | None = None,
 ) -> tuple[CreateRun, AsyncMock, AsyncMock]:
     repo = AsyncMock()
     repo.save = AsyncMock()
     repo.add_target = AsyncMock(return_value=TargetLinkResult.ADDED)
     repo.add_collection = AsyncMock(return_value=collection_link)
     protocol_repo = AsyncMock()
-    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=FakeProtocol())
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol or FakeProtocol())
     dispatcher = AsyncMock()
     dispatcher.dispatch_all = AsyncMock()
     uc = CreateRun(
@@ -154,3 +157,69 @@ class TestCreateRunCollections:
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
         dispatcher.dispatch_all.assert_not_awaited()
+
+
+class TestCreateRunFixedConditions:
+    """A run that gives no value for a condition takes the protocol's fixed value."""
+
+    @staticmethod
+    def _protocol() -> FakeProtocol:
+        pid = uuid.uuid4()
+        return FakeProtocol(
+            condition_definitions=[
+                ConditionDefinition(
+                    protocol_id=pid,
+                    name="Incubation time",
+                    data_type=ConditionDataType.NUMERIC,
+                    unit="h",
+                    fixed_value="72",
+                ),
+                ConditionDefinition(
+                    protocol_id=pid,
+                    name="Hypoxia",
+                    data_type=ConditionDataType.TEXT,
+                    fixed_value="yes",
+                ),
+                ConditionDefinition(
+                    protocol_id=pid, name="Medium", data_type=ConditionDataType.TEXT
+                ),
+            ]
+        )
+
+    @pytest.mark.asyncio
+    async def test_missing_conditions_are_filled_from_fixed_values(self) -> None:
+        auth = FakeAuth()
+        uc, _, _ = _build_uc(protocol=self._protocol())
+        cmd = CreateRunCommand(
+            workspace_id=auth.workspace_id,
+            protocol_id=uuid.uuid4(),
+            run_date=date(2026, 10, 8),
+            conditions={"Medium": "7H9", "Hypoxia": ""},
+        )
+        result = await uc(cmd, auth=auth)
+        assert isinstance(result, Success), result
+        assert result.unwrap().conditions == {
+            "Medium": "7H9",
+            "Hypoxia": "yes",
+            "Incubation time": "72 h",
+        }
+
+    @pytest.mark.asyncio
+    async def test_a_value_the_run_gives_wins(self) -> None:
+        auth = FakeAuth()
+        uc, _, _ = _build_uc(protocol=self._protocol())
+        cmd = CreateRunCommand(
+            workspace_id=auth.workspace_id,
+            protocol_id=uuid.uuid4(),
+            run_date=date(2026, 10, 8),
+            conditions={"Incubation time": "48 h", "Hypoxia": "no"},
+        )
+        result = await uc(cmd, auth=auth)
+        assert result.unwrap().conditions == {"Incubation time": "48 h", "Hypoxia": "no"}
+
+    @pytest.mark.asyncio
+    async def test_no_fixed_values_and_no_conditions_stay_none(self) -> None:
+        auth = FakeAuth()
+        uc, _, _ = _build_uc()
+        result = await uc(_cmd(auth, []), auth=auth)
+        assert result.unwrap().conditions is None

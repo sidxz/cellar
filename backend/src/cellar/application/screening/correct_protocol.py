@@ -31,6 +31,8 @@ class CorrectProtocolCommand(Command):
     discriminator: str | object | None = UNSET
     ontology_annotations: dict[str, list[dict]] | object = UNSET  # slot -> replacement ([] clears)
     target_ids: list[uuid.UUID] | object = UNSET  # the full set of direct targets
+    # condition definition id -> its fixed value (None clears it)
+    condition_fixed_values: dict[uuid.UUID, str | None] | object = UNSET
 
 
 class CorrectProtocol:
@@ -105,6 +107,9 @@ class CorrectProtocol:
                         )
                     else:
                         protocol.remove_ontology_annotation(slot, reason=reason)
+            if input.condition_fixed_values is not UNSET:
+                for definition_id, value in input.condition_fixed_values.items():  # type: ignore[union-attr]
+                    protocol.set_condition_fixed_value(definition_id, value, reason=reason)
             if input.target_ids is not UNSET:
                 current = set(
                     await self._repo.find_direct_target_ids(input.workspace_id, protocol.id)

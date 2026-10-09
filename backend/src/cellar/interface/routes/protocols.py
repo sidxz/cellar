@@ -205,8 +205,10 @@ class ConditionDefinitionResponse(BaseModel):
     id: uuid.UUID
     name: str
     data_type: str
-    unit: str | None = None
-    pick_list_values: list[str] | None = None
+    unit: str | None
+    pick_list_values: list[str] | None
+    # The value that defines the protocol (Hypoxia: yes, 72 h); runs that give none take it.
+    fixed_value: str | None
 
 
 class ProtocolAliasResponse(BaseModel):
@@ -330,6 +332,7 @@ class ProtocolResponse(BaseModel):
                     data_type=cd.data_type.value,
                     unit=cd.unit,
                     pick_list_values=cd.pick_list_values,
+                    fixed_value=cd.fixed_value,
                 )
                 for cd in p.condition_definitions
             ],
@@ -403,6 +406,14 @@ class SiblingDiscriminatorRequest(BaseModel):
     reason: str | None = None
 
 
+class AddConditionDefinitionRequest(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    pick_list_values: list[str] | None = None
+    fixed_value: str | None = None
+
+
 class CreateProtocolRequest(BaseModel):
     # No name: it is generated from the category pattern and the facts below.
     description: str | None = None
@@ -412,7 +423,7 @@ class CreateProtocolRequest(BaseModel):
     dose_unit: str = "uM"
     pos_control_signal: str = "high"
     readout_definitions: list[dict[str, Any]]
-    condition_definitions: list[dict[str, Any]] | None = None
+    condition_definitions: list[AddConditionDefinitionRequest] | None = None
     # Facets supplied at create time, keyed by slot name. Persisted atomically
     # with the protocol so multi-slot facet sets can't race/drop (the per-slot
     # PUT endpoint remains for interactive single-slot edits).
@@ -494,7 +505,7 @@ async def create_protocol(
         dose_unit=body.dose_unit,
         pos_control_signal=body.pos_control_signal,
         readout_definitions=body.readout_definitions,
-        condition_definitions=body.condition_definitions or [],
+        condition_definitions=[cd.model_dump() for cd in body.condition_definitions or []],
         ontology_annotations={
             slot: [t.model_dump() for t in terms]
             for slot, terms in (body.ontology_annotations or {}).items()
@@ -989,6 +1000,8 @@ class CorrectProtocolRequest(BaseModel):
     ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
     # the full set of direct targets
     target_ids: list[uuid.UUID] | None = None
+    # condition definition id -> its fixed value (null clears it)
+    condition_fixed_values: dict[uuid.UUID, str | None] | None = None
     model_config = {"extra": "forbid"}
 
 
@@ -1017,6 +1030,9 @@ async def correct_protocol(
         if "ontology_annotations" in sent
         else UNSET,
         target_ids=(body.target_ids or []) if "target_ids" in sent else UNSET,
+        condition_fixed_values=(body.condition_fixed_values or {})
+        if "condition_fixed_values" in sent
+        else UNSET,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1190,13 +1206,6 @@ async def remove_readout_definition(
 # ---------------------------------------------------------------------------
 
 
-class AddConditionDefinitionRequest(BaseModel):
-    name: str
-    data_type: str
-    unit: str | None = None
-    pick_list_values: list[str] | None = None
-
-
 @router.post(
     "/protocols/{protocol_id}/condition-definitions",
     response_model=ProtocolResponse,
@@ -1218,6 +1227,7 @@ async def add_condition_definition(
         data_type=body.data_type,
         unit=body.unit,
         pick_list_values=body.pick_list_values,
+        fixed_value=body.fixed_value,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1230,6 +1240,7 @@ class UpdateConditionDefinitionRequest(BaseModel):
     data_type: str | None = None
     unit: str | None = None
     pick_list_values: list[str] | None = None
+    fixed_value: str | None = None
 
 
 @router.put(
@@ -1252,7 +1263,7 @@ async def update_condition_definition(
         "protocol_id": protocol_id,
         "definition_id": definition_id,
     }
-    for key in ("name", "data_type", "unit", "pick_list_values"):
+    for key in ("name", "data_type", "unit", "pick_list_values", "fixed_value"):
         if key in sent:
             cmd_kwargs[key] = getattr(body, key)
 
