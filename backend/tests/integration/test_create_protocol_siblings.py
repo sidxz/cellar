@@ -232,3 +232,18 @@ async def test_preview_flags_a_sibling_name_the_new_protocol_already_takes(
     bare = await _seed_bare(session_factory, workspace_id, user_id)
     renames = await _preview(session_factory, workspace_id, user_id, bare, "hypoxia")
     assert renames[0].error == "Same name as another protocol"
+
+
+async def test_nicknames_are_added_at_create(session_factory, workspace_id, user_id):
+    await _seed_bare(session_factory, workspace_id, user_id)
+    created = (
+        await _uc(session_factory)(
+            _cmd(workspace_id, nicknames=["LORA", "  low oxygen recovery  "]),
+            auth=admin_auth(workspace_id, user_id),
+        )
+    ).unwrap()
+    loaded = await _load(session_factory, workspace_id, created.id)
+    assert {a.label for a in loaded.aliases if a.kind.value == "nickname"} == {
+        "LORA",
+        "low oxygen recovery",
+    }

@@ -93,6 +93,8 @@ class CreateProtocolCommand(Command):
     form_id: uuid.UUID | None = None
     # Bare siblings (same base name, no discriminator) told apart in the same save.
     sibling_discriminators: list[SiblingDiscriminator] = field(default_factory=list)
+    # What people call the new protocol, added in the same save (cosmetic; any status).
+    nicknames: list[str] = field(default_factory=list)
 
 
 class CreateProtocol:
@@ -278,6 +280,8 @@ class CreateProtocol:
                 condition_definitions=condition_defs or None,
                 ontology_annotations=ontology_annotations or None,
             )
+            for nickname in input.nicknames:
+                protocol.add_nickname(nickname)
             await self._repo.save(protocol)
             # Initial direct targets — idempotent, workspace-checked in the repo.
             # An unknown/cross-workspace target aborts the create (404) instead
