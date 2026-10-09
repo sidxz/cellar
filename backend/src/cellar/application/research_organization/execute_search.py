@@ -27,6 +27,7 @@ from cellar.domain.research_organization.repository import SavedSearchRepository
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.aggregation_types import SelectionRule
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.units import canonical_unit
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -204,7 +205,8 @@ def _query_has_similarity(criteria: list[dict]) -> bool:
 def _collect_any_readout_groups(criteria: list[dict]) -> list[tuple[str, str | None]]:
     """``(readout_name, unit)`` groups named by any-protocol activity criteria
     (``protocol_id`` None + ``readout_data`` where with ``readout_name``).
-    Feeds the ``any`` column so readout entries appear only when asked for."""
+    Feeds the ``any`` column so readout entries appear only when asked for. Units by
+    canonical spelling, so "uM" and "µM" are one group."""
     groups: list[tuple[str, str | None]] = []
 
     def _visit(c: dict) -> None:
@@ -216,7 +218,7 @@ def _collect_any_readout_groups(criteria: list[dict]) -> list[tuple[str, str | N
                 continue
             name = w.get("readout_name")
             if isinstance(name, str) and name.strip():
-                key = (name, w.get("unit") or None)
+                key = (name, canonical_unit(w.get("unit")))
                 if key not in groups:
                     groups.append(key)
 
