@@ -466,6 +466,7 @@ export * from './createProtocolRequestConditionDefinitions';
 export * from './createProtocolRequestConditionDefinitionsAnyOfItem';
 export * from './createProtocolRequestDescription';
 export * from './createProtocolRequestDiscriminator';
+export * from './createProtocolRequestFormId';
 export * from './createProtocolRequestOntologyAnnotations';
 export * from './createProtocolRequestOntologyAnnotationsAnyOf';
 export * from './createProtocolRequestOntologyAnnotationsAnyOfItem';

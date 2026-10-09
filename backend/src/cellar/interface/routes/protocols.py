@@ -407,6 +407,8 @@ class CreateProtocolRequest(BaseModel):
     ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
     # The free part of the name (method or fixed condition), needed when names collide.
     discriminator: str | None = None
+    # The form the dialog started from; decides whether the assay format follows the targets.
+    form_id: uuid.UUID | None = None
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -482,6 +484,7 @@ async def create_protocol(
             for slot, terms in (body.ontology_annotations or {}).items()
         },
         discriminator=body.discriminator,
+        form_id=body.form_id,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)

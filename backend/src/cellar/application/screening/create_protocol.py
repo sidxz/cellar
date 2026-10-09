@@ -22,6 +22,7 @@ from cellar.application.screening.protocol_naming_service import ProtocolNameSer
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.assay_format import assay_format_for_targets
 from cellar.domain.screening_assay.enums import (
     ConditionDataType,
     PosControlSignal,
@@ -37,7 +38,11 @@ from cellar.domain.screening_assay.protocol import (
     ReadoutDefinition,
     is_reserved_readout_name,
 )
-from cellar.domain.screening_assay.repository import ProtocolRepository, TargetLinkResult
+from cellar.domain.screening_assay.repository import (
+    ProtocolRepository,
+    TargetLinkResult,
+    TargetRepository,
+)
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import (
     DomainError,
@@ -45,7 +50,10 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from cellar.domain.shared.ontology import OntologyTerm
-from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
+from cellar.domain.workspace_config.repository import (
+    ProtocolFormRepository,
+    WorkspaceSettingsRepository,
+)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -67,6 +75,8 @@ class CreateProtocolCommand(Command):
     discriminator: str | None = None
     # Importers may create a protocol whose name still needs facts (flagged, cannot publish).
     allow_incomplete: bool = False
+    # The form the dialog started from; decides whether the assay format follows the targets.
+    form_id: uuid.UUID | None = None
 
 
 class CreateProtocol:
@@ -78,12 +88,16 @@ class CreateProtocol:
         *,
         names: ProtocolNameService,
         settings_repo: WorkspaceSettingsRepository | None = None,
+        form_repo: ProtocolFormRepository | None = None,
+        target_repo: TargetRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._names = names
         self._settings_repo = settings_repo
+        self._forms = form_repo
+        self._targets = target_repo
 
     async def __call__(
         self, input: CreateProtocolCommand, auth: AuthContext | None = None
@@ -179,6 +193,38 @@ class CreateProtocol:
         target_ids = list(dict.fromkeys(input.target_ids))
         async with self._uow:
             await self._repo.lock_naming(input.workspace_id)
+            if input.form_id is not None and "assay_format" not in ontology_annotations:
+                form = (
+                    await self._forms.find_by_id_in_workspace(input.workspace_id, input.form_id)
+                    if self._forms
+                    else None
+                )
+                if form is None:
+                    return Failure(NotFoundError("ProtocolForm", str(input.form_id)))
+                if form.assay_format_from_target:
+                    targets = (
+                        await self._targets.find_by_ids(input.workspace_id, target_ids)
+                        if self._targets and target_ids
+                        else []
+                    )
+                    fmt = assay_format_for_targets(t.target_type for t in targets)
+                    if fmt is None:
+                        fmt = next(
+                            (
+                                OntologyTerm(
+                                    term_id=t["term_id"],
+                                    label=t["label"],
+                                    ontology_source=t["ontology_source"],
+                                    uri=t.get("uri"),
+                                )
+                                for d in form.ontology_defaults
+                                if d.slot_name == "assay_format"
+                                for t in d.terms
+                            ),
+                            None,
+                        )
+                    if fmt is not None:
+                        ontology_annotations["assay_format"] = [fmt]
             discriminator = await self._names.clean_discriminator(
                 input.workspace_id, input.discriminator
             )

@@ -276,6 +276,9 @@ from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_category_repository import (  # noqa: E501
     SQLAlchemyProtocolCategoryRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.workspace_config.protocol_form_repository import (  # noqa: E501
+    SQLAlchemyProtocolFormRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.workspace_settings_repository import (  # noqa: E501
     SQLAlchemyWorkspaceSettingsRepository,
 )
@@ -360,6 +363,8 @@ def register_screening(container: Container) -> None:
             c[EventDispatcher],
             names=_name_service(uow),
             settings_repo=SQLAlchemyWorkspaceSettingsRepository(uow),
+            form_repo=SQLAlchemyProtocolFormRepository(uow),
+            target_repo=SQLAlchemyTargetRepository(uow),
         )
 
     container.define(CreateProtocol, _create_protocol)

@@ -10,6 +10,7 @@ import type { CreateProtocolRequestReadoutDefinitionsItem } from './createProtoc
 import type { CreateProtocolRequestConditionDefinitions } from './createProtocolRequestConditionDefinitions';
 import type { CreateProtocolRequestOntologyAnnotations } from './createProtocolRequestOntologyAnnotations';
 import type { CreateProtocolRequestDiscriminator } from './createProtocolRequestDiscriminator';
+import type { CreateProtocolRequestFormId } from './createProtocolRequestFormId';
 
 export interface CreateProtocolRequest {
   description?: CreateProtocolRequestDescription;
@@ -22,4 +23,5 @@ export interface CreateProtocolRequest {
   condition_definitions?: CreateProtocolRequestConditionDefinitions;
   ontology_annotations?: CreateProtocolRequestOntologyAnnotations;
   discriminator?: CreateProtocolRequestDiscriminator;
+  form_id?: CreateProtocolRequestFormId;
 }
