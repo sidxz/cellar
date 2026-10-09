@@ -2,6 +2,10 @@
 
 import { EmptyState } from "@/shared/components/empty-state";
 import { PageHeader } from "@/shared/components/page-header";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/shared/components/searchable-select";
 import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
@@ -33,6 +37,7 @@ import {
   useSeedDefaultProtocolCategories,
   useUpdateProtocolCategory,
 } from "../hooks/use-protocol-categories";
+import { useProtocolForms } from "../hooks/use-protocol-forms";
 import type { ProtocolCategory } from "../types";
 import { NamingChangePreview } from "./naming-change-preview";
 
@@ -49,13 +54,17 @@ function CategoryDialog({
   open,
   onOpenChange,
   category,
+  startLikeOptions,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   category: ProtocolCategory | null;
+  /** Categories that have at least one form to copy. */
+  startLikeOptions: SearchableSelectOption[];
 }) {
   const [label, setLabel] = useState("");
   const [pattern, setPattern] = useState("");
+  const [startLike, setStartLike] = useState<string | null>(null);
   const create = useCreateProtocolCategory();
   const update = useUpdateProtocolCategory(category?.id ?? "");
   const preview = usePreviewNamingChange();
@@ -65,12 +74,17 @@ function CategoryDialog({
     if (open) {
       setLabel(category?.label ?? "");
       setPattern(category?.name_pattern ?? "");
+      setStartLike(null);
     }
   }, [open, category]);
 
   const save = async () => {
     if (!category) {
-      await create.mutateAsync({ label: label.trim(), name_pattern: pattern.trim() || null });
+      await create.mutateAsync({
+        label: label.trim(),
+        name_pattern: pattern.trim() || null,
+        start_like_category_id: startLike,
+      });
       onOpenChange(false);
       return;
     }
@@ -143,6 +157,22 @@ function CategoryDialog({
                 <li>Add ? to make a slot optional, e.g. {"{cell_line?}"}.</li>
               </ul>
             </div>
+            {!category && (
+              <div className="grid gap-2">
+                <Label>Start protocols like (optional)</Label>
+                <SearchableSelect
+                  options={startLikeOptions}
+                  value={startLike}
+                  onValueChange={setStartLike}
+                  placeholder="None"
+                  searchPlaceholder="Search categories..."
+                  emptyMessage="No category has forms yet."
+                />
+                <p className="text-xs text-muted-foreground">
+                  Copies that category's forms: type, readouts, units, assay format.
+                </p>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -169,12 +199,18 @@ function CategoryDialog({
 /** Admin: protocol categories and the name patterns their protocols follow. */
 export function ProtocolCategoryAdmin() {
   const { data: categories, isLoading } = useProtocolCategories();
+  const { data: forms } = useProtocolForms();
   const seed = useSeedDefaultProtocolCategories();
   const remove = useDeleteProtocolCategory();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<ProtocolCategory | null>(null);
 
   if (isLoading) return <SkeletonList />;
+
+  const withForms = new Set((forms ?? []).map((f) => f.category_id));
+  const startLikeOptions = (categories ?? [])
+    .filter((c) => withForms.has(c.id))
+    .map((c) => ({ value: c.id, label: c.label }));
 
   return (
     <div>
@@ -252,7 +288,12 @@ export function ProtocolCategoryAdmin() {
         />
       )}
 
-      <CategoryDialog open={dialogOpen} onOpenChange={setDialogOpen} category={editing} />
+      <CategoryDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        category={editing}
+        startLikeOptions={startLikeOptions}
+      />
     </div>
   );
 }
