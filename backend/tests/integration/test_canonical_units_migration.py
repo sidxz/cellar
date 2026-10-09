@@ -1,5 +1,6 @@
 """Stored unit spellings are rewritten once; anything that is not a variant stays."""
 
+import json
 import uuid
 
 from sqlalchemy import text
@@ -12,6 +13,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.persistence.unit_rewrite import (
     _DISPLAY_UNIT_COLUMNS,
+    rewrite_saved_search_units,
     rewrite_stored_units,
 )
 from tests.integration.cascade import _rows
@@ -117,3 +119,59 @@ async def test_form_template_units_are_rewritten(session_factory, workspace_id):
         ).one()
     assert row.readout_templates == [{"name": "a", "unit": "µM"}, {"name": "b"}]
     assert row.condition_templates == [{"name": "t", "unit": "h"}]
+
+
+async def test_saved_search_criterion_units_are_rewritten(session_factory, workspace_id, user_id):
+    """Saved searches are live queries: an any-protocol readout criterion's unit follows the
+    stored readouts' spelling, so the search still matches and reopens on its option."""
+
+    def readout(name, unit):
+        return {"source": "readout_data", "readout_name": name, "unit": unit, "operator": "gt"}
+
+    query = {
+        "criteria": [
+            {
+                "type": "group",
+                "logic": "or",
+                "criteria": [
+                    {"type": "activity", "protocol_id": None, "where": [readout("IC50", "uM")]}
+                ],
+            },
+            {
+                "type": "activity",
+                "protocol_id": None,
+                "where": [readout("Papp", "10-6 cm/s"), readout("Signal", "U/mL")],
+            },
+            {"type": "text", "field": "name", "operator": "contains", "value": "uM"},
+        ],
+        "logic": "and",
+    }
+    columns = {"protocolColumns": ["any"], "reportConfig": {"imageSize": "medium"}}
+    search_id = uuid.uuid4()
+    async with session_factory() as s:
+        await s.execute(
+            text(
+                "insert into saved_searches (id, workspace_id, name, query, columns, visibility, "
+                "created_by, version) values (:id, :ws, 's', cast(:q as jsonb), "
+                "cast(:c as jsonb), 'private', :user, 1)"
+            ),
+            {
+                "id": search_id,
+                "ws": workspace_id,
+                "q": json.dumps(query),
+                "c": json.dumps(columns),
+                "user": user_id,
+            },
+        )
+        await s.run_sync(lambda sync: rewrite_saved_search_units(sync.connection()))
+        await s.commit()
+        row = (
+            await s.execute(
+                text("select query, columns from saved_searches where id=:id"), {"id": search_id}
+            )
+        ).one()
+    group, activity, text_criterion = row.query["criteria"]
+    assert group["criteria"][0]["where"][0]["unit"] == "µM"
+    assert [w["unit"] for w in activity["where"]] == ["×10⁻⁶ cm/s", "U/mL"]
+    assert text_criterion["value"] == "uM"  # only units change
+    assert row.columns == columns

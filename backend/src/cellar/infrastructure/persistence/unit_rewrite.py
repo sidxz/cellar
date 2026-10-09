@@ -1,4 +1,4 @@
-"""One-off rewrite of stored unit spellings (migration 088). Sync: Alembic runs sync."""
+"""Rewrite of stored unit spellings (migrations 088, 090). Idempotent. Sync: Alembic runs sync."""
 
 from __future__ import annotations
 
@@ -6,6 +6,7 @@ import json
 
 from sqlalchemy import Connection, text
 
+from cellar.domain.research_organization.criteria_walker import walk_criteria
 from cellar.domain.shared.units import canonical_unit
 
 # Free-text display units on live definitions only. Never rewritten:
@@ -59,4 +60,33 @@ def rewrite_stored_units(conn: Connection) -> None:
                     "c": json.dumps(new_c, ensure_ascii=False) if new_c is not None else None,
                     "id": form_id,
                 },
+            )
+
+
+def _criterion_units(query: dict) -> bool:
+    """Canonicalize the unit of every activity where-condition in place; True when one changed.
+    Only any-protocol readout conditions carry a unit; the search page derives the reopened
+    option (``any:rd:<name>|<unit>``) from it, so nothing else stores one."""
+    changed = False
+
+    def visit(criterion: dict) -> None:
+        nonlocal changed
+        where = criterion.get("where") if criterion.get("type") == "activity" else None
+        for cond in where if isinstance(where, list) else ():
+            if isinstance(cond, dict) and isinstance(cond.get("unit"), str):
+                new = canonical_unit(cond["unit"])
+                if new != cond["unit"]:
+                    cond["unit"], changed = new, True
+
+    walk_criteria(query.get("criteria"), visit)
+    return changed
+
+
+def rewrite_saved_search_units(conn: Connection) -> None:
+    """Saved searches are live queries (not frozen records): their units follow the readouts'."""
+    for search_id, query in conn.execute(text("select id, query from saved_searches")).all():
+        if isinstance(query, dict) and _criterion_units(query):
+            conn.execute(
+                text("update saved_searches set query=cast(:q as jsonb) where id=:id"),
+                {"q": json.dumps(query, ensure_ascii=False), "id": search_id},
             )

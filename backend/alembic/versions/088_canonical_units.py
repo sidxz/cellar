@@ -3,6 +3,10 @@
 Revision ID: 088_canonical_units
 Revises: 087_campaign_name_snapshot_width
 Create Date: 2026-10-08
+
+Locked and published protocols' unit spellings are rewritten too. Spelling only: no value
+changes, no version bump and no audit row (accepted, ledger R20). Frozen campaign snapshots
+are never touched.
 """
 
 from __future__ import annotations
