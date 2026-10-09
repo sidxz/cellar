@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.screening.list_terms_in_use import ListTermsInUse
 from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
@@ -87,6 +88,7 @@ from cellar.application.workspace_config.update_registration_form import UpdateR
 from cellar.application.workspace_config.update_salt_entry import UpdateSaltEntry
 from cellar.application.workspace_config.update_vocabulary import UpdateVocabulary
 from cellar.application.workspace_config.update_workspace_settings import UpdateWorkspaceSettings
+from cellar.application.workspace_config.workspace_setup import GetWorkspaceSetup
 
 from ._core import _get_use_case
 
@@ -125,6 +127,7 @@ __all__ = [
     "GetRegistrationFormDep",
     "GetTagsForEntityDep",
     "GetWorkspaceSettingsDep",
+    "GetWorkspaceSetupDep",
     "ListCustomFieldsDep",
     "ListDataSourcesDep",
     "ListExternalApiKeysDep",
@@ -139,6 +142,7 @@ __all__ = [
     "ListSaltEntriesDep",
     "ListTagEntitiesDep",
     "ListTagsDep",
+    "ListTermsInUseDep",
     "ListVocabulariesDep",
     "MergeTagsDep",
     "PreviewNamingChangeDep",
@@ -198,6 +202,7 @@ DeleteProtocolCategoryDep = Annotated[
 ListProtocolCategoriesDep = Annotated[
     ListProtocolCategories, Depends(_get_use_case(ListProtocolCategories))
 ]
+GetWorkspaceSetupDep = Annotated[GetWorkspaceSetup, Depends(_get_use_case(GetWorkspaceSetup))]
 SeedDefaultProtocolCategoriesDep = Annotated[
     SeedDefaultProtocolCategories, Depends(_get_use_case(SeedDefaultProtocolCategories))
 ]
@@ -263,6 +268,7 @@ SearchOntologyDep = Annotated[SearchOntology, Depends(_get_use_case(SearchOntolo
 ListOntologyDescendantsDep = Annotated[
     ListOntologyDescendants, Depends(_get_use_case(ListOntologyDescendants))
 ]
+ListTermsInUseDep = Annotated[ListTermsInUse, Depends(_get_use_case(ListTermsInUse))]
 SetOntologyAnnotationDep = Annotated[
     SetOntologyAnnotation, Depends(_get_use_case(SetOntologyAnnotation))
 ]

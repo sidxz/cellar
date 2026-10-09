@@ -15,7 +15,7 @@ from cellar.domain.shared.errors import ValidationError
 
 MAX_NAME_LENGTH = 400
 MAX_DISCRIMINATOR_LENGTH = 40
-SLOTS = ("target", "organism", "cell_line", "matrix", "subject", "discriminator")
+SLOTS = ("target", "organism", "strain", "cell_line", "matrix", "subject", "discriminator")
 NCBITAXON = "http://purl.bioontology.org/ontology/NCBITAXON/"
 BAO = "http://www.bioassayontology.org/bao#"
 
@@ -48,6 +48,7 @@ class NamingTarget:
 class NamingInputs:
     targets: tuple[NamingTarget, ...] = ()
     organisms: tuple[NamingTerm, ...] = ()
+    strains: tuple[NamingTerm, ...] = ()
     cell_lines: tuple[NamingTerm, ...] = ()
     matrices: tuple[NamingTerm, ...] = ()
     discriminator: str | None = None
@@ -58,7 +59,7 @@ class NamingContext:
     overrides_by_term: Mapping[str, str] = field(default_factory=dict)
     # lower-cased term label -> short label; registry targets carry organism as text
     overrides_by_label: Mapping[str, str] = field(default_factory=dict)
-    home_organism_label: str | None = None
+    home_organism_labels: frozenset[str] = frozenset()  # lower-cased
 
 
 @dataclass(frozen=True)
@@ -105,17 +106,17 @@ DEFAULT_CATEGORY_PATTERNS: dict[str, str] = {
     "Binding": "{target} binding",
     "Receptor function": "{target} {discriminator}",
     "Ion-channel inhibition": "{target} inhibition",
-    "Growth inhibition": "{organism} growth inhibition",
-    "Bactericidal activity": "{organism} bactericidal activity",
-    "Intracellular growth inhibition": "Intracellular {organism} growth inhibition",
-    "Metabolite rescue": "{organism} metabolite rescue",
-    "Membrane potential": "{organism} membrane potential",
-    "Resistance selection": "{organism?} resistant mutant selection",
+    "Growth inhibition": "{organism} {strain?} growth inhibition",
+    "Bactericidal activity": "{organism} {strain?} bactericidal activity",
+    "Intracellular growth inhibition": "Intracellular {organism} {strain?} growth inhibition",
+    "Metabolite rescue": "{organism} {strain?} metabolite rescue",
+    "Membrane potential": "{organism} {strain?} membrane potential",
+    "Resistance selection": "{organism?} {strain?} resistant mutant selection",
     "Combination (checkerboard)": "{subject?} combination",
     "Cytotoxicity": "{cell_line} cytotoxicity",
-    "Infection inhibition": "{organism} infection inhibition",
+    "Infection inhibition": "{organism} {strain?} infection inhibition",
     "In vitro translation inhibition": "{organism} in vitro translation inhibition",
-    "Intrabacterial pH homeostasis": "{organism} intrabacterial pH disruption",
+    "Intrabacterial pH homeostasis": "{organism} {strain?} intrabacterial pH disruption",
     "Detection interference": "{discriminator} interference",
     "Metabolic stability": "{matrix} stability",
     "Plasma stability": "Plasma stability",
@@ -124,9 +125,29 @@ DEFAULT_CATEGORY_PATTERNS: dict[str, str] = {
     "Solubility": "{discriminator?} solubility",
     "Lipophilicity": "Lipophilicity",
     "Pharmacokinetics": "{organism?} pharmacokinetics",
-    "In vivo efficacy": "{organism} in vivo efficacy",
+    "In vivo efficacy": "{organism} {strain?} in vivo efficacy",
     "Compound identity / purity": "Compound identity and purity",
     "Prediction": "{subject?} {discriminator} prediction",
+    "Cell-line growth inhibition": "{cell_line} growth inhibition",
+    "CYP inhibition": "{discriminator} inhibition",
+    "CYP time-dependent inhibition": "{discriminator} time-dependent inhibition",
+    "CYP induction": "{discriminator} induction",
+    "Target engagement": "{target} target engagement",
+    "Genotoxicity": "Genotoxicity",
+    "Mitochondrial toxicity": "{cell_line?} mitochondrial toxicity",
+    "Hemolysis": "{organism?} erythrocyte hemolysis",
+    "Blood-to-plasma ratio": "{organism?} blood-to-plasma ratio",
+    "Tissue binding": "{matrix} binding",
+    "Ionization constant": "pKa",
+    "Chemical stability": "Chemical stability",
+    "Time-kill": "{organism} {strain?} time-kill",
+    "Liver-stage inhibition": "{organism} {strain?} liver-stage inhibition",
+    "Transmission blocking": "{organism} {strain?} transmission blocking",
+    "Gametocytocidal activity": "{organism} {strain?} gametocytocidal activity",
+    "Parasite killing rate": "{organism} {strain?} killing rate",
+    "β-Hematin formation inhibition": "β-Hematin formation inhibition",
+    "Tolerability": "{organism?} tolerability",
+    "Pharmacodynamics": "{organism?} pharmacodynamics",
 }
 
 
@@ -206,14 +227,23 @@ def organism_short_label(label: str, ctx: NamingContext) -> str:
 
 def _target_label(target: NamingTarget, ctx: NamingContext) -> str:
     name = normalize_name_text(target.name)
-    home = (ctx.home_organism_label or "").strip().lower()
-    if target.organism and target.organism.strip().lower() != home:
+    if target.organism and target.organism.strip().lower() not in ctx.home_organism_labels:
         return f"{organism_short_label(target.organism, ctx)} {name}"
     return name
 
 
 def _joined(terms: tuple[NamingTerm, ...], ctx: NamingContext) -> str | None:
     return "/".join(short_label(t, ctx) for t in terms) or None
+
+
+def _as_typed(terms: tuple[NamingTerm, ...], ctx: NamingContext) -> str | None:
+    """Strains read as typed (no short-label rule); an admin override still applies."""
+    return (
+        "/".join(
+            ctx.overrides_by_term.get(t.term_id) or normalize_name_text(t.label) for t in terms
+        )
+        or None
+    )
 
 
 def with_discriminator(base: str, discriminator: str) -> str:
@@ -236,6 +266,7 @@ def render_protocol_name(pattern: str, inputs: NamingInputs, ctx: NamingContext)
     values = {
         "target": target,
         "organism": organism,
+        "strain": _as_typed(inputs.strains, ctx),
         "cell_line": cell_line,
         "matrix": _joined(inputs.matrices, ctx),
         "subject": subject,

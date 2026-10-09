@@ -19,6 +19,7 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import PlateFormat, ProtocolStatus, RunRelationshipType
+from cellar.domain.screening_assay.protocol import ConditionDefinition
 from cellar.domain.screening_assay.repository import (
     CollectionLinkResult,
     PlateTemplateRepository,
@@ -109,7 +110,7 @@ class CreateRun:
                 ),
                 plate_format=(PlateFormat(input.plate_format) if input.plate_format else None),
                 plate_template_id=input.plate_template_id,
-                conditions=input.conditions,
+                conditions=_with_fixed_values(input.conditions, protocol.condition_definitions),
                 notes=input.notes,
             )
             await self._repo.save(run)
@@ -131,3 +132,17 @@ class CreateRun:
 
         await self._dispatcher.dispatch_all(events)
         return Success(run)
+
+
+def _with_fixed_values(
+    given: dict[str, Any] | None, definitions: list[ConditionDefinition]
+) -> dict[str, Any] | None:
+    """A condition the run gives no value for takes the protocol's fixed value (``72 h``)."""
+    conditions = dict(given or {})
+    for cd in definitions:
+        given_value = conditions.get(cd.name)
+        if cd.fixed_run_value is not None and (
+            given_value is None or not str(given_value).strip()
+        ):
+            conditions[cd.name] = cd.fixed_run_value
+    return conditions or None

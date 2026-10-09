@@ -29,6 +29,7 @@ class AddConditionDefinitionCommand(Command):
     data_type: str
     unit: str | None = None
     pick_list_values: list[str] | None = None
+    fixed_value: str | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -50,6 +51,7 @@ class UpdateConditionDefinitionCommand(Command):
     data_type: str | None = None
     unit: str | object | None = _UNSET
     pick_list_values: list[str] | object | None = _UNSET
+    fixed_value: str | object | None = _UNSET
 
 
 # ---------------------------------------------------------------------------
@@ -88,6 +90,7 @@ class AddConditionDefinition:
                 data_type=ConditionDataType(input.data_type),
                 unit=input.unit,
                 pick_list_values=input.pick_list_values,
+                fixed_value=input.fixed_value,
             )
 
             protocol.add_condition_definition(definition)
@@ -165,6 +168,8 @@ class UpdateConditionDefinition:
                 kwargs["unit"] = input.unit
             if input.pick_list_values is not _UNSET:
                 kwargs["pick_list_values"] = input.pick_list_values
+            if input.fixed_value is not _UNSET:
+                kwargs["fixed_value"] = input.fixed_value
 
             try:
                 protocol.update_condition_definition(input.definition_id, **kwargs)

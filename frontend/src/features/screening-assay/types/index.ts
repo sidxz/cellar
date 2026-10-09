@@ -1,7 +1,9 @@
 import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import type {
+  AddConditionDefinitionRequest,
   ClassifyDoseResponseCurveRequest,
   CollectionCoverageResponse,
+  ConditionDefinitionResponse,
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
@@ -15,6 +17,7 @@ import type {
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
   PlateMapWellModel,
+  ProtocolReferenceResponse,
   ProtocolResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
@@ -338,13 +341,13 @@ export interface PickListValue {
   color?: string | null;
 }
 
-export interface ConditionDefinition {
-  id: string;
-  name: string;
-  data_type: string;
-  unit: string | null;
-  pick_list_values: string[] | null;
-}
+/** A protocol's condition; `fixed_value` is the value that defines the protocol (Hypoxia: yes,
+ *  72 h) and a run without a value for it takes it. Aliases the generated type. */
+export type ConditionDefinition = ConditionDefinitionResponse;
+
+/** Where a protocol comes from (ChEMBL assay, PubChem AID, DOI, PMID, URL), as validated by the
+ *  backend. Aliases the generated type; links are built in `lib/protocol-references`. */
+export type ProtocolReference = ProtocolReferenceResponse;
 
 export interface OntologyAnnotationTerm {
   term_id: string;
@@ -424,6 +427,8 @@ export interface Protocol {
   code: ProtocolResponse["code"];
   /** Former names (recorded on rename) and nicknames. Searchable; never the name. */
   aliases: ProtocolResponse["aliases"];
+  /** Where it comes from; searchable in the library. Typed off the DTO. */
+  references?: ProtocolResponse["references"];
   /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
   discriminator: ProtocolResponse["discriminator"];
   /** Why the generated name needs attention (`needs_facts` | `needs_discriminator` | `name_conflict`). */
@@ -574,16 +579,14 @@ export interface CreateReadoutDefinitionInput {
   dose_response_config?: DoseResponseConfig | null;
 }
 
-export interface CreateConditionDefinitionInput {
-  name: string;
-  data_type: string;
-  unit?: string | null;
-  pick_list_values?: string[] | null;
-}
+export type CreateConditionDefinitionInput = AddConditionDefinitionRequest;
 
 /** The form started from, same-named siblings' discriminators and nicknames: typed off the DTO. */
 export interface CreateProtocolInput
-  extends Pick<CreateProtocolRequest, "form_id" | "sibling_discriminators" | "nicknames"> {
+  extends Pick<
+    CreateProtocolRequest,
+    "form_id" | "sibling_discriminators" | "nicknames" | "references"
+  > {
   protocol_type: ProtocolType;
   /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
   discriminator?: string | null;

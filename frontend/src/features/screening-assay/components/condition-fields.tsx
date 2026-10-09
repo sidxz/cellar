@@ -30,46 +30,74 @@ interface ConditionFieldsProps {
 export function ConditionFields({ defs, values, onChange, disabled }: ConditionFieldsProps) {
   return (
     <>
-      {defs.map((cd) => {
-        const value = values[cd.name] ?? "";
-        const labelText = cd.unit ? `${cd.name} (${cd.unit})` : cd.name;
-        const pickListValues = cd.pick_list_values ?? [];
-        const isPickList = cd.data_type === "pick_list" && pickListValues.length > 0;
-        const isNumeric = cd.data_type === "numeric";
-        return (
-          <div key={cd.id} className="grid gap-1">
-            <Label className="text-xs">{labelText}</Label>
-            {isPickList ? (
-              <Select
-                value={value || "__none__"}
-                onValueChange={(v) => onChange(cd.name, v === "__none__" ? "" : v)}
-                disabled={disabled}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">(not recorded)</SelectItem>
-                  {pickListValues.map((opt) => (
-                    <SelectItem key={opt} value={opt}>
-                      {opt}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <Input
-                type={isNumeric ? "number" : "text"}
-                inputMode={isNumeric ? "decimal" : undefined}
-                placeholder={isNumeric ? (cd.unit ? `e.g. 10 (${cd.unit})` : "e.g. 10") : undefined}
-                value={value}
-                onChange={(e) => onChange(cd.name, e.target.value)}
-                disabled={disabled}
-              />
-            )}
-          </div>
-        );
-      })}
+      {defs.map((cd) => (
+        <div key={cd.id} className="grid gap-1">
+          <Label className="text-xs">{cd.unit ? `${cd.name} (${cd.unit})` : cd.name}</Label>
+          <ConditionValueInput
+            def={cd}
+            value={values[cd.name] ?? ""}
+            onChange={(v) => onChange(cd.name, v)}
+            disabled={disabled}
+          />
+        </div>
+      ))}
     </>
+  );
+}
+
+interface ConditionValueInputProps {
+  def: Pick<ConditionDefinition, "data_type" | "unit" | "pick_list_values">;
+  /** Bare value (no unit suffix); "" is none. */
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  /** What the empty pick-list choice reads. */
+  noneLabel?: string;
+  "aria-label"?: string;
+}
+
+/** One condition value: a Select for a pick list, a numeric or text Input otherwise. Serves a
+ *  run's value and the protocol's fixed value alike. */
+export function ConditionValueInput({
+  def,
+  value,
+  onChange,
+  disabled,
+  noneLabel = "(not recorded)",
+  "aria-label": ariaLabel,
+}: ConditionValueInputProps) {
+  const pickListValues = def.pick_list_values ?? [];
+  const isNumeric = def.data_type === "numeric";
+  if (def.data_type === "pick_list" && pickListValues.length > 0) {
+    return (
+      <Select
+        value={value || "__none__"}
+        onValueChange={(v) => onChange(v === "__none__" ? "" : v)}
+        disabled={disabled}
+      >
+        <SelectTrigger aria-label={ariaLabel}>
+          <SelectValue placeholder="Select..." />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__none__">{noneLabel}</SelectItem>
+          {pickListValues.map((opt) => (
+            <SelectItem key={opt} value={opt}>
+              {opt}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    );
+  }
+  return (
+    <Input
+      type={isNumeric ? "number" : "text"}
+      inputMode={isNumeric ? "decimal" : undefined}
+      placeholder={isNumeric ? (def.unit ? `e.g. 10 (${def.unit})` : "e.g. 10") : undefined}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      disabled={disabled}
+      aria-label={ariaLabel}
+    />
   );
 }

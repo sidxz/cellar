@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from cellar.domain.screening_assay.enums import TargetType
 from cellar.domain.screening_assay.target import Target
@@ -80,6 +80,14 @@ class SQLAlchemyTargetRepository(EntityRepository[Target, TargetModel]):
             .order_by(TargetModel.organism)
         )
         return list((await self._session.execute(stmt)).scalars())
+
+    async def count_by_workspace(self, workspace_id: uuid.UUID) -> int:
+        stmt = (
+            select(func.count())
+            .select_from(TargetModel)
+            .where(TargetModel.workspace_id == workspace_id)
+        )
+        return (await self._session.execute(stmt)).scalar_one()
 
     async def find_by_ids(self, workspace_id: uuid.UUID, ids: Sequence[uuid.UUID]) -> list[Target]:
         if not ids:

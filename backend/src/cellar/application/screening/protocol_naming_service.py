@@ -43,6 +43,7 @@ MISSING_FIELD_LABELS = {
     "category": "a category",
     "target": "a target",
     "organism": "an organism",
+    "strain": "a strain",
     "cell_line": "a cell line",
     "matrix": "an assay format",
     "subject": "a target, organism or cell line",
@@ -97,7 +98,7 @@ class ProtocolNameService:
         return NamingContext(
             overrides_by_term={lb.term_id: lb.short_label for lb in labels},
             overrides_by_label={lb.term_label.lower(): lb.short_label for lb in labels},
-            home_organism_label=settings.home_organism_label if settings else None,
+            home_organism_labels=settings.home_organism_labels if settings else frozenset(),
         )
 
     async def target_name(self, workspace_id: uuid.UUID, target_id: uuid.UUID) -> str:
@@ -149,6 +150,7 @@ class ProtocolNameService:
         inputs = NamingInputs(
             targets=tuple(NamingTarget(t.name, t.organism) for t in targets),
             organisms=_terms(annotations.get("organism")),
+            strains=_terms(annotations.get("strain")),
             cell_lines=_terms(annotations.get("cell_line")),
             matrices=_terms(annotations.get("assay_format")),
             discriminator=discriminator,

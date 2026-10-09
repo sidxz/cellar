@@ -31,6 +31,22 @@ vi.mock("../hooks/use-targets", () => ({
   }),
 }));
 
+// The real dialog is covered in request-target-dialog.test.tsx; this stand-in "creates" one.
+vi.mock("./request-target-dialog", () => ({
+  RequestTargetDialog: ({
+    open,
+    onCreated,
+  }: {
+    open: boolean;
+    onCreated: (t: { id: string; name: string }) => void;
+  }) =>
+    open ? (
+      <button type="button" onClick={() => onCreated({ id: "t-new", name: "hERG" })}>
+        create hERG
+      </button>
+    ) : null,
+}));
+
 // The trigger sets role="combobox" (mirrors SearchableSelect), so it is
 // queried as a combobox — not a button.
 function openPopover() {
@@ -117,5 +133,21 @@ describe("TargetMultiSelect", () => {
     expect(pf).toHaveTextContent("DHODH");
     fireEvent.click(pf as HTMLElement);
     expect(onChange).toHaveBeenCalledWith(["t-4"]);
+  });
+
+  it("'Request a new target' opens the dialog and selects the created target", () => {
+    const onChange = vi.fn();
+    render(<TargetMultiSelect value={["t-1"]} onChange={onChange} />);
+    openPopover();
+    fireEvent.change(screen.getByPlaceholderText(/search targets/i), {
+      target: { value: "hERG" },
+    });
+    const item = screen
+      .getByText(/request a new target/i)
+      .closest("[data-slot='command-item']") as HTMLElement;
+    fireEvent.click(item);
+    fireEvent.click(screen.getByRole("button", { name: "create hERG" }));
+    expect(onChange).toHaveBeenCalledWith(["t-1", "t-new"]);
+    expect(screen.queryByRole("button", { name: "create hERG" })).not.toBeInTheDocument();
   });
 });

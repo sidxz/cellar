@@ -14,7 +14,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from cellar.application.screening.target_source import SourceTarget, TargetSource
+from cellar.application.screening.target_source import NewTarget, SourceTarget, TargetSource
 from cellar.domain.shared.errors import AuthorizationError, ServiceUnavailableError
 from tests.api.conftest import AUTH_ORG_ID, _create_test_app
 from tests.fakes.fake_auth import FakeAuth
@@ -29,6 +29,18 @@ class StubSource:
         self.targets: list[SourceTarget] = []
         self.error: Exception | None = None
         self.calls: list[Mapping[str, str]] = []
+        self.created: list[NewTarget] = []
+
+    async def create_target(
+        self, request: NewTarget, *, forwarded_headers: Mapping[str, str]
+    ) -> SourceTarget:
+        self.calls.append(dict(forwarded_headers))
+        if self.error:
+            raise self.error
+        self.created.append(request)
+        return SourceTarget(
+            uuid.uuid4(), request.name, request.target_type, "Homo sapiens", request.chembl_id, 1
+        )
 
     async def fetch_all(self, *, forwarded_headers: Mapping[str, str]) -> list[SourceTarget]:
         self.calls.append(dict(forwarded_headers))
@@ -188,3 +200,62 @@ async def test_local_mutation_routes_are_gone(admin_sync_client: AsyncClient) ->
     assert patch.status_code == 405
     delete = await admin_sync_client.delete(f"/api/v1/targets/{tid}")
     assert delete.status_code == 405
+
+
+HERG = {
+    "name": "hERG",
+    "target_type": "single_protein",
+    "organism_term_id": "http://purl.bioontology.org/ontology/NCBITAXON/9606",
+    "organism_label": "Homo sapiens",
+    "chembl_id": "CHEMBL240",
+    "protein_identifier": "Q12809",
+}
+
+
+async def test_request_target_creates_in_source_and_mirrors_it(
+    admin_sync_client: AsyncClient, stub_source: StubSource
+) -> None:
+    resp = await admin_sync_client.post(
+        "/api/v1/targets/request", json=HERG, headers={**FWD, "X-Service-Key": "nope"}
+    )
+    assert resp.status_code == 201, resp.text
+    body = resp.json()
+    assert body["name"] == "hERG"
+    assert body["organism"] == "Homo sapiens"
+    assert body["chembl_id"] == "CHEMBL240"
+    assert stub_source.calls == [
+        {"authorization": "Bearer idp-token", "x-authz-token": "authz-token"}
+    ]
+    assert stub_source.created[0].organism_tax_id == 9606
+    assert stub_source.created[0].protein_identifier == "Q12809"
+
+    got = await admin_sync_client.get(f"/api/v1/targets/{body['id']}")
+    assert got.status_code == 200
+    assert got.json()["name"] == "hERG"
+
+
+async def test_request_target_refused_for_viewer_before_source(
+    viewer_sync_client: AsyncClient, stub_source: StubSource
+) -> None:
+    resp = await viewer_sync_client.post("/api/v1/targets/request", json=HERG, headers=FWD)
+    assert resp.status_code == 403
+    assert stub_source.created == []
+    assert stub_source.calls == []
+
+
+async def test_request_target_maps_source_refusal_and_bad_input(
+    admin_sync_client: AsyncClient, stub_source: StubSource
+) -> None:
+    stub_source.error = AuthorizationError("You need editor access in ProtCellar")
+    resp = await admin_sync_client.post("/api/v1/targets/request", json=HERG, headers=FWD)
+    assert resp.status_code == 403
+    assert resp.json()["message"] == "You need editor access in ProtCellar"
+
+    stub_source.error = None
+    resp = await admin_sync_client.post(
+        "/api/v1/targets/request",
+        json={**HERG, "organism_term_id": "free_text:human"},
+        headers=FWD,
+    )
+    assert resp.status_code == 422
+    assert stub_source.created == []

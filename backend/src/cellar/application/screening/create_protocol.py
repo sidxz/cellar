@@ -42,6 +42,7 @@ from cellar.domain.screening_assay.protocol import (
     RESERVED_READOUT_NAMES,
     ConditionDefinition,
     Protocol,
+    ProtocolReference,
     ReadoutDefinition,
     is_reserved_readout_name,
 )
@@ -106,6 +107,8 @@ class CreateProtocolCommand(Command):
     sibling_discriminators: list[SiblingDiscriminator] = field(default_factory=list)
     # What people call the new protocol, added in the same save (cosmetic; any status).
     nicknames: list[str] = field(default_factory=list)
+    # Where it comes from: [{kind, value}] (ChEMBL assay, PubChem AID, DOI, PMID, URL).
+    references: list[dict[str, str]] = field(default_factory=list)
 
 
 class CreateProtocol:
@@ -201,8 +204,13 @@ class CreateProtocol:
                 data_type=ConditionDataType(cd["data_type"]),
                 unit=cd.get("unit"),
                 pick_list_values=cd.get("pick_list_values"),
+                fixed_value=cd.get("fixed_value"),
             )
             for cd in input.condition_definitions
+        ]
+        references = [
+            ProtocolReference(kind=r["kind"], value=r["value"])  # type: ignore[arg-type]
+            for r in input.references
         ]
 
         ontology_annotations = {
@@ -254,23 +262,27 @@ class CreateProtocol:
                 protocol_repo=self._repo,
                 workspace_id=input.workspace_id,
             )
-            protocol = Protocol.create(
-                workspace_id=input.workspace_id,
-                name=derivation.rendered.name,
-                name_base=derivation.rendered.base,
-                name_flag=checked.unwrap(),
-                discriminator=discriminator,
-                code=code,
-                description=input.description,
-                protocol_type=ProtocolType(input.protocol_type),
-                category=input.category,
-                created_by=auth.user_id,
-                dose_unit=ConcentrationUnit(input.dose_unit),
-                pos_control_signal=PosControlSignal(input.pos_control_signal),
-                readout_definitions=readout_defs,
-                condition_definitions=condition_defs or None,
-                ontology_annotations=ontology_annotations or None,
-            )
+            try:
+                protocol = Protocol.create(
+                    workspace_id=input.workspace_id,
+                    name=derivation.rendered.name,
+                    name_base=derivation.rendered.base,
+                    name_flag=checked.unwrap(),
+                    discriminator=discriminator,
+                    code=code,
+                    description=input.description,
+                    protocol_type=ProtocolType(input.protocol_type),
+                    category=input.category,
+                    created_by=auth.user_id,
+                    dose_unit=ConcentrationUnit(input.dose_unit),
+                    pos_control_signal=PosControlSignal(input.pos_control_signal),
+                    readout_definitions=readout_defs,
+                    condition_definitions=condition_defs or None,
+                    ontology_annotations=ontology_annotations or None,
+                    references=references,
+                )
+            except DomainError as exc:  # e.g. two readouts or two conditions with one name
+                return Failure(exc)
             for nickname in input.nicknames:
                 protocol.add_nickname(nickname)
             await self._repo.save(protocol)

@@ -2,13 +2,20 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 
 import httpx
 import pytest
 
-from cellar.application.screening.target_source import SourceTarget
-from cellar.domain.shared.errors import AuthorizationError, ServiceUnavailableError
+from cellar.application.screening.target_source import NewTarget, SourceTarget
+from cellar.domain.shared.errors import (
+    AuthorizationError,
+    ConflictError,
+    NotFoundError,
+    ServiceUnavailableError,
+    ValidationError,
+)
 from cellar.infrastructure.prot_cellar.settings import ProtCellarSettings
 from cellar.infrastructure.prot_cellar.target_source import HttpTargetSource
 
@@ -157,3 +164,200 @@ async def test_non_json_response_raises_service_unavailable():
     src = _source(lambda req: httpx.Response(200, content=b"not json"))
     with pytest.raises(ServiceUnavailableError):
         await src.fetch_all(forwarded_headers=HEADERS)
+
+
+# ---------------------------------------------------------------------------
+# create_target — request a new target in prot-cellar (task E2)
+# ---------------------------------------------------------------------------
+
+PROTEIN_ID = str(uuid.uuid4())
+NEW_ID = str(uuid.uuid4())
+
+
+def _request(**overrides) -> NewTarget:
+    fields = {
+        "name": "hERG",
+        "target_type": "single_protein",
+        "organism_tax_id": 9606,
+        "organism_label": "Homo sapiens",
+        "chembl_id": "CHEMBL240",
+        "protein_identifier": "Q12809",
+    }
+    return NewTarget(**{**fields, **overrides})
+
+
+def _create_handler(calls: list[httpx.Request], *, post_status: int = 201, post_json=None):
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req)
+        path = req.url.path
+        if path == "/api/v1/organisms/resolve/9606":
+            return httpx.Response(200, json={"id": ORG_ID, "scientific_name": "Homo sapiens"})
+        if path == "/api/v1/proteins/resolve/Q12809":
+            return httpx.Response(200, json={"id": PROTEIN_ID, "primary_accession": "Q12809"})
+        if path == "/api/v1/targets" and req.method == "POST":
+            body = json.loads(req.content)
+            return httpx.Response(
+                post_status,
+                json=post_json
+                if post_json is not None
+                else {
+                    **_target(NEW_ID, body["pref_name"], ttype=body["target_type"]),
+                    "chembl_id": body["chembl_id"],
+                    "version": 1,
+                },
+            )
+        raise AssertionError(f"unexpected {req.method} {req.url}")
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_create_resolves_organism_and_protein_then_posts_with_forwarded_tokens():
+    calls: list[httpx.Request] = []
+    created = await _source(_create_handler(calls)).create_target(
+        _request(), forwarded_headers=HEADERS
+    )
+
+    assert [(c.method, c.url.path) for c in calls] == [
+        ("GET", "/api/v1/organisms/resolve/9606"),
+        ("GET", "/api/v1/proteins/resolve/Q12809"),
+        ("POST", "/api/v1/targets"),
+    ]
+    for c in calls:
+        assert c.headers["authorization"] == "Bearer idp"
+        assert c.headers["x-authz-token"] == "authz"
+    assert json.loads(calls[-1].content) == {
+        "pref_name": "hERG",
+        "target_type": "single_protein",
+        "organism_id": ORG_ID,
+        "chembl_id": "CHEMBL240",
+        "components": [{"protein_id": PROTEIN_ID, "relationship": "single_protein"}],
+    }
+    assert created == SourceTarget(
+        uuid.UUID(NEW_ID), "hERG", "single_protein", "Homo sapiens", "CHEMBL240", 1
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_component_free_type_sends_no_components_and_skips_protein_lookup():
+    calls: list[httpx.Request] = []
+    await _source(_create_handler(calls)).create_target(
+        _request(target_type="cell_line", protein_identifier=None, chembl_id=None),
+        forwarded_headers=HEADERS,
+    )
+    assert [c.url.path for c in calls] == [
+        "/api/v1/organisms/resolve/9606",
+        "/api/v1/targets",
+    ]
+    body = json.loads(calls[-1].content)
+    assert body["components"] == []
+    assert body["chembl_id"] is None
+
+
+@pytest.mark.asyncio
+async def test_create_organism_missing_raises_not_found_naming_the_organism():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.url.path == "/api/v1/organisms/resolve/9606"
+        return httpx.Response(404, json={"error": "NotFoundError", "message": "nope"})
+
+    with pytest.raises(NotFoundError) as exc:
+        await _source(handler).create_target(_request(), forwarded_headers=HEADERS)
+    assert "Homo sapiens" in exc.value.message
+    assert "ProtCellar" in exc.value.message
+
+
+@pytest.mark.asyncio
+async def test_create_protein_missing_raises_not_found():
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path.startswith("/api/v1/organisms/"):
+            return httpx.Response(200, json={"id": ORG_ID, "scientific_name": "Homo sapiens"})
+        assert req.method == "GET", "must not POST when the protein is unknown"
+        return httpx.Response(404, json={"message": "Protein 'Q12809' not found"})
+
+    with pytest.raises(NotFoundError, match="Protein Q12809 is not in ProtCellar"):
+        await _source(handler).create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [401, 403])
+async def test_create_refused_raises_editor_access_message(status: int):
+    calls: list[httpx.Request] = []
+    src = _source(_create_handler(calls, post_status=status, post_json={"message": "no"}))
+    with pytest.raises(AuthorizationError, match="You need editor access in ProtCellar"):
+        await src.create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(("status", "error"), [(409, ConflictError), (422, ValidationError)])
+async def test_create_rejection_passes_message_through(status: int, error: type):
+    calls: list[httpx.Request] = []
+    src = _source(
+        _create_handler(
+            calls, post_status=status, post_json={"error": "x", "message": "Name already used"}
+        )
+    )
+    with pytest.raises(error, match="Name already used"):
+        await src.create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+async def test_create_rejection_without_a_message_gets_a_generic_one():
+    calls: list[httpx.Request] = []
+    src = _source(
+        _create_handler(calls, post_status=422, post_json={"detail": [{"loc": ["body"]}]})
+    )
+    with pytest.raises(ValidationError, match="ProtCellar rejected"):
+        await src.create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [500, 503])
+async def test_create_5xx_raises_service_unavailable(status: int):
+    calls: list[httpx.Request] = []
+    src = _source(_create_handler(calls, post_status=status, post_json={}))
+    with pytest.raises(ServiceUnavailableError):
+        await src.create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+async def test_create_unreachable_raises_service_unavailable():
+    def handler(req: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("slow", request=req)
+
+    with pytest.raises(ServiceUnavailableError):
+        await _source(handler).create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+async def test_create_malformed_success_body_raises_service_unavailable():
+    calls: list[httpx.Request] = []
+    src = _source(_create_handler(calls, post_json={"unexpected": True}))
+    with pytest.raises(ServiceUnavailableError):
+        await src.create_target(_request(), forwarded_headers=HEADERS)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "body"),
+    [
+        ("/api/v1/organisms/resolve/9606", {"scientific_name": "Homo sapiens"}),
+        ("/api/v1/organisms/resolve/9606", ["not", "an", "object"]),
+        ("/api/v1/proteins/resolve/Q12809", {"primary_accession": "Q12809"}),
+        ("/api/v1/proteins/resolve/Q12809", "Q12809"),
+    ],
+)
+async def test_create_malformed_resolve_body_raises_service_unavailable_without_posting(
+    path: str, body: object
+):
+    calls: list[httpx.Request] = []
+    good = _create_handler(calls)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path == path:
+            calls.append(req)
+            return httpx.Response(200, json=body)
+        return good(req)
+
+    with pytest.raises(ServiceUnavailableError):
+        await _source(handler).create_target(_request(), forwarded_headers=HEADERS)
+    assert all(c.method == "GET" for c in calls), "must not POST after a malformed lookup"

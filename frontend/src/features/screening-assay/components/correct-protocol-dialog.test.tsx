@@ -56,6 +56,16 @@ const protocol = {
   discriminator: "resazurin",
   targets: [],
   ontology_annotations: {},
+  condition_definitions: [
+    {
+      id: "c1",
+      name: "Incubation time",
+      data_type: "numeric",
+      unit: "h",
+      pick_list_values: null,
+      fixed_value: "72",
+    },
+  ],
 } as unknown as Protocol;
 
 describe("CorrectProtocolDialog", () => {
@@ -103,5 +113,28 @@ describe("CorrectProtocolDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
     expect(correct).toHaveBeenCalledTimes(1);
     expect(correct.mock.calls[0][0]).not.toHaveProperty("target_ids");
+    expect(correct.mock.calls[0][0]).not.toHaveProperty("condition_fixed_values");
+  });
+
+  it("corrects a condition's fixed value", () => {
+    correct.mockReset();
+    render(<CorrectProtocolDialog protocol={protocol} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByLabelText(/correction: it was always this/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    const fixed = screen.getByLabelText("Incubation time (h)");
+    expect(fixed).toHaveValue(72);
+    fireEvent.change(fixed, { target: { value: "48" } });
+    fireEvent.change(screen.getByLabelText(/reason/i), { target: { value: "It was 48 h" } });
+    fireEvent.click(screen.getByRole("button", { name: /save correction/i }));
+    expect(correct.mock.calls[0][0].condition_fixed_values).toEqual({ c1: "48" });
+  });
+
+  it("offers the fixed condition values as discriminators, following an edit", () => {
+    render(<CorrectProtocolDialog protocol={protocol} open onOpenChange={() => {}} />);
+    fireEvent.click(screen.getByLabelText(/correction: it was always this/i));
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+    fireEvent.change(screen.getByLabelText("Incubation time (h)"), { target: { value: "48" } });
+    fireEvent.click(screen.getByRole("button", { name: "48 h" }));
+    expect(screen.getByLabelText(/^Discriminator/)).toHaveValue("48 h");
   });
 });

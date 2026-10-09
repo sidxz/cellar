@@ -3,15 +3,18 @@
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  AddConditionDefinitionRequest,
   CorrectProtocolRequest,
   ProtocolSummaryResponse,
   SetDiscriminatorRequest,
+  UpdateConditionDefinitionRequest,
 } from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { CreateProtocolInput, Protocol } from "../types";
+import { referenceKey } from "../lib/protocol-references";
+import type { CreateProtocolInput, Protocol, ProtocolReference } from "../types";
 import { PROTOCOLS_KEY } from "./query-keys";
 
 const protocolHooks = createCrudHooks<
@@ -217,12 +220,7 @@ export function useRemoveReadoutDefinition(protocolId: string) {
 export function useAddConditionDefinition(protocolId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      name: string;
-      data_type: string;
-      unit?: string | null;
-      pick_list_values?: string[] | null;
-    }) =>
+    mutationFn: (data: AddConditionDefinitionRequest) =>
       customInstance<Protocol>({
         url: `${API_V1}/protocols/${protocolId}/condition-definitions`,
         method: "POST",
@@ -243,12 +241,7 @@ export function useUpdateConditionDefinition(protocolId: string) {
       data,
     }: {
       definitionId: string;
-      data: {
-        name?: string;
-        data_type?: string;
-        unit?: string | null;
-        pick_list_values?: string[] | null;
-      };
+      data: UpdateConditionDefinitionRequest;
     }) =>
       customInstance<Protocol>({
         url: `${API_V1}/protocols/${protocolId}/condition-definitions/${definitionId}`,
@@ -407,6 +400,40 @@ export function useRemoveProtocolNickname(protocolId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Nickname removed");
+    },
+    onError: (err: Error) => showError(err.message),
+  });
+}
+
+export function useAddProtocolReference(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reference: ProtocolReference) =>
+      customInstance<Protocol>({
+        url: `${API_V1}/protocols/${protocolId}/references`,
+        method: "POST",
+        data: reference,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Reference added");
+    },
+    onError: (err: Error) => showError(err.message),
+  });
+}
+
+export function useRemoveProtocolReference(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (reference: ProtocolReference) =>
+      customInstance<Protocol>({
+        // The stable key, encoded whole: a DOI's slash travels as %2F.
+        url: `${API_V1}/protocols/${protocolId}/references/${encodeURIComponent(referenceKey(reference))}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Reference removed");
     },
     onError: (err: Error) => showError(err.message),
   });

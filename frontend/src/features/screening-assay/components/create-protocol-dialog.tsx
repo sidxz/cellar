@@ -7,6 +7,7 @@ import {
   useProtocolForms,
 } from "@/features/workspace-config/hooks/use-protocol-forms";
 import type { OntologyTerm } from "@/shared/components/ontology-search-input";
+import { PickListValuesInput } from "@/shared/components/pick-list-values-input";
 import { SearchableSelect } from "@/shared/components/searchable-select";
 import {
   AlertDialog,
@@ -45,13 +46,18 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { UnitPicker } from "@/shared/components/unit-picker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
+import { isFixedValueValid } from "../lib/conditions";
 import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
+import {
+  conditionDefinitionsPayload,
+  readoutDefinitionsPayload,
+} from "../lib/protocol-create-payload";
 import {
   applyFormFacets,
   conditionsFromForm,
@@ -59,14 +65,16 @@ import {
   pickFormForCategory,
   readoutsFromForm,
 } from "../lib/protocol-form-apply";
-import { WELL_CONC_X, isReservedReadoutName } from "../lib/readout-constants";
+import { prefillFromProtocol } from "../lib/protocol-prefill";
+import { isReservedReadoutName } from "../lib/readout-constants";
 import {
-  type CreateReadoutDefinitionInput,
   DOSE_UNIT_LABELS,
   PROTOCOL_TYPE_LABELS,
   type Protocol,
+  type ProtocolReference,
   type ProtocolType,
 } from "../types";
+import { ConditionValueInput } from "./condition-fields";
 import {
   DEFAULT_VALUES,
   type ProtocolFormValues,
@@ -86,6 +94,7 @@ import { StartsFrom } from "./create-protocol/starts-from";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
 import { ProtocolNamePreview, isPreviewSavable, useNameSlots } from "./protocol-name-preview";
+import { ReferencesEditor } from "./protocol-references";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
 
@@ -151,6 +160,7 @@ export function CreateProtocolDialog({
   const [appliedFacets, setAppliedFacets] = useState<Record<string, string>>({});
   const [pendingForm, setPendingForm] = useState<ProtocolForm | null>(null);
   const [nicknames, setNicknames] = useState<string[]>([]);
+  const [references, setReferences] = useState<ProtocolReference[]>([]);
   const [siblingValues, setSiblingValues] = useState<SiblingValues>({});
   const [showDiscriminator, setShowDiscriminator] = useState(false);
 
@@ -200,6 +210,7 @@ export function CreateProtocolDialog({
     setAppliedConditions(DEFAULT_CONDITIONS_JSON);
     setAppliedFacets({});
     setNicknames([]);
+    setReferences([]);
     setSiblingValues({});
     setShowDiscriminator(false);
     setDraftKept(false);
@@ -208,48 +219,11 @@ export function CreateProtocolDialog({
   // A new assay starts from the protocol it replaces: same facts, its own discriminator.
   useEffect(() => {
     if (!open || !prefill) return;
-    form.reset({
-      protocol_type: prefill.protocol_type,
-      discriminator: "",
-      target_ids: (prefill.targets ?? []).map((t) => t.id),
-      category: prefill.category ?? "",
-      description: prefill.description ?? "",
-      dose_unit: prefill.dose_unit,
-      readouts: prefill.readout_definitions.map((rd, i) => {
-        const dr = rd.dose_response_config;
-        return {
-          ...defaultReadout(i + 1),
-          name: rd.name,
-          data_type: rd.data_type,
-          unit: rd.unit ?? "",
-          aggregation: rd.aggregation ?? "none",
-          normalizations: rd.normalizations ?? [],
-          is_calculated: rd.is_calculated,
-          calculation_formula: rd.calculation_formula ?? "",
-          display_order: rd.display_order ?? i + 1,
-          pick_list_values: rd.pick_list_values ?? [],
-          ...(dr
-            ? {
-                dr_curve_type: dr.curve_type,
-                dr_x_readout: dr.x_readout_name ?? WELL_CONC_X,
-                dr_y_readout: dr.y_readout_name,
-                dr_hill_constraint: dr.hill_slope_constraint,
-                dr_normalization_scope: dr.normalization_scope,
-                dr_activity_threshold:
-                  dr.activity_threshold != null ? String(dr.activity_threshold) : "",
-                dr_intercepts: dr.intercepts ?? [],
-              }
-            : {}),
-        };
-      }),
-      conditions: prefill.condition_definitions.map((cd) => ({
-        name: cd.name,
-        data_type: cd.data_type,
-        unit: cd.unit ?? "",
-      })),
-    });
+    const start = prefillFromProtocol(prefill);
+    form.reset(start.values);
     setAppliedReadouts(JSON.stringify(form.getValues("readouts")));
-    setOntologyAnnotations(prefill.ontology_annotations ?? {});
+    setOntologyAnnotations(start.ontologyAnnotations);
+    setReferences(start.references);
   }, [open, prefill, form]);
 
   // ---- forms: picking a category applies its form ----
@@ -329,6 +303,29 @@ export function CreateProtocolDialog({
     showDiscriminator ||
     discriminatorValue.trim() !== "";
 
+  // A new assay needs its own discriminator, or its strain when the pattern has no discriminator
+  // field showing: focus whichever is there once it renders (the portal mounts a tick after
+  // open, so this checks on every render until it lands).
+  const focusTarget = showDiscriminatorField
+    ? "discriminator"
+    : nameFactSlots.includes("strain")
+      ? "strain"
+      : null;
+  const focused = useRef(false);
+  useEffect(() => {
+    if (!open || !prefill) {
+      focused.current = false;
+      return;
+    }
+    if (focused.current || !focusTarget) return;
+    const el =
+      focusTarget === "discriminator"
+        ? document.getElementById("protocol-discriminator")
+        : document.querySelector<HTMLElement>('[data-facet-slot="strain"] input');
+    el?.focus();
+    focused.current = !!el;
+  });
+
   // Facts the pattern does not place, assay format first.
   const moreSlots = facetSlots
     .filter((s) => !nameFactSlots.includes(s.name))
@@ -336,8 +333,18 @@ export function CreateProtocolDialog({
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
   const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
+  const conditionValues = form.watch("conditions");
+  // The backend refuses a pick list with no values.
+  const hasEmptyPickList = conditionValues.some(
+    (cd) => cd.name.trim() && cd.data_type === "pick_list" && cd.pick_list_values.length === 0,
+  );
+  const hasInvalidFixedValue = conditionValues.some(
+    (cd) => cd.name.trim() && !isFixedValueValid(cd),
+  );
   const canSubmit =
     validReadouts.length > 0 &&
+    !hasEmptyPickList &&
+    !hasInvalidFixedValue &&
     !hasReservedReadoutName &&
     isPreviewSavable(preview.data) &&
     !createMutation.isPending;
@@ -345,57 +352,8 @@ export function CreateProtocolDialog({
   // ---- submit handler ----
 
   const handleSubmit = form.handleSubmit((values) => {
-    const readout_definitions: CreateReadoutDefinitionInput[] = values.readouts
-      .filter((rd) => rd.name.trim())
-      .map((rd) => {
-        const base: CreateReadoutDefinitionInput = {
-          name: rd.name.trim(),
-          data_type: rd.data_type as CreateReadoutDefinitionInput["data_type"],
-          unit: rd.unit || null,
-          aggregation: rd.aggregation as CreateReadoutDefinitionInput["aggregation"],
-          normalizations: rd.normalizations,
-          is_calculated: rd.is_calculated,
-          calculation_formula: rd.is_calculated ? rd.calculation_formula || null : null,
-          display_order: rd.display_order,
-        };
-        if (rd.data_type === "pick_list") {
-          const cleaned = rd.pick_list_values
-            .filter((v) => v.label.trim())
-            .map((v) => ({ label: v.label.trim(), color: v.color || null }));
-          if (cleaned.length > 0) {
-            base.pick_list_values = cleaned;
-          }
-        }
-        if (rd.data_type === "dose_response" && rd.dr_y_readout) {
-          base.dose_response_config = {
-            curve_type: rd.dr_curve_type,
-            x_readout_name:
-              rd.dr_x_readout === WELL_CONC_X || !rd.dr_x_readout ? null : rd.dr_x_readout,
-            y_readout_name: rd.dr_y_readout,
-            hill_slope_constraint: rd.dr_hill_constraint,
-            activity_threshold: rd.dr_activity_threshold
-              ? Number.parseFloat(rd.dr_activity_threshold)
-              : null,
-            normalization_scope: rd.dr_normalization_scope,
-            top_constraint: null,
-            bottom_constraint: null,
-            // Empty list -> server seeds a single 50% intercept from
-            // curve_type. Send only when the chemist explicitly
-            // configured >=1 intercept so we don't drown the create
-            // payload in a single-default row.
-            ...(rd.dr_intercepts.length > 0 ? { intercepts: rd.dr_intercepts } : {}),
-          } as CreateReadoutDefinitionInput["dose_response_config"];
-        }
-        return base;
-      });
-
-    const condition_definitions = values.conditions
-      .filter((cd) => cd.name.trim())
-      .map((cd) => ({
-        name: cd.name.trim(),
-        data_type: cd.data_type,
-        unit: cd.unit || null,
-      }));
+    const readout_definitions = readoutDefinitionsPayload(values.readouts);
+    const condition_definitions = conditionDefinitionsPayload(values.conditions);
 
     createMutation.mutate(
       {
@@ -412,6 +370,7 @@ export function CreateProtocolDialog({
         ontology_annotations: ontologyAnnotationsPayload(ontologyAnnotations),
         form_id: selectedForm?.id ?? null,
         nicknames,
+        references,
         sibling_discriminators: siblingDiscriminatorsPayload(
           siblings,
           siblingValues,
@@ -441,7 +400,10 @@ export function CreateProtocolDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(95vw,1100px)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] overflow-y-auto">
+      <DialogContent
+        onOpenAutoFocus={(e) => prefill && e.preventDefault()}
+        className="w-[min(95vw,1100px)] max-w-[1100px] sm:max-w-[1100px] max-h-[90vh] overflow-y-auto"
+      >
         <DialogHeader>
           <DialogTitle>
             {prefill ? `New protocol from ${prefill.code ?? prefill.name}` : "New Protocol"}
@@ -493,9 +455,11 @@ export function CreateProtocolDialog({
                 name="discriminator"
                 render={({ field }) => (
                   <DiscriminatorInput
+                    id="protocol-discriminator"
                     value={field.value}
                     onChange={field.onChange}
                     base={preview.data?.base ?? null}
+                    conditions={conditionValues}
                     placeholder={discriminatorInName ? "Part of this category's name" : undefined}
                   />
                 )}
@@ -568,6 +532,15 @@ export function CreateProtocolDialog({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="grid gap-4 pt-2">
+              <div className="grid gap-2">
+                <Label>References</Label>
+                <ReferencesEditor
+                  references={references}
+                  onAdd={(r) => setReferences((prev) => [...prev, r])}
+                  onRemove={(r) => setReferences((prev) => prev.filter((x) => x !== r))}
+                  canEdit
+                />
+              </div>
               <div className="grid w-64 gap-2">
                 <Label>Type</Label>
                 <Controller
@@ -644,53 +617,87 @@ export function CreateProtocolDialog({
                   </Button>
                 </div>
                 {conditionFields.map((field, index) => (
-                  <div key={field.id} className="flex items-end gap-2">
-                    <div className="grid flex-1 gap-1">
-                      <Label className="text-xs">Name</Label>
-                      <Input
-                        placeholder="e.g., Incubation time"
-                        {...form.register(`conditions.${index}.name`)}
-                      />
+                  <div key={field.id} className="grid gap-2">
+                    <div className="flex items-end gap-2">
+                      <div className="grid flex-1 gap-1">
+                        <Label className="text-xs">Name</Label>
+                        <Input
+                          placeholder="e.g., Incubation time"
+                          {...form.register(`conditions.${index}.name`)}
+                        />
+                      </div>
+                      <div className="grid w-[130px] gap-1">
+                        <Label className="text-xs">Type</Label>
+                        <Controller
+                          control={form.control}
+                          name={`conditions.${index}.data_type`}
+                          render={({ field: f }) => (
+                            <Select value={f.value} onValueChange={f.onChange}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="text">Text</SelectItem>
+                                <SelectItem value="numeric">Numeric</SelectItem>
+                                <SelectItem value="pick_list">Pick List</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          )}
+                        />
+                      </div>
+                      <div className="grid w-40 gap-1">
+                        <Label className="text-xs">Unit</Label>
+                        <Controller
+                          control={form.control}
+                          name={`conditions.${index}.unit`}
+                          render={({ field: f }) => (
+                            <UnitPicker value={f.value} onChange={f.onChange} />
+                          )}
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Remove condition"
+                        className="shrink-0"
+                        onClick={() => removeCondition(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
                     </div>
-                    <div className="grid w-[130px] gap-1">
-                      <Label className="text-xs">Type</Label>
+                    {conditionValues[index]?.data_type === "pick_list" && (
                       <Controller
                         control={form.control}
-                        name={`conditions.${index}.data_type`}
+                        name={`conditions.${index}.pick_list_values`}
                         render={({ field: f }) => (
-                          <Select value={f.value} onValueChange={f.onChange}>
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="text">Text</SelectItem>
-                              <SelectItem value="numeric">Numeric</SelectItem>
-                              <SelectItem value="pick_list">Pick List</SelectItem>
-                            </SelectContent>
-                          </Select>
+                          <PickListValuesInput values={f.value} onChange={f.onChange} />
                         )}
                       />
-                    </div>
-                    <div className="grid w-40 gap-1">
-                      <Label className="text-xs">Unit</Label>
+                    )}
+                    <div className="grid gap-1">
+                      <Label className="text-xs">Fixed for this protocol (optional)</Label>
                       <Controller
                         control={form.control}
-                        name={`conditions.${index}.unit`}
+                        name={`conditions.${index}.fixed_value`}
                         render={({ field: f }) => (
-                          <UnitPicker value={f.value} onChange={f.onChange} />
+                          <ConditionValueInput
+                            def={conditionValues[index] ?? defaultCondition()}
+                            value={f.value}
+                            onChange={f.onChange}
+                            noneLabel="(varies per run)"
+                            aria-label="Fixed for this protocol"
+                          />
                         )}
                       />
+                      {conditionValues[index] && !isFixedValueValid(conditionValues[index]) && (
+                        <p className="text-xs text-destructive">
+                          {conditionValues[index].data_type === "numeric"
+                            ? "Must be a number."
+                            : "Must be one of the values."}
+                        </p>
+                      )}
                     </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label="Remove condition"
-                      className="shrink-0"
-                      onClick={() => removeCondition(index)}
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
                   </div>
                 ))}
               </div>

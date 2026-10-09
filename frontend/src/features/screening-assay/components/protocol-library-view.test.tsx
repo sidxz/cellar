@@ -1,7 +1,25 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../types";
 import { ProtocolLibraryView } from "./protocol-library-view";
+
+vi.mock("@/features/workspace-config/hooks/use-ontology-search", () => ({
+  useTermsInUse: (slot: string) => ({
+    data:
+      slot === "organism"
+        ? [
+            {
+              term_id: "NCBITaxon:1773",
+              label: "Mycobacterium tuberculosis",
+              ontology_source: "NCBITAXON",
+              uri: null,
+              short_label: "M. tuberculosis",
+              protocol_count: 1,
+            },
+          ]
+        : [],
+  }),
+}));
 
 // Radix Collapsible items need pointer-event stubs in jsdom.
 beforeAll(() => {
@@ -50,5 +68,55 @@ describe("ProtocolLibraryView", () => {
     fireEvent.click(screen.getByRole("checkbox", { name: "Cell-Based" }));
     expect(screen.getByText("Cell One")).toBeInTheDocument();
     expect(screen.queryByText("Active Bio")).not.toBeInTheDocument();
+  });
+
+  describe("defaults", () => {
+    const cat = [
+      p({ id: "a", name: "Alpha", category: "Whole cell" }),
+      p({ id: "b", name: "Beta", category: "Enzyme", status: "active" }),
+    ];
+    afterEach(() => localStorage.clear());
+
+    it("groups by category by default", () => {
+      render(<ProtocolLibraryView protocols={cat} />);
+      expect(screen.getByRole("combobox")).toHaveTextContent("Category");
+      // Grouped by target (the old default) this would be a single "No target" bucket.
+      expect(screen.queryByText("No target")).not.toBeInTheDocument();
+      expect(screen.getAllByText("Whole cell").length).toBeGreaterThan(0);
+    });
+
+    it("a stored group-by preference wins", () => {
+      localStorage.setItem("protocol-library-group-by", "type");
+      render(<ProtocolLibraryView protocols={cat} />);
+      expect(screen.getByRole("combobox")).toHaveTextContent("Type");
+    });
+
+    it("an unknown stored value falls back to category", () => {
+      localStorage.setItem("protocol-library-group-by", "bogus");
+      render(<ProtocolLibraryView protocols={cat} />);
+      expect(screen.getByRole("combobox")).toHaveTextContent("Category");
+    });
+
+    it("shows the short label for an organism facet", () => {
+      const mtb = p({
+        id: "m",
+        name: "Mtb",
+        ontology_annotations: {
+          organism: [
+            {
+              term_id: "NCBITaxon:1773",
+              label: "Mycobacterium tuberculosis",
+              ontology_source: "NCBITAXON",
+              uri: null,
+            },
+          ],
+        },
+      });
+      render(<ProtocolLibraryView protocols={[mtb]} />);
+      // Shows the short label; its accessible name is the full one.
+      expect(
+        screen.getByRole("checkbox", { name: "Mycobacterium tuberculosis" }),
+      ).toHaveTextContent("M. tuberculosis");
+    });
   });
 });

@@ -145,7 +145,7 @@ describe("protocolMatchesSelections / filterProtocols", () => {
   });
 });
 
-import { buildFacetModel, groupProtocols } from "./protocol-facets";
+import { buildFacetModel, groupProtocols, shortLabelLookup } from "./protocol-facets";
 
 describe("buildFacetModel (drill-down counts)", () => {
   const a = proto({ id: "a", protocol_type: "biochemical", category: "Enzyme" });
@@ -253,6 +253,28 @@ describe("protocolTextMatch", () => {
   });
 });
 
+describe("library search by reference", () => {
+  const p = proto({
+    name: "M. tuberculosis growth inhibition",
+    references: [
+      { kind: "chembl_assay", value: "CHEMBL1054500" },
+      { kind: "doi", value: "10.1021/jm901137j" },
+    ],
+  });
+
+  it("finds a protocol by its ChEMBL assay id", () => {
+    expect(protocolTextMatch(p, "CHEMBL1054500")).toEqual({
+      field: "reference",
+      value: "CHEMBL1054500",
+    });
+    expect(matchesProtocolText(p, "chembl1054500")).toBe(true);
+  });
+
+  it("finds a protocol by part of a DOI", () => {
+    expect(protocolTextMatch(p, "jm901137")?.field).toBe("reference");
+  });
+});
+
 describe("cell line facet", () => {
   it("reads the cell_line annotation", () => {
     const p = proto({
@@ -261,5 +283,54 @@ describe("cell line facet", () => {
       },
     });
     expect(extractFacetItems(p, "cell_line")).toEqual([{ value: "c1", label: "HepG2 cell" }]);
+  });
+});
+
+describe("facet short labels", () => {
+  const mtb = proto({
+    id: "m",
+    ontology_annotations: {
+      organism: [
+        {
+          term_id: "NCBITaxon:1773",
+          label: "Mycobacterium tuberculosis",
+          ontology_source: "NCBITAXON",
+          uri: null,
+        },
+      ],
+      strain: [{ term_id: "x", label: "H37Rv", ontology_source: "free_text", uri: null }],
+    },
+  });
+  const lookup = {
+    organism: shortLabelLookup([
+      {
+        term_id: "NCBITaxon:1773",
+        label: "Mycobacterium tuberculosis",
+        ontology_source: "NCBITAXON",
+        short_label: "M. tuberculosis",
+        protocol_count: 1,
+      },
+    ]),
+  };
+
+  it("shows the short label and keeps the full label when they differ", () => {
+    const org = buildFacetModel([mtb], {}, lookup).find((g) => g.dimension === "organism");
+    expect(org?.values).toEqual([
+      {
+        value: "ncbitaxon:1773",
+        label: "M. tuberculosis",
+        fullLabel: "Mycobacterium tuberculosis",
+        count: 1,
+      },
+    ]);
+  });
+
+  it("falls back to the full label when no short label is known; strain is a facet", () => {
+    const model = buildFacetModel([mtb], {});
+    expect(model.find((g) => g.dimension === "organism")?.values[0].label).toBe(
+      "Mycobacterium tuberculosis",
+    );
+    const strain = model.find((g) => g.dimension === "strain");
+    expect(strain?.values).toEqual([{ value: "free_text:h37rv", label: "H37Rv", count: 1 }]);
   });
 });

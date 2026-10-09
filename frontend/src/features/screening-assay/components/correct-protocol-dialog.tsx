@@ -18,7 +18,9 @@ import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useProtocolTargets } from "../hooks/use-protocol-targets";
 import { type CorrectProtocolInput, useCorrectProtocol } from "../hooks/use-protocols";
+import { isFixedValueValid } from "../lib/conditions";
 import type { Protocol } from "../types";
+import { ConditionValueInput } from "./condition-fields";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
 import {
@@ -29,7 +31,7 @@ import {
 import { TargetMultiSelect } from "./target-multi-select";
 
 /** Facet slots that feed the generated name. */
-const NAME_SLOTS = ["organism", "cell_line", "assay_format"];
+const NAME_SLOTS = ["organism", "strain", "cell_line", "assay_format"];
 
 type Step = "choose" | "correct" | "new";
 
@@ -44,6 +46,8 @@ interface CorrectProtocolDialogProps {
 const sameIds = (a: string[], b: string[]) =>
   a.length === b.length && [...a].sort().join() === [...b].sort().join();
 const termIds = (terms: OntologyTerm[] | undefined) => (terms ?? []).map((t) => t.term_id);
+const fixedById = (protocol: Protocol) =>
+  Object.fromEntries(protocol.condition_definitions.map((cd) => [cd.id, cd.fixed_value ?? ""]));
 
 /** A published protocol's facts were wrong (correction, same code), or the assay itself
  *  changed (a new protocol). */
@@ -68,6 +72,7 @@ export function CorrectProtocolDialog({
   const [discriminator, setDiscriminator] = useState(protocol.discriminator ?? "");
   const [annotations, setAnnotations] = useState<Record<string, OntologyTerm[]>>(original);
   const [targetIds, setTargetIds] = useState<string[]>(directIds);
+  const [fixed, setFixed] = useState<Record<string, string>>(() => fixedById(protocol));
   const [reason, setReason] = useState("");
   const correct = useCorrectProtocol(protocol.id);
 
@@ -86,6 +91,7 @@ export function CorrectProtocolDialog({
     setCategory(protocol.category ?? "");
     setDiscriminator(protocol.discriminator ?? "");
     setAnnotations(protocol.ontology_annotations ?? {});
+    setFixed(fixedById(protocol));
     setTargetsTouched(false);
     setReason("");
   }, [open, protocol]);
@@ -115,10 +121,21 @@ export function CorrectProtocolDialog({
         changedSlots.map((slot) => [slot, annotations[slot] ?? []]),
       );
     if (!sameIds(targetIds, directIds)) body.target_ids = targetIds;
+    const changedFixed = protocol.condition_definitions.filter(
+      (cd) => (fixed[cd.id] ?? "").trim() !== (cd.fixed_value ?? ""),
+    );
+    if (changedFixed.length > 0)
+      body.condition_fixed_values = Object.fromEntries(
+        changedFixed.map((cd) => [cd.id, (fixed[cd.id] ?? "").trim() || null]),
+      );
     return body;
   };
 
-  const canSave = !!reason.trim() && isPreviewSavable(preview.data) && !correct.isPending;
+  const fixedValid = protocol.condition_definitions.every((cd) =>
+    isFixedValueValid({ ...cd, fixed_value: fixed[cd.id] }),
+  );
+  const canSave =
+    !!reason.trim() && fixedValid && isPreviewSavable(preview.data) && !correct.isPending;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -170,6 +187,7 @@ export function CorrectProtocolDialog({
                 <OntologySearchInput
                   ontologySources={slot.ontology_sources}
                   rootConceptId={slot.root_concept_id}
+                  slot={slot.name}
                   value={annotations[slot.name] ?? []}
                   onChange={(terms) => setAnnotations((a) => ({ ...a, [slot.name]: terms }))}
                   allowFreeText={slot.allow_free_text}
@@ -187,13 +205,48 @@ export function CorrectProtocolDialog({
               />
             </div>
             <div className="grid gap-2">
-              <Label>Discriminator{needs.has("discriminator") ? "" : " (optional)"}</Label>
+              <Label htmlFor="correct-discriminator">
+                Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+              </Label>
               <DiscriminatorInput
+                id="correct-discriminator"
                 value={discriminator}
                 onChange={setDiscriminator}
                 base={preview.data?.base ?? null}
+                conditions={protocol.condition_definitions.map((cd) => ({
+                  ...cd,
+                  fixed_value: fixed[cd.id] ?? "",
+                }))}
               />
             </div>
+            {protocol.condition_definitions.length > 0 && (
+              <div className="grid gap-2">
+                <Label>Fixed condition values</Label>
+                <p className="text-xs text-muted-foreground">
+                  A fixed value defines the protocol; leave one empty when it varies per run.
+                </p>
+                {protocol.condition_definitions.map((cd) => {
+                  const label = cd.unit ? `${cd.name} (${cd.unit})` : cd.name;
+                  return (
+                    <div key={cd.id} className="grid gap-1">
+                      <span className="text-xs">{label}</span>
+                      <ConditionValueInput
+                        def={cd}
+                        value={fixed[cd.id] ?? ""}
+                        onChange={(v) => setFixed((f) => ({ ...f, [cd.id]: v }))}
+                        noneLabel="(varies per run)"
+                        aria-label={label}
+                      />
+                    </div>
+                  );
+                })}
+                {!fixedValid && (
+                  <p className="text-xs text-destructive">
+                    Each fixed value must fit its condition: a number, or one of its values.
+                  </p>
+                )}
+              </div>
+            )}
             <ProtocolNamePreview
               preview={preview.data}
               isFetching={preview.isFetching}

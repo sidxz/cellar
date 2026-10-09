@@ -12,6 +12,7 @@ import { Beaker, Clock, FlaskConical, Target } from "lucide-react";
 import { useState } from "react";
 import { useProtocolCollectionCoverage } from "../../hooks/use-protocol-collection-coverage";
 import { useProtocolStats } from "../../hooks/use-protocol-stats";
+import { formatFixedCondition } from "../../lib/conditions";
 import {
   PLATE_FORMAT_LABELS,
   PROTOCOL_TYPE_LABELS,
@@ -22,6 +23,7 @@ import {
 import { CoverageBar } from "../coverage-bar";
 import { CoverageGapDialog } from "../coverage-gap-dialog";
 import { ProtocolAliasesCard } from "../protocol-aliases-card";
+import { ProtocolReferencesCard } from "../protocol-references";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -138,6 +140,7 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: OverviewTabProps) {
+  const fixedConditions = protocol.condition_definitions.filter((cd) => cd.fixed_value);
   const { data: stats, isLoading } = useProtocolStats(protocolId);
   const { data: coverage } = useProtocolCollectionCoverage(protocolId);
   const canEditTags = useAuthzHasRole("editor");
@@ -296,10 +299,25 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
               <p className="font-medium">{protocol.readout_definitions.length}</p>
             </div>
           </div>
+          {fixedConditions.length > 0 && (
+            <div>
+              <p className="text-sm text-muted-foreground">Defining conditions</p>
+              <ul className="font-medium">
+                {fixedConditions.map((cd) => (
+                  <li key={cd.id}>{formatFixedCondition(cd)}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </CardContent>
       </Card>
 
       <ProtocolAliasesCard protocol={protocol} canEdit={canEditTags} />
+
+      <ProtocolReferencesCard
+        protocol={protocol}
+        canEdit={canEditTags && !protocol.is_locked && protocol.status !== "retired"}
+      />
 
       {/* Tags */}
       <TagTable entity="protocols" entityId={protocolId} canEdit={canEditTags} />

@@ -1,17 +1,21 @@
 "use client";
 
+import { SetupChecklist } from "@/features/workspace-config/components/setup-checklist";
 import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
-import { Crosshair, Download, Plus, Settings2, TestTubes } from "lucide-react";
+import { useAuthzHasRole } from "@duar-auth/nextjs";
+import { Crosshair, Download, Plus, Settings2, TestTubes, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
+import type { Protocol } from "../types";
 import { CddImportDialog } from "./cdd-import-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ProtocolBrowser } from "./protocol-browser";
+import { ProtocolCsvImportDialog } from "./protocol-csv-import/protocol-csv-import-dialog";
 import { TargetList } from "./target-list";
 
 export function ScreeningDashboard() {
@@ -19,6 +23,9 @@ export function ScreeningDashboard() {
   const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [cddImportOpen, setCddImportOpen] = useState(false);
+  const [csvImportOpen, setCsvImportOpen] = useState(false);
+  const [newFrom, setNewFrom] = useState<Protocol | null>(null);
+  const canCreate = useAuthzHasRole("editor");
   const [createRunForProtocol, setCreateRunForProtocol] = useState<string | null>(null);
   const { enabled: cddEnabled } = useCddEnabled();
 
@@ -47,6 +54,12 @@ export function ScreeningDashboard() {
                   Import from CDD
                 </Button>
               )}
+              {canCreate && (
+                <Button variant="outline" onClick={() => setCsvImportOpen(true)}>
+                  <Upload className="mr-2 h-4 w-4" />
+                  Import protocols (CSV)
+                </Button>
+              )}
               <Button onClick={() => setCreateProtocolOpen(true)}>
                 <Plus className="mr-2 h-4 w-4" />
                 New Protocol
@@ -64,7 +77,9 @@ export function ScreeningDashboard() {
         </div>
 
         <TabsContent value="protocols" className="mt-4">
+          <SetupChecklist />
           <ProtocolBrowser
+            onNewFrom={canCreate ? setNewFrom : undefined}
             onSelect={(protocolId) => {
               router.push(`/assays/protocols/${protocolId}`);
             }}
@@ -81,6 +96,16 @@ export function ScreeningDashboard() {
         onOpenChange={setCreateProtocolOpen}
         onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)}
       />
+      {newFrom && (
+        <CreateProtocolDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setNewFrom(null);
+          }}
+          prefill={newFrom}
+          onLogRun={(protocolId) => setCreateRunForProtocol(protocolId)}
+        />
+      )}
       {createRunForProtocol && (
         <CreateRunDialog
           protocolId={createRunForProtocol}
@@ -90,6 +115,7 @@ export function ScreeningDashboard() {
           }}
         />
       )}
+      {csvImportOpen && <ProtocolCsvImportDialog open onOpenChange={setCsvImportOpen} />}
       <CddImportDialog
         open={cddImportOpen}
         onOpenChange={setCddImportOpen}

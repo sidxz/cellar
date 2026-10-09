@@ -33,6 +33,9 @@ vi.mock("../hooks/use-protocols", () => ({
     error: null,
   }),
 }));
+vi.mock("@/features/workspace-config/hooks/use-ontology-search", () => ({
+  useTermsInUse: () => ({ data: [] }),
+}));
 vi.mock("@/features/research-organization/hooks/use-projects", () => ({
   useProjects: () => ({ data: [] }),
 }));

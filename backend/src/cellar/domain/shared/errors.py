@@ -41,13 +41,14 @@ class NotFoundError(DomainError):
         entity_id: str | None = None,
         *,
         detail: str | None = None,
+        message: str | None = None,
     ) -> None:
         self.entity_type = entity_type
         self.entity_id = entity_id
         msg = f"{entity_type} not found"
         if entity_id:
             msg = f"{entity_type} '{entity_id}' not found"
-        super().__init__(msg, detail=detail)
+        super().__init__(message or msg, detail=detail)
 
 
 class ConflictError(DomainError):

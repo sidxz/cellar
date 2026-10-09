@@ -59,6 +59,10 @@ from cellar.application.screening.manage_protocol import (
     VersionProtocolCommand,
 )
 from cellar.application.screening.manage_protocol_aliases import ProtocolNicknameCommand
+from cellar.application.screening.manage_protocol_references import (
+    AddProtocolReferenceCommand,
+    RemoveProtocolReferenceCommand,
+)
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
     RemoveReadoutDefinitionCommand,
@@ -77,11 +81,13 @@ from cellar.application.screening.resolve_target_links import (
     ResolveProtocolTargetsQuery,
 )
 from cellar.application.shared.sentinel import UNSET
+from cellar.domain.screening_assay.enums import ReferenceKind
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import NameSibling
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
     AddProtocolNicknameDep,
+    AddProtocolReferenceDep,
     AddProtocolTargetDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
@@ -108,6 +114,7 @@ from cellar.interface.dependencies import (
     RemoveOntologyAnnotationDep,
     RemoveProtocolFromProjectDep,
     RemoveProtocolNicknameDep,
+    RemoveProtocolReferenceDep,
     RemoveProtocolTargetDep,
     RemoveReadoutDefinitionDep,
     ResolveProtocolTargetsDep,
@@ -205,8 +212,17 @@ class ConditionDefinitionResponse(BaseModel):
     id: uuid.UUID
     name: str
     data_type: str
-    unit: str | None = None
-    pick_list_values: list[str] | None = None
+    unit: str | None
+    pick_list_values: list[str] | None
+    # The value that defines the protocol (Hypoxia: yes, 72 h); runs that give none take it.
+    fixed_value: str | None
+
+
+class ProtocolReferenceResponse(BaseModel):
+    """A validated reference; ``<kind>:<value>`` is its key for DELETE."""
+
+    kind: ReferenceKind
+    value: str
 
 
 class ProtocolAliasResponse(BaseModel):
@@ -256,6 +272,7 @@ class ProtocolResponse(BaseModel):
     # GET /protocols/{id}; null on every other response means "not computed".
     can_delete: bool | None = None
     aliases: list[ProtocolAliasResponse] = []
+    references: list[ProtocolReferenceResponse] = []
 
     @classmethod
     def from_domain(
@@ -330,6 +347,7 @@ class ProtocolResponse(BaseModel):
                     data_type=cd.data_type.value,
                     unit=cd.unit,
                     pick_list_values=cd.pick_list_values,
+                    fixed_value=cd.fixed_value,
                 )
                 for cd in p.condition_definitions
             ],
@@ -353,6 +371,9 @@ class ProtocolResponse(BaseModel):
                     label=a.label, kind=a.kind.value, recorded_at=a.recorded_at, reason=a.reason
                 )
                 for a in p.aliases
+            ],
+            references=[
+                ProtocolReferenceResponse(kind=r.kind, value=r.value) for r in p.references
             ],
         )
 
@@ -403,6 +424,22 @@ class SiblingDiscriminatorRequest(BaseModel):
     reason: str | None = None
 
 
+class ProtocolReferenceRequest(BaseModel):
+    """Raw input; the domain strips prefixes (``AID``, ``https://doi.org/``) and validates."""
+
+    kind: ReferenceKind
+    value: str
+    model_config = {"extra": "forbid"}
+
+
+class AddConditionDefinitionRequest(BaseModel):
+    name: str
+    data_type: str
+    unit: str | None = None
+    pick_list_values: list[str] | None = None
+    fixed_value: str | None = None
+
+
 class CreateProtocolRequest(BaseModel):
     # No name: it is generated from the category pattern and the facts below.
     description: str | None = None
@@ -412,7 +449,7 @@ class CreateProtocolRequest(BaseModel):
     dose_unit: str = "uM"
     pos_control_signal: str = "high"
     readout_definitions: list[dict[str, Any]]
-    condition_definitions: list[dict[str, Any]] | None = None
+    condition_definitions: list[AddConditionDefinitionRequest] | None = None
     # Facets supplied at create time, keyed by slot name. Persisted atomically
     # with the protocol so multi-slot facet sets can't race/drop (the per-slot
     # PUT endpoint remains for interactive single-slot edits).
@@ -425,6 +462,7 @@ class CreateProtocolRequest(BaseModel):
     # share the base name the new protocol carries a discriminator too.
     sibling_discriminators: list[SiblingDiscriminatorRequest] = []
     nicknames: list[str] = []
+    references: list[ProtocolReferenceRequest] = []
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -494,7 +532,7 @@ async def create_protocol(
         dose_unit=body.dose_unit,
         pos_control_signal=body.pos_control_signal,
         readout_definitions=body.readout_definitions,
-        condition_definitions=body.condition_definitions or [],
+        condition_definitions=[cd.model_dump() for cd in body.condition_definitions or []],
         ontology_annotations={
             slot: [t.model_dump() for t in terms]
             for slot, terms in (body.ontology_annotations or {}).items()
@@ -508,6 +546,7 @@ async def create_protocol(
             for s in body.sibling_discriminators
         ],
         nicknames=body.nicknames,
+        references=[r.model_dump(mode="json") for r in body.references],
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -989,6 +1028,8 @@ class CorrectProtocolRequest(BaseModel):
     ontology_annotations: dict[str, list[OntologyTermRequest]] | None = None
     # the full set of direct targets
     target_ids: list[uuid.UUID] | None = None
+    # condition definition id -> its fixed value (null clears it)
+    condition_fixed_values: dict[uuid.UUID, str | None] | None = None
     model_config = {"extra": "forbid"}
 
 
@@ -1017,6 +1058,9 @@ async def correct_protocol(
         if "ontology_annotations" in sent
         else UNSET,
         target_ids=(body.target_ids or []) if "target_ids" in sent else UNSET,
+        condition_fixed_values=(body.condition_fixed_values or {})
+        if "condition_fixed_values" in sent
+        else UNSET,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1056,6 +1100,46 @@ async def remove_protocol_nickname(
 ) -> ProtocolResponse:
     cmd = ProtocolNicknameCommand(
         workspace_id=auth.workspace_id, protocol_id=protocol_id, label=label
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
+
+
+@router.post(
+    "/protocols/{protocol_id}/references", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def add_protocol_reference(
+    protocol_id: uuid.UUID,
+    body: ProtocolReferenceRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: AddProtocolReferenceDep,
+) -> ProtocolResponse:
+    """Add where the protocol comes from. Draft and active; locked and retired refuse (409)."""
+    cmd = AddProtocolReferenceCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        kind=body.kind.value,
+        value=body.value,
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/references/{key:path}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def remove_protocol_reference(
+    protocol_id: uuid.UUID,
+    key: str,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: RemoveProtocolReferenceDep,
+) -> ProtocolResponse:
+    """Remove by key ``<kind>:<value>`` (URL-encoded), stable where an index would shift. The
+    path converter keeps a DOI's slash."""
+    cmd = RemoveProtocolReferenceCommand(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id, key=key
     )
     return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
 
@@ -1190,13 +1274,6 @@ async def remove_readout_definition(
 # ---------------------------------------------------------------------------
 
 
-class AddConditionDefinitionRequest(BaseModel):
-    name: str
-    data_type: str
-    unit: str | None = None
-    pick_list_values: list[str] | None = None
-
-
 @router.post(
     "/protocols/{protocol_id}/condition-definitions",
     response_model=ProtocolResponse,
@@ -1218,6 +1295,7 @@ async def add_condition_definition(
         data_type=body.data_type,
         unit=body.unit,
         pick_list_values=body.pick_list_values,
+        fixed_value=body.fixed_value,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1230,6 +1308,7 @@ class UpdateConditionDefinitionRequest(BaseModel):
     data_type: str | None = None
     unit: str | None = None
     pick_list_values: list[str] | None = None
+    fixed_value: str | None = None
 
 
 @router.put(
@@ -1252,7 +1331,7 @@ async def update_condition_definition(
         "protocol_id": protocol_id,
         "definition_id": definition_id,
     }
-    for key in ("name", "data_type", "unit", "pick_list_values"):
+    for key in ("name", "data_type", "unit", "pick_list_values", "fixed_value"):
         if key in sent:
             cmd_kwargs[key] = getattr(body, key)
 

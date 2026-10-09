@@ -14,6 +14,7 @@ import {
 } from "@/shared/components/ui/select";
 import { ChevronDown } from "lucide-react";
 import { GROUP_BY_OPTIONS, type GroupBy, type ProtocolGroup } from "../lib/protocol-facets";
+import type { Protocol } from "../types";
 import { ProtocolLibraryRow } from "./protocol-library-row";
 
 interface GroupedProtocolListProps {
@@ -22,6 +23,7 @@ interface GroupedProtocolListProps {
   onGroupByChange: (g: GroupBy) => void;
   onSelect?: (protocolId: string) => void;
   search?: string;
+  onNewFrom?: (protocol: Protocol) => void;
 }
 
 export function GroupedProtocolList({
@@ -30,6 +32,7 @@ export function GroupedProtocolList({
   onGroupByChange,
   onSelect,
   search,
+  onNewFrom,
 }: GroupedProtocolListProps) {
   const total = groups.reduce((n, g) => n + g.count, 0);
   return (
@@ -64,7 +67,13 @@ export function GroupedProtocolList({
           </CollapsibleTrigger>
           <CollapsibleContent>
             {group.protocols.map((p) => (
-              <ProtocolLibraryRow key={p.id} protocol={p} onSelect={onSelect} search={search} />
+              <ProtocolLibraryRow
+                key={p.id}
+                protocol={p}
+                onSelect={onSelect}
+                search={search}
+                onNewFrom={onNewFrom}
+              />
             ))}
           </CollapsibleContent>
         </Collapsible>

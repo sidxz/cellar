@@ -12,12 +12,31 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.shared.errors import DomainError
-from cellar.domain.workspace_config.default_protocol_forms import BAO, DEFAULT_PROTOCOL_FORMS
+from cellar.domain.workspace_config.default_protocol_forms import (
+    BAO,
+    DEFAULT_PROTOCOL_FORMS,
+    DefaultForm,
+)
+from cellar.domain.workspace_config.protocol_category import ProtocolCategory
 from cellar.domain.workspace_config.protocol_form import ProtocolForm, ProtocolFormOntologyDefault
 from cellar.domain.workspace_config.repository import (
     ProtocolCategoryRepository,
     ProtocolFormRepository,
 )
+
+
+def missing_default_forms(
+    categories: list[ProtocolCategory], existing: list[ProtocolForm]
+) -> list[tuple[ProtocolCategory, DefaultForm]]:
+    """Each shipped form whose category exists and whose name the category lacks."""
+    by_label = {c.label.lower(): c for c in categories}
+    have = {(f.category_id, f.name.lower()) for f in existing}
+    out = []
+    for spec in DEFAULT_PROTOCOL_FORMS:
+        category = by_label.get(spec.category.lower())
+        if category is not None and (category.id, spec.name.lower()) not in have:
+            out.append((category, spec))
+    return out
 
 
 async def seed_default_forms(
@@ -26,15 +45,11 @@ async def seed_default_forms(
     workspace_id: uuid.UUID,
 ) -> list[ProtocolForm]:
     """Create each shipped form whose category exists and whose name the category lacks."""
-    categories = {c.label.lower(): c for c in await category_repo.find_by_workspace(workspace_id)}
+    categories = await category_repo.find_by_workspace(workspace_id)
     existing = await form_repo.find_by_workspace(workspace_id)
-    have = {(f.category_id, f.name.lower()) for f in existing}
     defaults = {f.category_id for f in existing if f.is_default}
     created: list[ProtocolForm] = []
-    for spec in DEFAULT_PROTOCOL_FORMS:
-        category = categories.get(spec.category.lower())
-        if category is None or (category.id, spec.name.lower()) in have:
-            continue
+    for category, spec in missing_default_forms(categories, existing):
         ontology_defaults = (
             [
                 ProtocolFormOntologyDefault(

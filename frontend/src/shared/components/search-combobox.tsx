@@ -1,11 +1,17 @@
 "use client";
 
-import { Command, CommandEmpty, CommandItem, CommandList } from "@/shared/components/ui/command";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
 import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/shared/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
 import { X } from "lucide-react";
-import { type ReactNode, type RefObject, useId, useRef } from "react";
+import { Fragment, type ReactNode, type RefObject, useId, useRef } from "react";
 
 export interface SearchComboboxProps<T> {
   /** Current text in the search box (controlled by the caller). */
@@ -18,6 +24,8 @@ export interface SearchComboboxProps<T> {
   getItemKey: (item: T) => string;
   /** Render the visible content of a result row. */
   renderItem: (item: T) => ReactNode;
+  /** Optional group heading for a row; a heading shows wherever the group changes. */
+  getGroup?: (item: T) => string | undefined;
   /** Called when the user picks a row (click or Enter on the highlighted row). */
   onSelect: (item: T) => void;
   /** True while the caller's query is in flight. */
@@ -48,6 +56,8 @@ export interface SearchComboboxProps<T> {
   footer?: ReactNode;
   inputRef?: RefObject<HTMLInputElement | null>;
   className?: string;
+  /** Forwarded to the underlying input so a `<Label htmlFor>` can target it. */
+  id?: string;
   /** Tailwind classes for the input element. */
   inputClassName?: string;
 }
@@ -71,6 +81,7 @@ export function SearchCombobox<T>({
   items,
   getItemKey,
   renderItem,
+  getGroup,
   onSelect,
   isLoading = false,
   open,
@@ -87,6 +98,7 @@ export function SearchCombobox<T>({
   footer,
   inputRef,
   className,
+  id,
   inputClassName,
 }: SearchComboboxProps<T>) {
   const internalInputRef = useRef<HTMLInputElement>(null);
@@ -98,6 +110,7 @@ export function SearchCombobox<T>({
       <PopoverAnchor asChild>
         <div className={cn("relative", className)}>
           <Input
+            id={id}
             ref={resolvedInputRef}
             value={searchValue}
             onChange={(e) => onSearchChange(e.target.value)}
@@ -126,11 +139,16 @@ export function SearchCombobox<T>({
       </PopoverAnchor>
       <PopoverContent
         id={listId}
-        className="w-[--radix-popover-trigger-width] p-0"
+        className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0"
         align="start"
         // Keep focus in the input so the user can keep typing; cmdk still
         // tracks the highlighted item for arrow-key navigation.
         onOpenAutoFocus={(e) => e.preventDefault()}
+        // The input is the anchor, not "outside": its own focus/click must not dismiss the list
+        // (the focus that opens it is still bubbling when the dismiss layer attaches).
+        onInteractOutside={(e) => {
+          if (resolvedInputRef.current?.contains(e.target as Node)) e.preventDefault();
+        }}
       >
         <Command shouldFilter={false}>
           <CommandList>
@@ -139,17 +157,31 @@ export function SearchCombobox<T>({
             ) : items.length === 0 ? (
               <CommandEmpty>{emptyMessage}</CommandEmpty>
             ) : (
-              items.map((item) => {
-                const key = getItemKey(item);
-                return (
-                  <CommandItem
-                    key={key}
-                    value={key}
-                    onSelect={() => onSelect(item)}
-                    className="cursor-pointer"
+              groupRuns(items, getGroup).map(({ group, rows }, r) => {
+                const rendered = rows.map((item) => {
+                  const key = getItemKey(item);
+                  return (
+                    <CommandItem
+                      key={key}
+                      value={key}
+                      onSelect={() => onSelect(item)}
+                      className="cursor-pointer"
+                    >
+                      {renderItem(item)}
+                    </CommandItem>
+                  );
+                });
+                // A cmdk group labels its rows with the heading, so the heading is announced.
+                return group ? (
+                  <CommandGroup
+                    key={`${r}:${group}`}
+                    heading={group}
+                    className="p-0 [&_[cmdk-group-heading]]:px-3"
                   >
-                    {renderItem(item)}
-                  </CommandItem>
+                    {rendered}
+                  </CommandGroup>
+                ) : (
+                  <Fragment key={`${r}:`}>{rendered}</Fragment>
                 );
               })
             )}
@@ -159,4 +191,19 @@ export function SearchCombobox<T>({
       </PopoverContent>
     </Popover>
   );
+}
+
+/** Consecutive rows that share a group, in order: a heading shows wherever the group changes. */
+function groupRuns<T>(
+  items: T[],
+  getGroup?: (item: T) => string | undefined,
+): { group: string | undefined; rows: T[] }[] {
+  const runs: { group: string | undefined; rows: T[] }[] = [];
+  for (const item of items) {
+    const group = getGroup?.(item);
+    const last = runs.at(-1);
+    if (last && last.group === group) last.rows.push(item);
+    else runs.push({ group, rows: [item] });
+  }
+  return runs;
 }

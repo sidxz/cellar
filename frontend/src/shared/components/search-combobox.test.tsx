@@ -66,6 +66,17 @@ describe("SearchCombobox", () => {
     expect(onSearchChange).toHaveBeenCalledWith("asp");
   });
 
+  it("sizes the dropdown with the v4 trigger-width class", () => {
+    renderCombobox();
+    const content = screen.getByText("Aspirin").closest("[data-radix-popper-content-wrapper] > *");
+    expect(content?.className).toContain("w-[max(16rem,var(--radix-popover-trigger-width))]");
+  });
+
+  it("forwards id to the input so a label can target it", () => {
+    renderCombobox({ id: "pick", open: false });
+    expect(screen.getByPlaceholderText("Search...")).toHaveAttribute("id", "pick");
+  });
+
   it("renders result rows when open", () => {
     renderCombobox();
     expect(screen.getByText("Aspirin")).toBeInTheDocument();

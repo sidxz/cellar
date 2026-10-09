@@ -2,6 +2,7 @@ import type { ProtocolForm } from "@/features/workspace-config/hooks/use-protoco
 import { describe, expect, it } from "vitest";
 import {
   applyFormFacets,
+  conditionsFromForm,
   formsForCategory,
   pickFormForCategory,
   readoutsFromForm,
@@ -146,5 +147,26 @@ describe("applyFormFacets", () => {
     expect(applyFormFacets({}, {}, follows).annotations).toEqual({});
     // A format the last form applied is dropped, too.
     expect(applyFormFacets(first.annotations, first.applied, follows).annotations).toEqual({});
+  });
+});
+
+describe("conditionsFromForm", () => {
+  it("carries a pick-list condition's values", () => {
+    const f = form({
+      condition_templates: [
+        { name: "S9", data_type: "pick_list", unit: null, pick_list_values: ["with", "without"] },
+        { name: "Time", data_type: "numeric", unit: "h" },
+      ],
+    });
+    expect(conditionsFromForm(f)).toEqual([
+      {
+        name: "S9",
+        data_type: "pick_list",
+        unit: "",
+        pick_list_values: ["with", "without"],
+        fixed_value: "",
+      },
+      { name: "Time", data_type: "numeric", unit: "h", pick_list_values: [], fixed_value: "" },
+    ]);
   });
 });

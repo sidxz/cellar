@@ -82,6 +82,7 @@ from cellar.application.screening.list_protocol_summaries import ListProtocolSum
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.list_terms_in_use import ListTermsInUse
 from cellar.application.screening.list_units import ListUnits
 from cellar.application.screening.lock_protocol import (
     LockProtocol,
@@ -117,6 +118,10 @@ from cellar.application.screening.manage_protocol import (
 from cellar.application.screening.manage_protocol_aliases import (
     AddProtocolNickname,
     RemoveProtocolNickname,
+)
+from cellar.application.screening.manage_protocol_references import (
+    AddProtocolReference,
+    RemoveProtocolReference,
 )
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
@@ -167,6 +172,7 @@ from cellar.application.screening.refit_dose_response import RefitDoseResponseCu
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
+from cellar.application.screening.request_target import RequestTarget
 from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverage,
@@ -415,6 +421,8 @@ def register_screening(container: Container) -> None:
     container.define(ListNameFlags, _protocol_query(ListNameFlags))
     container.define(AddProtocolNickname, _protocol_cmd(AddProtocolNickname))
     container.define(RemoveProtocolNickname, _protocol_cmd(RemoveProtocolNickname))
+    container.define(AddProtocolReference, _protocol_cmd(AddProtocolReference))
+    container.define(RemoveProtocolReference, _protocol_cmd(RemoveProtocolReference))
     container.define(DeleteProtocol, _protocol_cmd(DeleteProtocol))
     container.define(ListProtocolsByProject, _protocol_query(ListProtocolsByProject))
 
@@ -511,7 +519,12 @@ def register_screening(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return GetTarget(uow, SQLAlchemyTargetRepository(uow))
 
+    def _request_target(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RequestTarget(uow, SQLAlchemyTargetRepository(uow), c[TargetSource])
+
     container.define(SyncTargetsFromProtCellar, _sync_targets)
+    container.define(RequestTarget, _request_target)
     container.define(ListTargets, _list_targets)
     container.define(GetTarget, _get_target)
 
@@ -1166,6 +1179,14 @@ def register_screening(container: Container) -> None:
     container.define(
         ListOntologyDescendants, lambda c: ListOntologyDescendants(c[BioPortalClient])
     )
+
+    def _list_terms_in_use(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListTermsInUse(
+            uow, SQLAlchemyProtocolRepository(uow), SQLAlchemyNamingLabelRepository(uow)
+        )
+
+    container.define(ListTermsInUse, _list_terms_in_use)
 
     def _set_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

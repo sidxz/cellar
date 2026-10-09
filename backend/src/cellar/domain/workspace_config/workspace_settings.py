@@ -133,32 +133,47 @@ class WorkspaceSettings(AggregateRoot):
         return _DEFAULT_PROTOCOL_CODE_WIDTH
 
     @property
-    def home_organism(self) -> dict[str, Any] | None:
-        """The organism protocol names leave unstated, as an ontology term dict."""
-        raw = self.protocol_naming.get("home_organism")
-        if isinstance(raw, dict) and raw.get("term_id") and raw.get("label"):
-            return raw
-        return None
+    def home_organisms(self) -> list[dict[str, Any]]:
+        """The organisms protocol names leave unstated, as ontology term dicts. The one
+        accessor for them: it reads the list, falling back to the legacy single key."""
+        raw = self.protocol_naming.get("home_organisms")
+        if raw is None:
+            legacy = self.protocol_naming.get("home_organism")
+            raw = [legacy] if legacy else []
+        if not isinstance(raw, list):
+            return []
+        return [t for t in raw if isinstance(t, dict) and t.get("term_id") and t.get("label")]
 
     @property
-    def home_organism_label(self) -> str | None:
-        home = self.home_organism
-        return home["label"] if home else None
+    def home_organism_count(self) -> int:
+        return len(self.home_organisms)
 
-    def set_home_organism(self, term: dict[str, Any] | None) -> None:
-        """Targets from this organism get no organism prefix in protocol names.
-        Changing it relabels protocols, so it has its own path (preview + confirm)."""
+    @property
+    def home_organism_labels(self) -> frozenset[str]:
+        """Lower-cased labels, as the naming context compares them."""
+        return frozenset(t["label"].strip().lower() for t in self.home_organisms)
+
+    def set_home_organisms(self, terms: list[dict[str, Any]]) -> None:
+        """Targets from these organisms get no organism prefix in protocol names.
+        Changing them relabels protocols, so it has its own path (preview + confirm)."""
         naming = dict(self.protocol_naming)
-        if term is None:
-            naming.pop("home_organism", None)
-        else:
+        naming.pop("home_organism", None)
+        kept: dict[str, dict[str, Any]] = {}
+        for term in terms:
             if not (term.get("term_id") and term.get("label")):
-                raise ValidationError("Home organism needs a term id and a label")
-            naming["home_organism"] = {
-                "term_id": term["term_id"],
-                "label": term["label"],
-                "ontology_source": term.get("ontology_source") or "NCBITAXON",
-            }
+                raise ValidationError("A home organism needs a term id and a label")
+            kept.setdefault(
+                term["term_id"],
+                {
+                    "term_id": term["term_id"],
+                    "label": term["label"],
+                    "ontology_source": term.get("ontology_source") or "NCBITAXON",
+                },
+            )
+        if kept:
+            naming["home_organisms"] = list(kept.values())
+        else:
+            naming.pop("home_organisms", None)
         self.protocol_naming = naming
         self.updated_at = datetime.now(UTC)
         self.register_event(
@@ -173,7 +188,7 @@ class WorkspaceSettings(AggregateRoot):
     def _merged_protocol_naming(current: dict[str, Any], incoming: object) -> dict[str, Any]:
         if not isinstance(incoming, dict):
             raise ValidationError("protocol_naming must be an object")
-        if "home_organism" in incoming:
+        if "home_organism" in incoming or "home_organisms" in incoming:
             raise ValidationError(
                 "Set the home organism through its own setting (it relabels protocols)"
             )

@@ -9,6 +9,7 @@ import type {
 } from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { WORKSPACE_SETUP_KEY } from "./use-workspace-setup";
 
 /** What an admin naming edit would rename, before it is saved. */
 export function usePreviewNamingChange() {
@@ -36,6 +37,7 @@ export function useSetHomeOrganism() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["workspace-settings"] });
       qc.invalidateQueries({ queryKey: ["protocols"] });
+      qc.invalidateQueries({ queryKey: WORKSPACE_SETUP_KEY });
       showSuccess("Home organism saved");
     },
     onError: (err: Error) => showError(err.message),

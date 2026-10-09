@@ -23,6 +23,16 @@ class AliasKind(StrEnum):
     NICKNAME = "nickname"  # what people call it (MABA, LORA, HLM CLint)
 
 
+class ReferenceKind(StrEnum):
+    """Where a protocol comes from: an assay record or the paper/page that describes it."""
+
+    CHEMBL_ASSAY = "chembl_assay"
+    PUBCHEM_AID = "pubchem_aid"
+    DOI = "doi"
+    PMID = "pmid"
+    URL = "url"
+
+
 class NameFlag(StrEnum):
     """Why a protocol's generated name needs attention."""
 

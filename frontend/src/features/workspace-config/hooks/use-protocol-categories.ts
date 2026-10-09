@@ -9,6 +9,7 @@ import type {
   ProtocolCategory,
   UpdateProtocolCategoryInput,
 } from "../types";
+import { WORKSPACE_SETUP_KEY } from "./use-workspace-setup";
 
 const PROTOCOL_CATEGORIES_KEY = ["protocol-categories"];
 // Creating a category can copy forms ("start like"), the defaults seed forms, and a deleted
@@ -23,7 +24,7 @@ const categoryHooks = createCrudHooks<
   entityName: "Category",
   baseUrl: `${API_V1}/protocol-categories`,
   queryKey: PROTOCOL_CATEGORIES_KEY,
-  parentQueryKeys: [PROTOCOL_FORMS_KEY],
+  parentQueryKeys: [PROTOCOL_FORMS_KEY, WORKSPACE_SETUP_KEY],
 });
 
 export const useProtocolCategories = categoryHooks.useList;
@@ -43,6 +44,7 @@ export function useSeedDefaultProtocolCategories() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PROTOCOL_CATEGORIES_KEY });
       qc.invalidateQueries({ queryKey: PROTOCOL_FORMS_KEY });
+      qc.invalidateQueries({ queryKey: WORKSPACE_SETUP_KEY });
       showSuccess("Default categories added");
     },
     onError: (err: Error) => showError(err.message),

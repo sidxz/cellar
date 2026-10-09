@@ -73,6 +73,10 @@ from cellar.application.screening.manage_protocol_aliases import (
     AddProtocolNickname,
     RemoveProtocolNickname,
 )
+from cellar.application.screening.manage_protocol_references import (
+    AddProtocolReference,
+    RemoveProtocolReference,
+)
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     RemoveReadoutDefinition,
@@ -116,6 +120,7 @@ from cellar.application.screening.refit_dose_response import RefitDoseResponseCu
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
+from cellar.application.screening.request_target import RequestTarget
 from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverage,
@@ -138,6 +143,7 @@ from ._core import _get_use_case
 __all__ = [
     "AddConditionDefinitionDep",
     "AddProtocolNicknameDep",
+    "AddProtocolReferenceDep",
     "AddProtocolTargetDep",
     "AddProtocolToProjectDep",
     "AddReadoutDefinitionDep",
@@ -218,10 +224,12 @@ __all__ = [
     "RemoveControlLayoutDep",
     "RemoveProtocolFromProjectDep",
     "RemoveProtocolNicknameDep",
+    "RemoveProtocolReferenceDep",
     "RemoveProtocolTargetDep",
     "RemoveReadoutDefinitionDep",
     "RemoveRunCollectionDep",
     "RemoveRunTargetDep",
+    "RequestTargetDep",
     "ResetRunDataDep",
     "ResetRunHitCriteriaDep",
     "ResolveProtocolTargetsDep",
@@ -312,6 +320,12 @@ AddProtocolNicknameDep = Annotated[
 RemoveProtocolNicknameDep = Annotated[
     RemoveProtocolNickname, Depends(_get_use_case(RemoveProtocolNickname))
 ]
+AddProtocolReferenceDep = Annotated[
+    AddProtocolReference, Depends(_get_use_case(AddProtocolReference))
+]
+RemoveProtocolReferenceDep = Annotated[
+    RemoveProtocolReference, Depends(_get_use_case(RemoveProtocolReference))
+]
 DeleteProtocolDep = Annotated[DeleteProtocol, Depends(_get_use_case(DeleteProtocol))]
 AddReadoutDefinitionDep = Annotated[
     AddReadoutDefinition, Depends(_get_use_case(AddReadoutDefinition))
@@ -340,6 +354,7 @@ ListTargetsDep = Annotated[ListTargets, Depends(_get_use_case(ListTargets))]
 SyncTargetsDep = Annotated[
     SyncTargetsFromProtCellar, Depends(_get_use_case(SyncTargetsFromProtCellar))
 ]
+RequestTargetDep = Annotated[RequestTarget, Depends(_get_use_case(RequestTarget))]
 ConditionGroupingServiceDep = Annotated[
     ConditionGroupingService, Depends(_get_use_case(ConditionGroupingService))
 ]

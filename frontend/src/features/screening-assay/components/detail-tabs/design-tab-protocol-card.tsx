@@ -187,6 +187,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
                     <OntologySearchInput
                       ontologySources={slot.ontology_sources}
                       rootConceptId={slot.root_concept_id}
+                      slot={slot.name}
                       allowFreeText={slot.allow_free_text}
                       value={currentTerms.map((t) => ({
                         term_id: t.term_id,

@@ -17,7 +17,7 @@ from cellar.domain.shared.protocol_naming import (
     validate_pattern,
 )
 
-HOME = NamingContext(home_organism_label="Mycobacterium tuberculosis")
+HOME = NamingContext(home_organism_labels=frozenset({"mycobacterium tuberculosis"}))
 MTB = NamingTerm(f"{NCBITAXON}1773", "Mycobacterium tuberculosis", "NCBITAXON")
 SMEG = NamingTerm(f"{NCBITAXON}1772", "Mycolicibacterium smegmatis", "NCBITAXON")
 MYCO_GENUS = NamingTerm(f"{NCBITAXON}1763", "Mycobacterium", "NCBITAXON")
@@ -175,8 +175,25 @@ def test_without_home_organism_every_target_gets_its_organism():
     assert r.name == "M. tuberculosis PptT inhibition"
 
 
+def test_several_home_organisms_drop_every_home_prefix():
+    ctx = NamingContext(home_organism_labels=frozenset({"homo sapiens", MTB_ORG.lower()}))
+    herg = render_protocol_name(
+        "{target} inhibition", NamingInputs(targets=(NamingTarget("hERG", "Homo sapiens"),)), ctx
+    )
+    inha = render_protocol_name(
+        "{target} inhibition", NamingInputs(targets=(NamingTarget("InhA", MTB_ORG),)), ctx
+    )
+    mouse = render_protocol_name(
+        "{target} inhibition", NamingInputs(targets=(NamingTarget("DHFR", "Mus musculus"),)), ctx
+    )
+    assert (herg.name, inha.name) == ("hERG inhibition", "InhA inhibition")
+    assert mouse.name == "Mouse DHFR inhibition"
+
+
 def test_admin_override_beats_rule_and_shipped_label():
-    ctx = NamingContext(overrides_by_term={MTB.term_id: "Mtb"}, home_organism_label=MTB_ORG)
+    ctx = NamingContext(
+        overrides_by_term={MTB.term_id: "Mtb"}, home_organism_labels=frozenset({MTB_ORG.lower()})
+    )
     assert (
         render_protocol_name(
             "{organism} growth inhibition", NamingInputs(organisms=(MTB,)), ctx
@@ -186,7 +203,10 @@ def test_admin_override_beats_rule_and_shipped_label():
 
 
 def test_target_organism_override_by_label():
-    ctx = NamingContext(overrides_by_label={"homo sapiens": "hs"}, home_organism_label=MTB_ORG)
+    ctx = NamingContext(
+        overrides_by_label={"homo sapiens": "hs"},
+        home_organism_labels=frozenset({MTB_ORG.lower()}),
+    )
     r = render_protocol_name(
         "{target} inhibition", NamingInputs(targets=(NamingTarget("MDH2", "Homo sapiens"),)), ctx
     )
@@ -226,8 +246,8 @@ def test_pattern_validation(bad):
         validate_pattern(bad)
 
 
-def test_every_default_pattern_is_valid_and_has_27_categories():
-    assert len(DEFAULT_CATEGORY_PATTERNS) == 27
+def test_every_default_pattern_is_valid_and_has_47_categories():
+    assert len(DEFAULT_CATEGORY_PATTERNS) == 47
     for pattern in DEFAULT_CATEGORY_PATTERNS.values():
         validate_pattern(pattern)
 
@@ -293,3 +313,41 @@ def test_lab_animals_ship_common_names(taxon_id, label, expected):
     assert _render("{target} inhibition", ctx=NamingContext(), targets=(target,)).name == (
         f"{expected} Cyp3a11 inhibition"
     )
+
+
+PF = NamingTerm(f"{NCBITAXON}5833", "Plasmodium falciparum", "NCBITAXON")
+PF_3D7 = NamingTerm("free_text:3D7", "3D7", "free_text")
+STRAIN_PATTERN = "{organism} {strain?} growth inhibition"
+
+
+def test_strain_follows_the_organism_as_typed():
+    r = _render(STRAIN_PATTERN, organisms=(PF,), strains=(PF_3D7,))
+    assert r.name == "P. falciparum 3D7 growth inhibition" and r.complete
+
+
+def test_without_a_strain_the_optional_slot_leaves_no_gap():
+    assert _render(STRAIN_PATTERN, organisms=(PF,)).name == "P. falciparum growth inhibition"
+
+
+def test_a_required_strain_with_none_is_missing():
+    r = _render("{organism} {strain} growth inhibition", organisms=(PF,))
+    assert r.missing == ("strain",)
+    assert r.name == "P. falciparum (strain needed) growth inhibition"
+
+
+def test_strain_gets_no_short_label_rule_but_an_override_applies():
+    # An NCBITaxon-looking strain still reads as typed; no "spp." or genus abbreviation.
+    h37rv = NamingTerm(f"{NCBITAXON}83332", "H37Rv", "NCBITAXON")
+    assert _render(STRAIN_PATTERN, organisms=(MTB,), strains=(h37rv,)).name == (
+        "M. tuberculosis H37Rv growth inhibition"
+    )
+    ctx = NamingContext(overrides_by_term={PF_3D7.term_id: "3D7 (CQ-sensitive)"})
+    assert (
+        _render(STRAIN_PATTERN, ctx=ctx, organisms=(PF,), strains=(PF_3D7,)).name
+        == "P. falciparum 3D7 (CQ-sensitive) growth inhibition"
+    )
+
+
+@pytest.mark.parametrize("pattern", [STRAIN_PATTERN, "{organism} {strain} growth inhibition"])
+def test_strain_is_a_valid_slot(pattern):
+    validate_pattern(pattern)

@@ -29,6 +29,7 @@ from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
     ProtocolAlias,
+    ProtocolReference,
     ReadoutDefinition,
 )
 from cellar.domain.screening_assay.protocol_fingerprint import (
@@ -128,7 +129,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 text(
                     """
                     select a.key as slot, t->>'term_id' as term_id, min(t->>'label') as label,
-                           min(t->>'ontology_source') as source, count(distinct p.id) as n
+                           min(t->>'ontology_source') as source, min(t->>'uri') as uri,
+                           count(distinct p.id) as n
                     from protocols p
                     cross join lateral jsonb_each(p.ontology_annotations) as a(key, terms)
                     cross join lateral jsonb_array_elements(a.terms) as t
@@ -149,6 +151,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 label=r.label,
                 ontology_source=r.source,
                 protocol_count=r.n,
+                uri=r.uri,
             )
             for r in rows
         ]
@@ -904,13 +907,14 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         ]
 
         condition_defs = [
-            ConditionDefinition(
+            ConditionDefinition.from_stored(
                 id=cd.id,
                 protocol_id=cd.protocol_id,
                 name=cd.name,
                 data_type=ConditionDataType(cd.data_type),
                 unit=cd.unit,
                 pick_list_values=cd.pick_list_values,
+                fixed_value=cd.fixed_value,
                 created_at=cd.created_at,
                 updated_at=cd.updated_at,
             )
@@ -968,6 +972,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 )
                 for a in model.aliases
             ],
+            references=[ProtocolReference.from_stored(r) for r in model.references or []],
             discriminator=model.discriminator,
             name_base=model.name_base,
             name_flag=NameFlag(model.name_flag) if model.name_flag else None,
@@ -1043,6 +1048,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             lock_reason=aggregate.lock_reason,
             locked_at=aggregate.locked_at,
             fingerprint=compute_protocol_fingerprint(aggregate),
+            references=[r.to_dict() for r in aggregate.references],
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -1081,6 +1087,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.lock_reason = aggregate.lock_reason
         model.locked_at = aggregate.locked_at
         model.fingerprint = compute_protocol_fingerprint(aggregate)
+        model.references = [r.to_dict() for r in aggregate.references]
 
         # Replace owned entity collections
         model.readout_definitions = [
@@ -1131,4 +1138,5 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             data_type=cd.data_type.value,
             unit=cd.unit,
             pick_list_values=cd.pick_list_values,
+            fixed_value=cd.fixed_value,
         )

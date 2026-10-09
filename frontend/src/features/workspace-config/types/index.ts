@@ -53,6 +53,8 @@ export interface CustomFieldDefinition {
 export interface ProtocolNamingSettings {
   code_prefix?: string;
   code_width?: number;
+  home_organisms?: { term_id: string; label: string; ontology_source: string }[];
+  /** Legacy single form; the backend reads it as a one-item list until the list is saved. */
   home_organism?: { term_id: string; label: string; ontology_source: string };
 }
 

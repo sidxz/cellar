@@ -1,3 +1,4 @@
+import type { TermInUse } from "@/features/workspace-config/hooks/use-ontology-search";
 import { PROTOCOL_STATUS_LABELS, PROTOCOL_TYPE_LABELS, type Protocol } from "../types";
 
 export type FacetDimension =
@@ -8,6 +9,7 @@ export type FacetDimension =
   | "detection"
   | "organism"
   | "cell_line"
+  | "strain"
   | "status"
   | "readout_kind";
 
@@ -29,6 +31,7 @@ export const FACET_DIMENSIONS: { dimension: FacetDimension; label: string }[] = 
   { dimension: "detection", label: "Detection" },
   { dimension: "organism", label: "Organism" },
   { dimension: "cell_line", label: "Cell line" },
+  { dimension: "strain", label: "Strain" },
   { dimension: "status", label: "Status" },
   { dimension: "readout_kind", label: "Readout kind" },
 ];
@@ -38,6 +41,7 @@ const ONTOLOGY_SLOTS: Partial<Record<FacetDimension, string>> = {
   detection: "detection",
   organism: "organism",
   cell_line: "cell_line",
+  strain: "strain",
 };
 
 /** Canonical comparable key: lower / trim / collapse-ws. Mirrors the backend
@@ -46,15 +50,23 @@ export function normFacet(s: string): string {
   return s.trim().toLowerCase().split(/\s+/).join(" ");
 }
 
+function termFacetValue(t: { term_id: string; label: string; ontology_source: string }): string {
+  return t.ontology_source === "free_text"
+    ? `free_text:${normFacet(t.label)}`
+    : t.term_id.trim().toLowerCase();
+}
+
 function ontologyItems(p: Protocol, slot: string): FacetItem[] {
   const terms = p.ontology_annotations?.[slot] ?? [];
-  return terms.map((t) => ({
-    value:
-      t.ontology_source === "free_text"
-        ? `free_text:${normFacet(t.label)}`
-        : t.term_id.trim().toLowerCase(),
-    label: t.label,
-  }));
+  return terms.map((t) => ({ value: termFacetValue(t), label: t.label }));
+}
+
+/** Facet value to short label, per dimension. Built from terms-in-use by the caller so this
+ *  module stays pure. */
+export type ShortLabels = Partial<Record<FacetDimension, Map<string, string>>>;
+
+export function shortLabelLookup(terms: TermInUse[]): Map<string, string> {
+  return new Map(terms.map((t) => [termFacetValue(t), t.short_label]));
 }
 
 /** Distinct (value,label) facet items a protocol contributes to a dimension.
@@ -106,7 +118,8 @@ export type ProtocolMatchField =
   | "organism"
   | "cell line"
   | "category"
-  | "condition";
+  | "condition"
+  | "reference";
 
 export interface ProtocolTextMatch {
   field: ProtocolMatchField;
@@ -135,6 +148,7 @@ export function protocolTextMatch(p: Protocol, query: string): ProtocolTextMatch
     ["cell line", termLabels(p, "cell_line")],
     ["category", p.category ? [p.category] : []],
     ["condition", conditionTexts(p)],
+    ["reference", (p.references ?? []).map((r) => r.value)],
   ];
   for (const [field, values] of candidates) {
     const value = values.find((v) => v.toLowerCase().includes(q));
@@ -144,7 +158,7 @@ export function protocolTextMatch(p: Protocol, query: string): ProtocolTextMatch
 }
 
 /** Substring match across name, code, aliases, targets, organism, cell line,
- *  category and condition values (case-insensitive). */
+ *  category, condition values and reference values (case-insensitive). */
 export function matchesProtocolText(p: Protocol, query: string): boolean {
   return protocolTextMatch(p, query) !== null;
 }
@@ -165,7 +179,10 @@ export function filterProtocols(protocols: Protocol[], selections: FacetSelectio
 
 export interface FacetValue {
   value: string;
+  /** Short label when one is known, else the full label. */
   label: string;
+  /** The full label, only set when it differs from `label`. */
+  fullLabel?: string;
   count: number;
 }
 
@@ -208,7 +225,11 @@ function pickLabel(counts: Map<string, number>): string {
 
 /** Per-dimension drill-down: each value's count reflects all OTHER facets'
  *  selections (not its own), the standard faceted-search semantic. */
-export function buildFacetModel(protocols: Protocol[], selections: FacetSelections): FacetGroup[] {
+export function buildFacetModel(
+  protocols: Protocol[],
+  selections: FacetSelections,
+  shortLabels: ShortLabels = {},
+): FacetGroup[] {
   const out: FacetGroup[] = [];
   for (const { dimension, label } of FACET_DIMENSIONS) {
     const others: FacetSelections = { ...selections };
@@ -228,7 +249,13 @@ export function buildFacetModel(protocols: Protocol[], selections: FacetSelectio
     if (counts.size === 0) continue; // hide empty facets
 
     const values: FacetValue[] = [...counts.entries()]
-      .map(([value, count]) => ({ value, count, label: pickLabel(labels.get(value) ?? new Map()) }))
+      .map(([value, count]) => {
+        const full = pickLabel(labels.get(value) ?? new Map());
+        const short = shortLabels[dimension]?.get(value)?.trim();
+        return short && short !== full
+          ? { value, count, label: short, fullLabel: full }
+          : { value, count, label: full };
+      })
       .sort((x, y) => y.count - x.count || x.label.localeCompare(y.label));
     out.push({ dimension, label, values });
   }

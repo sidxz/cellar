@@ -16,6 +16,8 @@ describe("factSlots", () => {
     ["{organism} {cell_line} infection [{discriminator}]", ["organism", "cell_line"]],
     ["{discriminator?} solubility", []],
     ["{target?} {organism?} binding", []],
+    ["{organism} {strain?} growth inhibition", ["organism"]],
+    ["{organism} {strain} growth inhibition", ["organism", "strain"]],
   ])("%s needs %j", (pattern, expected) => {
     expect(required(pattern)).toEqual(expected);
   });
@@ -32,6 +34,7 @@ describe("factSlots", () => {
     ["{matrix?} stability", ["assay_format"]],
     ["{discriminator?} solubility", []],
     ["{organism} growth inhibition", []],
+    ["{organism} {strain?} growth inhibition", ["strain"]],
   ])("%s may also name %j", (pattern, expected) => {
     expect(optional(pattern)).toEqual(expected);
   });

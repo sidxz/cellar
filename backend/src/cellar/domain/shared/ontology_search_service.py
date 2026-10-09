@@ -24,7 +24,14 @@ class OntologySearchService(Protocol):
         subtree_root_id: str | None = None,
         *,
         workspace_id: uuid.UUID | None = None,
-    ) -> list[OntologyTerm]: ...
+        exact_only: bool = False,
+    ) -> list[OntologyTerm]:
+        """Matching terms, exact label/synonym matches first; only those when `exact_only`."""
+        ...
+
+    async def has_api_key(self, workspace_id: uuid.UUID | None) -> bool:
+        """Whether a lookup can authenticate (never exposes the key itself)."""
+        ...
 
     async def list_descendants(
         self,

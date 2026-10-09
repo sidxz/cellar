@@ -61,7 +61,7 @@ async def _seed(session_factory, ws, user, *, locked=False):
             ProtocolCategory.create(workspace_id=ws, label="Enzyme inhibition")
         )
         settings = WorkspaceSettings.create_default(workspace_id=ws)
-        settings.set_home_organism({"term_id": "NCBITaxon:1773", "label": MTB})
+        settings.set_home_organisms([{"term_id": "NCBITaxon:1773", "label": MTB}])
         await SQLAlchemyWorkspaceSettingsRepository(uow).save(settings)
         await SQLAlchemyTargetRepository(uow).save(_target(ws, tid, "Pks13TE Domain"))
         protocol = Protocol.create(

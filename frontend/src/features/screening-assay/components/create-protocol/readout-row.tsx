@@ -26,6 +26,11 @@ import {
   isReservedReadoutName,
 } from "../../lib/readout-constants";
 import {
+  moveTestConcentration,
+  readoutTestConcentration,
+  testConcentrationMoveBlocker,
+} from "../../lib/test-concentration";
+import {
   CURVE_TYPE_LABELS,
   type CurveType,
   HILL_SLOPE_CONSTRAINT_LABELS,
@@ -63,6 +68,20 @@ export function ReadoutRow({
   const incomplete =
     (rd?.data_type === "pick_list" && rd.pick_list_values.length === 0) ||
     (rd?.data_type === "dose_response" && !rd.dr_y_readout);
+  const concentration = rd ? readoutTestConcentration(rd.name) : null;
+  const otherNames = readouts.filter((_, i) => i !== index).map((r) => r.name);
+  // Move is offered only when it can't overwrite a fixed value or repeat a readout name.
+  const moveBlocker = concentration
+    ? testConcentrationMoveBlocker(rd?.name ?? "", form.getValues("conditions"), otherNames)
+    : null;
+  const moveConcentration = () => {
+    const moved = moveTestConcentration(rd?.name ?? "", form.getValues("conditions"), otherNames);
+    if (!moved) return;
+    form.setValue(`readouts.${index}.name`, moved.name, { shouldDirty: true });
+    form.setValue("conditions", moved.conditions as ProtocolFormValues["conditions"], {
+      shouldDirty: true,
+    });
+  };
   const numericOthers = readouts.filter(
     (other, i) => i !== index && other.name.trim() && other.data_type === "numeric",
   );
@@ -86,6 +105,24 @@ export function ReadoutRow({
                   />
                 )}
               />
+              {concentration && (
+                <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                  Test concentration belongs in a condition
+                  {moveBlocker ? (
+                    <span>({moveBlocker})</span>
+                  ) : (
+                    <Button
+                      type="button"
+                      variant="link"
+                      size="sm"
+                      className="h-auto p-0 text-[11px]"
+                      onClick={moveConcentration}
+                    >
+                      Move
+                    </Button>
+                  )}
+                </p>
+              )}
               {rd && isReservedReadoutName(rd.name) && (
                 <p className="text-[11px] text-destructive">
                   Reserved well-metadata name — pick a different readout name (well concentration,

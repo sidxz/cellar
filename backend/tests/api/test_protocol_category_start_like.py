@@ -7,7 +7,7 @@ async def test_new_category_copies_the_sources_forms(client):
     growth = next(c for c in cats if c["label"] == "Growth inhibition")
     r = await client.post(
         "/api/v1/protocol-categories",
-        json={"label": "Gametocytocidal activity", "start_like_category_id": growth["id"]},
+        json={"label": "Biofilm inhibition", "start_like_category_id": growth["id"]},
     )
     assert r.status_code == 201, r.text
     new_id = r.json()["id"]

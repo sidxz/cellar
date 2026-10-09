@@ -68,6 +68,7 @@ export function syntheticDefForKey(key: string): ConditionDefinition {
     data_type: "text",
     unit: null,
     pick_list_values: null,
+    fixed_value: null,
   };
 }
 
@@ -167,4 +168,36 @@ export function readConditionCell(
     return Number.isFinite(n) ? n : null;
   }
   return String(raw);
+}
+
+// ─── Fixed values ───────────────────────────────────────────────────────────────
+
+type FixedValueShape = Pick<ConditionDefinition, "data_type" | "pick_list_values"> & {
+  fixed_value?: string | null;
+};
+
+/** "Hypoxia: yes", "Incubation time: 72 h": the value that defines the protocol. */
+export function formatFixedCondition(cd: ConditionDefinition): string {
+  const unit = cd.unit?.trim();
+  return `${cd.name}: ${cd.fixed_value}${unit ? ` ${unit}` : ""}`;
+}
+
+/** name → bare fixed value, to seed a new run's condition inputs. */
+export function fixedConditionValues(defs: ConditionDefinition[]): Record<string, string> {
+  return Object.fromEntries(
+    defs.filter((cd) => cd.fixed_value).map((cd) => [cd.name, cd.fixed_value as string]),
+  );
+}
+
+// A plain decimal, the same rule as the backend's _clean_fixed_value (no 0x10, 1_000, inf, nan).
+const DECIMAL = /^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$/;
+
+/** Mirrors the backend: blank is no value, a number is a finite plain decimal, a pick is one
+ *  of the values. */
+export function isFixedValueValid(cd: FixedValueShape): boolean {
+  const v = (cd.fixed_value ?? "").trim();
+  if (!v) return true;
+  if (cd.data_type === "numeric") return DECIMAL.test(v) && Number.isFinite(Number(v));
+  if (cd.data_type === "pick_list") return (cd.pick_list_values ?? []).includes(v);
+  return true;
 }

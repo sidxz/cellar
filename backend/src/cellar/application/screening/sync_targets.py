@@ -28,7 +28,7 @@ import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
-from cellar.application.screening.target_source import TargetSource
+from cellar.application.screening.target_source import SourceTarget, TargetSource
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -39,6 +39,19 @@ from cellar.domain.screening_assay.target import Target
 from cellar.domain.shared.errors import DomainError, ServiceUnavailableError
 
 _log = structlog.get_logger(__name__)
+
+
+def mirror_target(st: SourceTarget, workspace_id: uuid.UUID) -> Target:
+    """The local mirror row for one source target (shared by sync and RequestTarget)."""
+    return Target.from_mirror(
+        id=st.id,
+        workspace_id=workspace_id,
+        name=st.name,
+        target_type=TargetType(st.target_type),
+        organism=st.organism,
+        chembl_id=st.chembl_id,
+        source_version=st.version,
+    )
 
 
 class SyncFreshness:
@@ -128,17 +141,7 @@ class SyncTargetsFromProtCellar:
                 if current is not None and current.source_version == st.version:
                     skipped += 1
                     continue
-                await self._repo.save(
-                    Target.from_mirror(
-                        id=st.id,
-                        workspace_id=input.workspace_id,
-                        name=st.name,
-                        target_type=TargetType(st.target_type),
-                        organism=st.organism,
-                        chembl_id=st.chembl_id,
-                        source_version=st.version,
-                    )
-                )
+                await self._repo.save(mirror_target(st, input.workspace_id))
                 if current is None:
                     created += 1
                 else:

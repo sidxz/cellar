@@ -6,9 +6,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/components/ui/tooltip";
 import { Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
-import type { FacetDimension, FacetGroup, FacetSelections } from "../lib/protocol-facets";
+import { type ReactElement, useState } from "react";
+import type {
+  FacetDimension,
+  FacetGroup,
+  FacetSelections,
+  FacetValue,
+} from "../lib/protocol-facets";
 
 const FACET_VALUE_CAP = 8;
 
@@ -44,6 +55,20 @@ export function FacetSidebar({ model, selections, onToggle, onClear }: FacetSide
   );
 }
 
+/** The full label in a tooltip when it differs from the short one. The row itself is the
+ *  trigger, so keyboard focus shows it as well as hover. */
+function FullLabelTooltip({ value, children }: { value: FacetValue; children: ReactElement }) {
+  if (!value.fullLabel) return children;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{children}</TooltipTrigger>
+        <TooltipContent>{value.fullLabel}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function FacetGroupSection({
   group,
   selected,
@@ -70,26 +95,27 @@ function FacetGroupSection({
           // wrapping <label>, which reintroduces the click-forwarding trap. The
           // resulting biome useSemanticElements warning is intentional.
           return (
-            <button
-              key={v.value}
-              type="button"
-              role="checkbox"
-              aria-checked={checked}
-              aria-label={v.label}
-              onClick={() => onToggle(group.dimension, v.value)}
-              className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted"
-            >
-              <span
-                aria-hidden
-                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
-                  checked ? "border-primary bg-primary text-primary-foreground" : "border-input"
-                }`}
+            <FullLabelTooltip key={v.value} value={v}>
+              <button
+                type="button"
+                role="checkbox"
+                aria-checked={checked}
+                aria-label={v.fullLabel ?? v.label}
+                onClick={() => onToggle(group.dimension, v.value)}
+                className="flex w-full cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-sm hover:bg-muted"
               >
-                {checked && <Check className="h-3 w-3" />}
-              </span>
-              <span className="flex-1 truncate text-left">{v.label}</span>
-              <span className="text-xs tabular-nums text-muted-foreground">{v.count}</span>
-            </button>
+                <span
+                  aria-hidden
+                  className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border ${
+                    checked ? "border-primary bg-primary text-primary-foreground" : "border-input"
+                  }`}
+                >
+                  {checked && <Check className="h-3 w-3" />}
+                </span>
+                <span className="flex-1 truncate text-left">{v.label}</span>
+                <span className="text-xs tabular-nums text-muted-foreground">{v.count}</span>
+              </button>
+            </FullLabelTooltip>
           );
         })}
         {group.values.length > FACET_VALUE_CAP && (

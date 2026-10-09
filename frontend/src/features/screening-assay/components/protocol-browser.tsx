@@ -16,6 +16,7 @@ import { LayoutGrid, ListTree } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useProtocols } from "../hooks/use-protocols";
 import { matchesProtocolText } from "../lib/protocol-facets";
+import type { Protocol } from "../types";
 import { ProtocolGrid } from "./protocol-grid";
 import { ProtocolLibraryView } from "./protocol-library-view";
 
@@ -25,9 +26,11 @@ type View = "grid" | "library";
 
 interface ProtocolBrowserProps {
   onSelect?: (protocolId: string) => void;
+  /** Library rows offer "New protocol from this" when given (editors and up). */
+  onNewFrom?: (protocol: Protocol) => void;
 }
 
-export function ProtocolBrowser({ onSelect }: ProtocolBrowserProps) {
+export function ProtocolBrowser({ onSelect, onNewFrom }: ProtocolBrowserProps) {
   const [search, setSearch] = useState("");
   const [projectFilter, setProjectFilter] = useState<string>(ALL_PROJECTS);
   const [tagFilter, setTagFilter] = useState<TagFilterValue>({ tagIds: [], tagLogic: "any" });
@@ -118,7 +121,12 @@ export function ProtocolBrowser({ onSelect }: ProtocolBrowserProps) {
       ) : isLoading || !protocols ? (
         <div className="py-12 text-center text-sm text-muted-foreground">Loading protocols…</div>
       ) : (
-        <ProtocolLibraryView protocols={librarySource} onSelect={onSelect} search={search} />
+        <ProtocolLibraryView
+          protocols={librarySource}
+          onSelect={onSelect}
+          search={search}
+          onNewFrom={onNewFrom}
+        />
       )}
     </div>
   );

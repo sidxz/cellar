@@ -81,11 +81,12 @@ vi.mock("../hooks/use-protocol-facet-slots", () => ({
       ["organism", "Organism", "NCBITAXON"],
       ["cell_line", "Cell line", "CLO"],
       ["assay_format", "Assay format", "BAO"],
+      ["strain", "Strain", ""],
     ].map(([name, label, source]) => ({
       id: `std:${name}`,
       name,
       label,
-      ontology_sources: [source],
+      ontology_sources: source ? [source] : [],
       root_concept_id: null,
       allow_free_text: true,
       is_required: false,
@@ -182,6 +183,11 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
       { id: "c-sol", label: "Solubility", name_pattern: "{discriminator?} solubility" },
       { id: "c-cy", label: "Cytotoxicity", name_pattern: "{cell_line} cytotoxicity" },
       { id: "c-pk", label: "Pharmacokinetics", name_pattern: "{organism?} pharmacokinetics" },
+      {
+        id: "c-pf",
+        label: "Parasite growth inhibition",
+        name_pattern: "{organism} {strain?} growth inhibition",
+      },
     ],
   }),
 }));
@@ -202,6 +208,7 @@ vi.mock("./protocol-category-input", () => ({
         "Solubility",
         "Cytotoxicity",
         "Pharmacokinetics",
+        "Parasite growth inhibition",
       ].map((c) => (
         <option key={c} value={c}>
           {c}
@@ -331,6 +338,13 @@ describe("CreateProtocolDialog", () => {
     expect(labels()).toContain("Cell line");
   });
 
+  it("shows the organism and an optional strain inline when the pattern names a strain", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Parasite growth inhibition");
+    expect(labels().slice(0, 3)).toEqual(["Category", "Organism", "Strain (optional)"]);
+    expect(screen.getByPlaceholderText("Type a strain or pick one used here")).toBeInTheDocument();
+  });
+
   it("asks for a discriminator only when the pattern places it, else one click away", () => {
     render(<CreateProtocolDialog open onOpenChange={() => {}} />);
     pickCategory("Detection interference");
@@ -341,6 +355,14 @@ describe("CreateProtocolDialog", () => {
     expect(labels()).not.toContain("Discriminator");
     fireEvent.click(screen.getByRole("button", { name: /method or condition/ }));
     expect(labels()).toContain("Discriminator (optional)");
+  });
+
+  it("links the Discriminator label to its input", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Detection interference");
+    expect(screen.getByLabelText("Discriminator")).toBe(
+      screen.getByPlaceholderText("Part of this category's name"),
+    );
   });
 
   it("explains a discriminator the pattern requires as part of the category's name", () => {
@@ -466,6 +488,195 @@ describe("CreateProtocolDialog", () => {
     ]);
   });
 
+  it("sends a pick-list condition's values from a form, with any the chemist adds", async () => {
+    state.preview = complete;
+    state.extraForms = [
+      {
+        id: "ames",
+        workspace_id: "w1",
+        name: "Ames",
+        category_id: "c-sol",
+        is_default: true,
+        assay_format_from_target: false,
+        version: 1,
+        readout_templates: [{ name: "Revertants", data_type: "numeric" }],
+        condition_templates: [
+          { name: "S9", data_type: "pick_list", unit: null, pick_list_values: ["with", "without"] },
+        ],
+        ontology_defaults: [],
+      },
+    ];
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Solubility");
+    openMoreDetails();
+    const box = screen.getByPlaceholderText("Type a value, press Enter");
+    fireEvent.change(box, { target: { value: "Both" } });
+    fireEvent.keyDown(box, { key: "Enter" });
+    const payload = await submit();
+    expect(payload.condition_definitions).toEqual([
+      {
+        name: "S9",
+        data_type: "pick_list",
+        unit: null,
+        pick_list_values: ["with", "without", "Both"],
+      },
+    ]);
+  });
+
+  it("keeps a pick-list condition's values when starting from another protocol", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "S9",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["with", "without"],
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    expect(screen.getByText("with")).toBeInTheDocument();
+    const payload = await submit();
+    expect(payload.condition_definitions).toEqual([
+      { name: "S9", data_type: "pick_list", unit: null, pick_list_values: ["with", "without"] },
+    ]);
+  });
+
+  it("keeps a condition's fixed value when starting from another protocol, and sends one typed beside it", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "Hypoxia",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["yes", "no"],
+          fixed_value: "yes",
+        },
+        {
+          id: "c2",
+          name: "Incubation time",
+          data_type: "numeric",
+          unit: "h",
+          pick_list_values: null,
+          fixed_value: null,
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    fireEvent.change(screen.getAllByLabelText("Fixed for this protocol")[1], {
+      target: { value: "72" },
+    });
+    const payload = await submit();
+    expect(payload.condition_definitions).toEqual([
+      {
+        name: "Hypoxia",
+        data_type: "pick_list",
+        unit: null,
+        pick_list_values: ["yes", "no"],
+        fixed_value: "yes",
+      },
+      { name: "Incubation time", data_type: "numeric", unit: "h", fixed_value: "72" },
+    ]);
+  });
+
+  it("suggests the protocol's fixed condition values as discriminators", () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "Oxygen",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["Hypoxia", "Normoxia"],
+          fixed_value: "Hypoxia",
+        },
+        {
+          id: "c2",
+          name: "Incubation time",
+          data_type: "numeric",
+          unit: "h",
+          pick_list_values: null,
+          fixed_value: "72",
+        },
+        {
+          id: "c3",
+          name: "Plate",
+          data_type: "text",
+          unit: null,
+          pick_list_values: null,
+          fixed_value: null,
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    fireEvent.click(screen.getByRole("button", { name: /method or condition/ }));
+    expect(screen.getByRole("button", { name: "Hypoxia" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Normoxia" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "72 h" }));
+    expect(screen.getByLabelText("Discriminator (optional)")).toHaveValue("72 h");
+  });
+
+  it("moves a concentration out of a readout name into the Test concentration condition", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("% inhibition at 2 µM", "numeric")],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    expect(screen.getByText("Test concentration belongs in a condition")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Move" }));
+    expect(screen.queryByText("Test concentration belongs in a condition")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("e.g., % Inhibition")).toHaveValue("% inhibition");
+    const payload = await submit();
+    expect(payload.readout_definitions[0].name).toBe("% inhibition");
+    expect(payload.condition_definitions).toEqual([
+      { name: "Test concentration", data_type: "numeric", unit: "µM", fixed_value: "2" },
+    ]);
+  });
+
+  it("will not create a protocol whose fixed pick is not one of its values", () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        {
+          id: "c1",
+          name: "Hypoxia",
+          data_type: "pick_list",
+          unit: null,
+          pick_list_values: ["yes", "no"],
+          fixed_value: "maybe",
+        },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
+  });
+
+  it("will not create a protocol whose pick-list condition has no values", () => {
+    state.preview = complete;
+    const prefill = protocol({
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+      condition_definitions: [
+        { id: "c1", name: "S9", data_type: "pick_list", unit: null, pick_list_values: null },
+      ],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    openMoreDetails();
+    expect(screen.getByText("Add at least one value.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
+  });
+
   it("reopens clean after a create: no name and no clash until a category is picked", async () => {
     state.realPreview = true;
     const named = { ...complete, name: "M. tuberculosis growth inhibition" };
@@ -588,6 +799,56 @@ describe("CreateProtocolDialog", () => {
     expect(screen.queryByText(/already the protocol's name/)).not.toBeInTheDocument();
     fireEvent.keyDown(nickname, { key: "Enter" });
     expect((await submit()).nicknames).toEqual(["Mabs MIC"]);
+  });
+
+  it("sends references added under More details, normalized", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    openMoreDetails();
+    const value = screen.getByLabelText("Reference value");
+    fireEvent.change(value, { target: { value: "doi:10.1021/jm901137j" } });
+    fireEvent.keyDown(value, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "10.1021/jm901137j" })).toHaveAttribute(
+        "href",
+        "https://doi.org/10.1021/jm901137j",
+      ),
+    );
+    expect((await submit()).references).toEqual([{ kind: "doi", value: "10.1021/jm901137j" }]);
+  });
+
+  it("starts from another protocol with its paper-level references, no nicknames and no discriminator", async () => {
+    state.preview = complete;
+    const prefill = protocol({
+      discriminator: "FP",
+      aliases: [{ label: "MABA", kind: "nickname" }],
+      references: [
+        { kind: "doi", value: "10.1021/jm901137j" },
+        { kind: "chembl_assay", value: "CHEMBL1054500" },
+      ],
+      readout_definitions: [readout("Percent inhibition", "numeric")],
+    });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    const payload = await submit();
+    expect(payload.references).toEqual([{ kind: "doi", value: "10.1021/jm901137j" }]);
+    expect(payload.nicknames).toEqual([]);
+    expect(payload.discriminator).toBeNull();
+  });
+
+  it("focuses the discriminator when starting from another protocol", async () => {
+    state.preview = { ...complete, siblings: [{ protocol_id: "s1", code: "PRT-1", name: "n" }] };
+    const prefill = protocol({ category: "Detection interference" });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    await waitFor(() => expect(screen.getByLabelText("Discriminator")).toHaveFocus());
+  });
+
+  it("focuses the strain when the pattern names one and no discriminator is shown", async () => {
+    const prefill = protocol({ category: "Parasite growth inhibition" });
+    render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
+    await waitFor(() =>
+      expect(screen.getByPlaceholderText("Type a strain or pick one used here")).toHaveFocus(),
+    );
   });
 
   it("creates with the form, nicknames and the siblings' discriminators in one save", async () => {

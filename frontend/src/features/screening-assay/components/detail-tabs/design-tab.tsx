@@ -123,6 +123,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   const [cdName, setCdName] = useState("");
   const [cdDataType, setCdDataType] = useState("text");
   const [cdUnit, setCdUnit] = useState("");
+  const [cdValues, setCdValues] = useState<string[]>([]);
+  const [cdFixedValue, setCdFixedValue] = useState("");
 
   // --- Control layout form fields ---
   const [clFormat, setClFormat] = useState("96");
@@ -144,6 +146,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setCdName(cd.name);
     setCdDataType(cd.data_type);
     setCdUnit(cd.unit ?? "");
+    setCdValues(cd.pick_list_values ?? []);
+    setCdFixedValue(cd.fixed_value ?? "");
     setEditingConditionId(cdId);
   };
 
@@ -152,6 +156,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
     setCdName("");
     setCdDataType("text");
     setCdUnit("");
+    setCdValues([]);
+    setCdFixedValue("");
   };
 
   return (
@@ -314,7 +320,10 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
             <CardTitle>Condition Definitions</CardTitle>
-            <CardDescription>Experimental conditions that vary between runs.</CardDescription>
+            <CardDescription>
+              A fixed value defines the protocol; the rest vary between runs.
+              {status === "active" && " Change a fixed value with Correct details."}
+            </CardDescription>
           </div>
           {canAddMetadata && (
             <Button size="sm" variant="outline" onClick={() => setAddConditionOpen(true)}>
@@ -333,6 +342,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                   <TableHead>Name</TableHead>
                   <TableHead>Data Type</TableHead>
                   <TableHead>Unit</TableHead>
+                  <TableHead>Fixed value</TableHead>
                   {canStructurallyEdit && <TableHead className="w-10" />}
                 </TableRow>
               </TableHeader>
@@ -340,8 +350,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 {protocol.condition_definitions.map((cd) => (
                   <TableRow key={cd.id}>
                     <TableCell className="font-medium">{cd.name}</TableCell>
-                    <TableCell className="capitalize">{cd.data_type}</TableCell>
+                    <TableCell>
+                      {READOUT_DATA_TYPE_LABELS[cd.data_type as ReadoutDataType] ?? cd.data_type}
+                    </TableCell>
                     <TableCell>{cd.unit ?? "—"}</TableCell>
+                    <TableCell>
+                      {cd.fixed_value
+                        ? `${cd.fixed_value}${cd.unit ? ` ${cd.unit}` : ""}`
+                        : "Varies per run"}
+                    </TableCell>
                     {canStructurallyEdit && (
                       <TableCell>
                         <div className="flex items-center gap-1">
@@ -691,6 +708,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setCdDataType={setCdDataType}
         cdUnit={cdUnit}
         setCdUnit={setCdUnit}
+        cdValues={cdValues}
+        setCdValues={setCdValues}
+        cdFixedValue={cdFixedValue}
+        setCdFixedValue={setCdFixedValue}
+        allowFixedValue={isDraft}
         isSaving={addConditionDef.isPending}
         onSave={() => {
           addConditionDef.mutate(
@@ -698,12 +720,17 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               name: cdName.trim(),
               data_type: cdDataType,
               unit: cdUnit.trim() || undefined,
+              ...(cdDataType === "pick_list" ? { pick_list_values: cdValues } : {}),
+              // A published protocol takes a fixed value only through Correct details.
+              fixed_value: isDraft ? cdFixedValue.trim() || null : null,
             },
             {
               onSuccess: () => {
                 setCdName("");
                 setCdDataType("text");
                 setCdUnit("");
+                setCdValues([]);
+                setCdFixedValue("");
                 setAddConditionOpen(false);
               },
             },
@@ -725,6 +752,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setCdDataType={setCdDataType}
         cdUnit={cdUnit}
         setCdUnit={setCdUnit}
+        cdValues={cdValues}
+        setCdValues={setCdValues}
+        cdFixedValue={cdFixedValue}
+        setCdFixedValue={setCdFixedValue}
+        allowFixedValue
         isSaving={updateConditionDef.isPending}
         onSave={() => {
           if (!editingConditionId) return;
@@ -735,6 +767,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 name: cdName.trim(),
                 data_type: cdDataType,
                 unit: cdUnit.trim() || null,
+                pick_list_values: cdDataType === "pick_list" ? cdValues : null,
+                fixed_value: cdFixedValue.trim() || null,
               },
             },
             { onSuccess: closeEditCondition },

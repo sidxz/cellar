@@ -12,6 +12,7 @@ vi.mock("../../hooks/use-protocol-collection-coverage", () => ({
 vi.mock("@duar-auth/nextjs", () => ({ useAuthzHasRole: () => false }));
 vi.mock("@/features/tagging/components/tag-table", () => ({ TagTable: () => null }));
 vi.mock("../protocol-aliases-card", () => ({ ProtocolAliasesCard: () => null }));
+vi.mock("../protocol-references", () => ({ ProtocolReferencesCard: () => null }));
 
 function protocol(over: Partial<Protocol> = {}): Protocol {
   return {
@@ -100,5 +101,52 @@ describe("NameFlagNotice", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: /discriminator/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("Defining conditions", () => {
+  it("shows each fixed value, then its unit", () => {
+    render(
+      <OverviewTab
+        protocol={protocol({
+          condition_definitions: [
+            {
+              id: "c1",
+              name: "Hypoxia",
+              data_type: "pick_list",
+              unit: null,
+              pick_list_values: ["yes", "no"],
+              fixed_value: "yes",
+            },
+            {
+              id: "c2",
+              name: "Incubation time",
+              data_type: "numeric",
+              unit: "h",
+              pick_list_values: null,
+              fixed_value: "72",
+            },
+            {
+              id: "c3",
+              name: "Medium",
+              data_type: "text",
+              unit: null,
+              pick_list_values: null,
+              fixed_value: null,
+            },
+          ],
+        })}
+        protocolId="p1"
+        onTabChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Hypoxia: yes")).toBeInTheDocument();
+    expect(screen.getByText("Incubation time: 72 h")).toBeInTheDocument();
+    expect(screen.queryByText(/Medium/)).not.toBeInTheDocument();
+  });
+
+  it("is absent when nothing is fixed", () => {
+    render(<OverviewTab protocol={protocol()} protocolId="p1" onTabChange={vi.fn()} />);
+    expect(screen.queryByText("Defining conditions")).not.toBeInTheDocument();
   });
 });

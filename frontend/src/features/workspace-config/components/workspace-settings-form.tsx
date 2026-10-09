@@ -29,7 +29,7 @@ import type {
   RegistrationRules,
 } from "../types";
 import { CustomFieldBuilder } from "./custom-field-builder";
-import { HomeOrganismSetting } from "./home-organism-setting";
+import { HomeOrganismSetting, homeOrganismsFrom } from "./home-organism-setting";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -133,6 +133,12 @@ export function WorkspaceSettingsForm() {
       });
     }
   }, [settings, reset]);
+
+  // A link like /admin/settings#home-organisms lands before the form has rendered (it shows a
+  // skeleton while loading), so the browser's own hash scroll finds nothing: scroll once loaded.
+  useEffect(() => {
+    if (!isLoading) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+  }, [isLoading]);
 
   const sigRequired = useWatch({ control, name: "sigRequired" });
 
@@ -312,7 +318,7 @@ export function WorkspaceSettingsForm() {
               </p>
             </div>
             <HomeOrganismSetting
-              current={(settings?.protocol_naming as ProtocolNamingSettings)?.home_organism ?? null}
+              current={homeOrganismsFrom(settings?.protocol_naming as ProtocolNamingSettings)}
             />
           </div>
         </Card>

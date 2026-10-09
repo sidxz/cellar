@@ -335,12 +335,17 @@ function FormDialog({ open, onOpenChange, editing, categories }: FormDialogProps
                 <OntologySearchInput
                   ontologySources={slot.ontology_sources}
                   rootConceptId={slot.root_concept_id}
+                  slot={slot.name}
                   value={ontologyDefaults[slot.name] ?? []}
                   onChange={(terms) =>
                     setOntologyDefaults((prev) => ({ ...prev, [slot.name]: terms }))
                   }
                   allowFreeText={slot.allow_free_text}
-                  placeholder={`Search ${slot.ontology_sources.join(", ")}...`}
+                  placeholder={
+                    slot.ontology_sources.length
+                      ? `Search ${slot.ontology_sources.join(", ")}...`
+                      : undefined
+                  }
                 />
                 {slot.name === "assay_format" && assayFormatFromTarget && (
                   <p className="text-xs text-muted-foreground">

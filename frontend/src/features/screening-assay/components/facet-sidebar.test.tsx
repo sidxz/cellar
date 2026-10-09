@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { FacetGroup } from "../lib/protocol-facets";
 import { FacetSidebar } from "./facet-sidebar";
@@ -48,5 +48,20 @@ describe("FacetSidebar", () => {
     );
     const checkbox = screen.getByRole("checkbox", { name: /Biochemical/i });
     expect(checkbox).toBeChecked();
+  });
+
+  it("gives a short-labelled value its full label by name and on keyboard focus", async () => {
+    const organisms: FacetGroup[] = [
+      {
+        dimension: "organism",
+        label: "Organism",
+        values: [{ value: "mtb", label: "Mtb", fullLabel: "Mycobacterium tuberculosis", count: 4 }],
+      },
+    ];
+    render(<FacetSidebar model={organisms} selections={{}} onToggle={vi.fn()} onClear={vi.fn()} />);
+    const row = screen.getByRole("checkbox", { name: "Mycobacterium tuberculosis" });
+    expect(row).toHaveTextContent("Mtb");
+    act(() => row.focus());
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Mycobacterium tuberculosis");
   });
 });

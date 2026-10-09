@@ -2,7 +2,7 @@
 
 import pytest
 
-from tests.api._protocols import seed_protocol_categories
+from tests.api._protocols import protocol_body, seed_protocol_categories
 
 BAO = "http://www.bioassayontology.org/bao#"
 
@@ -112,6 +112,23 @@ async def test_an_unknown_form_is_not_found(client):
     }
     r = await client.post("/api/v1/protocols", json=body)
     assert r.status_code == 404, r.text
+
+
+async def test_create_refuses_duplicate_readout_or_condition_names(client):
+    # Two concentrations moved out of "% inhibition at 2 µM" / "... at 10 µM" collapse to one name.
+    readout = {"name": "% inhibition", "data_type": "numeric"}
+    dup_readouts = await protocol_body(client, "dup", readout_definitions=[readout, readout])
+    r = await client.post("/api/v1/protocols", json=dup_readouts)
+    assert r.status_code == 409, r.text
+    assert "% inhibition" in r.text
+
+    condition = {"name": "Test concentration", "data_type": "numeric", "unit": "µM"}
+    dup_conditions = await protocol_body(
+        client, "dup", condition_definitions=[condition, condition]
+    )
+    r = await client.post("/api/v1/protocols", json=dup_conditions)
+    assert r.status_code == 409, r.text
+    assert "Test concentration" in r.text
 
 
 MTB = {

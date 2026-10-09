@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
@@ -19,6 +21,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
+    ReferenceKind,
 )
 from cellar.domain.screening_assay.events import (
     ProtocolCorrected,
@@ -28,6 +31,7 @@ from cellar.domain.screening_assay.events import (
     ProtocolRenamed,
     ProtocolRetired,
     ProtocolUnlocked,
+    ProtocolUpdated,
 )
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.enums import ConcentrationUnit
@@ -118,6 +122,65 @@ class ProtocolAlias:
     kind: AliasKind
     recorded_at: datetime
     reason: str | None = None
+
+
+# A value must match its kind's pattern after the prefix is stripped. Links are built only from
+# these validated values, so a url is http(s) and nothing else (no javascript:, data:, ...).
+_REFERENCE_PATTERNS: dict[ReferenceKind, re.Pattern[str]] = {
+    ReferenceKind.CHEMBL_ASSAY: re.compile(r"^CHEMBL\d+$"),
+    ReferenceKind.PUBCHEM_AID: re.compile(r"^\d+$"),
+    ReferenceKind.DOI: re.compile(r"^10\.\d{4,9}/\S+$"),
+    ReferenceKind.PMID: re.compile(r"^\d+$"),
+    ReferenceKind.URL: re.compile(r"^https?://\S+$"),
+}
+_REFERENCE_PREFIXES: dict[ReferenceKind, re.Pattern[str]] = {
+    ReferenceKind.PUBCHEM_AID: re.compile(r"^aid\s?", re.IGNORECASE),
+    ReferenceKind.DOI: re.compile(r"^(https?://doi\.org/|doi:)", re.IGNORECASE),
+}
+_MAX_REFERENCE_LENGTH = 2000
+
+
+@dataclass(frozen=True)
+class ProtocolReference:
+    """Where a protocol comes from: a ChEMBL assay, PubChem AID, DOI, PMID or web page.
+
+    Built from raw input: the kind's prefix is stripped (``AID 1851``, ``https://doi.org/...``)
+    and the value is validated, so two spellings of one reference are equal.
+    """
+
+    kind: ReferenceKind
+    value: str
+
+    def __post_init__(self) -> None:
+        try:
+            kind = ReferenceKind(self.kind)
+        except ValueError:
+            raise ValidationError(f"Unknown reference kind {self.kind!r}") from None
+        value = self.value.strip()
+        prefix = _REFERENCE_PREFIXES.get(kind)
+        if prefix is not None:
+            value = prefix.sub("", value, count=1)
+        if len(value) > _MAX_REFERENCE_LENGTH or not _REFERENCE_PATTERNS[kind].match(value):
+            raise ValidationError(f"{value or self.value!r} is not a valid {kind.value} reference")
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "value", value)
+
+    @property
+    def key(self) -> str:
+        """Stable identity: ``<kind>:<value>``. Indexes shift; this does not."""
+        return f"{self.kind.value}:{self.value}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"kind": self.kind.value, "value": self.value}
+
+    @classmethod
+    def from_stored(cls, raw: dict[str, str]) -> ProtocolReference:
+        """Hydrate a stored reference as is: it was validated when it was written, and a later,
+        stricter rule must not make an existing protocol unreadable."""
+        ref = object.__new__(cls)
+        object.__setattr__(ref, "kind", ReferenceKind(raw["kind"]))
+        object.__setattr__(ref, "value", raw["value"])
+        return ref
 
 
 @dataclass(frozen=True)
@@ -280,6 +343,7 @@ class ConditionDefinition(Entity):
     Invariants:
         - name cannot be empty
         - pick_list data type requires pick_list_values
+        - fixed_value (the protocol-level value, e.g. Hypoxia: yes) fits the data type
     """
 
     def __init__(
@@ -291,6 +355,7 @@ class ConditionDefinition(Entity):
         data_type: ConditionDataType,
         unit: str | None = None,
         pick_list_values: list[str] | None = None,
+        fixed_value: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -308,6 +373,44 @@ class ConditionDefinition(Entity):
         self.data_type = data_type
         self.unit = canonical_unit(unit)
         self.pick_list_values = pick_list_values
+        self.fixed_value = _clean_fixed_value(fixed_value, data_type, pick_list_values, self.name)
+
+    @classmethod
+    def from_stored(cls, *, fixed_value: str | None, **fields: Any) -> ConditionDefinition:
+        """Hydrate a stored definition: its fixed value was validated when it was written, and a
+        later, stricter rule must not make an existing protocol unreadable."""
+        definition = cls(**fields)
+        definition.fixed_value = fixed_value or None
+        return definition
+
+    @property
+    def fixed_run_value(self) -> str | None:
+        """The fixed value as a run stores it: the unit after a space (``72 h``)."""
+        if self.fixed_value is None:
+            return None
+        return f"{self.fixed_value} {self.unit}" if self.unit else self.fixed_value
+
+
+# A plain decimal, as frontend lib/conditions.ts accepts it (no 0x10, 1_000, inf or nan).
+_DECIMAL_RE = re.compile(r"[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?")
+
+
+def _clean_fixed_value(
+    value: str | None,
+    data_type: ConditionDataType,
+    pick_list_values: list[str] | None,
+    name: str,
+) -> str | None:
+    """Blank is no value; a number must parse (kept as typed); a pick is one of the values."""
+    value = (value or "").strip()
+    if not value:
+        return None
+    if data_type == ConditionDataType.NUMERIC:
+        if not (_DECIMAL_RE.fullmatch(value) and math.isfinite(float(value))):
+            raise ValidationError(f"Fixed value of '{name}' must be a number, got '{value}'")
+    elif data_type == ConditionDataType.PICK_LIST and value not in (pick_list_values or []):
+        raise ValidationError(f"Fixed value of '{name}' must be one of its pick-list values")
+    return value
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +452,7 @@ class Protocol(AggregateRoot):
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
         aliases: list[ProtocolAlias] | None = None,
+        references: list[ProtocolReference] | None = None,
         discriminator: str | None = None,
         name_base: str | None = None,
         name_flag: NameFlag | None = None,
@@ -390,6 +494,7 @@ class Protocol(AggregateRoot):
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
         self.aliases: list[ProtocolAlias] = list(aliases or [])
+        self.references: list[ProtocolReference] = list(references or [])
         # Generated-name parts: the free discriminator, the name without it (collision key),
         # and why the name needs attention.
         self.discriminator = discriminator
@@ -497,9 +602,23 @@ class Protocol(AggregateRoot):
         discriminator: str | None = None,
         name_base: str | None = None,
         name_flag: NameFlag | None = None,
+        references: list[ProtocolReference] | None = None,
     ) -> Protocol:
         if not readout_definitions:
             raise ValidationError("Protocol must have at least one ReadoutDefinition")
+        references = list(references or [])
+        if len({r.key for r in references}) != len(references):
+            raise ConflictError("The same reference is listed twice")
+        # Same rule as add_readout_definition / add_condition_definition (names are trimmed).
+        for kind, defs in (
+            ("ReadoutDefinition", readout_definitions),
+            ("ConditionDefinition", condition_definitions or []),
+        ):
+            seen: set[str] = set()
+            for d in defs:
+                if d.name in seen:
+                    raise ConflictError(f"{kind} with name '{d.name}' already exists")
+                seen.add(d.name)
         if len(name.strip()) > MAX_NAME_LENGTH:
             raise ValidationError(f"Protocol name must be at most {MAX_NAME_LENGTH} characters")
 
@@ -519,6 +638,7 @@ class Protocol(AggregateRoot):
             discriminator=discriminator,
             name_base=name_base,
             name_flag=name_flag,
+            references=references,
         )
         protocol.register_event(
             ProtocolCreated(
@@ -1040,6 +1160,9 @@ class Protocol(AggregateRoot):
         versioning (run records reference conditions by name).
         """
         self._guard_metadata_mutable()
+        # A defining value on a published protocol changes only through a correction.
+        if self.status != ProtocolStatus.DRAFT and definition.fixed_value is not None:
+            raise ConflictError("Add the condition, then set its fixed value with Correct details")
         if any(cd.name == definition.name for cd in self.condition_definitions):
             raise ConflictError(
                 f"ConditionDefinition with name '{definition.name}' already exists"
@@ -1073,6 +1196,7 @@ class Protocol(AggregateRoot):
         data_type: ConditionDataType | None = None,
         unit: str | _UnsetT | None = _UNSET,
         pick_list_values: list[str] | _UnsetT | None = _UNSET,
+        fixed_value: str | _UnsetT | None = _UNSET,
     ) -> None:
         """Update fields on an existing condition definition."""
         self._guard_draft()
@@ -1100,10 +1224,25 @@ class Protocol(AggregateRoot):
             pick_list_values=(
                 existing.pick_list_values if pick_list_values is _UNSET else pick_list_values  # type: ignore[arg-type]
             ),
+            fixed_value=existing.fixed_value if fixed_value is _UNSET else fixed_value,  # type: ignore[arg-type]
             created_at=existing.created_at,
         )
         self.condition_definitions[idx] = replacement
         self.updated_at = datetime.now(UTC)
+
+    def set_condition_fixed_value(
+        self, definition_id: uuid.UUID, value: str | None, *, reason: str | None = None
+    ) -> None:
+        """The value that defines the protocol (Hypoxia: yes, 72 h). Drafts change it freely;
+        a published protocol only through a correction with a reason; locked ones not at all."""
+        self._guard_correction(reason)
+        cd = next((d for d in self.condition_definitions if d.id == definition_id), None)
+        if cd is None:
+            raise NotFoundError("ConditionDefinition", str(definition_id))
+        old = cd.fixed_value
+        cd.fixed_value = _clean_fixed_value(value, cd.data_type, cd.pick_list_values, cd.name)
+        self.updated_at = datetime.now(UTC)
+        self._record_correction(f"condition:{cd.name}", old, cd.fixed_value, reason)
 
     # ------------------------------------------------------------------
     # Control layout management
@@ -1165,6 +1304,37 @@ class Protocol(AggregateRoot):
             raise NotFoundError("Nickname", label)
         self.aliases = keep
         self.updated_at = datetime.now(UTC)
+
+    def add_reference(self, reference: ProtocolReference) -> None:
+        """Provenance: describes the protocol without defining it, so draft and active take it;
+        locked and retired do not."""
+        self._guard_metadata_mutable()
+        if any(r.key == reference.key for r in self.references):
+            raise ConflictError(f"'{reference.value}' is already a reference of this protocol")
+        self.references.append(reference)
+        self._record_reference(None, reference.key)
+
+    def remove_reference(self, key: str) -> None:
+        """Remove by ``<kind>:<value>`` (see ``ProtocolReference.key``)."""
+        self._guard_metadata_mutable()
+        keep = [r for r in self.references if r.key != key]
+        if len(keep) == len(self.references):
+            raise NotFoundError("Reference", key)
+        self.references = keep
+        self._record_reference(key, None)
+
+    def _record_reference(self, old: str | None, new: str | None) -> None:
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            ProtocolUpdated(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                field="references",
+                old_value=old,
+                new_value=new,
+            )
+        )
 
     def set_ontology_annotation(
         self, slot: str, terms: list[OntologyTerm], *, reason: str | None = None
