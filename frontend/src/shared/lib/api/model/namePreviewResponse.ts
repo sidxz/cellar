@@ -7,6 +7,7 @@
 import type { NamePreviewResponseClash } from './namePreviewResponseClash';
 import type { NameSiblingResponse } from './nameSiblingResponse';
 import type { NamePreviewResponseDiscriminatorError } from './namePreviewResponseDiscriminatorError';
+import type { SiblingRenameResponse } from './siblingRenameResponse';
 
 export interface NamePreviewResponse {
   name: string;
@@ -18,4 +19,5 @@ export interface NamePreviewResponse {
   needs_discriminator: boolean;
   discriminator_error: NamePreviewResponseDiscriminatorError;
   discriminator_in_pattern: boolean;
+  sibling_renames: SiblingRenameResponse[];
 }

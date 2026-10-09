@@ -8,6 +8,7 @@ import type { NamePreviewRequestCategory } from './namePreviewRequestCategory';
 import type { NamePreviewRequestOntologyAnnotations } from './namePreviewRequestOntologyAnnotations';
 import type { NamePreviewRequestDiscriminator } from './namePreviewRequestDiscriminator';
 import type { NamePreviewRequestProtocolId } from './namePreviewRequestProtocolId';
+import type { SiblingDiscriminatorRequest } from './siblingDiscriminatorRequest';
 
 export interface NamePreviewRequest {
   category?: NamePreviewRequestCategory;
@@ -15,4 +16,5 @@ export interface NamePreviewRequest {
   ontology_annotations?: NamePreviewRequestOntologyAnnotations;
   discriminator?: NamePreviewRequestDiscriminator;
   protocol_id?: NamePreviewRequestProtocolId;
+  sibling_discriminators?: SiblingDiscriminatorRequest[];
 }

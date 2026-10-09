@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
@@ -13,7 +14,10 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.application.screening.correct_protocol import CorrectProtocolCommand
-from cellar.application.screening.create_protocol import CreateProtocolCommand
+from cellar.application.screening.create_protocol import (
+    CreateProtocolCommand,
+    SiblingDiscriminator,
+)
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocolsQuery
 from cellar.application.screening.get_collection_gap import GetProtocolCollectionGapQuery
 from cellar.application.screening.get_protocol import (
@@ -391,6 +395,14 @@ class OntologyTermRequest(BaseModel):
     uri: str | None = None
 
 
+class SiblingDiscriminatorRequest(BaseModel):
+    """A discriminator for a bare sibling that has to be renamed alongside a new protocol."""
+
+    protocol_id: uuid.UUID
+    discriminator: str
+    reason: str | None = None
+
+
 class CreateProtocolRequest(BaseModel):
     # No name: it is generated from the category pattern and the facts below.
     description: str | None = None
@@ -409,6 +421,9 @@ class CreateProtocolRequest(BaseModel):
     discriminator: str | None = None
     # The form the dialog started from; decides whether the assay format follows the targets.
     form_id: uuid.UUID | None = None
+    # Bare siblings renamed in the same save, so a second protocol can take the base name.
+    sibling_discriminators: list[SiblingDiscriminatorRequest] = []
+    nicknames: list[str] = []
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -485,6 +500,13 @@ async def create_protocol(
         },
         discriminator=body.discriminator,
         form_id=body.form_id,
+        sibling_discriminators=[
+            SiblingDiscriminator(
+                protocol_id=s.protocol_id, discriminator=s.discriminator, reason=s.reason
+            )
+            for s in body.sibling_discriminators
+        ],
+        nicknames=body.nicknames,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -667,6 +689,8 @@ class NamePreviewRequest(BaseModel):
     discriminator: str | None = None
     # The protocol being corrected, so it does not clash with itself.
     protocol_id: uuid.UUID | None = None
+    # Discriminators proposed for the bare siblings, to preview their new names.
+    sibling_discriminators: list[SiblingDiscriminatorRequest] = []
     model_config = {"extra": "forbid"}
 
 
@@ -675,12 +699,26 @@ class NameSiblingResponse(BaseModel):
     code: str | None
     name: str
     discriminator: str | None
+    status: str | None
+    is_locked: bool
 
     @classmethod
     def from_domain(cls, s: NameSibling) -> NameSiblingResponse:
         return cls(
-            protocol_id=s.protocol_id, code=s.code, name=s.name, discriminator=s.discriminator
+            protocol_id=s.protocol_id,
+            code=s.code,
+            name=s.name,
+            discriminator=s.discriminator,
+            status=s.status,
+            is_locked=s.is_locked,
         )
+
+
+class SiblingRenameResponse(BaseModel):
+    protocol_id: uuid.UUID
+    code: str | None
+    name: str | None
+    error: str | None
 
 
 class NamePreviewResponse(BaseModel):
@@ -693,6 +731,7 @@ class NamePreviewResponse(BaseModel):
     needs_discriminator: bool
     discriminator_error: str | None
     discriminator_in_pattern: bool
+    sibling_renames: list[SiblingRenameResponse]
 
     @classmethod
     def from_domain(cls, p: NamePreview) -> NamePreviewResponse:
@@ -706,6 +745,7 @@ class NamePreviewResponse(BaseModel):
             needs_discriminator=p.needs_discriminator,
             discriminator_error=p.discriminator_error,
             discriminator_in_pattern=p.discriminator_in_pattern,
+            sibling_renames=[SiblingRenameResponse(**asdict(r)) for r in p.sibling_renames],
         )
 
 
@@ -724,6 +764,9 @@ async def preview_protocol_name(
         },
         discriminator=body.discriminator,
         protocol_id=body.protocol_id,
+        sibling_discriminators={
+            s.protocol_id: s.discriminator for s in body.sibling_discriminators
+        },
     )
     return NamePreviewResponse.from_domain(result_to_response(await uc(query, auth=auth)))
 

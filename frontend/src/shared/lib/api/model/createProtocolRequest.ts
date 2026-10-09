@@ -11,6 +11,7 @@ import type { CreateProtocolRequestConditionDefinitions } from './createProtocol
 import type { CreateProtocolRequestOntologyAnnotations } from './createProtocolRequestOntologyAnnotations';
 import type { CreateProtocolRequestDiscriminator } from './createProtocolRequestDiscriminator';
 import type { CreateProtocolRequestFormId } from './createProtocolRequestFormId';
+import type { SiblingDiscriminatorRequest } from './siblingDiscriminatorRequest';
 
 export interface CreateProtocolRequest {
   description?: CreateProtocolRequestDescription;
@@ -24,4 +25,6 @@ export interface CreateProtocolRequest {
   ontology_annotations?: CreateProtocolRequestOntologyAnnotations;
   discriminator?: CreateProtocolRequestDiscriminator;
   form_id?: CreateProtocolRequestFormId;
+  sibling_discriminators?: SiblingDiscriminatorRequest[];
+  nicknames?: string[];
 }

@@ -112,3 +112,73 @@ async def test_an_unknown_form_is_not_found(client):
     }
     r = await client.post("/api/v1/protocols", json=body)
     assert r.status_code == 404, r.text
+
+
+MTB = {
+    "term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1773",
+    "label": "Mycobacterium tuberculosis",
+    "ontology_source": "NCBITAXON",
+}
+
+
+def _growth(**kw):
+    return {
+        "category": "Growth inhibition",
+        "protocol_type": "whole_cell",
+        "readout_definitions": [{"name": "MIC", "data_type": "numeric"}],
+        "ontology_annotations": {"organism": [MTB]},
+        **kw,
+    }
+
+
+async def test_preview_and_create_rename_a_bare_sibling(client):
+    await seed_protocol_categories(client)
+    first = (await client.post("/api/v1/protocols", json=_growth())).json()
+    preview = (
+        await client.post(
+            "/api/v1/protocols/name-preview",
+            json={
+                "category": "Growth inhibition",
+                "ontology_annotations": {"organism": [MTB]},
+                "discriminator": "hypoxia",
+                "sibling_discriminators": [{"protocol_id": first["id"], "discriminator": "MABA"}],
+            },
+        )
+    ).json()
+    sib = preview["siblings"][0]
+    assert sib["status"] == "draft" and sib["is_locked"] is False
+    assert preview["sibling_renames"] == [
+        {
+            "protocol_id": first["id"],
+            "code": first["code"],
+            "name": "M. tuberculosis growth inhibition [MABA]",
+            "error": None,
+        }
+    ]
+    r = await client.post(
+        "/api/v1/protocols",
+        json=_growth(
+            discriminator="hypoxia",
+            nicknames=["LORA"],
+            sibling_discriminators=[{"protocol_id": first["id"], "discriminator": "MABA"}],
+        ),
+    )
+    assert r.status_code == 201, r.text
+    assert (await client.get(f"/api/v1/protocols/{first['id']}")).json()["name"].endswith("[MABA]")
+
+
+async def test_preview_reports_a_sibling_name_clash(client):
+    await seed_protocol_categories(client)
+    first = (await client.post("/api/v1/protocols", json=_growth())).json()
+    preview = (
+        await client.post(
+            "/api/v1/protocols/name-preview",
+            json={
+                "category": "Growth inhibition",
+                "ontology_annotations": {"organism": [MTB]},
+                "discriminator": "MABA",
+                "sibling_discriminators": [{"protocol_id": first["id"], "discriminator": "MABA"}],
+            },
+        )
+    ).json()
+    assert preview["sibling_renames"][0]["error"]

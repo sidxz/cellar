@@ -12,6 +12,7 @@ const base = {
   needs_discriminator: false,
   discriminator_error: null,
   discriminator_in_pattern: false,
+  sibling_renames: [],
 };
 
 describe("ProtocolNamePreview", () => {
@@ -32,7 +33,14 @@ describe("ProtocolNamePreview", () => {
   it("explains a clash with the other code", () => {
     const p = {
       ...base,
-      clash: { protocol_id: "x", code: "PRT-00002", name: base.name, discriminator: "resazurin" },
+      clash: {
+        protocol_id: "x",
+        code: "PRT-00002",
+        name: base.name,
+        discriminator: "resazurin",
+        status: "draft",
+        is_locked: false,
+      },
     };
     render(<ProtocolNamePreview preview={p} isFetching={false} />);
     expect(screen.getByText(/PRT-00002/)).toBeInTheDocument();
@@ -45,6 +53,8 @@ describe("ProtocolNamePreview", () => {
       code: "PRT-00003",
       name: "M. tuberculosis growth inhibition [OD600]",
       discriminator: "OD600",
+      status: "draft",
+      is_locked: false,
     };
     const p = { ...base, name: base.base, siblings: [sib], needs_discriminator: true };
     render(<ProtocolNamePreview preview={p} isFetching={false} />);
@@ -63,6 +73,8 @@ describe("ProtocolNamePreview", () => {
       code: "PRT-00019",
       name: "Microsomal stability [human]",
       discriminator: "human",
+      status: "draft",
+      is_locked: false,
     };
     const p = {
       ...base,

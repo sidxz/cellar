@@ -6,10 +6,13 @@
  */
 import type { NameSiblingResponseCode } from './nameSiblingResponseCode';
 import type { NameSiblingResponseDiscriminator } from './nameSiblingResponseDiscriminator';
+import type { NameSiblingResponseStatus } from './nameSiblingResponseStatus';
 
 export interface NameSiblingResponse {
   protocol_id: string;
   code: NameSiblingResponseCode;
   name: string;
   discriminator: NameSiblingResponseDiscriminator;
+  status: NameSiblingResponseStatus;
+  is_locked: boolean;
 }
