@@ -264,7 +264,8 @@ export function CreateProtocolDialog({
    *  (null: no form, so those are cleared); readouts the chemist edited are asked about. */
   const applyPickedForm = (f: ProtocolForm | null) => {
     setSelectedForm(f);
-    if (JSON.stringify(form.getValues("conditions")) === appliedConditions) {
+    const conditionsNow = JSON.stringify(form.getValues("conditions"));
+    if (conditionsNow === DEFAULT_CONDITIONS_JSON || conditionsNow === appliedConditions) {
       const conditions = f ? conditionsFromForm(f) : [];
       form.setValue("conditions", conditions);
       setAppliedConditions(JSON.stringify(conditions));

@@ -509,6 +509,18 @@ describe("CreateProtocolDialog", () => {
     expect(state.draft).toMatchObject({ form_id: null });
   });
 
+  it("gives conditions the chemist emptied to the next form", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    openMoreDetails();
+    fireEvent.click(screen.getByRole("button", { name: "Remove condition" }));
+    pickCategory("Cytotoxicity");
+    expect((await submit()).condition_definitions).toEqual([
+      { name: "Cell density", data_type: "numeric", unit: "cells/well" },
+    ]);
+  });
+
   it("hides Dose unit until a readout fits dose-response curves", () => {
     const { unmount } = render(<CreateProtocolDialog open onOpenChange={() => {}} />);
     openMoreDetails();
