@@ -206,6 +206,10 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     control_layouts: Mapped[dict | None] = mapped_column(JSONB)
     ontology_annotations: Mapped[dict | None] = mapped_column(JSONB)
     recommended_hit_criteria: Mapped[list | None] = mapped_column(JSONB)
+    # Typed provenance: [{kind, value}] (ChEMBL assay, PubChem AID, DOI, PMID, URL).
+    references: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     # Authoritative-derived structural signature (protocol_type + readout
     # schema). Powers similarity blocking/scoring; recomputed on every save.
     fingerprint: Mapped[dict | None] = mapped_column(JSONB)

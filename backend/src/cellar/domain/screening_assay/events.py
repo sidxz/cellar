@@ -81,6 +81,19 @@ class ProtocolRenamed(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class ProtocolUpdated(DomainEvent):
+    """A descriptive field changed (no correction needed): audited with the old and new value.
+    ``old_value`` None means added; ``new_value`` None means removed."""
+
+    field: str
+    old_value: str | None
+    new_value: str | None
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [(self.field, self.old_value, self.new_value)]
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProtocolLocked(DomainEvent):
     locked_by: uuid.UUID
     lock_reason: str

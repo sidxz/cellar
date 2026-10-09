@@ -86,6 +86,7 @@ class ProtocolVersioningService:
             name=parent.name,
             code=parent.code,
             aliases=list(parent.aliases),
+            references=list(parent.references),
             discriminator=parent.discriminator,
             name_base=parent.name_base,
             name_flag=parent.name_flag,

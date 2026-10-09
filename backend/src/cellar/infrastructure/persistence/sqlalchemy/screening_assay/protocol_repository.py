@@ -29,6 +29,7 @@ from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
     ProtocolAlias,
+    ProtocolReference,
     ReadoutDefinition,
 )
 from cellar.domain.screening_assay.protocol_fingerprint import (
@@ -971,6 +972,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 )
                 for a in model.aliases
             ],
+            references=[ProtocolReference.from_dict(r) for r in model.references or []],
             discriminator=model.discriminator,
             name_base=model.name_base,
             name_flag=NameFlag(model.name_flag) if model.name_flag else None,
@@ -1046,6 +1048,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
             lock_reason=aggregate.lock_reason,
             locked_at=aggregate.locked_at,
             fingerprint=compute_protocol_fingerprint(aggregate),
+            references=[r.to_dict() for r in aggregate.references],
         )
         model.readout_definitions = [
             self._readout_def_to_model(rd) for rd in aggregate.readout_definitions
@@ -1084,6 +1087,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         model.lock_reason = aggregate.lock_reason
         model.locked_at = aggregate.locked_at
         model.fingerprint = compute_protocol_fingerprint(aggregate)
+        model.references = [r.to_dict() for r in aggregate.references]
 
         # Replace owned entity collections
         model.readout_definitions = [

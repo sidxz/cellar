@@ -20,6 +20,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
+    ReferenceKind,
 )
 from cellar.domain.screening_assay.events import (
     ProtocolCorrected,
@@ -29,6 +30,7 @@ from cellar.domain.screening_assay.events import (
     ProtocolRenamed,
     ProtocolRetired,
     ProtocolUnlocked,
+    ProtocolUpdated,
 )
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.enums import ConcentrationUnit
@@ -119,6 +121,60 @@ class ProtocolAlias:
     kind: AliasKind
     recorded_at: datetime
     reason: str | None = None
+
+
+# A value must match its kind's pattern after the prefix is stripped. Links are built only from
+# these validated values, so a url is http(s) and nothing else (no javascript:, data:, ...).
+_REFERENCE_PATTERNS: dict[ReferenceKind, re.Pattern[str]] = {
+    ReferenceKind.CHEMBL_ASSAY: re.compile(r"^CHEMBL\d+$"),
+    ReferenceKind.PUBCHEM_AID: re.compile(r"^\d+$"),
+    ReferenceKind.DOI: re.compile(r"^10\.\d{4,9}/\S+$"),
+    ReferenceKind.PMID: re.compile(r"^\d+$"),
+    ReferenceKind.URL: re.compile(r"^https?://\S+$"),
+}
+_REFERENCE_PREFIXES: dict[ReferenceKind, re.Pattern[str]] = {
+    ReferenceKind.PUBCHEM_AID: re.compile(r"^aid\s?", re.IGNORECASE),
+    ReferenceKind.DOI: re.compile(r"^(https?://doi\.org/|doi:)", re.IGNORECASE),
+}
+_MAX_REFERENCE_LENGTH = 2000
+
+
+@dataclass(frozen=True)
+class ProtocolReference:
+    """Where a protocol comes from: a ChEMBL assay, PubChem AID, DOI, PMID or web page.
+
+    Built from raw input: the kind's prefix is stripped (``AID 1851``, ``https://doi.org/...``)
+    and the value is validated, so two spellings of one reference are equal.
+    """
+
+    kind: ReferenceKind
+    value: str
+
+    def __post_init__(self) -> None:
+        try:
+            kind = ReferenceKind(self.kind)
+        except ValueError:
+            raise ValidationError(f"Unknown reference kind {self.kind!r}") from None
+        value = self.value.strip()
+        prefix = _REFERENCE_PREFIXES.get(kind)
+        if prefix is not None:
+            value = prefix.sub("", value, count=1)
+        if len(value) > _MAX_REFERENCE_LENGTH or not _REFERENCE_PATTERNS[kind].match(value):
+            raise ValidationError(f"{value or self.value!r} is not a valid {kind.value} reference")
+        object.__setattr__(self, "kind", kind)
+        object.__setattr__(self, "value", value)
+
+    @property
+    def key(self) -> str:
+        """Stable identity: ``<kind>:<value>``. Indexes shift; this does not."""
+        return f"{self.kind.value}:{self.value}"
+
+    def to_dict(self) -> dict[str, str]:
+        return {"kind": self.kind.value, "value": self.value}
+
+    @classmethod
+    def from_dict(cls, raw: dict[str, str]) -> ProtocolReference:
+        return cls(kind=ReferenceKind(raw["kind"]), value=raw["value"])
 
 
 @dataclass(frozen=True)
@@ -382,6 +438,7 @@ class Protocol(AggregateRoot):
         control_layouts: dict[str, uuid.UUID] | None = None,
         ontology_annotations: dict[str, list[OntologyTerm]] | None = None,
         aliases: list[ProtocolAlias] | None = None,
+        references: list[ProtocolReference] | None = None,
         discriminator: str | None = None,
         name_base: str | None = None,
         name_flag: NameFlag | None = None,
@@ -423,6 +480,7 @@ class Protocol(AggregateRoot):
         self.control_layouts: dict[str, uuid.UUID] = control_layouts or {}
         self.ontology_annotations: dict[str, list[OntologyTerm]] = ontology_annotations or {}
         self.aliases: list[ProtocolAlias] = list(aliases or [])
+        self.references: list[ProtocolReference] = list(references or [])
         # Generated-name parts: the free discriminator, the name without it (collision key),
         # and why the name needs attention.
         self.discriminator = discriminator
@@ -530,9 +588,13 @@ class Protocol(AggregateRoot):
         discriminator: str | None = None,
         name_base: str | None = None,
         name_flag: NameFlag | None = None,
+        references: list[ProtocolReference] | None = None,
     ) -> Protocol:
         if not readout_definitions:
             raise ValidationError("Protocol must have at least one ReadoutDefinition")
+        references = list(references or [])
+        if len({r.key for r in references}) != len(references):
+            raise ConflictError("The same reference is listed twice")
         if len(name.strip()) > MAX_NAME_LENGTH:
             raise ValidationError(f"Protocol name must be at most {MAX_NAME_LENGTH} characters")
 
@@ -552,6 +614,7 @@ class Protocol(AggregateRoot):
             discriminator=discriminator,
             name_base=name_base,
             name_flag=name_flag,
+            references=references,
         )
         protocol.register_event(
             ProtocolCreated(
@@ -1217,6 +1280,37 @@ class Protocol(AggregateRoot):
             raise NotFoundError("Nickname", label)
         self.aliases = keep
         self.updated_at = datetime.now(UTC)
+
+    def add_reference(self, reference: ProtocolReference) -> None:
+        """Provenance: describes the protocol without defining it, so draft and active take it;
+        locked and retired do not."""
+        self._guard_metadata_mutable()
+        if any(r.key == reference.key for r in self.references):
+            raise ConflictError(f"'{reference.value}' is already a reference of this protocol")
+        self.references.append(reference)
+        self._record_reference(None, reference.key)
+
+    def remove_reference(self, key: str) -> None:
+        """Remove by ``<kind>:<value>`` (see ``ProtocolReference.key``)."""
+        self._guard_metadata_mutable()
+        keep = [r for r in self.references if r.key != key]
+        if len(keep) == len(self.references):
+            raise NotFoundError("Reference", key)
+        self.references = keep
+        self._record_reference(key, None)
+
+    def _record_reference(self, old: str | None, new: str | None) -> None:
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            ProtocolUpdated(
+                aggregate_id=self.id,
+                aggregate_type="Protocol",
+                workspace_id=self.workspace_id,
+                field="references",
+                old_value=old,
+                new_value=new,
+            )
+        )
 
     def set_ontology_annotation(
         self, slot: str, terms: list[OntologyTerm], *, reason: str | None = None

@@ -59,6 +59,10 @@ from cellar.application.screening.manage_protocol import (
     VersionProtocolCommand,
 )
 from cellar.application.screening.manage_protocol_aliases import ProtocolNicknameCommand
+from cellar.application.screening.manage_protocol_references import (
+    AddProtocolReferenceCommand,
+    RemoveProtocolReferenceCommand,
+)
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
     RemoveReadoutDefinitionCommand,
@@ -77,11 +81,13 @@ from cellar.application.screening.resolve_target_links import (
     ResolveProtocolTargetsQuery,
 )
 from cellar.application.shared.sentinel import UNSET
+from cellar.domain.screening_assay.enums import ReferenceKind
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import NameSibling
 from cellar.interface.dependencies import (
     AddConditionDefinitionDep,
     AddProtocolNicknameDep,
+    AddProtocolReferenceDep,
     AddProtocolTargetDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
@@ -108,6 +114,7 @@ from cellar.interface.dependencies import (
     RemoveOntologyAnnotationDep,
     RemoveProtocolFromProjectDep,
     RemoveProtocolNicknameDep,
+    RemoveProtocolReferenceDep,
     RemoveProtocolTargetDep,
     RemoveReadoutDefinitionDep,
     ResolveProtocolTargetsDep,
@@ -211,6 +218,13 @@ class ConditionDefinitionResponse(BaseModel):
     fixed_value: str | None
 
 
+class ProtocolReferenceResponse(BaseModel):
+    """A validated reference; ``<kind>:<value>`` is its key for DELETE."""
+
+    kind: ReferenceKind
+    value: str
+
+
 class ProtocolAliasResponse(BaseModel):
     label: str
     kind: str
@@ -258,6 +272,7 @@ class ProtocolResponse(BaseModel):
     # GET /protocols/{id}; null on every other response means "not computed".
     can_delete: bool | None = None
     aliases: list[ProtocolAliasResponse] = []
+    references: list[ProtocolReferenceResponse] = []
 
     @classmethod
     def from_domain(
@@ -357,6 +372,9 @@ class ProtocolResponse(BaseModel):
                 )
                 for a in p.aliases
             ],
+            references=[
+                ProtocolReferenceResponse(kind=r.kind, value=r.value) for r in p.references
+            ],
         )
 
 
@@ -406,6 +424,14 @@ class SiblingDiscriminatorRequest(BaseModel):
     reason: str | None = None
 
 
+class ProtocolReferenceRequest(BaseModel):
+    """Raw input; the domain strips prefixes (``AID``, ``https://doi.org/``) and validates."""
+
+    kind: ReferenceKind
+    value: str
+    model_config = {"extra": "forbid"}
+
+
 class AddConditionDefinitionRequest(BaseModel):
     name: str
     data_type: str
@@ -436,6 +462,7 @@ class CreateProtocolRequest(BaseModel):
     # share the base name the new protocol carries a discriminator too.
     sibling_discriminators: list[SiblingDiscriminatorRequest] = []
     nicknames: list[str] = []
+    references: list[ProtocolReferenceRequest] = []
 
     # The single target_id field was replaced by target_ids (migration 051);
     # forbid extras so a client still sending it gets a 422 instead of a
@@ -519,6 +546,7 @@ async def create_protocol(
             for s in body.sibling_discriminators
         ],
         nicknames=body.nicknames,
+        references=[r.model_dump(mode="json") for r in body.references],
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
@@ -1072,6 +1100,46 @@ async def remove_protocol_nickname(
 ) -> ProtocolResponse:
     cmd = ProtocolNicknameCommand(
         workspace_id=auth.workspace_id, protocol_id=protocol_id, label=label
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
+
+
+@router.post(
+    "/protocols/{protocol_id}/references", response_model=ProtocolResponse, tags=["protocols"]
+)
+async def add_protocol_reference(
+    protocol_id: uuid.UUID,
+    body: ProtocolReferenceRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: AddProtocolReferenceDep,
+) -> ProtocolResponse:
+    """Add where the protocol comes from. Draft and active; locked and retired refuse (409)."""
+    cmd = AddProtocolReferenceCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        kind=body.kind.value,
+        value=body.value,
+    )
+    return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
+
+
+@router.delete(
+    "/protocols/{protocol_id}/references/{key:path}",
+    response_model=ProtocolResponse,
+    tags=["protocols"],
+)
+async def remove_protocol_reference(
+    protocol_id: uuid.UUID,
+    key: str,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: RemoveProtocolReferenceDep,
+) -> ProtocolResponse:
+    """Remove by key ``<kind>:<value>`` (URL-encoded), stable where an index would shift. The
+    path converter keeps a DOI's slash."""
+    cmd = RemoveProtocolReferenceCommand(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id, key=key
     )
     return await _protocol_response(targets_uc, auth, await uc(cmd, auth=auth))
 

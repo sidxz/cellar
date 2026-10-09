@@ -42,6 +42,7 @@ from cellar.domain.screening_assay.protocol import (
     RESERVED_READOUT_NAMES,
     ConditionDefinition,
     Protocol,
+    ProtocolReference,
     ReadoutDefinition,
     is_reserved_readout_name,
 )
@@ -106,6 +107,8 @@ class CreateProtocolCommand(Command):
     sibling_discriminators: list[SiblingDiscriminator] = field(default_factory=list)
     # What people call the new protocol, added in the same save (cosmetic; any status).
     nicknames: list[str] = field(default_factory=list)
+    # Where it comes from: [{kind, value}] (ChEMBL assay, PubChem AID, DOI, PMID, URL).
+    references: list[dict[str, str]] = field(default_factory=list)
 
 
 class CreateProtocol:
@@ -205,6 +208,10 @@ class CreateProtocol:
             )
             for cd in input.condition_definitions
         ]
+        references = [
+            ProtocolReference(kind=r["kind"], value=r["value"])  # type: ignore[arg-type]
+            for r in input.references
+        ]
 
         ontology_annotations = {
             slot: [
@@ -271,6 +278,7 @@ class CreateProtocol:
                 readout_definitions=readout_defs,
                 condition_definitions=condition_defs or None,
                 ontology_annotations=ontology_annotations or None,
+                references=references,
             )
             for nickname in input.nicknames:
                 protocol.add_nickname(nickname)

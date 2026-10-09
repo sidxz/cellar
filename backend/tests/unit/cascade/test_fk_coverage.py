@@ -581,6 +581,7 @@ LEFT_ALONE: dict[str, str] = {
     "dose_response_curves.dose_response_config_snapshot": _BY_NAME,
     "protocols.ontology_annotations": _BY_NAME,
     "protocols.recommended_hit_criteria": _BY_NAME,
+    "protocols.references": _NO_IDS,
     "readout_definitions.dose_response_config": _BY_NAME,
     "readout_definitions.normalizations": _BY_NAME,
     "run_import_templates.column_mapping": _BY_NAME,
