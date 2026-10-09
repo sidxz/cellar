@@ -1,5 +1,6 @@
 "use client";
 
+import { useProtocolFacetSlots } from "@/features/screening-assay/hooks/use-protocol-facet-slots";
 import {
   PROTOCOL_TYPE_LABELS,
   READOUT_AGGREGATION_LABELS,
@@ -7,6 +8,7 @@ import {
   READOUT_NORMALIZATION_LABELS,
 } from "@/features/screening-assay/types";
 import { EmptyState } from "@/shared/components/empty-state";
+import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
 import { PageHeader } from "@/shared/components/page-header";
 import { SkeletonList } from "@/shared/components/skeleton-list";
 import { Badge } from "@/shared/components/ui/badge";
@@ -37,17 +39,23 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { UnitPicker } from "@/shared/components/unit-picker";
+import type {
+  ProtocolFormConditionTemplate,
+  ProtocolFormReadoutTemplate,
+} from "@/shared/lib/api/model";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
+import { useProtocolCategories } from "../hooks/use-protocol-categories";
 import {
-  type CreateProtocolFormInput,
   type ProtocolForm,
-  type UpdateProtocolFormInput,
   useCreateProtocolForm,
   useDeleteProtocolForm,
   useProtocolForms,
+  useSeedDefaultProtocolForms,
   useUpdateProtocolForm,
 } from "../hooks/use-protocol-forms";
+import type { ProtocolCategory } from "../types";
 
 // ---------------------------------------------------------------------------
 // Readout / Condition template row types
@@ -61,6 +69,8 @@ interface ReadoutRow {
   unit: string;
   aggregation: string;
   normalization: string;
+  /** The loaded template; spread into the payload so fields this editor does not show survive a save. */
+  _source?: ProtocolFormReadoutTemplate;
 }
 
 interface ConditionRow {
@@ -69,7 +79,12 @@ interface ConditionRow {
   name: string;
   data_type: string;
   unit: string;
+  /** The loaded template; spread into the payload so fields this editor does not show survive a save. */
+  _source?: ProtocolFormConditionTemplate;
 }
+
+const ANY_CATEGORY = "__any__";
+const ANY_CATEGORY_LABEL = "Any category";
 
 function emptyReadoutRow(): ReadoutRow {
   return {
@@ -86,6 +101,20 @@ function emptyConditionRow(): ConditionRow {
   return { _key: crypto.randomUUID(), name: "", data_type: "text", unit: "" };
 }
 
+/** A form's facet defaults as the picker's per-slot terms. */
+function termsBySlot(form: ProtocolForm | null): Record<string, OntologyTerm[]> {
+  const out: Record<string, OntologyTerm[]> = {};
+  for (const d of form?.ontology_defaults ?? []) {
+    out[d.slot_name] = (d.terms ?? []).map((t) => ({
+      term_id: String(t.term_id ?? ""),
+      label: String(t.label ?? ""),
+      ontology_source: String(t.ontology_source ?? ""),
+      uri: (t.uri as string | null) ?? null,
+    }));
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------------------
 // ProtocolForm dialog (create / edit)
 // ---------------------------------------------------------------------------
@@ -94,53 +123,64 @@ interface FormDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   editing: ProtocolForm | null;
+  categories: ProtocolCategory[];
 }
 
-function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
+function FormDialog({ open, onOpenChange, editing, categories }: FormDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [protocolType, setProtocolType] = useState("");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [assayFormatFromTarget, setAssayFormatFromTarget] = useState(false);
   const [isDefault, setIsDefault] = useState(false);
+  const [ontologyDefaults, setOntologyDefaults] = useState<Record<string, OntologyTerm[]>>({});
   const [readoutRows, setReadoutRows] = useState<ReadoutRow[]>([emptyReadoutRow()]);
   const [conditionRows, setConditionRows] = useState<ConditionRow[]>([]);
 
   const isEdit = editing !== null;
   const create = useCreateProtocolForm();
   const update = useUpdateProtocolForm(editing?.id ?? "");
+  const facetSlots = useProtocolFacetSlots();
 
   useEffect(() => {
     if (editing) {
       setName(editing.name);
       setDescription(editing.description ?? "");
       setProtocolType(editing.protocol_type ?? "");
+      setCategoryId(editing.category_id ?? null);
+      setAssayFormatFromTarget(editing.assay_format_from_target ?? false);
       setIsDefault(editing.is_default);
+      setOntologyDefaults(termsBySlot(editing));
       setReadoutRows(
         editing.readout_templates.length > 0
           ? editing.readout_templates.map((t) => ({
               _key: crypto.randomUUID(),
-              name: (t.name as string) ?? "",
-              data_type: (t.data_type as string) ?? "numeric",
-              unit: (t.unit as string) ?? "",
-              aggregation: (t.aggregation as string) ?? "none",
-              normalization: (t.normalization as string) ?? "none",
+              name: t.name,
+              data_type: t.data_type,
+              unit: t.unit ?? "",
+              aggregation: t.aggregation ?? "none",
+              normalization: t.normalization ?? "none",
+              _source: t,
             }))
           : [emptyReadoutRow()],
       );
       setConditionRows(
-        editing.condition_templates
-          ? editing.condition_templates.map((t) => ({
-              _key: crypto.randomUUID(),
-              name: (t.name as string) ?? "",
-              data_type: (t.data_type as string) ?? "text",
-              unit: (t.unit as string) ?? "",
-            }))
-          : [],
+        (editing.condition_templates ?? []).map((t) => ({
+          _key: crypto.randomUUID(),
+          name: t.name,
+          data_type: t.data_type,
+          unit: t.unit ?? "",
+          _source: t,
+        })),
       );
     } else {
       setName("");
       setDescription("");
       setProtocolType("");
+      setCategoryId(null);
+      setAssayFormatFromTarget(false);
       setIsDefault(false);
+      setOntologyDefaults({});
       setReadoutRows([emptyReadoutRow()]);
       setConditionRows([]);
     }
@@ -151,6 +191,7 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
     if (validReadouts.length === 0) return;
 
     const readout_templates = validReadouts.map((r) => ({
+      ...r._source,
       name: r.name.trim(),
       data_type: r.data_type,
       unit: r.unit || null,
@@ -162,26 +203,33 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
     const condition_templates =
       validConditions.length > 0
         ? validConditions.map((c) => ({
+            ...c._source,
             name: c.name.trim(),
             data_type: c.data_type,
             unit: c.unit || null,
           }))
         : null;
 
+    const facetDefaults = Object.entries(ontologyDefaults)
+      .filter(([, terms]) => terms.length)
+      .map(([slot_name, terms]) => ({ slot_name, terms: terms.map((t) => ({ ...t })) }));
+
     const payload = {
       name: name.trim(),
       description: description.trim() || null,
       protocol_type: protocolType && protocolType !== "__none__" ? protocolType : null,
+      category_id: categoryId,
+      assay_format_from_target: assayFormatFromTarget,
       is_default: isDefault,
       readout_templates,
       condition_templates,
-      ontology_defaults: null,
+      ontology_defaults: facetDefaults.length > 0 ? facetDefaults : null,
     };
 
     if (isEdit) {
-      await update.mutateAsync(payload as UpdateProtocolFormInput);
+      await update.mutateAsync(payload);
     } else {
-      await create.mutateAsync(payload as CreateProtocolFormInput);
+      await create.mutateAsync(payload);
     }
     onOpenChange(false);
   };
@@ -235,11 +283,72 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
             </Select>
           </div>
 
+          <div className="grid gap-2">
+            <Label>Category</Label>
+            <Select
+              value={categoryId ?? ANY_CATEGORY}
+              onValueChange={(v) => setCategoryId(v === ANY_CATEGORY ? null : v)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder={ANY_CATEGORY_LABEL} />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ANY_CATEGORY}>{ANY_CATEGORY_LABEL}</SelectItem>
+                {[...categories]
+                  .sort((a, b) => a.label.localeCompare(b.label))
+                  .map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="flex items-center justify-between rounded-md border px-3 py-2">
             <Label htmlFor="form-default" className="cursor-pointer">
-              Default Form
+              Default for this category
             </Label>
             <Switch id="form-default" checked={isDefault} onCheckedChange={setIsDefault} />
+          </div>
+
+          <div className="flex items-center justify-between rounded-md border px-3 py-2">
+            <Label htmlFor="form-assay-format" className="cursor-pointer">
+              Assay format follows the target
+            </Label>
+            <Switch
+              id="form-assay-format"
+              checked={assayFormatFromTarget}
+              onCheckedChange={setAssayFormatFromTarget}
+            />
+          </div>
+
+          {/* Facet defaults */}
+          <div className="grid gap-2">
+            <Label className="text-sm font-semibold">
+              Facet defaults{" "}
+              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+            </Label>
+            {facetSlots.map((slot) => (
+              <div key={slot.name} className="grid gap-1">
+                <Label className="text-[11px]">{slot.label}</Label>
+                <OntologySearchInput
+                  ontologySources={slot.ontology_sources}
+                  rootConceptId={slot.root_concept_id}
+                  value={ontologyDefaults[slot.name] ?? []}
+                  onChange={(terms) =>
+                    setOntologyDefaults((prev) => ({ ...prev, [slot.name]: terms }))
+                  }
+                  allowFreeText={slot.allow_free_text}
+                  placeholder={`Search ${slot.ontology_sources.join(", ")}...`}
+                />
+                {slot.name === "assay_format" && assayFormatFromTarget && (
+                  <p className="text-xs text-muted-foreground">
+                    Not used while the assay format follows the target.
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
 
           {/* Readout Templates */}
@@ -294,17 +403,16 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="grid gap-1 w-[80px]">
+                  <div className="grid gap-1 w-[110px]">
                     <Label className="text-[11px]">Unit</Label>
-                    <Input
+                    <UnitPicker
                       value={row.unit}
-                      onChange={(e) =>
+                      onChange={(v) =>
                         setReadoutRows((prev) =>
-                          prev.map((r, i) => (i === idx ? { ...r, unit: e.target.value } : r)),
+                          prev.map((r, i) => (i === idx ? { ...r, unit: v } : r)),
                         )
                       }
                       placeholder="nM"
-                      className="h-8 text-sm"
                     />
                   </div>
                   <div className="grid gap-1 w-[110px]">
@@ -421,17 +529,16 @@ function FormDialog({ open, onOpenChange, editing }: FormDialogProps) {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="grid gap-1 w-[80px]">
+                    <div className="grid gap-1 w-[110px]">
                       <Label className="text-[11px]">Unit</Label>
-                      <Input
+                      <UnitPicker
                         value={row.unit}
-                        onChange={(e) =>
+                        onChange={(v) =>
                           setConditionRows((prev) =>
-                            prev.map((r, i) => (i === idx ? { ...r, unit: e.target.value } : r)),
+                            prev.map((r, i) => (i === idx ? { ...r, unit: v } : r)),
                           )
                         }
                         placeholder="optional"
-                        className="h-8 text-sm"
                       />
                     </div>
                     <Button
@@ -509,11 +616,25 @@ function DeleteDialog({ form, onOpenChange }: DeleteDialogProps) {
 
 interface FormTableProps {
   entries: ProtocolForm[];
+  categories: ProtocolCategory[];
   onEdit: (form: ProtocolForm) => void;
   onDelete: (form: ProtocolForm) => void;
 }
 
-function FormTable({ entries, onEdit, onDelete }: FormTableProps) {
+/** Forms under their category heading, sorted by category label; generic forms ("Any category") last. */
+function groupByCategory(entries: ProtocolForm[], categories: ProtocolCategory[]) {
+  const labels = new Map(categories.map((c) => [c.id, c.label]));
+  const groups = new Map<string, ProtocolForm[]>();
+  for (const entry of entries) {
+    const label = (entry.category_id && labels.get(entry.category_id)) || ANY_CATEGORY_LABEL;
+    groups.set(label, [...(groups.get(label) ?? []), entry]);
+  }
+  return [...groups.entries()].sort(([a], [b]) =>
+    a === ANY_CATEGORY_LABEL ? 1 : b === ANY_CATEGORY_LABEL ? -1 : a.localeCompare(b),
+  );
+}
+
+function FormTable({ entries, categories, onEdit, onDelete }: FormTableProps) {
   if (entries.length === 0) {
     return <EmptyState variant="inline" icon={FileText} title="No protocol forms defined yet." />;
   }
@@ -531,44 +652,66 @@ function FormTable({ entries, onEdit, onDelete }: FormTableProps) {
           </TableRow>
         </TableHeader>
         <TableBody>
-          {entries.map((entry) => (
-            <TableRow key={entry.id}>
-              <TableCell>
-                <div>
-                  <span className="font-medium">{entry.name}</span>
-                  {entry.description && (
-                    <p className="text-xs text-muted-foreground mt-0.5">{entry.description}</p>
-                  )}
-                </div>
-              </TableCell>
-              <TableCell>
-                {entry.protocol_type
-                  ? (PROTOCOL_TYPE_LABELS[
-                      entry.protocol_type as keyof typeof PROTOCOL_TYPE_LABELS
-                    ] ?? entry.protocol_type)
-                  : "\u2014"}
-              </TableCell>
-              <TableCell className="tabular-nums">{entry.readout_templates.length}</TableCell>
-              <TableCell>
-                {entry.is_default ? (
-                  <Badge variant="secondary" className="text-xs">
-                    Default
-                  </Badge>
-                ) : (
-                  <span className="text-sm text-muted-foreground">{"\u2014"}</span>
-                )}
-              </TableCell>
-              <TableCell>
-                <div className="flex gap-1">
-                  <Button variant="ghost" size="sm" onClick={() => onEdit(entry)}>
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm" onClick={() => onDelete(entry)}>
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                </div>
-              </TableCell>
-            </TableRow>
+          {groupByCategory(entries, categories).map(([label, forms]) => (
+            <Fragment key={label}>
+              <TableRow className="bg-muted/40 hover:bg-muted/40">
+                <TableCell
+                  colSpan={5}
+                  className="py-1.5 text-xs font-semibold text-muted-foreground"
+                >
+                  {label}
+                </TableCell>
+              </TableRow>
+              {forms.map((entry) => (
+                <TableRow key={entry.id}>
+                  <TableCell>
+                    <div>
+                      <span className="font-medium">{entry.name}</span>
+                      {entry.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">{entry.description}</p>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {entry.protocol_type
+                      ? (PROTOCOL_TYPE_LABELS[
+                          entry.protocol_type as keyof typeof PROTOCOL_TYPE_LABELS
+                        ] ?? entry.protocol_type)
+                      : "\u2014"}
+                  </TableCell>
+                  <TableCell className="tabular-nums">{entry.readout_templates.length}</TableCell>
+                  <TableCell>
+                    {entry.is_default ? (
+                      <Badge variant="secondary" className="text-xs">
+                        Default
+                      </Badge>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">{"\u2014"}</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Edit ${entry.name}`}
+                        onClick={() => onEdit(entry)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`Delete ${entry.name}`}
+                        onClick={() => onDelete(entry)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </Fragment>
           ))}
         </TableBody>
       </Table>
@@ -586,6 +729,8 @@ export function ProtocolFormAdmin() {
   const [deleting, setDeleting] = useState<ProtocolForm | null>(null);
 
   const { data: entries, isLoading } = useProtocolForms();
+  const { data: categories } = useProtocolCategories();
+  const seed = useSeedDefaultProtocolForms();
 
   const openCreate = () => {
     setEditing(null);
@@ -603,6 +748,9 @@ export function ProtocolFormAdmin() {
         title="Protocol Forms"
         subtitle="Pre-configured protocol templates with readout definitions, conditions, and ontology defaults."
       >
+        <Button variant="outline" onClick={() => seed.mutate()} disabled={seed.isPending}>
+          Add default forms
+        </Button>
         <Button onClick={openCreate}>
           <Plus className="mr-2 h-4 w-4" />
           Add Form
@@ -613,11 +761,21 @@ export function ProtocolFormAdmin() {
         {isLoading ? (
           <SkeletonList />
         ) : (
-          <FormTable entries={entries ?? []} onEdit={openEdit} onDelete={setDeleting} />
+          <FormTable
+            entries={entries ?? []}
+            categories={categories ?? []}
+            onEdit={openEdit}
+            onDelete={setDeleting}
+          />
         )}
       </div>
 
-      <FormDialog open={dialogOpen} onOpenChange={setDialogOpen} editing={editing} />
+      <FormDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        editing={editing}
+        categories={categories ?? []}
+      />
 
       <DeleteDialog form={deleting} onOpenChange={(open) => !open && setDeleting(null)} />
     </>
