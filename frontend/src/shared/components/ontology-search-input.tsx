@@ -36,7 +36,8 @@ export interface OntologySearchInputProps {
   allowFreeText?: boolean;
   placeholder?: string;
   /** Annotation slot this picker fills. With it the dropdown lists the terms protocols already
-   *  use there ("Used here") before the ontology results. */
+   *  use there ("Used here") before the ontology results. With no `ontologySources` the picker
+   *  never searches an ontology: used-here terms plus free text only. */
   slot?: string;
 }
 
@@ -51,7 +52,7 @@ export function OntologySearchInput({
   value,
   onChange,
   allowFreeText = false,
-  placeholder = "Search ontology terms...",
+  placeholder = ontologySources.length ? "Search ontology terms..." : "Type or pick one used here",
   slot,
 }: OntologySearchInputProps) {
   // When rootConceptId is set, use dropdown mode (finite list of descendants)
@@ -202,6 +203,8 @@ function OntologySearchMode({
   slot?: string;
 }) {
   const [query, setQuery] = useState("");
+  // No ontology (e.g. strain): used-here terms plus free text, nothing to search or wait for.
+  const searchable = ontologySources.length > 0;
   const debouncedQuery = useDebounce(query, SEARCH_DEBOUNCE_MS);
   const [showDropdown, setShowDropdown] = useState(false);
 
@@ -209,7 +212,7 @@ function OntologySearchMode({
     data: results,
     isLoading,
     error,
-  } = useOntologySearch(debouncedQuery, ontologySources, showDropdown, rootConceptId);
+  } = useOntologySearch(debouncedQuery, ontologySources, showDropdown && searchable, rootConceptId);
 
   const addTerm = useCallback(
     (term: OntologyTerm) => {
@@ -317,13 +320,15 @@ function OntologySearchMode({
         )}
         onSelect={(row) => addTerm(row.term)}
         isLoading={isLoading && searching && usedRows.length === 0}
-        open={showDropdown && (searching || usedRows.length > 0)}
+        open={showDropdown && (searching || usedRows.length > 0 || (!searchable && !!needle))}
         onOpenChange={setShowDropdown}
         onInputFocus={() => {
           if (slot || query.length >= SEARCH_MIN_QUERY_LEN) setShowDropdown(true);
         }}
         placeholder={placeholder}
-        emptyMessage={error ? errorText(error) : "No results found."}
+        emptyMessage={
+          error ? errorText(error) : searchable ? "No results found." : "Not used here yet."
+        }
         footer={
           allowFreeText && query.trim() ? (
             <div className="border-t">

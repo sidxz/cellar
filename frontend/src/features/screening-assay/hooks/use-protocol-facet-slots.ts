@@ -6,11 +6,13 @@ import { useMemo } from "react";
 // Standard facet slots (spec §5.3) — always present, on create AND on the
 // protocol page. Admin-configured slots (useOntologySlots) override these by name.
 // allow_free_text so a chemist is never blocked when a term isn't in the ontology.
+// Strain has no ontology: free text plus the strains protocols already use.
 const STANDARD_FACET_SLOTS = [
   { name: "organism", label: "Organism", ontology_sources: ["NCBITAXON"] },
   { name: "cell_line", label: "Cell line", ontology_sources: ["CLO", "CL"] },
   { name: "assay_format", label: "Assay format", ontology_sources: ["BAO"] },
   { name: "detection", label: "Detection method", ontology_sources: ["BAO"] },
+  { name: "strain", label: "Strain", ontology_sources: [] },
 ] as const;
 
 export interface ProtocolFacetSlot {

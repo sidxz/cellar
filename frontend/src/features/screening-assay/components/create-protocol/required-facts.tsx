@@ -11,10 +11,17 @@ export function factSlots(slots: Set<string>, followsTarget: boolean): string[] 
   const out: string[] = [];
   if (slots.has("target") || (slots.has("subject") && followsTarget)) out.push("target");
   if (slots.has("organism") || (slots.has("subject") && !followsTarget)) out.push("organism");
+  if (slots.has("strain")) out.push("strain");
   if (slots.has("cell_line")) out.push("cell_line");
   if (slots.has("matrix")) out.push("assay_format");
   return out;
 }
+
+/** "Search NCBITAXON..." or, for a slot with no ontology, "Type a strain or pick one used here". */
+export const facetPlaceholder = (slot: Pick<ProtocolFacetSlot, "label" | "ontology_sources">) =>
+  slot.ontology_sources.length
+    ? `Search ${slot.ontology_sources.join(", ")}...`
+    : `Type a ${slot.label.toLowerCase()} or pick one used here`;
 
 /** One facet slot's ontology picker with its label. */
 export function FacetField({
@@ -45,7 +52,7 @@ export function FacetField({
         value={value}
         onChange={onChange}
         allowFreeText={slot.allow_free_text}
-        placeholder={`Search ${slot.ontology_sources.join(", ")}...`}
+        placeholder={facetPlaceholder(slot)}
       />
       {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
     </div>

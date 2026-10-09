@@ -81,11 +81,12 @@ vi.mock("../hooks/use-protocol-facet-slots", () => ({
       ["organism", "Organism", "NCBITAXON"],
       ["cell_line", "Cell line", "CLO"],
       ["assay_format", "Assay format", "BAO"],
+      ["strain", "Strain", ""],
     ].map(([name, label, source]) => ({
       id: `std:${name}`,
       name,
       label,
-      ontology_sources: [source],
+      ontology_sources: source ? [source] : [],
       root_concept_id: null,
       allow_free_text: true,
       is_required: false,
@@ -182,6 +183,11 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
       { id: "c-sol", label: "Solubility", name_pattern: "{discriminator?} solubility" },
       { id: "c-cy", label: "Cytotoxicity", name_pattern: "{cell_line} cytotoxicity" },
       { id: "c-pk", label: "Pharmacokinetics", name_pattern: "{organism?} pharmacokinetics" },
+      {
+        id: "c-pf",
+        label: "Parasite growth inhibition",
+        name_pattern: "{organism} {strain?} growth inhibition",
+      },
     ],
   }),
 }));
@@ -202,6 +208,7 @@ vi.mock("./protocol-category-input", () => ({
         "Solubility",
         "Cytotoxicity",
         "Pharmacokinetics",
+        "Parasite growth inhibition",
       ].map((c) => (
         <option key={c} value={c}>
           {c}
@@ -329,6 +336,13 @@ describe("CreateProtocolDialog", () => {
     openMoreDetails();
     expect(labels().filter((l) => l?.startsWith("Organism"))).toEqual(["Organism (optional)"]);
     expect(labels()).toContain("Cell line");
+  });
+
+  it("shows the organism and an optional strain inline when the pattern names a strain", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Parasite growth inhibition");
+    expect(labels().slice(0, 3)).toEqual(["Category", "Organism", "Strain (optional)"]);
+    expect(screen.getByPlaceholderText("Type a strain or pick one used here")).toBeInTheDocument();
   });
 
   it("asks for a discriminator only when the pattern places it, else one click away", () => {

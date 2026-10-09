@@ -36,6 +36,7 @@ import { NamingChangePreview } from "./naming-change-preview";
 
 const SLOT_TITLES: Record<string, string> = {
   organism: "Organism",
+  strain: "Strain",
   cell_line: "Cell line",
   assay_format: "Assay format",
   "target organism": "Target organism (from the registry)",

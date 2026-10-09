@@ -23,6 +23,15 @@ const HUMAN_USED = {
   protocol_count: 1,
 };
 
+const H37RV_USED = {
+  term_id: "free_text:H37Rv",
+  label: "H37Rv",
+  ontology_source: "free_text",
+  uri: null,
+  short_label: "H37Rv",
+  protocol_count: 2,
+};
+
 const MISSING_KEY =
   "Ontology search needs a BioPortal API key — an admin can add one under Admin → API Keys (key name 'bioportal').";
 
@@ -30,7 +39,8 @@ const search = vi.hoisted(() => vi.fn());
 vi.mock("@/features/workspace-config/hooks/use-ontology-search", () => ({
   useOntologySearch: search,
   useTermsInUse: (slot?: string) => ({
-    data: slot === "organism" ? [MTB_USED, HUMAN_USED] : undefined,
+    data:
+      slot === "organism" ? [MTB_USED, HUMAN_USED] : slot === "strain" ? [H37RV_USED] : undefined,
   }),
   useOntologyDescendants: () => ({
     data: undefined,
@@ -121,5 +131,28 @@ describe("OntologySearchInput", () => {
     );
     fireEvent.focus(screen.getByPlaceholderText("Search organism"));
     expect(screen.queryByText("Used here")).not.toBeInTheDocument();
+  });
+
+  it("without ontologies offers the terms used here and free text, never an ontology search", () => {
+    search.mockClear();
+    const onChange = vi.fn();
+    render(
+      <OntologySearchInput
+        ontologySources={[]}
+        slot="strain"
+        value={[]}
+        onChange={onChange}
+        allowFreeText
+        placeholder="Type a strain"
+      />,
+    );
+    fireEvent.focus(screen.getByPlaceholderText("Type a strain"));
+    expect(screen.getByText("H37Rv")).toBeInTheDocument();
+    fireEvent.change(screen.getByPlaceholderText("Type a strain"), { target: { value: "3D7" } });
+    for (const call of search.mock.calls) expect(call[2]).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: /Free Text: "3D7"/ }));
+    expect(onChange).toHaveBeenCalledWith([
+      { term_id: "free_text:3D7", label: "3D7", ontology_source: "free_text", uri: null },
+    ]);
   });
 });

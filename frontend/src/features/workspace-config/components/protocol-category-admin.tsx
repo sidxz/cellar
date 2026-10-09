@@ -44,6 +44,7 @@ import { NamingChangePreview } from "./naming-change-preview";
 const SLOT_HELP: [string, string][] = [
   ["{target}", "the linked registry target(s), with their organism when not the home one"],
   ["{organism}", "the Organism facet"],
+  ["{strain}", "the strain, e.g. H37Rv, 3D7"],
   ["{cell_line}", "the Cell line facet (a cell line or a cell type)"],
   ["{matrix}", "the Assay format facet (microsomes, plasma)"],
   ["{subject}", "the first of target, organism, cell line"],

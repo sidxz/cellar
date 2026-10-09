@@ -29,7 +29,7 @@ import {
 import { TargetMultiSelect } from "./target-multi-select";
 
 /** Facet slots that feed the generated name. */
-const NAME_SLOTS = ["organism", "cell_line", "assay_format"];
+const NAME_SLOTS = ["organism", "strain", "cell_line", "assay_format"];
 
 type Step = "choose" | "correct" | "new";
 
