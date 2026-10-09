@@ -287,6 +287,41 @@ describe("resolveRow and blockers", () => {
     expect(rowBlockers(r, { ...preview, clash: null }, null)).toEqual([]);
   });
 
+  it("asks for a blank fact the pattern needs, and only then", () => {
+    const blank = resolveRow(row({ category: "Growth inhibition" }), ctx(), {});
+    expect(blank.organism).toEqual({ state: "unresolved", query: "" });
+    // {strain?} is optional: blank stays blank.
+    expect(blank.strain).toEqual({ state: "empty" });
+    expect(blank.draft).toBeNull();
+    expect(rowBlockers(blank, undefined, null)).toEqual(["Pick the organism"]);
+
+    const strainNeeded = {
+      ...ctx(),
+      categories: [{ ...CATEGORIES[0], name_pattern: "{organism} {strain} growth inhibition" }],
+    };
+    const r = resolveRow(row({ category: "Growth inhibition", organism: "Mtb" }), strainNeeded, {
+      organism: MTB,
+    });
+    expect(r.strain).toEqual({ state: "unresolved", query: "" });
+    expect(rowBlockers(r, undefined, null)).toEqual(["Pick the strain"]);
+    const STRAIN = {
+      term_id: "free_text:Erdman",
+      label: "Erdman",
+      ontology_source: "free_text",
+      uri: null,
+    };
+    const picked = resolveRow(row({ category: "Growth inhibition" }), strainNeeded, {
+      organism: MTB,
+      strain: STRAIN,
+    });
+    expect(picked.draft?.ontology_annotations).toMatchObject({ organism: [MTB], strain: [STRAIN] });
+
+    // A target-based pattern asks for the target, not the organism.
+    const target = resolveRow(row({ category: "Enzyme inhibition", form: "Ki" }), ctx(), {});
+    expect(target.target).toEqual({ state: "unresolved", query: "" });
+    expect(target.organism).toEqual({ state: "empty" });
+  });
+
   it("finds rows that would get the same name", () => {
     expect(inFileClashes(["A", "B", undefined, "a", "C", undefined])).toEqual(
       new Map([

@@ -5,6 +5,8 @@ import type {
 import type { ProtocolForm } from "@/features/workspace-config/hooks/use-protocol-forms";
 import type { ProtocolCategory } from "@/features/workspace-config/types";
 import type { NamePreviewResponse } from "@/shared/lib/api/model";
+import { factSlots } from "../components/create-protocol/required-facts";
+import { nameSlots } from "../components/protocol-name-preview";
 import type { NamePreviewDraft } from "../hooks/use-protocol-name-preview";
 import type { CreateProtocolInput, ProtocolReference, ProtocolType, Target } from "../types";
 import { ontologyAnnotationsPayload } from "./ontology-annotations-payload";
@@ -177,6 +179,7 @@ export interface RowPicks {
   formId?: string;
   organism?: OntologyTerm;
   cell_line?: OntologyTerm;
+  strain?: OntologyTerm;
   targetIds?: string[];
   discriminator?: string;
 }
@@ -187,6 +190,7 @@ export interface ResolvedRow {
   form: Resolution<ProtocolForm>;
   organism: Resolution<OntologyTerm>;
   cell_line: Resolution<OntologyTerm>;
+  strain: Resolution<OntologyTerm>;
   target: Resolution<string[]>;
   discriminator: string;
   nicknames: string[];
@@ -219,17 +223,41 @@ export function resolveRow(csv: ProtocolCsvRow, ctx: ResolveContext, picks: RowP
     : pickedForm
       ? { state: "resolved", value: pickedForm }
       : resolveForm(csv.form, cat.id, ctx.forms);
+  const f = value(form);
+  // A fact the category's pattern needs but the file left blank is asked for, like an unmatched one.
+  const needed = cat
+    ? factSlots(nameSlots(cat.name_pattern).required, f?.assay_format_from_target ?? false)
+    : [];
+  const ask = <T>(slot: string, r: Resolution<T>): Resolution<T> =>
+    r.state === "empty" && needed.includes(slot) ? { state: "unresolved", query: "" } : r;
   const term = (slot: "organism" | "cell_line"): Resolution<OntologyTerm> => {
     const picked = picks[slot];
     if (picked) return { state: "resolved", value: picked };
-    return resolveTerm(csv[slot], ctx.usedHere[slot], ctx.exactHits(slot, csv[slot].trim()));
+    return ask(
+      slot,
+      resolveTerm(csv[slot], ctx.usedHere[slot], ctx.exactHits(slot, csv[slot].trim())),
+    );
   };
   const organism = term("organism");
   const cell_line = term("cell_line");
+  const strainText = csv.strain.trim();
+  const strain: Resolution<OntologyTerm> = picks.strain
+    ? { state: "resolved", value: picks.strain }
+    : strainText
+      ? {
+          state: "resolved",
+          value: {
+            term_id: `free_text:${strainText}`,
+            label: strainText,
+            ontology_source: "free_text",
+            uri: null,
+          },
+        }
+      : ask("strain", { state: "empty" });
   const target: Resolution<string[]> = picks.targetIds?.length
     ? { state: "resolved", value: picks.targetIds }
     : !csv.target
-      ? { state: "empty" }
+      ? ask("target", { state: "empty" })
       : (() => {
           const r = resolveTarget(
             csv.target,
@@ -241,28 +269,18 @@ export function resolveRow(csv: ProtocolCsvRow, ctx: ResolveContext, picks: RowP
   const discriminator = (picks.discriminator ?? csv.discriminator).trim();
   const { references, errors: referenceErrors } = parseReferences(csv.references);
 
-  const f = value(form);
-  const facts = [organism, cell_line, target];
+  const facts = [organism, cell_line, strain, target];
   const ready = cat && f && facts.every((r) => r.state === "resolved" || r.state === "empty");
-  const strain = csv.strain.trim();
+  const termList = (r: Resolution<OntologyTerm>) => (r.state === "resolved" ? [r.value] : []);
   const draft: NamePreviewDraft | null = ready
     ? {
         category: cat.label,
         target_ids: value(target) ?? [],
         ontology_annotations: ontologyAnnotationsPayload({
           ...applyFormFacets({}, {}, f).annotations,
-          organism: value(organism) ? [value(organism) as OntologyTerm] : [],
-          cell_line: value(cell_line) ? [value(cell_line) as OntologyTerm] : [],
-          strain: strain
-            ? [
-                {
-                  term_id: `free_text:${strain}`,
-                  label: strain,
-                  ontology_source: "free_text",
-                  uri: null,
-                },
-              ]
-            : [],
+          organism: termList(organism),
+          cell_line: termList(cell_line),
+          strain: termList(strain),
         }),
         discriminator: discriminator || null,
         form_id: f.id,
@@ -275,6 +293,7 @@ export function resolveRow(csv: ProtocolCsvRow, ctx: ResolveContext, picks: RowP
     form,
     organism,
     cell_line,
+    strain,
     target,
     discriminator,
     nicknames: splitList(csv.nicknames),
@@ -295,7 +314,12 @@ export function inFileClashes(names: (string | undefined)[]): Map<number, number
   return out;
 }
 
-const SLOT_WORDS = { organism: "the organism", cell_line: "the cell line", target: "the target" };
+const SLOT_WORDS = {
+  organism: "the organism",
+  cell_line: "the cell line",
+  strain: "the strain",
+  target: "the target",
+};
 
 /** Why a row can't be created yet; empty when it can. `clashRow` is the file row it shares a name with. */
 export function rowBlockers(
@@ -306,7 +330,7 @@ export function rowBlockers(
   const out: string[] = [];
   if (r.category.state !== "resolved") out.push("Pick a category");
   else if (r.form.state !== "resolved") out.push("Pick a form");
-  for (const slot of ["organism", "cell_line", "target"] as const) {
+  for (const slot of ["organism", "cell_line", "strain", "target"] as const) {
     if (r[slot].state === "unresolved") out.push(`Pick ${SLOT_WORDS[slot]}`);
     if (r[slot].state === "pending") out.push(`Looking up ${SLOT_WORDS[slot]}…`);
   }

@@ -179,6 +179,17 @@ describe("ProtocolCsvImportDialog", () => {
     expect(screen.getByRole("button", { name: "Create 2 protocols" })).toBeEnabled();
   });
 
+  it("shows a picker for a blank required organism; picking it makes the row creatable", async () => {
+    await upload(`${HEADER}\nGrowth inhibition,,H37Rv,,,`);
+    await within(rowOf(2)).findByText("Pick the organism");
+    expect(screen.getByRole("button", { name: "Create 0 protocols" })).toBeDisabled();
+    fireEvent.change(within(rowOf(2)).getByLabelText(/search ncbitaxon/i), {
+      target: { value: "Mycobacterium bovis" },
+    });
+    await within(rowOf(2)).findByText("Ready");
+    expect(screen.getByRole("button", { name: "Create 1 protocol" })).toBeEnabled();
+  });
+
   it("flags a clash with an existing protocol and within the file; a discriminator clears it", async () => {
     state.existing = ["Mycobacterium tuberculosis H37Rv growth inhibition"];
     await upload(

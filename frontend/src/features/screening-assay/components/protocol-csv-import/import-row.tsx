@@ -21,6 +21,8 @@ import type { Target } from "../../types";
 import { facetPlaceholder } from "../create-protocol/required-facts";
 import { TargetMultiSelect } from "../target-multi-select";
 
+const FACT_LABELS = { organism: "Organism", strain: "Strain", cell_line: "Cell line" };
+
 /** One file row: what resolved reads as text; what didn't gets a picker in place. */
 export function ImportRow({
   line,
@@ -46,7 +48,7 @@ export function ImportRow({
   facetSlots: ProtocolFacetSlot[];
   onPick: (picks: RowPicks) => void;
 }) {
-  const term = (slot: "organism" | "cell_line") => {
+  const term = (slot: "organism" | "cell_line" | "strain") => {
     const r = row[slot];
     if (r.state === "resolved") return r.value.label;
     if (r.state !== "unresolved") return r.state === "pending" ? row.csv[slot] : "";
@@ -54,7 +56,9 @@ export function ImportRow({
     return (
       def && (
         <div className="grid gap-1">
-          <span className="text-xs text-muted-foreground">"{r.query}" not found</span>
+          <span className="text-xs text-muted-foreground">
+            {r.query ? `"${r.query}" not found` : "The name needs it"}
+          </span>
           <OntologySearchInput
             ontologySources={def.ontology_sources}
             rootConceptId={def.root_concept_id}
@@ -113,7 +117,7 @@ export function ImportRow({
     ) : row.target.state === "unresolved" ? (
       <div className="grid gap-1">
         <span className="text-xs text-muted-foreground">
-          "{row.target.query}" not found or ambiguous
+          {row.target.query ? `"${row.target.query}" not found or ambiguous` : "The name needs it"}
         </span>
         <TargetMultiSelect value={[]} onChange={(targetIds) => onPick({ targetIds })} />
       </div>
@@ -129,15 +133,14 @@ export function ImportRow({
       <TableCell className="min-w-36">{form}</TableCell>
       <TableCell className="min-w-56">
         <dl className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-1 text-sm">
-          {(["organism", "cell_line"] as const).map(
+          {(["organism", "strain", "cell_line"] as const).map(
             (slot) =>
               row[slot].state !== "empty" && (
-                <FactRow key={slot} label={slot === "organism" ? "Organism" : "Cell line"}>
+                <FactRow key={slot} label={FACT_LABELS[slot]}>
                   {term(slot)}
                 </FactRow>
               ),
           )}
-          {row.csv.strain && <FactRow label="Strain">{row.csv.strain}</FactRow>}
           {target && <FactRow label="Target">{target}</FactRow>}
         </dl>
       </TableCell>
