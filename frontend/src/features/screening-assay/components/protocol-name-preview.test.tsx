@@ -86,4 +86,12 @@ describe("ProtocolNamePreview", () => {
     render(<ProtocolNamePreview preview={p} isFetching={false} />);
     expect(screen.getByText(/PRT-00019 Microsomal stability \[human\]/)).toBeInTheDocument();
   });
+
+  it("is not savable while a sibling's new name would clash", () => {
+    const p = {
+      ...base,
+      sibling_renames: [{ protocol_id: "y", code: "PRT-00019", name: null, error: "clash" }],
+    };
+    expect(isPreviewSavable(p)).toBe(false);
+  });
 });

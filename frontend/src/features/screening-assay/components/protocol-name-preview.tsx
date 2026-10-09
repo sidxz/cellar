@@ -15,10 +15,15 @@ export function useRequiredNameSlots(category?: string | null): Set<string> {
   return requiredNameSlots(data?.find((c) => c.label === category)?.name_pattern);
 }
 
-/** Complete, unique, and with a valid discriminator: the protocol can be created. */
+/** Complete, unique, with a valid discriminator, and no sibling rename clashes: the protocol can be created. */
 export function isPreviewSavable(p?: NamePreviewResponse): boolean {
   return (
-    !!p && p.missing.length === 0 && !p.clash && !p.needs_discriminator && !p.discriminator_error
+    !!p &&
+    p.missing.length === 0 &&
+    !p.clash &&
+    !p.needs_discriminator &&
+    !p.discriminator_error &&
+    !(p.sibling_renames ?? []).some((r) => r.error)
   );
 }
 
