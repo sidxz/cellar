@@ -235,4 +235,26 @@ describe("fixed values", () => {
   ])("validates %o against its type", (over, ok) => {
     expect(isFixedValueValid(def({ name: "c", ...over }))).toBe(ok);
   });
+
+  // Same vectors as backend test_condition_fixed_value.py: one strict decimal rule on both sides.
+  it.each(["72", "-0.5", "+2", ".5", "1.", "1e-3", "1E6"])("takes the plain decimal %s", (v) => {
+    expect(isFixedValueValid(def({ name: "c", data_type: "numeric", fixed_value: v }))).toBe(true);
+  });
+
+  it.each([
+    "72h",
+    "abc",
+    "nan",
+    "inf",
+    "Infinity",
+    "0x10",
+    "1_000",
+    "1,000",
+    "1e999",
+    "1e",
+    "-",
+    ".",
+  ])("refuses %s as a number", (v) => {
+    expect(isFixedValueValid(def({ name: "c", data_type: "numeric", fixed_value: v }))).toBe(false);
+  });
 });

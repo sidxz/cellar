@@ -189,11 +189,15 @@ export function fixedConditionValues(defs: ConditionDefinition[]): Record<string
   );
 }
 
-/** Mirrors the backend: blank is no value, a number must parse, a pick is one of the values. */
+// A plain decimal, the same rule as the backend's _clean_fixed_value (no 0x10, 1_000, inf, nan).
+const DECIMAL = /^[+-]?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$/;
+
+/** Mirrors the backend: blank is no value, a number is a finite plain decimal, a pick is one
+ *  of the values. */
 export function isFixedValueValid(cd: FixedValueShape): boolean {
   const v = (cd.fixed_value ?? "").trim();
   if (!v) return true;
-  if (cd.data_type === "numeric") return Number.isFinite(Number(v));
+  if (cd.data_type === "numeric") return DECIMAL.test(v) && Number.isFinite(Number(v));
   if (cd.data_type === "pick_list") return (cd.pick_list_values ?? []).includes(v);
   return true;
 }

@@ -145,8 +145,9 @@ export function RequestTargetDialog({ open, onOpenChange, onCreated }: RequestTa
           )}
 
           <div className="grid gap-2">
-            <Label>Organism</Label>
+            <Label htmlFor="request-target-organism">Organism</Label>
             <OntologySearchInput
+              id="request-target-organism"
               ontologySources={["NCBITAXON"]}
               slot="organism"
               value={organism}

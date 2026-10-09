@@ -37,14 +37,50 @@ export function readoutTestConcentration(name: string): { value: string; unit: s
   return m ? { value: m[1] as string, unit: canonicalUnit(m[2] as string) } : null;
 }
 
+const stripConcentration = (name: string) =>
+  name.replace(CONCENTRATION_PHRASE, "").replace(/\s+/g, " ").trim();
+
+const sameConcentration = (
+  a: { value: string; unit: string },
+  b: { value: string; unit: string },
+) =>
+  Number(a.value) === Number(b.value) &&
+  canonicalUnit(a.unit.trim()) === canonicalUnit(b.unit.trim());
+
+/** Why moving this readout's concentration would lose or contradict a fact, or null when the
+ *  move is safe. `otherReadoutNames` are the protocol's other readouts. */
+export function testConcentrationMoveBlocker(
+  name: string,
+  conditions: ConditionDraft[],
+  otherReadoutNames: string[],
+): string | null {
+  const found = readoutTestConcentration(name);
+  if (!found) return null;
+  const others = otherReadoutNames.map((n) => readoutTestConcentration(n));
+  if (others.some((c) => c && !sameConcentration(c, found)))
+    return "Two concentrations: keep them in the names, or make Test concentration vary per run.";
+  const existing = conditions.find((c) => c.name.trim() === TEST_CONCENTRATION);
+  const fixed = existing?.fixed_value?.trim();
+  if (fixed && !sameConcentration({ value: fixed, unit: existing?.unit ?? "" }, found)) {
+    const at = [fixed, existing?.unit?.trim()].filter(Boolean).join(" ");
+    return `Test concentration is already fixed at ${at}: keep this one in the name.`;
+  }
+  const stripped = stripConcentration(name).toLowerCase();
+  if (otherReadoutNames.some((n) => n.trim().toLowerCase() === stripped))
+    return `Another readout is already named "${stripConcentration(name)}": keep the concentration in the name.`;
+  return null;
+}
+
 /** The readout name without its concentration, and the conditions with "Test concentration"
- *  added or, when it exists, set to that value and unit. Null when the name has none. */
+ *  added or, when it exists without a different fixed value, set to that value and unit.
+ *  Null when the name has none or the move is blocked (see testConcentrationMoveBlocker). */
 export function moveTestConcentration(
   name: string,
   conditions: ConditionDraft[],
+  otherReadoutNames: string[] = [],
 ): { name: string; conditions: ConditionDraft[] } | null {
   const found = readoutTestConcentration(name);
-  if (!found) return null;
+  if (!found || testConcentrationMoveBlocker(name, conditions, otherReadoutNames)) return null;
   const condition: ConditionDraft = {
     name: TEST_CONCENTRATION,
     data_type: "numeric",
@@ -54,7 +90,7 @@ export function moveTestConcentration(
   };
   const exists = conditions.some((c) => c.name.trim() === TEST_CONCENTRATION);
   return {
-    name: name.replace(CONCENTRATION_PHRASE, "").replace(/\s+/g, " ").trim(),
+    name: stripConcentration(name),
     conditions: exists
       ? conditions.map((c) => (c.name.trim() === TEST_CONCENTRATION ? { ...c, ...condition } : c))
       : [...conditions, condition],

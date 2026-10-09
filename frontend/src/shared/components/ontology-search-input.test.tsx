@@ -79,6 +79,9 @@ describe("OntologySearchInput", () => {
     );
     fireEvent.focus(screen.getByPlaceholderText("Search organism"));
     expect(screen.getByText("Used here")).toBeInTheDocument();
+    // The heading names its rows' group, so a screen reader announces it.
+    const used = screen.getByRole("group", { name: "Used here" });
+    expect(used).toHaveTextContent("Mycobacterium tuberculosis");
     expect(screen.getByText("Mycobacterium tuberculosis")).toBeInTheDocument();
     expect(screen.getByText("Homo sapiens")).toBeInTheDocument();
     expect(screen.getByText("3 protocols")).toBeInTheDocument();
@@ -118,6 +121,31 @@ describe("OntologySearchInput", () => {
     );
     fireEvent.change(screen.getByPlaceholderText("Search organism"), { target: { value: "mtb" } });
     expect(screen.getAllByText("Mycobacterium tuberculosis")).toHaveLength(1);
+  });
+
+  it("forwards an id so a label names the input in either mode", () => {
+    render(
+      <>
+        <label htmlFor="org">Organism</label>
+        <OntologySearchInput
+          id="org"
+          ontologySources={["NCBITAXON"]}
+          slot="organism"
+          value={[]}
+          onChange={() => {}}
+        />
+        <label htmlFor="fmt">Format</label>
+        <OntologySearchInput
+          id="fmt"
+          ontologySources={["BAO"]}
+          rootConceptId="BAO_0000001"
+          value={[]}
+          onChange={() => {}}
+        />
+      </>,
+    );
+    expect(screen.getByLabelText("Organism")).toHaveAttribute("role", "combobox");
+    expect(screen.getByLabelText("Format").tagName).toBe("BUTTON");
   });
 
   it("shows no used-here group without a slot", () => {

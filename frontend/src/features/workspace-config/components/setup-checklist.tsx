@@ -2,31 +2,36 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
-import { useAuthzHasRole } from "@duar-auth/nextjs";
+import { useAuthz, useAuthzHasRole } from "@duar-auth/nextjs";
 import Link from "next/link";
 import { useState } from "react";
 import { useSeedDefaultProtocolCategories } from "../hooks/use-protocol-categories";
 import { useWorkspaceSetup } from "../hooks/use-workspace-setup";
 
-const DISMISSED_KEY = "cellar:setup-checklist-dismissed";
+// Per workspace: the missing items the admin dismissed. Anything newly missing brings it back.
+const dismissedKey = (workspaceId: string) => `cellar:setup-checklist-dismissed:${workspaceId}`;
 
-function readDismissed(): boolean {
+function readDismissed(workspaceId: string): string[] {
   try {
-    return window.localStorage.getItem(DISMISSED_KEY) === "1";
+    const stored = JSON.parse(window.localStorage.getItem(dismissedKey(workspaceId)) ?? "[]");
+    return Array.isArray(stored) ? stored : [];
   } catch {
-    return false;
+    return [];
   }
 }
 
 /** What an admin still has to configure before protocol work runs smoothly. Admins only;
- *  gone once everything is done; "Dismiss" hides it for this viewer. */
+ *  gone once everything is done; "Dismiss" hides it for this viewer in this workspace until
+ *  something else goes missing. */
 export function SetupChecklist() {
   const isAdmin = useAuthzHasRole("admin");
+  const workspaceId = useAuthz().user?.workspaceId ?? "";
   const { data } = useWorkspaceSetup(isAdmin);
   const seed = useSeedDefaultProtocolCategories();
-  const [dismissed, setDismissed] = useState(readDismissed);
+  // Dismissed this visit, for when storage is unavailable.
+  const [dismissedNow, setDismissedNow] = useState<string[]>([]);
 
-  if (!isAdmin || !data || dismissed) return null;
+  if (!isAdmin || !data) return null;
 
   const newCategories = data.missing_default_categories.length;
   const items: {
@@ -78,10 +83,18 @@ export function SetupChecklist() {
     });
   if (items.length === 0) return null;
 
+  // Each missing item, with each missing category by name: a new one is a new entry.
+  const missing = [
+    ...items.filter((i) => i.key !== "categories").map((i) => i.key),
+    ...data.missing_default_categories.map((c) => `category:${c}`),
+  ];
+  const dismissed = new Set([...readDismissed(workspaceId), ...dismissedNow]);
+  if (missing.every((m) => dismissed.has(m))) return null;
+
   const dismiss = () => {
-    setDismissed(true);
+    setDismissedNow(missing);
     try {
-      window.localStorage.setItem(DISMISSED_KEY, "1");
+      window.localStorage.setItem(dismissedKey(workspaceId), JSON.stringify(missing));
     } catch {
       // storage unavailable: hidden for this visit only
     }

@@ -13,8 +13,9 @@ vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
 
 // The organism picker is BioPortal-backed; a button stands in for picking a term.
 vi.mock("@/shared/components/ontology-search-input", () => ({
-  OntologySearchInput: ({ onChange }: { onChange: (t: unknown[]) => void }) => (
+  OntologySearchInput: ({ onChange, id }: { onChange: (t: unknown[]) => void; id?: string }) => (
     <button
+      id={id}
       type="button"
       onClick={() =>
         onChange([
@@ -52,6 +53,11 @@ function renderDialog(onCreated = vi.fn()) {
 }
 
 describe("RequestTargetDialog", () => {
+  it("names the organism picker by its label", () => {
+    renderDialog();
+    expect(screen.getByLabelText("Organism")).toHaveTextContent("pick human");
+  });
+
   it("submits the request and hands back the created target", async () => {
     customInstance.mockResolvedValue(HERG);
     const { onCreated, qc } = renderDialog();
@@ -63,7 +69,7 @@ describe("RequestTargetDialog", () => {
     fireEvent.change(screen.getByLabelText(/uniprot accession or entry name/i), {
       target: { value: "Q12809" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "pick human" }));
+    fireEvent.click(screen.getByLabelText("Organism"));
     fireEvent.change(screen.getByLabelText(/chembl id/i), { target: { value: "CHEMBL240" } });
     expect(submit).toBeEnabled();
     fireEvent.click(submit);
@@ -88,7 +94,7 @@ describe("RequestTargetDialog", () => {
   it("needs the protein for a single-protein target", () => {
     renderDialog();
     fireEvent.change(screen.getByLabelText(/^name/i), { target: { value: "hERG" } });
-    fireEvent.click(screen.getByRole("button", { name: "pick human" }));
+    fireEvent.click(screen.getByLabelText("Organism"));
     expect(screen.getByRole("button", { name: /request target/i })).toBeDisabled();
   });
 
@@ -106,7 +112,7 @@ describe("RequestTargetDialog", () => {
     fireEvent.change(screen.getByLabelText(/uniprot accession or entry name/i), {
       target: { value: "Q12809" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "pick human" }));
+    fireEvent.click(screen.getByLabelText("Organism"));
     fireEvent.click(screen.getByRole("button", { name: /request target/i }));
 
     expect(await screen.findByText("You need editor access in ProtCellar")).toBeInTheDocument();

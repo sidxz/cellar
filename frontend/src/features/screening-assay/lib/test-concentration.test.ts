@@ -3,6 +3,7 @@ import {
   fixedConditionChips,
   moveTestConcentration,
   readoutTestConcentration,
+  testConcentrationMoveBlocker,
 } from "./test-concentration";
 
 const cond = (over: object = {}) => ({
@@ -76,10 +77,10 @@ describe("moveTestConcentration", () => {
     expect(moveTestConcentration("Growth at 5 nM (24 h)", [])?.name).toBe("Growth (24 h)");
   });
 
-  it("updates an existing Test concentration, overwriting a different unit", () => {
+  it("fills an existing Test concentration that has no fixed value yet", () => {
     const existing = [
       cond({ name: "Hypoxia" }),
-      cond({ name: "Test concentration", data_type: "numeric", unit: "nM", fixed_value: "5" }),
+      cond({ name: "Test concentration", data_type: "numeric", unit: "nM", fixed_value: "" }),
     ];
     const out = moveTestConcentration("Inhibition at 2 uM", existing);
     expect(out?.conditions).toHaveLength(2);
@@ -93,5 +94,51 @@ describe("moveTestConcentration", () => {
 
   it("returns null when the name has no concentration", () => {
     expect(moveTestConcentration("% inhibition", [])).toBeNull();
+  });
+
+  it("never overwrites a different fixed Test concentration", () => {
+    const fixed = [
+      cond({ name: "Test concentration", data_type: "numeric", unit: "µM", fixed_value: "2" }),
+    ];
+    expect(moveTestConcentration("% inhibition at 10 µM", fixed)).toBeNull();
+  });
+});
+
+describe("testConcentrationMoveBlocker", () => {
+  const tc = (fixed_value: string, unit = "µM") =>
+    cond({ name: "Test concentration", data_type: "numeric", unit, fixed_value });
+
+  it("allows the move when nothing conflicts", () => {
+    expect(testConcentrationMoveBlocker("% inhibition at 2 µM", [], ["Viability"])).toBeNull();
+    // Same concentration, spelled u or µ, already fixed: the move only confirms it.
+    expect(testConcentrationMoveBlocker("% inhibition at 2 uM", [tc("2")], [])).toBeNull();
+    expect(
+      testConcentrationMoveBlocker("Signal at 2 µM", [tc("")], ["Viability at 2 µM"]),
+    ).toBeNull();
+  });
+
+  it("blocks when another readout names a different concentration", () => {
+    expect(
+      testConcentrationMoveBlocker("% inhibition at 2 µM", [], ["% inhibition at 10 µM"]),
+    ).toMatch(/Two concentrations/);
+  });
+
+  it("blocks when Test concentration is fixed at another value or unit", () => {
+    expect(testConcentrationMoveBlocker("% inhibition at 10 µM", [tc("2")], [])).toMatch(
+      /already fixed at 2 µM/,
+    );
+    expect(testConcentrationMoveBlocker("% inhibition at 2 µM", [tc("2", "nM")], [])).toMatch(
+      /already fixed/,
+    );
+  });
+
+  it("blocks when the stripped name would repeat another readout", () => {
+    expect(
+      testConcentrationMoveBlocker("% Inhibition at 2 µM", [tc("2")], ["% inhibition"]),
+    ).toMatch(/already named "% Inhibition"/);
+  });
+
+  it("says nothing for a name without a concentration", () => {
+    expect(testConcentrationMoveBlocker("% inhibition", [tc("2")], ["% inhibition"])).toBeNull();
   });
 });

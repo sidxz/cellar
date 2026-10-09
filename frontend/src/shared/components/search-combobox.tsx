@@ -1,6 +1,12 @@
 "use client";
 
-import { Command, CommandEmpty, CommandItem, CommandList } from "@/shared/components/ui/command";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandItem,
+  CommandList,
+} from "@/shared/components/ui/command";
 import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverAnchor, PopoverContent } from "@/shared/components/ui/popover";
 import { cn } from "@/shared/lib/utils";
@@ -146,24 +152,31 @@ export function SearchCombobox<T>({
             ) : items.length === 0 ? (
               <CommandEmpty>{emptyMessage}</CommandEmpty>
             ) : (
-              items.map((item, i) => {
-                const key = getItemKey(item);
-                const group = getGroup?.(item);
-                return (
-                  <Fragment key={key}>
-                    {group && (i === 0 || group !== getGroup?.(items[i - 1] as T)) && (
-                      <div className="px-3 pb-1 pt-2 text-xs font-medium text-muted-foreground">
-                        {group}
-                      </div>
-                    )}
+              groupRuns(items, getGroup).map(({ group, rows }, r) => {
+                const rendered = rows.map((item) => {
+                  const key = getItemKey(item);
+                  return (
                     <CommandItem
+                      key={key}
                       value={key}
                       onSelect={() => onSelect(item)}
                       className="cursor-pointer"
                     >
                       {renderItem(item)}
                     </CommandItem>
-                  </Fragment>
+                  );
+                });
+                // A cmdk group labels its rows with the heading, so the heading is announced.
+                return group ? (
+                  <CommandGroup
+                    key={`${r}:${group}`}
+                    heading={group}
+                    className="p-0 [&_[cmdk-group-heading]]:px-3"
+                  >
+                    {rendered}
+                  </CommandGroup>
+                ) : (
+                  <Fragment key={`${r}:`}>{rendered}</Fragment>
                 );
               })
             )}
@@ -173,4 +186,19 @@ export function SearchCombobox<T>({
       </PopoverContent>
     </Popover>
   );
+}
+
+/** Consecutive rows that share a group, in order: a heading shows wherever the group changes. */
+function groupRuns<T>(
+  items: T[],
+  getGroup?: (item: T) => string | undefined,
+): { group: string | undefined; rows: T[] }[] {
+  const runs: { group: string | undefined; rows: T[] }[] = [];
+  for (const item of items) {
+    const group = getGroup?.(item);
+    const last = runs.at(-1);
+    if (last && last.group === group) last.rows.push(item);
+    else runs.push({ group, rows: [item] });
+  }
+  return runs;
 }

@@ -113,7 +113,10 @@ describe("ProtocolLibraryView", () => {
         },
       });
       render(<ProtocolLibraryView protocols={[mtb]} />);
-      expect(screen.getByRole("checkbox", { name: "M. tuberculosis" })).toBeInTheDocument();
+      // Shows the short label; its accessible name is the full one.
+      expect(
+        screen.getByRole("checkbox", { name: "Mycobacterium tuberculosis" }),
+      ).toHaveTextContent("M. tuberculosis");
     });
   });
 });
