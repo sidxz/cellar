@@ -17,6 +17,7 @@ import type {
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
   PlateMapWellModel,
+  ProtocolReferenceResponse,
   ProtocolResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
@@ -344,6 +345,10 @@ export interface PickListValue {
  *  72 h) and a run without a value for it takes it. Aliases the generated type. */
 export type ConditionDefinition = ConditionDefinitionResponse;
 
+/** Where a protocol comes from (ChEMBL assay, PubChem AID, DOI, PMID, URL), as validated by the
+ *  backend. Aliases the generated type; links are built in `lib/protocol-references`. */
+export type ProtocolReference = ProtocolReferenceResponse;
+
 export interface OntologyAnnotationTerm {
   term_id: string;
   label: string;
@@ -422,6 +427,8 @@ export interface Protocol {
   code: ProtocolResponse["code"];
   /** Former names (recorded on rename) and nicknames. Searchable; never the name. */
   aliases: ProtocolResponse["aliases"];
+  /** Where it comes from; searchable in the library. Typed off the DTO. */
+  references?: ProtocolResponse["references"];
   /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
   discriminator: ProtocolResponse["discriminator"];
   /** Why the generated name needs attention (`needs_facts` | `needs_discriminator` | `name_conflict`). */
@@ -576,7 +583,10 @@ export type CreateConditionDefinitionInput = AddConditionDefinitionRequest;
 
 /** The form started from, same-named siblings' discriminators and nicknames: typed off the DTO. */
 export interface CreateProtocolInput
-  extends Pick<CreateProtocolRequest, "form_id" | "sibling_discriminators" | "nicknames"> {
+  extends Pick<
+    CreateProtocolRequest,
+    "form_id" | "sibling_discriminators" | "nicknames" | "references"
+  > {
   protocol_type: ProtocolType;
   /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
   discriminator?: string | null;

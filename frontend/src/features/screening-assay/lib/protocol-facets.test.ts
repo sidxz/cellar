@@ -253,6 +253,28 @@ describe("protocolTextMatch", () => {
   });
 });
 
+describe("library search by reference", () => {
+  const p = proto({
+    name: "M. tuberculosis growth inhibition",
+    references: [
+      { kind: "chembl_assay", value: "CHEMBL1054500" },
+      { kind: "doi", value: "10.1021/jm901137j" },
+    ],
+  });
+
+  it("finds a protocol by its ChEMBL assay id", () => {
+    expect(protocolTextMatch(p, "CHEMBL1054500")).toEqual({
+      field: "reference",
+      value: "CHEMBL1054500",
+    });
+    expect(matchesProtocolText(p, "chembl1054500")).toBe(true);
+  });
+
+  it("finds a protocol by part of a DOI", () => {
+    expect(protocolTextMatch(p, "jm901137")?.field).toBe("reference");
+  });
+});
+
 describe("cell line facet", () => {
   it("reads the cell_line annotation", () => {
     const p = proto({

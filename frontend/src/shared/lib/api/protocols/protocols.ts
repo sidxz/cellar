@@ -44,6 +44,7 @@ import type {
   NamePreviewResponse,
   PaginatedResponseProtocolResponse,
   ProtocolCollectionGapApiV1ProtocolsProtocolIdCollectionsCollectionIdGapGetParams,
+  ProtocolReferenceRequest,
   ProtocolResponse,
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
@@ -1437,6 +1438,136 @@ export const useRemoveProtocolNicknameApiV1ProtocolsProtocolIdNicknamesDelete = 
       > => {
 
       const mutationOptions = getRemoveProtocolNicknameApiV1ProtocolsProtocolIdNicknamesDeleteMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Add where the protocol comes from. Draft and active; locked and retired refuse (409).
+ * @summary Add Protocol Reference
+ */
+export const addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost = (
+    protocolId: string,
+    protocolReferenceRequest: ProtocolReferenceRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<ProtocolResponse>(
+      {url: `/api/v1/protocols/${protocolId}/references`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: protocolReferenceRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getAddProtocolReferenceApiV1ProtocolsProtocolIdReferencesPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost>>, TError,{protocolId: string;data: ProtocolReferenceRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost>>, TError,{protocolId: string;data: ProtocolReferenceRequest}, TContext> => {
+
+const mutationKey = ['addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost>>, {protocolId: string;data: ProtocolReferenceRequest}> = (props) => {
+          const {protocolId,data} = props ?? {};
+
+          return  addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost(protocolId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AddProtocolReferenceApiV1ProtocolsProtocolIdReferencesPostMutationResult = NonNullable<Awaited<ReturnType<typeof addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost>>>
+    export type AddProtocolReferenceApiV1ProtocolsProtocolIdReferencesPostMutationBody = ProtocolReferenceRequest
+    export type AddProtocolReferenceApiV1ProtocolsProtocolIdReferencesPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Add Protocol Reference
+ */
+export const useAddProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost>>, TError,{protocolId: string;data: ProtocolReferenceRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof addProtocolReferenceApiV1ProtocolsProtocolIdReferencesPost>>,
+        TError,
+        {protocolId: string;data: ProtocolReferenceRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getAddProtocolReferenceApiV1ProtocolsProtocolIdReferencesPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Remove by key ``<kind>:<value>`` (URL-encoded), stable where an index would shift. The
+path converter keeps a DOI's slash.
+ * @summary Remove Protocol Reference
+ */
+export const removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete = (
+    protocolId: string,
+    key: string,
+ ) => {
+      
+      
+      return customInstance<ProtocolResponse>(
+      {url: `/api/v1/protocols/${protocolId}/references/${key}`, method: 'DELETE'
+    },
+      );
+    }
+  
+
+
+export const getRemoveProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete>>, TError,{protocolId: string;key: string}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete>>, TError,{protocolId: string;key: string}, TContext> => {
+
+const mutationKey = ['removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete>>, {protocolId: string;key: string}> = (props) => {
+          const {protocolId,key} = props ?? {};
+
+          return  removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete(protocolId,key,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RemoveProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete>>>
+    
+    export type RemoveProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDeleteMutationError = HTTPValidationError
+
+    /**
+ * @summary Remove Protocol Reference
+ */
+export const useRemoveProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete>>, TError,{protocolId: string;key: string}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof removeProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDelete>>,
+        TError,
+        {protocolId: string;key: string},
+        TContext
+      > => {
+
+      const mutationOptions = getRemoveProtocolReferenceApiV1ProtocolsProtocolIdReferencesKeyDeleteMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

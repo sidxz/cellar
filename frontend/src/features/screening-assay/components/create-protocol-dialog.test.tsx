@@ -801,6 +801,23 @@ describe("CreateProtocolDialog", () => {
     expect((await submit()).nicknames).toEqual(["Mabs MIC"]);
   });
 
+  it("sends references added under More details, normalized", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    openMoreDetails();
+    const value = screen.getByLabelText("Reference value");
+    fireEvent.change(value, { target: { value: "doi:10.1021/jm901137j" } });
+    fireEvent.keyDown(value, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.getByRole("link", { name: "10.1021/jm901137j" })).toHaveAttribute(
+        "href",
+        "https://doi.org/10.1021/jm901137j",
+      ),
+    );
+    expect((await submit()).references).toEqual([{ kind: "doi", value: "10.1021/jm901137j" }]);
+  });
+
   it("creates with the form, nicknames and the siblings' discriminators in one save", async () => {
     const sibling = {
       protocol_id: "s1",

@@ -12,6 +12,7 @@ vi.mock("../../hooks/use-protocol-collection-coverage", () => ({
 vi.mock("@duar-auth/nextjs", () => ({ useAuthzHasRole: () => false }));
 vi.mock("@/features/tagging/components/tag-table", () => ({ TagTable: () => null }));
 vi.mock("../protocol-aliases-card", () => ({ ProtocolAliasesCard: () => null }));
+vi.mock("../protocol-references", () => ({ ProtocolReferencesCard: () => null }));
 
 function protocol(over: Partial<Protocol> = {}): Protocol {
   return {

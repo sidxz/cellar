@@ -21,6 +21,7 @@ import type { ProtocolResponseLockReason } from './protocolResponseLockReason';
 import type { ProtocolResponseLockedAt } from './protocolResponseLockedAt';
 import type { ProtocolResponseCanDelete } from './protocolResponseCanDelete';
 import type { ProtocolAliasResponse } from './protocolAliasResponse';
+import type { ProtocolReferenceResponse } from './protocolReferenceResponse';
 
 export interface ProtocolResponse {
   id: string;
@@ -51,4 +52,5 @@ export interface ProtocolResponse {
   locked_at?: ProtocolResponseLockedAt;
   can_delete?: ProtocolResponseCanDelete;
   aliases?: ProtocolAliasResponse[];
+  references?: ProtocolReferenceResponse[];
 }

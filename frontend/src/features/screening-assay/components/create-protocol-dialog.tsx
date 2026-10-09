@@ -67,6 +67,7 @@ import {
   DOSE_UNIT_LABELS,
   PROTOCOL_TYPE_LABELS,
   type Protocol,
+  type ProtocolReference,
   type ProtocolType,
 } from "../types";
 import { ConditionValueInput } from "./condition-fields";
@@ -89,6 +90,7 @@ import { StartsFrom } from "./create-protocol/starts-from";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
 import { ProtocolNamePreview, isPreviewSavable, useNameSlots } from "./protocol-name-preview";
+import { ReferencesEditor } from "./protocol-references";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
 
@@ -154,6 +156,7 @@ export function CreateProtocolDialog({
   const [appliedFacets, setAppliedFacets] = useState<Record<string, string>>({});
   const [pendingForm, setPendingForm] = useState<ProtocolForm | null>(null);
   const [nicknames, setNicknames] = useState<string[]>([]);
+  const [references, setReferences] = useState<ProtocolReference[]>([]);
   const [siblingValues, setSiblingValues] = useState<SiblingValues>({});
   const [showDiscriminator, setShowDiscriminator] = useState(false);
 
@@ -203,6 +206,7 @@ export function CreateProtocolDialog({
     setAppliedConditions(DEFAULT_CONDITIONS_JSON);
     setAppliedFacets({});
     setNicknames([]);
+    setReferences([]);
     setSiblingValues({});
     setShowDiscriminator(false);
     setDraftKept(false);
@@ -429,6 +433,7 @@ export function CreateProtocolDialog({
         ontology_annotations: ontologyAnnotationsPayload(ontologyAnnotations),
         form_id: selectedForm?.id ?? null,
         nicknames,
+        references,
         sibling_discriminators: siblingDiscriminatorsPayload(
           siblings,
           siblingValues,
@@ -587,6 +592,15 @@ export function CreateProtocolDialog({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="grid gap-4 pt-2">
+              <div className="grid gap-2">
+                <Label>References</Label>
+                <ReferencesEditor
+                  references={references}
+                  onAdd={(r) => setReferences((prev) => [...prev, r])}
+                  onRemove={(r) => setReferences((prev) => prev.filter((x) => x !== r))}
+                  canEdit
+                />
+              </div>
               <div className="grid w-64 gap-2">
                 <Label>Type</Label>
                 <Controller

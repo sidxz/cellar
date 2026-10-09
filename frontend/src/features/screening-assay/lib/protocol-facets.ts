@@ -118,7 +118,8 @@ export type ProtocolMatchField =
   | "organism"
   | "cell line"
   | "category"
-  | "condition";
+  | "condition"
+  | "reference";
 
 export interface ProtocolTextMatch {
   field: ProtocolMatchField;
@@ -147,6 +148,7 @@ export function protocolTextMatch(p: Protocol, query: string): ProtocolTextMatch
     ["cell line", termLabels(p, "cell_line")],
     ["category", p.category ? [p.category] : []],
     ["condition", conditionTexts(p)],
+    ["reference", (p.references ?? []).map((r) => r.value)],
   ];
   for (const [field, values] of candidates) {
     const value = values.find((v) => v.toLowerCase().includes(q));
@@ -156,7 +158,7 @@ export function protocolTextMatch(p: Protocol, query: string): ProtocolTextMatch
 }
 
 /** Substring match across name, code, aliases, targets, organism, cell line,
- *  category and condition values (case-insensitive). */
+ *  category, condition values and reference values (case-insensitive). */
 export function matchesProtocolText(p: Protocol, query: string): boolean {
   return protocolTextMatch(p, query) !== null;
 }

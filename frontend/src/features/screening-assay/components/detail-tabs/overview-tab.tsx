@@ -23,6 +23,7 @@ import {
 import { CoverageBar } from "../coverage-bar";
 import { CoverageGapDialog } from "../coverage-gap-dialog";
 import { ProtocolAliasesCard } from "../protocol-aliases-card";
+import { ProtocolReferencesCard } from "../protocol-references";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -312,6 +313,11 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
       </Card>
 
       <ProtocolAliasesCard protocol={protocol} canEdit={canEditTags} />
+
+      <ProtocolReferencesCard
+        protocol={protocol}
+        canEdit={canEditTags && !protocol.is_locked && protocol.status !== "retired"}
+      />
 
       {/* Tags */}
       <TagTable entity="protocols" entityId={protocolId} canEdit={canEditTags} />
