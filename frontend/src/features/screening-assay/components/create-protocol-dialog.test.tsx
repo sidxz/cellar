@@ -620,8 +620,8 @@ describe("CreateProtocolDialog", () => {
     });
     render(<CreateProtocolDialog open onOpenChange={() => {}} prefill={prefill} />);
     fireEvent.click(screen.getByRole("button", { name: /method or condition/ }));
-    expect(screen.getByRole("button", { name: "hypoxia" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "normoxia" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hypoxia" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Normoxia" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "72 h" }));
     expect(screen.getByLabelText("Discriminator (optional)")).toHaveValue("72 h");
   });

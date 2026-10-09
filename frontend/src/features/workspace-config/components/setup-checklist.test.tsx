@@ -58,7 +58,7 @@ describe("SetupChecklist", () => {
     );
     expect(screen.getByRole("link", { name: /home organism/i })).toHaveAttribute(
       "href",
-      "/admin/settings",
+      "/admin/settings#home-organisms",
     );
     expect(screen.getByRole("link", { name: /targets/i })).toHaveAttribute(
       "href",

@@ -14,15 +14,14 @@ export const TEST_CONCENTRATION = "Test concentration";
 
 const CONCENTRATION_PHRASE = /\bat\s+(\d+(?:\.\d+)?)\s*(nM|µM|uM|mM|µg\/mL|mg\/mL)\b/;
 
-/** "hypoxia", "72 h", "2 µM": each fixed value as a discriminator would read it. */
+/** "Hypoxia", "72 h", "2 µM": each fixed value as entered (trimmed); numbers carry their unit. */
 export function fixedConditionChips(conditions: ConditionDraft[]): string[] {
   const chips = new Map<string, string>();
   for (const cd of conditions) {
     const value = (cd.fixed_value ?? "").trim();
     if (!value) continue;
     const unit = cd.unit?.trim();
-    const chip =
-      cd.data_type === "numeric" ? (unit ? `${value} ${unit}` : value) : value.toLowerCase();
+    const chip = cd.data_type === "numeric" && unit ? `${value} ${unit}` : value;
     if (!chips.has(chip.toLowerCase())) chips.set(chip.toLowerCase(), chip);
   }
   return [...chips.values()];

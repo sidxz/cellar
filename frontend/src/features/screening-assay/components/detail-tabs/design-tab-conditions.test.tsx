@@ -86,6 +86,17 @@ describe("DesignTab condition dialog", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
+  it("names each condition's data type in words, and its pick-list editor Values", () => {
+    render(<DesignTab protocol={protocol} protocolId="p1" />);
+    const pick = screen.getByText("S9").closest("tr") as HTMLElement;
+    expect(within(pick).getByText("Pick List")).toBeInTheDocument();
+    expect(screen.queryByText(/pick_list/i)).not.toBeInTheDocument();
+    const numeric = screen.getByText("Incubation time").closest("tr") as HTMLElement;
+    expect(within(numeric).getByText("Numeric")).toBeInTheDocument();
+    fireEvent.click(pick.querySelectorAll("button")[0]);
+    expect(screen.getByText("Values")).toBeInTheDocument();
+  });
+
   it("shows a fixed value with its unit, and one that varies per run", () => {
     render(<DesignTab protocol={protocol} protocolId="p1" />);
     expect(screen.getByText("72 h")).toBeInTheDocument();

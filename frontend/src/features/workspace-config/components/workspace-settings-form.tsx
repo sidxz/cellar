@@ -134,6 +134,12 @@ export function WorkspaceSettingsForm() {
     }
   }, [settings, reset]);
 
+  // A link like /admin/settings#home-organisms lands before the form has rendered (it shows a
+  // skeleton while loading), so the browser's own hash scroll finds nothing: scroll once loaded.
+  useEffect(() => {
+    if (!isLoading) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+  }, [isLoading]);
+
   const sigRequired = useWatch({ control, name: "sigRequired" });
 
   const toggleSigRequired = (op: string) => {

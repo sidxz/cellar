@@ -41,7 +41,7 @@ export function HomeOrganismSetting({ current }: { current: Home[] }) {
     terms.every((t) => current.some((c) => c.term_id === t.term_id));
 
   return (
-    <div className="grid gap-2">
+    <div id="home-organisms" className="grid scroll-mt-20 gap-2">
       <Label>Home organisms</Label>
       <OntologySearchInput
         ontologySources={["NCBITAXON"]}

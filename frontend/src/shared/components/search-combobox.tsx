@@ -144,6 +144,11 @@ export function SearchCombobox<T>({
         // Keep focus in the input so the user can keep typing; cmdk still
         // tracks the highlighted item for arrow-key navigation.
         onOpenAutoFocus={(e) => e.preventDefault()}
+        // The input is the anchor, not "outside": its own focus/click must not dismiss the list
+        // (the focus that opens it is still bubbling when the dismiss layer attaches).
+        onInteractOutside={(e) => {
+          if (resolvedInputRef.current?.contains(e.target as Node)) e.preventDefault();
+        }}
       >
         <Command shouldFilter={false}>
           <CommandList>

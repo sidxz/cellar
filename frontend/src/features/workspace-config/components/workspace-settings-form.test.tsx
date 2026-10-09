@@ -90,3 +90,18 @@ describe("WorkspaceSettingsForm home organism", () => {
     );
   });
 });
+
+describe("WorkspaceSettingsForm hash link", () => {
+  it("scrolls to the section a #hash link names once the form is shown", () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    window.location.hash = "#home-organisms";
+    try {
+      render(<WorkspaceSettingsForm />);
+      expect(scroll).toHaveBeenCalledTimes(1);
+      expect(scroll.mock.contexts[0]).toHaveAttribute("id", "home-organisms");
+    } finally {
+      window.location.hash = "";
+    }
+  });
+});

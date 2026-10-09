@@ -16,7 +16,7 @@ const cond = (over: object = {}) => ({
 });
 
 describe("fixedConditionChips", () => {
-  it("lowercases a text or pick-list value and joins a numeric value to its unit", () => {
+  it("keeps a text or pick-list value as entered and joins a numeric value to its unit", () => {
     expect(
       fixedConditionChips([
         cond({ name: "Oxygen", data_type: "pick_list", fixed_value: "Hypoxia" }),
@@ -24,7 +24,7 @@ describe("fixedConditionChips", () => {
         cond({ name: "Compound", data_type: "numeric", unit: "µM", fixed_value: "2" }),
         cond({ name: "Count", data_type: "numeric", unit: null, fixed_value: "3" }),
       ]),
-    ).toEqual(["hypoxia", "72 h", "2 µM", "3"]);
+    ).toEqual(["Hypoxia", "72 h", "2 µM", "3"]);
   });
 
   it("skips conditions without a fixed value and repeats nothing", () => {
@@ -34,7 +34,8 @@ describe("fixedConditionChips", () => {
         cond({ name: "A", fixed_value: "Yes" }),
         cond({ name: "B", fixed_value: "yes" }),
       ]),
-    ).toEqual(["yes"]);
+    ).toEqual(["Yes"]);
+    expect(fixedConditionChips([cond({ fixed_value: " 10% FBS " })])).toEqual(["10% FBS"]);
   });
 });
 

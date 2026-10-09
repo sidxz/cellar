@@ -350,7 +350,9 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                 {protocol.condition_definitions.map((cd) => (
                   <TableRow key={cd.id}>
                     <TableCell className="font-medium">{cd.name}</TableCell>
-                    <TableCell className="capitalize">{cd.data_type}</TableCell>
+                    <TableCell>
+                      {READOUT_DATA_TYPE_LABELS[cd.data_type as ReadoutDataType] ?? cd.data_type}
+                    </TableCell>
                     <TableCell>{cd.unit ?? "—"}</TableCell>
                     <TableCell>
                       {cd.fixed_value

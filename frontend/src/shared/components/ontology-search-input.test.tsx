@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { OntologySearchInput } from "./ontology-search-input";
 
@@ -85,6 +85,29 @@ describe("OntologySearchInput", () => {
     expect(screen.getByText("Mycobacterium tuberculosis")).toBeInTheDocument();
     expect(screen.getByText("Homo sapiens")).toBeInTheDocument();
     expect(screen.getByText("3 protocols")).toBeInTheDocument();
+  });
+
+  it("stays open when the focus event reaches the document after the dropdown mounted", async () => {
+    // In a browser the input's own focusin is still bubbling when the popover mounts and its
+    // dismiss layer attaches to the document, so the layer saw the picker's own input as an
+    // outside interaction and closed the dropdown it had just opened.
+    render(
+      <OntologySearchInput
+        ontologySources={["NCBITAXON"]}
+        slot="organism"
+        value={[]}
+        onChange={() => {}}
+        placeholder="Search organism"
+      />,
+    );
+    const input = screen.getByPlaceholderText("Search organism");
+    fireEvent.focus(input);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 10));
+    });
+    fireEvent.focusIn(input);
+    fireEvent.pointerDown(input);
+    expect(screen.getByText("Used here")).toBeInTheDocument();
   });
 
   it("filters the used terms as the chemist types, with no search results needed", () => {

@@ -71,7 +71,7 @@ export function SetupChecklist() {
     items.push({
       key: "home",
       text: "No home organism set, so protocol names spell out every organism.",
-      link: "/admin/settings",
+      link: "/admin/settings#home-organisms",
       label: "Home organism",
     });
   if (data.targets === 0)
