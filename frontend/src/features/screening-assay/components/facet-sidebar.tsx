@@ -6,9 +6,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/shared/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/shared/components/ui/tooltip";
 import { Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import type { FacetDimension, FacetGroup, FacetSelections } from "../lib/protocol-facets";
+import type {
+  FacetDimension,
+  FacetGroup,
+  FacetSelections,
+  FacetValue,
+} from "../lib/protocol-facets";
 
 const FACET_VALUE_CAP = 8;
 
@@ -41,6 +52,20 @@ export function FacetSidebar({ model, selections, onToggle, onClear }: FacetSide
         />
       ))}
     </aside>
+  );
+}
+
+/** Short label, with the full label in a tooltip only when it differs. */
+function FacetLabel({ value }: { value: FacetValue }) {
+  const label = <span className="flex-1 truncate text-left">{value.label}</span>;
+  if (!value.fullLabel) return label;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{label}</TooltipTrigger>
+        <TooltipContent>{value.fullLabel}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
@@ -87,7 +112,7 @@ function FacetGroupSection({
               >
                 {checked && <Check className="h-3 w-3" />}
               </span>
-              <span className="flex-1 truncate text-left">{v.label}</span>
+              <FacetLabel value={v} />
               <span className="text-xs tabular-nums text-muted-foreground">{v.count}</span>
             </button>
           );

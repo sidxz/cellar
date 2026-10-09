@@ -4,6 +4,7 @@ import {
   type FacetSelections,
   type GroupBy,
   type ProtocolGroup,
+  type ShortLabels,
   buildFacetModel,
   filterProtocols,
   groupProtocols,
@@ -16,11 +17,12 @@ export function useProtocolFacets(
   protocols: Protocol[],
   selections: FacetSelections,
   groupBy: GroupBy,
+  shortLabels?: ShortLabels,
 ): { facetModel: FacetGroup[]; filtered: Protocol[]; groups: ProtocolGroup[] } {
   return useMemo(() => {
-    const facetModel = buildFacetModel(protocols, selections);
+    const facetModel = buildFacetModel(protocols, selections, shortLabels);
     const filtered = filterProtocols(protocols, selections);
     const groups = groupProtocols(filtered, groupBy);
     return { facetModel, filtered, groups };
-  }, [protocols, selections, groupBy]);
+  }, [protocols, selections, groupBy, shortLabels]);
 }
