@@ -119,4 +119,14 @@ describe("DesignTab condition dialog", () => {
       fixed_value: "7H9",
     });
   });
+
+  it("on a published protocol, adds without a fixed value and points to Correct details", () => {
+    render(<DesignTab protocol={{ ...protocol, status: "active" } as Protocol} protocolId="p1" />);
+    const header = screen.getByText("Condition Definitions").parentElement?.parentElement;
+    fireEvent.click(within(header as HTMLElement).getByRole("button", { name: /Add/ }));
+    expect(screen.queryByLabelText("Fixed for this protocol")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Add the condition, then set its fixed value with Correct details."),
+    ).toBeInTheDocument();
+  });
 });

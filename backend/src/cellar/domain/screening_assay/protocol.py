@@ -1073,6 +1073,9 @@ class Protocol(AggregateRoot):
         versioning (run records reference conditions by name).
         """
         self._guard_metadata_mutable()
+        # A defining value on a published protocol changes only through a correction.
+        if self.status != ProtocolStatus.DRAFT and definition.fixed_value is not None:
+            raise ConflictError("Add the condition, then set its fixed value with Correct details")
         if any(cd.name == definition.name for cd in self.condition_definitions):
             raise ConflictError(
                 f"ConditionDefinition with name '{definition.name}' already exists"

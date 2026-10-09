@@ -710,6 +710,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setCdValues={setCdValues}
         cdFixedValue={cdFixedValue}
         setCdFixedValue={setCdFixedValue}
+        allowFixedValue={isDraft}
         isSaving={addConditionDef.isPending}
         onSave={() => {
           addConditionDef.mutate(
@@ -718,7 +719,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               data_type: cdDataType,
               unit: cdUnit.trim() || undefined,
               ...(cdDataType === "pick_list" ? { pick_list_values: cdValues } : {}),
-              fixed_value: cdFixedValue.trim() || null,
+              // A published protocol takes a fixed value only through Correct details.
+              fixed_value: isDraft ? cdFixedValue.trim() || null : null,
             },
             {
               onSuccess: () => {
@@ -752,6 +754,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         setCdValues={setCdValues}
         cdFixedValue={cdFixedValue}
         setCdFixedValue={setCdFixedValue}
+        allowFixedValue
         isSaving={updateConditionDef.isPending}
         onSave={() => {
           if (!editingConditionId) return;

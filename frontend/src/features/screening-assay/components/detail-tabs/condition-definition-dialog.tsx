@@ -43,6 +43,8 @@ export interface ConditionDefinitionDialogProps {
   setCdValues: (v: string[]) => void;
   cdFixedValue: string;
   setCdFixedValue: (v: string) => void;
+  /** False on a published protocol: a fixed value is then set with Correct details. */
+  allowFixedValue: boolean;
   isSaving: boolean;
   onSave: () => void;
   onCancel: () => void;
@@ -62,6 +64,7 @@ export function ConditionDefinitionDialog({
   setCdValues,
   cdFixedValue,
   setCdFixedValue,
+  allowFixedValue,
   isSaving,
   onSave,
   onCancel,
@@ -121,21 +124,27 @@ export function ConditionDefinitionDialog({
               <PickListValuesInput values={cdValues} onChange={setCdValues} />
             </div>
           )}
-          <div className="space-y-1">
-            <Label>Fixed for this protocol (optional)</Label>
-            <ConditionValueInput
-              def={{ data_type: cdDataType, unit: cdUnit, pick_list_values: cdValues }}
-              value={cdFixedValue}
-              onChange={setCdFixedValue}
-              noneLabel="(varies per run)"
-              aria-label="Fixed for this protocol"
-            />
-            {!fixedValid && (
-              <p className="text-xs text-destructive">
-                {cdDataType === "numeric" ? "Must be a number." : "Must be one of the values."}
-              </p>
-            )}
-          </div>
+          {!allowFixedValue ? (
+            <p className="text-xs text-muted-foreground">
+              Add the condition, then set its fixed value with Correct details.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              <Label>Fixed for this protocol (optional)</Label>
+              <ConditionValueInput
+                def={{ data_type: cdDataType, unit: cdUnit, pick_list_values: cdValues }}
+                value={cdFixedValue}
+                onChange={setCdFixedValue}
+                noneLabel="(varies per run)"
+                aria-label="Fixed for this protocol"
+              />
+              {!fixedValid && (
+                <p className="text-xs text-destructive">
+                  {cdDataType === "numeric" ? "Must be a number." : "Must be one of the values."}
+                </p>
+              )}
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={onCancel}>

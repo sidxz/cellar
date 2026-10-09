@@ -133,6 +133,20 @@ class TestMutability:
         with pytest.raises(ValidationError, match="number"):
             p.set_condition_fixed_value(cd.id, "long", reason="x")
 
+    def test_active_refuses_adding_a_condition_with_a_fixed_value(self) -> None:
+        p = _protocol()
+        p.publish()
+        with pytest.raises(ConflictError, match="Correct details"):
+            p.add_condition_definition(_cd(fixed_value="72"))
+        assert p.condition_definitions == []
+        p.add_condition_definition(_cd())
+        assert p.condition_definitions[0].fixed_value is None
+
+    def test_draft_adds_a_condition_with_a_fixed_value(self) -> None:
+        p = _protocol()
+        p.add_condition_definition(_cd(fixed_value="72"))
+        assert p.condition_definitions[0].fixed_value == "72"
+
     def test_locked_is_refused(self) -> None:
         cd = _cd()
         p = _protocol(cd)
