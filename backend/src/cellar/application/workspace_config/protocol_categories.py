@@ -91,7 +91,7 @@ class CreateProtocolCategory:
         repo: ProtocolCategoryRepository,
         dispatcher: EventDispatcherProtocol,
         *,
-        form_repo: ProtocolFormRepository | None = None,
+        form_repo: ProtocolFormRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -119,7 +119,7 @@ class CreateProtocolCategory:
                 workspace_id=input.workspace_id, label=input.label, name_pattern=input.name_pattern
             )
             await self._repo.save(category)
-            if source is not None and self._forms is not None:
+            if source is not None:
                 for f in await self._forms.find_by_workspace(input.workspace_id):
                     if f.category_id != source.id:
                         continue
@@ -270,7 +270,7 @@ class SeedDefaultProtocolCategories:
         repo: ProtocolCategoryRepository,
         dispatcher: EventDispatcherProtocol,
         *,
-        form_repo: ProtocolFormRepository | None = None,
+        form_repo: ProtocolFormRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
@@ -288,8 +288,7 @@ class SeedDefaultProtocolCategories:
                     await self._repo.save(
                         ProtocolCategory.create(workspace_id=input.workspace_id, label=label)
                     )
-            if self._forms is not None:
-                await seed_default_forms(self._forms, self._repo, input.workspace_id)
+            await seed_default_forms(self._forms, self._repo, input.workspace_id)
             categories = await self._repo.find_by_workspace(input.workspace_id)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all(events)
