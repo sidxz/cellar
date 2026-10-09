@@ -1,14 +1,29 @@
 "use client";
 
 import { useProjects } from "@/features/research-organization/hooks/use-projects";
+import { useProtocolCategories } from "@/features/workspace-config/hooks/use-protocol-categories";
 import {
   type ProtocolForm,
   useProtocolForms,
 } from "@/features/workspace-config/hooks/use-protocol-forms";
-import { OntologySearchInput, type OntologyTerm } from "@/shared/components/ontology-search-input";
+import type { OntologyTerm } from "@/shared/components/ontology-search-input";
 import { SearchableSelect } from "@/shared/components/searchable-select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
-import { Card, CardContent } from "@/shared/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/components/ui/collapsible";
 import {
   Dialog,
   DialogContent,
@@ -26,38 +41,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import { Separator } from "@/shared/components/ui/separator";
-import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { UnitPicker } from "@/shared/components/unit-picker";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
-import { useTargets } from "../hooks/use-targets";
 import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
 import {
-  VISIBLE_READOUT_DATA_TYPES,
-  WELL_CONC_X,
-  isReservedReadoutName,
-} from "../lib/readout-constants";
+  conditionsFromForm,
+  formsForCategory,
+  mergeFacetDefaults,
+  pickFormForCategory,
+  readoutsFromForm,
+} from "../lib/protocol-form-apply";
+import { WELL_CONC_X, isReservedReadoutName } from "../lib/readout-constants";
 import {
-  CURVE_TYPE_LABELS,
   type CreateReadoutDefinitionInput,
-  type CurveType,
   DOSE_UNIT_LABELS,
-  HILL_SLOPE_CONSTRAINT_LABELS,
-  type InterceptSpec,
-  NORMALIZATION_SCOPE_LABELS,
   PROTOCOL_TYPE_LABELS,
   type Protocol,
   type ProtocolType,
-  READOUT_AGGREGATION_LABELS,
-  READOUT_DATA_TYPE_LABELS,
-  type ReadoutNormalization,
 } from "../types";
 import {
   DEFAULT_VALUES,
@@ -66,20 +74,24 @@ import {
   defaultReadout,
   protocolSchema,
 } from "./create-protocol/form-values";
+import { NicknameInput } from "./create-protocol/nickname-input";
+import { ReadoutRow } from "./create-protocol/readout-row";
+import { FacetField, RequiredFacts, requiredFactSlots } from "./create-protocol/required-facts";
+import {
+  SiblingDiscriminators,
+  type SiblingValues,
+  siblingDiscriminatorsPayload,
+} from "./create-protocol/sibling-discriminators";
+import { StartsFrom } from "./create-protocol/starts-from";
 import { DiscriminatorInput } from "./discriminator-input";
-import { FormulaInput } from "./formula-input";
-import { InterceptsEditor } from "./intercepts-editor";
-import { PickListEditor } from "./pick-list-editor";
 import { ProtocolCategoryInput } from "./protocol-category-input";
 import {
   ProtocolNamePreview,
   isPreviewSavable,
   useRequiredNameSlots,
 } from "./protocol-name-preview";
-import { NormalizationCheckboxGroup } from "./readout-normalization-checkboxes";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
-import { VocabularyAutocomplete } from "./vocabulary-autocomplete";
 
 // ---------------------------------------------------------------------------
 // Component
@@ -98,6 +110,8 @@ interface CreateProtocolDialogProps {
   prefill?: Protocol;
 }
 
+const DEFAULT_READOUTS_JSON = JSON.stringify(DEFAULT_VALUES.readouts);
+
 export function CreateProtocolDialog({
   open,
   onOpenChange,
@@ -109,7 +123,8 @@ export function CreateProtocolDialog({
   const assignToProject = useAssignProtocolToProject();
   const { data: projects } = useProjects();
   const { data: protocolForms } = useProtocolForms();
-  const mergedFacetSlots = useProtocolFacetSlots();
+  const { data: categories } = useProtocolCategories();
+  const facetSlots = useProtocolFacetSlots();
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
   const crossProtocols = useMemo(
@@ -120,10 +135,7 @@ export function CreateProtocolDialog({
     [allProtocols],
   );
 
-  // Form-template selection and project assignment live outside the zod form:
-  // selectedFormId is pure UI state (triggers applyForm); projectId is POSTed
-  // separately after protocol creation.
-  const [selectedFormId, setSelectedFormId] = useState<string>("");
+  // Project assignment is POSTed separately after protocol creation.
   const [projectId, setProjectId] = useState<string | null>(defaultProjectId ?? null);
 
   // Ontology annotations are keyed by slot name and managed by OntologySearchInput;
@@ -131,6 +143,16 @@ export function CreateProtocolDialog({
   const [ontologyAnnotations, setOntologyAnnotations] = useState<Record<string, OntologyTerm[]>>(
     {},
   );
+  const setAnnotation = (slot: string, terms: OntologyTerm[]) =>
+    setOntologyAnnotations((prev) => ({ ...prev, [slot]: terms }));
+
+  // The form the protocol starts from; its readouts as last applied tell an edit apart.
+  const [selectedForm, setSelectedForm] = useState<ProtocolForm | null>(null);
+  const [appliedReadouts, setAppliedReadouts] = useState(DEFAULT_READOUTS_JSON);
+  const [pendingForm, setPendingForm] = useState<ProtocolForm | null>(null);
+  const [nicknames, setNicknames] = useState<string[]>([]);
+  const [siblingValues, setSiblingValues] = useState<SiblingValues>({});
+  const [showDiscriminator, setShowDiscriminator] = useState(false);
 
   // ---- react-hook-form setup ----
 
@@ -158,15 +180,27 @@ export function CreateProtocolDialog({
   });
 
   const readoutValues = form.watch("readouts");
-  const { data: targets } = useTargets();
 
-  // ---- form-template application ----
+  // ---- draft retention: the dialog stays mounted, so entries survive a close ----
+
+  const isDirty = form.formState.isDirty;
+  const [draftKept, setDraftKept] = useState(false);
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setDraftKept(isDirty && !prefill);
+  }
 
   const resetForm = () => {
     form.reset(DEFAULT_VALUES);
-    setSelectedFormId("");
     setProjectId(defaultProjectId ?? null);
     setOntologyAnnotations({});
+    setSelectedForm(null);
+    setAppliedReadouts(DEFAULT_READOUTS_JSON);
+    setNicknames([]);
+    setSiblingValues({});
+    setShowDiscriminator(false);
+    setDraftKept(false);
   };
 
   // A new assay starts from the protocol it replaces: same facts, its own discriminator.
@@ -212,75 +246,75 @@ export function CreateProtocolDialog({
         unit: cd.unit ?? "",
       })),
     });
+    setAppliedReadouts(JSON.stringify(form.getValues("readouts")));
     setOntologyAnnotations(prefill.ontology_annotations ?? {});
   }, [open, prefill, form]);
 
-  const applyForm = (template: ProtocolForm) => {
-    if (template.protocol_type) {
-      form.setValue("protocol_type", template.protocol_type);
-    }
-    if (template.readout_templates.length > 0) {
-      form.setValue(
-        "readouts",
-        template.readout_templates.map((tpl, i) => {
-          // The API template carries a single `normalization` (it never had a list).
-          const tplLegacy = tpl.normalization;
-          const resolvedNormalizations: ReadoutNormalization[] =
-            tplLegacy && tplLegacy !== "none" ? [tplLegacy as ReadoutNormalization] : [];
-          return {
-            ...defaultReadout(i + 1),
-            name: (tpl.name as string) ?? "",
-            data_type: (tpl.data_type as string) ?? "numeric",
-            unit: (tpl.unit as string) ?? "",
-            aggregation: (tpl.aggregation as string) ?? "none",
-            normalizations: resolvedNormalizations,
-          };
-        }),
-      );
-    }
-    if (template.condition_templates && template.condition_templates.length > 0) {
-      form.setValue(
-        "conditions",
-        template.condition_templates.map((tpl) => ({
-          name: (tpl.name as string) ?? "",
-          data_type: (tpl.data_type as string) ?? "text",
-          unit: (tpl.unit as string) ?? "",
-        })),
-      );
-    }
-    if (template.ontology_defaults && template.ontology_defaults.length > 0) {
-      const annotations: Record<string, OntologyTerm[]> = {};
-      for (const od of template.ontology_defaults) {
-        const slotName = od.slot_name as string;
-        const terms = od.terms as Array<Record<string, unknown>>;
-        if (slotName && Array.isArray(terms)) {
-          annotations[slotName] = terms.map((t) => ({
-            term_id: (t.term_id as string) ?? "",
-            label: (t.label as string) ?? "",
-            ontology_source: (t.ontology_source as string) ?? "",
-            uri: (t.uri as string) ?? null,
-          }));
-        }
-      }
-      setOntologyAnnotations(annotations);
-    }
+  // ---- forms: picking a category applies its form ----
+
+  const applyReadouts = (f: ProtocolForm) => {
+    const readouts = readoutsFromForm(f);
+    form.setValue("readouts", readouts);
+    setAppliedReadouts(JSON.stringify(readouts));
   };
+
+  /** Type, conditions and facet defaults apply at once; readouts the chemist edited are asked about. */
+  const applyPickedForm = (f: ProtocolForm | null) => {
+    setSelectedForm(f);
+    if (!f) return;
+    if (f.protocol_type) form.setValue("protocol_type", f.protocol_type);
+    const conditions = conditionsFromForm(f);
+    if (conditions.length > 0) form.setValue("conditions", conditions);
+    setOntologyAnnotations((prev) => mergeFacetDefaults(prev, f));
+    if (f.readout_templates.length === 0) return;
+    if (JSON.stringify(form.getValues("readouts")) !== appliedReadouts) setPendingForm(f);
+    else applyReadouts(f);
+  };
+
+  const categoryValue = form.watch("category") || null;
+  const categoryId = categories?.find((c) => c.label === categoryValue)?.id ?? null;
+  const onCategoryPicked = (label: string) => {
+    // A new assay from an existing protocol keeps that protocol's readouts.
+    if (prefill) return;
+    const id = categories?.find((c) => c.label === label)?.id;
+    applyPickedForm(id ? pickFormForCategory(protocolForms ?? [], id) : null);
+  };
+  const { own: ownForms, generic: genericForms } = formsForCategory(
+    protocolForms ?? [],
+    categoryId,
+  );
 
   // ---- derived validation ----
 
-  const categoryValue = form.watch("category") || null;
   const needs = useRequiredNameSlots(categoryValue);
-  const needsFacet = ["organism", "cell_line", "matrix"].some((slot) => needs.has(slot));
+  const followsTarget = selectedForm?.assay_format_from_target ?? false;
+  const requiredSlots = requiredFactSlots(needs, followsTarget);
+  const targetIds = form.watch("target_ids") ?? [];
+  const discriminatorValue = form.watch("discriminator");
   const preview = useProtocolNamePreview(
     categoryValue
       ? {
           category: categoryValue,
-          target_ids: form.watch("target_ids") ?? [],
+          target_ids: targetIds,
           ontology_annotations: ontologyAnnotations,
-          discriminator: form.watch("discriminator").trim() || null,
+          discriminator: discriminatorValue.trim() || null,
+          sibling_discriminators: Object.entries(siblingValues)
+            .filter(([, v]) => v.discriminator.trim())
+            .map(([protocol_id, v]) => ({ protocol_id, discriminator: v.discriminator.trim() })),
         }
       : null,
   );
+  const siblings = preview.data?.siblings ?? [];
+  const showDiscriminatorField =
+    needs.has("discriminator") ||
+    siblings.length > 0 ||
+    showDiscriminator ||
+    discriminatorValue.trim() !== "";
+
+  // Facts the pattern does not need, assay format first.
+  const moreSlots = facetSlots
+    .filter((s) => !requiredSlots.includes(s.name))
+    .sort((a, b) => Number(b.name === "assay_format") - Number(a.name === "assay_format"));
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
   const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
@@ -358,6 +392,13 @@ export function CreateProtocolDialog({
         // Facets persisted atomically with the protocol — one transaction, so a
         // multi-slot set can't race/drop the way separate post-create PUTs did.
         ontology_annotations: ontologyAnnotationsPayload(ontologyAnnotations),
+        form_id: selectedForm?.id ?? null,
+        nicknames,
+        sibling_discriminators: siblingDiscriminatorsPayload(
+          siblings,
+          siblingValues,
+          preview.data?.name ?? "",
+        ),
       },
       {
         onSuccess: async (protocol) => {
@@ -388,653 +429,341 @@ export function CreateProtocolDialog({
             {prefill ? `New protocol from ${prefill.code ?? prefill.name}` : "New Protocol"}
           </DialogTitle>
           <DialogDescription>
-            Define a screening protocol with readout definitions.
+            Pick a category; the name, its facts and the readouts follow from it.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
-          {/* Basic info */}
+          {/* First, and focused on open as the first control in the dialog. */}
           <div className="grid gap-2">
-            <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
-            <Label htmlFor="protocol-discriminator">
-              Discriminator{needs.has("discriminator") ? "" : " (optional)"}
-            </Label>
+            <Label>Category</Label>
             <Controller
               control={form.control}
-              name="discriminator"
+              name="category"
               render={({ field }) => (
-                <DiscriminatorInput
-                  value={field.value}
-                  onChange={field.onChange}
-                  base={preview.data?.base ?? null}
+                <ProtocolCategoryInput
+                  value={field.value ?? ""}
+                  onChange={(v) => {
+                    field.onChange(v);
+                    onCategoryPicked(v);
+                  }}
                 />
               )}
             />
-            <p className="text-xs text-muted-foreground">
-              Only needed when another protocol would get the same name. A method or a fixed
-              condition, never a stage, library or date.
-            </p>
-            <SimilarProtocolsPanel
-              draft={{
-                name: preview.data?.name ?? "",
-                protocol_type: form.watch("protocol_type") || null,
-                target_ids: form.watch("target_ids") ?? [],
-                readout_names: (form.watch("readouts") ?? [])
-                  .map((r) => r.name)
-                  .filter((n): n is string => Boolean(n)),
-                facet_ids: Object.values(ontologyAnnotations)
-                  .flat()
-                  .map((t) => t.term_id),
-              }}
-              onLogRun={(protocolId) => {
-                onOpenChange(false);
-                onLogRun?.(protocolId);
-              }}
-            />
           </div>
 
-          {/* Protocol Form Selector */}
-          {protocolForms && protocolForms.length > 0 && (
+          <RequiredFacts
+            needs={needs}
+            followsTarget={followsTarget}
+            facetSlots={facetSlots}
+            annotations={ontologyAnnotations}
+            onAnnotations={setAnnotation}
+            targetIds={targetIds}
+            onTargetIds={(ids) => form.setValue("target_ids", ids, { shouldDirty: true })}
+          />
+
+          <ProtocolNamePreview preview={preview.data} isFetching={preview.isFetching} />
+
+          {showDiscriminatorField ? (
             <div className="grid gap-2">
-              <Label>Form Template</Label>
-              <Select
-                value={selectedFormId}
-                onValueChange={(v) => {
-                  setSelectedFormId(v);
-                  if (v === "__blank__") {
-                    resetForm();
-                    return;
-                  }
-                  const template = protocolForms.find((f) => f.id === v);
-                  if (template) applyForm(template);
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Blank Protocol" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__blank__">Blank Protocol</SelectItem>
-                  {protocolForms.map((f) => (
-                    <SelectItem key={f.id} value={f.id}>
-                      {f.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="protocol-discriminator">
+                Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+              </Label>
+              <Controller
+                control={form.control}
+                name="discriminator"
+                render={({ field }) => (
+                  <DiscriminatorInput
+                    value={field.value}
+                    onChange={field.onChange}
+                    base={preview.data?.base ?? null}
+                  />
+                )}
+              />
               <p className="text-xs text-muted-foreground">
-                Pre-fill readouts, conditions, and type from a saved form.
+                Only needed when another protocol would get the same name. A method or a fixed
+                condition, never a stage, library or date.
               </p>
             </div>
+          ) : (
+            <Button
+              type="button"
+              variant="link"
+              size="sm"
+              className="h-auto justify-self-start p-0"
+              onClick={() => setShowDiscriminator(true)}
+            >
+              + method or condition
+            </Button>
           )}
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Type</Label>
-              <Controller
-                control={form.control}
-                name="protocol_type"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(PROTOCOL_TYPE_LABELS).map(([value, label]) => (
-                        <SelectItem key={value} value={value}>
-                          {label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </div>
+          <SiblingDiscriminators
+            siblings={siblings}
+            renames={preview.data?.sibling_renames ?? []}
+            values={siblingValues}
+            newName={preview.data?.name ?? ""}
+            onChange={setSiblingValues}
+          />
 
-            <div className="grid gap-2">
-              <Label>Targets{needs.has("target") ? "" : " (optional)"}</Label>
-              <Controller
-                control={form.control}
-                name="target_ids"
-                render={({ field }) => (
-                  <TargetMultiSelect value={field.value} onChange={field.onChange} />
-                )}
-              />
-            </div>
-          </div>
+          <StartsFrom
+            forms={[...ownForms, ...genericForms]}
+            selectedId={selectedForm?.id ?? null}
+            onPick={applyPickedForm}
+          />
 
           <div className="grid gap-2">
-            <Label>Dose Unit</Label>
-            <Controller
-              control={form.control}
-              name="dose_unit"
-              render={({ field }) => (
-                <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-48">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(DOSE_UNIT_LABELS).map(([value, label]) => (
-                      <SelectItem key={value} value={value}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="flex items-center justify-between">
+              <Label>Readouts</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendReadout(defaultReadout(readoutFields.length + 1))}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add readout
+              </Button>
+            </div>
+            {readoutFields.map((field, index) => (
+              <ReadoutRow
+                key={field.id}
+                form={form}
+                index={index}
+                readouts={readoutValues}
+                crossProtocols={crossProtocols}
+                canRemove={readoutFields.length > 1}
+                onRemove={() => removeReadout(index)}
+              />
+            ))}
+          </div>
+
+          <NicknameInput value={nicknames} onChange={setNicknames} />
+
+          <Collapsible>
+            <CollapsibleTrigger asChild>
+              <Button type="button" variant="ghost" size="sm" className="group -ml-2">
+                <ChevronDown className="mr-1 h-4 w-4 -rotate-90 transition-transform group-data-[state=open]:rotate-0" />
+                More details
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="grid gap-4 pt-2">
+              <div className="grid w-64 gap-2">
+                <Label>Type</Label>
+                <Controller
+                  control={form.control}
+                  name="protocol_type"
+                  render={({ field }) => (
+                    <Select value={field.value} onValueChange={field.onChange}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(PROTOCOL_TYPE_LABELS).map(([value, label]) => (
+                          <SelectItem key={value} value={value}>
+                            {label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
+
+              {moreSlots.map((slot) => (
+                <FacetField
+                  key={slot.id}
+                  slot={slot}
+                  value={ontologyAnnotations[slot.name] ?? []}
+                  onChange={(terms) => setAnnotation(slot.name, terms)}
+                  hint={
+                    slot.name === "assay_format" &&
+                    followsTarget &&
+                    !ontologyAnnotations.assay_format?.length
+                      ? "Follows the target"
+                      : undefined
+                  }
+                />
+              ))}
+
+              {!requiredSlots.includes("target") && (
+                <div className="grid gap-2">
+                  <Label>Targets</Label>
+                  <Controller
+                    control={form.control}
+                    name="target_ids"
+                    render={({ field }) => (
+                      <TargetMultiSelect value={field.value} onChange={field.onChange} />
+                    )}
+                  />
+                </div>
               )}
-            />
-            <p className="text-xs text-muted-foreground">
-              Canonical unit for all wells and IC50 fits of runs of this protocol. Picked once at
-              protocol design time.
-            </p>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="grid gap-2">
-              <Label>Project (optional)</Label>
-              <SearchableSelect
-                options={projects?.map((p) => ({ value: p.id, label: p.name })) ?? []}
-                value={projectId}
-                onValueChange={setProjectId}
-                placeholder="No project"
-                searchPlaceholder="Search projects..."
-                emptyMessage="No projects found."
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Category</Label>
-              <Controller
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <ProtocolCategoryInput value={field.value ?? ""} onChange={field.onChange} />
-                )}
-              />
-            </div>
-          </div>
+              <div className="grid gap-2">
+                <Label>Description</Label>
+                <Textarea placeholder="Optional description..." {...form.register("description")} />
+              </div>
 
-          <div className="grid gap-2">
-            <Label>Description</Label>
-            <Textarea placeholder="Optional description..." {...form.register("description")} />
-          </div>
+              <div className="grid gap-2">
+                <Label>Project</Label>
+                <SearchableSelect
+                  options={projects?.map((p) => ({ value: p.id, label: p.name })) ?? []}
+                  value={projectId}
+                  onValueChange={setProjectId}
+                  placeholder="No project"
+                  searchPlaceholder="Search projects..."
+                  emptyMessage="No projects found."
+                />
+              </div>
 
-          {/* Facets (always shown: standard slots + any admin-configured slots) */}
-          {mergedFacetSlots.length > 0 && (
-            <>
-              <Separator />
-              <Label className="text-base font-semibold">
-                Facets
-                {!needsFacet && (
-                  <span className="text-xs font-normal text-muted-foreground"> (optional)</span>
-                )}
-              </Label>
-              <div className="space-y-3">
-                {mergedFacetSlots.map((slot) => (
-                  <div key={slot.id} className="grid gap-1.5">
-                    <Label className="text-xs">
-                      {slot.label}
-                      {slot.is_required && <span className="ml-1 text-destructive">*</span>}
-                    </Label>
-                    <OntologySearchInput
-                      ontologySources={slot.ontology_sources}
-                      rootConceptId={slot.root_concept_id}
-                      value={ontologyAnnotations[slot.name] ?? []}
-                      onChange={(terms) =>
-                        setOntologyAnnotations((prev) => ({
-                          ...prev,
-                          [slot.name]: terms,
-                        }))
-                      }
-                      allowFreeText={slot.allow_free_text}
-                      placeholder={`Search ${slot.ontology_sources.join(", ")}...`}
-                    />
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between">
+                  <Label>Conditions</Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendCondition(defaultCondition())}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Condition
+                  </Button>
+                </div>
+                {conditionFields.map((field, index) => (
+                  <div key={field.id} className="flex items-end gap-2">
+                    <div className="grid flex-1 gap-1">
+                      <Label className="text-xs">Name</Label>
+                      <Input
+                        placeholder="e.g., Incubation time"
+                        {...form.register(`conditions.${index}.name`)}
+                      />
+                    </div>
+                    <div className="grid w-[130px] gap-1">
+                      <Label className="text-xs">Type</Label>
+                      <Controller
+                        control={form.control}
+                        name={`conditions.${index}.data_type`}
+                        render={({ field: f }) => (
+                          <Select value={f.value} onValueChange={f.onChange}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="numeric">Numeric</SelectItem>
+                              <SelectItem value="pick_list">Pick List</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      />
+                    </div>
+                    <div className="grid w-40 gap-1">
+                      <Label className="text-xs">Unit</Label>
+                      <Controller
+                        control={form.control}
+                        name={`conditions.${index}.unit`}
+                        render={({ field: f }) => (
+                          <UnitPicker value={f.value} onChange={f.onChange} />
+                        )}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Remove condition"
+                      className="shrink-0"
+                      onClick={() => removeCondition(index)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
                   </div>
                 ))}
               </div>
-            </>
-          )}
 
-          <Separator />
-
-          {/* Readout Definitions */}
-          <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold">Readout Definitions</Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => appendReadout(defaultReadout(readoutFields.length + 1))}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Readout
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            {readoutFields.map((field, index) => {
-              const rd = readoutValues[index];
-              return (
-                <Card key={field.id}>
-                  <CardContent className="pt-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="grid flex-1 gap-3">
-                        <div className="grid grid-cols-2 gap-3">
-                          <div className="grid gap-1">
-                            <Label className="text-xs">Name</Label>
-                            <Controller
-                              control={form.control}
-                              name={`readouts.${index}.name`}
-                              render={({ field }) => (
-                                <VocabularyAutocomplete
-                                  value={field.value ?? ""}
-                                  onChange={field.onChange}
-                                  placeholder="e.g., % Inhibition"
-                                  field="readout_name"
-                                />
-                              )}
-                            />
-                            {rd && isReservedReadoutName(rd.name) && (
-                              <p className="text-[11px] text-destructive">
-                                Reserved well-metadata name — pick a different readout name (well
-                                concentration, batch, and compound are tracked on the well, not as
-                                readouts).
-                              </p>
-                            )}
-                          </div>
-                          <div className="grid gap-1">
-                            <Label className="text-xs">Data Type</Label>
-                            <Controller
-                              control={form.control}
-                              name={`readouts.${index}.data_type`}
-                              render={({ field: f }) => (
-                                <Select value={f.value} onValueChange={f.onChange}>
-                                  <SelectTrigger>
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    {VISIBLE_READOUT_DATA_TYPES.map((value) => (
-                                      <SelectItem key={value} value={value}>
-                                        {
-                                          READOUT_DATA_TYPE_LABELS[
-                                            value as keyof typeof READOUT_DATA_TYPE_LABELS
-                                          ]
-                                        }
-                                      </SelectItem>
-                                    ))}
-                                  </SelectContent>
-                                </Select>
-                              )}
-                            />
-                          </div>
-                        </div>
-
-                        {/* Pick List Values */}
-                        {rd?.data_type === "pick_list" && (
-                          <div className="grid gap-1">
-                            <Label className="text-xs">Allowed Values</Label>
-                            <Controller
-                              control={form.control}
-                              name={`readouts.${index}.pick_list_values`}
-                              render={({ field: f }) => (
-                                <PickListEditor value={f.value} onChange={f.onChange} />
-                              )}
-                            />
-                          </div>
-                        )}
-
-                        {/* Numeric measurement attributes */}
-                        {rd?.data_type !== "pick_list" && (
-                          <div className="grid grid-cols-3 gap-3">
-                            <div className="grid gap-1">
-                              <Label className="text-xs">Unit</Label>
-                              <Input
-                                placeholder="e.g., nM"
-                                {...form.register(`readouts.${index}.unit`)}
-                              />
-                            </div>
-                            <div className="grid gap-1">
-                              <Label className="text-xs">Aggregation</Label>
-                              <Controller
-                                control={form.control}
-                                name={`readouts.${index}.aggregation`}
-                                render={({ field: f }) => (
-                                  <Select value={f.value} onValueChange={f.onChange}>
-                                    <SelectTrigger>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {Object.entries(READOUT_AGGREGATION_LABELS).map(
-                                        ([value, label]) => (
-                                          <SelectItem key={value} value={value}>
-                                            {label}
-                                          </SelectItem>
-                                        ),
-                                      )}
-                                    </SelectContent>
-                                  </Select>
-                                )}
-                              />
-                            </div>
-                            <div className="grid gap-1">
-                              <Label className="text-xs">Normalization</Label>
-                              <Controller
-                                control={form.control}
-                                name={`readouts.${index}.normalizations`}
-                                render={({ field: f }) => (
-                                  <NormalizationCheckboxGroup
-                                    value={f.value}
-                                    onChange={f.onChange}
-                                  />
-                                )}
-                              />
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Calculated readout toggle */}
-                        <div className="flex items-center gap-3">
-                          <Controller
-                            control={form.control}
-                            name={`readouts.${index}.is_calculated`}
-                            render={({ field: f }) => (
-                              <Switch checked={f.value} onCheckedChange={f.onChange} size="sm" />
-                            )}
-                          />
-                          <Label className="text-xs">Calculated</Label>
-                        </div>
-                        {rd?.is_calculated && (
-                          <div className="grid gap-1">
-                            <Label className="text-xs">Formula</Label>
-                            <Controller
-                              control={form.control}
-                              name={`readouts.${index}.calculation_formula`}
-                              render={({ field: f }) => (
-                                <FormulaInput
-                                  value={f.value}
-                                  onChange={f.onChange}
-                                  availableReadoutNames={readoutValues
-                                    .filter((other, i) => i !== index && other.name.trim())
-                                    .map((r) => r.name.trim())}
-                                  protocols={crossProtocols}
-                                />
-                              )}
-                            />
-                            <p className="text-[11px] text-muted-foreground">
-                              Use other readout names as variables. Type <code>@</code> for
-                              cross-protocol.
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Dose-Response Config */}
-                        {rd?.data_type === "dose_response" && (
-                          <div className="space-y-3 rounded-lg border bg-muted/30 p-3">
-                            <p className="text-xs font-medium">Dose-Response Configuration</p>
-                            <div className="grid grid-cols-3 gap-3">
-                              <div className="grid gap-1">
-                                <Label className="text-xs">Curve Type</Label>
-                                <Controller
-                                  control={form.control}
-                                  name={`readouts.${index}.dr_curve_type`}
-                                  render={({ field: f }) => (
-                                    <Select value={f.value} onValueChange={f.onChange}>
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {Object.entries(CURVE_TYPE_LABELS).map(([v, l]) => (
-                                          <SelectItem key={v} value={v}>
-                                            {l}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label className="text-xs">X-Axis Readout</Label>
-                                <Controller
-                                  control={form.control}
-                                  name={`readouts.${index}.dr_x_readout`}
-                                  render={({ field: f }) => (
-                                    <Select value={f.value} onValueChange={f.onChange}>
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value={WELL_CONC_X}>
-                                          (use well concentration)
-                                        </SelectItem>
-                                        {readoutValues
-                                          .filter(
-                                            (other, i) =>
-                                              i !== index &&
-                                              other.name.trim() &&
-                                              other.data_type === "numeric",
-                                          )
-                                          .map((other) => (
-                                            <SelectItem key={other.name} value={other.name.trim()}>
-                                              {other.name}
-                                            </SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label className="text-xs">Y-Axis Readout</Label>
-                                <Controller
-                                  control={form.control}
-                                  name={`readouts.${index}.dr_y_readout`}
-                                  render={({ field: f }) => (
-                                    <Select value={f.value} onValueChange={f.onChange}>
-                                      <SelectTrigger>
-                                        <SelectValue placeholder="Select..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {readoutValues
-                                          .filter(
-                                            (other, i) =>
-                                              i !== index &&
-                                              other.name.trim() &&
-                                              other.data_type === "numeric",
-                                          )
-                                          .map((other) => (
-                                            <SelectItem key={other.name} value={other.name.trim()}>
-                                              {other.name}
-                                            </SelectItem>
-                                          ))}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                />
-                              </div>
-                            </div>
-
-                            {/* Intercepts — chemist declares which intercepts
-                                the fit emits (EC50, EC90, IC10, …). Empty list
-                                = single implicit 50% intercept seeded from the
-                                Curve Type. Every downstream surface emits one
-                                column per row. */}
-                            <Controller
-                              control={form.control}
-                              name={`readouts.${index}.dr_intercepts`}
-                              render={({ field: f }) => (
-                                <div className="grid gap-2 rounded-md border bg-background p-3">
-                                  <div className="flex items-baseline justify-between">
-                                    <Label className="text-xs font-medium">Intercepts</Label>
-                                    <span className="text-[11px] text-muted-foreground">
-                                      One row per intercept (EC50, EC90, IC10, …) — all derived from
-                                      the same Hill fit
-                                    </span>
-                                  </div>
-                                  <InterceptsEditor
-                                    value={f.value as InterceptSpec[]}
-                                    onChange={f.onChange}
-                                    curveType={
-                                      (form.watch(
-                                        `readouts.${index}.dr_curve_type`,
-                                      ) as CurveType) ?? "ic50"
-                                    }
-                                  />
-                                </div>
-                              )}
-                            />
-
-                            <div className="grid grid-cols-3 gap-3">
-                              <div className="grid gap-1">
-                                <Label className="text-xs">Hill Slope</Label>
-                                <Controller
-                                  control={form.control}
-                                  name={`readouts.${index}.dr_hill_constraint`}
-                                  render={({ field: f }) => (
-                                    <Select value={f.value} onValueChange={f.onChange}>
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {Object.entries(HILL_SLOPE_CONSTRAINT_LABELS).map(
-                                          ([v, l]) => (
-                                            <SelectItem key={v} value={v}>
-                                              {l}
-                                            </SelectItem>
-                                          ),
-                                        )}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label className="text-xs">Normalization</Label>
-                                <Controller
-                                  control={form.control}
-                                  name={`readouts.${index}.dr_normalization_scope`}
-                                  render={({ field: f }) => (
-                                    <Select value={f.value} onValueChange={f.onChange}>
-                                      <SelectTrigger>
-                                        <SelectValue />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {Object.entries(NORMALIZATION_SCOPE_LABELS).map(
-                                          ([v, l]) => (
-                                            <SelectItem key={v} value={v}>
-                                              {l}
-                                            </SelectItem>
-                                          ),
-                                        )}
-                                      </SelectContent>
-                                    </Select>
-                                  )}
-                                />
-                              </div>
-                              <div className="grid gap-1">
-                                <Label className="text-xs">Activity Threshold (%)</Label>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  max="100"
-                                  placeholder="e.g., 30"
-                                  {...form.register(`readouts.${index}.dr_activity_threshold`)}
-                                />
-                              </div>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {readoutFields.length > 1 && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="mt-5 shrink-0"
-                          onClick={() => removeReadout(index)}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-
-          <Separator />
-
-          {/* Condition Definitions */}
-          <div className="flex items-center justify-between">
-            <Label className="text-base font-semibold">
-              Conditions{" "}
-              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
-            </Label>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => appendCondition(defaultCondition())}
-            >
-              <Plus className="mr-2 h-4 w-4" />
-              Add Condition
-            </Button>
-          </div>
-
-          {conditionFields.length > 0 && (
-            <div className="space-y-2">
-              {conditionFields.map((field, index) => (
-                <div key={field.id} className="flex items-end gap-2">
-                  <div className="grid gap-1 flex-1">
-                    <Label className="text-xs">Name</Label>
-                    <Input
-                      placeholder="e.g., Cell Line"
-                      {...form.register(`conditions.${index}.name`)}
-                    />
-                  </div>
-                  <div className="grid gap-1 w-[130px]">
-                    <Label className="text-xs">Type</Label>
-                    <Controller
-                      control={form.control}
-                      name={`conditions.${index}.data_type`}
-                      render={({ field: f }) => (
-                        <Select value={f.value} onValueChange={f.onChange}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="text">Text</SelectItem>
-                            <SelectItem value="numeric">Numeric</SelectItem>
-                            <SelectItem value="pick_list">Pick List</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      )}
-                    />
-                  </div>
-                  <div className="grid gap-1 w-[100px]">
-                    <Label className="text-xs">Unit</Label>
-                    <Input placeholder="optional" {...form.register(`conditions.${index}.unit`)} />
-                  </div>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="shrink-0"
-                    onClick={() => removeCondition(index)}
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
+              {readoutValues.some((r) => r.data_type === "dose_response") && (
+                <div className="grid gap-2">
+                  <Label>Dose unit</Label>
+                  <Controller
+                    control={form.control}
+                    name="dose_unit"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(DOSE_UNIT_LABELS).map(([value, label]) => (
+                            <SelectItem key={value} value={value}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Canonical unit for all wells and IC50 fits of runs of this protocol.
+                  </p>
                 </div>
-              ))}
-            </div>
-          )}
+              )}
+            </CollapsibleContent>
+          </Collapsible>
+
+          <SimilarProtocolsPanel
+            draft={{
+              name: preview.data?.name ?? "",
+              protocol_type: form.watch("protocol_type") || null,
+              target_ids: targetIds,
+              readout_names: readoutValues
+                .map((r) => r.name)
+                .filter((n): n is string => Boolean(n)),
+              facet_ids: Object.values(ontologyAnnotations)
+                .flat()
+                .map((t) => t.term_id),
+            }}
+            onLogRun={(protocolId) => {
+              onOpenChange(false);
+              onLogRun?.(protocolId);
+            }}
+          />
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="sm:items-center">
+          {draftKept && (
+            <>
+              <span className="text-sm text-muted-foreground sm:mr-auto">Draft kept</span>
+              <Button type="button" variant="ghost" onClick={resetForm}>
+                Clear
+              </Button>
+            </>
+          )}
           <Button onClick={handleSubmit} disabled={!canSubmit}>
             {createMutation.isPending ? "Creating..." : "Create Protocol"}
           </Button>
         </DialogFooter>
+
+        <AlertDialog open={pendingForm !== null} onOpenChange={(o) => !o && setPendingForm(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Replace your readouts with the form's?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You changed the readouts. "{pendingForm?.name}" starts with{" "}
+                {pendingForm?.readout_templates.map((t) => t.name).join(", ")}.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Keep mine</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  if (pendingForm) applyReadouts(pendingForm);
+                  setPendingForm(null);
+                }}
+              >
+                Replace
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </DialogContent>
     </Dialog>
   );

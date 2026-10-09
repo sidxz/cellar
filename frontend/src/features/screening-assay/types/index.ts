@@ -5,6 +5,7 @@ import type {
   ConditionGroupReadoutResponse,
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
+  CreateProtocolRequest,
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
   HitCriterionDTO,
@@ -580,7 +581,9 @@ export interface CreateConditionDefinitionInput {
   pick_list_values?: string[] | null;
 }
 
-export interface CreateProtocolInput {
+/** The form started from, same-named siblings' discriminators and nicknames: typed off the DTO. */
+export interface CreateProtocolInput
+  extends Pick<CreateProtocolRequest, "form_id" | "sibling_discriminators" | "nicknames"> {
   protocol_type: ProtocolType;
   /** The free part of the generated name (method or fixed condition), e.g. `FP`. */
   discriminator?: string | null;
