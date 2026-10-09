@@ -1577,6 +1577,7 @@ export * from './umapJobDtoPickerParams';
 export * from './umapPointDto';
 export * from './umapResultDto';
 export * from './umapResultDtoPickerParams';
+export * from './unitSuggestionResponse';
 export * from './unlockRequest';
 export * from './unmatchedCompoundModel';
 export * from './unmatchedCompoundModelStructure';

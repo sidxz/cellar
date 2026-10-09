@@ -44,6 +44,7 @@ from cellar.application.screening.list_protocol_summaries import ListProtocolSum
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.list_units import ListUnits
 from cellar.application.screening.lock_protocol import LockProtocol, UnlockProtocol
 from cellar.application.screening.lock_run import LockRun, UnlockRun
 from cellar.application.screening.manage_condition_definitions import (
@@ -198,6 +199,7 @@ __all__ = [
     "ListRunsByProtocolDep",
     "ListRunsWithCountsDep",
     "ListTargetsDep",
+    "ListUnitsDep",
     "LockProtocolDep",
     "LockRunDep",
     "MoleculeActivityServiceDep",
@@ -417,6 +419,7 @@ FindSimilarProtocolsDep = Annotated[
 ListProtocolVocabularyDep = Annotated[
     ListProtocolVocabulary, Depends(_get_use_case(ListProtocolVocabulary))
 ]
+ListUnitsDep = Annotated[ListUnits, Depends(_get_use_case(ListUnits))]
 
 # --- Compound Flag dependencies ---
 ListCompoundFlagsDep = Annotated[ListCompoundFlags, Depends(_get_use_case(ListCompoundFlags))]

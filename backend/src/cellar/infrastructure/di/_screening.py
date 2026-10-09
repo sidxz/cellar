@@ -82,6 +82,7 @@ from cellar.application.screening.list_protocol_summaries import ListProtocolSum
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.list_units import ListUnits
 from cellar.application.screening.lock_protocol import (
     LockProtocol,
     UnlockProtocol,
@@ -372,6 +373,7 @@ def register_screening(container: Container) -> None:
     container.define(GetProtocol, _protocol_query(GetProtocol))
     container.define(ListProtocols, _protocol_query(ListProtocols))
     container.define(ListProtocolVocabulary, _protocol_query(ListProtocolVocabulary))
+    container.define(ListUnits, lambda c: ListUnits())
     container.define(FindSimilarProtocols, _find_similar_protocols)
     container.define(PublishProtocol, _protocol_cmd(PublishProtocol))
     container.define(RetireProtocol, _protocol_cmd(RetireProtocol))

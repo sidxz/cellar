@@ -430,6 +430,10 @@ def create_app() -> FastAPI:
 
     app.include_router(protocol_forms_router)
 
+    from cellar.interface.routes.units import router as units_router
+
+    app.include_router(units_router)
+
     from cellar.interface.routes.cdd_import import router as cdd_import_router
 
     app.include_router(cdd_import_router)
