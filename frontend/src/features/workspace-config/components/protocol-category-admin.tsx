@@ -159,8 +159,9 @@ function CategoryDialog({
             </div>
             {!category && (
               <div className="grid gap-2">
-                <Label>Start protocols like (optional)</Label>
+                <Label htmlFor="category-start-like">Start protocols like (optional)</Label>
                 <SearchableSelect
+                  id="category-start-like"
                   options={startLikeOptions}
                   value={startLike}
                   onValueChange={setStartLike}

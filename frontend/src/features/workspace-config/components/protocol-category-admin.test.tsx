@@ -116,7 +116,7 @@ describe("ProtocolCategoryAdmin", () => {
     fireEvent.change(screen.getByLabelText("Label"), {
       target: { value: "Gametocytocidal activity" },
     });
-    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(screen.getByRole("combobox", { name: "Start protocols like (optional)" }));
     // Only categories that have a form to copy are offered.
     expect(screen.queryByRole("option", { name: "Cytotoxicity" })).not.toBeInTheDocument();
     fireEvent.click(await screen.findByRole("option", { name: "Growth inhibition" }));
