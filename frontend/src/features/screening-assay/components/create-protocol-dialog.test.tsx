@@ -311,6 +311,15 @@ describe("CreateProtocolDialog", () => {
     },
   );
 
+  it("shows an optional slot of the pattern under the category, once, marked optional", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Pharmacokinetics");
+    expect(labels().slice(0, 2)).toEqual(["Category", "Organism (optional)"]);
+    openMoreDetails();
+    expect(labels().filter((l) => l?.startsWith("Organism"))).toEqual(["Organism (optional)"]);
+    expect(labels()).toContain("Cell line");
+  });
+
   it("asks for a discriminator only when the pattern places it, else one click away", () => {
     render(<CreateProtocolDialog open onOpenChange={() => {}} />);
     pickCategory("Detection interference");

@@ -76,7 +76,7 @@ import {
 } from "./create-protocol/form-values";
 import { NicknameInput } from "./create-protocol/nickname-input";
 import { ReadoutRow } from "./create-protocol/readout-row";
-import { FacetField, RequiredFacts, requiredFactSlots } from "./create-protocol/required-facts";
+import { FacetField, NameFacts, factSlots } from "./create-protocol/required-facts";
 import {
   SiblingDiscriminators,
   type SiblingValues,
@@ -85,11 +85,7 @@ import {
 import { StartsFrom } from "./create-protocol/starts-from";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
-import {
-  ProtocolNamePreview,
-  isPreviewSavable,
-  useRequiredNameSlots,
-} from "./protocol-name-preview";
+import { ProtocolNamePreview, isPreviewSavable, useNameSlots } from "./protocol-name-preview";
 import { SimilarProtocolsPanel } from "./similar-protocols-panel";
 import { TargetMultiSelect } from "./target-multi-select";
 
@@ -298,9 +294,14 @@ export function CreateProtocolDialog({
 
   // ---- derived validation ----
 
-  const needs = useRequiredNameSlots(categoryValue);
+  const { required: needs, optional: mayName } = useNameSlots(categoryValue);
   const followsTarget = selectedForm?.assay_format_from_target ?? false;
-  const requiredSlots = requiredFactSlots(needs, followsTarget);
+  // The pattern's facts sit under the category, the optional ones too: they change the name.
+  const requiredSlots = factSlots(needs, followsTarget);
+  const optionalSlots = factSlots(mayName, followsTarget).filter((s) => !requiredSlots.includes(s));
+  const nameFactSlots = [...requiredSlots, ...optionalSlots];
+  const assayFormatHint =
+    followsTarget && !ontologyAnnotations.assay_format?.length ? "Follows the target" : undefined;
   const targetIds = form.watch("target_ids") ?? [];
   const discriminatorValue = form.watch("discriminator");
   const preview = useProtocolNamePreview(
@@ -323,9 +324,9 @@ export function CreateProtocolDialog({
     showDiscriminator ||
     discriminatorValue.trim() !== "";
 
-  // Facts the pattern does not need, assay format first.
+  // Facts the pattern does not place, assay format first.
   const moreSlots = facetSlots
-    .filter((s) => !requiredSlots.includes(s.name))
+    .filter((s) => !nameFactSlots.includes(s.name))
     .sort((a, b) => Number(b.name === "assay_format") - Number(a.name === "assay_format"));
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
@@ -464,9 +465,10 @@ export function CreateProtocolDialog({
             />
           </div>
 
-          <RequiredFacts
-            needs={needs}
-            followsTarget={followsTarget}
+          <NameFacts
+            required={requiredSlots}
+            optional={optionalSlots}
+            assayFormatHint={assayFormatHint}
             facetSlots={facetSlots}
             annotations={ontologyAnnotations}
             onAnnotations={setAnnotation}
@@ -587,17 +589,11 @@ export function CreateProtocolDialog({
                   slot={slot}
                   value={ontologyAnnotations[slot.name] ?? []}
                   onChange={(terms) => setAnnotation(slot.name, terms)}
-                  hint={
-                    slot.name === "assay_format" &&
-                    followsTarget &&
-                    !ontologyAnnotations.assay_format?.length
-                      ? "Follows the target"
-                      : undefined
-                  }
+                  hint={slot.name === "assay_format" ? assayFormatHint : undefined}
                 />
               ))}
 
-              {!requiredSlots.includes("target") && (
+              {!nameFactSlots.includes("target") && (
                 <div className="grid gap-2">
                   <Label>Targets</Label>
                   <Controller

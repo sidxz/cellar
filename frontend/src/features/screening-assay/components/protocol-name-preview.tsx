@@ -4,15 +4,28 @@ import { useProtocolCategories } from "@/features/workspace-config/hooks/use-pro
 import type { NamePreviewResponse } from "@/shared/lib/api/model";
 import { Loader2 } from "lucide-react";
 
-/** Slots a category pattern needs filled: `{slot}` without `?` (same rule as the backend). */
-export function requiredNameSlots(pattern?: string | null): Set<string> {
-  return new Set([...(pattern ?? "").matchAll(/\{([a-z_]+)\}/g)].map((m) => m[1]));
+/** The slots a category pattern places: `{slot}` is required, `{slot?}` optional (same rule as the backend). */
+export function nameSlots(pattern?: string | null): {
+  required: Set<string>;
+  optional: Set<string>;
+} {
+  const required = new Set<string>();
+  const optional = new Set<string>();
+  for (const [, slot, mark] of (pattern ?? "").matchAll(/\{([a-z_]+)(\?)?\}/g)) {
+    (mark ? optional : required).add(slot);
+  }
+  return { required, optional };
+}
+
+/** The slots the named category's pattern places. */
+export function useNameSlots(category?: string | null) {
+  const { data } = useProtocolCategories();
+  return nameSlots(data?.find((c) => c.label === category)?.name_pattern);
 }
 
 /** The slots the named category's pattern needs, so a form can stop calling them optional. */
 export function useRequiredNameSlots(category?: string | null): Set<string> {
-  const { data } = useProtocolCategories();
-  return requiredNameSlots(data?.find((c) => c.label === category)?.name_pattern);
+  return useNameSlots(category).required;
 }
 
 /** Complete, unique, with a valid discriminator, and no sibling rename clashes: the protocol can be created. */
