@@ -39,5 +39,6 @@ describe("protocol category mutations", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["protocol-categories"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["protocol-forms"] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["workspace-setup"] });
   });
 });

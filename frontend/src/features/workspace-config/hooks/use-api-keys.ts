@@ -7,6 +7,7 @@ import type {
   ExternalApiKeyResponse,
   UpdateExternalApiKeyBody,
 } from "@/shared/lib/api/model";
+import { WORKSPACE_SETUP_KEY } from "./use-workspace-setup";
 
 // Aliases of the orval-generated DTOs (source of truth). Domain-friendly names
 // keep call sites stable while the shapes stay in lockstep with the backend.
@@ -18,6 +19,7 @@ const apiKeyHooks = createCrudHooks<ExternalApiKey, CreateApiKeyInput, UpdateApi
   entityName: "API key",
   baseUrl: `${API_V1}/api-keys`,
   queryKey: ["api-keys"],
+  parentQueryKeys: [WORKSPACE_SETUP_KEY],
 });
 
 export const useApiKeys = apiKeyHooks.useList;

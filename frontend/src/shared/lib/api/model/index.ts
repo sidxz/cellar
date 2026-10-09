@@ -1876,3 +1876,4 @@ export * from './workspaceSettingsResponseDefaultMoleculeType';
 export * from './workspaceSettingsResponseFormulationNumberScheme';
 export * from './workspaceSettingsResponseProtocolNaming';
 export * from './workspaceSettingsResponseRegistrationRules';
+export * from './workspaceSetupResponse';

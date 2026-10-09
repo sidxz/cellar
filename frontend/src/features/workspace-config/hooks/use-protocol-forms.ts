@@ -9,6 +9,7 @@ import type {
 } from "@/shared/lib/api/model";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { WORKSPACE_SETUP_KEY } from "./use-workspace-setup";
 
 // Aliases of the orval-generated DTOs (source of truth). The template fields
 // (readout_templates / condition_templates / ontology_defaults) resolve to the
@@ -21,6 +22,7 @@ const pfHooks = createCrudHooks<ProtocolForm, CreateProtocolFormInput, UpdatePro
   entityName: "Protocol form",
   baseUrl: `${API_V1}/protocol-forms`,
   queryKey: ["protocol-forms"],
+  parentQueryKeys: [WORKSPACE_SETUP_KEY],
 });
 
 export const useProtocolForms = pfHooks.useList;
@@ -36,6 +38,7 @@ export function useSeedDefaultProtocolForms() {
       customInstance<ProtocolForm[]>({ url: `${API_V1}/protocol-forms/defaults`, method: "POST" }),
     onSuccess: (created) => {
       qc.invalidateQueries({ queryKey: ["protocol-forms"] });
+      qc.invalidateQueries({ queryKey: WORKSPACE_SETUP_KEY });
       showSuccess(
         created.length > 0
           ? `Default forms added (${created.length})`

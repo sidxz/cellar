@@ -1,5 +1,6 @@
 "use client";
 
+import { WORKSPACE_SETUP_KEY } from "@/features/workspace-config/hooks/use-workspace-setup";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { PaginatedResponse } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -38,6 +39,7 @@ export function useSyncTargets() {
       customInstance<TargetSyncReport>({ url: `${API_V1}/targets/sync`, method: "POST" }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: TARGETS_KEY });
+      qc.invalidateQueries({ queryKey: WORKSPACE_SETUP_KEY });
     },
   });
 }

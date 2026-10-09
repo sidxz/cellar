@@ -1,5 +1,6 @@
 "use client";
 
+import { SetupChecklist } from "@/features/workspace-config/components/setup-checklist";
 import { PageHeader } from "@/shared/components/page-header";
 import { Button } from "@/shared/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
@@ -64,6 +65,7 @@ export function ScreeningDashboard() {
         </div>
 
         <TabsContent value="protocols" className="mt-4">
+          <SetupChecklist />
           <ProtocolBrowser
             onSelect={(protocolId) => {
               router.push(`/assays/protocols/${protocolId}`);
