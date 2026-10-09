@@ -128,7 +128,8 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 text(
                     """
                     select a.key as slot, t->>'term_id' as term_id, min(t->>'label') as label,
-                           min(t->>'ontology_source') as source, count(distinct p.id) as n
+                           min(t->>'ontology_source') as source, min(t->>'uri') as uri,
+                           count(distinct p.id) as n
                     from protocols p
                     cross join lateral jsonb_each(p.ontology_annotations) as a(key, terms)
                     cross join lateral jsonb_array_elements(a.terms) as t
@@ -149,6 +150,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 label=r.label,
                 ontology_source=r.source,
                 protocol_count=r.n,
+                uri=r.uri,
             )
             for r in rows
         ]

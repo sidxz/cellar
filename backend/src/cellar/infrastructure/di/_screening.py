@@ -82,6 +82,7 @@ from cellar.application.screening.list_protocol_summaries import ListProtocolSum
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
 from cellar.application.screening.list_runs_with_counts import ListRunsWithCounts
+from cellar.application.screening.list_terms_in_use import ListTermsInUse
 from cellar.application.screening.list_units import ListUnits
 from cellar.application.screening.lock_protocol import (
     LockProtocol,
@@ -1166,6 +1167,14 @@ def register_screening(container: Container) -> None:
     container.define(
         ListOntologyDescendants, lambda c: ListOntologyDescendants(c[BioPortalClient])
     )
+
+    def _list_terms_in_use(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListTermsInUse(
+            uow, SQLAlchemyProtocolRepository(uow), SQLAlchemyNamingLabelRepository(uow)
+        )
+
+    container.define(ListTermsInUse, _list_terms_in_use)
 
     def _set_ontology_annotation(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

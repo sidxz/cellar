@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
+from cellar.application.screening.list_terms_in_use import ListTermsInUseQuery, TermInUse
 from cellar.application.screening.search_ontology import (
     ListOntologyDescendantsQuery,
     SearchOntologyQuery,
@@ -33,6 +34,7 @@ from cellar.interface.dependencies import (
     DeleteOntologySlotDep,
     ListOntologyDescendantsDep,
     ListOntologySlotsDep,
+    ListTermsInUseDep,
     SearchOntologyDep,
     UpdateOntologySlotDep,
 )
@@ -60,6 +62,19 @@ class OntologyTermResponse(BaseModel):
             ontology_source=t.ontology_source,
             uri=t.uri,
         )
+
+
+class TermInUseResponse(BaseModel):
+    term_id: str
+    label: str
+    ontology_source: str
+    uri: str | None = None
+    short_label: str
+    protocol_count: int
+
+    @classmethod
+    def from_domain(cls, t: TermInUse) -> TermInUseResponse:
+        return cls(**vars(t))
 
 
 class OntologySlotResponse(BaseModel):
@@ -131,6 +146,18 @@ async def search_ontology(
     )
     terms = result_to_response(await use_case(query, auth=auth))
     return [OntologyTermResponse.from_domain(t) for t in terms]
+
+
+@router.get("/ontology/terms-in-use", response_model=list[TermInUseResponse])
+async def list_terms_in_use(
+    auth: AuthDep,
+    use_case: ListTermsInUseDep,
+    slot: str = Query(..., min_length=1),
+) -> list[TermInUseResponse]:
+    """Terms protocols already use in one annotation slot, with their short label."""
+    query = ListTermsInUseQuery(workspace_id=auth.workspace_id, slot=slot)
+    terms = result_to_response(await use_case(query, auth=auth))
+    return [TermInUseResponse.from_domain(t) for t in terms]
 
 
 @router.get("/ontology/descendants", response_model=list[OntologyTermResponse])

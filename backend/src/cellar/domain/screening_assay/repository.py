@@ -34,6 +34,7 @@ class AnnotationTermUse:
     label: str
     ontology_source: str
     protocol_count: int
+    uri: str | None = None
 
 
 @dataclass(frozen=True)

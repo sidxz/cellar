@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.screening.list_terms_in_use import ListTermsInUse
 from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
@@ -139,6 +140,7 @@ __all__ = [
     "ListSaltEntriesDep",
     "ListTagEntitiesDep",
     "ListTagsDep",
+    "ListTermsInUseDep",
     "ListVocabulariesDep",
     "MergeTagsDep",
     "PreviewNamingChangeDep",
@@ -263,6 +265,7 @@ SearchOntologyDep = Annotated[SearchOntology, Depends(_get_use_case(SearchOntolo
 ListOntologyDescendantsDep = Annotated[
     ListOntologyDescendants, Depends(_get_use_case(ListOntologyDescendants))
 ]
+ListTermsInUseDep = Annotated[ListTermsInUse, Depends(_get_use_case(ListTermsInUse))]
 SetOntologyAnnotationDep = Annotated[
     SetOntologyAnnotation, Depends(_get_use_case(SetOntologyAnnotation))
 ]
