@@ -59,7 +59,7 @@ class NamingContext:
     overrides_by_term: Mapping[str, str] = field(default_factory=dict)
     # lower-cased term label -> short label; registry targets carry organism as text
     overrides_by_label: Mapping[str, str] = field(default_factory=dict)
-    home_organism_label: str | None = None
+    home_organism_labels: frozenset[str] = frozenset()  # lower-cased
 
 
 @dataclass(frozen=True)
@@ -227,8 +227,7 @@ def organism_short_label(label: str, ctx: NamingContext) -> str:
 
 def _target_label(target: NamingTarget, ctx: NamingContext) -> str:
     name = normalize_name_text(target.name)
-    home = (ctx.home_organism_label or "").strip().lower()
-    if target.organism and target.organism.strip().lower() != home:
+    if target.organism and target.organism.strip().lower() not in ctx.home_organism_labels:
         return f"{organism_short_label(target.organism, ctx)} {name}"
     return name
 

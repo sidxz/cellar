@@ -69,7 +69,14 @@ class _Labels:
 class _Settings:
     async def find_by_workspace_id(self, workspace_id):
         s = WorkspaceSettings.create_default(workspace_id=workspace_id)
-        s.set_home_organism({"term_id": MTB.term_id, "label": MTB.label})
+        s.set_home_organisms([{"term_id": MTB.term_id, "label": MTB.label}])
+        return s
+
+
+class _LegacySettings:
+    async def find_by_workspace_id(self, workspace_id):
+        s = WorkspaceSettings.create_default(workspace_id=workspace_id)
+        s.protocol_naming = {"home_organism": {"term_id": MTB.term_id, "label": MTB.label}}
         return s
 
 
@@ -225,3 +232,16 @@ async def test_strain_comes_from_its_annotation_and_a_missing_one_is_named():
     )
     failed = _service().check(bare, person=True, allow_incomplete=False).failure()
     assert str(failed) == "This protocol's name needs a strain"
+
+
+async def test_context_reads_legacy_single_home_organism_the_same_way():
+    kwargs = dict(
+        protocol_repo=_Protocols(()),
+        target_repo=_Targets(()),
+        category_repo=_Categories(),
+        label_repo=_Labels(),
+        collection_repo=_Collections(),
+    )
+    new = await ProtocolNameService(settings_repo=_Settings(), **kwargs).context(WS)
+    old = await ProtocolNameService(settings_repo=_LegacySettings(), **kwargs).context(WS)
+    assert old.home_organism_labels == new.home_organism_labels == frozenset({MTB.label.lower()})

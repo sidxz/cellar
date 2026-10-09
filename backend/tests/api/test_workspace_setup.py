@@ -60,7 +60,8 @@ async def test_after_seeding_a_key_a_home_organism_and_a_target_it_is_done(clien
     )
     assert key.status_code == 201, key.text
     org = {"term_id": "NCBITAXON:1773", "label": "Mycobacterium tuberculosis"}
-    r = await client.put("/api/v1/settings/home-organism", json={"term": org})
+    human = {"term_id": "NCBITAXON:9606", "label": "Homo sapiens"}
+    r = await client.put("/api/v1/settings/home-organism", json={"terms": [org, human]})
     assert r.status_code == 200, r.text
     await make_target("InhA")
     resp = await client.get(URL)
@@ -68,7 +69,7 @@ async def test_after_seeding_a_key_a_home_organism_and_a_target_it_is_done(clien
         "missing_default_categories": [],
         "missing_default_forms": 0,
         "bioportal_key": True,
-        "home_organisms": 1,
+        "home_organisms": 2,
         "targets": 1,
     }
     assert "s3cret-value" not in resp.text

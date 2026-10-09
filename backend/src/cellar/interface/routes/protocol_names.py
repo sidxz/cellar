@@ -35,7 +35,8 @@ class NamingTermBody(BaseModel):
 
 class NamingChangeRequest(BaseModel):
     """One admin naming edit. ``category``: category_id + new label and/or name_pattern.
-    ``label``: the term + short_label (null = back to the default). ``home_organism``: term."""
+    ``label``: the term + short_label (null = back to the default).
+    ``home_organism``: terms (a list; the older single ``term`` is still read)."""
 
     kind: Literal["category", "label", "home_organism"]
     category_id: uuid.UUID | None = None
@@ -46,6 +47,7 @@ class NamingChangeRequest(BaseModel):
     ontology_source: str | None = None
     short_label: str | None = None
     term: NamingTermBody | None = None
+    terms: list[NamingTermBody] | None = None
     model_config = {"extra": "forbid"}
 
 
@@ -92,7 +94,13 @@ async def preview_naming_change(
         term_id=body.term_id,
         term_label=body.term_label,
         short_label=body.short_label,
-        home_organism=body.term.model_dump() if body.term else None,
+        home_organisms=(
+            [t.model_dump() for t in body.terms]
+            if body.terms is not None
+            else [body.term.model_dump()]
+            if body.term
+            else []
+        ),
     )
     return NamingChangePreviewResponse.from_domain(
         result_to_response(await use_case(query, auth=auth))

@@ -108,13 +108,15 @@ async def plan_home_organism(
     workspace_id: uuid.UUID,
     protocol_repo: ProtocolRepository,
     names: ProtocolNameService,
-    term: dict[str, Any] | None,
+    terms: list[dict[str, Any]],
 ) -> NamingPlan:
     ctx = await names.context(workspace_id)
     return NamingPlan(
         protocols=await protocol_repo.find_by_workspace(workspace_id),
         pattern_for=lambda _p: None,
-        ctx=dataclasses.replace(ctx, home_organism_label=term["label"] if term else None),
+        ctx=dataclasses.replace(
+            ctx, home_organism_labels=frozenset(t["label"].strip().lower() for t in terms)
+        ),
     )
 
 
@@ -273,7 +275,7 @@ class PreviewNamingChangeQuery(Query):
     term_id: str | None = None
     term_label: str | None = None
     short_label: str | None = None
-    home_organism: dict[str, Any] | None = None
+    home_organisms: list[dict[str, Any]] = dataclasses.field(default_factory=list)
 
 
 class PreviewNamingChange:
@@ -331,7 +333,7 @@ class PreviewNamingChange:
                     workspace_id=ws,
                     protocol_repo=self._protocols,
                     names=self._names,
-                    term=input.home_organism,
+                    terms=input.home_organisms,
                 )
             else:
                 return Failure(ValidationError(f"Unknown naming change '{input.kind}'"))

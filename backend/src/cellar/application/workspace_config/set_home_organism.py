@@ -1,4 +1,4 @@
-"""Set the workspace's home organism: its targets are named without an organism prefix."""
+"""Set the workspace's home organisms: their targets are named without an organism prefix."""
 
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
 @dataclass(frozen=True, kw_only=True)
 class SetHomeOrganismCommand(Command):
     workspace_id: uuid.UUID
-    term: dict[str, Any] | None  # {term_id, label, ontology_source}; None clears it
+    terms: list[dict[str, Any]]  # [{term_id, label, ontology_source}]; empty clears them
 
 
 class SetHomeOrganism:
@@ -56,12 +56,12 @@ class SetHomeOrganism:
             settings = await self._settings.find_by_workspace_id(input.workspace_id)
             if settings is None:
                 settings = WorkspaceSettings.create_default(workspace_id=input.workspace_id)
-            settings.set_home_organism(input.term)
+            settings.set_home_organisms(input.terms)
             plan = await plan_home_organism(
                 workspace_id=input.workspace_id,
                 protocol_repo=self._protocols,
                 names=self._names,
-                term=settings.home_organism,
+                terms=settings.home_organisms,
             )
             preview = await compute_naming_change(
                 workspace_id=input.workspace_id,

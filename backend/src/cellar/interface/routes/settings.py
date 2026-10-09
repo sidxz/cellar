@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi import APIRouter
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from cellar.application.workspace_config.get_workspace_settings import (
     GetWorkspaceSettingsQuery,
@@ -108,17 +108,31 @@ class HomeOrganismTerm(BaseModel):
 
 
 class SetHomeOrganismRequest(BaseModel):
-    term: HomeOrganismTerm | None
+    """``terms``: the home organisms (empty clears them). ``term`` is the older single shape
+    (null clears); external callers may still send it."""
+
+    terms: list[HomeOrganismTerm] | None = None
+    term: HomeOrganismTerm | None = None
     model_config = {"extra": "forbid"}
+
+    @model_validator(mode="after")
+    def _one_shape(self) -> SetHomeOrganismRequest:
+        sent = self.model_fields_set & {"terms", "term"}
+        if len(sent) != 1 or (self.terms is None and "terms" in sent):
+            raise ValueError("Send either terms (a list) or term")
+        return self
+
+    def as_list(self) -> list[dict]:
+        if self.terms is not None:
+            return [t.model_dump() for t in self.terms]
+        return [self.term.model_dump()] if self.term else []
 
 
 @router.put("/home-organism", response_model=WorkspaceSettingsResponse)
 async def set_home_organism(
     body: SetHomeOrganismRequest, auth: AuthDep, use_case: SetHomeOrganismDep
 ) -> WorkspaceSettingsResponse:
-    """Targets from this organism are named without it; relabels protocols (refused on a clash)."""
-    cmd = SetHomeOrganismCommand(
-        workspace_id=auth.workspace_id, term=body.term.model_dump() if body.term else None
-    )
+    """Targets from these organisms are named without them; relabels protocols."""
+    cmd = SetHomeOrganismCommand(workspace_id=auth.workspace_id, terms=body.as_list())
     settings = result_to_response(await use_case(cmd, auth=auth))
     return WorkspaceSettingsResponse.from_domain(settings)

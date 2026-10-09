@@ -17,7 +17,7 @@ from cellar.domain.shared.protocol_naming import (
     validate_pattern,
 )
 
-HOME = NamingContext(home_organism_label="Mycobacterium tuberculosis")
+HOME = NamingContext(home_organism_labels=frozenset({"mycobacterium tuberculosis"}))
 MTB = NamingTerm(f"{NCBITAXON}1773", "Mycobacterium tuberculosis", "NCBITAXON")
 SMEG = NamingTerm(f"{NCBITAXON}1772", "Mycolicibacterium smegmatis", "NCBITAXON")
 MYCO_GENUS = NamingTerm(f"{NCBITAXON}1763", "Mycobacterium", "NCBITAXON")
@@ -175,8 +175,23 @@ def test_without_home_organism_every_target_gets_its_organism():
     assert r.name == "M. tuberculosis PptT inhibition"
 
 
+def test_several_home_organisms_drop_every_home_prefix():
+    ctx = NamingContext(home_organism_labels=frozenset({"homo sapiens", MTB_ORG.lower()}))
+    herg = render_protocol_name(
+        "{target} inhibition", NamingInputs(targets=(NamingTarget("hERG", "Homo sapiens"),)), ctx
+    )
+    inha = render_protocol_name(
+        "{target} inhibition", NamingInputs(targets=(NamingTarget("InhA", MTB_ORG),)), ctx
+    )
+    mouse = render_protocol_name(
+        "{target} inhibition", NamingInputs(targets=(NamingTarget("DHFR", "Mus musculus"),)), ctx
+    )
+    assert (herg.name, inha.name) == ("hERG inhibition", "InhA inhibition")
+    assert mouse.name == "Mouse DHFR inhibition"
+
+
 def test_admin_override_beats_rule_and_shipped_label():
-    ctx = NamingContext(overrides_by_term={MTB.term_id: "Mtb"}, home_organism_label=MTB_ORG)
+    ctx = NamingContext(overrides_by_term={MTB.term_id: "Mtb"}, home_organism_labels=frozenset({MTB_ORG.lower()}))
     assert (
         render_protocol_name(
             "{organism} growth inhibition", NamingInputs(organisms=(MTB,)), ctx
@@ -186,7 +201,7 @@ def test_admin_override_beats_rule_and_shipped_label():
 
 
 def test_target_organism_override_by_label():
-    ctx = NamingContext(overrides_by_label={"homo sapiens": "hs"}, home_organism_label=MTB_ORG)
+    ctx = NamingContext(overrides_by_label={"homo sapiens": "hs"}, home_organism_labels=frozenset({MTB_ORG.lower()}))
     r = render_protocol_name(
         "{target} inhibition", NamingInputs(targets=(NamingTarget("MDH2", "Homo sapiens"),)), ctx
     )
