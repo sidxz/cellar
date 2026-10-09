@@ -524,7 +524,7 @@ export function CreateProtocolDialog({
           />
 
           <StartsFrom
-            forms={[...ownForms, ...genericForms]}
+            forms={ownForms.length > 0 ? ownForms : genericForms}
             selectedId={selectedForm?.id ?? null}
             onPick={applyPickedForm}
           />

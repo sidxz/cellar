@@ -35,11 +35,17 @@ const { ORGANISM_BASED, CELL_BASED } = vi.hoisted(() => {
     CELL_BASED: bao("BAO_0000219", "cell based format"),
   };
 });
-const state = vi.hoisted(() => ({ preview: null as unknown, mutate: vi.fn(), realPreview: false }));
+const state = vi.hoisted(() => ({
+  preview: null as unknown,
+  mutate: vi.fn(),
+  realPreview: false,
+  extraForms: [] as unknown[],
+}));
 state.preview = incomplete;
 afterEach(() => {
   state.preview = incomplete;
   state.realPreview = false;
+  state.extraForms = [];
   state.mutate.mockReset();
 });
 
@@ -155,6 +161,7 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
         condition_templates: [{ name: "Cell density", data_type: "numeric", unit: "cells/well" }],
         ontology_defaults: [{ slot_name: "assay_format", terms: [CELL_BASED] }],
       },
+      ...state.extraForms,
     ],
   }),
 }));
@@ -357,6 +364,30 @@ describe("CreateProtocolDialog", () => {
     expect(screen.getByRole("button", { name: "MIC" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByDisplayValue("MIC")).toBeInTheDocument();
     expect(screen.queryByText(/Replace your readouts/)).not.toBeInTheDocument();
+  });
+
+  it("offers generic forms only for a category without forms of its own", () => {
+    state.extraForms = [
+      {
+        id: "g1",
+        workspace_id: "w1",
+        name: "Single readout",
+        category_id: null,
+        is_default: false,
+        assay_format_from_target: false,
+        version: 1,
+        readout_templates: [{ name: "Signal", data_type: "numeric" }],
+        condition_templates: [],
+        ontology_defaults: [],
+      },
+    ];
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    expect(screen.getByRole("button", { name: "MIC" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Single readout" })).not.toBeInTheDocument();
+    pickCategory("Solubility");
+    expect(screen.getByRole("button", { name: "Single readout" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "MIC" })).not.toBeInTheDocument();
   });
 
   it("says the assay format follows the target only when the form does", () => {
