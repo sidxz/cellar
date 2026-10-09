@@ -50,6 +50,16 @@ MISSING_FIELD_LABELS = {
 }
 
 
+class NameTakenError(ConflictError):
+    """A generated name another protocol already has; ``name`` is that name."""
+
+    def __init__(self, name: str, holder: str | None) -> None:
+        self.name = name
+        super().__init__(
+            f"'{name}' is already the name of {holder}; give one of them a different discriminator"
+        )
+
+
 @dataclass(frozen=True)
 class NameDerivation:
     rendered: RenderedName
@@ -179,12 +189,7 @@ class ProtocolNameService:
             return Success(NameFlag.NEEDS_FACTS)
         if derivation.clash is not None:
             if person:
-                return Failure(
-                    ConflictError(
-                        f"'{r.name}' is already the name of {derivation.clash.code}; "
-                        "give one of them a different discriminator"
-                    )
-                )
+                return Failure(NameTakenError(r.name, derivation.clash.code))
             return Success(NameFlag.NAME_CONFLICT)
         if derivation.needs_discriminator:
             if person:

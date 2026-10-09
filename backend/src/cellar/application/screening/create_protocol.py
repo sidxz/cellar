@@ -23,7 +23,10 @@ from cellar.application.screening.manage_protocol import (
     set_discriminator_and_rename,
 )
 from cellar.application.screening.protocol_codes import mint_protocol_code
-from cellar.application.screening.protocol_naming_service import ProtocolNameService
+from cellar.application.screening.protocol_naming_service import (
+    NameTakenError,
+    ProtocolNameService,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -304,8 +307,14 @@ class CreateProtocol:
                         ),
                         user_id=auth.user_id if auth else None,
                     )
-                    if isinstance(renamed, Failure):  # its new name clashes
-                        return Failure(_about(label, renamed.failure()))
+                    if isinstance(renamed, Failure):
+                        error = renamed.failure()
+                        if isinstance(error, NameTakenError):
+                            # The holder may be the new protocol, whose code is rolled back.
+                            return Failure(
+                                ConflictError(f'{label}: "{error.name}" is already taken')
+                            )
+                        return Failure(_about(label, error))
                     await self._repo.save(sibling)
                 except (ConflictError, ValidationError, ConcurrencyConflictError) as exc:
                     # Published, locked or retired since the preview, or saved meanwhile.
