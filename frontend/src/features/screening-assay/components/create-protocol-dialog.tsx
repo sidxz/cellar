@@ -53,9 +53,9 @@ import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
 import {
+  applyFormFacets,
   conditionsFromForm,
   formsForCategory,
-  mergeFacetDefaults,
   pickFormForCategory,
   readoutsFromForm,
 } from "../lib/protocol-form-apply";
@@ -111,6 +111,7 @@ interface CreateProtocolDialogProps {
 }
 
 const DEFAULT_READOUTS_JSON = JSON.stringify(DEFAULT_VALUES.readouts);
+const DEFAULT_CONDITIONS_JSON = JSON.stringify(DEFAULT_VALUES.conditions);
 
 export function CreateProtocolDialog({
   open,
@@ -146,9 +147,12 @@ export function CreateProtocolDialog({
   const setAnnotation = (slot: string, terms: OntologyTerm[]) =>
     setOntologyAnnotations((prev) => ({ ...prev, [slot]: terms }));
 
-  // The form the protocol starts from; its readouts as last applied tell an edit apart.
+  // The form the protocol starts from. What a form last applied (readouts, conditions, facet
+  // slot → terms, as JSON) tells the chemist's edits apart: only those survive a re-apply.
   const [selectedForm, setSelectedForm] = useState<ProtocolForm | null>(null);
   const [appliedReadouts, setAppliedReadouts] = useState(DEFAULT_READOUTS_JSON);
+  const [appliedConditions, setAppliedConditions] = useState(DEFAULT_CONDITIONS_JSON);
+  const [appliedFacets, setAppliedFacets] = useState<Record<string, string>>({});
   const [pendingForm, setPendingForm] = useState<ProtocolForm | null>(null);
   const [nicknames, setNicknames] = useState<string[]>([]);
   const [siblingValues, setSiblingValues] = useState<SiblingValues>({});
@@ -197,6 +201,8 @@ export function CreateProtocolDialog({
     setOntologyAnnotations({});
     setSelectedForm(null);
     setAppliedReadouts(DEFAULT_READOUTS_JSON);
+    setAppliedConditions(DEFAULT_CONDITIONS_JSON);
+    setAppliedFacets({});
     setNicknames([]);
     setSiblingValues({});
     setShowDiscriminator(false);
@@ -258,14 +264,20 @@ export function CreateProtocolDialog({
     setAppliedReadouts(JSON.stringify(readouts));
   };
 
-  /** Type, conditions and facet defaults apply at once; readouts the chemist edited are asked about. */
+  /** Type, conditions and facet defaults apply at once, replacing what the last form applied
+   *  (null: no form, so those are cleared); readouts the chemist edited are asked about. */
   const applyPickedForm = (f: ProtocolForm | null) => {
     setSelectedForm(f);
+    if (JSON.stringify(form.getValues("conditions")) === appliedConditions) {
+      const conditions = f ? conditionsFromForm(f) : [];
+      form.setValue("conditions", conditions);
+      setAppliedConditions(JSON.stringify(conditions));
+    }
+    const facets = applyFormFacets(ontologyAnnotations, appliedFacets, f);
+    setOntologyAnnotations(facets.annotations);
+    setAppliedFacets(facets.applied);
     if (!f) return;
     if (f.protocol_type) form.setValue("protocol_type", f.protocol_type);
-    const conditions = conditionsFromForm(f);
-    if (conditions.length > 0) form.setValue("conditions", conditions);
-    setOntologyAnnotations((prev) => mergeFacetDefaults(prev, f));
     if (f.readout_templates.length === 0) return;
     if (JSON.stringify(form.getValues("readouts")) !== appliedReadouts) setPendingForm(f);
     else applyReadouts(f);

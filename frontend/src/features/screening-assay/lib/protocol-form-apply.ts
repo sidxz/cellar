@@ -71,21 +71,46 @@ export function conditionsFromForm(form: ProtocolForm): ProtocolFormValues["cond
   }));
 }
 
-/** Fills only empty slots, so a chemist's pick is never replaced. */
-export function mergeFacetDefaults(
-  current: Record<string, OntologyTerm[]>,
-  form: ProtocolForm,
-): Record<string, OntologyTerm[]> {
-  const next = { ...current };
-  for (const d of form.ontology_defaults ?? []) {
-    if (d.slot_name === "assay_format" && form.assay_format_from_target) continue;
-    if ((next[d.slot_name] ?? []).length > 0) continue;
-    next[d.slot_name] = (d.terms ?? []).map((t) => ({
+/** The facet terms a form brings; none for the assay format when it follows the target. */
+function formFacets(form: ProtocolForm | null): Record<string, OntologyTerm[]> {
+  const out: Record<string, OntologyTerm[]> = {};
+  for (const d of form?.ontology_defaults ?? []) {
+    if (d.slot_name === "assay_format" && form?.assay_format_from_target) continue;
+    const terms = (d.terms ?? []).map((t) => ({
       term_id: String(t.term_id ?? ""),
       label: String(t.label ?? ""),
       ontology_source: String(t.ontology_source ?? ""),
       uri: (t.uri as string | null) ?? null,
     }));
+    if (terms.length > 0) out[d.slot_name] = terms;
   }
-  return next;
+  return out;
+}
+
+/**
+ * Applies a form's facet defaults (null: no form). A slot that is empty, or still holds what the
+ * last form applied, gets the new form's terms, or is cleared when the new form has none. A slot
+ * the chemist filled is left alone. `lastApplied` and the returned `applied` map slot → the JSON
+ * of the terms a form put there.
+ */
+export function applyFormFacets(
+  current: Record<string, OntologyTerm[]>,
+  lastApplied: Record<string, string>,
+  form: ProtocolForm | null,
+): { annotations: Record<string, OntologyTerm[]>; applied: Record<string, string> } {
+  const annotations = { ...current };
+  const applied: Record<string, string> = {};
+  const incoming = formFacets(form);
+  for (const slot of new Set([...Object.keys(lastApplied), ...Object.keys(incoming)])) {
+    const now = JSON.stringify(annotations[slot] ?? []);
+    if (now !== "[]" && now !== lastApplied[slot]) continue;
+    const terms = incoming[slot];
+    if (terms) {
+      annotations[slot] = terms;
+      applied[slot] = JSON.stringify(terms);
+    } else {
+      delete annotations[slot];
+    }
+  }
+  return { annotations, applied };
 }

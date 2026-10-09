@@ -22,6 +22,18 @@ const incomplete = {
   discriminator_in_pattern: false,
   sibling_renames: [],
 };
+const { ORGANISM_BASED, CELL_BASED } = vi.hoisted(() => {
+  const bao = (code: string, label: string) => ({
+    term_id: `http://www.bioassayontology.org/bao#${code}`,
+    label,
+    ontology_source: "BAO",
+    uri: null,
+  });
+  return {
+    ORGANISM_BASED: bao("BAO_0000218", "organism-based format"),
+    CELL_BASED: bao("BAO_0000219", "cell based format"),
+  };
+});
 const state = vi.hoisted(() => ({ preview: null as unknown, mutate: vi.fn() }));
 state.preview = incomplete;
 afterEach(() => {
@@ -57,7 +69,28 @@ vi.mock("../hooks/use-protocol-facet-slots", () => ({
       is_required: false,
     })),
 }));
-vi.mock("@/shared/components/ontology-search-input", () => ({ OntologySearchInput: () => null }));
+vi.mock("@/shared/components/ontology-search-input", () => ({
+  // A plain input standing in for the picker: typing a label picks that one term.
+  OntologySearchInput: ({
+    value,
+    onChange,
+    placeholder,
+  }: {
+    value: { label: string }[];
+    onChange: (terms: unknown[]) => void;
+    placeholder?: string;
+  }) => (
+    <input
+      placeholder={placeholder}
+      value={value.map((t) => t.label).join(", ")}
+      onChange={(e) =>
+        onChange([
+          { term_id: e.target.value, label: e.target.value, ontology_source: "BAO", uri: null },
+        ])
+      }
+    />
+  ),
+}));
 vi.mock("@/shared/hooks/use-units", () => ({ useUnits: () => ({ data: [] }) }));
 vi.mock("@/features/research-organization/hooks/use-projects", () => ({
   useProjects: () => ({ data: [] }),
@@ -83,8 +116,8 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
             is_calculated: false,
           },
         ],
-        condition_templates: [],
-        ontology_defaults: [],
+        condition_templates: [{ name: "Incubation time", data_type: "numeric", unit: "h" }],
+        ontology_defaults: [{ slot_name: "assay_format", terms: [ORGANISM_BASED] }],
       },
       {
         id: "f2",
@@ -96,7 +129,19 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
         version: 1,
         readout_templates: [{ name: "IC50", data_type: "dose_response", unit: "µM" }],
         condition_templates: [],
-        ontology_defaults: [],
+        ontology_defaults: [{ slot_name: "assay_format", terms: [ORGANISM_BASED] }],
+      },
+      {
+        id: "f3",
+        workspace_id: "w1",
+        name: "CC50",
+        category_id: "c-cy",
+        is_default: true,
+        assay_format_from_target: false,
+        version: 1,
+        readout_templates: [{ name: "CC50", data_type: "numeric", unit: "µM" }],
+        condition_templates: [{ name: "Cell density", data_type: "numeric", unit: "cells/well" }],
+        ontology_defaults: [{ slot_name: "assay_format", terms: [CELL_BASED] }],
       },
     ],
   }),
@@ -112,6 +157,8 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-categories", () => ({
         name_pattern: "{discriminator} interference",
       },
       { id: "c-sol", label: "Solubility", name_pattern: "{discriminator?} solubility" },
+      { id: "c-cy", label: "Cytotoxicity", name_pattern: "{cell_line} cytotoxicity" },
+      { id: "c-pk", label: "Pharmacokinetics", name_pattern: "{organism?} pharmacokinetics" },
     ],
   }),
 }));
@@ -125,13 +172,18 @@ vi.mock("./protocol-category-input", () => ({
   }) => (
     <select aria-label="Category" value={value} onChange={(e) => onChange(e.target.value)}>
       <option value="" />
-      {["Growth inhibition", "Enzyme inhibition", "Detection interference", "Solubility"].map(
-        (c) => (
-          <option key={c} value={c}>
-            {c}
-          </option>
-        ),
-      )}
+      {[
+        "Growth inhibition",
+        "Enzyme inhibition",
+        "Detection interference",
+        "Solubility",
+        "Cytotoxicity",
+        "Pharmacokinetics",
+      ].map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
     </select>
   ),
 }));
@@ -158,6 +210,19 @@ const pickCategory = (label: string) =>
 const labels = () =>
   screen.getAllByText((_, el) => el?.tagName === "LABEL").map((l) => l.textContent);
 const openMoreDetails = () => fireEvent.click(screen.getByRole("button", { name: /More details/ }));
+const complete = {
+  ...incomplete,
+  name: "Some name",
+  base: "Some name",
+  missing: [],
+  missing_labels: [],
+};
+/** Clicks Create and returns the payload sent. */
+const submit = async () => {
+  fireEvent.click(screen.getByRole("button", { name: "Create Protocol" }));
+  await waitFor(() => expect(state.mutate).toHaveBeenCalled());
+  return state.mutate.mock.calls[0][0];
+};
 
 const protocol = (over: Record<string, unknown> = {}) =>
   ({
@@ -270,6 +335,62 @@ describe("CreateProtocolDialog", () => {
       "true",
     );
     expect(screen.getByText("Follows the target")).toBeInTheDocument();
+  });
+
+  it("replaces the format and conditions the last form applied when the category changes", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    pickCategory("Cytotoxicity");
+    const payload = await submit();
+    expect(payload.form_id).toBe("f3");
+    expect(payload.ontology_annotations).toEqual({ assay_format: [CELL_BASED] });
+    expect(payload.condition_definitions).toEqual([
+      { name: "Cell density", data_type: "numeric", unit: "cells/well" },
+    ]);
+  });
+
+  it("drops the last form's format and conditions for a form that follows the target", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    pickCategory("Enzyme inhibition");
+    const payload = await submit();
+    expect(payload.form_id).toBe("f2");
+    expect(payload.ontology_annotations).toEqual({});
+    expect(payload.condition_definitions).toBeUndefined();
+  });
+
+  it("clears what a form applied when Blank is picked", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    fireEvent.click(screen.getByRole("button", { name: "Blank" }));
+    const payload = await submit();
+    expect(payload.form_id).toBeNull();
+    expect(payload.ontology_annotations).toEqual({});
+    expect(payload.condition_definitions).toBeUndefined();
+  });
+
+  it("keeps a format and conditions the chemist edited when the form changes", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Growth inhibition");
+    openMoreDetails();
+    const format = screen.getByPlaceholderText("Search BAO...");
+    expect(format).toHaveValue("organism-based format");
+    fireEvent.change(format, { target: { value: "tissue-based format" } });
+    fireEvent.change(screen.getByDisplayValue("Incubation time"), {
+      target: { value: "Incubation time (aerobic)" },
+    });
+    pickCategory("Cytotoxicity");
+    const payload = await submit();
+    expect(payload.ontology_annotations.assay_format).toMatchObject([
+      { label: "tissue-based format" },
+    ]);
+    expect(payload.condition_definitions).toEqual([
+      { name: "Incubation time (aerobic)", data_type: "numeric", unit: "h" },
+    ]);
   });
 
   it("hides Dose unit until a readout fits dose-response curves", () => {

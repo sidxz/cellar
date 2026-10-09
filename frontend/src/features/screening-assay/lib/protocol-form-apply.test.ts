@@ -1,8 +1,8 @@
 import type { ProtocolForm } from "@/features/workspace-config/hooks/use-protocol-forms";
 import { describe, expect, it } from "vitest";
 import {
+  applyFormFacets,
   formsForCategory,
-  mergeFacetDefaults,
   pickFormForCategory,
   readoutsFromForm,
 } from "./protocol-form-apply";
@@ -95,7 +95,11 @@ describe("readoutsFromForm", () => {
   });
 });
 
-describe("mergeFacetDefaults", () => {
+describe("applyFormFacets", () => {
+  const BAO_CELL = { ...BAO_BIOCHEM, term_id: "bao#BAO_0000219", label: "cell based format" };
+  const withFormat = (terms: (typeof BAO_BIOCHEM)[], over: Partial<ProtocolForm> = {}) =>
+    form({ ontology_defaults: [{ slot_name: "assay_format", terms }], ...over });
+
   it("fills empty slots only and never replaces a chemist's pick", () => {
     const f = form({
       ontology_defaults: [
@@ -104,17 +108,34 @@ describe("mergeFacetDefaults", () => {
       ],
     });
     const other = { ...MTB, term_id: "ncbi#5833", label: "Plasmodium falciparum" };
-    expect(mergeFacetDefaults({ organism: [other] }, f)).toEqual({
-      organism: [other],
-      assay_format: [BAO_BIOCHEM],
+    expect(applyFormFacets({ organism: [other] }, {}, f)).toEqual({
+      annotations: { organism: [other], assay_format: [BAO_BIOCHEM] },
+      applied: { assay_format: JSON.stringify([BAO_BIOCHEM]) },
+    });
+  });
+
+  it("replaces what the last form applied, and clears it when the new form has none", () => {
+    const first = applyFormFacets({}, {}, withFormat([BAO_BIOCHEM]));
+    const second = applyFormFacets(first.annotations, first.applied, withFormat([BAO_CELL]));
+    expect(second.annotations).toEqual({ assay_format: [BAO_CELL] });
+    expect(applyFormFacets(second.annotations, second.applied, form({})).annotations).toEqual({});
+    expect(applyFormFacets(second.annotations, second.applied, null).annotations).toEqual({});
+  });
+
+  it("keeps a slot the chemist changed after a form filled it", () => {
+    const first = applyFormFacets({}, {}, withFormat([BAO_BIOCHEM]));
+    const edited = { assay_format: [BAO_CELL] };
+    expect(applyFormFacets(edited, first.applied, null)).toEqual({
+      annotations: edited,
+      applied: {},
     });
   });
 
   it("leaves the assay format to the backend when the form follows the target", () => {
-    const f = form({
-      assay_format_from_target: true,
-      ontology_defaults: [{ slot_name: "assay_format", terms: [BAO_BIOCHEM] }],
-    });
-    expect(mergeFacetDefaults({}, f)).toEqual({});
+    const first = applyFormFacets({}, {}, withFormat([BAO_BIOCHEM]));
+    const follows = withFormat([BAO_CELL], { assay_format_from_target: true });
+    expect(applyFormFacets({}, {}, follows).annotations).toEqual({});
+    // A format the last form applied is dropped, too.
+    expect(applyFormFacets(first.annotations, first.applied, follows).annotations).toEqual({});
   });
 });
