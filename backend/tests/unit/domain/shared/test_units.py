@@ -39,6 +39,14 @@ MICRO = "µ"  # micro sign
         ("ng*h/mL", "ng·h/mL"),
         ("ng.h/mL", "ng·h/mL"),
         ("  µM  ", f"{MICRO}M"),
+        ("ug.mL-1", f"{MICRO}g·mL-1"),
+        ("ng.h.mL-1", "ng·h·mL-1"),
+        ("10-6 cm/s", "×10⁻⁶ cm/s"),
+        ("10^-6 cm/s", "×10⁻⁶ cm/s"),
+        ("x10-6 cm/s", "×10⁻⁶ cm/s"),
+        ("X 10^-6 cm/s", "×10⁻⁶ cm/s"),
+        ("1e-6 cm/s", "×10⁻⁶ cm/s"),
+        ("1E-6cm/sec", "×10⁻⁶ cm/s"),
     ],
 )
 def test_spelling_variants_collapse(raw, expected):
@@ -50,7 +58,6 @@ def test_spelling_variants_collapse(raw, expected):
     [
         "U/mL",
         "% remaining",
-        "10-6 cm/s",
         "mm",
         "mM",
         "M",
@@ -62,6 +69,12 @@ def test_spelling_variants_collapse(raw, expected):
         "fold",
         "Da",
         "1.5 h",
+        "100 mL",
+        "a.u.",  # dotted abbreviations are not products
+        "A.U.",
+        "O.D.",
+        "um",  # µM in an assay, µm as a length: ambiguous, so left alone
+        f"{MICRO}m",
     ],
 )
 def test_anything_else_is_left_as_typed(unchanged):
