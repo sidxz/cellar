@@ -40,6 +40,7 @@ const state = vi.hoisted(() => ({
   mutate: vi.fn(),
   realPreview: false,
   extraForms: [] as unknown[],
+  draft: null as unknown,
 }));
 state.preview = incomplete;
 afterEach(() => {
@@ -52,7 +53,10 @@ afterEach(() => {
 // The preview is canned, unless a test runs the real hook against the canned server response.
 vi.mock("../hooks/use-protocol-name-preview", async (importOriginal) => {
   const real = await importOriginal<typeof import("../hooks/use-protocol-name-preview")>();
-  const canned = () => ({ data: state.preview, isFetching: false });
+  const canned = (draft: unknown) => {
+    state.draft = draft;
+    return { data: state.preview, isFetching: false };
+  };
   return {
     useProtocolNamePreview: (draft: Parameters<typeof real.useProtocolNamePreview>[0]) =>
       (state.realPreview ? real.useProtocolNamePreview : canned)(draft),
@@ -495,6 +499,14 @@ describe("CreateProtocolDialog", () => {
     expect(screen.getByText("Pick a category to see the name.")).toBeInTheDocument();
     expect(screen.queryByText(named.name)).not.toBeInTheDocument();
     expect(screen.queryByText(/already has this exact name/)).not.toBeInTheDocument();
+  });
+
+  it("previews the name with the form it starts from", () => {
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Enzyme inhibition");
+    expect(state.draft).toMatchObject({ category: "Enzyme inhibition", form_id: "f2" });
+    fireEvent.click(screen.getByRole("button", { name: "Blank" }));
+    expect(state.draft).toMatchObject({ form_id: null });
   });
 
   it("hides Dose unit until a readout fits dose-response curves", () => {

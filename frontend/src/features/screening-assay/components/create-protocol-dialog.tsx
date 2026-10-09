@@ -311,6 +311,8 @@ export function CreateProtocolDialog({
           target_ids: targetIds,
           ontology_annotations: ontologyAnnotations,
           discriminator: discriminatorValue.trim() || null,
+          // A form that follows the target gives {matrix} its assay format.
+          form_id: selectedForm?.id ?? null,
           sibling_discriminators: Object.entries(siblingValues)
             .filter(([, v]) => v.discriminator.trim())
             .map(([protocol_id, v]) => ({ protocol_id, discriminator: v.discriminator.trim() })),
