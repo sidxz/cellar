@@ -8,12 +8,14 @@ from sqlalchemy import Connection, text
 
 from cellar.domain.shared.units import canonical_unit
 
-# Free-text display units only. ``test_concentration_unit`` / ``dose_unit`` and the inventory
-# concentration columns hold ConcentrationUnit enum values ("uM") that code parses back.
+# Free-text display units on live definitions only. Never rewritten:
+# - ``campaign_measurement.unit``: a frozen snapshot (closed campaigns are records, guarded by a
+#   lock trigger); the campaign results filter compares units by canonical spelling instead.
+# - ``test_concentration_unit`` / ``dose_unit`` and the inventory concentration columns: they hold
+#   ConcentrationUnit enum values ("uM") that code parses back.
 _DISPLAY_UNIT_COLUMNS = (
     ("readout_definitions", "unit"),
     ("condition_definitions", "unit"),
-    ("campaign_measurement", "unit"),  # snapshot; the results filter compares it to readout units
 )
 
 
@@ -30,24 +32,16 @@ def _template_units(items: list | None) -> tuple[list | None, bool]:
 
 
 def rewrite_stored_units(conn: Connection) -> None:
-    # Closed campaigns reject measurement writes by trigger; a spelling fix is not a result edit.
-    conn.execute(
-        text("alter table campaign_measurement disable trigger campaign_measurement_reject_locked")
-    )
     for table, column in _DISPLAY_UNIT_COLUMNS:
         for (old,) in conn.execute(
             text(f"select distinct {column} from {table} where {column} is not null")
         ).all():
             new = canonical_unit(old)
-            # None = blank text; the column may be NOT NULL, so a blank is left as typed.
-            if new is not None and new != old:
+            if new != old:  # a blank string becomes NULL, like the domain now stores it
                 conn.execute(
                     text(f"update {table} set {column}=:new where {column}=:old"),
                     {"new": new, "old": old},
                 )
-    conn.execute(
-        text("alter table campaign_measurement enable trigger campaign_measurement_reject_locked")
-    )
     rows = conn.execute(
         text("select id, readout_templates, condition_templates from protocol_forms")
     ).all()

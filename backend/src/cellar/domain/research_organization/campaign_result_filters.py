@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.shared.aggregation_types import ValueQualifier
+from cellar.domain.shared.units import canonical_unit
 
 
 class MeasurementFilter(BaseModel):
@@ -17,7 +18,8 @@ class MeasurementFilter(BaseModel):
     channel_id: uuid.UUID
     minimum: float | None = None
     maximum: float | None = None
-    # Bounds use the stored unit exactly; empty means dimensionless. No silent conversion.
+    # Bounds use the stored unit up to spelling (uM = µM; closed snapshots keep their old
+    # spelling); empty means dimensionless. No silent conversion between different units.
     unit: str = Field(default="", max_length=40)
     qc: Literal["any", "passed", "failed", "unknown"] = "any"
 
@@ -43,7 +45,7 @@ class MeasurementFilter(BaseModel):
             if (
                 cell.value_qualifier != ValueQualifier.EQ
                 or cell.value is None
-                or cell.unit != self.unit
+                or canonical_unit(cell.unit) != canonical_unit(self.unit)
             ):
                 return False
             if self.minimum is not None and cell.value < self.minimum:

@@ -54,9 +54,7 @@ async def test_rewrites_variants_and_leaves_the_rest(session_factory, workspace_
     assert units == {"a": "µM", "b": "U/mL", "c": "µg/mL"}
 
 
-async def test_campaign_snapshot_unit_is_rewritten_even_when_closed(
-    session_factory, workspace_id, user_id
-):
+async def test_closed_campaign_snapshot_is_left_untouched(session_factory, workspace_id, user_id):
     protocol = await _save_protocol(session_factory, workspace_id, user_id, names=("a",))
     async with session_factory() as s:
         readout_id = await s.scalar(
@@ -68,34 +66,29 @@ async def test_campaign_snapshot_unit_is_rewritten_even_when_closed(
         chan = await _rows.channel(s, camp, protocol.id, readout_id)
         res = await _rows.result(s, camp, mol)
         meas = await _rows.measurement(s, res, chan)  # planted with unit 'uM'
-        await s.execute(
-            text("update campaign_measurement set test_concentration_unit='uM' where id=:id"),
-            {"id": meas},
-        )
         await _rows.set_campaign_status(s, camp, "closed")
         await s.run_sync(lambda sync: rewrite_stored_units(sync.connection()))
         await s.commit()
-        row = (
-            await s.execute(
-                text(
-                    "select unit, test_concentration_unit from campaign_measurement where id=:id"
-                ),
-                {"id": meas},
-            )
-        ).one()
+        unit = await s.scalar(
+            text("select unit from campaign_measurement where id=:id"), {"id": meas}
+        )
         trigger_state = await s.scalar(
             text(
                 "select tgenabled::text from pg_trigger "
                 "where tgname='campaign_measurement_reject_locked'"
             )
         )
-    assert tuple(row) == ("µM", "uM")  # ConcentrationUnit enum value stays
-    assert trigger_state == "O"  # the lock trigger is back on
+    assert unit == "uM"  # frozen record: the filter compares canonical spellings instead
+    assert trigger_state == "O"  # the lock trigger is never disabled
 
 
-def test_only_display_unit_columns_are_rewritten():
-    assert ("campaign_measurement", "unit") in _DISPLAY_UNIT_COLUMNS
-    # ConcentrationUnit enum values ("uM") that code parses back; never rewrite these.
+def test_only_live_definition_units_are_rewritten():
+    assert _DISPLAY_UNIT_COLUMNS == (
+        ("readout_definitions", "unit"),
+        ("condition_definitions", "unit"),
+    )
+    # Frozen campaign snapshots and ConcentrationUnit enum columns ("uM", parsed back) stay.
+    assert "campaign_measurement" not in {t for t, _ in _DISPLAY_UNIT_COLUMNS}
     assert not {c for _, c in _DISPLAY_UNIT_COLUMNS} & {"test_concentration_unit", "dose_unit"}
 
 
