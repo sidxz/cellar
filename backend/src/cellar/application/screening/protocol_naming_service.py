@@ -43,6 +43,7 @@ MISSING_FIELD_LABELS = {
     "category": "a category",
     "target": "a target",
     "organism": "an organism",
+    "strain": "a strain",
     "cell_line": "a cell line",
     "matrix": "an assay format",
     "subject": "a target, organism or cell line",
@@ -149,6 +150,7 @@ class ProtocolNameService:
         inputs = NamingInputs(
             targets=tuple(NamingTarget(t.name, t.organism) for t in targets),
             organisms=_terms(annotations.get("organism")),
+            strains=_terms(annotations.get("strain")),
             cell_lines=_terms(annotations.get("cell_line")),
             matrices=_terms(annotations.get("assay_format")),
             discriminator=discriminator,

@@ -15,7 +15,7 @@ from cellar.domain.shared.errors import ValidationError
 
 MAX_NAME_LENGTH = 400
 MAX_DISCRIMINATOR_LENGTH = 40
-SLOTS = ("target", "organism", "cell_line", "matrix", "subject", "discriminator")
+SLOTS = ("target", "organism", "strain", "cell_line", "matrix", "subject", "discriminator")
 NCBITAXON = "http://purl.bioontology.org/ontology/NCBITAXON/"
 BAO = "http://www.bioassayontology.org/bao#"
 
@@ -48,6 +48,7 @@ class NamingTarget:
 class NamingInputs:
     targets: tuple[NamingTarget, ...] = ()
     organisms: tuple[NamingTerm, ...] = ()
+    strains: tuple[NamingTerm, ...] = ()
     cell_lines: tuple[NamingTerm, ...] = ()
     matrices: tuple[NamingTerm, ...] = ()
     discriminator: str | None = None
@@ -216,6 +217,16 @@ def _joined(terms: tuple[NamingTerm, ...], ctx: NamingContext) -> str | None:
     return "/".join(short_label(t, ctx) for t in terms) or None
 
 
+def _as_typed(terms: tuple[NamingTerm, ...], ctx: NamingContext) -> str | None:
+    """Strains read as typed (no short-label rule); an admin override still applies."""
+    return (
+        "/".join(
+            ctx.overrides_by_term.get(t.term_id) or normalize_name_text(t.label) for t in terms
+        )
+        or None
+    )
+
+
 def with_discriminator(base: str, discriminator: str) -> str:
     """The name a protocol gets when its discriminator trails the base in brackets."""
     return f"{base} [{discriminator}]"
@@ -236,6 +247,7 @@ def render_protocol_name(pattern: str, inputs: NamingInputs, ctx: NamingContext)
     values = {
         "target": target,
         "organism": organism,
+        "strain": _as_typed(inputs.strains, ctx),
         "cell_line": cell_line,
         "matrix": _joined(inputs.matrices, ctx),
         "subject": subject,

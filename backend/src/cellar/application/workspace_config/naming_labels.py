@@ -36,7 +36,7 @@ from cellar.domain.workspace_config.naming_label import NamingLabel
 from cellar.domain.workspace_config.repository import NamingLabelRepository
 
 # Annotation slots whose terms appear in protocol names.
-NAME_SLOTS = ("organism", "cell_line", "assay_format")
+NAME_SLOTS = ("organism", "strain", "cell_line", "assay_format")
 
 
 @dataclass(frozen=True, kw_only=True)

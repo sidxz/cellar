@@ -293,3 +293,41 @@ def test_lab_animals_ship_common_names(taxon_id, label, expected):
     assert _render("{target} inhibition", ctx=NamingContext(), targets=(target,)).name == (
         f"{expected} Cyp3a11 inhibition"
     )
+
+
+PF = NamingTerm(f"{NCBITAXON}5833", "Plasmodium falciparum", "NCBITAXON")
+PF_3D7 = NamingTerm("free_text:3D7", "3D7", "free_text")
+STRAIN_PATTERN = "{organism} {strain?} growth inhibition"
+
+
+def test_strain_follows_the_organism_as_typed():
+    r = _render(STRAIN_PATTERN, organisms=(PF,), strains=(PF_3D7,))
+    assert r.name == "P. falciparum 3D7 growth inhibition" and r.complete
+
+
+def test_without_a_strain_the_optional_slot_leaves_no_gap():
+    assert _render(STRAIN_PATTERN, organisms=(PF,)).name == "P. falciparum growth inhibition"
+
+
+def test_a_required_strain_with_none_is_missing():
+    r = _render("{organism} {strain} growth inhibition", organisms=(PF,))
+    assert r.missing == ("strain",)
+    assert r.name == "P. falciparum (strain needed) growth inhibition"
+
+
+def test_strain_gets_no_short_label_rule_but_an_override_applies():
+    # An NCBITaxon-looking strain still reads as typed; no "spp." or genus abbreviation.
+    h37rv = NamingTerm(f"{NCBITAXON}83332", "H37Rv", "NCBITAXON")
+    assert _render(STRAIN_PATTERN, organisms=(MTB,), strains=(h37rv,)).name == (
+        "M. tuberculosis H37Rv growth inhibition"
+    )
+    ctx = NamingContext(overrides_by_term={PF_3D7.term_id: "3D7 (CQ-sensitive)"})
+    assert (
+        _render(STRAIN_PATTERN, ctx=ctx, organisms=(PF,), strains=(PF_3D7,)).name
+        == "P. falciparum 3D7 (CQ-sensitive) growth inhibition"
+    )
+
+
+@pytest.mark.parametrize("pattern", [STRAIN_PATTERN, "{organism} {strain} growth inhibition"])
+def test_strain_is_a_valid_slot(pattern):
+    validate_pattern(pattern)

@@ -42,7 +42,9 @@ async def test_shared_term_listed_once_with_count(client):
     ]
 
     strain = (await client.get("/api/v1/ontology/terms-in-use", params={"slot": "strain"})).json()
-    assert [(t["label"], t["protocol_count"], t["uri"]) for t in strain] == [("H37Rv", 1, None)]
+    assert [(t["label"], t["short_label"], t["protocol_count"], t["uri"]) for t in strain] == [
+        ("H37Rv", "H37Rv", 1, None)
+    ]
 
 
 async def test_short_label_is_the_admin_override(client):

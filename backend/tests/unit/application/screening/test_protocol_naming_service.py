@@ -202,3 +202,26 @@ async def test_an_incomplete_name_never_overwrites_an_existing_one():
     assert result.unwrap().rendered.missing == ("category",)
     assert legacy.name == "Legacy hand-typed name" and legacy.aliases == []
     assert legacy.name_flag == NameFlag.NEEDS_FACTS
+
+
+async def test_strain_comes_from_its_annotation_and_a_missing_one_is_named():
+    strain = OntologyTerm(term_id="free_text:H37Rv", label="H37Rv", ontology_source="free_text")
+    d = await _service().derive(
+        WS,
+        category=None,
+        pattern="{organism} {strain?} growth inhibition",
+        target_ids=[],
+        annotations={"organism": [MTB], "strain": [strain]},
+        discriminator=None,
+    )
+    assert d.rendered.name == "M. tuberculosis H37Rv growth inhibition"
+    bare = await _service().derive(
+        WS,
+        category=None,
+        pattern="{organism} {strain} growth inhibition",
+        target_ids=[],
+        annotations={"organism": [MTB]},
+        discriminator=None,
+    )
+    failed = _service().check(bare, person=True, allow_incomplete=False).failure()
+    assert str(failed) == "This protocol's name needs a strain"

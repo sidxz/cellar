@@ -22,6 +22,7 @@ from cellar.domain.shared.ontology import OntologyTerm
 # Audit reasons for renames caused by an annotation change.
 SLOT_LABELS = {
     "organism": "Organism",
+    "strain": "Strain",
     "cell_line": "Cell line",
     "assay_format": "Assay format",
     "detection": "Detection method",
