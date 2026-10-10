@@ -224,6 +224,11 @@ class ProtocolModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
         "ReadoutDefinitionModel",
         cascade="all, delete-orphan",
         lazy="selectin",
+        # created_at, id break ties: display_order defaults to 0.
+        order_by=(
+            "ReadoutDefinitionModel.display_order, "
+            "ReadoutDefinitionModel.created_at, ReadoutDefinitionModel.id"
+        ),
         back_populates="protocol",
     )
     condition_definitions: Mapped[list[ConditionDefinitionModel]] = relationship(
