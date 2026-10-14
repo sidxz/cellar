@@ -169,7 +169,7 @@ jobs:
           args: --include-path "${{ steps.range.outputs.path }}" ${{ steps.range.outputs.range }}
         env:
           OUTPUT: CHANGES.md
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ steps.range.outputs.title }}
