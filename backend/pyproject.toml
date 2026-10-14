@@ -5,40 +5,40 @@ description = "Chemical compound management & screening platform"
 requires-python = ">=3.13"
 dependencies = [
     # Web
-    "fastapi>=0.115.0",
+    "fastapi>=0.143.0",
     "uvicorn[standard]>=0.34.0",
     "python-multipart>=0.0.20",
     # Database
     "sqlalchemy[asyncio]>=2.0.36",
-    "asyncpg>=0.30.0",
-    "alembic>=1.14.0",
-    "pymysql>=1.1",  # legacy plate-tracker migration read (scripts/migrate_legacy_plate_tracker.py); removable post-cutover
+    "asyncpg>=0.32.0",
+    "alembic>=1.20.0",
+    "pymysql>=1.2.3",  # legacy plate-tracker migration read (scripts/migrate_legacy_plate_tracker.py); removable post-cutover
     # Validation
-    "pydantic>=2.10.0",
+    "pydantic>=2.14.0",
     "pydantic-settings>=2.7.0",
     # DI + Railway
     "lagom>=2.7.0",
     "returns>=0.23.0",
     # Auth
-    "duar-auth>=1.4.1",
+    "duar-auth>=1.4.3",
     "pyjwt[crypto]>=2.14.0",
     "httpx>=0.28.0",
     # Chemistry
-    "rdkit>=2024.9.1",
+    "rdkit>=2026.9.1",
     "chembl-structure-pipeline>=1.2.4",
     # Cache / PubSub
     "redis>=5.2.0",
     # Workflow
-    "temporalio>=1.9.0",
+    "temporalio>=1.34.0",
     # Storage
-    "fsspec>=2024.10.0",
+    "fsspec>=2026.9.0",
     # Science
     "scipy>=1.14.0",
     "lmfit>=1.3.0",
-    "numpy>=2.0.0",
-    "pandas>=2.2.0",
+    "numpy>=2.5.4",
+    "pandas>=3.0.6",
     "openpyxl>=3.1.0",
-    "matplotlib>=3.9",
+    "matplotlib>=3.11.2",
     "weasyprint>=62",
     "Jinja2>=3.1",
     # Logging
@@ -55,10 +55,10 @@ dev = [
     "httpx>=0.28.0",
     "testcontainers[postgres]>=4.0.0",
     "factory-boy>=3.3.0",
-    "ruff>=0.8.0",
-    "mypy>=1.13.0",
+    "ruff>=0.17.0",
+    "mypy>=2.4.0",
     "pre-commit>=4.0.0",
-    "import-linter>=2.11",
+    "import-linter>=2.15",
     "respx>=0.23.0",
     "jsonschema>=4.26.0",
 ]
