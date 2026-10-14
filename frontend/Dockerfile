@@ -1,4 +1,4 @@
-FROM node:22-alpine AS base
+FROM node:26-alpine AS base
 # pnpm version is pinned via the packageManager field in package.json;
 # corepack resolves it per-project so Docker/CI/local all use the same version.
 RUN corepack enable
