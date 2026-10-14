@@ -66,7 +66,7 @@ jobs:
       - id: ver
         # Single source of build identity (also what `make dev` exports).
         run: scripts/build-info.sh backend | awk -F= -v OFS== '{$1=tolower($1)}1' >> "$GITHUB_OUTPUT"
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: meta
         with:
           images: ghcr.io/sidxz/cellar-backend
@@ -112,7 +112,7 @@ jobs:
       - id: ver
         # Single source of build identity (also what `make dev` exports).
         run: scripts/build-info.sh frontend | awk -F= -v OFS== '{$1=tolower($1)}1' >> "$GITHUB_OUTPUT"
-      - uses: docker/metadata-action@v5
+      - uses: docker/metadata-action@v6
         id: meta
         with:
           images: ghcr.io/sidxz/cellar-frontend
