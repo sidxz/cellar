@@ -320,7 +320,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=6.0.0" },
     { name = "respx", specifier = ">=0.23.0" },
     { name = "ruff", specifier = ">=0.8.0" },
-    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.0.0" },
+    { name = "testcontainers", extras = ["postgres"], specifier = ">=4.15.0" },
 ]
 
 [[package]]
