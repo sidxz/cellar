@@ -83,12 +83,8 @@ def _make_run(
             plate_map={"name": "P1"},
         )
         run.plates.append(plate)
-        run.wells.append(
-            Well(plate_id=plate.id, row="A", column=1, well_type=WellType.SAMPLE)
-        )
-        run.wells.append(
-            Well(plate_id=plate.id, row="A", column=2, well_type=WellType.SAMPLE)
-        )
+        run.wells.append(Well(plate_id=plate.id, row="A", column=1, well_type=WellType.SAMPLE))
+        run.wells.append(Well(plate_id=plate.id, row="A", column=2, well_type=WellType.SAMPLE))
         run.qc_metrics = {"z_prime": {"plate-1": 0.7}}
     return run
 
@@ -98,6 +94,7 @@ def _build_uc(
     *,
     readouts_deleted: int = 0,
     curves_for_run: list | None = None,
+    measured_repo: AsyncMock | None = None,
 ):
     uow = FakeUoW()
     run_repo = AsyncMock()
@@ -111,6 +108,10 @@ def _build_uc(
     curve_repo.find_by_run = AsyncMock(return_value=curves_for_run or [])
     curve_repo.delete_by_run = AsyncMock(return_value=None)
 
+    if measured_repo is None:
+        measured_repo = AsyncMock()
+        measured_repo.delete_by_run = AsyncMock(return_value=0)
+
     dispatcher = AsyncMock()
     dispatcher.dispatch_all = AsyncMock()
 
@@ -119,6 +120,7 @@ def _build_uc(
         run_repo=run_repo,
         readout_data_repo=readout_repo,
         curve_repo=curve_repo,
+        measured_curve_repo=measured_repo,
         dispatcher=dispatcher,
     )
     return uc, uow, run_repo, readout_repo, curve_repo, dispatcher
@@ -192,6 +194,22 @@ class TestResetRunData:
         assert ev.plates_deleted == 1
         assert ev.wells_deleted == 2
         assert ev.readouts_deleted == 3
+
+    @pytest.mark.asyncio
+    async def test_reset_deletes_measured_curves(self) -> None:
+        auth = FakeAuth()
+        ws = auth.workspace_id
+        run = _make_run(ws)
+        measured_repo = AsyncMock()
+        measured_repo.delete_by_run.return_value = 96
+        uc, *_ = _build_uc(run, measured_repo=measured_repo)
+
+        result = await uc(ResetRunDataCommand(workspace_id=ws, run_id=run.id), auth=auth)
+
+        measured_repo.delete_by_run.assert_awaited_once_with(ws, run.id)
+        assert result.unwrap().measured_curves_deleted == 96
+        (event,) = [e for e in run.collect_events() if isinstance(e, RunDataReset)]
+        assert event.measured_curves_deleted == 96
 
     # ---------------------------------------------------------------------
     # Guards
