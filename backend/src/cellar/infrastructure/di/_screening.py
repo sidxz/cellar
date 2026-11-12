@@ -75,6 +75,7 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
+from cellar.application.screening.instrument_export import InstrumentReaders
 from cellar.application.screening.link_run_plate import LinkRunPlate, UnlinkRunPlate
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
@@ -211,6 +212,7 @@ from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregat
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
 from cellar.infrastructure.external.bioportal.client import BioPortalClient
+from cellar.infrastructure.instrument_readers import default_readers
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
@@ -459,6 +461,7 @@ def register_screening(container: Container) -> None:
     container.define(PlateQualityCalculator, Singleton(PlateQualityCalculator))
     container.define(TabularFileParser, Singleton(TabularFileParser))
     container.define(TabularParser, lambda c: c[TabularFileParser])
+    container.define(InstrumentReaders, Singleton(default_readers))
     container.define(ParsePlateMapFile, lambda c: ParsePlateMapFile(c[TabularParser]))
 
     def _add_readout_def(c: Container):
