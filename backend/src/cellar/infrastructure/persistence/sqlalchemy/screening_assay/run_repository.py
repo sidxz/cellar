@@ -9,6 +9,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     PlateFormat,
     RunRelationshipType,
     RunStatus,
@@ -288,6 +289,9 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                 parent_plate_id=pm.parent_plate_id,
                 template_id=pm.template_id,
                 registered_plate_id=pm.registered_plate_id,
+                holder_kind=HolderKind(pm.holder_kind),
+                holder_rows=pm.holder_rows,
+                holder_columns=pm.holder_columns,
                 created_at=pm.created_at,
                 updated_at=pm.updated_at,
             )
@@ -302,6 +306,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                     well_type=WellType(wm.well_type),
                     batch_id=wm.batch_id,
                     dose=wm.dose,
+                    label=wm.label,
                     created_at=wm.created_at,
                     updated_at=wm.updated_at,
                 )
@@ -442,6 +447,9 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             parent_plate_id=plate.parent_plate_id,
             template_id=plate.template_id,
             registered_plate_id=plate.registered_plate_id,
+            holder_kind=plate.holder_kind.value,
+            holder_rows=plate.holder_rows,
+            holder_columns=plate.holder_columns,
         )
         pm.wells = [SQLAlchemyRunRepository._well_to_model(w) for w in wells]
         return pm
@@ -456,4 +464,5 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             well_type=well.well_type.value,
             batch_id=well.batch_id,
             dose=well.dose,
+            label=well.label,
         )
