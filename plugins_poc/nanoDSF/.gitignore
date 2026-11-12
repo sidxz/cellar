@@ -1,0 +1,5 @@
+# Imported runs: real lab data, never commit.
+library/
+
+# Copied from the plotly package the first time the app starts.
+components/overlay_app/plotly.min.js

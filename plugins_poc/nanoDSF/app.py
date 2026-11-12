@@ -5,12 +5,14 @@ this file feeds them data and carries out what they ask for (save a layout, impo
 """
 import base64
 import re
+import shutil
 import tempfile
 import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import plotly
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -32,6 +34,10 @@ footer {display: none;}
 """, unsafe_allow_html=True)
 
 COMP = Path(__file__).parent / "components"
+# plotly.min.js (4.8 MB) is not kept in git: the plotly package ships the same file, copy it in once.
+_plotly_js = COMP / "overlay_app" / "plotly.min.js"
+if not _plotly_js.exists():
+    shutil.copy(Path(plotly.__file__).parent / "package_data" / "plotly.min.js", _plotly_js)
 _overlay = components.declare_component("overlay_app", path=str(COMP / "overlay_app"))
 _pages = components.declare_component("pages_app", path=str(COMP / "pages_app"))
 
