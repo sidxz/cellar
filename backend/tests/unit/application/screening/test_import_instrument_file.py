@@ -505,6 +505,20 @@ async def test_non_finite_curve_value_is_refused_and_nothing_written():
     h.assert_nothing_written()
 
 
+@pytest.mark.parametrize("value", [float("nan"), float("inf")])
+async def test_non_finite_reported_value_without_curve_is_refused(value):
+    # The mapped series' channel has no curve at the position, so no curve invariant
+    # catches the value: the import itself must refuse it.
+    export = replace(
+        _export(reported=(_reported(1), _reported(2, value=value), _reported(3))),
+        curves=tuple(c for c in _export().curves if c.channel != "ratio"),
+    )
+    h = Harness(export=export)
+    failure = (await h()).failure()
+    assert isinstance(failure, ValidationError) and "finite" in str(failure)
+    h.assert_nothing_written()
+
+
 async def test_label_too_long_is_refused_and_nothing_written():
     h = Harness()
     positions = (replace(h.positions[0], label="x" * 201), *h.positions[1:])

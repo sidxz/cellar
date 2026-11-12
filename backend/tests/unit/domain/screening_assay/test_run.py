@@ -762,6 +762,11 @@ class TestWell:
         with pytest.raises(ValidationError, match="column must be >= 1"):
             Well(plate_id=uuid.uuid4(), row="A", column=-1)
 
+    @pytest.mark.parametrize("dose", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_dose_raises(self, dose: float) -> None:
+        with pytest.raises(ValidationError, match="finite"):
+            Well(plate_id=uuid.uuid4(), row="A", column=1, dose=dose)
+
     def test_empty_row_raises(self) -> None:
         with pytest.raises(ValidationError, match="1-2 alphabetic"):
             Well(plate_id=uuid.uuid4(), row="", column=1)

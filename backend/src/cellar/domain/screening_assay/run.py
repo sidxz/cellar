@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
@@ -121,6 +122,7 @@ class Well(Entity):
     Invariants:
         - row: 1-2 uppercase characters
         - column >= 1
+        - dose, when given, is finite and >= 0
         - label, when given, is trimmed and at most 200 characters
     """
 
@@ -150,6 +152,8 @@ class Well(Entity):
             raise ValidationError("Well row must be 1-2 alphabetic characters")
         if column < 1:
             raise ValidationError("Well column must be >= 1")
+        if dose is not None and not math.isfinite(dose):
+            raise ValidationError("Well dose must be a finite number")
         if dose is not None and dose < 0:
             raise ValidationError("Well dose must be >= 0")
 

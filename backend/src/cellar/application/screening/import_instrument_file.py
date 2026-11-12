@@ -10,6 +10,7 @@ engine when readout rows were written and attaches the original file to the run.
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections import Counter, defaultdict
 from collections.abc import Sequence
@@ -320,6 +321,11 @@ class ImportInstrumentFile:
                     ReportedPoint(v.kind, v.ordinal, v.label, v.value, v.unit)
                 )
                 well = wells.get((v.row, v.column))
+                if well is not None and not math.isfinite(v.value):
+                    raise ValidationError(
+                        f"{name(v.row, v.column)}: reported value '{v.label}' "
+                        "is not a finite number"
+                    )
                 definition_id = mapped.get((v.channel, v.kind, v.ordinal))
                 if well is None or definition_id is None:
                     continue
