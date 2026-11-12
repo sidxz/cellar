@@ -19,6 +19,7 @@ from cellar.domain.screening_assay.events import (
     RunCreated,
     RunHitCriteriaCleared,
     RunHitCriteriaSet,
+    RunInstrumentFileImported,
     RunLocked,
     RunRejected,
     RunUnlocked,
@@ -426,7 +427,37 @@ class Run(AggregateRoot):
         plate.registered_plate_id = registered_plate_id
         self.updated_at = datetime.now(UTC)
 
-    def reset_data(self, *, readouts_deleted: int, curves_deleted: int) -> None:
+    def record_instrument_import(
+        self,
+        *,
+        reader: str,
+        file_name: str,
+        positions: int,
+        curves: int,
+        readout_values: int,
+    ) -> None:
+        """Record that an instrument file was imported into this run (blocked when locked)."""
+        self._guard_not_locked()
+        self.register_event(
+            RunInstrumentFileImported(
+                workspace_id=self.workspace_id,
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                reader=reader,
+                file_name=file_name,
+                positions=positions,
+                curves=curves,
+                readout_values=readout_values,
+            )
+        )
+
+    def reset_data(
+        self,
+        *,
+        readouts_deleted: int,
+        curves_deleted: int,
+        measured_curves_deleted: int = 0,
+    ) -> None:
         """Wipe plates, wells, and QC metrics on this run.
 
         Cascades plates → wells via the FK relationship at persistence
@@ -455,6 +486,7 @@ class Run(AggregateRoot):
                 wells_deleted=wells_deleted,
                 readouts_deleted=readouts_deleted,
                 curves_deleted=curves_deleted,
+                measured_curves_deleted=measured_curves_deleted,
             )
         )
 

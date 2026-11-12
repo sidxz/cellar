@@ -237,3 +237,15 @@ class RunDataReset(DomainEvent):
     wells_deleted: int
     readouts_deleted: int
     curves_deleted: int
+    measured_curves_deleted: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunInstrumentFileImported(DomainEvent):
+    """Emitted when an instrument file's curves and readout values were stored on a run."""
+
+    reader: str
+    file_name: str
+    positions: int
+    curves: int
+    readout_values: int

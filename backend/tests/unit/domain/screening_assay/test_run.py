@@ -16,8 +16,10 @@ from cellar.domain.screening_assay.events import (
     RunApproved,
     RunCompleted,
     RunCreated,
+    RunDataReset,
     RunHitCriteriaCleared,
     RunHitCriteriaSet,
+    RunInstrumentFileImported,
     RunLocked,
     RunRejected,
     RunUnlocked,
@@ -1012,3 +1014,61 @@ def test_well_label_is_trimmed_capped_and_blank_is_none():
 
 def test_position_above_24_is_a_valid_well():
     assert Well(plate_id=_P, row="A", column=48).column == 48
+
+
+# ---------------------------------------------------------------------------
+# Instrument import event
+# ---------------------------------------------------------------------------
+
+
+def _fresh_run() -> Run:
+    run = Run.create(
+        workspace_id=uuid.uuid4(),
+        protocol_id=uuid.uuid4(),
+        run_date=date(2025, 6, 15),
+        operator=uuid.uuid4(),
+    )
+    run.clear_events()
+    return run
+
+
+def test_record_instrument_import_registers_event():
+    run = _fresh_run()
+    run.record_instrument_import(
+        reader="r", file_name="f.xlsx", positions=3, curves=6, readout_values=4
+    )
+    (event,) = [e for e in run.collect_events() if isinstance(e, RunInstrumentFileImported)]
+    assert (
+        event.reader,
+        event.file_name,
+        event.positions,
+        event.curves,
+        event.readout_values,
+    ) == (
+        "r",
+        "f.xlsx",
+        3,
+        6,
+        4,
+    )
+    assert event.aggregate_id == run.id
+    assert event.aggregate_type == "Run"
+    assert event.workspace_id == run.workspace_id
+
+
+def test_record_instrument_import_blocked_when_locked():
+    run = _fresh_run()
+    run.start()
+    run.complete(plate_count=1, data_point_count=1)
+    run.lock(locked_by=uuid.uuid4(), reason="final")
+    with pytest.raises(ConflictError):
+        run.record_instrument_import(
+            reader="r", file_name="f.xlsx", positions=1, curves=1, readout_values=1
+        )
+
+
+def test_reset_data_event_carries_measured_curve_count():
+    run = _fresh_run()
+    run.reset_data(readouts_deleted=1, curves_deleted=0, measured_curves_deleted=96)
+    event = next(e for e in run.collect_events() if isinstance(e, RunDataReset))
+    assert event.measured_curves_deleted == 96
