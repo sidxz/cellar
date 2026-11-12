@@ -1,0 +1,714 @@
+<!doctype html>
+<html data-theme="midnight">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ===================== themes (same as Overlay) ===================== */
+:root, [data-theme="midnight"] {
+  --bg: #0b1020; --panel: rgba(23, 31, 54, .62); --panel-solid: #151c31; --field: rgba(9, 13, 27, .55);
+  --line: rgba(150, 170, 220, .12); --line2: rgba(150, 170, 220, .24);
+  --text: #dfe5f2; --muted: #8b95b0; --dim: #5c6680;
+  --accent: #9cc3e6; --accent-soft: rgba(156, 195, 230, .16); --accent-ink: #0d1424;
+  --pos: #9fd8b8; --neg: #eba3b5; --warn: #f0c48a;
+  --glow1: rgba(120, 140, 220, .10); --glow2: rgba(156, 195, 230, .06); --shadow: rgba(0, 0, 0, .45);
+}
+[data-theme="graphite"] {
+  --bg: #111214; --panel: rgba(33, 35, 39, .72); --panel-solid: #1c1e22; --field: rgba(10, 10, 12, .5);
+  --line: rgba(255, 255, 255, .08); --line2: rgba(255, 255, 255, .17);
+  --text: #e7e6e3; --muted: #9b9a96; --dim: #64635f;
+  --accent: #d1c2a1; --accent-soft: rgba(209, 194, 161, .15); --accent-ink: #1a1813;
+  --pos: #a9d3a4; --neg: #e3a7a2; --warn: #e6bf8c;
+  --glow1: rgba(209, 194, 161, .05); --glow2: rgba(255, 255, 255, .02); --shadow: rgba(0, 0, 0, .5);
+}
+[data-theme="dusk"] {
+  --bg: #16111d; --panel: rgba(40, 30, 52, .62); --panel-solid: #221a2d; --field: rgba(14, 9, 20, .5);
+  --line: rgba(225, 195, 240, .11); --line2: rgba(225, 195, 240, .22);
+  --text: #efe7f3; --muted: #a798b4; --dim: #6c5f79;
+  --accent: #e6b8cb; --accent-soft: rgba(230, 184, 203, .15); --accent-ink: #20141c;
+  --pos: #acd9c6; --neg: #f0aaa6; --warn: #f1d39b;
+  --glow1: rgba(200, 150, 220, .09); --glow2: rgba(230, 184, 203, .06); --shadow: rgba(0, 0, 0, .45);
+}
+[data-theme="paper"] {
+  --bg: #f3f0ea; --panel: rgba(255, 255, 255, .78); --panel-solid: #ffffff; --field: rgba(245, 242, 236, .9);
+  --line: rgba(70, 60, 45, .12); --line2: rgba(70, 60, 45, .24);
+  --text: #2a2a2d; --muted: #77736c; --dim: #a8a39b;
+  --accent: #5b7fa6; --accent-soft: rgba(91, 127, 166, .12); --accent-ink: #ffffff;
+  --pos: #3e8b68; --neg: #b5566c; --warn: #b07f3e;
+  --glow1: rgba(91, 127, 166, .06); --glow2: rgba(200, 160, 120, .05); --shadow: rgba(60, 50, 40, .18);
+}
+[data-theme="forest"] {
+  --bg: #0e1712; --panel: rgba(26, 42, 33, .62); --panel-solid: #172219; --field: rgba(8, 14, 10, .55);
+  --line: rgba(170, 220, 190, .12); --line2: rgba(170, 220, 190, .24);
+  --text: #e3efe6; --muted: #8fa898; --dim: #5d7466;
+  --accent: #9fd8b2; --accent-soft: rgba(159, 216, 178, .15); --accent-ink: #0e1712;
+  --pos: #a9dcb8; --neg: #eba8a8; --warn: #e8cf8f; --tube: rgba(255, 255, 255, .028); --sheen: rgba(255, 255, 255, .10);
+  --glow1: rgba(110, 190, 140, .10); --glow2: rgba(200, 230, 160, .05); --shadow: rgba(0, 0, 0, .45);
+}
+[data-theme="amethyst"] {
+  --bg: #140f22; --panel: rgba(36, 26, 62, .62); --panel-solid: #1d1530; --field: rgba(10, 6, 20, .55);
+  --line: rgba(200, 180, 255, .12); --line2: rgba(200, 180, 255, .24);
+  --text: #ece6fa; --muted: #a397c2; --dim: #6b5f8c;
+  --accent: #c3a8f5; --accent-soft: rgba(195, 168, 245, .16); --accent-ink: #160f26;
+  --pos: #a8dcc4; --neg: #f0a6c0; --warn: #f1d39b; --tube: rgba(255, 255, 255, .028); --sheen: rgba(255, 255, 255, .10);
+  --glow1: rgba(150, 110, 240, .12); --glow2: rgba(230, 160, 220, .06); --shadow: rgba(0, 0, 0, .45);
+}
+[data-theme="cream"] {
+  --bg: #f7f2e7; --panel: rgba(255, 252, 245, .82); --panel-solid: #fffdf8; --field: rgba(243, 236, 222, .9);
+  --line: rgba(90, 70, 40, .13); --line2: rgba(90, 70, 40, .25);
+  --text: #2e2a24; --muted: #7a7166; --dim: #ada392;
+  --accent: #a27a46; --accent-soft: rgba(162, 122, 70, .12); --accent-ink: #ffffff;
+  --pos: #4b8a5c; --neg: #b4574f; --warn: #a8691c; --tube: rgba(0, 0, 0, .022); --sheen: rgba(255, 255, 255, .55);
+  --glow1: rgba(200, 160, 100, .08); --glow2: rgba(160, 180, 140, .06); --shadow: rgba(70, 50, 20, .16);
+}
+[data-theme="sky"] {
+  --bg: #dceaf8; --panel: rgba(240, 247, 255, .82); --panel-solid: #f2f8ff; --field: rgba(214, 229, 247, .9);
+  --line: rgba(40, 80, 150, .14); --line2: rgba(40, 80, 150, .27);
+  --text: #1f2a3a; --muted: #66758c; --dim: #9aa7ba;
+  --accent: #3f7fc7; --accent-soft: rgba(63, 127, 199, .12); --accent-ink: #ffffff;
+  --pos: #2f8a63; --neg: #c0506a; --warn: #b07f3e; --tube: rgba(0, 40, 100, .025); --sheen: rgba(255, 255, 255, .6);
+  --glow1: rgba(80, 145, 235, .18); --glow2: rgba(120, 190, 245, .14); --shadow: rgba(30, 60, 120, .18);
+}
+[data-theme="twilight"] {
+  --bg: #121429; --panel: rgba(32, 34, 70, .6); --panel-solid: #1b1d3a; --field: rgba(8, 9, 24, .55);
+  --line: rgba(180, 180, 255, .12); --line2: rgba(180, 180, 255, .24);
+  --text: #e6e6fa; --muted: #9b9cc4; --dim: #63648f;
+  --accent: #f2b38c; --accent-soft: rgba(242, 179, 140, .15); --accent-ink: #121429;
+  --pos: #a8dcc4; --neg: #f0a6b4; --warn: #f1d39b; --tube: rgba(255, 255, 255, .028); --sheen: rgba(255, 255, 255, .10);
+  --glow1: rgba(120, 110, 230, .14); --glow2: rgba(240, 160, 120, .08); --shadow: rgba(0, 0, 0, .45);
+}
+[data-theme="dawn"] {
+  --bg: #f7c88e; --panel: rgba(255, 233, 196, .72); --panel-solid: #fff3e2; --field: rgba(252, 222, 178, .78);
+  --line: rgba(160, 70, 10, .18); --line2: rgba(160, 70, 10, .32);
+  --text: #3b2216; --muted: #8a5a3a; --dim: #b98c66;
+  --accent: #d9541a; --accent-soft: rgba(217, 84, 26, .15); --accent-ink: #ffffff;
+  --pos: #3f8a50; --neg: #c0392f; --warn: #b8640f; --tube: rgba(120, 50, 0, .035); --sheen: rgba(255, 255, 255, .6);
+  --glow1: rgba(255, 120, 40, .38); --glow2: rgba(110, 100, 190, .26); --shadow: rgba(120, 60, 20, .2);
+}
+[data-theme="day"] {
+  --bg: #9fbdf0; --panel: rgba(235, 243, 255, .78); --panel-solid: #f2f7ff; --field: rgba(205, 222, 250, .85);
+  --line: rgba(25, 70, 170, .16); --line2: rgba(25, 70, 170, .3);
+  --text: #0f1f3d; --muted: #4b6290; --dim: #8ea2c8;
+  --accent: #1f5fd6; --accent-soft: rgba(31, 95, 214, .13); --accent-ink: #ffffff;
+  --pos: #1f8a5a; --neg: #c93b52; --warn: #a8700f; --tube: rgba(0, 30, 100, .03); --sheen: rgba(255, 255, 255, .7);
+  --glow1: rgba(40, 100, 230, .38); --glow2: rgba(120, 175, 255, .35); --shadow: rgba(20, 50, 120, .2);
+}
+:root { --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; background: transparent; color: var(--text);
+  font: 12.5px/1.4 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+button, input, select { font: inherit; color: inherit; }
+#app { position: relative; display: flex; flex-direction: column; gap: 10px; height: 860px; padding: 2px; }
+.card { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); backdrop-filter: blur(12px); }
+
+/* toolbar */
+.bar { position: relative; z-index: 20; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 12px; padding: 10px 14px;
+  border: 1px solid var(--line); border-radius: 14px; background: var(--panel); backdrop-filter: blur(14px); }
+.brand { display: flex; align-items: center; gap: 9px; margin-right: 4px; align-self: center; }
+.brand .logo { width: 24px; height: 24px; border-radius: 7px; display: grid; place-items: center; background: var(--accent-soft); border: 1px solid var(--line2); }
+.brand .logo svg { width: 14px; height: 14px; color: var(--accent); }
+.brand b { font-weight: 650; letter-spacing: -.01em; font-size: 13px; }
+.brand span { display: block; font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); }
+.grp { display: flex; flex-direction: column; gap: 4px; }
+.grp > label, .lab { font-size: 9px; font-weight: 600; letter-spacing: .15em; text-transform: uppercase; color: var(--dim); padding-left: 2px; }
+.seg { display: inline-flex; padding: 2px; border-radius: 9px; background: var(--field); border: 1px solid var(--line); }
+.seg button { border: 0; background: transparent; color: var(--muted); font-size: 11.5px; font-weight: 500; padding: 5px 9px; border-radius: 7px;
+  cursor: pointer; white-space: nowrap; transition: color .12s, background .12s; }
+.seg button:hover { color: var(--text); }
+.seg button.on { color: var(--text); background: var(--accent-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.btn { border: 1px solid var(--line); background: var(--field); color: var(--muted); border-radius: 9px; padding: 6px 11px; cursor: pointer;
+  font-size: 11.5px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; height: 31px; }
+.btn:hover { color: var(--text); border-color: var(--line2); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn svg { width: 14px; height: 14px; }
+.btn.primary { color: var(--accent-ink); background: var(--accent); border-color: transparent; font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.06); color: var(--accent-ink); }
+.btn.danger { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 40%, transparent); }
+.btn.danger:hover { background: color-mix(in srgb, var(--neg) 12%, transparent); }
+.spacer { flex: 1; }
+.field { height: 31px; border-radius: 9px; border: 1px solid var(--line); background: var(--field); color: var(--text); padding: 0 10px; outline: none;
+  transition: border-color .12s; min-width: 0; }
+.field:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+.field::placeholder { color: var(--dim); }
+select.field { appearance: none; -webkit-appearance: none; padding-right: 26px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 13px) 13px, calc(100% - 9px) 13px; background-size: 4px 4px; background-repeat: no-repeat; }
+.search { position: relative; }
+.search .field { padding-left: 30px; width: 240px; }
+.search svg { position: absolute; left: 9px; top: 8px; width: 15px; height: 15px; color: var(--muted); }
+.menu { position: relative; }
+.pop { position: absolute; z-index: 60; right: 0; top: 36px; display: none; min-width: 230px; background: var(--panel-solid); border: 1px solid var(--line2);
+  border-radius: 12px; padding: 6px; box-shadow: 0 18px 40px -12px var(--shadow); }
+.menu.open .pop { display: block; }
+.pop button.item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: transparent; padding: 8px 10px;
+  border-radius: 8px; cursor: pointer; color: var(--text); }
+.pop button.item:hover, .pop button.item.on { background: var(--accent-soft); }
+.pop small { display: block; color: var(--muted); font-size: 10.5px; }
+.pop .txt { padding: 10px 12px; color: var(--muted); line-height: 1.55; max-width: 420px; }
+.pop .txt b { color: var(--text); }
+.sw4 { display: inline-grid; grid-template-columns: repeat(2, 9px); gap: 2px; padding: 3px; border-radius: 6px; border: 1px solid var(--line2); flex: none; }
+.sw4 i { width: 9px; height: 9px; border-radius: 2px; display: block; }
+.chip { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 999px; padding: 3px 10px; font-size: 10.5px;
+  font-weight: 600; letter-spacing: .03em; cursor: pointer; white-space: nowrap; }
+.chip:hover { color: var(--text); border-color: var(--line2); }
+.stat { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); color: var(--muted);
+  font-size: 11px; white-space: nowrap; }
+.stat b { font: 600 12px var(--mono); color: var(--text); }
+.pill { font: 600 9px var(--mono); letter-spacing: .08em; padding: 2px 6px; border-radius: 5px; border: 1px solid var(--line2); color: var(--muted); }
+.pill.ctrl { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.pill.raw { color: var(--pos); border-color: color-mix(in srgb, var(--pos) 45%, transparent); }
+.pill.proc { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, transparent); }
+
+/* tables */
+.tw { flex: 1; min-height: 0; overflow: auto; padding: 0 8px 8px; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; }
+th { position: sticky; top: 0; z-index: 2; background: var(--panel-solid); text-align: left; font: 600 9px Inter; letter-spacing: .12em; text-transform: uppercase;
+  color: var(--muted); padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; user-select: none; }
+th.num, td.num { text-align: right; }
+th.sort { cursor: pointer; } th.sort:hover { color: var(--text); }
+th .arr { color: var(--accent); margin-left: 4px; }
+td { padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td.num { font: 500 11.5px var(--mono); }
+td.mono { font: 500 11.5px var(--mono); color: var(--muted); }
+tr:hover td { background: var(--accent-soft); }
+td .cd { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--c); vertical-align: 1px; }
+td.pos { color: var(--pos); } td.neg { color: var(--neg); } td.na { color: var(--dim); }
+.empty { display: grid; place-items: center; height: 100%; text-align: center; color: var(--muted); padding: 30px; }
+.empty b { display: block; color: var(--text); font-size: 15px; margin-bottom: 6px; }
+
+/* edit grid */
+.ed td { padding: 3px 6px; }
+.ed td.cap { font: 500 11px var(--mono); color: var(--muted); padding-left: 10px; }
+.ed input.cell, .ed select.cell { width: 100%; height: 27px; border: 1px solid transparent; border-radius: 7px; background: transparent; color: var(--text);
+  padding: 0 8px; outline: none; transition: border-color .1s, background .1s; }
+.ed input.cell:hover, .ed select.cell:hover { border-color: var(--line); }
+.ed input.cell:focus, .ed select.cell:focus { border-color: color-mix(in srgb, var(--accent) 60%, transparent); background: var(--field); }
+.ed input.num { font-family: var(--mono); text-align: right; }
+.ed select.cell { appearance: none; -webkit-appearance: none; cursor: pointer; }
+.ed tr.chg td { background: color-mix(in srgb, var(--warn) 6%, transparent); }
+.ed tr.sel td { background: var(--accent-soft); }
+.ed tr.skip td { opacity: .45; }
+.ed input[type=checkbox] { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+.role-sample { color: var(--text); } .role-control { color: var(--accent); } .role-blank { color: var(--muted); } .role-skip { color: var(--dim); }
+.side { display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow: auto; }
+.side h3 { margin: 0; font-size: 12px; font-weight: 600; }
+.side .hint { color: var(--muted); font-size: 11px; line-height: 1.5; }
+.row { display: flex; gap: 6px; align-items: center; }
+.row .field { flex: 1; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 11.5px; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.kv span:nth-child(even) { font-family: var(--mono); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sep { height: 1px; background: var(--line); margin: 2px 0; }
+.dirty { color: var(--warn); font-size: 11px; font-weight: 600; display: none; align-items: center; gap: 6px; align-self: center; }
+.dirty.on { display: inline-flex; }
+.dirty i { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); }
+
+/* add page */
+.addwrap { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 10px; }
+.drop { position: relative; display: grid; place-items: center; text-align: center; border: 1.5px dashed var(--line2); border-radius: 14px; padding: 26px;
+  cursor: pointer; transition: border-color .15s, background .15s; color: var(--muted); }
+.drop:hover, .drop.over { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.drop svg { width: 34px; height: 34px; color: var(--accent); margin-bottom: 10px; }
+.drop b { display: block; color: var(--text); font-size: 14px; margin-bottom: 4px; }
+.drop.small { padding: 14px; }
+.drop.small svg { width: 20px; height: 20px; margin: 0 0 4px; }
+.drop input { display: none; }
+.files { display: flex; flex-direction: column; gap: 8px; }
+.file { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--field); }
+.file svg { width: 18px; height: 18px; color: var(--muted); flex: none; }
+.file .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.file .meta { color: var(--muted); font: 500 11px var(--mono); white-space: nowrap; }
+.form { display: flex; flex-direction: column; gap: 12px; padding: 16px; overflow: auto; }
+.f { display: flex; flex-direction: column; gap: 5px; }
+.form .f .field { width: 100%; }
+.check { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11.5px; cursor: pointer; }
+.check input { accent-color: var(--accent); }
+.steps { display: flex; flex-direction: column; gap: 10px; padding: 16px; overflow: auto; }
+.step { display: flex; gap: 12px; }
+.step .n { width: 22px; height: 22px; flex: none; border-radius: 50%; display: grid; place-items: center; font: 600 11px var(--mono);
+  border: 1px solid var(--line2); color: var(--muted); }
+.step.done .n { background: var(--accent-soft); color: var(--accent); border-color: color-mix(in srgb, var(--accent) 45%, transparent); }
+.step .t { flex: 1; color: var(--muted); font-size: 11.5px; line-height: 1.5; }
+.step .t b { color: var(--text); display: block; font-size: 12.5px; margin-bottom: 2px; }
+.ok { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; padding: 16px; border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--pos) 40%, transparent); background: color-mix(in srgb, var(--pos) 8%, transparent); }
+.ok b { color: var(--pos); font-size: 13px; }
+
+/* confirm + toast */
+.modal { position: absolute; inset: 0; z-index: 90; display: none; place-items: center; background: color-mix(in srgb, var(--bg) 55%, transparent); backdrop-filter: blur(3px); }
+.modal.on { display: grid; }
+.modal .box { width: 380px; padding: 18px; border-radius: 14px; background: var(--panel-solid); border: 1px solid var(--line2); box-shadow: 0 24px 60px -16px var(--shadow); }
+.modal h3 { margin: 0 0 6px; font-size: 14px; }
+.modal p { margin: 0 0 16px; color: var(--muted); line-height: 1.5; }
+.modal .row { justify-content: flex-end; }
+.toast { position: absolute; right: 18px; bottom: 18px; z-index: 95; max-width: 460px; padding: 10px 14px; border-radius: 10px; background: var(--panel-solid);
+  border: 1px solid var(--line2); box-shadow: 0 10px 30px -10px var(--shadow); font-size: 12px; opacity: 0; transform: translateY(6px); transition: all .2s; pointer-events: none; }
+.toast.show { opacity: 1; transform: none; }
+.toast.err { border-color: color-mix(in srgb, var(--neg) 60%, transparent); color: var(--neg); }
+.busy { position: absolute; inset: 0; z-index: 85; display: none; place-items: center; background: color-mix(in srgb, var(--bg) 35%, transparent); }
+.busy.on { display: grid; }
+.busy i { width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--line2); border-top-color: var(--accent); animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+::-webkit-scrollbar { width: 7px; height: 7px; } ::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 4px; } ::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+(function () {
+  "use strict";
+  const post = (type, extra) => window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type }, extra || {}), "*");
+  const $ = (s, el = document) => el.querySelector(s);
+  const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+  const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+                  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+  const send = (action, data) => { busy(true); post("streamlit:setComponentValue", { value: Object.assign({ action, nonce: Date.now() + Math.random() }, data || {}), dataType: "json" }); };
+  function busy(on) { let b = $("#busy"); if (b) b.classList.toggle("on", on); }
+  function toast(text, err) { const t = $("#toast"); t.textContent = text; t.classList.toggle("err", !!err); t.classList.add("show");
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), err ? 6000 : 2600); }
+
+  const ICON = {
+    logo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 17c3 0 4-10 7-10s3 10 6 10 3-6 5-6"/></svg>',
+    search: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>',
+    dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 4v11m0 0l-4-4m4 4l4-4M5 20h14"/></svg>',
+    up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V9m0 0l-4 4m4-4l4 4M5 4h14"/></svg>',
+    theme: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8.5"/><path d="M12 3.5a8.5 8.5 0 0 0 0 17z" fill="currentColor"/></svg>',
+    info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+    save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 4h11l3 3v13H5z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/></svg>',
+    undo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>',
+    trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>',
+    file: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>',
+    cloud: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.5 1.5A3.75 3.75 0 0 1 17.5 18"/><path d="M12 12v8m0-8l-3 3m3-3l3 3"/></svg>',
+    arrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14m-5-5l5 5-5 5"/></svg>',
+  };
+
+  // ------------------------------------------------------------------ themes (shared with Overlay via the same saved settings)
+  const THEMES = {
+    dawn: ["Dawn", "golden-orange glow, dusky haze", "#f7c88e"],
+    day: ["Day", "light cobalt blue", "#9fbdf0"],
+    dusk: ["Dusk", "plum night, rose & sage", "#1c1424"],
+    twilight: ["Twilight", "indigo night, peach glow", "#121429"],
+    midnight: ["Midnight", "deep navy, soft pastels", "#0b1020"],
+    sky: ["Sky", "light, airy blue", "#dceaf8"],
+    graphite: ["Graphite", "neutral grey, warm accents", "#16171a"],
+    paper: ["Paper", "light, print-friendly", "#f3f0ea"],
+    forest: ["Forest", "deep green, mint & moss", "#0e1712"],
+    amethyst: ["Amethyst", "dark purple, lavender", "#140f22"],
+    cream: ["Cream", "warm off-white", "#f7f2e7"] };
+  const LIGHT = new Set(["paper", "cream", "sky", "dawn", "day"]);
+  const PAL_DARK = ["#4f9ae8", "#f2c230", "#ef6fa5", "#3fbf7f", "#9b6cf0", "#f5873d", "#22b8c2", "#e5484d", "#6474f0", "#a8cc2f", "#d65cc8", "#c98a3a",
+                    "#38a8f5", "#ff7f6e", "#2fa56b", "#b07cf5", "#e0a91c", "#3cc8e8", "#e0577a", "#8fae3a", "#7b7fd8", "#e26a2c", "#1fa392", "#c2457f"];
+  const PAL_LIGHT = ["#2f74c0", "#c99a12", "#d04a87", "#23955d", "#7a4ad6", "#d8661f", "#11929b", "#c9303a", "#4656d6", "#7f9c15", "#b43aa6", "#a8691c",
+                     "#1f86d1", "#e05a48", "#1d7f50", "#8f55d9", "#b9850a", "#1b9cbb", "#c13d63", "#6a8a1e", "#5a5fbf", "#c0511a", "#108272", "#a32f66"];
+  const KEY = "nanodsf_overlay2";
+  const theme = () => (store.get(KEY, {}) || {}).theme || "midnight";
+  const capColor = cap => (LIGHT.has(theme()) ? PAL_LIGHT : PAL_DARK)[(cap - 1) % 24];
+  function setTheme(t) { const s = store.get(KEY, {}) || {}; s.theme = t; store.set(KEY, s); applyTheme(); render(true); }
+  function applyTheme() {
+    document.documentElement.dataset.theme = theme();
+    try {
+      const d = window.parent.document;
+      let el = d.getElementById("nds-theme");
+      if (!el) { el = d.createElement("style"); el.id = "nds-theme"; d.head.appendChild(el); }
+      const bg = css("--bg"), g1 = css("--glow1"), g2 = css("--glow2"), line = css("--line"), text = css("--text"), muted = css("--muted");
+      const sc = 'body:has(iframe[src*="_app/"])';
+      el.textContent = `${sc} .stApp{background:radial-gradient(1100px 560px at 85% -10%, ${g1}, transparent 60%),radial-gradient(900px 500px at -10% 10%, ${g2}, transparent 60%),${bg} !important}
+        ${sc} header[data-testid="stHeader"]{background:color-mix(in srgb, ${bg} 82%, transparent) !important;border-bottom:1px solid ${line} !important}
+        ${sc} header[data-testid="stHeader"] a, ${sc} header[data-testid="stHeader"] span, ${sc} header[data-testid="stHeader"] p{color:${muted} !important}
+        ${sc} header[data-testid="stHeader"] a[aria-current="page"] span, ${sc} header[data-testid="stHeader"] a[aria-current="page"] p{color:${text} !important}`;
+    } catch (e) {}
+  }
+  function themeMenu() {
+    return `<div class="menu" id="mTheme"><button class="btn" data-menu="mTheme">${ICON.theme}Theme</button><div class="pop">
+      ${Object.entries(THEMES).map(([k, [n, note, bg]]) => `<button class="item ${theme() === k ? "on" : ""}" data-theme="${k}">
+        <span class="sw4" style="background:${bg}">${(LIGHT.has(k) ? PAL_LIGHT : PAL_DARK).slice(0, 4).map(c => `<i style="background:${c}"></i>`).join("")}</span>
+        <span>${n}<small>${note}</small></span></button>`).join("")}</div></div>`;
+  }
+  function brand(title) { return `<div class="brand"><div class="logo">${ICON.logo}</div><div><b>nanoDSF</b><span>${title}</span></div></div>`; }
+  function wireMenus(root) {
+    $$("[data-menu]", root).forEach(b => b.onclick = e => { e.stopPropagation(); const m = $("#" + b.dataset.menu);
+      $$(".menu.open").forEach(x => { if (x !== m) x.classList.remove("open"); }); m.classList.toggle("open"); });
+    $$("[data-theme]", root).forEach(b => b.onclick = () => setTheme(b.dataset.theme));
+  }
+  document.addEventListener("click", e => { if (!e.target.closest(".menu")) $$(".menu.open").forEach(m => m.classList.remove("open")); });
+
+  // ------------------------------------------------------------------ fit the window, never scroll the page
+  function fit() {
+    let h = 860;
+    try { const r = window.frameElement.getBoundingClientRect(); h = window.parent.innerHeight - r.top - 14; } catch (e) {}
+    h = Math.max(520, Math.round(h));
+    $("#app").style.height = h + "px";
+    post("streamlit:setFrameHeight", { height: h + 4 });
+  }
+  try { window.parent.addEventListener("resize", () => requestAnimationFrame(fit)); } catch (e) {}
+
+  function download(text, name, type) {
+    const url = URL.createObjectURL(new Blob(["﻿" + text], { type: type || "text/csv" }));
+    const doc = (() => { try { return window.parent.document; } catch (e) { return document; } })();
+    const a = doc.createElement("a"); a.href = url; a.download = name; doc.body.appendChild(a); a.click(); a.remove();
+  }
+  const csvCell = x => `"${String(x ?? "").replace(/"/g, '""')}"`;
+  const readB64 = file => new Promise((res, rej) => { const r = new FileReader();
+    r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(file); });
+  function go(path) {   // use the app's own top-bar link (the page is sandboxed and can't change the address itself)
+    try {
+      const links = [...window.parent.document.querySelectorAll('header a[href]')];
+      const a = links.find(l => path ? new URL(l.href).pathname.endsWith("/" + path) : new URL(l.href).pathname === "/");
+      if (a) { a.click(); return; }
+    } catch (e) {}
+    toast("Use the tabs at the top to switch pages");
+  }
+
+  // whole-word search: commas = or, spaces = and
+  function matcher(q) {
+    const terms = q.toLowerCase().split(",").map(t => t.trim()).filter(Boolean);
+    if (!terms.length) return null;
+    const res = terms.map(t => t.split(/\s+/).map(w => new RegExp("(?<![\\w.])" + w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\w.])")));
+    const part = terms.map(t => t.split(/\s+/));
+    return { whole: hay => res.some(ws => ws.every(r => r.test(hay))), part: hay => part.some(ws => ws.every(w => hay.includes(w))) };
+  }
+
+  // ================================================================== RESULTS
+  const RS = Object.assign({ q: "", sig: "Ratio", src: "recalculated", role: "all", sort: ["Run", 1] }, store.get("nanodsf_results", {}));
+  const saveRS = () => store.set("nanodsf_results", RS);
+  function pageResults(P) {
+    const C = Object.fromEntries(P.cols.map((c, i) => [c, i]));
+    const all = P.rows.map(r => Object.assign({ _hay: [r[C["Run"]], r[C["Molecule ID"]], r[C["Concentration"]], r[C["Units"]], r[C["Role"]],
+      r[C["Notes"]], "cap " + r[C["Capillary"]]].join("  ").toLowerCase() }, { r }));
+    $("#app").innerHTML = `
+      <div class="bar">
+        ${brand("Results")}
+        <div class="search">${ICON.search}<input class="field" id="q" placeholder="Search molecule, conc, run…" value="${esc(RS.q)}" autocomplete="off"></div>
+        <div class="grp"><label>Signal</label><div class="seg" data-o="sig">
+          <button data-v="all">All</button><button data-v="Ratio">Ratio</button><button data-v="330nm">330</button><button data-v="350nm">350</button><button data-v="Scattering">Scatter</button></div></div>
+        <div class="grp"><label>Tm source</label><div class="seg" data-o="src"><button data-v="recalculated">Recalc</button><button data-v="software">Software</button></div></div>
+        <div class="grp"><label>Show</label><div class="seg" data-o="role"><button data-v="all">All</button><button data-v="sample">Samples</button><button data-v="control">Controls</button></div></div>
+        <div class="spacer"></div>
+        <div class="menu" id="mInfo"><button class="btn" data-menu="mInfo">${ICON.info}How it's calculated</button><div class="pop"><div class="txt">
+          <b>Software</b> — values from NanoTemper's software (the Overview sheet).<br>
+          <b>Recalc</b> — smoothed curve (4 °C window) → 1st derivative → each clear peak is a Tm. For scattering, <b>Tagg</b> is where scattering rises above its starting level.<br><br>
+          The controls of each run define the transitions <b>T1, T2…</b>. Each sample transition is matched to the nearest control one (within 10 °C);
+          <b>ΔTm = sample − mean control</b>, using controls from the <b>same run only</b>.<br><br>
+          <b>Onset</b> — where unfolding starts (software only). <b>Unmatched</b> — a transition the controls don't have (no ΔTm).
+          <b>#1, #2</b> — run has no controls marked yet.</div></div></div>
+        ${themeMenu()}
+        <button class="btn" id="dl">${ICON.dl}Download CSV</button>
+      </div>
+      <div class="card" style="flex:1;min-height:0;display:flex;flex-direction:column">
+        <div style="display:flex;gap:8px;padding:10px 12px;flex-wrap:wrap" id="stats"></div>
+        <div class="tw"><table id="rt"></table></div>
+      </div>`;
+    wireMenus($("#app"));
+    $$(".seg[data-o]").forEach(seg => {
+      const sync = () => $$("button", seg).forEach(b => b.classList.toggle("on", RS[seg.dataset.o] === b.dataset.v));
+      sync(); seg.onclick = e => { const b = e.target.closest("button"); if (!b) return; RS[seg.dataset.o] = b.dataset.v; saveRS(); sync(); draw(); };
+    });
+    $("#q").oninput = e => { RS.q = e.target.value; saveRS(); draw(); };
+    let shown = [];
+    const COLS = [["Run", "Run"], ["Capillary", "Cap", "num"], ["Molecule ID", "Molecule"], ["Concentration", "Conc", "num"], ["Role", "Role"],
+                  ["Signal", "Signal"], ["Transition", "Transition"], ["Tm", "Tm", "num"], ["Control Tm", "Ctrl Tm", "num"], ["ΔTm", "ΔTm", "num"]];
+    function draw() {
+      let rows = all.filter(x => {
+        const r = x.r;
+        if (r[C["Method"]] !== RS.src) return false;
+        if (RS.sig !== "all" && r[C["Signal"]] !== RS.sig) return false;
+        if (RS.role !== "all" && r[C["Role"]] !== RS.role) return false;
+        return true;
+      });
+      const m = matcher(RS.q);
+      if (m) { const w = rows.filter(x => m.whole(x._hay)); rows = w.length ? w : rows.filter(x => m.part(x._hay)); }
+      const [sc, sd] = RS.sort, si = C[sc];
+      const nat = (a, b) => String(a ?? "").localeCompare(String(b ?? ""), undefined, { numeric: true });
+      rows.sort((a, b) => {
+        const va = a.r[si], vb = b.r[si];
+        const c = (typeof va === "number" || typeof vb === "number") ? ((va ?? -1e9) - (vb ?? -1e9)) : nat(va, vb);
+        return c * sd || nat(a.r[C["Run"]], b.r[C["Run"]]) || a.r[C["Capillary"]] - b.r[C["Capillary"]] || nat(a.r[C["Transition"]], b.r[C["Transition"]]);
+      });
+      shown = rows;
+      const runs = new Set(rows.map(x => x.r[C["Run"]])), caps = new Set(rows.map(x => x.r[C["Run"]] + "|" + x.r[C["Capillary"]]));
+      const ds = rows.map(x => x.r[C["ΔTm"]]).filter(v => v != null);
+      const best = ds.length ? Math.max(...ds) : null;
+      $("#stats").innerHTML = `<span class="stat"><b>${rows.length}</b> values</span><span class="stat"><b>${caps.size}</b> capillaries</span>
+        <span class="stat"><b>${runs.size}</b> run${runs.size === 1 ? "" : "s"}</span>${best != null ? `<span class="stat">largest ΔTm <b style="color:var(--pos)">${best >= 0 ? "+" : ""}${best.toFixed(2)} °C</b></span>` : ""}`;
+      if (!all.length) { $("#rt").innerHTML = `<tr><td><div class="empty"><div><b>No runs yet</b>Add one on the Add run page.</div></div></td></tr>`; return; }
+      let h = "<thead><tr>" + COLS.map(([k, lab, cl]) => `<th class="sort ${cl || ""}" data-k="${k}">${lab}${sc === k ? `<span class="arr">${sd > 0 ? "↑" : "↓"}</span>` : ""}</th>`).join("") + "</tr></thead><tbody>";
+      rows.slice(0, 3000).forEach(x => { const r = x.r, cap = r[C["Capillary"]], d = r[C["ΔTm"]], conc = r[C["Concentration"]];
+        const dc = d == null ? "na" : Math.abs(d) < .05 ? "" : d > 0 ? "pos" : "neg";
+        h += `<tr><td class="mono">${esc(r[C["Run"]])}</td><td class="num">${cap}</td>
+          <td style="--c:${capColor(cap)}"><span class="cd"></span>${esc(r[C["Molecule ID"]])}</td>
+          <td class="num">${conc == null ? '<span class="na">—</span>' : `${conc} <span style="color:var(--muted)">${esc(r[C["Units"]])}</span>`}</td>
+          <td>${r[C["Role"]] === "control" ? '<span class="pill ctrl">CTRL</span>' : `<span style="color:var(--muted)">${esc(r[C["Role"]])}</span>`}</td>
+          <td style="color:var(--muted)">${esc(r[C["Signal"]])}</td><td>${esc(r[C["Transition"]])}</td>
+          <td class="num">${r[C["Tm"]] == null ? "—" : r[C["Tm"]].toFixed(2)}</td>
+          <td class="num ${r[C["Control Tm"]] == null ? "na" : ""}">${r[C["Control Tm"]] == null ? "—" : r[C["Control Tm"]].toFixed(2)}</td>
+          <td class="num ${dc}">${d == null ? "—" : (d >= 0 ? "+" : "") + d.toFixed(2)}</td></tr>`; });
+      $("#rt").innerHTML = h + "</tbody>";
+      $$("#rt th.sort").forEach(th => th.onclick = () => { RS.sort = [th.dataset.k, RS.sort[0] === th.dataset.k ? -RS.sort[1] : 1]; saveRS(); draw(); });
+    }
+    $("#dl").onclick = () => {
+      const keep = ["Run", "Capillary", "Molecule ID", "Concentration", "Units", "Role", "Signal", "Method", "Transition", "Tm", "Control Tm", "ΔTm", "Protein", "Notes"];
+      download([keep.join(","), ...shown.map(x => keep.map(k => csvCell(x.r[C[k]])).join(","))].join("\n"), `nanoDSF_results_${RS.src}.csv`);
+      toast(`Downloaded ${shown.length} rows`);
+    };
+    draw();
+  }
+
+  // ================================================================== EDIT RUNS
+  let ES = { run: store.get("nanodsf_edit_run", null), rows: [], orig: [], sel: new Set(), anchor: null };
+  function pageEdit(P, keepWork) {
+    if (!P.runs.length) { $("#app").innerHTML = `<div class="bar">${brand("Edit runs")}<div class="spacer"></div>${themeMenu()}</div>
+      <div class="card" style="flex:1"><div class="empty"><div><b>No runs yet</b>Add one on the <a href="#" id="toAdd" style="color:var(--accent)">Add run</a> page.</div></div></div>`;
+      wireMenus($("#app")); $("#toAdd").onclick = e => { e.preventDefault(); go("page_add"); }; return; }
+    if (!P.runs.find(r => r.run === ES.run)) ES.run = P.runs[0].run;
+    const R = () => P.runs.find(r => r.run === ES.run);
+    if (!keepWork) { ES.orig = R().rows.map(r => Object.assign({}, r)); ES.rows = R().rows.map(r => Object.assign({}, r)); ES.sel = new Set();
+      ES.protein = ES.protOrig = R().protein || ""; }
+    const U = P.units, ROLES = P.roles;
+    $("#app").innerHTML = `
+      <div class="bar">
+        ${brand("Edit runs")}
+        <div class="grp"><label>Run</label><select class="field" id="runSel" style="min-width:220px">${P.runs.map(r => `<option ${r.run === ES.run ? "selected" : ""}>${esc(r.run)}</option>`).join("")}</select></div>
+        <div class="grp"><label>Protein</label><input class="field" id="prot" value="${esc(ES.protein)}" placeholder="e.g. ProteinX" style="width:150px"></div>
+        <span class="dirty" id="dirty"><i></i>Unsaved changes</span>
+        <div class="spacer"></div>
+        <label class="btn" title="Fill this run from an Excel or CSV layout (Capillary, Molecule ID, Concentration, Units, Role)">${ICON.up}Import layout<input type="file" id="imp" accept=".xlsx,.csv" style="display:none"></label>
+        <button class="btn" id="exp">${ICON.dl}Layout CSV</button>
+        ${themeMenu()}
+        <button class="btn danger" id="del">${ICON.trash}Delete run</button>
+        <button class="btn" id="rev">${ICON.undo}Revert</button>
+        <button class="btn primary" id="save">${ICON.save}Save</button>
+      </div>
+      <div style="flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:10px">
+        <div class="card" style="display:flex;flex-direction:column;min-height:0">
+          <div class="tw" style="padding-top:6px"><table class="ed" id="grid"></table></div>
+        </div>
+        <div class="card side" id="side"></div>
+      </div>
+      <div class="modal" id="modal"><div class="box"><h3>Delete ${esc(ES.run)}?</h3><p>This permanently removes the run, its curves and its layout from the library. The original Excel files on your computer are not touched.</p>
+        <div class="row"><button class="btn" id="mNo">Cancel</button><button class="btn danger" id="mYes">${ICON.trash}Delete permanently</button></div></div></div>
+      <div class="busy" id="busy"><i></i></div>`;
+    wireMenus($("#app"));
+    const dirty = () => JSON.stringify(ES.rows) !== JSON.stringify(ES.orig) || ES.protein !== ES.protOrig;
+    const syncDirty = () => { const d = dirty(); $("#dirty").classList.toggle("on", d); $("#save").disabled = !d; $("#rev").disabled = !d; };
+    const COLS = [["mol", "Molecule ID", "text"], ["conc", "Concentration", "num"], ["units", "Units", "units"], ["role", "Role", "role"], ["notes", "Notes", "text"]];
+    function drawGrid() {
+      const allSel = ES.rows.length && ES.rows.every(r => ES.sel.has(r.cap));
+      let h = `<thead><tr><th style="width:30px"><input type="checkbox" id="selAll" ${allSel ? "checked" : ""}></th><th style="width:56px">Cap</th>
+        <th>Molecule ID</th><th class="num" style="width:120px">Conc</th><th style="width:90px">Units</th><th style="width:110px">Role</th><th>Notes</th></tr></thead><tbody>`;
+      ES.rows.forEach((r, i) => {
+        const o = ES.orig[i], chg = JSON.stringify(r) !== JSON.stringify(o);
+        h += `<tr data-i="${i}" class="${ES.sel.has(r.cap) ? "sel" : ""} ${chg ? "chg" : ""} ${r.role === "skip" ? "skip" : ""}">
+          <td><input type="checkbox" class="rs" ${ES.sel.has(r.cap) ? "checked" : ""}></td>
+          <td class="cap" style="--c:${capColor(r.cap)}"><span class="cd" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--c);margin-right:7px"></span>${r.cap}</td>
+          <td><input class="cell" data-k="mol" data-i="${i}" value="${esc(r.mol)}"></td>
+          <td><input class="cell num" data-k="conc" data-i="${i}" value="${r.conc ?? ""}" inputmode="decimal" placeholder="—"></td>
+          <td><select class="cell" data-k="units" data-i="${i}">${U.map(u => `<option ${u === r.units ? "selected" : ""}>${u}</option>`).join("")}</select></td>
+          <td><select class="cell role-${r.role}" data-k="role" data-i="${i}">${ROLES.map(x => `<option ${x === r.role ? "selected" : ""}>${x}</option>`).join("")}</select></td>
+          <td><input class="cell" data-k="notes" data-i="${i}" value="${esc(r.notes)}" placeholder="—"></td></tr>`;
+      });
+      $("#grid").innerHTML = h + "</tbody>";
+      $("#selAll").onchange = e => { ES.sel = e.target.checked ? new Set(ES.rows.map(r => r.cap)) : new Set(); drawGrid(); drawSide(); };
+      $$("#grid .rs").forEach(cb => cb.onclick = e => {
+        const i = +cb.closest("tr").dataset.i, cap = ES.rows[i].cap;
+        if (e.shiftKey && ES.anchor != null) { const [a, b] = [Math.min(ES.anchor, i), Math.max(ES.anchor, i)];
+          for (let j = a; j <= b; j++) cb.checked ? ES.sel.add(ES.rows[j].cap) : ES.sel.delete(ES.rows[j].cap); }
+        else cb.checked ? ES.sel.add(cap) : ES.sel.delete(cap);
+        ES.anchor = i; drawGrid(); drawSide();
+      });
+      $$("#grid .cell").forEach(el => {
+        const i = +el.dataset.i, k = el.dataset.k;
+        const setv = v => { ES.rows[i][k] = k === "conc" ? (v === "" || isNaN(+v) ? null : +v) : v;
+          el.closest("tr").classList.toggle("chg", JSON.stringify(ES.rows[i]) !== JSON.stringify(ES.orig[i]));
+          if (k === "role") { el.className = "cell role-" + v; el.closest("tr").classList.toggle("skip", v === "skip"); }
+          syncDirty(); };
+        el.addEventListener(el.tagName === "SELECT" ? "change" : "input", () => setv(el.value));
+        el.addEventListener("keydown", e => {   // Enter / arrows move up and down the column, like a spreadsheet
+          if (["Enter", "ArrowDown", "ArrowUp"].includes(e.key) && el.tagName === "INPUT") {
+            e.preventDefault(); const n = $(`#grid .cell[data-k="${k}"][data-i="${i + (e.key === "ArrowUp" ? -1 : 1)}"]`); if (n) { n.focus(); n.select(); } }
+        });
+        if (el.tagName === "INPUT") el.addEventListener("paste", e => {   // paste a column from Excel: fills downwards
+          const t = (e.clipboardData || window.clipboardData).getData("text");
+          if (!t.includes("\n")) return;
+          e.preventDefault();
+          const lines = t.replace(/\r/g, "").split("\n").filter((x, j, a) => !(j === a.length - 1 && x === ""));
+          lines.forEach((ln, j) => { const row = ES.rows[i + j]; if (!row) return; const cells = ln.split("\t");
+            const keys = COLS.map(c => c[0]), start = keys.indexOf(k);
+            cells.forEach((v, c) => { const kk = keys[start + c]; if (!kk) return;
+              if (kk === "conc") { const num = parseFloat(v.replace(",", ".")); row.conc = isNaN(num) ? null : num; }
+              else if (kk === "role") { const rv = v.trim().toLowerCase(); if (ROLES.includes(rv)) row.role = rv; }
+              else if (kk === "units") { if (v.trim()) row.units = v.trim(); }
+              else row[kk] = v.trim(); }); });
+          drawGrid(); syncDirty(); toast(`Pasted ${lines.length} row${lines.length === 1 ? "" : "s"}`);
+        });
+      });
+    }
+    function drawSide() {
+      const r = R(), m = r.meta || {}, n = ES.sel.size, sel = () => ES.rows.filter(x => ES.sel.has(x.cap));
+      $("#side").innerHTML = `
+        <h3>Run</h3>
+        <div class="kv"><span>Started</span><span>${esc((m.start_time || "—").replace("T", " ").slice(0, 16))}</span>
+          <span>Capillaries</span><span>${m.n_capillaries ?? ES.rows.length}</span>
+          <span>Controls</span><span>${ES.rows.filter(x => x.role === "control").length}</span>
+          <span>Files</span><span title="${esc(Object.values(m.files || {}).join(", "))}">${esc(Object.values(m.files || {}).join(", ") || "—")}</span></div>
+        <div class="sep"></div>
+        <h3>Bulk edit <span style="color:var(--muted);font-weight:500">· ${n ? `${n} selected` : "nothing selected"}</span></h3>
+        <div class="hint">${n ? "Applies to the ticked rows." : "Tick rows on the left (Shift-click for a range). Tip: you can also paste a whole column from Excel into the first cell."}</div>
+        <div class="f"><span class="lab">Molecule ID</span><div class="row"><input class="field" id="bMol" placeholder="e.g. CMPD-0142"><button class="btn" id="aMol" ${n ? "" : "disabled"}>Apply</button></div></div>
+        <div class="f"><span class="lab">Role</span><div class="seg" id="bRole">${P.roles.map(x => `<button data-v="${x}" ${n ? "" : "disabled"}>${x}</button>`).join("")}</div></div>
+        <div class="f"><span class="lab">Units</span><div class="row"><select class="field" id="bUnits">${U.map(u => `<option>${u}</option>`).join("")}</select><button class="btn" id="aUnits" ${n ? "" : "disabled"}>Apply</button></div></div>
+        <div class="sep"></div>
+        <h3>Dilution series</h3>
+        <div class="hint">Fills the ticked rows in capillary order, starting from the top concentration.</div>
+        <div class="row"><div class="f" style="flex:1"><span class="lab">Top conc</span><input class="field" id="dTop" inputmode="decimal" placeholder="100" style="width:100%"></div>
+          <div class="f" style="width:80px"><span class="lab">Fold</span><input class="field" id="dFold" inputmode="decimal" value="2" style="width:100%"></div></div>
+        <div class="row"><div class="seg" id="dDir"><button data-v="down" class="on">High → low</button><button data-v="up">Low → high</button></div>
+          <button class="btn" id="aDil" ${n ? "" : "disabled"}>Fill</button></div>
+        <button class="btn" id="aClr" ${n ? "" : "disabled"} style="align-self:flex-start">Clear concentrations</button>`;
+      const apply = (fn, msg) => { sel().forEach(fn); drawGrid(); syncDirty(); toast(msg); };
+      $("#aMol").onclick = () => { const v = $("#bMol").value.trim(); if (!v) return; apply(x => x.mol = v, `Molecule ID set on ${n} rows`); };
+      $$("#bRole button").forEach(b => b.onclick = () => apply(x => x.role = b.dataset.v, `Role “${b.dataset.v}” set on ${n} rows`));
+      $("#aUnits").onclick = () => apply(x => x.units = $("#bUnits").value, `Units set on ${n} rows`);
+      let dir = "down";
+      $$("#dDir button").forEach(b => b.onclick = () => { dir = b.dataset.v; $$("#dDir button").forEach(x => x.classList.toggle("on", x === b)); });
+      $("#aDil").onclick = () => {
+        const top = parseFloat($("#dTop").value), fold = parseFloat($("#dFold").value);
+        if (!(top > 0) || !(fold > 0)) { toast("Enter a top concentration and a fold dilution", true); return; }
+        const rows = sel().sort((a, b) => a.cap - b.cap), k = rows.length;
+        rows.forEach((x, j) => { const step = dir === "down" ? j : k - 1 - j; x.conc = +(top / Math.pow(fold, step)).toPrecision(4); });
+        drawGrid(); syncDirty(); toast(`Filled ${k} concentrations`);
+      };
+      $("#aClr").onclick = () => apply(x => x.conc = null, `Cleared ${n} concentrations`);
+    }
+    $("#runSel").onchange = e => {
+      if (dirty() && !confirm("You have unsaved changes in this run. Discard them?")) { e.target.value = ES.run; return; }
+      ES.run = e.target.value; store.set("nanodsf_edit_run", ES.run); pageEdit(P);
+    };
+    $("#prot").oninput = e => { ES.protein = e.target.value; syncDirty(); };
+    $("#save").onclick = () => send("save_layout", { run: ES.run, rows: ES.rows, protein: ES.protein.trim() });
+    $("#rev").onclick = () => { ES.rows = ES.orig.map(r => Object.assign({}, r)); ES.protein = ES.protOrig; $("#prot").value = ES.protein;
+      drawGrid(); syncDirty(); toast("Changes reverted"); };
+    $("#exp").onclick = () => {
+      const head = ["Capillary", "Molecule ID", "Concentration", "Units", "Role", "Notes"];
+      download([head.join(","), ...ES.rows.map(r => [r.cap, r.mol, r.conc ?? "", r.units, r.role, r.notes].map(csvCell).join(","))].join("\n"), `${ES.run}_layout.csv`);
+    };
+    $("#imp").onchange = async e => { const f = e.target.files[0]; if (!f) return; send("import_layout", { run: ES.run, name: f.name, b64: await readB64(f) }); e.target.value = ""; };
+    $("#del").onclick = () => $("#modal").classList.add("on");
+    $("#mNo").onclick = () => $("#modal").classList.remove("on");
+    $("#mYes").onclick = () => { $("#modal").classList.remove("on"); send("delete_run", { run: ES.run }); };
+    drawGrid(); drawSide(); syncDirty();
+  }
+
+  // ================================================================== ADD RUN
+  let AS = { layout: null };
+  function pageAdd(P) {
+    const pend = P.pending || [], hasRaw = pend.some(f => f.kind === "raw");
+    const runId = AS.runId ?? P.suggested ?? "";
+    const exists = P.runs.includes(runId.trim());
+    $("#app").innerHTML = `
+      <div class="bar">${brand("Add run")}<div class="spacer"></div>
+        <button class="btn" id="tpl">${ICON.dl}Blank layout template</button>${themeMenu()}</div>
+      <div class="addwrap">
+        <div class="card" style="display:flex;flex-direction:column;gap:12px;padding:14px;min-height:0;overflow:auto">
+          <label class="drop" id="drop"><input type="file" id="fi" accept=".xlsx" multiple>
+            <div>${ICON.cloud}<b>Drop the raw and processed exports here</b>or click to choose · .xlsx from PR.ThermControl · order doesn't matter</div></label>
+          ${pend.length ? `<div class="files">${pend.map(f => `<div class="file">${ICON.file}<span class="nm">${esc(f.name)}</span>
+              <span class="pill ${f.kind === "raw" ? "raw" : "proc"}">${f.kind.toUpperCase()}</span>
+              <span class="meta">${f.caps} caps${f.start ? " · " + esc(f.start.replace("T", " ").slice(0, 16)) : ""}</span></div>`).join("")}
+              ${hasRaw ? "" : `<div class="file"><span class="pill warn">MISSING</span><span class="nm" style="color:var(--muted)">The raw export is required — add it too.</span></div>`}
+              <button class="chip" id="clr" style="align-self:flex-start">Start over</button></div>` : ""}
+          ${P.saved ? `<div class="ok"><b>✓ Saved “${esc(P.saved)}”</b><span style="color:var(--muted)">Next: name the molecules and mark the controls, then compare curves.</span>
+              <div class="row"><button class="btn primary" id="toEdit">Edit runs ${ICON.arrow}</button><button class="btn" id="toOv">Open Overlay ${ICON.arrow}</button></div></div>` : ""}
+        </div>
+        <div class="card form">
+          <div class="steps" style="padding:0">
+            <div class="step ${pend.length ? "done" : ""}"><span class="n">1</span><div class="t"><b>Add the exported files</b>Both the raw and the processed Excel export from one run.</div></div>
+            <div class="step ${runId.trim() ? "done" : ""}"><span class="n">2</span><div class="t"><b>Name the run</b>A short, unique name, e.g. ProteinX_2026-01-15.</div></div>
+            <div class="step ${AS.layout ? "done" : ""}"><span class="n">3</span><div class="t"><b>Layout (optional)</b>What's in each capillary — or fill it in afterwards on Edit runs.</div></div>
+          </div>
+          <div class="sep"></div>
+          <div class="f"><span class="lab">Run ID</span><input class="field" id="rid" value="${esc(runId)}" placeholder="e.g. ProteinX_2026-01-15"></div>
+          ${exists ? `<label class="check"><input type="checkbox" id="ow" ${AS.overwrite ? "checked" : ""}> A run called “${esc(runId)}” exists — replace it</label>` : ""}
+          <div class="f"><span class="lab">Protein</span><input class="field" id="prot" value="${esc(AS.protein || "")}" placeholder="e.g. ProteinX"></div>
+          <div class="f"><span class="lab">Capillary layout</span>
+            <label class="drop small" id="ldrop"><input type="file" id="lfi" accept=".xlsx,.csv">
+              <div>${AS.layout ? `${ICON.file}<b style="font-size:12px">${esc(AS.layout.name)}</b><span>click to replace</span>` : `${ICON.up}<b style="font-size:12px">Drop a layout file</b>Excel or CSV with Capillary, Molecule ID, Concentration, Units, Role`}</div></label></div>
+          <div class="spacer"></div>
+          <button class="btn primary" id="save" style="height:38px;justify-content:center" ${hasRaw && runId.trim() && (!exists || AS.overwrite) ? "" : "disabled"}>${ICON.save}Save run</button>
+        </div>
+      </div>
+      <div class="busy" id="busy"><i></i></div>`;
+    wireMenus($("#app"));
+    const take = async files => { files = [...files].filter(f => /\.xlsx$/i.test(f.name)); if (!files.length) return;
+      AS.runId = undefined; send("inspect", { files: await Promise.all(files.map(async f => ({ name: f.name, b64: await readB64(f) }))) }); };
+    const dz = $("#drop");
+    ["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("over"); }));
+    ["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("over"); }));
+    dz.addEventListener("drop", e => take(e.dataTransfer.files));
+    $("#fi").onchange = e => take(e.target.files);
+    const ld = $("#ldrop"), takeL = async f => { if (!f) return; AS.layout = { name: f.name, b64: await readB64(f) }; pageAdd(P); };
+    ["dragenter", "dragover"].forEach(ev => ld.addEventListener(ev, e => { e.preventDefault(); ld.classList.add("over"); }));
+    ["dragleave", "drop"].forEach(ev => ld.addEventListener(ev, e => { e.preventDefault(); ld.classList.remove("over"); }));
+    ld.addEventListener("drop", e => takeL(e.dataTransfer.files[0]));
+    $("#lfi").onchange = e => takeL(e.target.files[0]);
+    $("#rid").oninput = e => { AS.runId = e.target.value; const ex = P.runs.includes(AS.runId.trim());
+      if (ex !== exists) { pageAdd(P); const r = $("#rid"); r.focus(); r.setSelectionRange(r.value.length, r.value.length); return; }
+      $("#save").disabled = !(hasRaw && AS.runId.trim() && (!ex || AS.overwrite)); };
+    $("#prot").oninput = e => AS.protein = e.target.value;
+    if ($("#ow")) $("#ow").onchange = e => { AS.overwrite = e.target.checked; pageAdd(P); };
+    if ($("#clr")) $("#clr").onclick = () => { AS = { layout: null }; send("clear_pending"); };
+    if ($("#toEdit")) $("#toEdit").onclick = () => { store.set("nanodsf_edit_run", P.saved); go("page_edit"); };
+    if ($("#toOv")) $("#toOv").onclick = () => go("");
+    $("#save").onclick = () => send("save_run", { run_id: (AS.runId ?? runId).trim(), protein: (AS.protein || "").trim(), overwrite: !!AS.overwrite, layout: AS.layout });
+    $("#tpl").onclick = () => {
+      const lines = ["Capillary,Molecule ID,Concentration,Units,Role,Notes"];
+      for (let i = 1; i <= 24; i++) lines.push(`${i},,,µM,sample,`);
+      download(lines.join("\n"), "nanoDSF_layout_template.csv");
+    };
+  }
+
+  // ================================================================== EMPTY (Overlay with no runs)
+  function pageEmpty() {
+    $("#app").innerHTML = `<div class="bar">${brand("Overlay")}<div class="spacer"></div>${themeMenu()}</div>
+      <div class="card" style="flex:1"><div class="empty"><div><b>No runs in the library yet</b>
+      <span style="display:block;margin-bottom:14px">Upload the raw and processed exports from your first run to get started.</span>
+      <button class="btn primary" id="toAdd">Add a run ${ICON.arrow}</button></div></div></div>`;
+    wireMenus($("#app")); $("#toAdd").onclick = () => go("page_add");
+  }
+
+  // ------------------------------------------------------------------ Streamlit render loop
+  let ARGS = null, version = null, lastMsg = null;
+  function render(force) {
+    if (!ARGS) return;
+    const P = ARGS.payload, pg = ARGS.page;
+    if (pg === "results") pageResults(P);
+    else if (pg === "edit") pageEdit(P, force === "keep");
+    else if (pg === "add") pageAdd(P);
+    else pageEmpty();
+  }
+  window.addEventListener("message", e => {
+    const d = e.data;
+    if (!d || d.type !== "streamlit:render") return;
+    ARGS = d.args; applyTheme(); fit();
+    const m = ARGS.msg;
+    const fresh = m && m.nonce !== lastMsg;
+    if (fresh) { lastMsg = m.nonce; }
+    if (fresh && m.ok && ARGS.page === "add" && (m.action === "save_run" || m.action === "clear_pending")) AS = { layout: null };
+    if (ARGS.version !== version) {
+      version = ARGS.version;
+      // after a failed save on Edit runs, keep what was typed
+      render(fresh && !m.ok && ARGS.page === "edit" ? "keep" : undefined);
+    } else if (fresh && ARGS.page === "add") render();
+    busy(false);
+    if (fresh && !(lastMsg === null)) { if (store.get("nanodsf_seen_msg", null) !== m.nonce) { store.set("nanodsf_seen_msg", m.nonce); toast(m.text, !m.ok); } }
+  });
+  post("streamlit:componentReady", { apiVersion: 1 });
+})();
+</script>
+</body>
+</html>
