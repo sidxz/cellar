@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     PlateFormat,
     RunRelationshipType,
     RunStatus,
@@ -953,3 +954,61 @@ class TestRunPlateLink:
         with pytest.raises(ConflictError, match="locked"):
             run.link_plate(plate.id, uuid.uuid4())
         assert plate.registered_plate_id is None
+
+
+# ---------------------------------------------------------------------------
+# Holder kind, holder size, well label
+# ---------------------------------------------------------------------------
+
+_RUN = uuid.uuid4()
+_P = uuid.uuid4()
+
+
+def test_plate_defaults_to_plate_holder():
+    p = Plate(run_id=uuid.uuid4(), plate_number=1)
+    assert (p.holder_kind, p.holder_rows, p.holder_columns) == (HolderKind.PLATE, None, None)
+
+
+def test_cassette_needs_one_row_and_no_format():
+    Plate(
+        run_id=_RUN,
+        plate_number=1,
+        holder_kind=HolderKind.CASSETTE,
+        holder_rows=1,
+        holder_columns=48,
+    )
+    with pytest.raises(ValidationError):
+        Plate(
+            run_id=_RUN,
+            plate_number=1,
+            holder_kind=HolderKind.CASSETTE,
+            holder_rows=2,
+            holder_columns=12,
+        )
+    with pytest.raises(ValidationError):
+        Plate(
+            run_id=_RUN,
+            plate_number=1,
+            holder_kind=HolderKind.CASSETTE,
+            holder_rows=1,
+            holder_columns=24,
+            format=PlateFormat.F24,
+        )
+
+
+def test_holder_size_is_both_or_neither_and_positive():
+    for rows, cols in ((1, None), (None, 5), (0, 5), (1, 0)):
+        with pytest.raises(ValidationError):
+            Plate(run_id=_RUN, plate_number=1, holder_rows=rows, holder_columns=cols)
+
+
+def test_well_label_is_trimmed_capped_and_blank_is_none():
+    assert Well(plate_id=_P, row="A", column=1, label="  x  ").label == "x"
+    assert Well(plate_id=_P, row="A", column=1, label="   ").label is None
+    assert len(Well(plate_id=_P, row="A", column=1, label="x" * 200).label) == 200
+    with pytest.raises(ValidationError):
+        Well(plate_id=_P, row="A", column=1, label="x" * 201)
+
+
+def test_position_above_24_is_a_valid_well():
+    assert Well(plate_id=_P, row="A", column=48).column == 48

@@ -7,6 +7,7 @@ from datetime import UTC, date, datetime
 from typing import Any
 
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     PlateFormat,
     RunRelationshipType,
     RunStatus,
@@ -41,6 +42,8 @@ _RUN_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
 
 _LOCKABLE_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
 
+_WELL_LABEL_MAX = 200
+
 
 # ---------------------------------------------------------------------------
 # Owned entities
@@ -54,6 +57,8 @@ class Plate(Entity):
 
     Invariants:
         - plate_number >= 1
+        - holder size is both rows and columns or neither, each >= 1
+        - a cassette has one row and no plate format
     """
 
     def __init__(
@@ -68,6 +73,9 @@ class Plate(Entity):
         parent_plate_id: uuid.UUID | None = None,
         template_id: uuid.UUID | None = None,
         registered_plate_id: uuid.UUID | None = None,
+        holder_kind: HolderKind = HolderKind.PLATE,
+        holder_rows: int | None = None,
+        holder_columns: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -75,6 +83,19 @@ class Plate(Entity):
 
         if plate_number < 1:
             raise ValidationError("plate_number must be >= 1")
+        if (holder_rows is None) != (holder_columns is None):
+            raise ValidationError("holder_rows and holder_columns must be set together")
+        if (
+            holder_rows is not None
+            and holder_columns is not None
+            and min(holder_rows, holder_columns) < 1
+        ):
+            raise ValidationError("holder size must be >= 1")
+        if holder_kind is HolderKind.CASSETTE:
+            if holder_rows is not None and holder_rows != 1:
+                raise ValidationError("A cassette has exactly one row")
+            if format is not None:
+                raise ValidationError("A cassette has no plate format")
 
         self.run_id = run_id
         self.plate_number = plate_number
@@ -86,6 +107,9 @@ class Plate(Entity):
         # Optional link to the physical inventory plate (RegisteredPlate) this
         # run plate was run on. Null is normal — nothing depends on it.
         self.registered_plate_id = registered_plate_id
+        self.holder_kind = holder_kind
+        self.holder_rows = holder_rows
+        self.holder_columns = holder_columns
 
 
 class Well(Entity):
@@ -96,6 +120,7 @@ class Well(Entity):
     Invariants:
         - row: 1-2 uppercase characters
         - column >= 1
+        - label, when given, is trimmed and at most 200 characters
     """
 
     def __init__(
@@ -108,10 +133,15 @@ class Well(Entity):
         well_type: WellType = WellType.SAMPLE,
         batch_id: uuid.UUID | None = None,
         dose: float | None = None,
+        label: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at)
+
+        label = (label or "").strip() or None
+        if label is not None and len(label) > _WELL_LABEL_MAX:
+            raise ValidationError(f"Well label must be at most {_WELL_LABEL_MAX} characters")
 
         # Normalize row to uppercase
         row = row.upper()
@@ -130,6 +160,8 @@ class Well(Entity):
         # Dose value only — unit is the owning protocol's dose_unit. Not
         # carried per-well to avoid duplication and inconsistency.
         self.dose = dose
+        # Free-text identifier of what was measured here (e.g. a sample name).
+        self.label = label
 
 
 # ---------------------------------------------------------------------------
