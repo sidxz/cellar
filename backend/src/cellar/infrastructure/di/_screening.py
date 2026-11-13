@@ -871,6 +871,8 @@ def register_screening(container: Container) -> None:
             dispatcher=c[EventDispatcher],
             fit_dose_response=c[FitDoseResponseCurves],
             plate_quality=c[PlateQualityCalculator],
+            melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
     container.define(ReadoutCalculationEngine, _readout_calc_engine)
