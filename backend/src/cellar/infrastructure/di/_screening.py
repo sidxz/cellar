@@ -176,6 +176,7 @@ from cellar.application.screening.refit_dose_response import RefitDoseResponseCu
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
 )
+from cellar.application.screening.relabel_run_positions import RelabelRunPositions
 from cellar.application.screening.request_target import RequestTarget
 from cellar.application.screening.reset_run_data import ResetRunData
 from cellar.application.screening.resolve_collection_coverage import (
@@ -236,6 +237,9 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.plate_read_model_rea
 )
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (  # noqa: E501
+    SQLAlchemyCampaignRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
     SQLAlchemyCollectionRepository,
@@ -1022,6 +1026,21 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ImportInstrumentFile, _import_instrument_file)
+
+    def _relabel_run_positions(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RelabelRunPositions(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            calculation_engine=c[ReadoutCalculationEngine],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(RelabelRunPositions, _relabel_run_positions)
 
     def _get_run_curves(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
