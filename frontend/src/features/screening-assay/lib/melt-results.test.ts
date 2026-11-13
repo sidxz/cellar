@@ -6,11 +6,13 @@ import {
   batchSeries,
   concentrationSeries,
   matchesFilter,
+  maxAbsDelta,
   orderRows,
   resultRows,
   shiftRows,
   windowRows,
   windowSummary,
+  worstStatus,
 } from "./melt-results";
 
 function pos(id: string, over: Record<string, unknown> = {}) {
@@ -228,6 +230,18 @@ describe("melt-results", () => {
       { wellId: "q", dose: 6.25, deltaTm: -2 },
       { wellId: "p", dose: 25, deltaTm: -4 },
     ]);
+  });
+
+  it("every position gets a row, even with no windows", () => {
+    const positions = [pos("a"), pos("b", { well_type: "blank" }), pos("c")];
+    const rows = resultRows([], positions, [], noChecks);
+    expect(rows.map((r) => r.wellId)).toEqual(["a", "b", "c"]);
+    expect(rows.every((r) => Object.keys(r.cells).length === 0)).toBe(true);
+    expect(worstStatus(rows[0], ["Main"])).toBeNull();
+    expect(maxAbsDelta(rows[0], ["Main"])).toBeNull();
+    expect(matchesFilter(rows[0], ["Main"], "up", 2)).toBe(false);
+    const { body } = orderRows(rows, ["Main"]);
+    expect(body.map((r) => r.wellId)).toEqual(["a", "c", "b"]);
   });
 
   it("shiftRows excludes references, non-samples and missing values, ascending", () => {

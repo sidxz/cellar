@@ -171,7 +171,9 @@ function cellStatus(
   return counting?.status === "unreviewed" ? "provisional" : "reviewed";
 }
 
-/** One row per position present in any window, in `positions` order. */
+/** One row per position, in `positions` order, whether or not any window
+ *  lists it (the grid doubles as the position picker). A window a position is
+ *  missing from simply has no entry in `cells`. */
 export function resultRows(
   windows: readonly MeltWindow[],
   positions: readonly CurvePosition[],
@@ -193,7 +195,6 @@ export function resultRows(
         differs,
       };
     }
-    if (Object.keys(cells).length === 0) return [];
     return {
       wellId: p.well_id,
       position: p.position_label,
@@ -217,11 +218,12 @@ export function resultRows(
 const cellsOf = (row: ResultRow, names: readonly string[]) =>
   names.flatMap((n) => (row.cells[n] ? [row.cells[n]] : []));
 
-export function worstStatus(row: ResultRow, windowNames: readonly string[]): CellStatus {
-  if (!row.isSample && row.wellType === "reference") return "reference";
+/** Worst status across the given windows; null when the row has no cell in
+ *  any of them (nothing to report). */
+export function worstStatus(row: ResultRow, windowNames: readonly string[]): CellStatus | null {
   const cells = cellsOf(row, windowNames);
   if (cells.some((c) => c.status === "reference")) return "reference";
-  return STATUS_ORDER.find((s) => cells.some((c) => c.status === s)) ?? "reviewed";
+  return STATUS_ORDER.find((s) => cells.some((c) => c.status === s)) ?? null;
 }
 
 export function maxAbsDelta(row: ResultRow, windowNames: readonly string[]): number | null {
