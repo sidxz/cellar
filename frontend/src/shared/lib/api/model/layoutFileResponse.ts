@@ -9,4 +9,5 @@ import type { LayoutRowModel } from './layoutRowModel';
 export interface LayoutFileResponse {
   rows: LayoutRowModel[];
   unrecognised_columns: string[];
+  calculated_columns_ignored: boolean;
 }

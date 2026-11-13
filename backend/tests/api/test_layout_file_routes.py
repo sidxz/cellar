@@ -76,6 +76,7 @@ async def test_resolve_layout_file_returns_rows_with_resolved_compound_and_batch
         "needs_batch_choice": False,
     }
     assert out["unrecognised_columns"] == ["Plate"]
+    assert out["calculated_columns_ignored"] is False
 
 
 async def test_batch_of_another_compound_is_a_row_problem(

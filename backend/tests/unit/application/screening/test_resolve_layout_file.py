@@ -401,6 +401,23 @@ async def test_a_concentration_the_template_guarded_reads_back_as_typed():
     assert minus.dose is None and minus.problems == ("Concentration must be a number, 0 or more",)
 
 
+@pytest.mark.parametrize(
+    "status,body,ignored",
+    [
+        # Every ignored cell invalid: still ignored, and said so.
+        (RunStatus.COMPLETED, ",Standard,NOPE,,-1", True),
+        (RunStatus.APPROVED, ",,,B-404,", True),
+        (RunStatus.COMPLETED, "y,,,,", False),
+        (RunStatus.DRAFT, ",Blank,,,5", False),
+    ],
+)
+async def test_says_whether_cells_of_ignored_columns_were_in_the_file(status, body, ignored):
+    h = Harness()
+    h.run.status = status
+    out = await h.ok(csv("Position,Label,Role,Compound,Batch,Concentration", f"{P(1)},{body}"))
+    assert out.calculated_columns_ignored is ignored
+
+
 async def test_missing_position_column_is_validation_error():
     h = Harness()
     failure = (await h(csv("Label,Note", "x,y"))).failure()

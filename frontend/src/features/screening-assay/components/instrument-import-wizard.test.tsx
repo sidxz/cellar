@@ -303,6 +303,7 @@ describe("InstrumentImportWizard", () => {
           },
         ],
         unrecognised_columns: [],
+        calculated_columns_ignored: false,
       }),
     );
     const input = container.ownerDocument.querySelector(

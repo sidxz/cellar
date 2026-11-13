@@ -150,12 +150,16 @@ class LayoutRowModel(BaseModel):
 class LayoutFileResponse(BaseModel):
     rows: list[LayoutRowModel]
     unrecognised_columns: list[str]
+    # Role, compound, batch and concentration cannot change on this run, and the file
+    # had cells in those columns: they were ignored.
+    calculated_columns_ignored: bool
 
     @classmethod
     def from_domain(cls, f: LayoutFile) -> LayoutFileResponse:
         return cls(
             rows=[LayoutRowModel.from_domain(r) for r in f.rows],
             unrecognised_columns=list(f.unrecognised_columns),
+            calculated_columns_ignored=f.calculated_columns_ignored,
         )
 
 

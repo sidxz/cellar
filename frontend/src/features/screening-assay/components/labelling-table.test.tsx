@@ -231,6 +231,7 @@ describe("LabellingTable", () => {
       o.onSuccess?.({
         rows: [{ position: "Position 2", ...noValues, dose: 12.5, problems: [] }],
         unrecognised_columns: [],
+        calculated_columns_ignored: false,
       }),
     );
     expect(onReplaceRows).toHaveBeenCalledTimes(1);
@@ -249,6 +250,7 @@ describe("LabellingTable", () => {
       o.onSuccess?.({
         rows: [{ position: "Position 2", ...noValues, label: "y", problems: [] }],
         unrecognised_columns: [],
+        calculated_columns_ignored: false,
       }),
     );
     expect(
@@ -265,6 +267,7 @@ describe("LabellingTable", () => {
           { position: "Position 9", ...noValues, problems: [] },
         ],
         unrecognised_columns: ["Plate"],
+        calculated_columns_ignored: false,
       }),
     );
     const heading = screen.getByText("2 rows need attention");
@@ -295,6 +298,7 @@ describe("LabellingTable", () => {
       o.onSuccess?.({
         rows: [{ position: "Position 2", ...noValues, label: "y", problems: [] }],
         unrecognised_columns: [],
+        calculated_columns_ignored: false,
       }),
     );
     expect(screen.queryByText("File is empty")).not.toBeInTheDocument();

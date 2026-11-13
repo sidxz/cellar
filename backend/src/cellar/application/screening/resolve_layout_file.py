@@ -45,6 +45,7 @@ MAX_LAYOUT_UNPACKED_BYTES = 50 * 1024 * 1024
 _MAX_LABEL = 200
 _MAX_NOTE = 1000
 _COLUMNS = ("position", "label", "role", "compound", "batch", "note", "use")
+_CALCULATED_COLUMNS = ("role", "compound", "batch", "concentration")
 # The template writes ' before a cell starting with one of these, so a spreadsheet
 # program keeps it as text instead of running it as a formula; reading drops that one '.
 _FORMULA_START = ("=", "+", "-", "@")
@@ -80,6 +81,9 @@ class LayoutRow:
 class LayoutFile:
     rows: tuple[LayoutRow, ...]
     unrecognised_columns: tuple[str, ...]
+    # The run's role, compound, batch and concentration cannot change, and the file
+    # had a non-empty cell in one of those columns, valid or not.
+    calculated_columns_ignored: bool
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -152,14 +156,24 @@ class ResolveLayoutFile:
             # Where those columns cannot change, their problems are not worth listing.
             report_calculated = run.calculated_positions_editable
             rows = []
+            ignored = False
             for raw in table.iter_rows():
                 cells = {key: raw.get(header, "").strip() for key, header in columns.items()}
                 for key in _GUARDED_COLUMNS:
                     if key in cells:
                         cells[key] = _without_formula_guard(cells[key])
                 rows.append(await _row(cells, resolver, report_calculated=report_calculated))
+                ignored = ignored or (
+                    not report_calculated and any(cells.get(k) for k in _CALCULATED_COLUMNS)
+                )
 
-        return Success(LayoutFile(rows=tuple(rows), unrecognised_columns=tuple(unrecognised)))
+        return Success(
+            LayoutFile(
+                rows=tuple(rows),
+                unrecognised_columns=tuple(unrecognised),
+                calculated_columns_ignored=ignored,
+            )
+        )
 
 
 def _without_formula_guard(text: str) -> str:

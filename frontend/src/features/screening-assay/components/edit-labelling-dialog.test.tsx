@@ -304,6 +304,7 @@ describe("EditLabellingDialog", () => {
           },
         ],
         unrecognised_columns: [],
+        calculated_columns_ignored: false,
       }),
     );
     const input = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;

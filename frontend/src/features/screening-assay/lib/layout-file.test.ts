@@ -69,6 +69,7 @@ function fileRow(position: string, values: Partial<LayoutFileRow> = {}): LayoutF
 const file = (...fileRows: LayoutFileRow[]): LayoutFile => ({
   rows: fileRows,
   unrecognised_columns: [],
+  calculated_columns_ignored: false,
 });
 
 /** What the API answers for the template written from these rows. */
@@ -290,10 +291,13 @@ describe("apply layout", () => {
     const locked = { allowUse: false, calculatedLocked: true };
     const out = applyLayout(
       rows,
-      file(
-        fileRow("Position 1", { well_type: "sample", compound, label: "y" }),
-        fileRow("Position 2", { dose: 99 }),
-      ),
+      {
+        ...file(
+          fileRow("Position 1", { well_type: "sample", compound, label: "y" }),
+          fileRow("Position 2", { dose: 99 }),
+        ),
+        calculated_columns_ignored: true,
+      },
       locked,
     );
     expect(out.rows[0]).toEqual({ ...rows[0], label: "y" });
@@ -304,8 +308,26 @@ describe("apply layout", () => {
     expect(out.filled).toBe(1);
   });
 
+  it("says the locked columns were ignored even when none of their cells could be read", () => {
+    const locked = { allowUse: false, calculatedLocked: true };
+    // The server read Role "Standard" and Compound "NOPE": no value, no problem on a locked run.
+    const out = applyLayout(
+      rows,
+      { ...file(fileRow("Position 1", { label: "y" })), calculated_columns_ignored: true },
+      locked,
+    );
+    expect(out.notices).toEqual([
+      "Role, Compound, Batch and Concentration in the file were ignored: they can be changed only while the run is draft or in progress.",
+    ]);
+    expect(out.problems).toEqual([]);
+  });
+
   it("reports unrecognised columns as a notice", () => {
-    const out = applyLayout(rows, { rows: [], unrecognised_columns: ["Plate", "Well"] }, OPEN);
+    const out = applyLayout(
+      rows,
+      { rows: [], unrecognised_columns: ["Plate", "Well"], calculated_columns_ignored: false },
+      OPEN,
+    );
     expect(out.notices).toEqual(["Columns not recognised and ignored: Plate, Well"]);
   });
 });

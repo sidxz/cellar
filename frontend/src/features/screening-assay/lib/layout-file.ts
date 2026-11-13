@@ -78,7 +78,6 @@ export function applyLayout<T extends LabellingRow>(
 
   const toApply = new Map<string, LayoutFileRow>();
   const reported = new Set<string>();
-  let lockedIgnored = false;
   for (const f of file.rows) {
     const p = f.position.trim();
     if (!p) {
@@ -101,12 +100,10 @@ export function applyLayout<T extends LabellingRow>(
       );
       continue;
     }
-    if (opts.calculatedLocked && (f.well_type != null || f.compound != null || f.dose != null)) {
-      lockedIgnored = true;
-    }
     toApply.set(p, f);
   }
-  if (lockedIgnored) notices.push(LOCKED_NOTICE);
+  // The server tells: only it saw the cells, including ones it could not read.
+  if (file.calculated_columns_ignored) notices.push(LOCKED_NOTICE);
   if (file.unrecognised_columns.length > 0) {
     notices.push(`Columns not recognised and ignored: ${file.unrecognised_columns.join(", ")}`);
   }
