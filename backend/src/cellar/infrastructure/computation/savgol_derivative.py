@@ -20,6 +20,8 @@ class SavgolCurveDerivative:
         xs, ys = np.asarray(x, float)[order], np.asarray(y, float)[order]
         xs, first = np.unique(xs, return_index=True)
         ys = ys[first]
+        if len(xs) < 2:  # no spacing to differentiate over; NaN cannot go in JSON
+            return DerivativeCurve(x=(), y=())
         step = float(np.median(np.diff(xs)))  # the curve's own spacing; no instrument constant
         grid = np.arange(xs[0], xs[-1] + step / 2, step)
         yi = np.interp(grid, xs, ys)

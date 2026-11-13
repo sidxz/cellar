@@ -223,3 +223,25 @@ async def test_explicit_window_is_passed_through():
     out = (await h.uc(h.query(view="derivative", window=2.5), auth=h.viewer)).unwrap()
     assert out.window == 2.5
     assert {c.kwargs["window"] for c in h.derivative.derivative.call_args_list} == {2.5}
+
+
+async def test_derivative_view_leaves_out_a_curve_with_an_empty_derivative():
+    h = Harness()
+    empty_for = h.entries[1]
+    h.derivative.derivative.side_effect = lambda x, y, *, window: (
+        DerivativeCurve(x=(), y=())
+        if y == (7.0, 7.0)
+        else DerivativeCurve(x=(0.5, 1.5), y=(9.0, 9.5))
+    )
+    original = h.curve_repo.find_by_run.side_effect
+
+    async def find(ws, run_id, *, channel_key):
+        curves = original(ws, run_id, channel_key=channel_key)
+        return [
+            c.__class__(**{**c.__dict__, "y": (7.0, 7.0)}) if c.well_id == empty_for.well_id else c
+            for c in curves
+        ]
+
+    h.curve_repo.find_by_run.side_effect = find
+    out = (await h.uc(h.query(view="derivative"), auth=h.viewer)).unwrap()
+    assert empty_for.well_id not in {c.well_id for c in out.curves} and len(out.curves) == 2

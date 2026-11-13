@@ -114,7 +114,7 @@ class GetRunCurves:
         if input.view == "derivative" and series:
             # One window for the whole response; calculated here, never stored.
             window = input.window or default_window([(min(s.x), max(s.x)) for s in series])
-            series = [self._differentiate(s, window) for s in series]
+            series = [d for d in (self._differentiate(s, window) for s in series) if d.x]
         elif input.view == "derivative":
             window = input.window
 

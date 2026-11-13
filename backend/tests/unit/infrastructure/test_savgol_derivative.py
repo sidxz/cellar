@@ -51,3 +51,8 @@ def test_output_is_finite():
 
 def test_default_window_is_five_percent_of_the_widest_range():
     assert default_window([(25.0, 95.0), (25.0, 90.0)]) == pytest.approx(3.5)
+
+
+def test_fewer_than_two_distinct_x_gives_an_empty_derivative():
+    out = SavgolCurveDerivative().derivative([30.0, 30.0, 30.0], [1.0, 2.0, 3.0], window=3.5)
+    assert (out.x, out.y) == ((), ())
