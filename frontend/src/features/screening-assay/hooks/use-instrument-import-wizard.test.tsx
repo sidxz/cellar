@@ -107,14 +107,14 @@ describe("useInstrumentImportWizard", () => {
 
   it("shows the API's own words when the preview is refused", async () => {
     fetchMock.mockResolvedValue(
-      json({ detail: "Unrecognised instrument file. Supported formats: Reader one" }, 422),
+      json({ detail: "Unrecognized instrument file. Supported formats: Reader one" }, 422),
     );
     const { result: hook } = renderWizardHook();
 
     act(() => hook.current.handleFile(file));
     await waitFor(() =>
       expect(hook.current.error).toBe(
-        "Unrecognised instrument file. Supported formats: Reader one",
+        "Unrecognized instrument file. Supported formats: Reader one",
       ),
     );
     expect(hook.current.preview).toBeNull();

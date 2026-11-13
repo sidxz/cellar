@@ -276,7 +276,7 @@ describe("LabellingTable", () => {
     expect(
       within(notice).getByText("Position 9: not a position in this table; skipped"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Columns not recognised and ignored: Plate")).toBeInTheDocument();
+    expect(screen.getByText("Columns not recognized and ignored: Plate")).toBeInTheDocument();
     // Above the table.
     const table = screen.getByRole("table");
     expect(heading.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

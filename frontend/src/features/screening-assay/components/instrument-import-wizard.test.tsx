@@ -160,7 +160,7 @@ describe("InstrumentImportWizard", () => {
   it("step 1 shows the recognised format and the holder line from the API", () => {
     hookState.value = withPreview(1);
     renderWizard();
-    expect(screen.getByText("Recognised")).toBeInTheDocument();
+    expect(screen.getByText("Recognized")).toBeInTheDocument();
     expect(screen.getByText("Reader one raw export")).toBeInTheDocument();
     expect(screen.getByText("Holder of 3 positions")).toBeInTheDocument();
     expect(screen.getByText("Start temperature")).toBeInTheDocument();
@@ -332,9 +332,9 @@ describe("InstrumentImportWizard", () => {
 
   it("step 1 still lists the supported files beside a refusal", () => {
     formats.value = { data: FORMATS, isLoading: false, isError: false };
-    hookState.value = baseHook({ step: 1, error: "Unrecognised instrument file." });
+    hookState.value = baseHook({ step: 1, error: "Unrecognized instrument file." });
     renderWizard();
-    expect(screen.getByText("Unrecognised instrument file.")).toBeInTheDocument();
+    expect(screen.getByText("Unrecognized instrument file.")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Supported instrument files" })).toBeInTheDocument();
   });
 

@@ -89,7 +89,7 @@ export function RunCurvesPanel({
               title={editRefusal ?? undefined}
               onClick={() => setEditOpen(true)}
             >
-              Edit labelling
+              Edit labeling
             </Button>
             <EditLabellingDialog
               run={run}

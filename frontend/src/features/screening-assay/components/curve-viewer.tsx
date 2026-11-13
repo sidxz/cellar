@@ -487,10 +487,10 @@ function CurveViewerBody({
             onChange={(v) => setShowReported(v === "on")}
           />
         </Field>
-        <Field label="Colour">
+        <Field label="Color">
           <div className="flex items-center gap-2">
             <Segmented
-              label="Colour"
+              label="Color"
               value={effectiveMode}
               options={[
                 { value: "highlight", label: "Highlight" },
@@ -644,10 +644,10 @@ function CurveViewerBody({
                 The trace under the pointer
               </span>
               {colourMode === "distinct" && (
-                <span>More than {COLOUR_SLOT_COUNT} selected: distinct colours are off</span>
+                <span>More than {COLOUR_SLOT_COUNT} selected: distinct colors are off</span>
               )}
               {colourMode === "group" && (
-                <span>More than {COLOUR_SLOT_COUNT} groups: group colours are off</span>
+                <span>More than {COLOUR_SLOT_COUNT} groups: group colors are off</span>
               )}
             </>
           )}

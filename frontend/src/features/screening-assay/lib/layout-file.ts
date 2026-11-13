@@ -105,7 +105,7 @@ export function applyLayout<T extends LabellingRow>(
   // The server tells: only it saw the cells, including ones it could not read.
   if (file.calculated_columns_ignored) notices.push(LOCKED_NOTICE);
   if (file.unrecognised_columns.length > 0) {
-    notices.push(`Columns not recognised and ignored: ${file.unrecognised_columns.join(", ")}`);
+    notices.push(`Columns not recognized and ignored: ${file.unrecognised_columns.join(", ")}`);
   }
 
   let filled = 0;

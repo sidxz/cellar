@@ -1129,7 +1129,7 @@ async def import_instrument_file(
     try:
         parsed = InstrumentLabellingRequest.model_validate_json(labelling)
     except PydanticValidationError as exc:
-        raise ValidationError(f"Invalid labelling: {exc}") from exc
+        raise ValidationError(f"Invalid labeling: {exc}") from exc
     cmd = ImportInstrumentFileCommand(
         workspace_id=auth.workspace_id,
         run_id=run_id,

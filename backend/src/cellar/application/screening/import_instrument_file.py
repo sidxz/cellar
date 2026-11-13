@@ -243,7 +243,7 @@ class ImportInstrumentFile:
             (heading, keys)
             for heading, keys in (
                 ("not in the file", [k for k in named if k not in file_set]),
-                ("missing from the labelling", [k for k in file_keys if k not in named]),
+                ("missing from the labeling", [k for k in file_keys if k not in named]),
                 ("named more than once", [k for k, n in named.items() if n > 1]),
             )
             if keys
@@ -251,7 +251,7 @@ class ImportInstrumentFile:
         if problems:
             return Failure(
                 ValidationError(
-                    "The labelling does not match the file's positions: "
+                    "The labeling does not match the file's positions: "
                     + "; ".join(
                         f"{h}: {', '.join(name(*k) for k in keys)}" for h, keys in problems
                     )

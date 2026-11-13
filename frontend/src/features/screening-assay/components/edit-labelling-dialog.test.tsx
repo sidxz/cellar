@@ -128,7 +128,7 @@ beforeEach(() => {
 describe("EditLabellingDialog", () => {
   it("keeps Save disabled until something changes, then shows the count beside it", () => {
     renderDialog();
-    expect(screen.getByRole("heading", { name: "Edit labelling" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Edit labeling" })).toBeInTheDocument();
     expect(save()).toBeDisabled();
     expect(screen.queryByText(/positions? changed/)).not.toBeInTheDocument();
     fireEvent.change(label("Position 2"), { target: { value: "y" } });
@@ -159,9 +159,9 @@ describe("EditLabellingDialog", () => {
       compute_warning: "The calculation could not finish",
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(toast.showSuccess).toHaveBeenCalledWith("Labelling saved");
+    expect(toast.showSuccess).toHaveBeenCalledWith("Labeling saved");
     expect(toast.showWarning).toHaveBeenCalledWith(
-      "The labelling was saved, but the calculations were not rebuilt: The calculation could not finish. Press Recompute on the run to rebuild them.",
+      "The labeling was saved, but the calculations were not rebuilt: The calculation could not finish. Press Recompute on the run to rebuild them.",
     );
   });
 

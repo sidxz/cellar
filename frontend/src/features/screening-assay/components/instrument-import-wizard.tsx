@@ -128,7 +128,7 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
               onUpdate={w.updatePosition}
               onSetRole={w.setRole}
               onReplaceRows={w.replacePositions}
-              templateName="labelling-template.csv"
+              templateName="labeling-template.csv"
               showUse
               hints={hints}
               problem={labellingProblem(w.draft)}
@@ -231,7 +231,7 @@ function RecognisedFile({
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3 rounded-md border p-3 text-sm">
         <Badge variant="outline" className="border-green-500/30 bg-green-500/10 text-green-400">
-          Recognised
+          Recognized
         </Badge>
         <span className="font-mono">{file.name}</span>
         <span className="text-xs text-muted-foreground">{formatFileSize(file.size)}</span>

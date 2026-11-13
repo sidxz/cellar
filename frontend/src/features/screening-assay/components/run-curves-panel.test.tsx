@@ -120,7 +120,7 @@ describe("RunCurvesPanel", () => {
       ["Signal", "Signal A", "Signal B"],
       ["View", "Measured", "Derivative"],
       ["Reported values", "Lines on", "Off"],
-      ["Colour", "Highlight", /Distinct/],
+      ["Color", "Highlight", /Distinct/],
     ] as const) {
       const list = screen.getByRole("tablist", { name: group });
       expect(within(list).getByRole("tab", { name: current })).toHaveAttribute(
@@ -286,14 +286,14 @@ describe("RunCurvesPanel", () => {
     const { unmount } = render(
       <RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />,
     );
-    const button = screen.getByRole("button", { name: "Edit labelling" });
+    const button = screen.getByRole("button", { name: "Edit labeling" });
     expect(button).toBeEnabled();
     fireEvent.click(button);
     expect(screen.getByTestId("edit-labelling")).toBeInTheDocument();
     unmount();
 
     render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: true }} />);
-    const locked = screen.getByRole("button", { name: "Edit labelling" });
+    const locked = screen.getByRole("button", { name: "Edit labeling" });
     expect(locked).toBeDisabled();
     expect(locked).toHaveAttribute("title", "The run is locked.");
   });
@@ -301,11 +301,11 @@ describe("RunCurvesPanel", () => {
   it("does not offer Edit labelling to a viewer", () => {
     canEdit.value = false;
     render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />);
-    expect(screen.queryByRole("button", { name: "Edit labelling" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit labeling" })).not.toBeInTheDocument();
   });
 
   it("does not offer Edit labelling without a run", () => {
     render(<RunCurvesPanel runId="r1" />);
-    expect(screen.queryByRole("button", { name: "Edit labelling" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit labeling" })).not.toBeInTheDocument();
   });
 });

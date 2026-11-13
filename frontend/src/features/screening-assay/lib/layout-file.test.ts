@@ -328,7 +328,7 @@ describe("apply layout", () => {
       { rows: [], unrecognised_columns: ["Plate", "Well"], calculated_columns_ignored: false },
       OPEN,
     );
-    expect(out.notices).toEqual(["Columns not recognised and ignored: Plate, Well"]);
+    expect(out.notices).toEqual(["Columns not recognized and ignored: Plate, Well"]);
   });
 });
 

@@ -328,7 +328,7 @@ async def test_note_over_1000_characters_returns_422(
     labelling = labelling_from(preview)
     labelling["positions"][0]["note"] = "x" * 1001
     resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
-    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert resp.status_code == 422 and "Invalid labeling" in resp.text
     assert await _count(session_factory, "plates", s.run_id) == 0
 
 
@@ -509,10 +509,10 @@ async def test_malformed_labelling_returns_422(
 ) -> None:
     s = await _seed(session_factory, fake_auth.workspace_id)
     resp = await client.post(s.import_url, files=FILE, data={"labelling": "{not json"})
-    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert resp.status_code == 422 and "Invalid labeling" in resp.text
     negative = {"positions": [{"row": 1, "column": 1, "dose": -1}]}
     resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(negative)})
-    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert resp.status_code == 422 and "Invalid labeling" in resp.text
     assert await _count(session_factory, "plates", s.run_id) == 0
 
 
