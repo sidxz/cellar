@@ -404,6 +404,40 @@ async def test_mirror_creates_stage_from_recommended_criteria() -> None:
 
 
 @pytest.mark.asyncio
+async def test_mirrored_recommended_not_between_becomes_a_stage_criterion() -> None:
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="not_between", value=[-2.0, 2.0])],
+    )
+
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        resolver=FakeResolver(factory=_fake_measurement),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_name="Primary Hits",
+        ),
+        auth=auth,
+    )
+
+    assert isinstance(out, Success)
+    criterion = campaign.stages[0].criteria[0]
+    assert criterion.operator == "not_between"
+    assert criterion.value == [-2.0, 2.0]
+
+
+@pytest.mark.asyncio
 async def test_mirror_no_recommendations_stage_not_created() -> None:
     """stage_name given but the protocol has no recommended_hit_criteria ->
     stage_created is False and no stage is added."""

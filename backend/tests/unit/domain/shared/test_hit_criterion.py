@@ -170,3 +170,29 @@ class TestCompareCensored:
     def test_is_met_passes_qualifier_through(self) -> None:
         crit = HitCriterion(readout_name="IC50", operator="lt", value=60.0)
         assert crit.is_met(50.0, ValueQualifier.GT) is False
+
+
+@pytest.mark.parametrize(
+    "v,expected", [(-2.5, True), (-2.0, False), (0.0, False), (2.0, False), (2.1, True)]
+)
+def test_not_between_is_the_complement_of_between(v: float, expected: bool) -> None:
+    assert compare("not_between", v, [-2.0, 2.0]) is expected
+
+
+def test_not_between_censored_values() -> None:
+    assert compare("not_between", 3.0, [-2.0, 2.0], ValueQualifier.GT) is True
+    assert compare("not_between", 1.0, [-2.0, 2.0], ValueQualifier.GT) is False
+    assert compare("not_between", -3.0, [-2.0, 2.0], ValueQualifier.LT) is True
+    assert compare("not_between", 1.0, [-2.0, 2.0], ValueQualifier.LT) is False
+
+
+@pytest.mark.parametrize("bad", [[3, 1], [1], "x", [1, "a"]])
+def test_hit_criterion_not_between_validates_like_between(bad: object) -> None:
+    with pytest.raises(ValidationError):
+        HitCriterion(readout_name="dTm", operator="not_between", value=bad)  # type: ignore[arg-type]
+
+
+def test_hit_criterion_not_between_is_met() -> None:
+    c = HitCriterion(readout_name="dTm", operator="not_between", value=[-2.0, 2.0])
+    assert c.is_met(-3.0) is True
+    assert c.is_met(0.5) is False
