@@ -206,7 +206,7 @@ async def test_run_without_curves_returns_409(
 ) -> None:
     never_imported = await _seed(session_factory, fake_auth.workspace_id)
     resp = await client.post(_url(never_imported.run_id), json=_bare_body())
-    assert resp.status_code == 409 and "no measured curves" in resp.text
+    assert resp.status_code == 409 and "has no traces" in resp.text
 
 
 async def test_batch_from_another_workspace_is_404_and_nothing_written(

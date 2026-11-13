@@ -57,7 +57,7 @@ export function RunCurvesPanel({
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
   if (!data || !set) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">Could not load the curves.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">Could not load the traces.</p>
     );
   }
 
@@ -76,7 +76,7 @@ export function RunCurvesPanel({
       onWindowChange={setDerivativeWindow}
       pending={isPlaceholderData}
       failed={failed}
-      exportName={`run-curves-${shortId(data.run_id)}`}
+      exportName={`run-traces-${shortId(data.run_id)}`}
       selectorAction={
         run &&
         canEdit && (

@@ -47,10 +47,10 @@ describe("<AssayEvidence /> curves", () => {
   it("offers Curves in the popover when a target is given, and opens the dialog", async () => {
     const rowClick = renderEvidence(target);
     expect(await screen.findByText(/Reported readout/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Curves" }));
+    fireEvent.click(screen.getByRole("button", { name: "Traces" }));
     expect(
       await screen.findByRole("dialog", {
-        name: "All runs of Protocol 1 with curves for ABC-0000001",
+        name: "All runs of Protocol 1 with traces for ABC-0000001",
       }),
     ).toBeInTheDocument();
     expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["m1"] });
@@ -60,7 +60,7 @@ describe("<AssayEvidence /> curves", () => {
   it("offers no Curves without a target", async () => {
     renderEvidence(null);
     expect(await screen.findByText(/Reported readout/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Curves" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Traces" })).toBeNull();
   });
 
   it("offers no Curves outside a provider", async () => {
@@ -71,6 +71,6 @@ describe("<AssayEvidence /> curves", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: /show run history/i }));
     expect(await screen.findByText(/Reported readout/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Curves" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Traces" })).toBeNull();
   });
 });

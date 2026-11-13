@@ -268,7 +268,7 @@ function MapStep({
       <p className="text-sm text-muted-foreground">
         The instrument&apos;s own software calculated these values. Choose which of the
         protocol&apos;s readouts each one is stored in, or leave it out. Values left out are still
-        kept with the curve.
+        kept with the trace.
       </p>
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-sm">
@@ -362,7 +362,7 @@ function ReviewStep({
           value={s.withoutBatch}
           accent={s.withoutBatch > 0 ? "warn" : undefined}
         />
-        <StatCard label="curves to store" value={s.curves} />
+        <StatCard label="traces to store" value={s.curves} />
         <StatCard
           label={s.unused > 0 ? "readout values to write, at most" : "readout values to write"}
           value={s.values}
@@ -373,7 +373,7 @@ function ReviewStep({
           <b>
             {s.withoutBatch} position{s.withoutBatch === 1 ? " has" : "s have"} no batch.
           </b>{" "}
-          They keep their label and curves, but their values will not appear under a compound.
+          They keep their label and traces, but their values will not appear under a compound.
         </Notice>
       )}
       {preview.warnings.map((warning) => (
@@ -391,7 +391,7 @@ function ResultView({ result }: { result: InstrumentImportResult }) {
   return (
     <div className="space-y-3 py-2">
       <Notice tone="ok">
-        <b>Imported.</b> {result.positions_created} positions, {result.curves_created} curves,{" "}
+        <b>Imported.</b> {result.positions_created} positions, {result.curves_created} traces,{" "}
         {result.values_inserted} readout values.
         {result.file_attached &&
           (result.stored_file_name

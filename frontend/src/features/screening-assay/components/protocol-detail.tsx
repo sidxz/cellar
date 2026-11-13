@@ -351,7 +351,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               {hasCurves && (
                 <TabsTrigger value="curves">
                   <LineChart className="mr-1.5 h-4 w-4" />
-                  Curves
+                  Traces
                 </TabsTrigger>
               )}
               <TabsTrigger value="files">

@@ -38,7 +38,7 @@ export function ResetRunDataDialog({
     reset.mutate(undefined, {
       onSuccess: (out) => {
         const measured =
-          out.measured_curves_deleted > 0 ? `, ${out.measured_curves_deleted} measured curves` : "";
+          out.measured_curves_deleted > 0 ? `, ${out.measured_curves_deleted} traces` : "";
         showSuccess(
           holder
             ? `Reset run data — ${out.wells_deleted} positions, ${out.readouts_deleted} readouts, ${out.curves_deleted} dose-response curves${measured} removed.`
@@ -59,8 +59,8 @@ export function ResetRunDataDialog({
           <AlertDialogTitle>Reset run data?</AlertDialogTitle>
           <AlertDialogDescription>
             {holder
-              ? `This will delete the holder (${holder.holder_label}) and its positions, readout data, dose-response curves${hasMeasuredCurves ? ", measured curves" : ""} and QC metrics for this run.`
-              : `This will delete all plates (${plateCount}), wells, readout data, dose-response curves,${hasMeasuredCurves ? " measured curves," : ""} and QC metrics for this run.`}
+              ? `This will delete the holder (${holder.holder_label}) and its positions, readout data, dose-response curves${hasMeasuredCurves ? ", traces" : ""} and QC metrics for this run.`
+              : `This will delete all plates (${plateCount}), wells, readout data, dose-response curves,${hasMeasuredCurves ? " traces," : ""} and QC metrics for this run.`}
             <br />
             <br />
             The run itself, its metadata, and any uploaded files will be kept. This cannot be

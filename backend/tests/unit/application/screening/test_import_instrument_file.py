@@ -590,7 +590,7 @@ async def test_used_position_without_a_curve_on_a_channel_is_a_warning():
 
     label = position_label(HolderKind.CASSETTE, "A", 2)
     assert result.warnings == (
-        f"{label} has no Signal curve in the file; nothing is stored for it on that channel",
+        f"{label} has no Signal trace in the file; nothing is stored for it on that channel",
     )
     assert (result.positions_created, result.curves_created) == (2, 3)
 

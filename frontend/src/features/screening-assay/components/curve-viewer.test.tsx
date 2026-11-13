@@ -481,7 +481,7 @@ describe("CurveViewer", () => {
     expect(screen.queryByText(/Not shown/)).not.toBeInTheDocument();
     rerender(<Harness callbacks={cb} set={twoRuns} pending={false} />);
     expect(
-      screen.getByText("Not shown, no Signal A curve: Position 3 · Delta"),
+      screen.getByText("Not shown, no Signal A trace: Position 3 · Delta"),
     ).toBeInTheDocument();
   });
 
@@ -503,11 +503,11 @@ describe("CurveViewer", () => {
     const cb = callbacks();
     const { rerender } = render(<Harness callbacks={cb} set={loading} pending />);
     fireEvent.click(slot(0, 2));
-    expect(screen.getByText("Loading curves…")).toBeInTheDocument();
+    expect(screen.getByText("Loading traces…")).toBeInTheDocument();
     expect(screen.queryByText(/have no curves/)).not.toBeInTheDocument();
     rerender(<Harness callbacks={cb} set={loading} pending={false} />);
     expect(
-      screen.getByText("The selected positions have no curves for this signal."),
+      screen.getByText("The selected positions have no traces for this signal."),
     ).toBeInTheDocument();
   });
 

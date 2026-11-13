@@ -54,7 +54,7 @@ def reported_series(export: InstrumentExport) -> tuple[list[ReportedSeries], lis
             warnings.setdefault(
                 (v.channel, v.label),
                 f"Reported value '{v.label}' names channel '{v.channel}', "
-                "which the file has no curves for; skipped",
+                "which the file has no traces for; skipped",
             )
             continue
         key = (v.channel, v.kind, v.ordinal)
@@ -72,7 +72,7 @@ def missing_curve_warnings(export: InstrumentExport, keys: Iterable[tuple[int, i
     have = {(c.row, c.column, c.channel) for c in export.curves}
     return [
         f"{position_label(export.holder.kind, row_letters(row), column)} has no "
-        f"{channel.label} curve in the file; nothing is stored for it on that channel"
+        f"{channel.label} trace in the file; nothing is stored for it on that channel"
         for row, column in keys
         for channel in export.channels
         if (row, column, channel.key) not in have

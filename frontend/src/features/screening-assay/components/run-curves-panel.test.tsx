@@ -96,7 +96,7 @@ beforeEach(() => {
 describe("RunCurvesPanel", () => {
   it("shows an empty state when nothing is selected", () => {
     render(<RunCurvesPanel runId="r1" />);
-    expect(screen.getByText("Select positions above to draw their curves")).toBeInTheDocument();
+    expect(screen.getByText("Select positions above to draw their traces")).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.getByText("No positions selected.")).toBeInTheDocument();
   });
@@ -192,7 +192,7 @@ describe("RunCurvesPanel", () => {
       format: "png",
       width: 1200,
       height: 600,
-      filename: "run-curves-r1",
+      filename: "run-traces-r1",
     });
     expect(figure.layout.paper_bgcolor).toBe("#ffffff");
   });
@@ -275,11 +275,11 @@ describe("RunCurvesPanel", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
     fireEvent.change(screen.getByLabelText("Window"), { target: { value: "5" } });
     fireEvent.keyDown(screen.getByLabelText("Window"), { key: "Enter" });
-    expect(screen.getByText("Could not load the curves.")).toBeInTheDocument();
+    expect(screen.getByText("Could not load the traces.")).toBeInTheDocument();
     expect(screen.getByLabelText("Window")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Measured" })).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Measured" }));
-    expect(screen.queryByText("Could not load the curves.")).not.toBeInTheDocument();
+    expect(screen.queryByText("Could not load the traces.")).not.toBeInTheDocument();
   });
 
   it("offers Edit labelling beside the selector, disabled with the reason on a locked run", () => {

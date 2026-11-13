@@ -153,10 +153,10 @@ describe("compareCurvesChoice", () => {
     expect(compareCurvesChoice(["r1", "r2", "r3"], new Set(["r1", "r3"]))).toEqual({
       runIds: ["r1", "r3"],
       disabledReason: null,
-      note: "2 of the 3 selected runs have curves",
+      note: "2 of the 3 selected runs have traces",
     });
     expect(compareCurvesChoice(["r1", "r2"], new Set(["r2"])).note).toBe(
-      "1 of the 2 selected runs has curves",
+      "1 of the 2 selected runs has traces",
     );
     expect(compareCurvesChoice(["r1", "r2"], new Set(["r1", "r2"]))).toEqual({
       runIds: ["r1", "r2"],
@@ -168,11 +168,11 @@ describe("compareCurvesChoice", () => {
   it("gives a reason when no selected run has curves, and above 8", () => {
     expect(compareCurvesChoice([], new Set(["r1"]))).toEqual({
       runIds: [],
-      disabledReason: "Select runs that have curves",
+      disabledReason: "Select runs that have traces",
       note: null,
     });
     expect(compareCurvesChoice(["r2"], new Set(["r1"])).disabledReason).toBe(
-      "Select runs that have curves",
+      "Select runs that have traces",
     );
     const nine = Array.from({ length: 9 }, (_, i) => `r${i}`);
     expect(compareCurvesChoice(nine, new Set(nine)).disabledReason).toBe("At most 8 runs at once");

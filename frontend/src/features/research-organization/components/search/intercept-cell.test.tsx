@@ -287,10 +287,10 @@ it("offers Curves in its evidence popover when given a target", async () => {
     </CompoundCurvesProvider>,
   );
   fireEvent.click(screen.getByRole("button", { name: /show run history/i }));
-  fireEvent.click(await screen.findByRole("button", { name: "Curves" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Traces" }));
   expect(
     await screen.findByRole("dialog", {
-      name: "All runs of Protocol 1 with curves for ABC-0000001",
+      name: "All runs of Protocol 1 with traces for ABC-0000001",
     }),
   ).toBeInTheDocument();
 });

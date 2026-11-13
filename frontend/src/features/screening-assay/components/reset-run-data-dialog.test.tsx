@@ -49,11 +49,11 @@ describe("ResetRunDataDialog", () => {
     confirm(0);
     const text = screen.getByRole("alertdialog").textContent ?? "";
     expect(text).toContain("the holder (Holder of 3 positions) and its positions");
-    expect(text).toContain("measured curves");
+    expect(text).toContain("traces");
     expect(text).not.toMatch(/plates|wells/);
     const toast = showSuccess.mock.calls[0][0] as string;
     expect(toast).toBe(
-      "Reset run data — 3 positions, 2 readouts, 0 dose-response curves, 12 measured curves removed.",
+      "Reset run data — 3 positions, 2 readouts, 0 dose-response curves, 12 traces removed.",
     );
   });
 
@@ -75,8 +75,8 @@ describe("ResetRunDataDialog", () => {
     state.out = out(4);
     confirm(1);
     expect(screen.getByRole("alertdialog").textContent).toContain(
-      "dose-response curves, measured curves, and QC metrics",
+      "dose-response curves, traces, and QC metrics",
     );
-    expect(showSuccess.mock.calls[0][0]).toContain("0 curves, 4 measured curves removed.");
+    expect(showSuccess.mock.calls[0][0]).toContain("0 curves, 4 traces removed.");
   });
 });

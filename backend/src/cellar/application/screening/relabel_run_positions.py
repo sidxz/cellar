@@ -32,7 +32,7 @@ from cellar.domain.screening_assay.run import PositionEdit
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 
 NO_MEASURED_CURVES = (
-    "This run has no measured curves. Positions can be edited here only on a run "
+    "This run has no traces. Positions can be edited here only on a run "
     "imported from an instrument file."
 )
 

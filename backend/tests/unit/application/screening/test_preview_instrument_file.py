@@ -426,5 +426,5 @@ async def test_position_without_a_curve_on_a_channel_is_a_warning():
 
     label = position_label(HolderKind.CASSETTE, "A", 3)
     assert preview.warnings == (
-        f"{label} has no Ratio curve in the file; nothing is stored for it on that channel",
+        f"{label} has no Ratio trace in the file; nothing is stored for it on that channel",
     )

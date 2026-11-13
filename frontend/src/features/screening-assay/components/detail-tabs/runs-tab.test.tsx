@@ -79,22 +79,22 @@ describe("RunsTab Compare curves", () => {
     render(<RunsTab protocol={protocol(true)} protocolId="p1" onCompareCurves={onCompare} />);
     expect(gridProps.at(-1)).toMatchObject({ enableMultiSelect: true });
 
-    const button = screen.getByRole("button", { name: "Compare curves" });
+    const button = screen.getByRole("button", { name: "Compare traces" });
     expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Select runs that have curves");
+    expect(button).toHaveAttribute("title", "Select runs that have traces");
     expect(screen.getByText("0 selected")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "tick three" }));
     expect(screen.getByText("3 selected")).toBeInTheDocument();
-    expect(button).toHaveTextContent(/^Compare curves$/);
+    expect(button).toHaveTextContent(/^Compare traces$/);
     expect(button).not.toBeDisabled();
-    expect(screen.getByText("2 of the 3 selected runs have curves")).toBeInTheDocument();
+    expect(screen.getByText("2 of the 3 selected runs have traces")).toBeInTheDocument();
 
     fireEvent.click(button);
     expect(onCompare).toHaveBeenCalledWith(["r1", "r3"]);
 
     fireEvent.click(screen.getByRole("button", { name: "tick r2" }));
-    expect(screen.getByRole("button", { name: "Compare curves" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Compare traces" })).toBeDisabled();
   });
 
   it("keeps a row click opening the run", () => {
@@ -107,7 +107,7 @@ describe("RunsTab Compare curves", () => {
     "offers no Compare curves on a protocol without measured curves (%s)",
     (flag) => {
       render(<RunsTab protocol={protocol(flag)} protocolId="p1" onCompareCurves={vi.fn()} />);
-      expect(screen.queryByRole("button", { name: "Compare curves" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Compare traces" })).not.toBeInTheDocument();
       expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
       // Nothing asked of the curves endpoint.
       expect(positionCalls.every((c) => c[2] === false)).toBe(true);

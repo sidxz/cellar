@@ -154,11 +154,11 @@ it("Curves on a protocol opens the curves of all compared compounds, once per pr
     </CompoundCurvesProvider>,
   );
   // Target has two endpoint rows and curves; Counter has none.
-  const buttons = screen.getAllByRole("button", { name: "Curves" });
+  const buttons = screen.getAllByRole("button", { name: "Traces" });
   expect(buttons).toHaveLength(1);
   fireEvent.click(buttons[0]);
   expect(
-    screen.getByRole("dialog", { name: "All runs of Target with curves for A and B" }),
+    screen.getByRole("dialog", { name: "All runs of Target with traces for A and B" }),
   ).toBeInTheDocument();
   expect(curvesProps.at(-1)?.protocolId).toBe("Target");
   expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["A", "B"] });

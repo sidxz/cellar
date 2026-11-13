@@ -571,20 +571,20 @@ function CurveViewerBody({
           )}
         >
           {failed
-            ? "Could not load the curves."
+            ? "Could not load the traces."
             : tooMany
               ? `More than ${MAX_DRAWN} positions are selected. Narrow the selection to draw them.`
               : selectedIds.length === 0
-                ? "Select positions above to draw their curves"
+                ? "Select positions above to draw their traces"
                 : pending
-                  ? "Loading curves…"
-                  : "The selected positions have no curves for this signal."}
+                  ? "Loading traces…"
+                  : "The selected positions have no traces for this signal."}
         </div>
       )}
 
       {notShown.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Not shown, no {currentChannel(set)?.label ?? set.channel} curve:{" "}
+          Not shown, no {currentChannel(set)?.label ?? set.channel} trace:{" "}
           {notShown.map(positionName).join(", ")}
         </p>
       )}
@@ -641,7 +641,7 @@ function CurveViewerBody({
               </span>
               <span>
                 <Swatch line colour={colours.focus} />
-                The curve under the pointer
+                The trace under the pointer
               </span>
               {colourMode === "distinct" && (
                 <span>More than {COLOUR_SLOT_COUNT} selected: distinct colours are off</span>

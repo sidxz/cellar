@@ -27,7 +27,7 @@ function listNames(names: readonly string[]): string {
 
 export function compoundCurvesTitle(target: CompoundCurvesTarget): string {
   const names = listNames(target.molecules.map((m) => m.name));
-  return `All runs of ${target.protocol.name} with curves for ${names}`;
+  return `All runs of ${target.protocol.name} with traces for ${names}`;
 }
 
 const OpenContext = createContext<((target: CompoundCurvesTarget) => void) | null>(null);
@@ -59,7 +59,7 @@ export function CompoundCurvesButton({
         open(target);
       }}
     >
-      Curves
+      Traces
     </Button>
   );
 }
@@ -85,7 +85,7 @@ function CompoundCurvesContent({ target }: { target: CompoundCurvesTarget }) {
       <DialogHeader>
         <DialogTitle>{compoundCurvesTitle(target)}</DialogTitle>
         <DialogDescription>
-          A live view of every run with curves, except rejected runs. It can include runs that this
+          A live view of every run with traces, except rejected runs. It can include runs that this
           search&apos;s run scope and aggregation rule did not count.
         </DialogDescription>
       </DialogHeader>
@@ -102,10 +102,10 @@ function CompoundCurvesContent({ target }: { target: CompoundCurvesTarget }) {
               groupBy: target.molecules.length === 1 ? "batch" : "compound",
             },
           }}
-          exportName={`compound-curves-${shortId(target.protocol.id)}`}
+          exportName={`compound-traces-${shortId(target.protocol.id)}`}
           empty={
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No curves for {names} in runs that are not rejected.
+              No traces for {names} in runs that are not rejected.
             </p>
           }
         />

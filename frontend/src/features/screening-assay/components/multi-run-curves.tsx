@@ -107,7 +107,7 @@ export function MultiRunCurves({
     <div className="space-y-3">
       {fetched.failed && (
         <div className="flex items-center gap-2 text-sm text-destructive">
-          Could not load some of the curves.
+          Could not load some of the traces.
           <Button type="button" variant="outline" size="sm" onClick={fetched.retry}>
             Retry
           </Button>

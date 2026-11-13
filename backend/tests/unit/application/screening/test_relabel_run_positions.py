@@ -199,7 +199,7 @@ async def test_run_without_measured_curves_is_conflict():
     h = Harness()
     h.curve_repo.list_channels.return_value = []
     failure = (await h([E(h.w2, label="y")])).failure()
-    assert isinstance(failure, ConflictError) and "no measured curves" in str(failure)
+    assert isinstance(failure, ConflictError) and "has no traces" in str(failure)
     h.curve_repo.list_channels.assert_awaited_once_with(h.ws, h.run.id)
     h.assert_nothing_written()
 

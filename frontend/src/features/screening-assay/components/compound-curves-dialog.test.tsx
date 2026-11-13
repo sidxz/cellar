@@ -48,24 +48,24 @@ beforeEach(() => {
 describe("compound curves dialog", () => {
   it("states what it shows, for one compound and for several", () => {
     expect(compoundCurvesTitle({ protocol: P, molecules: [A] })).toBe(
-      "All runs of Protocol 1 with curves for Compound A",
+      "All runs of Protocol 1 with traces for Compound A",
     );
     expect(compoundCurvesTitle({ protocol: P, molecules: [A, B] })).toBe(
-      "All runs of Protocol 1 with curves for Compound A and Compound B",
+      "All runs of Protocol 1 with traces for Compound A and Compound B",
     );
     expect(compoundCurvesTitle({ protocol: P, molecules: [A, B, C] })).toBe(
-      "All runs of Protocol 1 with curves for Compound A, Compound B and Compound C",
+      "All runs of Protocol 1 with traces for Compound A, Compound B and Compound C",
     );
   });
 
   it("says in one line that runs outside the search's scope can be included", () => {
     openFor({ protocol: P, molecules: [A] });
     expect(
-      screen.getByRole("dialog", { name: "All runs of Protocol 1 with curves for Compound A" }),
+      screen.getByRole("dialog", { name: "All runs of Protocol 1 with traces for Compound A" }),
     ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "A live view of every run with curves, except rejected runs. It can include runs that this search's run scope and aggregation rule did not count.",
+        "A live view of every run with traces, except rejected runs. It can include runs that this search's run scope and aggregation rule did not count.",
       ),
     ).toBeInTheDocument();
   });
@@ -96,7 +96,7 @@ describe("compound curves dialog", () => {
     const props = openFor({ protocol: P, molecules: [A] });
     render(<div>{props.empty as ReactNode}</div>);
     expect(
-      screen.getByText("No curves for Compound A in runs that are not rejected."),
+      screen.getByText("No traces for Compound A in runs that are not rejected."),
     ).toBeInTheDocument();
   });
 

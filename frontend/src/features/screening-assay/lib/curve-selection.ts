@@ -141,13 +141,13 @@ export function compareCurvesChoice(
   const runIds = selectedRunIds.filter((id) => runIdsWithCurves.has(id));
   const disabledReason =
     runIds.length === 0
-      ? "Select runs that have curves"
+      ? "Select runs that have traces"
       : runIds.length > MAX_CURVE_RUNS
         ? "At most 8 runs at once"
         : null;
   const note =
     runIds.length > 0 && runIds.length < selectedRunIds.length
-      ? `${runIds.length} of the ${selectedRunIds.length} selected runs ${runIds.length === 1 ? "has" : "have"} curves`
+      ? `${runIds.length} of the ${selectedRunIds.length} selected runs ${runIds.length === 1 ? "has" : "have"} traces`
       : null;
   return { runIds, disabledReason, note };
 }

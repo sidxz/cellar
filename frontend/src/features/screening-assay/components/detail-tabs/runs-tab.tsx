@@ -270,7 +270,7 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
                 title={choice.disabledReason ?? undefined}
                 onClick={() => onCompareCurves(choice.runIds)}
               >
-                Compare curves
+                Compare traces
               </Button>
             </>
           )}
