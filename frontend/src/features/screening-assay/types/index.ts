@@ -8,6 +8,7 @@ import type {
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
   CreateProtocolRequest,
+  CurvePositionsResponse,
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
   HitCriterionDTO,
@@ -18,6 +19,7 @@ import type {
   LatestRunResponse as LatestRunResponseModel,
   LayoutFileResponse,
   LayoutRowModel,
+  MeasuredCurvesBatchResponse,
   PlateData as PlateDataModel,
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
@@ -798,5 +800,7 @@ export type PositionValues = PositionValuesModel;
 export type PositionEdit = PositionEditRequest;
 export type RelabelResult = RelabelPositionsResponse;
 export type InstrumentFileFormats = InstrumentFileFormatsResponse;
+export type CurvePositions = CurvePositionsResponse;
+export type MeasuredCurvesBatch = MeasuredCurvesBatchResponse;
 export type LayoutFile = LayoutFileResponse;
 export type LayoutFileRow = LayoutRowModel;

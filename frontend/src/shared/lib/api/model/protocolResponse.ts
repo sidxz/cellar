@@ -21,6 +21,7 @@ import type { ProtocolResponseLockedBy } from './protocolResponseLockedBy';
 import type { ProtocolResponseLockReason } from './protocolResponseLockReason';
 import type { ProtocolResponseLockedAt } from './protocolResponseLockedAt';
 import type { ProtocolResponseCanDelete } from './protocolResponseCanDelete';
+import type { ProtocolResponseHasMeasuredCurves } from './protocolResponseHasMeasuredCurves';
 import type { ProtocolAliasResponse } from './protocolAliasResponse';
 import type { ProtocolReferenceResponse } from './protocolReferenceResponse';
 
@@ -53,6 +54,7 @@ export interface ProtocolResponse {
   lock_reason?: ProtocolResponseLockReason;
   locked_at?: ProtocolResponseLockedAt;
   can_delete?: ProtocolResponseCanDelete;
+  has_measured_curves: ProtocolResponseHasMeasuredCurves;
   aliases?: ProtocolAliasResponse[];
   references?: ProtocolReferenceResponse[];
 }

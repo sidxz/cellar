@@ -5,23 +5,31 @@
  * OpenAPI spec version: 0.1.0
  */
 import {
+  useMutation,
   useQuery
 } from '@tanstack/react-query';
 import type {
   DataTag,
   DefinedInitialDataOptions,
   DefinedUseQueryResult,
+  MutationFunction,
   QueryClient,
   QueryFunction,
   QueryKey,
   UndefinedInitialDataOptions,
+  UseMutationOptions,
+  UseMutationResult,
   UseQueryOptions,
   UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
+  CurvePositionsResponse,
+  FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams,
   GetRunCurvesApiV1RunsRunIdCurvesGetParams,
   HTTPValidationError,
+  MeasuredCurvesBatchRequest,
+  MeasuredCurvesBatchResponse,
   RunCurvesResponse
 } from '.././model';
 
@@ -134,3 +142,176 @@ export function useGetRunCurvesApiV1RunsRunIdCurvesGet<TData = Awaited<ReturnTyp
 
 
 
+/**
+ * The protocol's runs with curves, and the positions with curves of the runs asked for
+(at most 8), of the compounds asked for (at most 50), or both; each contributing run's
+reference positions are added. Without a filter, ``positions`` is empty. No curve is
+returned: fetch them with ``POST /measured-curves:batch``.
+ * @summary Find Curve Positions
+ */
+export const findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet = (
+    protocolId: string,
+    params?: FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<CurvePositionsResponse>(
+      {url: `/api/v1/protocols/${protocolId}/curve-positions`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+  
+
+
+
+export const getFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetQueryKey = (protocolId?: string,
+    params?: FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams,) => {
+    return [
+    `/api/v1/protocols/${protocolId}/curve-positions`, ...(params ? [params]: [])
+    ] as const;
+    }
+
+    
+export const getFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetQueryOptions = <TData = Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError = HTTPValidationError>(protocolId: string,
+    params?: FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetQueryKey(protocolId,params);
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>> = ({ signal }) => findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet(protocolId,params, signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, enabled: !!(protocolId), ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetQueryResult = NonNullable<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>>
+export type FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetQueryError = HTTPValidationError
+
+
+export function useFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet<TData = Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    params: undefined |  FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>,
+          TError,
+          Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet<TData = Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    params?: FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>,
+          TError,
+          Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet<TData = Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    params?: FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Find Curve Positions
+ */
+
+export function useFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet<TData = Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError = HTTPValidationError>(
+ protocolId: string,
+    params?: FindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof findCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getFindCurvePositionsApiV1ProtocolsProtocolIdCurvePositionsGetQueryOptions(protocolId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
+ * The curves of one channel for up to 100 positions, in the order asked for. A position
+without a curve on the channel, or not in the workspace, is absent. ``view=derivative``
+states the one window used (default 5% of the widest x range of these curves); send it
+back with later requests so every curve of a selection uses the same window.
+ * @summary Get Measured Curves Batch
+ */
+export const getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost = (
+    measuredCurvesBatchRequest: MeasuredCurvesBatchRequest,
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<MeasuredCurvesBatchResponse>(
+      {url: `/api/v1/measured-curves:batch`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: measuredCurvesBatchRequest, signal
+    },
+      );
+    }
+  
+
+
+export const getGetMeasuredCurvesBatchApiV1MeasuredCurvesBatchPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost>>, TError,{data: MeasuredCurvesBatchRequest}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost>>, TError,{data: MeasuredCurvesBatchRequest}, TContext> => {
+
+const mutationKey = ['getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost>>, {data: MeasuredCurvesBatchRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost(data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GetMeasuredCurvesBatchApiV1MeasuredCurvesBatchPostMutationResult = NonNullable<Awaited<ReturnType<typeof getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost>>>
+    export type GetMeasuredCurvesBatchApiV1MeasuredCurvesBatchPostMutationBody = MeasuredCurvesBatchRequest
+    export type GetMeasuredCurvesBatchApiV1MeasuredCurvesBatchPostMutationError = HTTPValidationError
+
+    /**
+ * @summary Get Measured Curves Batch
+ */
+export const useGetMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost>>, TError,{data: MeasuredCurvesBatchRequest}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof getMeasuredCurvesBatchApiV1MeasuredCurvesBatchPost>>,
+        TError,
+        {data: MeasuredCurvesBatchRequest},
+        TContext
+      > => {
+
+      const mutationOptions = getGetMeasuredCurvesBatchApiV1MeasuredCurvesBatchPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    
