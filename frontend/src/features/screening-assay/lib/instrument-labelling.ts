@@ -5,23 +5,12 @@
 
 import type { InstrumentLabelling } from "../hooks/use-instrument-import";
 import type { InstrumentPreview, Run, WellType } from "../types";
+import { type LabellingRow, parseDose, rowsProblem, setRoleForRows } from "./labelling-rows";
 
-const MAX_LABEL = 200;
-const MAX_NOTE = 1000;
-
-export interface PositionDraft {
+/** A labelling row placed on the holder; its key is {@link positionKey} of it. */
+export interface PositionDraft extends LabellingRow {
   row: number;
   column: number;
-  positionLabel: string;
-  used: boolean;
-  label: string;
-  note: string;
-  wellType: WellType;
-  moleculeId: string | null;
-  moleculeName: string | null;
-  batchId: string | null;
-  /** Text while editing; parsed in {@link buildLabelling}. */
-  dose: string;
 }
 
 export interface LabellingDraft {
@@ -47,6 +36,7 @@ export function positionKey(p: { row: number; column: number }): string {
 export function draftFromPreview(preview: InstrumentPreview): LabellingDraft {
   return {
     positions: preview.positions.map((p) => ({
+      key: positionKey(p),
       row: p.row,
       column: p.column,
       positionLabel: p.position_label,
@@ -71,10 +61,7 @@ export function setRoleForPositions(
   keys: ReadonlySet<string>,
   wellType: WellType,
 ): LabellingDraft {
-  return {
-    ...draft,
-    positions: draft.positions.map((p) => (keys.has(positionKey(p)) ? { ...p, wellType } : p)),
-  };
+  return { ...draft, positions: setRoleForRows(draft.positions, keys, wellType) };
 }
 
 /** The protocol's readouts for one reported series, with why any cannot take it. */
@@ -96,30 +83,10 @@ export function selectableReadouts(
   });
 }
 
-/** A blank dose is null; anything else must be a non-negative number. */
-function parseDose(text: string): number | null | undefined {
-  const t = text.trim();
-  if (t === "") return null;
-  const n = Number(t);
-  return Number.isFinite(n) && n >= 0 ? n : undefined;
-}
-
 /** Why the draft cannot be imported yet, naming the first used position that holds an
  *  invalid value, or null when it can. */
 export function labellingProblem(draft: LabellingDraft): string | null {
-  for (const p of draft.positions) {
-    if (!p.used) continue;
-    if (parseDose(p.dose) === undefined) {
-      return `${p.positionLabel}: the concentration must be a number, 0 or more.`;
-    }
-    if (p.label.length > MAX_LABEL) {
-      return `${p.positionLabel}: the label is longer than ${MAX_LABEL} characters.`;
-    }
-    if (p.note.length > MAX_NOTE) {
-      return `${p.positionLabel}: the note is longer than ${MAX_NOTE} characters.`;
-    }
-  }
-  return null;
+  return rowsProblem(draft.positions);
 }
 
 /** The `labelling` payload, or null while a used position holds an invalid value. */
