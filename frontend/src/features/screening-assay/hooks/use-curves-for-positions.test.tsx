@@ -159,4 +159,21 @@ describe("useCurvesForPositions", () => {
     expect(result.current.failed).toBe(false);
     expect(posts.map((p) => p.data.well_ids)).toEqual([["w1"], ["w2"], ["w2"]]);
   });
+
+  it("stops reporting a failure once nothing it failed to fetch is wanted", async () => {
+    const { result, rerender } = render({ wellIds: ids(1), params: measured });
+    await waitFor(() => expect(result.current.curves.size).toBe(1));
+    answer = async () => {
+      throw new Error("API error: 500");
+    };
+    rerender({ wellIds: ids(2), params: measured });
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    // Back to what was fetched: nothing is missing.
+    rerender({ wellIds: ids(1), params: measured });
+    expect(result.current.failed).toBe(false);
+    rerender({ wellIds: ids(2), params: measured });
+    await waitFor(() => expect(result.current.failed).toBe(true));
+    rerender({ wellIds: [], params: measured });
+    expect(result.current.failed).toBe(false);
+  });
 });

@@ -271,6 +271,15 @@ describe("CurveViewer colour by group", () => {
     expect(new Set(["a1", "a2", "b2"].map(colourOfTrace)).size).toBe(1);
   });
 
+  it("lets the grouping be changed while By group is unavailable for the current one", async () => {
+    render(<Harness callbacks={callbacks()} set={compoundSet(9, (i) => i)} />);
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getByRole("tab", { name: "By group" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("combobox", { name: "Group by" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Role" }));
+    expect(screen.getByRole("tab", { name: "By group" })).not.toBeDisabled();
+  });
+
   it("starts in the colour mode given by initialColour", () => {
     const { unmount } = render(
       <Harness callbacks={callbacks()} initialColour={{ mode: "distinct" }} />,
@@ -474,6 +483,34 @@ describe("CurveViewer", () => {
     expect(traces[1].line.color).toBe(MEASURED_CURVE_COLORS.dark.series[0]);
     // Not selected, so not a table row.
     expect(within(screen.getByRole("table")).queryByText("Ref B")).not.toBeInTheDocument();
+  });
+
+  it("says the curves are loading, not that there are none, until the first answer", () => {
+    const loading: CurveSet = { ...twoRuns, curves: new Map() };
+    const cb = callbacks();
+    const { rerender } = render(<Harness callbacks={cb} set={loading} pending />);
+    fireEvent.click(slot(0, 2));
+    expect(screen.getByText("Loading curves…")).toBeInTheDocument();
+    expect(screen.queryByText(/have no curves/)).not.toBeInTheDocument();
+    rerender(<Harness callbacks={cb} set={loading} pending={false} />);
+    expect(
+      screen.getByText("The selected positions have no curves for this signal."),
+    ).toBeInTheDocument();
+  });
+
+  it("counts only the selected positions that are loaded", () => {
+    // Positions of a run no longer shown stay in the selection the parent holds.
+    const gone = Array.from({ length: 9 }, (_, i) => `gone${i}`);
+    render(
+      <Harness
+        callbacks={callbacks()}
+        set={twoRuns}
+        selection={{ selected: new Set(["a2", ...gone]), anchor: null }}
+      />,
+    );
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Distinct/ })).not.toBeDisabled();
+    expect(screen.queryByText("More than 8 selected")).not.toBeInTheDocument();
   });
 
   it("asks to narrow the selection above 400 and draws nothing", () => {

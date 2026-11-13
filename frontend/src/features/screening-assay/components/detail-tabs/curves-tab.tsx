@@ -8,7 +8,7 @@ import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { shortId } from "@/shared/lib/utils";
 import { useMemo } from "react";
 import { useCurvePositions } from "../../hooks/use-curve-positions";
-import { type CurveRunInfo, runHeading, runsSharingADate, sameDateTag } from "../../lib/curve-plot";
+import { type CurveRunInfo, runHeading, sameDateTags } from "../../lib/curve-plot";
 import { MAX_CURVE_RUNS, toggleRun } from "../../lib/curve-selection";
 import { RUN_STATUS_LABELS, type RunStatus } from "../../types";
 import { MultiRunCurves } from "../multi-run-curves";
@@ -41,7 +41,7 @@ export function CurvesTab({
       })),
     [data],
   );
-  const sameDate = useMemo(() => runsSharingADate(runs), [runs]);
+  const tags = useMemo(() => sameDateTags(runs), [runs]);
   const scientistOf = (userId: string) =>
     members?.find((m) => m.user_id === userId)?.name ?? shortId(userId);
 
@@ -76,7 +76,7 @@ export function CurvesTab({
         <ul aria-label="Runs with curves" className="max-h-64 divide-y overflow-y-auto">
           {runs.map((run) => {
             const scientist = scientistOf(run.operator);
-            const shared = sameDate.has(run.runId);
+            const tag = tags.get(run.runId);
             const count = countOf.get(run.runId) ?? 0;
             const disabled = full && !chosen.has(run.runId);
             return (
@@ -89,7 +89,7 @@ export function CurvesTab({
                     id={`curve-run-${run.runId}`}
                     checked={chosen.has(run.runId)}
                     disabled={disabled}
-                    aria-label={runHeading(run, { scientist, sameDate: shared })}
+                    aria-label={runHeading(run, { scientist, tag })}
                     onCheckedChange={() => onRunIdsChange(toggleRun(runIds, run.runId))}
                   />
                   <span className="font-mono">{run.runDate}</span>
@@ -101,9 +101,7 @@ export function CurvesTab({
                   <span className="text-muted-foreground">
                     {count} {count === 1 ? "position" : "positions"}
                   </span>
-                  {shared && (
-                    <span className="truncate text-muted-foreground">{sameDateTag(run)}</span>
-                  )}
+                  {tag && <span className="truncate text-muted-foreground">{tag}</span>}
                 </label>
               </li>
             );

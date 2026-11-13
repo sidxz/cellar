@@ -107,29 +107,34 @@ export function curveSetFromPositions(
   };
 }
 
-/** A run group's heading. Two runs on one date are told apart by the start of
- *  their notes, or by a short id when a run has none. */
+/** A run group's heading; `tag` (from `sameDateTags`) tells it from a run on the same date. */
 export function runHeading(
   run: CurveRunInfo,
-  opts: { scientist: string; sameDate: boolean },
+  opts: { scientist: string; tag: string | undefined },
 ): string {
   const status = RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status;
   const heading = `${run.runDate} · ${opts.scientist} · ${status}`;
-  return opts.sameDate ? `${heading} · ${sameDateTag(run)}` : heading;
+  return opts.tag ? `${heading} · ${opts.tag}` : heading;
 }
 
-/** What tells a run apart from another on its date: the start of its notes,
- *  or a short id when it has none. */
-export function sameDateTag(run: Pick<CurveRunInfo, "runId" | "notes">): string {
-  const notes = run.notes?.trim();
-  return notes ? notes.slice(0, 40) : `Run ${shortId(run.runId)}`;
-}
-
-/** The ids of the runs that share their date with another run. */
-export function runsSharingADate(runs: readonly CurveRunInfo[]): ReadonlySet<string> {
-  const count = new Map<string, number>();
-  for (const r of runs) count.set(r.runDate, (count.get(r.runDate) ?? 0) + 1);
-  return new Set(runs.filter((r) => (count.get(r.runDate) ?? 0) > 1).map((r) => r.runId));
+/** For each run that shares its date with another, what tells it apart: the
+ *  start of its notes, or a short id when it has none or another run on that
+ *  date starts its notes the same way. Runs alone on their date have no tag. */
+export function sameDateTags(runs: readonly CurveRunInfo[]): ReadonlyMap<string, string> {
+  const byDate = new Map<string, CurveRunInfo[]>();
+  for (const r of runs) byDate.set(r.runDate, [...(byDate.get(r.runDate) ?? []), r]);
+  const start = (r: CurveRunInfo) => r.notes?.trim().slice(0, 40) || null;
+  const tags = new Map<string, string>();
+  for (const same of byDate.values()) {
+    if (same.length < 2) continue;
+    const starts = same.map(start);
+    for (const r of same) {
+      const s = start(r);
+      const unique = s !== null && starts.filter((t) => t === s).length === 1;
+      tags.set(r.runId, unique ? s : `Run ${shortId(r.runId)}`);
+    }
+  }
+  return tags;
 }
 
 /** Group order, then holder order. */

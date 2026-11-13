@@ -1,3 +1,4 @@
+import { shortId } from "@/shared/lib/utils";
 import { describe, expect, it } from "vitest";
 
 import { CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
@@ -14,7 +15,7 @@ import {
   positionsNotShown,
   reportedColumns,
   runHeading,
-  runsSharingADate,
+  sameDateTags,
   tableRows,
 } from "./curve-plot";
 
@@ -347,19 +348,35 @@ describe("run groups", () => {
   const runC = { ...runA, runId: "0a1b2c3d-0000-4000-8000-000000000003", runDate: "2026-11-04" };
 
   it("tells two runs on the same date apart by the start of their notes, or by a short id without notes", () => {
-    expect(runHeading(runA, { scientist: "A. Person", sameDate: false })).toBe(
+    const tags = sameDateTags([
+      runA,
+      runB,
+      runC,
+      { ...runA, runId: "0a1b2c3d-0000-4000-8000-00000000000d", notes: null },
+    ]);
+    expect(tags.get(runA.runId)).toBe(runA.notes.slice(0, 40));
+    expect(tags.get(runB.runId)).toBe("first try");
+    expect(tags.get("0a1b2c3d-0000-4000-8000-00000000000d")).toMatch(/^Run [0-9a-f]+$/);
+    // Alone on its date: no tag.
+    expect(tags.has(runC.runId)).toBe(false);
+    expect(runHeading(runA, { scientist: "A. Person", tag: undefined })).toBe(
       "2026-11-03 · A. Person · Completed",
     );
-    expect(runHeading(runA, { scientist: "A. Person", sameDate: true })).toContain(
-      "second attempt, new buffer",
-    );
-    expect(runHeading(runA, { scientist: "A. Person", sameDate: true })).toBe(
+    expect(runHeading(runA, { scientist: "A. Person", tag: tags.get(runA.runId) })).toBe(
       `2026-11-03 · A. Person · Completed · ${runA.notes.slice(0, 40)}`,
     );
-    expect(
-      runHeading({ ...runA, notes: null }, { scientist: "A. Person", sameDate: true }),
-    ).toMatch(/Run [0-9a-f]+$/);
-    expect([...runsSharingADate([runA, runB, runC])]).toEqual([runA.runId, runB.runId]);
+  });
+
+  it("falls back to the short id when two runs on one date share the start of their notes", () => {
+    const twin = {
+      ...runA,
+      runId: "0a1b2c3d-0000-4000-8000-000000000009",
+      notes: `${runA.notes} (b)`,
+    };
+    const tags = sameDateTags([runA, twin, runB]);
+    expect(tags.get(runA.runId)).toBe(`Run ${shortId(runA.runId)}`);
+    expect(tags.get(twin.runId)).toBe(`Run ${shortId(twin.runId)}`);
+    expect(tags.get(runB.runId)).toBe("first try");
   });
 
   it("lists drawn positions that have no curve in the set", () => {

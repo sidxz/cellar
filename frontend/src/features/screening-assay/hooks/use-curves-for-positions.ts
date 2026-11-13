@@ -127,7 +127,10 @@ export function useCurvesForPositions(
       // Nothing to wait for: do not keep showing the earlier curves.
       if (wanted.current.length === 0) setShown(NOTHING);
     }
-    if (gen.current && wanted.current.length > 0) void pump();
+    const g = gen.current;
+    // A failure is about curves still missing; with none missing it is over.
+    if (!g || wanted.current.every((id) => g.fetched.has(id))) setFailed(false);
+    if (g && wanted.current.length > 0) void pump();
   }, [genKey, idsKey, channel, view, askedWindow, pump]);
 
   const retry = useCallback(() => void pump(), [pump]);

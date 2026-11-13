@@ -5,6 +5,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useCurvePositions } from "../hooks/use-curve-positions";
 import { useCurvesForPositions } from "../hooks/use-curves-for-positions";
+import { apiReason } from "../hooks/use-instrument-import-wizard";
 import type { CurveView } from "../hooks/use-run-curves";
 import {
   type ColourMode,
@@ -16,14 +17,6 @@ import { EMPTY_SELECTION, type SelectionState, drawnPositionIds } from "../lib/c
 import { CurveViewer } from "./curve-viewer";
 
 const NO_CURVES: ReadonlyMap<string, CurveSeriesData> = new Map();
-
-/** The API's own wording for a refused request, when it gave one. */
-function apiMessage(error: unknown): string {
-  const body = (error as { body?: { detail?: unknown; message?: unknown } } | null)?.body;
-  if (typeof body?.detail === "string") return body.detail;
-  if (typeof body?.message === "string") return body.message;
-  return "Could not load the positions.";
-}
 
 /** The curve viewer over positions of several runs of one protocol: finds the
  *  positions, then fetches curves for the drawn ones only. */
@@ -105,7 +98,7 @@ export function MultiRunCurves({
   );
 
   if (error && !found) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">{apiMessage(error)}</p>;
+    return <p className="py-8 text-center text-sm text-muted-foreground">{apiReason(error)}</p>;
   }
   if (isLoading || !set) return <Skeleton className="h-[400px] w-full" />;
   if (set.groups.length === 0) return <>{empty}</>;

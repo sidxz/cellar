@@ -47,7 +47,7 @@ import {
   positionsNotShown,
   reportedColumns,
   runHeading,
-  runsSharingADate,
+  sameDateTags,
   tableRows,
 } from "../lib/curve-plot";
 import {
@@ -230,8 +230,8 @@ function CurveViewerBody({
     () => new Set(ordered.filter((p) => !matchesFilter(p, filter)).map((p) => p.well_id)),
     [ordered, filter],
   );
-  const sameDate = useMemo(
-    () => runsSharingADate(set.groups.flatMap((g) => (g.run ? [g.run] : []))),
+  const tags = useMemo(
+    () => sameDateTags(set.groups.flatMap((g) => (g.run ? [g.run] : []))),
     [set.groups],
   );
   const hasRuns = set.groups.some((g) => g.run);
@@ -249,14 +249,14 @@ function CurveViewerBody({
                   g.run.runId,
                   runHeading(g.run, {
                     scientist: scientistOf(g.run.operator),
-                    sameDate: sameDate.has(g.run.runId),
+                    tag: tags.get(g.run.runId),
                   }),
                 ] as const,
               ]
             : [],
         ),
       ),
-    [set.groups, scientistOf, sameDate],
+    [set.groups, scientistOf, tags],
   );
 
   const drawnIds = useMemo(
@@ -288,7 +288,8 @@ function CurveViewerBody({
   }, [set.groups, selection.selected, groupBy, headings]);
   const groupSlots = useColourSlots(groupKeys);
 
-  const distinctAvailable = selection.selected.size <= COLOUR_SLOT_COUNT;
+  // Counted over the loaded positions: the parent may still hold ids of a run no longer shown.
+  const distinctAvailable = selectedIds.length <= COLOUR_SLOT_COUNT;
   const groupAvailable = groupKeys.length <= COLOUR_SLOT_COUNT;
   const effectiveMode: ColourMode =
     colourMode === "distinct" && distinctAvailable
@@ -363,7 +364,7 @@ function CurveViewerBody({
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
   const doseUnit = DOSE_UNIT_LABELS[set.doseUnit as DoseUnit] ?? set.doseUnit;
   const notShown = pending || tooMany || failed ? [] : positionsNotShown(set, drawnIds);
-  const addedReferences = drawnIds.length > selection.selected.size;
+  const addedReferences = drawnIds.length > selectedIds.length;
 
   return (
     <div className="space-y-4">
@@ -386,7 +387,7 @@ function CurveViewerBody({
 
       {set.groups.length > 1 && (
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{selection.selected.size} selected</span>
+          <span className="text-sm font-medium">{selectedIds.length} selected</span>
           <Button
             type="button"
             variant="ghost"
@@ -500,7 +501,8 @@ function CurveViewerBody({
               ]}
               onChange={setColourMode}
             />
-            {colourMode === "group" && (
+            {/* Also while By group is unavailable: another grouping may have few enough groups. */}
+            {(colourMode === "group" || !groupAvailable) && (
               <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
                 <SelectTrigger size="sm" aria-label="Group by">
                   <SelectValue />
@@ -571,9 +573,11 @@ function CurveViewerBody({
             ? "Could not load the curves."
             : tooMany
               ? `More than ${MAX_DRAWN} positions are selected. Narrow the selection to draw them.`
-              : selection.selected.size === 0
+              : selectedIds.length === 0
                 ? "Select positions above to draw their curves"
-                : "The selected positions have no curves for this signal."}
+                : pending
+                  ? "Loading curves…"
+                  : "The selected positions have no curves for this signal."}
         </div>
       )}
 
@@ -675,7 +679,7 @@ function CurveViewerBody({
                   colSpan={(hasRuns ? 8 : 7) + columns.length}
                   className="text-muted-foreground"
                 >
-                  {selection.selected.size > 0 && filter.trim()
+                  {selectedIds.length > 0 && filter.trim()
                     ? "No selected position matches the filter."
                     : "No positions selected."}
                 </TableCell>
@@ -694,7 +698,7 @@ function CurveViewerBody({
                       {r.run && (
                         <Link href={runHref(r.run.runId)} className="hover:underline">
                           {/* A run that shares its date reads as its heading does. */}
-                          {sameDate.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
+                          {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
                         </Link>
                       )}
                     </TableCell>
