@@ -11,6 +11,7 @@ import type { PlateMapWellModelMoleculeName } from './plateMapWellModelMoleculeN
 import type { PlateMapWellModelSmiles } from './plateMapWellModelSmiles';
 import type { PlateMapWellModelDose } from './plateMapWellModelDose';
 import type { PlateMapWellModelLabel } from './plateMapWellModelLabel';
+import type { PlateMapWellModelNote } from './plateMapWellModelNote';
 
 export interface PlateMapWellModel {
   well_id: string;
@@ -27,4 +28,5 @@ export interface PlateMapWellModel {
   dose?: PlateMapWellModelDose;
   position_label: string;
   label: PlateMapWellModelLabel;
+  note: PlateMapWellModelNote;
 }

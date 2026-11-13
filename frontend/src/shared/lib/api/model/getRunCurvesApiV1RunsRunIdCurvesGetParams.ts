@@ -4,7 +4,10 @@
  * Cellar
  * OpenAPI spec version: 0.1.0
  */
+import type { GetRunCurvesApiV1RunsRunIdCurvesGetView } from './getRunCurvesApiV1RunsRunIdCurvesGetView';
 
 export type GetRunCurvesApiV1RunsRunIdCurvesGetParams = {
 channel?: string | null;
+view?: GetRunCurvesApiV1RunsRunIdCurvesGetView;
+window?: number | null;
 };

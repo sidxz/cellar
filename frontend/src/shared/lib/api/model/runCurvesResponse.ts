@@ -9,6 +9,7 @@ import type { PlateMapWellModel } from './plateMapWellModel';
 import type { CurveChannelModel } from './curveChannelModel';
 import type { RunCurvesResponseChannel } from './runCurvesResponseChannel';
 import type { CurveSeriesModel } from './curveSeriesModel';
+import type { RunCurvesResponseWindow } from './runCurvesResponseWindow';
 
 export interface RunCurvesResponse {
   run_id: string;
@@ -18,4 +19,6 @@ export interface RunCurvesResponse {
   channels: CurveChannelModel[];
   channel: RunCurvesResponseChannel;
   curves: CurveSeriesModel[];
+  view: string;
+  window: RunCurvesResponseWindow;
 }
