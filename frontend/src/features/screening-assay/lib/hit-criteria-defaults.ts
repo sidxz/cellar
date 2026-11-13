@@ -22,7 +22,7 @@ import type { HitCriterion, InterceptKey } from "../types";
 
 export interface ChannelHitDefaults {
   /** "" means "(no threshold)". */
-  hit_operator: "" | "lt" | "lte" | "gt" | "gte" | "between";
+  hit_operator: "" | "lt" | "lte" | "gt" | "gte" | "between" | "not_between";
   hit_value: string;
   hit_value_low: string;
   hit_value_high: string;
@@ -43,6 +43,19 @@ const EMPTY: ChannelHitDefaults = {
   allowed_curve_classes: [],
   intercept_key: null,
 };
+
+/** One criterion as channel defaults: a single bound, or two for `not_between`. */
+function single(c: HitCriterion, allowed_curve_classes: string[]): ChannelHitDefaults {
+  const [low, high] = c.operator === "not_between" ? (c.value as number[]) : ["", ""];
+  return {
+    hit_operator: c.operator as ChannelHitDefaults["hit_operator"],
+    hit_value: c.operator === "not_between" ? "" : String(c.value as number),
+    hit_value_low: String(low),
+    hit_value_high: String(high),
+    allowed_curve_classes,
+    intercept_key: normalizeKey(c.intercept_key),
+  };
+}
 
 const LOWERS = new Set(["gt", "gte"]);
 const UPPERS = new Set(["lt", "lte"]);
@@ -89,6 +102,7 @@ export function deriveChannelHitDefaults(
   // the full set so legacy callers behave unchanged.
   const numeric = recommended.filter((c) => {
     if (c.readout_name !== readout.name) return false;
+    if (c.operator === "not_between") return Array.isArray(c.value) && c.value.length === 2;
     if (typeof c.value !== "number") return false;
     if (interceptKey !== undefined && !sameInterceptKey(c.intercept_key, interceptKey)) {
       return false;
@@ -110,17 +124,7 @@ export function deriveChannelHitDefaults(
     return { ...EMPTY, allowed_curve_classes };
   }
 
-  if (numeric.length === 1) {
-    const c = numeric[0];
-    return {
-      hit_operator: c.operator as ChannelHitDefaults["hit_operator"],
-      hit_value: String(c.value as number),
-      hit_value_low: "",
-      hit_value_high: "",
-      allowed_curve_classes,
-      intercept_key: normalizeKey(c.intercept_key),
-    };
-  }
+  if (numeric.length === 1) return single(numeric[0], allowed_curve_classes);
 
   // Two-or-more numerics: try to pair a lower bound with an upper bound
   // and present as `between`. The pair must target the same intercept —
@@ -144,13 +148,5 @@ export function deriveChannelHitDefaults(
     };
   }
 
-  const first = numeric[0];
-  return {
-    hit_operator: first.operator as ChannelHitDefaults["hit_operator"],
-    hit_value: String(first.value as number),
-    hit_value_low: "",
-    hit_value_high: "",
-    allowed_curve_classes,
-    intercept_key: normalizeKey(first.intercept_key),
-  };
+  return single(numeric[0], allowed_curve_classes);
 }

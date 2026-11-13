@@ -57,6 +57,7 @@ import { formatDate } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { showSuccess } from "@/shared/lib/toast";
 
+import { DeltaTmHint } from "@/features/screening-assay/components/delta-tm-hint";
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import type { ProtocolSummary } from "@/features/screening-assay/hooks/use-protocols";
 import { channelUnit } from "@/features/screening-assay/lib/channel-unit";
@@ -67,6 +68,7 @@ import {
   type InterceptKey,
   type InterceptSpec,
   READOUT_NORMALIZATION_LABELS,
+  type ReadoutDefinition,
 } from "@/features/screening-assay/types";
 import {
   useAddResultsFromRunsApiV1CampaignsCampaignIdAddFromRunsPost,
@@ -82,13 +84,16 @@ import { ROOT_SENTINEL } from "./stage-popover";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
+/** Operators that take a low and a high bound. */
+const TWO_BOUND = new Set(["between", "not_between"]);
+
 interface ChannelConfigUI {
   protocol_id: string;
   readout_definition_id: string;
   label: string;
   source_kind: "readout_data" | "dose_response_curve";
   selection_rule: "latest_approved_run" | "mean_across_runs" | "geometric_mean";
-  /** "lt" | "lte" | "gt" | "gte" | "between" | "" (no threshold) */
+  /** "lt" | "lte" | "gt" | "gte" | "between" | "not_between" | "" (no threshold) */
   hit_operator: string;
   /** For lt/gt/etc: a single number string. For "between": empty (use hit_value_low/high). */
   hit_value: string;
@@ -355,7 +360,7 @@ export function AddFromRunsDialog({
           value: number | number[];
           intercept_key: InterceptKey | null;
         } | null = null;
-        if (c.hit_operator === "between") {
+        if (c.hit_operator === "between" || c.hit_operator === "not_between") {
           const low = c.hit_value_low === "" ? null : Number(c.hit_value_low);
           const high = c.hit_value_high === "" ? null : Number(c.hit_value_high);
           if (
@@ -367,7 +372,7 @@ export function AddFromRunsDialog({
           ) {
             hitThreshold = {
               readout_name: c.label,
-              operator: "between",
+              operator: c.hit_operator,
               value: [low, high],
               intercept_key: interceptKey,
             };
@@ -607,7 +612,12 @@ interface ConfigureStepProps {
    *  threshold input + caption can show the unit chemists expect. */
   protocolDetail?: {
     dose_unit?: string;
-    readout_definitions: Array<{ id: string; name: string; unit?: string | null }>;
+    readout_definitions: Array<{
+      id: string;
+      name: string;
+      unit?: string | null;
+      melt_config?: ReadoutDefinition["melt_config"];
+    }>;
   };
   onChannelConfigChange: (idx: number, patch: Partial<ChannelConfigUI>) => void;
   filterMode: "any" | "all";
@@ -777,12 +787,12 @@ function ConfigureStep(p: ConfigureStepProps) {
                           return `Hit if ${c.label} ${sym} ${v}${unit ? ` ${unit}` : ""}`;
                         };
                         const betweenCaption =
-                          c.hit_operator === "between" &&
+                          TWO_BOUND.has(c.hit_operator) &&
                           c.hit_value_low.trim() !== "" &&
                           c.hit_value_high.trim() !== "" &&
                           !Number.isNaN(Number(c.hit_value_low)) &&
                           !Number.isNaN(Number(c.hit_value_high))
-                            ? `Hit if ${c.label} is between ${c.hit_value_low} and ${c.hit_value_high}${unit ? ` ${unit}` : ""}`
+                            ? `Hit if ${c.label} is ${c.hit_operator === "not_between" ? "outside" : "between"} ${c.hit_value_low} and ${c.hit_value_high}${unit ? ` ${unit}` : ""}`
                             : null;
                         return (
                           <>
@@ -806,11 +816,12 @@ function ConfigureStep(p: ConfigureStepProps) {
                                     <SelectItem value="gt">&gt; greater than</SelectItem>
                                     <SelectItem value="gte">≥ at least</SelectItem>
                                     <SelectItem value="between">between (range)</SelectItem>
+                                    <SelectItem value="not_between">outside</SelectItem>
                                   </SelectContent>
                                 </Select>
                               </div>
 
-                              {c.hit_operator === "between" ? (
+                              {TWO_BOUND.has(c.hit_operator) ? (
                                 <div className="flex items-end gap-1 flex-1 min-w-0">
                                   <Input
                                     value={c.hit_value_low}
@@ -862,13 +873,14 @@ function ConfigureStep(p: ConfigureStepProps) {
                                 </div>
                               ) : null}
                             </div>
-                            {(c.hit_operator === "between"
+                            <DeltaTmHint readout={rd} />
+                            {(TWO_BOUND.has(c.hit_operator)
                               ? betweenCaption
                               : c.hit_operator
                                 ? captionForValue(c.hit_value)
                                 : null) && (
                               <p className="text-[10px] text-muted-foreground italic">
-                                {c.hit_operator === "between"
+                                {TWO_BOUND.has(c.hit_operator)
                                   ? betweenCaption
                                   : captionForValue(c.hit_value)}
                               </p>

@@ -36,6 +36,7 @@ import type {
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
+  ReadoutDefinitionResponse,
   RefitDoseResponseCurveRequest,
   RelabelPositionsResponse,
   RunCountsResponse as RunCountsResponseModel,
@@ -352,6 +353,9 @@ export interface ReadoutDefinition {
    *  condition variables. */
   pick_list_values: PickListValue[] | null;
   dose_response_config: DoseResponseConfig | null;
+  /** Melting-analysis window (keys window, measure, channel_key, low, high); `measure ===
+   *  "delta_tm"` marks a ΔTm readout. Typed off the DTO, optional for hand-built fixtures. */
+  melt_config?: ReadoutDefinitionResponse["melt_config"];
 }
 
 export interface PickListValue {
@@ -708,7 +712,7 @@ export interface InterceptKey {
  *    generated `InterceptKeyDTO` widens `kind` to `string`.
  */
 export type HitCriterion = Omit<HitCriterionDTO, "operator" | "intercept_key"> & {
-  operator: "gt" | "lt" | "gte" | "lte" | "in";
+  operator: "gt" | "lt" | "gte" | "lte" | "in" | "not_between";
   intercept_key?: InterceptKey | null;
 };
 

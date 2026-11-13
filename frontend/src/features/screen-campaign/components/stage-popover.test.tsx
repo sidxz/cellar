@@ -153,3 +153,30 @@ describe("StagePopoverForm — stage kind", () => {
     );
   });
 });
+
+describe("StagePopoverForm — outside operator", () => {
+  it("sends not_between with both bounds", async () => {
+    const outsideStage = {
+      ...existing,
+      criteria: [{ channel_id: "ch-1", operator: "not_between", value: [-2, 2] }],
+    } as unknown as CampaignStageResponse;
+    render(
+      <StagePopoverForm
+        campaignId="c1"
+        campaign={campaign}
+        existing={outsideStage}
+        onClose={vi.fn()}
+      />,
+      { wrapper },
+    );
+    const [low, high] = screen.getAllByRole("spinbutton");
+    fireEvent.change(low, { target: { value: "-3" } });
+    fireEvent.change(high, { target: { value: "4" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
+    expect(updateMutate.mock.calls[0][0].data.criteria).toEqual([
+      { channel_id: "ch-1", operator: "not_between", value: [-3, 4] },
+    ]);
+  });
+});
