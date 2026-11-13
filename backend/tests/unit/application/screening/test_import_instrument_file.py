@@ -33,7 +33,7 @@ from cellar.domain.screening_assay.events import RunInstrumentFileImported
 from cellar.domain.screening_assay.holder import position_label
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.run import Plate, Run
-from cellar.domain.shared.enums import ConcentrationUnit, WellType
+from cellar.domain.shared.enums import ConcentrationUnit, PlateFormat, WellType
 from cellar.domain.shared.errors import (
     AuthorizationError,
     ConflictError,
@@ -564,3 +564,18 @@ async def test_used_position_without_a_curve_on_a_channel_is_a_warning():
         f"{label} has no Signal curve in the file; nothing is stored for it on that channel",
     )
     assert (result.positions_created, result.curves_created) == (2, 3)
+
+
+async def test_holder_that_is_not_a_plate_clears_the_run_plate_format():
+    h = Harness()
+    h.run.plate_format = PlateFormat.F96
+    (await h()).unwrap()
+    assert h.run.plate_format is None
+
+
+async def test_plate_holder_keeps_the_run_plate_format():
+    export = _export()
+    h = Harness(export=replace(export, holder=HolderLayout(HolderKind.PLATE, 1, 3)))
+    h.run.plate_format = PlateFormat.F96
+    (await h()).unwrap()
+    assert h.run.plate_format is PlateFormat.F96

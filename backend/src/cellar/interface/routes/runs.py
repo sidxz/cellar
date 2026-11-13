@@ -45,6 +45,7 @@ from cellar.application.screening.set_run_hit_criteria import (
 )
 from cellar.application.screening.update_run import UpdateRunCommand
 from cellar.application.shared.sentinel import UNSET
+from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.run import Run
 from cellar.interface.dependencies import (
     AddRunCollectionDep,
@@ -159,7 +160,8 @@ class RunResponse(BaseModel):
             lock_reason=r.lock_reason,
             qc_metrics=r.qc_metrics,
             notes=r.notes,
-            plate_count=len(r.plates),
+            # Plates only: a run whose holder is another kind (a cassette) shows 0.
+            plate_count=sum(p.holder_kind is HolderKind.PLATE for p in r.plates),
             plate_barcodes=plate_barcodes,
             molecule_count=molecule_count,
             performed_at_org_id=r.performed_at_org_id,

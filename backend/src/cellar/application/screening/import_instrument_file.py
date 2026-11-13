@@ -42,6 +42,7 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.inventory.repository import BatchRepository
+from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import position_label, row_letters
 from cellar.domain.screening_assay.measured_curve import MeasuredCurve, ReportedPoint
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
@@ -171,6 +172,8 @@ class ImportInstrumentFile:
 
             writes.plate.wells = writes.wells  # type: ignore[attr-defined]
             run.add_plate(writes.plate)
+            if writes.plate.holder_kind is not HolderKind.PLATE:
+                run.clear_plate_format()
             run.record_instrument_import(
                 reader=export.reader,
                 file_name=input.filename,

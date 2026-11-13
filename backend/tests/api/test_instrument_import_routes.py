@@ -19,6 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import holder_label, position_label
 from cellar.infrastructure.instrument_readers import default_readers
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_stats_reader import (
+    SQLAlchemyProtocolStatsReader,
+)
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests.fakes.fake_auth import FakeAuth
 from tests.fixtures.dose_response_curves import _insert_org, _insert_protocol, _insert_run
@@ -376,6 +379,69 @@ async def test_plate_imports_are_refused_on_a_run_whose_holder_is_not_a_plate(
     assert (
         await _count(session_factory, "readout_data", s.run_id, where="is_computed = false") == 3
     )
+
+
+async def test_run_lists_count_plates_only(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    await _import(client, s)
+    plate_run_id = uuid.uuid4()
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        protocol_id = (
+            await uow.session.execute(
+                sa.text("SELECT protocol_id FROM runs WHERE id = :id"), {"id": s.run_id}
+            )
+        ).scalar_one()
+    # The protocol overview's latest run (the stats router is not mounted in the test app).
+    stats = await SQLAlchemyProtocolStatsReader(session_factory).get_stats_data(
+        fake_auth.workspace_id, protocol_id
+    )
+    assert stats.latest_run is not None and stats.latest_run.plate_count == 0
+
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        await _insert_run(uow, plate_run_id, protocol_id, fake_auth.workspace_id)
+        await uow.session.execute(
+            sa.text("INSERT INTO plates (id, run_id, plate_number) VALUES (:id, :run, 1)"),
+            {"id": uuid.uuid4(), "run": plate_run_id},
+        )
+        await uow.commit()
+
+    runs = (await client.get(f"/api/v1/protocols/{protocol_id}/runs")).json()
+    assert {r["id"]: r["plate_count"] for r in runs} == {str(s.run_id): 0, str(plate_run_id): 1}
+    assert (await client.get(f"/api/v1/runs/{s.run_id}")).json()["plate_count"] == 0
+
+
+async def test_run_without_a_plate_format_takes_a_holder_and_a_plate_format_is_cleared(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    async with session_factory() as session:
+        protocol_id = (
+            await session.execute(
+                sa.text("SELECT protocol_id FROM runs WHERE id = :id"), {"id": s.run_id}
+            )
+        ).scalar_one()
+        await session.execute(
+            sa.text("UPDATE runs SET plate_format = '96' WHERE id = :id"), {"id": s.run_id}
+        )
+        await session.commit()
+    assert (await client.get(f"/api/v1/runs/{s.run_id}")).json()["plate_format"] == "96"
+
+    await _import(client, s)
+    assert (await client.get(f"/api/v1/runs/{s.run_id}")).json()["plate_format"] is None
+
+    created = await client.post(
+        "/api/v1/runs", json={"protocol_id": str(protocol_id), "run_date": "2026-11-12"}
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["plate_format"] is None
 
 
 async def test_run_update_after_import_keeps_curves(

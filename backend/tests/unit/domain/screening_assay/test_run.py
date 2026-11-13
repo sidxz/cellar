@@ -1081,6 +1081,24 @@ def test_record_instrument_import_blocked_when_locked():
         )
 
 
+def test_clear_plate_format():
+    run = _fresh_run()
+    run.plate_format = PlateFormat.F96
+    run.clear_plate_format()
+    assert run.plate_format is None
+
+
+def test_clear_plate_format_blocked_when_locked():
+    run = _fresh_run()
+    run.plate_format = PlateFormat.F96
+    run.start()
+    run.complete(plate_count=0, data_point_count=0)
+    run.lock(locked_by=uuid.uuid4(), reason="final")
+    with pytest.raises(ConflictError):
+        run.clear_plate_format()
+    assert run.plate_format == PlateFormat.F96
+
+
 def test_reset_data_event_carries_measured_curve_count():
     run = _fresh_run()
     run.reset_data(readouts_deleted=1, curves_deleted=0, measured_curves_deleted=96)

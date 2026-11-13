@@ -440,6 +440,15 @@ class Run(AggregateRoot):
         plate.registered_plate_id = registered_plate_id
         self.updated_at = datetime.now(UTC)
 
+    def clear_plate_format(self) -> None:
+        """Forget the run's plate format, for a run whose holder is not a plate.
+
+        Blocked when the run is locked.
+        """
+        self._guard_not_locked()
+        self.plate_format = None
+        self.updated_at = datetime.now(UTC)
+
     def record_instrument_import(
         self,
         *,
