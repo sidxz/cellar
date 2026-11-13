@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 
 import { CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import type { RunCurves } from "../types";
-import { buildCurveFigure, focusIdFromHover, reportedColumns, tableRows } from "./curve-plot";
+import {
+  type CurveSet,
+  buildCurveFigure,
+  curveSetFromRun,
+  focusIdFromHover,
+  orderedPositions,
+  reportedColumns,
+  tableRows,
+} from "./curve-plot";
 
 function position(id: string, column: number, wellType: string, label: string | null) {
   return {
@@ -63,8 +71,8 @@ const dark = MEASURED_CURVE_COLORS.dark;
 const light = MEASURED_CURVE_COLORS.light;
 
 const base = {
-  data: curves,
-  selected: new Set(["w1", "w3"]),
+  set: curveSetFromRun(curves),
+  drawn: new Set(["w1", "w3"]),
   showReported: false,
   canvas: "screen" as const,
   colourMode: "highlight" as const,
@@ -121,14 +129,14 @@ describe("buildCurveFigure", () => {
   });
 
   it("draws reported values as vertical lines only when their unit is the x unit", () => {
-    const { layout } = buildCurveFigure({ ...base, selected: new Set(["w1"]), showReported: true });
+    const { layout } = buildCurveFigure({ ...base, drawn: new Set(["w1"]), showReported: true });
     const shapes = layout.shapes as { x0: number; line: { color: string } }[];
     expect(shapes.map((s) => s.x0)).toEqual([21.5, 22.5]);
     expect(shapes[0].line.color).toBe(dark.reference);
   });
 
   it("draws no lines when the switch is off", () => {
-    const { layout } = buildCurveFigure({ ...base, selected: new Set(["w1"]) });
+    const { layout } = buildCurveFigure({ ...base, drawn: new Set(["w1"]) });
     expect(layout.shapes).toEqual([]);
   });
 
@@ -145,13 +153,13 @@ describe("buildCurveFigure", () => {
       ...curves,
       channels: [{ ...curves.channels[0], x_label: "Temperature" }],
     };
-    const { layout } = buildCurveFigure({ ...base, data: named }) as unknown as {
+    const { layout } = buildCurveFigure({ ...base, set: curveSetFromRun(named) }) as unknown as {
       layout: { xaxis: { title: { text: string } } };
     };
     expect(layout.xaxis.title.text).toBe("Temperature [°C]");
     const derivative = buildCurveFigure({
       ...base,
-      data: { ...named, view: "derivative", window: 1.5 },
+      set: curveSetFromRun({ ...named, view: "derivative", window: 1.5 }),
     }) as unknown as { layout: { yaxis: { title: { text: string } } } };
     expect(derivative.layout.yaxis.title.text).toBe("d(Signal A)/d(°C)");
   });
@@ -159,7 +167,7 @@ describe("buildCurveFigure", () => {
   it("titles the y axis as a derivative in the derivative view", () => {
     const { layout } = buildCurveFigure({
       ...base,
-      data: { ...curves, view: "derivative", window: 1.5 },
+      set: curveSetFromRun({ ...curves, view: "derivative", window: 1.5 }),
     }) as unknown as { layout: { yaxis: { title: { text: string } } } };
     expect(layout.yaxis.title.text).toBe("d(Signal A)/d(°C)");
   });
@@ -183,9 +191,52 @@ describe("buildCurveFigure", () => {
 
   it("keeps uirevision constant so a redraw keeps the zoom", () => {
     const a = buildCurveFigure(base).layout.uirevision;
-    const b = buildCurveFigure({ ...base, focusedId: "w1", selected: new Set(["w1"]) }).layout
+    const b = buildCurveFigure({ ...base, focusedId: "w1", drawn: new Set(["w1"]) }).layout
       .uirevision;
     expect(a).toBe(b);
+  });
+});
+
+describe("curve sets", () => {
+  it("turns a run's curves into a set with one group and a curve per position", () => {
+    const set = curveSetFromRun(curves);
+    expect(set.groups).toHaveLength(1);
+    expect(set.groups[0].run).toBeNull();
+    expect(set.curves.get("w1")?.x).toEqual(curves.curves[0].x);
+  });
+
+  it("draws positions of two groups in group order", () => {
+    const one = curveSetFromRun(curves);
+    const run = (runId: string) => ({
+      runId,
+      runDate: "2026-11-03",
+      operator: "u1",
+      status: "completed",
+      notes: null,
+    });
+    const other = curves.positions.map((p) => ({ ...p, well_id: `x${p.column}` }));
+    const set: CurveSet = {
+      ...one,
+      groups: [
+        { key: "r2", run: run("r2"), holder: curves.holder, positions: other },
+        { ...one.groups[0], run: run("r1") },
+      ],
+      curves: new Map([
+        ...one.curves,
+        ...curves.curves.map((c) => [`x${c.well_id.slice(1)}`, c] as const),
+      ]),
+    };
+    expect(orderedPositions(set).map((p) => p.well_id)).toEqual([
+      "x1",
+      "x2",
+      "x3",
+      "w1",
+      "w2",
+      "w3",
+    ]);
+    const { data } = buildCurveFigure({ ...base, set, drawn: new Set(["w1", "x3"]) });
+    expect(data.map((t) => t.meta)).toEqual(["x3", "w1"]);
+    expect(tableRows(set, new Set(["w2", "x1"])).map((r) => r.wellId)).toEqual(["x1", "w2"]);
   });
 });
 
@@ -198,7 +249,7 @@ describe("focusIdFromHover", () => {
 
 describe("table helpers", () => {
   it("builds one table column per distinct reported value", () => {
-    expect(reportedColumns(curves)).toEqual([
+    expect(reportedColumns(curveSetFromRun(curves))).toEqual([
       { key: "k1:1", label: "Point 1", unit: "°C" },
       { key: "k1:2", label: "Point 2", unit: "°C" },
       { key: "k2:1", label: "Share", unit: "%" },
@@ -206,7 +257,7 @@ describe("table helpers", () => {
   });
 
   it("lists the selected positions in holder order with their reported values", () => {
-    const rows = tableRows(curves, new Set(["w3", "w2"]));
+    const rows = tableRows(curveSetFromRun(curves), new Set(["w3", "w2"]));
     expect(rows.map((r) => r.wellId)).toEqual(["w2", "w3"]);
     expect(rows[0]).toMatchObject({
       positionLabel: "Position 2",

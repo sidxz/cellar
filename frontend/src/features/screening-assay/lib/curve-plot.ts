@@ -1,12 +1,64 @@
-/** The Curves tab's figure and table, built from the API's run curves. Pure.
- *  It draws what the API sends and knows nothing about what a reported value
- *  means. */
+/** The curve viewer's figure and table, built from a set of positions and
+ *  their curves that may come from several runs. Pure. It draws what the API
+ *  sends and knows nothing about what a reported value means. */
 
 import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import type { CurveView } from "../hooks/use-run-curves";
 import { type RunCurves, WELL_TYPE_LABELS, type WellType } from "../types";
 import { holderOrder } from "./curve-selection";
 
-type Position = RunCurves["positions"][number];
+export type CurvePosition = RunCurves["positions"][number];
+export type CurveSeriesData = RunCurves["curves"][number];
+export interface CurveRunInfo {
+  runId: string;
+  runDate: string;
+  operator: string;
+  status: string;
+  notes: string | null;
+}
+
+/** The positions of one run's holder. */
+export interface CurveGroup {
+  /** The run id. */
+  key: string;
+  /** Null on the run's own Curves tab, where the page already says which run it is. */
+  run: CurveRunInfo | null;
+  holder: RunCurves["holder"];
+  /** Holder order. */
+  positions: CurvePosition[];
+}
+
+/** What the curve viewer draws: groups of positions and, for one signal and
+ *  view, their curves. */
+export interface CurveSet {
+  doseUnit: string;
+  channels: RunCurves["channels"];
+  channel: string | null;
+  view: CurveView;
+  window: number | null;
+  groups: CurveGroup[];
+  /** By well id, for `channel` and `view`. */
+  curves: ReadonlyMap<string, CurveSeriesData>;
+}
+
+export function curveSetFromRun(data: RunCurves): CurveSet {
+  return {
+    doseUnit: data.dose_unit,
+    channels: data.channels,
+    channel: data.channel,
+    view: data.view as CurveView,
+    window: data.window,
+    groups: [
+      { key: data.run_id, run: null, holder: data.holder, positions: holderOrder(data.positions) },
+    ],
+    curves: new Map(data.curves.map((c) => [c.well_id, c])),
+  };
+}
+
+/** Group order, then holder order. */
+export function orderedPositions(set: CurveSet): CurvePosition[] {
+  return set.groups.flatMap((g) => g.positions);
+}
 
 export type ColourMode = "highlight" | "distinct";
 export type CurvePalette = "dark" | "light";
@@ -30,7 +82,7 @@ const DIMMED = 0.35;
 /** One position's line colour, width and opacity. The selector, the legend
  *  and the table use it too, so a position looks the same in all four. */
 export function curveStyle(
-  position: Pick<Position, "well_id" | "well_type">,
+  position: Pick<CurvePosition, "well_id" | "well_type">,
   c: CurveColouring,
 ): CurveStyle {
   const colours = MEASURED_CURVE_COLORS[c.palette];
@@ -47,23 +99,23 @@ export function curveStyle(
   };
 }
 
-export function positionName(p: Pick<Position, "position_label" | "label">): string {
+export function positionName(p: Pick<CurvePosition, "position_label" | "label">): string {
   return p.label ? `${p.position_label} · ${p.label}` : p.position_label;
 }
 
-export function currentChannel(data: RunCurves) {
-  return data.channels.find((c) => c.key === data.channel);
+export function currentChannel(set: CurveSet) {
+  return set.channels.find((c) => c.key === set.channel);
 }
 
 export function buildCurveFigure(
   args: {
-    data: RunCurves;
-    selected: ReadonlySet<string>;
+    set: CurveSet;
+    drawn: ReadonlySet<string>;
     showReported: boolean;
     canvas: "screen" | "export";
   } & CurveColouring,
 ): { data: Record<string, unknown>[]; layout: Record<string, unknown> } {
-  const { data, selected, showReported, canvas } = args;
+  const { set, drawn, showReported, canvas } = args;
   const exporting = canvas === "export";
   // The exported figure sits on white, so it always takes the light set.
   const colouring: CurveColouring = {
@@ -71,16 +123,15 @@ export function buildCurveFigure(
     palette: exporting ? "light" : args.palette,
     focusedId: exporting ? null : args.focusedId,
   };
-  const channel = currentChannel(data);
+  const channel = currentChannel(set);
   const xUnit = channel?.x_unit ?? "";
   const xTitle = channel?.x_label ? `${channel.x_label} [${xUnit}]` : xUnit;
-  const curveById = new Map(data.curves.map((c) => [c.well_id, c]));
 
   const traces: Record<string, unknown>[] = [];
   const shapes: Record<string, unknown>[] = [];
-  for (const p of holderOrder(data.positions)) {
-    const curve = curveById.get(p.well_id);
-    if (!selected.has(p.well_id) || !curve) continue;
+  for (const p of orderedPositions(set)) {
+    const curve = set.curves.get(p.well_id);
+    if (!drawn.has(p.well_id) || !curve) continue;
     const style = curveStyle(p, colouring);
     traces.push({
       type: "scatter",
@@ -120,7 +171,7 @@ export function buildCurveFigure(
   const background = exporting ? CHART_CANVAS.background : "rgba(0,0,0,0)";
   const yTitle = !channel
     ? ""
-    : data.view === "derivative"
+    : set.view === "derivative"
       ? `d(${channel.label})/d(${xUnit})`
       : channel.y_unit
         ? `${channel.label} (${channel.y_unit})`
@@ -146,7 +197,7 @@ export function buildCurveFigure(
         gridcolor: grid,
         linecolor: grid,
         zeroline: false,
-        uirevision: `${data.channel}:${data.view}`,
+        uirevision: `${set.channel}:${set.view}`,
       },
     },
   };
@@ -170,9 +221,9 @@ function reportedKey(r: { kind: string; ordinal: number }): string {
 }
 
 /** One table column per distinct reported value on this signal's curves. */
-export function reportedColumns(data: RunCurves): ReportedColumn[] {
+export function reportedColumns(set: CurveSet): ReportedColumn[] {
   const columns = new Map<string, ReportedColumn & { kind: string; ordinal: number }>();
-  for (const curve of data.curves) {
+  for (const curve of set.curves.values()) {
     for (const r of curve.reported) {
       const key = reportedKey(r);
       if (!columns.has(key)) {
@@ -198,9 +249,8 @@ export interface CurveTableRow {
   reported: Record<string, number>;
 }
 
-export function tableRows(data: RunCurves, selected: ReadonlySet<string>): CurveTableRow[] {
-  const curveById = new Map(data.curves.map((c) => [c.well_id, c]));
-  return holderOrder(data.positions)
+export function tableRows(set: CurveSet, selected: ReadonlySet<string>): CurveTableRow[] {
+  return orderedPositions(set)
     .filter((p) => selected.has(p.well_id))
     .map((p) => ({
       wellId: p.well_id,
@@ -213,7 +263,7 @@ export function tableRows(data: RunCurves, selected: ReadonlySet<string>): Curve
       role: WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type,
       note: p.note,
       reported: Object.fromEntries(
-        (curveById.get(p.well_id)?.reported ?? []).map((r) => [reportedKey(r), r.value]),
+        (set.curves.get(p.well_id)?.reported ?? []).map((r) => [reportedKey(r), r.value]),
       ),
     }));
 }
