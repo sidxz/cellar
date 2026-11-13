@@ -25,7 +25,7 @@ def position_label(kind: HolderKind, row: str, column: int) -> str:
 
 def holder_label(kind: HolderKind, rows: int | None, columns: int | None) -> str:
     if kind is HolderKind.CASSETTE:
-        return f"Cassette, {columns} capillaries"
+        return "Cassette" if columns is None else f"Cassette, {columns} capillaries"
     if rows is None or columns is None:
         return "Plate"
     return f"Plate, {rows} × {columns}"

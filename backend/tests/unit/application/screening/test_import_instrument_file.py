@@ -547,3 +547,20 @@ async def test_reported_value_for_undeclared_channel_is_a_warning():
     result = (await h()).unwrap()
     assert len(result.warnings) == 1 and "ghost" in result.warnings[0]
     assert result.values_inserted == 3
+
+
+async def test_used_position_without_a_curve_on_a_channel_is_a_warning():
+    export = _export()
+    # Position 2 has no curve on the second channel; position 3 has none at all but is unused.
+    curves = tuple(
+        c for c in export.curves if (c.column, c.channel) != (2, "signal") and c.column != 3
+    )
+    h = Harness(export=replace(export, curves=curves))
+    positions = (*h.positions[:2], replace(h.positions[2], used=False))
+    result = (await h(h.command(positions=positions))).unwrap()
+
+    label = position_label(HolderKind.CASSETTE, "A", 2)
+    assert result.warnings == (
+        f"{label} has no Signal curve in the file; nothing is stored for it on that channel",
+    )
+    assert (result.positions_created, result.curves_created) == (2, 3)

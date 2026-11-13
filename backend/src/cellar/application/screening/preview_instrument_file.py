@@ -23,6 +23,7 @@ from cellar.application.screening.instrument_export import (
 from cellar.application.screening.instrument_import_plan import (
     ReportedSeries,
     label_lookup_candidates,
+    missing_curve_warnings,
     refuse_instrument_import,
     reported_series,
     suggest_readout,
@@ -164,6 +165,7 @@ class PreviewInstrumentFile:
 
         definitions = protocol.readout_definitions
         series, warnings = reported_series(export)
+        warnings += missing_curve_warnings(export, ((p.row, p.column) for p in export.positions))
         return Success(
             InstrumentFilePreview(
                 reader=reader.id,

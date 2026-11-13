@@ -18,3 +18,7 @@ def test_holder_label():
     assert holder_label(HolderKind.CASSETTE, 1, 24) == "Cassette, 24 capillaries"
     assert holder_label(HolderKind.PLATE, 8, 12) == "Plate, 8 × 12"
     assert holder_label(HolderKind.PLATE, None, None) == "Plate"
+
+
+def test_holder_label_without_a_size_is_the_holder_word_alone():
+    assert holder_label(HolderKind.CASSETTE, None, None) == "Cassette"

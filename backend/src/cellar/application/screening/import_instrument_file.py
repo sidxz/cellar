@@ -31,6 +31,7 @@ from cellar.application.screening.instrument_export import (
     read_instrument_file,
 )
 from cellar.application.screening.instrument_import_plan import (
+    missing_curve_warnings,
     readout_mapping_error,
     refuse_instrument_import,
     reported_series,
@@ -259,6 +260,7 @@ class ImportInstrumentFile:
 
         # Series mapping.
         all_series, warnings = reported_series(export)
+        warnings += missing_curve_warnings(export, (k for k in file_keys if k in used))
         series_by_key = {s.key: s for s in all_series}
         for m in labelling.series:
             if (m.channel, m.kind, m.ordinal) not in series_by_key:

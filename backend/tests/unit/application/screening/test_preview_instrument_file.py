@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import date
 from types import SimpleNamespace, TracebackType
 from typing import Self
@@ -411,3 +412,15 @@ async def test_unrecognised_file_is_validation_error():
     h = Harness(recognises=False)
     failure = (await h()).failure()
     assert isinstance(failure, ValidationError) and "Stub format" in str(failure)
+
+
+async def test_position_without_a_curve_on_a_channel_is_a_warning():
+    export = _export()
+    curves = tuple(c for c in export.curves if (c.column, c.channel) != (3, "ratio"))
+    h = Harness(export=replace(export, curves=curves))
+    preview = (await h()).unwrap()
+
+    label = position_label(HolderKind.CASSETTE, "A", 3)
+    assert preview.warnings == (
+        f"{label} has no Ratio curve in the file; nothing is stored for it on that channel",
+    )

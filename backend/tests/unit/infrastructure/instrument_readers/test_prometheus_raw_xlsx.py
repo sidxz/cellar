@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 
 import pytest
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 
 from cellar.application.screening.instrument_export import HolderLayout, InstrumentFileError
 from cellar.domain.screening_assay.enums import HolderKind
@@ -97,6 +97,22 @@ def test_position_gaps_and_numbers_above_24():
         build_raw_workbook(positions={1: "a", 2: "b", 5: "c", 48: "d"}), "run.xlsx"
     )
     assert [p.column for p in export.positions] == [1, 2, 5, 48] and export.holder.columns == 48
+
+
+@pytest.mark.parametrize("number", [0, -1])
+def test_position_number_below_one_is_refused(number):
+    data = build_raw_workbook(positions={number: "a", 1: "b"})
+    with pytest.raises(InstrumentFileError, match=f"capillary {number}; .* start at 1"):
+        READER.read(data, "run.xlsx")
+
+
+def test_position_listed_twice_is_refused():
+    wb = load_workbook(io.BytesIO(build_raw_workbook(positions={1: "a", 2: "b"})))
+    wb["Overview"].append([1, "again"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    with pytest.raises(InstrumentFileError, match="capillary 1 more than once"):
+        READER.read(buf.getvalue(), "run.xlsx")
 
 
 def test_reported_value_for_a_channel_without_a_sheet_keeps_its_channel_key():

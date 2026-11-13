@@ -10,6 +10,7 @@ from __future__ import annotations
 import io
 import math
 import re
+from collections import Counter
 from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
@@ -137,6 +138,15 @@ class PrometheusRawXlsxReader:
         ]
         if not position_rows:
             raise InstrumentFileError("The Overview sheet lists no capillaries.")
+        counts = Counter(n for n, _ in position_rows)
+        if bad := sorted(n for n in counts if n < 1):
+            raise InstrumentFileError(
+                f"The Overview sheet numbers a capillary {bad[0]}; capillary numbers start at 1."
+            )
+        if twice := sorted(n for n, k in counts.items() if k > 1):
+            raise InstrumentFileError(
+                f"The Overview sheet lists capillary {', '.join(map(str, twice))} more than once."
+            )
         positions = tuple(
             ExportPosition(
                 row=1,

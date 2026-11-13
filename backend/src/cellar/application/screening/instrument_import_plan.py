@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import re
 import uuid
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, replace
 
 from cellar.application.screening.instrument_export import InstrumentExport
 from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.domain.screening_assay.enums import ReadoutDataType, RunStatus
+from cellar.domain.screening_assay.holder import position_label, row_letters
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.repository import ReadoutDataRepository
 from cellar.domain.screening_assay.run import Run
@@ -64,6 +65,18 @@ def reported_series(export: InstrumentExport) -> tuple[list[ReportedSeries], lis
             else ReportedSeries(v.channel, v.kind, v.ordinal, v.label, v.unit, 1)
         )
     return list(series.values()), list(warnings.values())
+
+
+def missing_curve_warnings(export: InstrumentExport, keys: Iterable[tuple[int, int]]) -> list[str]:
+    """One warning per (row, column) position and declared channel the file has no curve for."""
+    have = {(c.row, c.column, c.channel) for c in export.curves}
+    return [
+        f"{position_label(export.holder.kind, row_letters(row), column)} has no "
+        f"{channel.label} curve in the file; nothing is stored for it on that channel"
+        for row, column in keys
+        for channel in export.channels
+        if (row, column, channel.key) not in have
+    ]
 
 
 def readout_mapping_error(
