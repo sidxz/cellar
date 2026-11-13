@@ -99,15 +99,14 @@ class RelabelRunPositions:
                     return Failure(NotFoundError("Batch", str(edit.new.batch_id)))
 
             wells = {w.id: w for w in run.wells}
-            moving = [
-                wells[e.well_id]
+            moving = {
+                e.well_id
                 for e in input.edits
                 if e.well_id in wells and e.new.batch_id != wells[e.well_id].batch_id
-            ]
+            }
             if moving:
                 rows = await self._readout_repo.find_by_run(ws, run.id)
-                moving_ids = {w.id for w in moving}
-                row_well = {r.id: r.well_id for r in rows if r.well_id in moving_ids}
+                row_well = {r.id: r.well_id for r in rows if r.well_id in moving}
                 used = await self._campaign_repo.find_names_using_readouts(ws, list(row_well))
                 if used:
                     plates = {p.id: p for p in run.plates}
