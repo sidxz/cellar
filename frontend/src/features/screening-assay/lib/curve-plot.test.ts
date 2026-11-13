@@ -139,6 +139,14 @@ describe("buildCurveFigure", () => {
     expect(layout.yaxis.title.text).toBe("Signal A (u)");
   });
 
+  it("titles the y axis as a derivative in the derivative view", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      data: { ...curves, view: "derivative", window: 1.5 },
+    }) as unknown as { layout: { yaxis: { title: { text: string } } } };
+    expect(layout.yaxis.title.text).toBe("d(Signal A)/d(°C)");
+  });
+
   it("uses the white canvas and the light colours for export", () => {
     const { data, layout } = buildCurveFigure({ ...base, canvas: "export" }) as unknown as {
       data: Trace[];

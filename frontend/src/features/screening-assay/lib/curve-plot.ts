@@ -117,11 +117,13 @@ export function buildCurveFigure(
   const grid = light ? CHART_CANVAS.gridLight : CHART_AXIS.grid;
   const ink = light ? CHART_CANVAS.label : CHART_AXIS.label;
   const background = exporting ? CHART_CANVAS.background : "rgba(0,0,0,0)";
-  const yTitle = channel
-    ? channel.y_unit
-      ? `${channel.label} (${channel.y_unit})`
-      : channel.label
-    : "";
+  const yTitle = !channel
+    ? ""
+    : data.view === "derivative"
+      ? `d(${channel.label})/d(${xUnit})`
+      : channel.y_unit
+        ? `${channel.label} (${channel.y_unit})`
+        : channel.label;
 
   return {
     data: traces,

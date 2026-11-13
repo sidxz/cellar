@@ -71,7 +71,14 @@ beforeEach(() => {
   plotCalls.length = 0;
   downloadImage.mockReset();
   useRunCurves.mockReset();
-  useRunCurves.mockReturnValue({ data: curves, isLoading: false, isPlaceholderData: false });
+  useRunCurves.mockImplementation((_runId: string, params: { view?: string; window?: number }) => ({
+    data:
+      params.view === "derivative"
+        ? { ...curves, view: "derivative", window: params.window ?? 3.5 }
+        : curves,
+    isLoading: false,
+    isPlaceholderData: false,
+  }));
 });
 
 describe("RunCurvesPanel", () => {
@@ -145,5 +152,32 @@ describe("RunCurvesPanel", () => {
     const [figure, opts] = downloadImage.mock.calls[0];
     expect(opts).toMatchObject({ format: "png", width: 1200, height: 600 });
     expect(figure.layout.paper_bgcolor).toBe("#ffffff");
+  });
+
+  it("hides the window field in the measured view", () => {
+    render(<RunCurvesPanel runId="r1" />);
+    expect(screen.queryByLabelText("Window")).not.toBeInTheDocument();
+  });
+
+  it("requests view=derivative when the switch is on and shows the window the API used", () => {
+    render(<RunCurvesPanel runId="r1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Derivative" }));
+    expect(lastParams()).toMatchObject({ view: "derivative" });
+    expect(screen.getByLabelText("Window")).toHaveValue(3.5);
+  });
+
+  it("refetches with the edited window on commit, not on each keystroke", () => {
+    render(<RunCurvesPanel runId="r1" />);
+    fireEvent.click(screen.getByRole("button", { name: "Derivative" }));
+    const field = screen.getByLabelText("Window");
+    fireEvent.change(field, { target: { value: "2" } });
+    expect(lastParams()?.window).toBeUndefined();
+    fireEvent.blur(field);
+    expect(lastParams()).toMatchObject({ view: "derivative", window: 2 });
+    expect(screen.getByLabelText("Window")).toHaveValue(2);
+    fireEvent.change(field, { target: { value: "4" } });
+    expect(lastParams()?.window).toBe(2);
+    fireEvent.keyDown(field, { key: "Enter" });
+    expect(lastParams()).toMatchObject({ window: 4 });
   });
 });

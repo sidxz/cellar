@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
+import { Input } from "@/shared/components/ui/input";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import {
   Table,
@@ -16,12 +17,13 @@ import { cn } from "@/shared/lib/utils";
 import { useTheme } from "next-themes";
 import { useCallback, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
-import { useRunCurves } from "../hooks/use-run-curves";
+import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
 import {
   type ColourMode,
   type CurveColouring,
   type CurvePalette,
   buildCurveFigure,
+  currentChannel,
   curveStyle,
   focusIdFromHover,
   positionName,
@@ -115,7 +117,16 @@ function formatValue(v: number | undefined): string {
  *  the figure. */
 export function RunCurvesPanel({ runId }: { runId: string }) {
   const [channel, setChannel] = useState<string | undefined>();
-  const { data, isLoading, isPlaceholderData, error } = useRunCurves(runId, { channel });
+  const [view, setView] = useState<CurveView>("measured");
+  // The committed window; undefined lets the API choose. The draft is what is
+  // being typed, sent only on blur or Enter.
+  const [derivativeWindow, setDerivativeWindow] = useState<number | undefined>();
+  const [windowDraft, setWindowDraft] = useState<string | null>(null);
+  const { data, isLoading, isPlaceholderData, error } = useRunCurves(runId, {
+    channel,
+    view,
+    window: view === "derivative" ? derivativeWindow : undefined,
+  });
 
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
   const [slots, setSlots] = useState<ReadonlyMap<string, number>>(() => new Map());
@@ -200,6 +211,13 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
     });
   };
 
+  const commitWindow = () => {
+    if (windowDraft === null) return;
+    const n = Number(windowDraft);
+    if (windowDraft.trim() !== "" && Number.isFinite(n) && n > 0) setDerivativeWindow(n);
+    setWindowDraft(null);
+  };
+
   const hasTraces = (figure?.data.length ?? 0) > 0;
   const colours = MEASURED_CURVE_COLORS[palette];
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
@@ -227,6 +245,38 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
             />
           </Field>
         )}
+        <Field label="View">
+          <div className="flex items-center gap-2">
+            <Segmented
+              label="View"
+              value={view}
+              options={[
+                { value: "measured", label: "Measured" },
+                { value: "derivative", label: "Derivative" },
+              ]}
+              onChange={setView}
+            />
+            {view === "derivative" && (
+              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                window
+                <Input
+                  type="number"
+                  aria-label="Window"
+                  min={0}
+                  step="any"
+                  className="h-8 w-20"
+                  value={windowDraft ?? data.window ?? ""}
+                  onChange={(e) => setWindowDraft(e.target.value)}
+                  onBlur={commitWindow}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitWindow();
+                  }}
+                />
+                {currentChannel(data)?.x_unit}
+              </span>
+            )}
+          </div>
+        </Field>
         <Field label="Reported values">
           <Segmented
             label="Reported values"
