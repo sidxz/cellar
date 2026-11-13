@@ -12,6 +12,7 @@ import {
   matchesFilter,
   orderRows,
   resultRows,
+  shiftRows,
   windowSummary,
 } from "../lib/melt-results";
 import { useShiftThreshold } from "../lib/use-shift-threshold";
@@ -19,6 +20,7 @@ import type { MeltingAnalysis } from "../types";
 import { Segmented } from "./curve-viewer";
 import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
+import { ShiftPlot } from "./shift-plot";
 
 const COMPARE = "__compare__";
 const NO_WINDOW = "No temperature window on this signal — add one on the protocol's Design tab";
@@ -61,6 +63,7 @@ export function MeltResultsPanel({
   const [chosen, setChosen] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
   const [filter, setFilter] = useState<ResultFilter>(null);
+  const [view, setView] = useState<"table" | "plot">("table");
   const switchId = useId();
 
   const windows = useMemo(
@@ -132,6 +135,17 @@ export function MeltResultsPanel({
             />
           </div>
         )}
+        <div title={comparing ? "Shift plot shows one window" : undefined}>
+          <Segmented
+            label="View"
+            value={view === "plot" && !comparing ? "plot" : "table"}
+            options={[
+              { value: "table", label: "Table" },
+              { value: "plot", label: "Shift plot", disabled: comparing || !lead },
+            ]}
+            onChange={setView}
+          />
+        </div>
         <div className="flex items-center gap-2">
           <Switch id={switchId} checked={showReferences} onCheckedChange={onShowReferencesChange} />
           <Label htmlFor={switchId} className="text-sm font-normal">
@@ -159,14 +173,27 @@ export function MeltResultsPanel({
           )}
         </p>
       )}
-      <MeltResultsGrid
-        rows={ordered}
-        windowNames={windowNames}
-        threshold={threshold}
-        doseUnit={doseUnit}
-        selection={selection}
-        onRowClick={(id, mods, order) => onSelectionChange(applyClick(selection, order, id, mods))}
-      />
+      {view === "plot" && !comparing && lead ? (
+        <ShiftPlot
+          rows={shiftRows(rows, lead.window)}
+          threshold={threshold}
+          selected={selection.selected}
+          onSelect={(id) =>
+            onSelectionChange(applyClick(selection, [id], id, { shift: false, toggle: false }))
+          }
+        />
+      ) : (
+        <MeltResultsGrid
+          rows={ordered}
+          windowNames={windowNames}
+          threshold={threshold}
+          doseUnit={doseUnit}
+          selection={selection}
+          onRowClick={(id, mods, order) =>
+            onSelectionChange(applyClick(selection, order, id, mods))
+          }
+        />
+      )}
     </section>
   );
 }

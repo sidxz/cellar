@@ -11,6 +11,14 @@ vi.mock("@/shared/components/chemistry/structure-thumbnail", () => ({
   StructureThumbnail: () => <div data-testid="structure" />,
 }));
 
+const plots: { data: Record<string, any>[]; onClick?: (e: unknown) => void }[] = [];
+vi.mock("@/shared/lib/plotly", () => ({
+  Plot: (p: (typeof plots)[number]) => {
+    plots.push(p);
+    return <div data-testid="plot" />;
+  },
+}));
+
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("./test-data-grid")).TableGrid,
 }));
@@ -270,5 +278,26 @@ describe("useShiftThreshold", () => {
     });
     expect(renderHook(() => useShiftThreshold()).result.current[0]).toBe(2);
     spy.mockRestore();
+  });
+});
+
+describe("shift plot toggle", () => {
+  it("shows the plot for one window and selects a clicked point", () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Shift plot" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Shift plot" }));
+    const p = plots[plots.length - 1];
+    expect(p.data[0].customdata).toEqual(["s1", "s3", "s2"]);
+    act(() => p.onClick?.({ points: [{ customdata: "s3" }] }));
+    expect(onChange.mock.calls[0][0].anchor).toBe("s3");
+    expect([...onChange.mock.calls[0][0].selected]).toEqual(["s3"]);
+  });
+
+  it("is disabled in Compare", () => {
+    render(<Harness />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Compare" }));
+    expect(screen.getByRole("tab", { name: "Shift plot" })).toBeDisabled();
   });
 });
