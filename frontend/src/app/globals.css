@@ -24,6 +24,10 @@
   /* page surface: white with a breath of lime, so the app feels warm, not clinical */
   --ds-surface: color-mix(in srgb, var(--lime) 3%, white);
   --ds-surface-elevated: var(--ds-surface);
+  /* muted fills (grid headers, tab strips, secondary buttons, hover): the
+     package's slate reads cold on the lime page, so use the sidebar's warm neutral */
+  --ds-surface-sunken: var(--ds-sidebar);
+  --ds-surface-hover: color-mix(in srgb, var(--lime) 12%, #eeebe3);
 
   --ds-accent: var(--lime-text);
   --ds-accent-hover: #4e6509;
