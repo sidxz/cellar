@@ -362,17 +362,7 @@ class ImportInstrumentFile:
                         "is not a finite number"
                     )
                 if v.kind == STEP_KIND:
-                    if well is not None and any(c.key == v.channel for c in export.channels):
-                        steps.append(
-                            MeltingStep.from_reported(
-                                workspace_id=ws,
-                                run_id=run.id,
-                                well_id=well.id,
-                                channel_key=v.channel,
-                                point=ReportedPoint(v.kind, v.ordinal, v.label, v.value, v.unit),
-                            )
-                        )
-                    continue
+                    continue  # Steps come from the traces below: a step needs its trace.
                 definition_id = mapped.get((v.channel, v.kind, v.ordinal))
                 if well is None or definition_id is None:
                     continue
@@ -396,6 +386,18 @@ class ImportInstrumentFile:
                 if well is None:
                     continue
                 order, channel = channels[c.channel]
+                points = tuple(reported_at[(c.row, c.column, c.channel)])
+                steps.extend(
+                    MeltingStep.from_reported(
+                        workspace_id=ws,
+                        run_id=run.id,
+                        well_id=well.id,
+                        channel_key=c.channel,
+                        point=p,
+                    )
+                    for p in points
+                    if p.kind == STEP_KIND
+                )
                 curves.append(
                     MeasuredCurve(
                         workspace_id=ws,
@@ -409,7 +411,7 @@ class ImportInstrumentFile:
                         channel_order=order,
                         x=c.x,
                         y=c.y,
-                        reported=tuple(reported_at[(c.row, c.column, c.channel)]),
+                        reported=points,
                         reader=export.reader,
                     )
                 )

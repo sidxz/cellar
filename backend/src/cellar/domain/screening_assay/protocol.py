@@ -311,6 +311,11 @@ class ReadoutDefinition(Entity):
                 raise ValidationError(
                     f"{label} computed from a temperature window cannot use a geometric mean"
                 )
+            if dose_response_config is not None:
+                raise ValidationError(
+                    f"{label} computed from a temperature window cannot be fitted to a "
+                    "dose-response curve"
+                )
 
         # pick_list type requires values
         if data_type == ReadoutDataType.PICK_LIST and not pick_list_values:

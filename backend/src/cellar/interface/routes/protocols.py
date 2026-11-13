@@ -169,6 +169,16 @@ async def _protocol_response(targets_uc, auth, result) -> ProtocolResponse:
 # ---------------------------------------------------------------------------
 
 
+class MeltConfigModel(BaseModel):
+    """A temperature window's Tm or ΔTm readout: the window, the measure, its signal and limits."""
+
+    window: str
+    measure: MeltMeasure
+    channel_key: str
+    low: float
+    high: float
+
+
 class ReadoutDefinitionResponse(BaseModel):
     id: uuid.UUID
     name: str
@@ -189,8 +199,8 @@ class ReadoutDefinitionResponse(BaseModel):
     # variables.
     pick_list_values: list[dict] | None = None
     dose_response_config: dict | None = None
-    # Set on a temperature window's Tm / ΔTm readout: {window, measure, channel_key, low, high}.
-    melt_config: dict | None
+    # Set on a temperature window's Tm / ΔTm readout.
+    melt_config: MeltConfigModel | None
 
 
 class FindSimilarProtocolsRequest(BaseModel):
@@ -348,7 +358,9 @@ class ProtocolResponse(BaseModel):
                         if rd.dose_response_config is not None
                         else None
                     ),
-                    melt_config=rd.melt_config.to_dict() if rd.melt_config else None,
+                    melt_config=(
+                        MeltConfigModel(**rd.melt_config.to_dict()) if rd.melt_config else None
+                    ),
                 )
                 for rd in p.readout_definitions
             ],
@@ -522,8 +534,8 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     display_order: int | None = None
     pick_list_values: list[dict | str] | None = None
     dose_response_config: dict | None = None
-    # {window, measure, channel_key, low, high}; null clears it.
-    melt_config: dict | None = None
+    # Null clears it.
+    melt_config: MeltConfigModel | None = None
 
 
 class AddTemperatureWindowRequest(BaseModel):
@@ -1263,10 +1275,12 @@ async def update_readout_definition(
         "normalizations",
         "pick_list_values",
         "dose_response_config",
-        "melt_config",
     ):
         if key in sent:
             cmd_kwargs[key] = getattr(body, key)
+    if "melt_config" in sent:
+        mc = body.melt_config
+        cmd_kwargs["melt_config"] = mc.model_dump(mode="json") if mc is not None else None
 
     cmd = UpdateReadoutDefinitionCommand(**cmd_kwargs)
     result = await uc(cmd, auth=auth)

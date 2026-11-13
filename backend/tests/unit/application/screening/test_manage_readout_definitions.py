@@ -147,3 +147,28 @@ async def test_add_window_viewer_raises_authorization_error():
     p = _protocol()
     with pytest.raises(AuthorizationError):
         await _add(p, _cmd(p), role="viewer")
+
+
+@pytest.mark.parametrize(
+    "bad",
+    [
+        {"window": "Main", "measure": "tm", "channel_key": "ratio", "high": 85.0},
+        {"window": "Main", "measure": "tmax", "channel_key": "ratio", "low": 50.0, "high": 85.0},
+        {"window": "Main", "measure": "tm", "channel_key": "ratio", "low": None, "high": 85.0},
+    ],
+)
+async def test_update_with_malformed_melt_config_is_validation_error(bad):
+    p = _protocol()
+    await _add(p, _cmd(p))
+    tm = p.readout_definitions[1]
+    repo = _repo(p)
+    uc = UpdateReadoutDefinition(FakeUnitOfWork(), repo, AsyncMock())
+    result = await uc(
+        UpdateReadoutDefinitionCommand(
+            workspace_id=WS, protocol_id=p.id, definition_id=tm.id, melt_config=bad
+        ),
+        auth=FakeAuth(workspace_id=WS),
+    )
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), ValidationError)
+    repo.save.assert_not_awaited()

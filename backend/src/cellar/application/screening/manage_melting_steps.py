@@ -152,6 +152,8 @@ class AddMeltingStep(_StepUseCase):
                 return Failure(NotFoundError("Run", str(input.run_id)))
             if (refused := self._check_run(run)) is not None:
                 return Failure(refused)
+            if all(w.id != input.well_id for w in run.wells):
+                return Failure(NotFoundError("Position", str(input.well_id)))
             x_range = await self._x_range(ws, input.well_id, input.channel_key)
             if x_range is None:
                 return Failure(ValidationError(NO_TRACE))

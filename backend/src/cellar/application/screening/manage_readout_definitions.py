@@ -273,6 +273,13 @@ class UpdateReadoutDefinition:
                     )
                 except DomainError as exc:
                     return Failure(exc)
+                except (KeyError, ValueError, TypeError):
+                    return Failure(
+                        ValidationError(
+                            "Temperature window settings need a window, a measure (tm or "
+                            "delta_tm), a channel and numeric low and high limits"
+                        )
+                    )
 
             # Optional formula validation
             formula = kwargs.get("calculation_formula")

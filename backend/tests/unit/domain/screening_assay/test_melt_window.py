@@ -104,5 +104,15 @@ def test_window_positions_drops_blanks_rejected_steps_and_other_channels():
         (a, "ch2", 55.0, True),
         (b, "ch1", 60.0, True),
     ]
-    out = window_positions(wells, steps, "ch1")
+    traced = {(a, "ch1"), (b, "ch1"), (c, "ch1")}
+    out = window_positions(wells, steps, "ch1", traced)
     assert out == [WindowPosition(a, REF, (36.0, 71.0)), WindowPosition(c, SAMPLE, ())]
+
+
+def test_window_positions_leaves_out_positions_without_a_trace_on_the_channel():
+    a, c = _id(), _id()
+    wells = [(a, REF), (c, SAMPLE)]
+    steps = [(a, "ch1", 71.0, True)]
+    # c has a trace on ch2 only: it is not evaluated on ch1, so no "no step" flag for it.
+    out = window_positions(wells, steps, "ch1", {(a, "ch1"), (c, "ch2")})
+    assert out == [WindowPosition(a, REF, (71.0,))]

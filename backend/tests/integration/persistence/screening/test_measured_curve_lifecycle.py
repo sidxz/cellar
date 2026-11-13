@@ -111,6 +111,20 @@ async def test_run_save_keeps_every_curve(session_factory, workspace_id):
         assert {w.id for w in reloaded.wells} == set(well_ids)
 
 
+async def test_list_traced_gives_each_position_and_channel_with_a_trace(
+    session_factory, workspace_id
+):
+    run_id, well_ids = await _run_with_curves(session_factory, workspace_id)
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        traced = await SQLAlchemyMeasuredCurveRepository(uow).list_traced(workspace_id, run_id)
+        assert traced == {(w, k) for w in well_ids for k in ("ratio", "f330")}
+        assert (
+            await SQLAlchemyMeasuredCurveRepository(uow).list_traced(workspace_id, uuid.uuid4())
+            == set()
+        )
+
+
 async def test_reset_run_data_leaves_no_curves(session_factory, workspace_id):
     run_id, _ = await _run_with_curves(session_factory, workspace_id)
 

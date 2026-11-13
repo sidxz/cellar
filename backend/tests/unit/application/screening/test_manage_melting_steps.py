@@ -205,6 +205,14 @@ async def test_position_without_trace_on_channel_is_validation_error(which):
     h.assert_nothing_written()
 
 
+async def test_add_on_a_position_of_another_run_is_not_found():
+    h = Harness()
+    _, (other, _, _) = _instrument_run()
+    failure = (await h.do_add(well_id=other.id)).failure()
+    assert isinstance(failure, NotFoundError)
+    h.assert_nothing_written()
+
+
 async def test_reject_without_reason_is_validation_error():
     h = Harness()
     failure = (await h.do_review(status=MeltingStepStatus.REJECTED)).failure()

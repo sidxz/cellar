@@ -46,6 +46,7 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.screening_assay.repository import (
+    MeasuredCurveRepository,
     MeltingStepRepository,
     ProtocolRepository,
     ReadoutDataRepository,
@@ -95,6 +96,7 @@ class ReadoutCalculationEngine:
         fit_dose_response: FitDoseResponseCurves | None = None,
         plate_quality: PlateQualityCalculator | None = None,
         melting_step_repo: MeltingStepRepository | None = None,
+        measured_curve_repo: MeasuredCurveRepository | None = None,
         batch_repo: BatchRepository | None = None,
     ) -> None:
         self._uow = uow
@@ -108,6 +110,7 @@ class ReadoutCalculationEngine:
         self._fit_dose_response = fit_dose_response
         self._plate_quality = plate_quality
         self._melting_step_repo = melting_step_repo
+        self._measured_curve_repo = measured_curve_repo
         self._batch_repo = batch_repo
 
     async def compute_for_run(
@@ -417,12 +420,13 @@ class ReadoutCalculationEngine:
             for rd in protocol.readout_definitions
             if rd.melt_config is not None
         ]
-        if not melt_defs or self._melting_step_repo is None:
+        if not melt_defs or self._melting_step_repo is None or self._measured_curve_repo is None:
             return []
         steps = [
             (s.well_id, s.channel_key, s.value, s.counts)
             for s in await self._melting_step_repo.find_by_run(workspace_id, run.id)
         ]
+        traced = await self._measured_curve_repo.list_traced(workspace_id, run.id)
         wells = [(w.id, w.well_type) for w in run.wells]
 
         # Readouts of one window share its channel and limits (Protocol enforces it).
@@ -432,7 +436,7 @@ class ReadoutCalculationEngine:
             result = by_window.get(mc.window)
             if result is None:
                 result = by_window[mc.window] = evaluate_window(
-                    mc.low, mc.high, window_positions(wells, steps, mc.channel_key)
+                    mc.low, mc.high, window_positions(wells, steps, mc.channel_key, traced)
                 )
             for p in result.positions:
                 v = p.tm if mc.measure is MeltMeasure.TM else p.delta_tm

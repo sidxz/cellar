@@ -117,3 +117,26 @@ async def test_update_readout_sets_and_clears_melt_config(
     assert resp.status_code == 200, resp.text
     cleared = next(r for r in resp.json()["readout_definitions"] if r["id"] == rd["id"])
     assert cleared["melt_config"] is None
+
+
+async def test_update_readout_with_malformed_melt_config_returns_422(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    protocol_id = await _protocol_id(session_factory, fake_auth.workspace_id)
+    async with session_factory() as session:
+        await session.execute(
+            sa.text("UPDATE protocols SET status = 'draft' WHERE id = :id"), {"id": protocol_id}
+        )
+        await session.commit()
+    added = await client.post(
+        f"/api/v1/protocols/{protocol_id}/temperature-windows", json=_window(measures=["tm"])
+    )
+    rd = next(r for r in added.json()["readout_definitions"] if r["name"] == "Tm (Main)")
+    url = f"/api/v1/protocols/{protocol_id}/readout-definitions/{rd['id']}"
+    good = rd["melt_config"]
+    missing_low = {k: v for k, v in good.items() if k != "low"}
+    for bad in (missing_low, good | {"measure": "tmax"}, good | {"high": "hot"}):
+        resp = await client.put(url, json={"melt_config": bad})
+        assert resp.status_code == 422, resp.text

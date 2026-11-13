@@ -26,6 +26,7 @@ from cellar.application.screening.preview_instrument_file import (
 )
 from cellar.domain.screening_assay.enums import HolderKind, ReadoutDataType, RunStatus
 from cellar.domain.screening_assay.holder import holder_label, position_label
+from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.run import Plate, Run
 from cellar.domain.shared.enums import ConcentrationUnit
@@ -257,6 +258,21 @@ async def test_success_lists_positions_channels_series_and_readouts():
     assert preview.dose_unit == "uM" and h.uow.committed is False
     h.run_repo.find_by_id_in_workspace.assert_awaited_once_with(h.ws, h.run.id)
     h.protocol_repo.find_by_id_in_workspace.assert_awaited_once_with(h.ws, h.run.protocol_id)
+
+
+async def test_window_readouts_are_not_offered_for_mapping():
+    numeric = _definition("Melting point")
+    window = ReadoutDefinition(
+        protocol_id=uuid.uuid4(),
+        name="Tm (Main)",
+        data_type=ReadoutDataType.NUMERIC,
+        unit="°C",
+        melt_config=MeltReadoutConfig(
+            window="Main", measure=MeltMeasure.TM, channel_key="ratio", low=50.0, high=85.0
+        ),
+    )
+    preview = (await Harness(definitions=[numeric, window])()).unwrap()
+    assert [r.id for r in preview.readouts] == [numeric.id]
 
 
 async def test_preview_does_not_offer_transitions_for_mapping():

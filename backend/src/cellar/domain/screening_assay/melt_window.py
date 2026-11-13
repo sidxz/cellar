@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -176,8 +176,12 @@ def window_positions(
     wells: Sequence[tuple[uuid.UUID, WellType]],
     steps: Sequence[tuple[uuid.UUID, str, float, bool]],
     channel_key: str,
+    traced: Collection[tuple[uuid.UUID, str]],
 ) -> list[WindowPosition]:
-    """Non-blank positions with their counted step values on one channel, sorted."""
+    """Non-blank positions with a trace on one channel, with their counted steps there, sorted.
+
+    ``traced`` holds the (well id, channel key) pairs that have a trace.
+    """
     by_well: dict[uuid.UUID, list[float]] = {}
     for well_id, key, value, counts in steps:
         if counts and key == channel_key:
@@ -185,5 +189,5 @@ def window_positions(
     return [
         WindowPosition(well_id, well_type, tuple(sorted(by_well.get(well_id, ()))))
         for well_id, well_type in wells
-        if well_type != WellType.BLANK
+        if well_type != WellType.BLANK and (well_id, channel_key) in traced
     ]

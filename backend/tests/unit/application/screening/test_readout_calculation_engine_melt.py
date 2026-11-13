@@ -103,6 +103,7 @@ def _engine(
     *,
     raw: list[ReadoutData] | None = None,
     molecule_by_batch: dict[uuid.UUID, uuid.UUID] | None = None,
+    traced: set[tuple[uuid.UUID, str]] | None = None,
 ) -> tuple[ReadoutCalculationEngine, AsyncMock, AsyncMock, AsyncMock]:
     readout_data_repo = AsyncMock()
     readout_data_repo.find_by_run.return_value = raw or []
@@ -112,6 +113,10 @@ def _engine(
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
     step_repo = AsyncMock()
     step_repo.find_by_run.return_value = steps
+    curve_repo = AsyncMock()
+    curve_repo.list_traced.return_value = (
+        {(w.id, CH) for w in run.wells} if traced is None else traced
+    )
     batch_repo = AsyncMock()
     batch_repo.find_by_ids.return_value = [
         SimpleNamespace(id=b, molecule_id=m) for b, m in (molecule_by_batch or {}).items()
@@ -128,6 +133,7 @@ def _engine(
         protocol_repo=protocol_repo,
         dispatcher=AsyncMock(),
         melting_step_repo=step_repo,
+        measured_curve_repo=curve_repo,
         batch_repo=batch_repo,
     )
     return engine, readout_data_repo, step_repo, batch_repo
@@ -158,6 +164,18 @@ async def test_merged_step_writes_negative_delta_row_and_no_low_window_row() -> 
         ("Tm (Main)", sample.id): 64.0,
         ("ΔTm (Main)", sample.id): pytest.approx(-7.3),
     }
+
+
+@pytest.mark.asyncio
+async def test_position_without_a_trace_on_the_channel_gets_no_window_rows() -> None:
+    protocol = _protocol(_window_defs())
+    run, ref, sample = _run(protocol)
+    steps = [_step(run, ref, 71.3), _step(run, sample, 64.0)]
+    engine, *_ = _engine(protocol, run, steps, traced={(ref.id, CH), (sample.id, "other")})
+
+    rows, _ = await _rows(engine, run, protocol)
+
+    assert rows == {("Tm (Main)", ref.id): 71.3}
 
 
 @pytest.mark.asyncio

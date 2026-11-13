@@ -21,6 +21,7 @@ from cellar.domain.screening_assay.melt_window import (
 )
 from cellar.domain.screening_assay.melting_step import MeltingStep
 from cellar.domain.screening_assay.repository import (
+    MeasuredCurveRepository,
     MeltingStepRepository,
     ProtocolRepository,
     RunRepository,
@@ -69,11 +70,13 @@ class GetMeltingAnalysis:
         run_repo: RunRepository,
         protocol_repo: ProtocolRepository,
         step_repo: MeltingStepRepository,
+        curve_repo: MeasuredCurveRepository,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
         self._protocol_repo = protocol_repo
         self._step_repo = step_repo
+        self._curve_repo = curve_repo
 
     async def __call__(
         self, input: GetMeltingAnalysisQuery, auth: AuthContext | None = None
@@ -90,6 +93,7 @@ class GetMeltingAnalysis:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(run.protocol_id)))
             found = await self._step_repo.find_by_run(ws, run.id)
+            traced = await self._curve_repo.list_traced(ws, run.id)
 
         order = {w.id: i for i, w in enumerate(run.wells)}
         steps = tuple(
@@ -113,12 +117,14 @@ class GetMeltingAnalysis:
                 high=high,
                 tm_readout_id=grouped[name].get(MeltMeasure.TM),
                 delta_tm_readout_id=grouped[name].get(MeltMeasure.DELTA_TM),
-                result=evaluate_window(low, high, window_positions(wells, counted, channel)),
+                result=evaluate_window(
+                    low, high, window_positions(wells, counted, channel, traced)
+                ),
             )
             for name, (channel, low, high) in sorted(shape.items(), key=lambda kv: kv[1][1])
         )
         step_checks = tuple(
-            ChannelStepCheck(ch, check_step_counts(window_positions(wells, counted, ch)))
+            ChannelStepCheck(ch, check_step_counts(window_positions(wells, counted, ch, traced)))
             for ch in sorted({s.channel_key for s in steps})
         )
 

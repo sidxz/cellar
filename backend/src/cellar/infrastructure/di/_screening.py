@@ -876,6 +876,7 @@ def register_screening(container: Container) -> None:
             fit_dose_response=c[FitDoseResponseCurves],
             plate_quality=c[PlateQualityCalculator],
             melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
+            measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
@@ -1094,6 +1095,7 @@ def register_screening(container: Container) -> None:
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             step_repo=SQLAlchemyMeltingStepRepository(uow),
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
         )
 
     container.define(GetMeltingAnalysis, _get_melting_analysis)

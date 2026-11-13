@@ -691,3 +691,16 @@ async def test_onsets_do_not_become_steps():
     h = Harness()
     (await h()).unwrap()
     h.step_repo.save_bulk.assert_not_awaited()
+
+
+async def test_reported_transition_without_a_trace_makes_no_step():
+    # Position 2 has no trace on "ratio": its transition cannot be drawn or reviewed.
+    export = _export(
+        reported=tuple(_reported(c, kind="transition", value=60.0 + c) for c in (1, 2, 3))
+    )
+    curves = tuple(c for c in export.curves if (c.column, c.channel) != (2, "ratio"))
+    h = Harness(export=replace(export, curves=curves))
+    (await h(h.command(series=()))).unwrap()
+
+    steps = h.step_repo.save_bulk.await_args.args[0]
+    assert sorted(s.value for s in steps) == [61.0, 63.0]

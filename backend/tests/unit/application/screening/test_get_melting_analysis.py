@@ -86,11 +86,15 @@ class Harness:
         self.protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=self.protocol)
         self.step_repo = AsyncMock()
         self.step_repo.find_by_run = AsyncMock(side_effect=lambda ws, rid: list(self.steps))
+        self.traced = {(self.ref.id, CH), (self.sample.id, CH)}
+        self.curve_repo = AsyncMock()
+        self.curve_repo.list_traced = AsyncMock(side_effect=lambda ws, rid: set(self.traced))
         self.uc = GetMeltingAnalysis(
             uow=FakeUoW([]),
             run_repo=self.run_repo,
             protocol_repo=self.protocol_repo,
             step_repo=self.step_repo,
+            curve_repo=self.curve_repo,
         )
 
     def step(self, well: Well, value: float, status=MeltingStepStatus.UNREVIEWED) -> MeltingStep:
@@ -191,3 +195,15 @@ async def test_other_workspace_is_not_found():
     with pytest.raises(NotFoundError):
         await h.read(auth=FakeAuth(role="viewer"))
     h.run_repo.find_by_id_in_workspace.assert_not_awaited()
+
+
+async def test_position_without_a_trace_on_the_channel_is_not_evaluated():
+    h = Harness()
+    h.step(h.ref, 71.0)
+    h.traced = {(h.ref.id, CH), (h.sample.id, "other")}
+    out = (await h.read()).unwrap()
+
+    for w in out.windows:
+        assert [p.well_id for p in w.result.positions] == [h.ref.id]
+    (check,) = out.step_checks
+    assert check.check.differs == frozenset()

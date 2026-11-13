@@ -6,7 +6,9 @@ import uuid
 
 import pytest
 
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
+    CurveType,
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
@@ -14,7 +16,7 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.shared.errors import ConflictError, ValidationError
-from tests.unit.domain.screening_assay.test_protocol import _make_protocol, _make_readout
+from tests.unit.domain.screening_assay.test_protocol import _make_protocol
 
 
 def _cfg(**over) -> MeltReadoutConfig:
@@ -61,6 +63,7 @@ def test_melt_config_round_trips_and_validates():
         dict(is_calculated=True, calculation_formula="[A]"),
         dict(normalizations=frozenset({ReadoutNormalization.PERCENT_INHIBITION})),
         dict(aggregation=ReadoutAggregation.GEOMETRIC_MEAN),
+        dict(dose_response_config=DoseResponseConfig(CurveType.IC50, "Tm (Main)")),
     ],
 )
 def test_melt_readout_must_be_numeric_celsius_without_formula_or_normalization(over):

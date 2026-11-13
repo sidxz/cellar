@@ -186,7 +186,7 @@ class PreviewInstrumentFile:
                 readouts=tuple(
                     ReadoutOption(id=d.id, name=d.name, unit=d.unit)
                     for d in definitions
-                    if d.data_type == ReadoutDataType.NUMERIC and not d.is_calculated
+                    if d.data_type == ReadoutDataType.NUMERIC and not d.is_derived
                 ),
                 settings=export.settings,
                 warnings=tuple(warnings),

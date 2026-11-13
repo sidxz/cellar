@@ -638,6 +638,12 @@ class MeasuredCurveRepository(Protocol):
     async def list_channels(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[CurveChannel]: ...
+    async def list_traced(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> set[tuple[uuid.UUID, str]]:
+        """The (well id, channel key) pairs of the run that have a trace."""
+        ...
+
     async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int: ...
 
 
