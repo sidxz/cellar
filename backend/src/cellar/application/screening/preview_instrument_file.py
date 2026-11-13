@@ -35,6 +35,7 @@ from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import HolderKind, ReadoutDataType
 from cellar.domain.screening_assay.holder import holder_label, position_label, row_letters
+from cellar.domain.screening_assay.melt_window import STEP_KIND
 from cellar.domain.screening_assay.repository import (
     ProtocolRepository,
     ReadoutDataRepository,
@@ -166,6 +167,7 @@ class PreviewInstrumentFile:
 
         definitions = protocol.readout_definitions
         series, warnings = reported_series(export)
+        series = [s for s in series if s.kind != STEP_KIND]  # steps are not mapped to readouts
         warnings += missing_curve_warnings(export, ((p.row, p.column) for p in export.positions))
         return Success(
             InstrumentFilePreview(

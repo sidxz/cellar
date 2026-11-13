@@ -47,10 +47,13 @@ from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import position_label, row_letters
 from cellar.domain.screening_assay.measured_curve import MeasuredCurve, ReportedPoint
+from cellar.domain.screening_assay.melt_window import STEP_KIND
+from cellar.domain.screening_assay.melting_step import MeltingStep
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.repository import (
     MeasuredCurveRepository,
+    MeltingStepRepository,
     ProtocolRepository,
     ReadoutDataRepository,
     RunRepository,
@@ -125,6 +128,7 @@ class _Writes:
     wells: list[Well]
     readouts: list[ReadoutData]
     curves: list[MeasuredCurve]
+    steps: list[MeltingStep]
     warnings: list[str]
 
 
@@ -136,6 +140,7 @@ class ImportInstrumentFile:
         protocol_repo: ProtocolRepository,
         readout_repo: ReadoutDataRepository,
         curve_repo: MeasuredCurveRepository,
+        step_repo: MeltingStepRepository,
         batch_repo: BatchRepository,
         readers: InstrumentReaders,
         attachment_repo: AttachmentRepository,
@@ -148,6 +153,7 @@ class ImportInstrumentFile:
         self._protocol_repo = protocol_repo
         self._readout_repo = readout_repo
         self._curve_repo = curve_repo
+        self._step_repo = step_repo
         self._batch_repo = batch_repo
         self._readers = readers
         self._attachment_repo = attachment_repo
@@ -198,6 +204,8 @@ class ImportInstrumentFile:
                 await self._readout_repo.save_bulk(writes.readouts)
             if writes.curves:
                 await self._curve_repo.save_bulk(writes.curves)
+            if writes.steps:
+                await self._step_repo.save_bulk(writes.steps)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
@@ -218,7 +226,7 @@ class ImportInstrumentFile:
             curves=result.curves_created,
             values_inserted=result.values_inserted,
         )
-        if result.values_inserted:
+        if result.values_inserted or writes.steps:
             computed = await self._calculation_engine.compute_for_run(run.id, workspace_id=ws)
             if isinstance(computed, Failure):
                 _log.warning(
@@ -341,6 +349,7 @@ class ImportInstrumentFile:
             }
 
             readouts: list[ReadoutData] = []
+            steps: list[MeltingStep] = []
             reported_at: defaultdict[tuple[int, int, str], list[ReportedPoint]] = defaultdict(list)
             for v in export.reported:
                 reported_at[(v.row, v.column, v.channel)].append(
@@ -352,6 +361,18 @@ class ImportInstrumentFile:
                         f"{name(v.row, v.column)}: reported value '{v.label}' "
                         "is not a finite number"
                     )
+                if v.kind == STEP_KIND:
+                    if well is not None and any(c.key == v.channel for c in export.channels):
+                        steps.append(
+                            MeltingStep.from_reported(
+                                workspace_id=ws,
+                                run_id=run.id,
+                                well_id=well.id,
+                                channel_key=v.channel,
+                                point=ReportedPoint(v.kind, v.ordinal, v.label, v.value, v.unit),
+                            )
+                        )
+                    continue
                 definition_id = mapped.get((v.channel, v.kind, v.ordinal))
                 if well is None or definition_id is None:
                     continue
@@ -401,6 +422,7 @@ class ImportInstrumentFile:
                 wells=list(wells.values()),
                 readouts=readouts,
                 curves=curves,
+                steps=steps,
                 warnings=warnings,
             )
         )

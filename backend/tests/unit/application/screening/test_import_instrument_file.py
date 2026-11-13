@@ -185,6 +185,8 @@ class Harness:
         self.readout_repo.save_bulk = AsyncMock(side_effect=lambda rows: self.calls.append("rd"))
         self.curve_repo = AsyncMock()
         self.curve_repo.save_bulk = AsyncMock(side_effect=lambda rows: self.calls.append("curve"))
+        self.step_repo = AsyncMock()
+        self.step_repo.save_bulk = AsyncMock(side_effect=lambda rows: self.calls.append("step"))
         self.batch_repo = AsyncMock()
         self.batch_repo.find_by_ids = AsyncMock(
             side_effect=lambda ws, ids: [known[i] for i in ids if i in known]
@@ -205,6 +207,7 @@ class Harness:
             protocol_repo=self.protocol_repo,
             readout_repo=self.readout_repo,
             curve_repo=self.curve_repo,
+            step_repo=self.step_repo,
             batch_repo=self.batch_repo,
             readers=InstrumentReaders((self.reader,)),
             attachment_repo=self.attachment_repo,
@@ -248,6 +251,7 @@ class Harness:
         self.run_repo.save.assert_not_awaited()
         self.readout_repo.save_bulk.assert_not_awaited()
         self.curve_repo.save_bulk.assert_not_awaited()
+        self.step_repo.save_bulk.assert_not_awaited()
         assert self.uow.committed is False
         assert self.run.plates == [] and self.run.wells == []
         self.dispatcher.dispatch_all.assert_not_awaited()
@@ -655,3 +659,35 @@ async def test_transition_series_cannot_be_mapped():
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError) and "is a melting step" in failure.message
     h.assert_nothing_written()
+
+
+async def test_import_creates_one_unreviewed_instrument_step_per_transition():
+    reported = (
+        *(_reported(c, kind="transition", value=60.0 + c) for c in (1, 2, 3)),
+        _reported(2, kind="transition", ordinal=2, value=80.0),
+        _reported(1, channel="ghost", kind="transition"),  # undeclared channel: no step
+    )
+    h = Harness(export=_export(reported=reported))
+    positions = (*h.positions[:2], replace(h.positions[2], used=False))
+    (await h(h.command(positions=positions, series=()))).unwrap()
+
+    steps = h.step_repo.save_bulk.await_args.args[0]
+    assert len(steps) == 3  # position 3 is unused
+    assert {s.run_id for s in steps} == {h.run.id} and {s.workspace_id for s in steps} == {h.ws}
+    assert {s.channel_key for s in steps} == {"ratio"}
+    assert sorted(s.value for s in steps) == [61.0, 62.0, 80.0]
+    assert all(
+        s.source.value == "instrument"
+        and s.status.value == "unreviewed"
+        and s.instrument_value == s.value
+        for s in steps
+    )
+    assert h.calls.index("step") > h.calls.index("curve")  # saved with the curves, then commit
+    assert h.uow.committed is True
+    h.engine.compute_for_run.assert_awaited_once()  # window rows come from steps alone
+
+
+async def test_onsets_do_not_become_steps():
+    h = Harness()
+    (await h()).unwrap()
+    h.step_repo.save_bulk.assert_not_awaited()

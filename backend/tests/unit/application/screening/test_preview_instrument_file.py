@@ -259,6 +259,12 @@ async def test_success_lists_positions_channels_series_and_readouts():
     h.protocol_repo.find_by_id_in_workspace.assert_awaited_once_with(h.ws, h.run.protocol_id)
 
 
+async def test_preview_does_not_offer_transitions_for_mapping():
+    h = Harness(export=_export(("",), reported=(_reported(1), _reported(1, kind="transition"))))
+    preview = (await h()).unwrap()
+    assert [s.series.kind for s in preview.series] == ["onset"]
+
+
 async def test_exact_identifier_match_with_one_batch_is_preselected():
     mol = _molecule()
     only_batch = _batch(mol, "ABC-0000001-001")
@@ -337,7 +343,7 @@ async def test_blank_label_gets_no_suggestion_and_no_lookup():
 
 async def test_series_is_prefilled_only_on_name_match():
     matching = _definition("onset #1 for ratio")
-    reported = (_reported(1), _reported(1, kind="transition"))
+    reported = (_reported(1), _reported(1, channel="signal"))
     h = Harness(
         export=_export(("",), reported=reported),
         definitions=[matching, _definition("Onset")],
@@ -346,7 +352,7 @@ async def test_series_is_prefilled_only_on_name_match():
 
     assert [(s.series.key, s.suggested_readout_definition_id) for s in preview.series] == [
         (("ratio", "onset", 1), matching.id),
-        (("ratio", "transition", 1), None),
+        (("signal", "onset", 1), None),
     ]
 
 

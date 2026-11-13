@@ -1040,6 +1040,7 @@ def register_screening(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_repo=SQLAlchemyReadoutDataRepository(uow),
             curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            step_repo=SQLAlchemyMeltingStepRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             readers=c[InstrumentReaders],
             attachment_repo=SQLAlchemyAttachmentRepository(uow),
