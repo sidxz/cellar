@@ -94,12 +94,12 @@ async def get_run_curves(
     uc: GetRunCurvesDep,
     channel: str | None = None,
     view: Literal["measured", "derivative"] = "measured",
-    window: float | None = Query(None, gt=0),
+    window: float | None = Query(None, gt=0, allow_inf_nan=False),
 ) -> RunCurvesResponse:
     """The run's holder, positions and channels, with the curves of one channel
     (the one asked for, else the first). ``view=derivative`` returns the smoothed first
-    derivative instead, calculated on request (``window`` in x units, default 5% of the
-    widest x range) and never stored."""
+    derivative instead, calculated on request (``window`` in x units, at most the widest
+    x range, default 5% of it) and never stored."""
     result = await uc(
         GetRunCurvesQuery(
             workspace_id=auth.workspace_id,

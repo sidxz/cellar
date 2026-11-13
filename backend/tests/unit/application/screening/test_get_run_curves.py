@@ -220,9 +220,24 @@ async def test_measured_view_does_not_call_the_derivative_service():
 
 async def test_explicit_window_is_passed_through():
     h = Harness()
-    out = (await h.uc(h.query(view="derivative", window=2.5), auth=h.viewer)).unwrap()
-    assert out.window == 2.5
-    assert {c.kwargs["window"] for c in h.derivative.derivative.call_args_list} == {2.5}
+    out = (await h.uc(h.query(view="derivative", window=0.25), auth=h.viewer)).unwrap()
+    assert out.window == 0.25
+    assert {c.kwargs["window"] for c in h.derivative.derivative.call_args_list} == {0.25}
+
+
+async def test_window_up_to_the_widest_x_range_is_accepted():
+    h = Harness()
+    out = (await h.uc(h.query(view="derivative", window=1.0), auth=h.viewer)).unwrap()
+    assert out.window == 1.0
+
+
+@pytest.mark.parametrize("window", [1.5, float("inf"), float("nan"), -1.0])
+async def test_window_outside_the_x_range_or_not_finite_is_a_validation_error(window):
+    h = Harness()  # every curve spans x 20 to 21
+    result = await h.uc(h.query(view="derivative", window=window), auth=h.viewer)
+    assert isinstance(result.failure(), ValidationError)
+    assert "at most 1" in str(result.failure())
+    h.derivative.derivative.assert_not_called()
 
 
 async def test_derivative_view_leaves_out_a_curve_with_an_empty_derivative():

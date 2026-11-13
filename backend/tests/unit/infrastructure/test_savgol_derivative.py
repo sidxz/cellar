@@ -56,3 +56,13 @@ def test_default_window_is_five_percent_of_the_widest_range():
 def test_fewer_than_two_distinct_x_gives_an_empty_derivative():
     out = SavgolCurveDerivative().derivative([30.0, 30.0, 30.0], [1.0, 2.0, 3.0], window=3.5)
     assert (out.x, out.y) == ((), ())
+
+
+def test_grid_is_bounded_by_the_input_size():
+    # 100 closely spaced points and one far away: the median spacing alone would ask for a
+    # 100,001-point grid.
+    x = [i * 0.001 for i in range(100)] + [100.0]
+    out = SavgolCurveDerivative().derivative(x, [v * v for v in x], window=3.5)
+    assert 2 <= len(out.x) <= 4 * len(x)
+    assert (out.x[0], out.x[-1]) == (0.0, pytest.approx(100.0))
+    assert all(math.isfinite(v) for v in out.y)

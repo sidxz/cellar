@@ -258,6 +258,9 @@ async def test_derivative_view_over_http(
     body = (await client.get(url, params={"view": "derivative"})).json()
     assert body["view"] == "derivative" and body["window"] > 0 and len(body["curves"]) == 3
     assert (await client.get(url, params={"view": "derivative", "window": 0})).status_code == 422
+    for window in ("inf", "nan", "1e308"):
+        resp = await client.get(url, params={"view": "derivative", "window": window})
+        assert resp.status_code == 422, (window, resp.text)
     measured = (await client.get(url)).json()
     assert measured["view"] == "measured" and measured["window"] is None
 

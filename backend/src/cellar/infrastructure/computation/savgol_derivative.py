@@ -1,4 +1,5 @@
-"""Savitzky-Golay first derivative of a curve, resampled on its own median spacing."""
+"""Savitzky-Golay first derivative of a curve, resampled on its own median spacing
+(capped at 4 points per input point)."""
 
 from __future__ import annotations
 
@@ -23,7 +24,11 @@ class SavgolCurveDerivative:
         if len(xs) < 2:  # no spacing to differentiate over; NaN cannot go in JSON
             return DerivativeCurve(x=(), y=())
         step = float(np.median(np.diff(xs)))  # the curve's own spacing; no instrument constant
-        grid = np.arange(xs[0], xs[-1] + step / 2, step)
+        # Evenly spaced over the curve's range, at most 4 points per input point, so an
+        # unevenly sampled curve cannot ask for an unbounded grid.
+        size = min(round((xs[-1] - xs[0]) / step) + 1, 4 * len(xs))
+        grid = np.linspace(xs[0], xs[-1], size)
+        step = float(grid[1] - grid[0])
         yi = np.interp(grid, xs, ys)
         if len(grid) < 5:
             d = np.gradient(yi, step)

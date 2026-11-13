@@ -113,7 +113,16 @@ class GetRunCurves:
         window: float | None = None
         if input.view == "derivative" and series:
             # One window for the whole response; calculated here, never stored.
-            window = input.window or default_window([(min(s.x), max(s.x)) for s in series])
+            ranges = [(min(s.x), max(s.x)) for s in series]
+            widest = max(hi - lo for lo, hi in ranges)
+            if input.window is not None and not 0 < input.window <= widest:
+                return Failure(
+                    ValidationError(
+                        f"The derivative window must be a number above 0 and at most {widest:g}, "
+                        "the widest x range of the curves"
+                    )
+                )
+            window = input.window or default_window(ranges)
             series = [d for d in (self._differentiate(s, window) for s in series) if d.x]
         elif input.view == "derivative":
             window = input.window
