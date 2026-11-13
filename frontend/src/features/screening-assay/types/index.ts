@@ -15,6 +15,8 @@ import type {
   InstrumentPreviewResponse,
   InterceptValueResponse,
   LatestRunResponse as LatestRunResponseModel,
+  LayoutFileResponse,
+  LayoutRowModel,
   PlateData as PlateDataModel,
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
@@ -794,3 +796,5 @@ export type RunCurves = RunCurvesResponse;
 export type PositionValues = PositionValuesModel;
 export type PositionEdit = PositionEditRequest;
 export type RelabelResult = RelabelPositionsResponse;
+export type LayoutFile = LayoutFileResponse;
+export type LayoutFileRow = LayoutRowModel;

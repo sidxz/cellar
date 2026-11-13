@@ -15,7 +15,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost,
   HTTPValidationError,
+  LayoutFileResponse,
   RelabelPositionsRequest,
   RelabelPositionsResponse
 } from '.././model';
@@ -88,6 +90,74 @@ export const useRelabelRunPositionsApiV1RunsRunIdRelabelPositionsPost = <TError 
       > => {
 
       const mutationOptions = getRelabelRunPositionsApiV1RunsRunIdRelabelPositionsPostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Read a labelling layout file and resolve its compounds and batches. Writes nothing.
+ * @summary Resolve Layout File
+ */
+export const resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost = (
+    runId: string,
+    bodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost: BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost,
+ signal?: AbortSignal
+) => {
+      
+      const formData = new FormData();
+formData.append(`file`, bodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost.file)
+
+      return customInstance<LayoutFileResponse>(
+      {url: `/api/v1/runs/${runId}/resolve-layout-file`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      );
+    }
+  
+
+
+export const getResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost>>, TError,{runId: string;data: BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost>>, TError,{runId: string;data: BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost}, TContext> => {
+
+const mutationKey = ['resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost>>, {runId: string;data: BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost>>>
+    export type ResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationBody = BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost
+    export type ResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Resolve Layout File
+ */
+export const useResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost>>, TError,{runId: string;data: BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof resolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost>>,
+        TError,
+        {runId: string;data: BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost},
+        TContext
+      > => {
+
+      const mutationOptions = getResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

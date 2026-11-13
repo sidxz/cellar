@@ -47,6 +47,7 @@ const preview: InstrumentPreview = {
       suggestion: {
         molecule_id: "m1",
         molecule_name: "ABC-0000001",
+        registration_number: "REG-0001",
         batches: [{ batch_id: "b1", batch_number: "B-1" }],
         batch_id: "b1",
       },

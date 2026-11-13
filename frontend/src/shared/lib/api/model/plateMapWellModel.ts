@@ -8,6 +8,7 @@ import type { PlateMapWellModelBatchId } from './plateMapWellModelBatchId';
 import type { PlateMapWellModelBatchNumber } from './plateMapWellModelBatchNumber';
 import type { PlateMapWellModelMoleculeId } from './plateMapWellModelMoleculeId';
 import type { PlateMapWellModelMoleculeName } from './plateMapWellModelMoleculeName';
+import type { PlateMapWellModelRegistrationNumber } from './plateMapWellModelRegistrationNumber';
 import type { PlateMapWellModelSmiles } from './plateMapWellModelSmiles';
 import type { PlateMapWellModelDose } from './plateMapWellModelDose';
 import type { PlateMapWellModelLabel } from './plateMapWellModelLabel';
@@ -23,6 +24,7 @@ export interface PlateMapWellModel {
   batch_number?: PlateMapWellModelBatchNumber;
   molecule_id?: PlateMapWellModelMoleculeId;
   molecule_name?: PlateMapWellModelMoleculeName;
+  registration_number: PlateMapWellModelRegistrationNumber;
   synonyms?: string[];
   smiles?: PlateMapWellModelSmiles;
   dose?: PlateMapWellModelDose;

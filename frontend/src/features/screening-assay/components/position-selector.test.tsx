@@ -14,6 +14,7 @@ function position(id: string, row: string, column: number, wellType = "sample"):
     row,
     column,
     well_type: wellType,
+    registration_number: null,
     position_label: `Position ${row}${column}`,
     label: null,
     note: null,

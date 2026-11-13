@@ -28,6 +28,7 @@ const preview: InstrumentPreview = {
       suggestion: {
         molecule_id: "m1",
         molecule_name: "ABC-0000001",
+        registration_number: "REG-0001",
         batches: [{ batch_id: "b1", batch_number: "B-1" }],
         batch_id: "b1",
       },
@@ -40,6 +41,7 @@ const preview: InstrumentPreview = {
       suggestion: {
         molecule_id: "m2",
         molecule_name: "ABC-0000002",
+        registration_number: "REG-0002",
         batches: [
           { batch_id: "b2", batch_number: "B-2" },
           { batch_id: "b3", batch_number: "B-3" },

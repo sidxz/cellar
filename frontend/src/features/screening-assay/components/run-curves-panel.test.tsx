@@ -35,6 +35,7 @@ const positions = Array.from({ length: 9 }, (_, i) => ({
   row: "A",
   column: i + 1,
   well_type: i === 0 ? "reference" : "sample",
+  registration_number: null,
   position_label: `Position ${i + 1}`,
   label: i === 0 ? "Protein alone" : `ABC-000000${i + 1}`,
   note: i === 0 ? "bubble at start" : null,

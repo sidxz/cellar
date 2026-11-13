@@ -15,6 +15,7 @@ function position(id: string, column: number, wellType: string, label: string | 
     batch_number: id === "w2" ? "B-001" : null,
     molecule_id: null,
     molecule_name: id === "w2" ? "ABC-0000001" : null,
+    registration_number: id === "w2" ? "REG-0001" : null,
     synonyms: [],
     smiles: null,
     dose: id === "w2" ? 50 : null,
