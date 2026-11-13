@@ -8,7 +8,10 @@ import type { PositionEditRequest } from './positionEditRequest';
 import type { RelabelPositionsRequestReason } from './relabelPositionsRequestReason';
 
 export interface RelabelPositionsRequest {
-  /** @minItems 1 */
+  /**
+   * @minItems 1
+   * @maxItems 2000
+   */
   positions: PositionEditRequest[];
   reason?: RelabelPositionsRequestReason;
 }

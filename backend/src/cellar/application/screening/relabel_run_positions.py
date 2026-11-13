@@ -87,6 +87,12 @@ class RelabelRunPositions:
                 return Failure(NotFoundError("Run", str(input.run_id)))
             if not await self._curve_repo.list_channels(ws, run.id):
                 return Failure(ConflictError(NO_MEASURED_CURVES))
+            # Stale before campaign: an edit made from old values is refused as stale,
+            # whatever else it would change.
+            try:
+                run.check_position_edits(input.edits)
+            except (ValidationError, ConflictError) as exc:
+                return Failure(exc)
 
             named = {
                 b
@@ -101,9 +107,7 @@ class RelabelRunPositions:
 
             wells = {w.id: w for w in run.wells}
             moving = {
-                e.well_id
-                for e in input.edits
-                if e.well_id in wells and e.new.batch_id != wells[e.well_id].batch_id
+                e.well_id for e in input.edits if e.new.batch_id != wells[e.well_id].batch_id
             }
             if moving:
                 # A campaign can hold a position's value without naming its readout row

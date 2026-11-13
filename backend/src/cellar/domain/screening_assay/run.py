@@ -32,7 +32,12 @@ from cellar.domain.screening_assay.events import (
 )
 from cellar.domain.screening_assay.holder import position_label
 from cellar.domain.shared.entity import AggregateRoot, Entity
-from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import (
+    ConflictError,
+    NotFoundError,
+    StaleEditError,
+    ValidationError,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion, validate_hit_criteria
 from cellar.domain.shared.value_objects import Barcode
 
@@ -113,7 +118,8 @@ def _field_changes(
         return None if b is None else batch_names.get(b, str(b))
 
     def dose(d: float | None) -> str | None:
-        return None if d is None else f"{d:g}"
+        # repr keeps every digit: an audit row must tell 0.1234567 from 0.1234568.
+        return None if d is None else repr(d)
 
     candidates = (
         ("label", old.label, new.label, old.label, new.label),
@@ -557,6 +563,13 @@ class Run(AggregateRoot):
             )
         )
 
+    def check_position_edits(self, edits: Sequence[PositionEdit]) -> None:
+        """The checks ``relabel_positions`` makes before it compares anything: the run is
+        not locked, each position is on the run and given once, its values are valid, and
+        nothing changed since the user opened it (a conflict naming the positions).
+        Changes nothing."""
+        self._checked_position_edits(edits)
+
     def relabel_positions(
         self,
         edits: Sequence[PositionEdit],
@@ -572,33 +585,7 @@ class Run(AggregateRoot):
         approved run; role, batch and concentration only while draft or in progress.
         Returns the changes; no change registers nothing.
         """
-        self._guard_not_locked()
-
-        wells = {w.id: w for w in self.wells}
-        plates = {p.id: p for p in self.plates}
-        checked: list[tuple[Well, str, PositionValues, PositionValues]] = []
-        seen: set[uuid.UUID] = set()
-        for edit in edits:
-            well = wells.get(edit.well_id)
-            if well is None:
-                raise ValidationError(f"Position '{edit.well_id}' is not on this run")
-            if edit.well_id in seen:
-                raise ValidationError(f"Position '{edit.well_id}' is given more than once")
-            seen.add(edit.well_id)
-            plate = plates[well.plate_id]
-            label = position_label(plate.holder_kind, well.row, well.column)
-            try:
-                expected, new = _cleaned(edit.expected), _cleaned(edit.new)
-            except ValidationError as exc:
-                raise ValidationError(f"{label}: {exc.message}") from exc
-            checked.append((well, label, expected, new))
-
-        stale = [label for well, label, expected, _ in checked if expected != well.values]
-        if stale:
-            raise ConflictError(
-                f"Changed by someone else since you opened them: {', '.join(stale)}. "
-                "Reload and try again."
-            )
+        checked = self._checked_position_edits(edits)
 
         names = batch_names or {}
         changed: list[tuple[Well, PositionValues, PositionChange]] = []
@@ -639,6 +626,38 @@ class Run(AggregateRoot):
             )
         )
         return changes
+
+    def _checked_position_edits(
+        self, edits: Sequence[PositionEdit]
+    ) -> list[tuple[Well, str, PositionValues, PositionValues]]:
+        self._guard_not_locked()
+
+        wells = {w.id: w for w in self.wells}
+        plates = {p.id: p for p in self.plates}
+        checked: list[tuple[Well, str, PositionValues, PositionValues]] = []
+        seen: set[uuid.UUID] = set()
+        for edit in edits:
+            well = wells.get(edit.well_id)
+            if well is None:
+                raise ValidationError(f"Position '{edit.well_id}' is not on this run")
+            if edit.well_id in seen:
+                raise ValidationError(f"Position '{edit.well_id}' is given more than once")
+            seen.add(edit.well_id)
+            plate = plates[well.plate_id]
+            label = position_label(plate.holder_kind, well.row, well.column)
+            try:
+                expected, new = _cleaned(edit.expected), _cleaned(edit.new)
+            except ValidationError as exc:
+                raise ValidationError(f"{label}: {exc.message}") from exc
+            checked.append((well, label, expected, new))
+
+        stale = [label for well, label, expected, _ in checked if expected != well.values]
+        if stale:
+            raise StaleEditError(
+                f"Changed by someone else since you opened them: {', '.join(stale)}. "
+                "Reload and try again."
+            )
+        return checked
 
     def reset_data(
         self,

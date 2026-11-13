@@ -159,6 +159,8 @@ async def test_stale_edit_returns_409_and_writes_nothing(
     assert (await client.post(_url(s.run_id), json={"positions": [first]})).status_code == 200
     resp = await client.post(_url(s.run_id), json={"positions": [second, edit(p1, note="n")]})
     assert resp.status_code == 409 and LABEL(2) in resp.text
+    # Its own error name: the only 409 a reload can help with.
+    assert resp.json()["error"] == "StaleEditError"
     positions = await _positions(client, s.run_id)
     assert positions[1]["label"] == "mine" and positions[0]["note"] is None
 
@@ -261,3 +263,5 @@ async def test_body_validation_returns_422(client: AsyncClient) -> None:
     body["positions"][0]["new"] = body["positions"][0]["new"] | {"dose": -1}
     assert (await client.post(_url(uuid.uuid4()), json=body)).status_code == 422
     assert (await client.post(_url(uuid.uuid4()), json={"positions": []})).status_code == 422
+    too_many = {"positions": _bare_body()["positions"] * 2001}
+    assert (await client.post(_url(uuid.uuid4()), json=too_many)).status_code == 422

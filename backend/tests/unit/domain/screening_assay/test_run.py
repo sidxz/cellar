@@ -29,7 +29,12 @@ from cellar.domain.screening_assay.events import (
 )
 from cellar.domain.screening_assay.holder import position_label
 from cellar.domain.screening_assay.run import Plate, PositionEdit, PositionValues, Run, Well
-from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import (
+    ConflictError,
+    NotFoundError,
+    StaleEditError,
+    ValidationError,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.value_objects import Barcode
 
@@ -1170,12 +1175,35 @@ def test_relabel_changes_fields_and_registers_one_event():
     assert changes[0].position_label == P(2)
     assert changes[0].fields == (
         FieldChange("label", "x", "y"),
-        FieldChange("concentration", "10", "25"),
+        FieldChange("concentration", "10.0", "25.0"),
     )
     assert event.audit_changes()[0] == (f"{P(2)}: label", "x", "y")
     assert len(event.audit_changes()) == 3
     assert not changes[0].batch_changed and changes[0].touches_calculation
     assert not changes[1].touches_calculation
+
+
+@pytest.mark.parametrize(
+    "old,new,old_text,new_text",
+    [
+        (0.1234567, 0.1234568, "0.1234567", "0.1234568"),
+        (11.1111111, 1234567.0, "11.1111111", "1234567.0"),
+    ],
+)
+def test_relabel_audit_text_keeps_every_digit_of_a_concentration(old, new, old_text, new_text):
+    run, (_, w2, _) = _instrument_run()
+    w2.dose = old
+    (change,) = run.relabel_positions([E(w2, dose=new)])
+    assert change.fields == (FieldChange("concentration", old_text, new_text),)
+
+
+def test_check_position_edits_refuses_a_stale_edit_and_changes_nothing():
+    run, (_, w2, w3) = _instrument_run()
+    stale = PositionEdit(w2.id, replace(w2.values, label="old"), replace(w2.values, batch_id=None))
+    with pytest.raises(StaleEditError, match=P(2)):
+        run.check_position_edits([E(w3, note="n"), stale])
+    run.check_position_edits([E(w2, batch_id=None), E(w3, note="n")])
+    assert (w2.batch_id is not None, w3.note) == (True, None) and run.collect_events() == []
 
 
 def test_relabel_batch_change_uses_batch_names_and_flags_calculation():

@@ -55,6 +55,11 @@ class ConflictError(DomainError):
     """Raised when an operation violates a business rule or uniqueness constraint."""
 
 
+class StaleEditError(ConflictError):
+    """Raised when an edit was made from values someone else has changed since; reloading
+    them is the way out. Its own name in the error body tells it from other conflicts."""
+
+
 class ConcurrencyConflictError(DomainError):
     """Raised when optimistic concurrency check fails (version mismatch)."""
 

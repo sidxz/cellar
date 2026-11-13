@@ -227,6 +227,21 @@ async def test_batch_change_refused_when_a_campaign_may_hold_the_compounds_value
     h.assert_nothing_written()
 
 
+async def test_stale_edit_is_refused_as_stale_before_the_campaign_is_asked():
+    """Someone else changed the batch since the dialog opened: a label-only edit from the
+    old values must say "changed by someone else", not "used by a campaign"."""
+    h = Harness()
+    h.campaign_repo.find_names_holding_run_values.return_value = {
+        h.batch1.molecule_id: "Campaign A"
+    }
+    opened = replace(h.w2.values, batch_id=h.batch2.id)
+    failure = (await h([PositionEdit(h.w2.id, opened, replace(opened, label="y"))])).failure()
+    assert isinstance(failure, ConflictError) and "someone else" in str(failure)
+    assert "Campaign A" not in str(failure)
+    h.campaign_repo.find_names_holding_run_values.assert_not_awaited()
+    h.assert_nothing_written()
+
+
 async def test_label_change_on_a_position_a_campaign_uses_is_allowed():
     h = Harness()
     h.campaign_repo.find_names_holding_run_values.return_value = {

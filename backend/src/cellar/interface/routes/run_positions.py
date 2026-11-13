@@ -17,6 +17,7 @@ from cellar.application.screening.relabel_run_positions import (
     RelabelRunPositionsCommand,
 )
 from cellar.application.screening.resolve_layout_file import (
+    MAX_LAYOUT_ROWS,
     LayoutCompound,
     LayoutFile,
     LayoutRow,
@@ -56,7 +57,8 @@ class PositionEditRequest(BaseModel):
 
 
 class RelabelPositionsRequest(BaseModel):
-    positions: list[PositionEditRequest] = Field(min_length=1)
+    # At most as many positions as a layout file can fill; the run refuses any not on it.
+    positions: list[PositionEditRequest] = Field(min_length=1, max_length=MAX_LAYOUT_ROWS)
     # Required when the run is completed or approved.
     reason: str | None = Field(None, max_length=500)
 
