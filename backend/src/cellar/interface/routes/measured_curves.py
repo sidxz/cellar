@@ -98,8 +98,8 @@ async def get_run_curves(
 ) -> RunCurvesResponse:
     """The run's holder, positions and channels, with the curves of one channel
     (the one asked for, else the first). ``view=derivative`` returns the smoothed first
-    derivative instead, calculated on request (``window`` in x units, at most the widest
-    x range, default 5% of it) and never stored."""
+    derivative instead, calculated on request (``window`` in x units, default 5% of the
+    widest x range; a wider window is clamped to that range) and never stored."""
     result = await uc(
         GetRunCurvesQuery(
             workspace_id=auth.workspace_id,

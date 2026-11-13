@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from dataclasses import dataclass
 
@@ -115,14 +116,12 @@ class GetRunCurves:
             # One window for the whole response; calculated here, never stored.
             ranges = [(min(s.x), max(s.x)) for s in series]
             widest = max(hi - lo for lo, hi in ranges)
-            if input.window is not None and not 0 < input.window <= widest:
+            if input.window is not None and not (math.isfinite(input.window) and input.window > 0):
                 return Failure(
-                    ValidationError(
-                        f"The derivative window must be a number above 0 and at most {widest:g}, "
-                        "the widest x range of the curves"
-                    )
+                    ValidationError("The derivative window must be a finite number above 0")
                 )
-            window = input.window or default_window(ranges)
+            # A window wider than the curves is clamped to their widest x range.
+            window = min(input.window, widest) if input.window else default_window(ranges)
             series = [d for d in (self._differentiate(s, window) for s in series) if d.x]
         elif input.view == "derivative":
             window = input.window

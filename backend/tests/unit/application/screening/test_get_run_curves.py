@@ -231,12 +231,19 @@ async def test_window_up_to_the_widest_x_range_is_accepted():
     assert out.window == 1.0
 
 
-@pytest.mark.parametrize("window", [1.5, float("inf"), float("nan"), -1.0])
-async def test_window_outside_the_x_range_or_not_finite_is_a_validation_error(window):
+async def test_window_larger_than_the_widest_x_range_is_clamped_to_it():
     h = Harness()  # every curve spans x 20 to 21
+    out = (await h.uc(h.query(view="derivative", window=1e308), auth=h.viewer)).unwrap()
+    assert out.window == 1.0
+    assert {c.kwargs["window"] for c in h.derivative.derivative.call_args_list} == {1.0}
+
+
+@pytest.mark.parametrize("window", [float("inf"), float("nan"), -1.0, 0.0])
+async def test_window_not_finite_or_not_positive_is_a_validation_error(window):
+    h = Harness()
     result = await h.uc(h.query(view="derivative", window=window), auth=h.viewer)
     assert isinstance(result.failure(), ValidationError)
-    assert "at most 1" in str(result.failure())
+    assert "above 0" in str(result.failure())
     h.derivative.derivative.assert_not_called()
 
 
