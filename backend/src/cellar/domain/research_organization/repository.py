@@ -288,6 +288,15 @@ class CampaignRepository(Protocol):
         """True when a link row was actually removed."""
         ...
 
+    async def find_names_using_readouts(
+        self, workspace_id: uuid.UUID, readout_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """Readout row id -> name of a campaign with a measurement sourced from that row.
+
+        Rows no campaign uses are absent; an empty list gives ``{}``.
+        """
+        ...
+
     async def project_targets(
         self, workspace_id: uuid.UUID, campaigns: list[Campaign]
     ) -> dict[uuid.UUID, list[TargetRef]]:

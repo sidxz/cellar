@@ -566,6 +566,28 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             return None
         return [SeedRun.from_dict(s).run_id for s in (rows[0] or [])]
 
+    async def find_names_using_readouts(
+        self, workspace_id: uuid.UUID, readout_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        if not readout_ids:
+            return {}
+        stmt = (
+            select(CampaignMeasurementModel.source_readout_id, CampaignModel.name)
+            .join(
+                CampaignResultModel, CampaignResultModel.id == CampaignMeasurementModel.result_id
+            )
+            .join(CampaignModel, CampaignModel.id == CampaignResultModel.campaign_id)
+            .where(
+                CampaignModel.workspace_id == workspace_id,
+                CampaignMeasurementModel.source_readout_id.in_(readout_ids),
+            )
+            .order_by(CampaignModel.name)
+        )
+        names: dict[uuid.UUID, str] = {}
+        for readout_id, name in (await self._session.execute(stmt)).all():
+            names.setdefault(readout_id, name)
+        return names
+
     # ------------------------------------------------------------------
     # Campaign-collection links (association, not aggregate state)
     # ------------------------------------------------------------------
