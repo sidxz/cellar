@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections import Counter
+from collections.abc import Sequence
 
 from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -88,62 +89,15 @@ class SQLAlchemyPlateMapReader:
                 wells_result = await session.execute(wells_stmt)
                 wells = list(wells_result.scalars().all())
 
-            # Batch lookup: batch_id -> (batch_number, molecule_id) + per-mol
-            # display info (name, smiles, custom synonyms) so the well tooltip
-            # can render structure + aliases without a second roundtrip.
-            batch_ids = list({w.batch_id for w in wells if w.batch_id is not None})
-            batch_to_mol: dict[uuid.UUID, uuid.UUID] = {}
-            batch_numbers: dict[uuid.UUID, str] = {}
-            mol_names: dict[uuid.UUID, str] = {}
-            mol_smiles: dict[uuid.UUID, str | None] = {}
-            mol_regs: dict[uuid.UUID, str] = {}
-            mol_synonyms: dict[uuid.UUID, list[str]] = {}
-
-            if batch_ids:
-                batch_stmt = select(
-                    BatchModel.id, BatchModel.molecule_id, BatchModel.batch_number
-                ).where(
-                    BatchModel.workspace_id == workspace_id,
-                    BatchModel.id.in_(batch_ids),
+            kinds = {p.id: HolderKind(p.holder_kind) for p in plates}
+            entries = {
+                e.well_id: e
+                for e in await well_map_entries(
+                    session, workspace_id, [(w, kinds[w.plate_id]) for w in wells]
                 )
-                batch_rows = await session.execute(batch_stmt)
-                for bid, mol_id, bnum in batch_rows:
-                    batch_to_mol[bid] = mol_id
-                    batch_numbers[bid] = bnum
-
-                mol_ids = list(set(batch_to_mol.values()))
-                if mol_ids:
-                    mol_stmt = select(
-                        MoleculeModel.id,
-                        MoleculeModel.name,
-                        MoleculeModel.smiles,
-                        MoleculeModel.registration_number,
-                    ).where(
-                        MoleculeModel.workspace_id == workspace_id,
-                        MoleculeModel.id.in_(mol_ids),
-                    )
-                    mol_rows = await session.execute(mol_stmt)
-                    for mid, name, smiles, reg in mol_rows:
-                        mol_names[mid] = name
-                        mol_smiles[mid] = smiles
-                        mol_regs[mid] = reg
-
-                    ident_stmt = select(
-                        MoleculeIdentifierModel.molecule_id,
-                        MoleculeIdentifierModel.identifier,
-                        MoleculeIdentifierModel.identifier_type,
-                    ).where(
-                        MoleculeIdentifierModel.workspace_id == workspace_id,
-                        MoleculeIdentifierModel.molecule_id.in_(mol_ids),
-                        MoleculeIdentifierModel.identifier_type.in_(_ALIAS_TYPES),
-                    )
-                    ident_rows = await session.execute(ident_stmt)
-                    for mid, ident, _ in ident_rows:
-                        if ident:
-                            mol_synonyms.setdefault(mid, []).append(ident)
-
+            }
             plate_wells: dict[uuid.UUID, list[WellModel]] = {p.id: [] for p in plates}
-            for w in wells:
+            for w in sorted(wells, key=lambda w: (w.row, w.column)):
                 plate_wells[w.plate_id].append(w)
 
             has_measured_curves = bool(
@@ -160,35 +114,7 @@ class SQLAlchemyPlateMapReader:
             plates_data: list[PlateMapData] = []
             for plate in sorted(plates, key=lambda p: p.plate_number):
                 holder_kind = HolderKind(plate.holder_kind)
-                well_entries: list[WellMapEntry] = []
-                for well in sorted(plate_wells[plate.id], key=lambda w: (w.row, w.column)):
-                    molecule_id = batch_to_mol.get(well.batch_id) if well.batch_id else None
-                    well_entries.append(
-                        WellMapEntry(
-                            well_id=well.id,
-                            position=f"{well.row}{well.column}",
-                            row=well.row,
-                            column=well.column,
-                            well_type=well.well_type,
-                            batch_id=well.batch_id,
-                            batch_number=(
-                                batch_numbers.get(well.batch_id) if well.batch_id else None
-                            ),
-                            molecule_id=molecule_id,
-                            molecule_name=(mol_names.get(molecule_id) if molecule_id else None),
-                            registration_number=(
-                                mol_regs.get(molecule_id) if molecule_id else None
-                            ),
-                            synonyms=tuple(
-                                mol_synonyms.get(molecule_id, []) if molecule_id else ()
-                            ),
-                            smiles=(mol_smiles.get(molecule_id) if molecule_id else None),
-                            dose=well.dose,
-                            label=well.label,
-                            note=well.note,
-                            position_label=position_label(holder_kind, well.row, well.column),
-                        )
-                    )
+                well_entries = [entries[w.id] for w in plate_wells[plate.id]]
                 link = linked.get(plate.registered_plate_id) if plate.registered_plate_id else None
                 plates_data.append(
                     PlateMapData(
@@ -215,6 +141,91 @@ class SQLAlchemyPlateMapReader:
             plates=plates_data,
             has_measured_curves=has_measured_curves,
         )
+
+
+async def well_map_entries(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    wells: Sequence[tuple[WellModel, HolderKind]],
+) -> list[WellMapEntry]:
+    """Entries for ``wells`` (each with its holder's kind), in the order given: batch,
+    compound, synonyms and position label resolved in one query each."""
+    # Batch lookup: batch_id -> (batch_number, molecule_id) + per-mol
+    # display info (name, smiles, custom synonyms) so the well tooltip
+    # can render structure + aliases without a second roundtrip.
+    batch_ids = list({w.batch_id for w, _ in wells if w.batch_id is not None})
+    batch_to_mol: dict[uuid.UUID, uuid.UUID] = {}
+    batch_numbers: dict[uuid.UUID, str] = {}
+    mol_names: dict[uuid.UUID, str] = {}
+    mol_smiles: dict[uuid.UUID, str | None] = {}
+    mol_regs: dict[uuid.UUID, str] = {}
+    mol_synonyms: dict[uuid.UUID, list[str]] = {}
+
+    if batch_ids:
+        batch_stmt = select(BatchModel.id, BatchModel.molecule_id, BatchModel.batch_number).where(
+            BatchModel.workspace_id == workspace_id,
+            BatchModel.id.in_(batch_ids),
+        )
+        batch_rows = await session.execute(batch_stmt)
+        for bid, mol_id, bnum in batch_rows:
+            batch_to_mol[bid] = mol_id
+            batch_numbers[bid] = bnum
+
+        mol_ids = list(set(batch_to_mol.values()))
+        if mol_ids:
+            mol_stmt = select(
+                MoleculeModel.id,
+                MoleculeModel.name,
+                MoleculeModel.smiles,
+                MoleculeModel.registration_number,
+            ).where(
+                MoleculeModel.workspace_id == workspace_id,
+                MoleculeModel.id.in_(mol_ids),
+            )
+            mol_rows = await session.execute(mol_stmt)
+            for mid, name, smiles, reg in mol_rows:
+                mol_names[mid] = name
+                mol_smiles[mid] = smiles
+                mol_regs[mid] = reg
+
+            ident_stmt = select(
+                MoleculeIdentifierModel.molecule_id,
+                MoleculeIdentifierModel.identifier,
+                MoleculeIdentifierModel.identifier_type,
+            ).where(
+                MoleculeIdentifierModel.workspace_id == workspace_id,
+                MoleculeIdentifierModel.molecule_id.in_(mol_ids),
+                MoleculeIdentifierModel.identifier_type.in_(_ALIAS_TYPES),
+            )
+            ident_rows = await session.execute(ident_stmt)
+            for mid, ident, _ in ident_rows:
+                if ident:
+                    mol_synonyms.setdefault(mid, []).append(ident)
+
+    entries: list[WellMapEntry] = []
+    for well, holder_kind in wells:
+        molecule_id = batch_to_mol.get(well.batch_id) if well.batch_id else None
+        entries.append(
+            WellMapEntry(
+                well_id=well.id,
+                position=f"{well.row}{well.column}",
+                row=well.row,
+                column=well.column,
+                well_type=well.well_type,
+                batch_id=well.batch_id,
+                batch_number=(batch_numbers.get(well.batch_id) if well.batch_id else None),
+                molecule_id=molecule_id,
+                molecule_name=(mol_names.get(molecule_id) if molecule_id else None),
+                registration_number=(mol_regs.get(molecule_id) if molecule_id else None),
+                synonyms=tuple(mol_synonyms.get(molecule_id, []) if molecule_id else ()),
+                smiles=(mol_smiles.get(molecule_id) if molecule_id else None),
+                dose=well.dose,
+                label=well.label,
+                note=well.note,
+                position_label=position_label(holder_kind, well.row, well.column),
+            )
+        )
+    return entries
 
 
 def _summarize(wells: list[WellMapEntry]) -> PlateMapSummary:
