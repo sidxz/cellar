@@ -214,6 +214,7 @@ async def test_preview_then_import_then_read_curves(
     assert out["reader"] == default_readers()[0].id
     assert (out["positions_created"], out["curves_created"], out["values_inserted"]) == (3, 12, 3)
     assert out["file_attached"] is True and out["attachment_warning"] is None
+    assert out["stored_file_name"] is None
     assert uuid.UUID(out["attachment_id"])
     assert out["compute_warning"] is None  # the calculation engine ran on a holder with no format
 
@@ -345,6 +346,24 @@ async def test_second_import_is_refused_until_reset(
     assert await _count(session_factory, "measured_curves", s.run_id) == 0
     again = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
     assert again.status_code == 201, again.text
+
+
+async def test_reimport_after_reset_keeps_its_own_copy_of_the_file(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    labelling = await _import(client, s)
+    assert (await client.post(f"/api/v1/runs/{s.run_id}/reset-data")).status_code == 200
+
+    again = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
+    assert again.status_code == 201, again.text
+    out = again.json()
+    assert out["file_attached"] is True and out["attachment_warning"] is None
+    assert out["stored_file_name"] == "run (2).xlsx"
+    listed = (await client.get(f"/api/v1/run/{s.run_id}/attachments")).json()
+    assert sorted(a["file_name"] for a in listed) == ["run (2).xlsx", "run.xlsx"]
 
 
 async def test_plate_imports_are_refused_on_a_run_whose_holder_is_not_a_plate(

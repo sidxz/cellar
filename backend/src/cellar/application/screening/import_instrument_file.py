@@ -41,6 +41,8 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.attachment.enums import AttachableType
+from cellar.domain.attachment.file_name import numbered_file_name
+from cellar.domain.attachment.repository import AttachmentRepository
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import position_label, row_letters
@@ -59,6 +61,8 @@ from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationEr
 from cellar.domain.shared.value_objects import QualifiedValue
 
 _log = structlog.get_logger(__name__)
+
+ATTACHMENT_FAILED = "The file could not be attached. Upload it on the Files tab."
 
 
 @dataclass(frozen=True)
@@ -107,6 +111,8 @@ class InstrumentImportResult:
     compute_warning: str | None = None
     attachment_id: uuid.UUID | None = None
     attachment_warning: str | None = None
+    stored_file_name: str | None = None
+    """The name the file was attached under, when it differs from the uploaded name."""
 
 
 @dataclass(frozen=True)
@@ -128,6 +134,7 @@ class ImportInstrumentFile:
         curve_repo: MeasuredCurveRepository,
         batch_repo: BatchRepository,
         readers: InstrumentReaders,
+        attachment_repo: AttachmentRepository,
         upload_attachment: UploadAttachment,
         calculation_engine: ReadoutCalculationEngine,
         dispatcher: EventDispatcherProtocol,
@@ -139,6 +146,7 @@ class ImportInstrumentFile:
         self._curve_repo = curve_repo
         self._batch_repo = batch_repo
         self._readers = readers
+        self._attachment_repo = attachment_repo
         self._upload_attachment = upload_attachment
         self._calculation_engine = calculation_engine
         self._dispatcher = dispatcher
@@ -392,30 +400,46 @@ class ImportInstrumentFile:
         result: InstrumentImportResult,
         auth: AuthContext | None,
     ) -> InstrumentImportResult:
-        """Persist the upload as a Run attachment; warn (never fail) on error."""
+        """Attach the upload to the run, numbering its name if the run already has one.
+
+        Never fails the import: on any error the user gets a plain sentence and
+        the reason goes to the log.
+        """
         if auth is None:
             return replace(result, attachment_warning="no auth context — skipped")
-        upload_cmd = UploadAttachmentCommand(
-            workspace_id=cmd.workspace_id,
-            attachable_type=AttachableType.RUN,
-            attachable_id=cmd.run_id,
-            uploaded_by=auth.user_id,
-            file_name=cmd.filename,
-            mime_type=cmd.content_type or _guess_content_type(cmd.filename),
-            file_data=cmd.content,
-        )
         try:
-            attached = await self._upload_attachment(upload_cmd, auth=auth)
-        except Exception as exc:
-            _log.warning(
-                "instrument_import.attachment_failed",
-                run_id=str(cmd.run_id),
-                workspace_id=str(cmd.workspace_id),
-                file_name=cmd.filename,
-                error=str(exc),
-                exc_info=True,
+            async with self._uow:
+                existing = await self._attachment_repo.find_by_entity(
+                    cmd.workspace_id, AttachableType.RUN, cmd.run_id
+                )
+            file_name = numbered_file_name(cmd.filename, {a.file_name for a in existing})
+            attached = await self._upload_attachment(
+                UploadAttachmentCommand(
+                    workspace_id=cmd.workspace_id,
+                    attachable_type=AttachableType.RUN,
+                    attachable_id=cmd.run_id,
+                    uploaded_by=auth.user_id,
+                    file_name=file_name,
+                    mime_type=cmd.content_type or _guess_content_type(cmd.filename),
+                    file_data=cmd.content,
+                ),
+                auth=auth,
             )
-            return replace(result, attachment_warning=f"attachment failed: {exc}")
-        if isinstance(attached, Failure):
-            return replace(result, attachment_warning=str(attached.failure()))
-        return replace(result, attachment_id=attached.unwrap().id)
+            if isinstance(attached, Success):
+                return replace(
+                    result,
+                    attachment_id=attached.unwrap().id,
+                    stored_file_name=file_name if file_name != cmd.filename else None,
+                )
+            reason, exc_info = str(attached.failure()), False
+        except Exception as exc:  # the import already succeeded; warn, never fail it
+            reason, exc_info = str(exc), True
+        _log.warning(
+            "instrument_import.attachment_failed",
+            run_id=str(cmd.run_id),
+            workspace_id=str(cmd.workspace_id),
+            file_name=cmd.filename,
+            reason=reason,
+            exc_info=exc_info,
+        )
+        return replace(result, attachment_warning=ATTACHMENT_FAILED)

@@ -219,6 +219,9 @@ from cellar.infrastructure.external.bioportal.client import BioPortalClient
 from cellar.infrastructure.instrument_readers import default_readers
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
+from cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_repository import (
+    SQLAlchemyAttachmentRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
@@ -1012,6 +1015,7 @@ def register_screening(container: Container) -> None:
             curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             readers=c[InstrumentReaders],
+            attachment_repo=SQLAlchemyAttachmentRepository(uow),
             upload_attachment=c[UploadAttachment],
             calculation_engine=c[ReadoutCalculationEngine],
             dispatcher=c[EventDispatcher],

@@ -1025,6 +1025,8 @@ class InstrumentImportResponse(BaseModel):
     file_attached: bool
     attachment_id: uuid.UUID | None
     attachment_warning: str | None
+    stored_file_name: str | None
+    """The name the file was attached under, when it differs from the uploaded name."""
 
     @classmethod
     def from_result(cls, out: InstrumentImportResult) -> InstrumentImportResponse:
@@ -1038,6 +1040,7 @@ class InstrumentImportResponse(BaseModel):
             file_attached=out.attachment_id is not None,
             attachment_id=out.attachment_id,
             attachment_warning=out.attachment_warning,
+            stored_file_name=out.stored_file_name,
         )
 
 

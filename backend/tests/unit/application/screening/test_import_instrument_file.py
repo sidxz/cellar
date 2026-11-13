@@ -28,6 +28,7 @@ from cellar.application.screening.instrument_export import (
     InstrumentReaders,
     ReportedValue,
 )
+from cellar.domain.attachment.enums import AttachableType
 from cellar.domain.screening_assay.enums import HolderKind, ReadoutDataType, RunStatus
 from cellar.domain.screening_assay.events import RunInstrumentFileImported
 from cellar.domain.screening_assay.holder import position_label
@@ -187,6 +188,8 @@ class Harness:
         self.upload_attachment = AsyncMock(
             return_value=Success(SimpleNamespace(id=self.attachment_id))
         )
+        self.attachment_repo = AsyncMock()
+        self.attachment_repo.find_by_entity = AsyncMock(return_value=[])
         self.engine = AsyncMock()
         self.engine.compute_for_run = AsyncMock(return_value=Success(SimpleNamespace()))
         self.dispatcher = AsyncMock()
@@ -198,6 +201,7 @@ class Harness:
             curve_repo=self.curve_repo,
             batch_repo=self.batch_repo,
             readers=InstrumentReaders((self.reader,)),
+            attachment_repo=self.attachment_repo,
             upload_attachment=self.upload_attachment,
             calculation_engine=self.engine,
             dispatcher=self.dispatcher,
@@ -353,20 +357,44 @@ async def test_engine_failure_becomes_compute_warning():
     assert result.compute_warning is not None and "formula broke" in result.compute_warning
 
 
-async def test_attachment_failure_is_a_warning_not_a_failure():
+ATTACH_FAILED = "The file could not be attached. Upload it on the Files tab."
+
+
+async def test_first_import_keeps_the_file_name():
+    h = Harness()
+    result = (await h()).unwrap()
+    assert h.upload_attachment.await_args.args[0].file_name == "run.bin"
+    assert result.stored_file_name is None
+    h.attachment_repo.find_by_entity.assert_awaited_once_with(h.ws, AttachableType.RUN, h.run.id)
+
+
+async def test_second_import_of_the_same_name_is_stored_numbered():
+    h = Harness()
+    h.attachment_repo.find_by_entity.return_value = [SimpleNamespace(file_name="run.bin")]
+    result = (await h()).unwrap()
+    assert h.upload_attachment.await_args.args[0].file_name == "run (2).bin"
+    assert result.stored_file_name == "run (2).bin"
+    assert result.attachment_id == h.attachment_id and result.attachment_warning is None
+
+
+async def test_attachment_failure_is_a_plain_warning_not_a_failure():
     h = Harness()
     h.upload_attachment.return_value = Failure(ValidationError("storage full"))
     result = await h()
     assert isinstance(result, Success)
-    assert result.unwrap().attachment_warning == "storage full"
+    assert result.unwrap().attachment_warning == ATTACH_FAILED
     assert result.unwrap().attachment_id is None
+    assert result.unwrap().stored_file_name is None
 
 
-async def test_attachment_exception_is_a_warning_not_a_failure():
+async def test_attachment_exception_is_a_plain_warning_not_a_failure():
     h = Harness()
-    h.upload_attachment.side_effect = RuntimeError("bucket down")
+    h.upload_attachment.side_effect = RuntimeError(
+        "Database constraint violated: uq_attachment_entity_filename"
+    )
     result = (await h()).unwrap()
-    assert result.attachment_warning is not None and "bucket down" in result.attachment_warning
+    assert result.attachment_warning == ATTACH_FAILED
+    assert result.values_inserted == 3
 
 
 async def test_run_not_found():
