@@ -17,6 +17,7 @@ from cellar.application.screening.create_readout_data import CreateReadoutData
 from cellar.application.screening.create_run import CreateRun
 from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
 from cellar.application.screening.delete_run import DeleteRun
+from cellar.application.screening.find_curve_positions import FindCurvePositions
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_collection_gap import (
@@ -26,6 +27,7 @@ from cellar.application.screening.get_collection_gap import (
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
+from cellar.application.screening.get_measured_curves_batch import GetMeasuredCurvesBatch
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
@@ -170,10 +172,12 @@ __all__ = [
     "DeletePlateTemplateDep",
     "DeleteProtocolDep",
     "DeleteRunDep",
+    "FindCurvePositionsDep",
     "FindSimilarProtocolsDep",
     "FitDoseResponseCurvesDep",
     "GetCompoundCurvesDep",
     "GetCurveEditHistoryDep",
+    "GetMeasuredCurvesBatchDep",
     "GetMoleculeActivityDetailDep",
     "GetMoleculeTestCountsDep",
     "GetPlateMapDep",
@@ -431,6 +435,10 @@ ListDoseResponseEnrichedDep = Annotated[
 ]
 GetPlateMapDep = Annotated[GetPlateMap, Depends(_get_use_case(GetPlateMap))]
 GetRunCurvesDep = Annotated[GetRunCurves, Depends(_get_use_case(GetRunCurves))]
+FindCurvePositionsDep = Annotated[FindCurvePositions, Depends(_get_use_case(FindCurvePositions))]
+GetMeasuredCurvesBatchDep = Annotated[
+    GetMeasuredCurvesBatch, Depends(_get_use_case(GetMeasuredCurvesBatch))
+]
 FindSimilarProtocolsDep = Annotated[
     FindSimilarProtocols, Depends(_get_use_case(FindSimilarProtocols))
 ]

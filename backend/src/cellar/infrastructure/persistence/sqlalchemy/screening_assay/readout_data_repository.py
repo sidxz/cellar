@@ -434,6 +434,27 @@ class SQLAlchemyReadoutDataRepository:
         result = await self._uow.session.execute(stmt)
         return result.rowcount
 
+    async def repoint_well(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        well_id: uuid.UUID,
+        *,
+        batch_id: uuid.UUID | None,
+        molecule_id: uuid.UUID | None,
+    ) -> int:
+        stmt = (
+            sa.update(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id == well_id,
+            )
+            .values(batch_id=batch_id, molecule_id=molecule_id)
+        )
+        result = await self._uow.session.execute(stmt)
+        return result.rowcount
+
     async def save(self, entity: ReadoutData) -> None:
         existing = await self._uow.session.get(ReadoutDataModel, entity.id)
         if existing is None:

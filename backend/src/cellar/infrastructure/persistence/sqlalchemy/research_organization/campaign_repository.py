@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import delete, select
+from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from cellar.domain.research_organization.campaign import Campaign
@@ -565,6 +565,45 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         if rows is None:
             return None
         return [SeedRun.from_dict(s).run_id for s in (rows[0] or [])]
+
+    async def find_names_holding_run_values(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+    ) -> dict[uuid.UUID, str]:
+        if not molecule_ids:
+            return {}
+        m = CampaignMeasurementModel
+        stmt = (
+            select(CampaignResultModel.molecule_id, CampaignModel.name)
+            .join(m, m.result_id == CampaignResultModel.id)
+            .join(CampaignChannelModel, CampaignChannelModel.id == m.channel_id)
+            .join(CampaignModel, CampaignModel.id == CampaignResultModel.campaign_id)
+            .where(
+                CampaignModel.workspace_id == workspace_id,
+                CampaignChannelModel.protocol_id == protocol_id,
+                CampaignResultModel.molecule_id.in_(molecule_ids),
+                or_(
+                    m.source_run_id == run_id,
+                    m.contributing_run_ids.any(run_id),
+                    and_(
+                        m.source_run_id.is_(None),
+                        or_(
+                            m.value.is_not(None),
+                            # A JSON null and a SQL NULL both mean "no curve".
+                            func.jsonb_typeof(m.curve_snapshot) == "object",
+                        ),
+                    ),
+                ),
+            )
+            .order_by(CampaignModel.name)
+        )
+        names: dict[uuid.UUID, str] = {}
+        for molecule_id, name in (await self._session.execute(stmt)).all():
+            names.setdefault(molecule_id, name)
+        return names
 
     # ------------------------------------------------------------------
     # Campaign-collection links (association, not aggregate state)

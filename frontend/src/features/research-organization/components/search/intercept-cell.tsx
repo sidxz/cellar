@@ -2,6 +2,7 @@
 
 import { AlertTriangle } from "lucide-react";
 
+import type { CompoundCurvesTarget } from "@/features/screening-assay/components/compound-curves-dialog";
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import type { InterceptSpec } from "@/features/screening-assay/types";
@@ -24,6 +25,8 @@ export interface InterceptCellProps {
    *  is the fallback when spec doesn't match any keyed intercept_values). */
   isPrimary: boolean;
   mode: AggregationMode;
+  /** The compound's curves in this protocol, offered in the evidence popover. */
+  curves?: CompoundCurvesTarget | null;
 }
 
 function specToKey(spec: InterceptKey | InterceptSpec | null): InterceptKey | null {
@@ -55,7 +58,7 @@ function formatFoldRange(foldRange: number): string {
   return foldRange >= 10 ? `×${Math.round(foldRange)}` : `×${foldRange.toFixed(1)}`;
 }
 
-export function InterceptCell({ av, spec, isPrimary, mode }: InterceptCellProps) {
+export function InterceptCell({ av, spec, isPrimary, mode, curves }: InterceptCellProps) {
   if (!av) return <span className="text-muted-foreground">&mdash;</span>;
 
   const ik = specToKey(spec);
@@ -197,7 +200,7 @@ export function InterceptCell({ av, spec, isPrimary, mode }: InterceptCellProps)
     );
 
   return (
-    <AssayEvidence av={av} interceptKey={ik} mode={mode}>
+    <AssayEvidence av={av} interceptKey={ik} mode={mode} curves={curves}>
       {stackedBody}
     </AssayEvidence>
   );

@@ -1,20 +1,173 @@
-/** The Curves tab's figure and table, built from the API's run curves. Pure.
- *  It draws what the API sends and knows nothing about what a reported value
- *  means. */
+/** The curve viewer's figure and table, built from a set of positions and
+ *  their curves that may come from several runs. Pure. It draws what the API
+ *  sends and knows nothing about what a reported value means. */
 
 import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
-import { type RunCurves, WELL_TYPE_LABELS, type WellType } from "../types";
+import { shortId } from "@/shared/lib/utils";
+import type { CurveView } from "../hooks/use-run-curves";
+import {
+  type CurvePositions,
+  RUN_STATUS_LABELS,
+  type RunCurves,
+  type RunStatus,
+  WELL_TYPE_LABELS,
+  type WellType,
+} from "../types";
 import { holderOrder } from "./curve-selection";
 
-type Position = RunCurves["positions"][number];
+export type CurvePosition = RunCurves["positions"][number];
+export type CurveSeriesData = RunCurves["curves"][number];
+export interface CurveRunInfo {
+  runId: string;
+  runDate: string;
+  operator: string;
+  status: string;
+  notes: string | null;
+}
 
-export type ColourMode = "highlight" | "distinct";
+/** The positions of one run's holder. */
+export interface CurveGroup {
+  /** The run id. */
+  key: string;
+  /** Null on the run's own Curves tab, where the page already says which run it is. */
+  run: CurveRunInfo | null;
+  holder: RunCurves["holder"];
+  /** Holder order. */
+  positions: CurvePosition[];
+}
+
+/** What the curve viewer draws: groups of positions and, for one signal and
+ *  view, their curves. */
+export interface CurveSet {
+  doseUnit: string;
+  channels: RunCurves["channels"];
+  channel: string | null;
+  view: CurveView;
+  window: number | null;
+  groups: CurveGroup[];
+  /** By well id, for `channel` and `view`. */
+  curves: ReadonlyMap<string, CurveSeriesData>;
+}
+
+export function curveSetFromRun(data: RunCurves): CurveSet {
+  return {
+    doseUnit: data.dose_unit,
+    channels: data.channels,
+    channel: data.channel,
+    view: data.view as CurveView,
+    window: data.window,
+    groups: [
+      { key: data.run_id, run: null, holder: data.holder, positions: holderOrder(data.positions) },
+    ],
+    curves: new Map(data.curves.map((c) => [c.well_id, c])),
+  };
+}
+
+/** Positions found across runs, with the curves fetched so far. One group per
+ *  run that has a position, in the API's run order, leaving out runs whose
+ *  status is hidden; the signals are the union over those runs. */
+export function curveSetFromPositions(
+  found: CurvePositions,
+  args: {
+    channel: string | undefined;
+    view: CurveView;
+    window: number | null;
+    curves: ReadonlyMap<string, CurveSeriesData>;
+    hideStatuses?: readonly string[];
+  },
+): CurveSet {
+  const groups: CurveGroup[] = [];
+  const channels = new Map<string, RunCurves["channels"][number]>();
+  for (const r of found.runs) {
+    if (args.hideStatuses?.includes(r.status)) continue;
+    const positions = found.positions.filter((p) => p.run_id === r.run_id);
+    if (positions.length === 0) continue;
+    for (const c of r.channels) if (!channels.has(c.key)) channels.set(c.key, c);
+    groups.push({
+      key: r.run_id,
+      run: {
+        runId: r.run_id,
+        runDate: r.run_date,
+        operator: r.operator,
+        status: r.status,
+        notes: r.notes,
+      },
+      holder: r.holder,
+      positions: holderOrder(positions),
+    });
+  }
+  return {
+    doseUnit: found.dose_unit,
+    channels: [...channels.values()],
+    channel: args.channel ?? channels.keys().next().value ?? null,
+    view: args.view,
+    window: args.window,
+    groups,
+    curves: args.curves,
+  };
+}
+
+/** A run group's heading; `tag` (from `sameDateTags`) tells it from a run on the same date. */
+export function runHeading(
+  run: CurveRunInfo,
+  opts: { scientist: string; tag: string | undefined },
+): string {
+  const status = RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status;
+  const heading = `${run.runDate} · ${opts.scientist} · ${status}`;
+  return opts.tag ? `${heading} · ${opts.tag}` : heading;
+}
+
+/** For each run that shares its date with another, what tells it apart: the
+ *  start of its notes, or a short id when it has none or another run on that
+ *  date starts its notes the same way. Runs alone on their date have no tag. */
+export function sameDateTags(runs: readonly CurveRunInfo[]): ReadonlyMap<string, string> {
+  const byDate = new Map<string, CurveRunInfo[]>();
+  for (const r of runs) byDate.set(r.runDate, [...(byDate.get(r.runDate) ?? []), r]);
+  const start = (r: CurveRunInfo) => r.notes?.trim().slice(0, 40) || null;
+  const tags = new Map<string, string>();
+  for (const same of byDate.values()) {
+    if (same.length < 2) continue;
+    const starts = same.map(start);
+    for (const r of same) {
+      const s = start(r);
+      const unique = s !== null && starts.filter((t) => t === s).length === 1;
+      tags.set(r.runId, unique ? s : `Run ${shortId(r.runId)}`);
+    }
+  }
+  return tags;
+}
+
+/** Group order, then holder order. */
+export function orderedPositions(set: CurveSet): CurvePosition[] {
+  return set.groups.flatMap((g) => g.positions);
+}
+
+export type ColourMode = "highlight" | "distinct" | "group";
+export type GroupBy = "run" | "compound" | "batch" | "role";
 export type CurvePalette = "dark" | "light";
 
+/** The key of a position's colour group; `groupKey` is its CurveGroup's key. */
+export function colourGroupKey(p: CurvePosition, groupKey: string, by: GroupBy): string {
+  if (by === "run") return groupKey;
+  if (by === "compound") return p.molecule_id ?? "none";
+  if (by === "batch") return p.batch_id ?? "none";
+  return p.well_type;
+}
+
+export function colourGroupLabel(p: CurvePosition, runHeading: string | null, by: GroupBy): string {
+  if (by === "run") return runHeading ?? "Run";
+  if (by === "compound") return p.molecule_name ?? "No compound";
+  if (by === "batch") return p.batch_number ?? "No batch";
+  return WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type;
+}
+
 export interface CurveColouring {
-  /** Distinct uses `slots`; a position without a slot gets highlight colours. */
+  /** Distinct and group use `slots`; a position without a slot gets highlight colours. */
   colourMode: ColourMode;
+  /** Distinct: by well id. Group: by group key. */
   slots: ReadonlyMap<string, number>;
+  /** Group mode: the colour group of each selected position, by well id. */
+  groups?: ReadonlyMap<string, { key: string; label: string }>;
   focusedId: string | null;
   palette: CurvePalette;
 }
@@ -30,12 +183,18 @@ const DIMMED = 0.35;
 /** One position's line colour, width and opacity. The selector, the legend
  *  and the table use it too, so a position looks the same in all four. */
 export function curveStyle(
-  position: Pick<Position, "well_id" | "well_type">,
+  position: Pick<CurvePosition, "well_id" | "well_type">,
   c: CurveColouring,
 ): CurveStyle {
   const colours = MEASURED_CURVE_COLORS[c.palette];
   const focused = c.focusedId === position.well_id;
-  const slot = c.colourMode === "distinct" ? c.slots.get(position.well_id) : undefined;
+  const slotKey =
+    c.colourMode === "distinct"
+      ? position.well_id
+      : c.colourMode === "group"
+        ? c.groups?.get(position.well_id)?.key
+        : undefined;
+  const slot = slotKey === undefined ? undefined : c.slots.get(slotKey);
   if (slot !== undefined) {
     return { color: colours.series[slot], width: focused ? 3 : 1.6, opacity: 1 };
   }
@@ -47,23 +206,23 @@ export function curveStyle(
   };
 }
 
-export function positionName(p: Pick<Position, "position_label" | "label">): string {
+export function positionName(p: Pick<CurvePosition, "position_label" | "label">): string {
   return p.label ? `${p.position_label} · ${p.label}` : p.position_label;
 }
 
-export function currentChannel(data: RunCurves) {
-  return data.channels.find((c) => c.key === data.channel);
+export function currentChannel(set: CurveSet) {
+  return set.channels.find((c) => c.key === set.channel);
 }
 
 export function buildCurveFigure(
   args: {
-    data: RunCurves;
-    selected: ReadonlySet<string>;
+    set: CurveSet;
+    drawn: ReadonlySet<string>;
     showReported: boolean;
     canvas: "screen" | "export";
   } & CurveColouring,
 ): { data: Record<string, unknown>[]; layout: Record<string, unknown> } {
-  const { data, selected, showReported, canvas } = args;
+  const { set, drawn, showReported, canvas } = args;
   const exporting = canvas === "export";
   // The exported figure sits on white, so it always takes the light set.
   const colouring: CurveColouring = {
@@ -71,27 +230,36 @@ export function buildCurveFigure(
     palette: exporting ? "light" : args.palette,
     focusedId: exporting ? null : args.focusedId,
   };
-  const channel = currentChannel(data);
+  const channel = currentChannel(set);
   const xUnit = channel?.x_unit ?? "";
   const xTitle = channel?.x_label ? `${channel.x_label} [${xUnit}]` : xUnit;
-  const curveById = new Map(data.curves.map((c) => [c.well_id, c]));
 
   const traces: Record<string, unknown>[] = [];
   const shapes: Record<string, unknown>[] = [];
-  for (const p of holderOrder(data.positions)) {
-    const curve = curveById.get(p.well_id);
-    if (!selected.has(p.well_id) || !curve) continue;
+  const byGroup = colouring.colourMode === "group";
+  const inLegend = new Set<string>();
+  for (const p of orderedPositions(set)) {
+    const curve = set.curves.get(p.well_id);
+    if (!drawn.has(p.well_id) || !curve) continue;
     const style = curveStyle(p, colouring);
+    // By group, the legend has one entry per group; the hover still names the
+    // position. A drawn position with no group is a reference the switch added.
+    const group = byGroup
+      ? (colouring.groups?.get(p.well_id) ?? { key: "", label: "Reference positions" })
+      : null;
+    const firstOfGroup = group !== null && !inLegend.has(group.key);
+    if (group) inLegend.add(group.key);
     traces.push({
       type: "scatter",
       mode: "lines",
       x: curve.x,
       y: curve.y,
-      name: positionName(p),
+      name: group ? group.label : positionName(p),
       meta: p.well_id,
       line: { color: style.color, width: style.width },
       opacity: style.opacity,
-      hovertemplate: `<b>%{fullData.name}</b><br>%{x} ${xUnit} · %{y:.4g}<extra></extra>`,
+      hovertemplate: `<b>${group ? positionName(p) : "%{fullData.name}"}</b><br>%{x} ${xUnit} · %{y:.4g}<extra></extra>`,
+      ...(group && { legendgroup: group.key, showlegend: firstOfGroup }),
     });
     if (!showReported) continue;
     for (const r of curve.reported) {
@@ -120,7 +288,7 @@ export function buildCurveFigure(
   const background = exporting ? CHART_CANVAS.background : "rgba(0,0,0,0)";
   const yTitle = !channel
     ? ""
-    : data.view === "derivative"
+    : set.view === "derivative"
       ? `d(${channel.label})/d(${xUnit})`
       : channel.y_unit
         ? `${channel.label} (${channel.y_unit})`
@@ -136,7 +304,7 @@ export function buildCurveFigure(
       paper_bgcolor: background,
       plot_bgcolor: background,
       // In Highlight mode every entry shares a colour, so a legend could not be read.
-      showlegend: exporting && colouring.colourMode === "distinct",
+      showlegend: exporting && colouring.colourMode !== "highlight",
       hovermode: "closest",
       font: { color: ink, size: 12 },
       shapes,
@@ -146,7 +314,7 @@ export function buildCurveFigure(
         gridcolor: grid,
         linecolor: grid,
         zeroline: false,
-        uirevision: `${data.channel}:${data.view}`,
+        uirevision: `${set.channel}:${set.view}`,
       },
     },
   };
@@ -170,9 +338,9 @@ function reportedKey(r: { kind: string; ordinal: number }): string {
 }
 
 /** One table column per distinct reported value on this signal's curves. */
-export function reportedColumns(data: RunCurves): ReportedColumn[] {
+export function reportedColumns(set: CurveSet): ReportedColumn[] {
   const columns = new Map<string, ReportedColumn & { kind: string; ordinal: number }>();
-  for (const curve of data.curves) {
+  for (const curve of set.curves.values()) {
     for (const r of curve.reported) {
       const key = reportedKey(r);
       if (!columns.has(key)) {
@@ -185,8 +353,19 @@ export function reportedColumns(data: RunCurves): ReportedColumn[] {
     .map(({ key, label, unit }) => ({ key, label, unit }));
 }
 
+/** Positions to draw that have no curve in the set, in the order given. */
+export function positionsNotShown(set: CurveSet, drawn: readonly string[]): CurvePosition[] {
+  const byId = new Map(orderedPositions(set).map((p) => [p.well_id, p]));
+  return drawn.flatMap((id) => {
+    const p = byId.get(id);
+    return p && !set.curves.has(id) ? [p] : [];
+  });
+}
+
 export interface CurveTableRow {
   wellId: string;
+  /** The position's run; null on a set without run information. */
+  run: CurveRunInfo | null;
   wellType: string;
   positionLabel: string;
   label: string | null;
@@ -198,22 +377,24 @@ export interface CurveTableRow {
   reported: Record<string, number>;
 }
 
-export function tableRows(data: RunCurves, selected: ReadonlySet<string>): CurveTableRow[] {
-  const curveById = new Map(data.curves.map((c) => [c.well_id, c]));
-  return holderOrder(data.positions)
-    .filter((p) => selected.has(p.well_id))
-    .map((p) => ({
-      wellId: p.well_id,
-      wellType: p.well_type,
-      positionLabel: p.position_label,
-      label: p.label,
-      compound: p.molecule_name ?? null,
-      batch: p.batch_number ?? null,
-      dose: p.dose ?? null,
-      role: WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type,
-      note: p.note,
-      reported: Object.fromEntries(
-        (curveById.get(p.well_id)?.reported ?? []).map((r) => [reportedKey(r), r.value]),
-      ),
-    }));
+export function tableRows(set: CurveSet, selected: ReadonlySet<string>): CurveTableRow[] {
+  return set.groups.flatMap((g) =>
+    g.positions
+      .filter((p) => selected.has(p.well_id))
+      .map((p) => ({
+        wellId: p.well_id,
+        run: g.run,
+        wellType: p.well_type,
+        positionLabel: p.position_label,
+        label: p.label,
+        compound: p.molecule_name ?? null,
+        batch: p.batch_number ?? null,
+        dose: p.dose ?? null,
+        role: WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type,
+        note: p.note,
+        reported: Object.fromEntries(
+          (set.curves.get(p.well_id)?.reported ?? []).map((r) => [reportedKey(r), r.value]),
+        ),
+      })),
+  );
 }

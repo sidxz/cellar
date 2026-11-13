@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import csv
 import io
+import itertools
+import zipfile
 
 from cellar.application.shared.parsers import ParsedTable, TabularParseError
 
@@ -34,12 +36,30 @@ def _detect_format(content: bytes, filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def parse_tabular(content: bytes, filename: str = "") -> ParsedTable:
+def parse_tabular(
+    content: bytes,
+    filename: str = "",
+    *,
+    max_rows: int | None = None,
+    max_columns: int | None = None,
+    max_uncompressed_bytes: int | None = None,
+    quotechar: str | None = None,
+) -> ParsedTable:
     """Parse a tabular file into a ParsedTable.
 
     Detects xlsx vs csv from extension + magic bytes. xlsx is read with
     openpyxl in read-only mode; csv falls back to delimiter-sniffing
     against `,;\\t|` and tolerates UTF-8 BOM.
+
+    With ``max_rows``, reading stops once ``max_rows + 1`` non-blank rows are
+    read, so a caller can refuse a longer file without every row being built.
+    With ``max_columns``, a wider header is refused before any row is read. With
+    ``max_uncompressed_bytes``, an xlsx whose entries unpack to more (by their
+    declared sizes, which bound what can be read) is refused before it is opened.
+
+    ``quotechar`` fixes a CSV's quote character; by default it is sniffed with the
+    delimiter. A file whose cells may start with an apostrophe (one that keeps a
+    spreadsheet from reading the cell as a formula) passes the double quote.
 
     Raises TabularParseError on unparseable input.
     """
@@ -48,15 +68,31 @@ def parse_tabular(content: bytes, filename: str = "") -> ParsedTable:
 
     fmt = _detect_format(content, filename)
     if fmt == "xlsx":
-        return _parse_xlsx(content)
-    return _parse_csv(content)
+        return _parse_xlsx(content, max_rows, max_columns, max_uncompressed_bytes)
+    return _parse_csv(content, max_rows, max_columns, quotechar)
 
 
 class TabularFileParser:
     """``TabularParser`` Protocol implementation backed by ``parse_tabular``."""
 
-    def parse(self, content: bytes, filename: str = "") -> ParsedTable:
-        return parse_tabular(content, filename)
+    def parse(
+        self,
+        content: bytes,
+        filename: str = "",
+        max_rows: int | None = None,
+        *,
+        max_columns: int | None = None,
+        max_uncompressed_bytes: int | None = None,
+        quotechar: str | None = None,
+    ) -> ParsedTable:
+        return parse_tabular(
+            content,
+            filename,
+            max_rows=max_rows,
+            max_columns=max_columns,
+            max_uncompressed_bytes=max_uncompressed_bytes,
+            quotechar=quotechar,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +100,12 @@ class TabularFileParser:
 # ---------------------------------------------------------------------------
 
 
-def _parse_csv(content: bytes) -> ParsedTable:
+def _parse_csv(
+    content: bytes,
+    max_rows: int | None = None,
+    max_columns: int | None = None,
+    quotechar: str | None = None,
+) -> ParsedTable:
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -79,17 +120,19 @@ def _parse_csv(content: bytes) -> ParsedTable:
     except csv.Error:
         dialect = csv.excel  # type: ignore[assignment]
 
-    reader = csv.reader(io.StringIO(text), dialect)
-    all_rows = list(reader)
-    if not all_rows:
+    quoting = {} if quotechar is None else {"quotechar": quotechar, "doublequote": True}
+    reader = csv.reader(io.StringIO(text), dialect, **quoting)
+    first = next(reader, None)
+    if first is None:
         raise TabularParseError("CSV has no rows")
 
-    headers = [(h or "").strip() for h in all_rows[0]]
+    headers = [(h or "").strip() for h in first]
     if not any(headers):
         raise TabularParseError("CSV has no header row")
+    _check_width(headers, max_columns)
 
     rows: list[dict[str, str]] = []
-    for raw in all_rows[1:]:
+    for raw in reader:
         if not any((c or "").strip() for c in raw):
             continue
         row = {
@@ -97,6 +140,8 @@ def _parse_csv(content: bytes) -> ParsedTable:
             for i in range(len(headers))
         }
         rows.append(row)
+        if max_rows is not None and len(rows) > max_rows:
+            break
 
     return ParsedTable(headers=headers, rows=rows, source_format="csv")
 
@@ -106,11 +151,28 @@ def _parse_csv(content: bytes) -> ParsedTable:
 # ---------------------------------------------------------------------------
 
 
-def _parse_xlsx(content: bytes) -> ParsedTable:
+def _parse_xlsx(
+    content: bytes,
+    max_rows: int | None = None,
+    max_columns: int | None = None,
+    max_uncompressed_bytes: int | None = None,
+) -> ParsedTable:
     try:
         from openpyxl import load_workbook
     except ImportError as exc:  # pragma: no cover - dep is declared
         raise TabularParseError("openpyxl is required to parse xlsx") from exc
+
+    if max_uncompressed_bytes is not None:
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as archive:
+                unpacked = sum(entry.file_size for entry in archive.infolist())
+        except zipfile.BadZipFile as exc:
+            raise TabularParseError(f"Cannot read xlsx: {exc}") from exc
+        if unpacked > max_uncompressed_bytes:
+            raise TabularParseError(
+                f"The spreadsheet is larger than {max_uncompressed_bytes // 2**20} MB "
+                "when unpacked"
+            )
 
     try:
         wb = load_workbook(filename=io.BytesIO(content), read_only=True, data_only=True)
@@ -134,6 +196,13 @@ def _parse_xlsx(content: bytes) -> ParsedTable:
             headers.pop()
         if not headers:
             raise TabularParseError("xlsx has no header row")
+        if max_columns is not None:
+            _check_width(headers, max_columns)
+            # Rows read no wider than the header: a cell far to the right would
+            # otherwise pad every row to the sheet's width.
+            rows_iter = itertools.islice(
+                ws.iter_rows(values_only=True, max_col=len(headers)), 1, None
+            )
 
         rows: list[dict[str, str]] = []
         for raw in rows_iter:
@@ -145,10 +214,17 @@ def _parse_xlsx(content: bytes) -> ParsedTable:
                 for i in range(len(headers))
             }
             rows.append(row)
+            if max_rows is not None and len(rows) > max_rows:
+                break
     finally:
         wb.close()
 
     return ParsedTable(headers=headers, rows=rows, source_format="xlsx")
+
+
+def _check_width(headers: list[str], max_columns: int | None) -> None:
+    if max_columns is not None and len(headers) > max_columns:
+        raise TabularParseError(f"The file has more than {max_columns} columns")
 
 
 def _cell_to_str(value: object) -> str:

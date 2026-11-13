@@ -32,6 +32,7 @@ import {
   Copy,
   FlaskConical,
   LayoutDashboard,
+  LineChart,
   Lock,
   LockOpen,
   Paperclip,
@@ -60,7 +61,7 @@ import type { Protocol, ProtocolStatus } from "../types";
 import { CorrectProtocolDialog } from "./correct-protocol-dialog";
 import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
-import { ActivityTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
+import { ActivityTab, CurvesTab, DesignTab, FilesTab, OverviewTab, RunsTab } from "./detail-tabs";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
 import { ProtocolNamePreview, useRequiredNameSlots } from "./protocol-name-preview";
@@ -86,7 +87,13 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const lockMutation = useLockProtocol();
   const unlockMutation = useUnlockProtocol();
 
-  const [activeTab, setActiveTab] = useHashTab("overview");
+  const [hashTab, setActiveTab] = useHashTab("overview");
+  // The Curves tab exists only on a protocol with measured curves; a hash naming
+  // it elsewhere shows the overview.
+  const hasCurves = protocol?.has_measured_curves === true;
+  const activeTab = hashTab === "curves" && !hasCurves ? "overview" : hashTab;
+  // The runs chosen on the Curves tab, held here so the Runs tab can set them.
+  const [curveRunIds, setCurveRunIds] = useState<string[]>([]);
 
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -341,6 +348,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
                 <FlaskConical className="mr-1.5 h-4 w-4" />
                 Runs
               </TabsTrigger>
+              {hasCurves && (
+                <TabsTrigger value="curves">
+                  <LineChart className="mr-1.5 h-4 w-4" />
+                  Curves
+                </TabsTrigger>
+              )}
               <TabsTrigger value="files">
                 <Paperclip className="mr-1.5 h-4 w-4" />
                 Files
@@ -362,8 +375,24 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <DesignTab protocol={protocol} protocolId={protocolId} />
             </TabsContent>
             <TabsContent value="runs">
-              <RunsTab protocol={protocol} protocolId={protocolId} />
+              <RunsTab
+                protocol={protocol}
+                protocolId={protocolId}
+                onCompareCurves={(ids) => {
+                  setCurveRunIds(ids);
+                  setActiveTab("curves");
+                }}
+              />
             </TabsContent>
+            {hasCurves && (
+              <TabsContent value="curves">
+                <CurvesTab
+                  protocolId={protocolId}
+                  runIds={curveRunIds}
+                  onRunIdsChange={setCurveRunIds}
+                />
+              </TabsContent>
+            )}
             <TabsContent value="files">
               <FilesTab protocolId={protocolId} />
             </TabsContent>

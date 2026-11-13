@@ -138,6 +138,12 @@ class ProtocolRepository(Protocol):
     async def next_protocol_code(
         self, workspace_id: uuid.UUID, *, prefix: str, width: int
     ) -> str: ...
+    async def find_ids_with_measured_curves(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        """The protocols among ``protocol_ids`` with a run that has measured curves (one query)."""
+        ...
+
     async def find_usages(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[str]:
         """What still points at this protocol, one chemist-readable phrase each
         (``'campaign "Test-2" (2 readouts)'``, ``'3 runs'``). Empty when nothing
@@ -449,6 +455,21 @@ class ReadoutDataRepository(Protocol):
     ) -> dict[uuid.UUID, int]: ...
     async def delete_computed_for_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int: ...
     async def delete_for_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int: ...
+    async def repoint_well(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        well_id: uuid.UUID,
+        *,
+        batch_id: uuid.UUID | None,
+        molecule_id: uuid.UUID | None,
+    ) -> int:
+        """Move a position's readout rows to another batch and its molecule (or to none).
+
+        Returns the number of rows changed.
+        """
+        ...
+
     async def save(self, entity: ReadoutData) -> None: ...
     async def save_bulk(self, entities: list[ReadoutData]) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
@@ -607,6 +628,12 @@ class MeasuredCurveRepository(Protocol):
         *,
         channel_key: str | None = None,
     ) -> list[MeasuredCurve]: ...
+    async def find_by_wells(
+        self, workspace_id: uuid.UUID, well_ids: Sequence[uuid.UUID], *, channel_key: str
+    ) -> list[MeasuredCurve]:
+        """The curves on ``channel_key`` of those positions; positions without one are absent."""
+        ...
+
     async def list_channels(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[CurveChannel]: ...

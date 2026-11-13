@@ -1,6 +1,7 @@
 """Tests for Run aggregate root, Plate, and Well entities."""
 
 import uuid
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -13,6 +14,7 @@ from cellar.domain.screening_assay.enums import (
     WellType,
 )
 from cellar.domain.screening_assay.events import (
+    FieldChange,
     RunApproved,
     RunCompleted,
     RunCreated,
@@ -21,11 +23,18 @@ from cellar.domain.screening_assay.events import (
     RunHitCriteriaSet,
     RunInstrumentFileImported,
     RunLocked,
+    RunPositionsRelabelled,
     RunRejected,
     RunUnlocked,
 )
-from cellar.domain.screening_assay.run import Plate, Run, Well
-from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.screening_assay.holder import position_label
+from cellar.domain.screening_assay.run import Plate, PositionEdit, PositionValues, Run, Well
+from cellar.domain.shared.errors import (
+    ConflictError,
+    NotFoundError,
+    StaleEditError,
+    ValidationError,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.value_objects import Barcode
 
@@ -1104,3 +1113,217 @@ def test_reset_data_event_carries_measured_curve_count():
     run.reset_data(readouts_deleted=1, curves_deleted=0, measured_curves_deleted=96)
     event = next(e for e in run.collect_events() if isinstance(e, RunDataReset))
     assert event.measured_curves_deleted == 96
+
+
+# ---------------------------------------------------------------------------
+# Relabel positions
+# ---------------------------------------------------------------------------
+
+
+def _instrument_run(
+    status: RunStatus = RunStatus.DRAFT, locked: bool = False
+) -> tuple[Run, list[Well]]:
+    """One cassette of three positions: a reference, a sample with a batch, a bare sample."""
+    run_id = uuid.uuid4()
+    plate = Plate(
+        run_id=run_id,
+        plate_number=1,
+        holder_kind=HolderKind.CASSETTE,
+        holder_rows=1,
+        holder_columns=3,
+    )
+    wells = [
+        Well(
+            plate_id=plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.REFERENCE,
+            label="protein alone",
+        ),
+        Well(plate_id=plate.id, row="A", column=2, batch_id=uuid.uuid4(), dose=10.0, label="x"),
+        Well(plate_id=plate.id, row="A", column=3),
+    ]
+    run = Run(
+        id=run_id,
+        workspace_id=uuid.uuid4(),
+        protocol_id=uuid.uuid4(),
+        run_date=date(2025, 6, 15),
+        operator=uuid.uuid4(),
+        status=status,
+        is_locked=locked,
+        plates=[plate],
+        wells=wells,
+    )
+    return run, wells
+
+
+def E(w: Well, **new) -> PositionEdit:
+    return PositionEdit(w.id, w.values, replace(w.values, **new))
+
+
+def P(n: int) -> str:
+    return position_label(HolderKind.CASSETTE, "A", n)
+
+
+def test_relabel_changes_fields_and_registers_one_event():
+    run, (_, w2, w3) = _instrument_run()
+    changes = run.relabel_positions([E(w2, label="y", dose=25.0), E(w3, note="bubble")])
+    assert (w2.label, w2.dose, w3.note) == ("y", 25.0, "bubble")
+    (event,) = [e for e in run.collect_events() if isinstance(e, RunPositionsRelabelled)]
+    assert event.positions == changes and len(changes) == 2 and event.aggregate_id == run.id
+    assert event.aggregate_type == "Run" and event.workspace_id == run.workspace_id
+    assert changes[0].position_label == P(2)
+    assert changes[0].fields == (
+        FieldChange("label", "x", "y"),
+        FieldChange("concentration", "10.0", "25.0"),
+    )
+    assert event.audit_changes()[0] == (f"{P(2)}: label", "x", "y")
+    assert len(event.audit_changes()) == 3
+    assert not changes[0].batch_changed and changes[0].touches_calculation
+    assert not changes[1].touches_calculation
+
+
+@pytest.mark.parametrize(
+    "old,new,old_text,new_text",
+    [
+        (0.1234567, 0.1234568, "0.1234567", "0.1234568"),
+        (11.1111111, 1234567.0, "11.1111111", "1234567.0"),
+    ],
+)
+def test_relabel_audit_text_keeps_every_digit_of_a_concentration(old, new, old_text, new_text):
+    run, (_, w2, _) = _instrument_run()
+    w2.dose = old
+    (change,) = run.relabel_positions([E(w2, dose=new)])
+    assert change.fields == (FieldChange("concentration", old_text, new_text),)
+
+
+def test_check_position_edits_refuses_a_stale_edit_and_changes_nothing():
+    run, (_, w2, w3) = _instrument_run()
+    stale = PositionEdit(w2.id, replace(w2.values, label="old"), replace(w2.values, batch_id=None))
+    with pytest.raises(StaleEditError, match=P(2)):
+        run.check_position_edits([E(w3, note="n"), stale])
+    run.check_position_edits([E(w2, batch_id=None), E(w3, note="n")])
+    assert (w2.batch_id is not None, w3.note) == (True, None) and run.collect_events() == []
+
+
+def test_relabel_batch_change_uses_batch_names_and_flags_calculation():
+    run, (_, w2, _) = _instrument_run()
+    other = uuid.uuid4()
+    changes = run.relabel_positions(
+        [E(w2, batch_id=other)], batch_names={w2.batch_id: "B-1", other: "B-2"}
+    )
+    assert changes[0].fields == (FieldChange("batch", "B-1", "B-2"),)
+    assert changes[0].batch_changed and changes[0].touches_calculation
+    assert w2.batch_id == other
+
+
+def test_relabel_batch_without_names_uses_the_id_and_none_for_no_batch():
+    run, (_, w2, _) = _instrument_run()
+    old = w2.batch_id
+    changes = run.relabel_positions([E(w2, batch_id=None)])
+    assert changes[0].fields == (FieldChange("batch", str(old), None),)
+
+
+def test_relabel_with_no_changes_registers_nothing():
+    run, (_, w2, w3) = _instrument_run()
+    before = run.updated_at
+    assert run.relabel_positions([E(w2), E(w3, label="  ")]) == ()
+    assert run.collect_events() == []
+    assert run.updated_at == before
+
+
+def test_relabel_stale_expected_is_conflict_naming_positions_and_changes_nothing():
+    run, (_, w2, w3) = _instrument_run()
+    stale = PositionEdit(
+        w2.id,
+        replace(w2.values, label="what it used to say"),
+        replace(w2.values, label="mine"),
+    )
+    with pytest.raises(ConflictError, match=P(2)) as exc:
+        run.relabel_positions([E(w3, note="n"), stale])
+    assert P(3) not in str(exc.value)
+    assert "Reload and try again" in str(exc.value)
+    assert (w2.label, w3.note) == ("x", None) and run.collect_events() == []
+
+
+def test_relabel_expected_is_normalised_before_the_stale_check():
+    run, (_, w2, _) = _instrument_run()
+    edit = PositionEdit(w2.id, replace(w2.values, label="  x "), replace(w2.values, label="y"))
+    assert len(run.relabel_positions([edit])) == 1
+
+
+@pytest.mark.parametrize("new", [{"well_type": WellType.BLANK}, {"batch_id": None}, {"dose": 5.0}])
+@pytest.mark.parametrize("status", [RunStatus.COMPLETED, RunStatus.APPROVED, RunStatus.REJECTED])
+def test_relabel_role_batch_or_concentration_refused_outside_draft_or_in_progress(new, status):
+    run, (_, w2, _) = _instrument_run(status=status)
+    before = w2.values
+    with pytest.raises(ConflictError, match="draft or in progress"):
+        run.relabel_positions([E(w2, **new)], reason="typo")
+    assert w2.values == before and run.collect_events() == []
+
+
+@pytest.mark.parametrize("status", [RunStatus.DRAFT, RunStatus.IN_PROGRESS])
+def test_relabel_role_batch_and_concentration_allowed_in_draft_and_in_progress(status):
+    run, (_, w2, _) = _instrument_run(status=status)
+    run.relabel_positions([E(w2, well_type=WellType.BLANK, batch_id=None, dose=5.0)])
+    assert (w2.well_type, w2.batch_id, w2.dose) == (WellType.BLANK, None, 5.0)
+
+
+def test_relabel_label_on_completed_run_needs_a_reason_and_keeps_it():
+    run, (_, w2, _) = _instrument_run(status=RunStatus.COMPLETED)
+    with pytest.raises(ValidationError, match="reason"):
+        run.relabel_positions([E(w2, label="y")])
+    with pytest.raises(ValidationError, match="reason"):
+        run.relabel_positions([E(w2, label="y")], reason="   ")
+    assert w2.label == "x"
+    run.relabel_positions([E(w2, label="y")], reason="  typo in the name ")
+    (event,) = [e for e in run.collect_events() if isinstance(e, RunPositionsRelabelled)]
+    assert event.reason == "typo in the name" and event.audit_reason == "typo in the name"
+    assert w2.label == "y"
+
+
+def test_relabel_note_on_rejected_run_needs_no_reason():
+    run, (_, w2, _) = _instrument_run(status=RunStatus.REJECTED)
+    run.relabel_positions([E(w2, note="n")])
+    assert w2.note == "n"
+
+
+def test_relabel_on_draft_run_needs_no_reason():
+    run, (_, w2, _) = _instrument_run()
+    run.relabel_positions([E(w2, label="y")], reason="   ")
+    (event,) = [e for e in run.collect_events() if isinstance(e, RunPositionsRelabelled)]
+    assert event.reason is None and event.audit_reason is None
+
+
+def test_relabel_blocked_when_locked():
+    run, (_, w2, _) = _instrument_run(status=RunStatus.COMPLETED, locked=True)
+    with pytest.raises(ConflictError, match="locked"):
+        run.relabel_positions([E(w2, label="y")], reason="typo")
+    assert w2.label == "x" and run.collect_events() == []
+
+
+@pytest.mark.parametrize(
+    "new", [{"label": "x" * 201}, {"note": "n" * 1001}, {"dose": -1.0}, {"dose": float("nan")}]
+)
+def test_relabel_validates_like_a_well(new):
+    run, (_, w2, w3) = _instrument_run()
+    with pytest.raises(ValidationError) as exc:
+        run.relabel_positions([E(w3, note="fine"), E(w2, **new)])
+    assert str(exc.value).startswith(P(2))
+    assert w3.note is None and run.collect_events() == []
+
+
+def test_relabel_unknown_or_repeated_position_is_validation_error():
+    run, (_, w2, _) = _instrument_run()
+    unknown = PositionEdit(uuid.uuid4(), w2.values, replace(w2.values, label="y"))
+    with pytest.raises(ValidationError):
+        run.relabel_positions([unknown])
+    with pytest.raises(ValidationError):
+        run.relabel_positions([E(w2, label="y"), E(w2, label="z")])
+    assert w2.label == "x" and run.collect_events() == []
+
+
+def test_well_values_reflects_the_stored_fields():
+    _, (w1, w2, _) = _instrument_run()
+    assert w1.values == PositionValues(label="protein alone", well_type=WellType.REFERENCE)
+    assert w2.values == PositionValues(label="x", batch_id=w2.batch_id, dose=10.0)

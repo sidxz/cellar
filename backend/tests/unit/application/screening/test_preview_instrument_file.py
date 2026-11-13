@@ -35,7 +35,7 @@ from cellar.domain.shared.errors import (
     NotFoundError,
     ValidationError,
 )
-from cellar.domain.shared.value_objects import BatchNumber
+from cellar.domain.shared.value_objects import BatchNumber, RegistrationNumber
 from tests.fakes.fake_auth import FakeAuth
 
 
@@ -107,6 +107,7 @@ def _export(
 class StubReader:
     id = "stub"
     label = "Stub format"
+    hint = "Export format A"
 
     def __init__(self, export: InstrumentExport, *, recognises: bool = True) -> None:
         self._export = export
@@ -139,7 +140,9 @@ def _definition(
 
 
 def _molecule(name: str = "Compound one") -> SimpleNamespace:
-    return SimpleNamespace(id=uuid.uuid4(), name=name)
+    return SimpleNamespace(
+        id=uuid.uuid4(), name=name, registration_number=RegistrationNumber(value="REG-0001")
+    )
 
 
 def _batch(molecule: SimpleNamespace, number: str) -> SimpleNamespace:
@@ -270,6 +273,7 @@ async def test_exact_identifier_match_with_one_batch_is_preselected():
     assert suggestion is not None
     assert suggestion.molecule_id == mol.id and suggestion.batch_id == only_batch.id
     assert suggestion.molecule_name == "Compound one"
+    assert suggestion.registration_number == "REG-0001"
     assert [(b.batch_id, b.batch_number) for b in suggestion.batches] == [
         (only_batch.id, "ABC-0000001-001")
     ]

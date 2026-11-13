@@ -6,7 +6,8 @@ import type { Batch } from "../types";
 interface BatchSelectorProps {
   moleculeId: string;
   selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  /** The chosen batch comes second, so a caller can keep its number. */
+  onSelect: (id: string | null, batch?: Batch) => void;
 }
 
 export function BatchSelector({ moleculeId, selectedId, onSelect }: BatchSelectorProps) {
@@ -16,7 +17,13 @@ export function BatchSelector({ moleculeId, selectedId, onSelect }: BatchSelecto
     <select
       className="h-9 min-w-[180px] rounded-md border border-input bg-background px-3 text-sm"
       value={selectedId ?? ""}
-      onChange={(e) => onSelect(e.target.value || null)}
+      onChange={(e) => {
+        const id = e.target.value || null;
+        onSelect(
+          id,
+          batches?.find((b: Batch) => b.id === id),
+        );
+      }}
       disabled={isLoading}
     >
       <option value="">{isLoading ? "Loading batches..." : "Select batch..."}</option>

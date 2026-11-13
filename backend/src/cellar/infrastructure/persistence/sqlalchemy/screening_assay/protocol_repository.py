@@ -52,6 +52,7 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ConditionDefinitionModel,
+    MeasuredCurveModel,
     ProtocolAliasModel,
     ProtocolModel,
     ReadoutDefinitionModel,
@@ -811,6 +812,25 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
         ]
         out.sort(key=lambda e: e.name.lower())
         return out
+
+    async def find_ids_with_measured_curves(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        if not protocol_ids:
+            return set()
+        rows = await self._session.execute(
+            select(RunModel.protocol_id)
+            .distinct()
+            .where(
+                RunModel.workspace_id == workspace_id,
+                RunModel.protocol_id.in_(protocol_ids),
+                sa.exists().where(
+                    MeasuredCurveModel.run_id == RunModel.id,
+                    MeasuredCurveModel.workspace_id == workspace_id,
+                ),
+            )
+        )
+        return set(rows.scalars().all())
 
     async def find_effective_targets_for_protocols(
         self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]

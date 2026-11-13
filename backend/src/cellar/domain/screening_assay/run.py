@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from typing import Any
 
@@ -15,6 +17,8 @@ from cellar.domain.screening_assay.enums import (
     WellType,
 )
 from cellar.domain.screening_assay.events import (
+    FieldChange,
+    PositionChange,
     RunApproved,
     RunCompleted,
     RunCreated,
@@ -22,11 +26,18 @@ from cellar.domain.screening_assay.events import (
     RunHitCriteriaSet,
     RunInstrumentFileImported,
     RunLocked,
+    RunPositionsRelabelled,
     RunRejected,
     RunUnlocked,
 )
+from cellar.domain.screening_assay.holder import position_label
 from cellar.domain.shared.entity import AggregateRoot, Entity
-from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import (
+    ConflictError,
+    NotFoundError,
+    StaleEditError,
+    ValidationError,
+)
 from cellar.domain.shared.hit_criterion import HitCriterion, validate_hit_criteria
 from cellar.domain.shared.value_objects import Barcode
 
@@ -46,6 +57,82 @@ _LOCKABLE_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
 
 _WELL_LABEL_MAX = 200
 _WELL_NOTE_MAX = 1000
+
+# Role/batch/concentration feed calculations: editable only while the run's data can be reset.
+_CALCULATION_EDIT_STATES = {RunStatus.DRAFT, RunStatus.IN_PROGRESS}
+# Label/note edits on these statuses need a reason.
+_REASON_REQUIRED_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
+
+
+def _clean_label(label: str | None) -> str | None:
+    label = (label or "").strip() or None
+    if label is not None and len(label) > _WELL_LABEL_MAX:
+        raise ValidationError(f"Well label must be at most {_WELL_LABEL_MAX} characters")
+    return label
+
+
+def _clean_note(note: str | None) -> str | None:
+    note = (note or "").strip() or None
+    if note is not None and len(note) > _WELL_NOTE_MAX:
+        raise ValidationError(f"Well note must be at most {_WELL_NOTE_MAX} characters")
+    return note
+
+
+def _check_dose(dose: float | None) -> None:
+    if dose is not None and not math.isfinite(dose):
+        raise ValidationError("Well dose must be a finite number")
+    if dose is not None and dose < 0:
+        raise ValidationError("Well dose must be >= 0")
+
+
+@dataclass(frozen=True)
+class PositionValues:
+    """The editable values of one position (a well)."""
+
+    label: str | None = None
+    note: str | None = None
+    well_type: WellType = WellType.SAMPLE
+    batch_id: uuid.UUID | None = None
+    dose: float | None = None
+
+
+@dataclass(frozen=True)
+class PositionEdit:
+    """One position's edit: the values the user started from, and the values to store."""
+
+    well_id: uuid.UUID
+    expected: PositionValues
+    new: PositionValues
+
+
+def _cleaned(values: PositionValues) -> PositionValues:
+    """Normalised and validated exactly as a Well does."""
+    _check_dose(values.dose)
+    return replace(values, label=_clean_label(values.label), note=_clean_note(values.note))
+
+
+def _field_changes(
+    old: PositionValues, new: PositionValues, batch_names: Mapping[uuid.UUID, str]
+) -> tuple[FieldChange, ...]:
+    def batch(b: uuid.UUID | None) -> str | None:
+        return None if b is None else batch_names.get(b, str(b))
+
+    def dose(d: float | None) -> str | None:
+        # repr keeps every digit: an audit row must tell 0.1234567 from 0.1234568.
+        return None if d is None else repr(d)
+
+    candidates = (
+        ("label", old.label, new.label, old.label, new.label),
+        ("note", old.note, new.note, old.note, new.note),
+        ("role", old.well_type, new.well_type, old.well_type.value, new.well_type.value),
+        ("batch", old.batch_id, new.batch_id, batch(old.batch_id), batch(new.batch_id)),
+        ("concentration", old.dose, new.dose, dose(old.dose), dose(new.dose)),
+    )
+    return tuple(
+        FieldChange(name, old_text, new_text)
+        for name, old_value, new_value, old_text, new_text in candidates
+        if old_value != new_value
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -145,13 +232,8 @@ class Well(Entity):
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at)
 
-        label = (label or "").strip() or None
-        if label is not None and len(label) > _WELL_LABEL_MAX:
-            raise ValidationError(f"Well label must be at most {_WELL_LABEL_MAX} characters")
-
-        note = (note or "").strip() or None
-        if note is not None and len(note) > _WELL_NOTE_MAX:
-            raise ValidationError(f"Well note must be at most {_WELL_NOTE_MAX} characters")
+        label = _clean_label(label)
+        note = _clean_note(note)
 
         # Normalize row to uppercase
         row = row.upper()
@@ -159,10 +241,7 @@ class Well(Entity):
             raise ValidationError("Well row must be 1-2 alphabetic characters")
         if column < 1:
             raise ValidationError("Well column must be >= 1")
-        if dose is not None and not math.isfinite(dose):
-            raise ValidationError("Well dose must be a finite number")
-        if dose is not None and dose < 0:
-            raise ValidationError("Well dose must be >= 0")
+        _check_dose(dose)
 
         self.plate_id = plate_id
         self.row = row
@@ -176,6 +255,17 @@ class Well(Entity):
         self.label = label
         # Free-text observation made at the bench about this sample in this run.
         self.note = note
+
+    @property
+    def values(self) -> PositionValues:
+        """The fields a user can edit after import."""
+        return PositionValues(
+            label=self.label,
+            note=self.note,
+            well_type=self.well_type,
+            batch_id=self.batch_id,
+            dose=self.dose,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +562,108 @@ class Run(AggregateRoot):
                 readout_values=readout_values,
             )
         )
+
+    @property
+    def calculated_positions_editable(self) -> bool:
+        """Whether positions' role, batch and concentration can be changed: only while
+        the run is draft or in progress."""
+        return self.status in _CALCULATION_EDIT_STATES
+
+    def check_position_edits(self, edits: Sequence[PositionEdit]) -> None:
+        """The checks ``relabel_positions`` makes before it compares anything: the run is
+        not locked, each position is on the run and given once, its values are valid, and
+        nothing changed since the user opened it (a conflict naming the positions).
+        Changes nothing."""
+        self._checked_position_edits(edits)
+
+    def relabel_positions(
+        self,
+        edits: Sequence[PositionEdit],
+        *,
+        reason: str | None = None,
+        batch_names: Mapping[uuid.UUID, str] | None = None,
+    ) -> tuple[PositionChange, ...]:
+        """Edit positions' label, note, role, batch and concentration after import.
+
+        Every check runs before anything is changed. An edit whose ``expected`` no
+        longer matches what is stored is a conflict (someone else saved first). Label
+        and note can be edited in any unlocked status, with a reason on a completed or
+        approved run; role, batch and concentration only while draft or in progress.
+        Returns the changes; no change registers nothing.
+        """
+        checked = self._checked_position_edits(edits)
+
+        names = batch_names or {}
+        changed: list[tuple[Well, PositionValues, PositionChange]] = []
+        for well, label, _, new in checked:
+            fields = _field_changes(well.values, new, names)
+            if fields:
+                changed.append((well, new, PositionChange(well.id, label, fields)))
+        if not changed:
+            return ()
+
+        if (
+            any(change.touches_calculation for _, _, change in changed)
+            and not self.calculated_positions_editable
+        ):
+            raise ConflictError(
+                "Role, batch and concentration can be changed only while the run is "
+                "draft or in progress"
+            )
+        reason = (reason or "").strip() or None
+        if self.status in _REASON_REQUIRED_STATES and reason is None:
+            raise ValidationError("A reason is required to edit a completed or approved run")
+
+        for well, new, _ in changed:
+            well.label = new.label
+            well.note = new.note
+            well.well_type = new.well_type
+            well.batch_id = new.batch_id
+            well.dose = new.dose
+        self.updated_at = datetime.now(UTC)
+        changes = tuple(change for _, _, change in changed)
+        self.register_event(
+            RunPositionsRelabelled(
+                workspace_id=self.workspace_id,
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                positions=changes,
+                reason=reason,
+            )
+        )
+        return changes
+
+    def _checked_position_edits(
+        self, edits: Sequence[PositionEdit]
+    ) -> list[tuple[Well, str, PositionValues, PositionValues]]:
+        self._guard_not_locked()
+
+        wells = {w.id: w for w in self.wells}
+        plates = {p.id: p for p in self.plates}
+        checked: list[tuple[Well, str, PositionValues, PositionValues]] = []
+        seen: set[uuid.UUID] = set()
+        for edit in edits:
+            well = wells.get(edit.well_id)
+            if well is None:
+                raise ValidationError(f"Position '{edit.well_id}' is not on this run")
+            if edit.well_id in seen:
+                raise ValidationError(f"Position '{edit.well_id}' is given more than once")
+            seen.add(edit.well_id)
+            plate = plates[well.plate_id]
+            label = position_label(plate.holder_kind, well.row, well.column)
+            try:
+                expected, new = _cleaned(edit.expected), _cleaned(edit.new)
+            except ValidationError as exc:
+                raise ValidationError(f"{label}: {exc.message}") from exc
+            checked.append((well, label, expected, new))
+
+        stale = [label for well, label, expected, _ in checked if expected != well.values]
+        if stale:
+            raise StaleEditError(
+                f"Changed by someone else since you opened them: {', '.join(stale)}. "
+                "Reload and try again."
+            )
+        return checked
 
     def reset_data(
         self,

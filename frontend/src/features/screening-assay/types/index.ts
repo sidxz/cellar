@@ -8,23 +8,31 @@ import type {
   ConditionGroupResponse as ConditionGroupResponseModel,
   ConditionGroupsResponse as ConditionGroupsResponseModel,
   CreateProtocolRequest,
+  CurvePositionsResponse,
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
   HitCriterionDTO,
+  InstrumentFileFormatsResponse,
   InstrumentImportResponse,
   InstrumentPreviewResponse,
   InterceptValueResponse,
   LatestRunResponse as LatestRunResponseModel,
+  LayoutFileResponse,
+  LayoutRowModel,
+  MeasuredCurvesBatchResponse,
   PlateData as PlateDataModel,
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
   PlateMapWellModel,
+  PositionEditRequest,
+  PositionValuesModel,
   ProtocolReferenceResponse,
   ProtocolResponse,
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
   RefitDoseResponseCurveRequest,
+  RelabelPositionsResponse,
   RunCountsResponse as RunCountsResponseModel,
   RunCurvesResponse,
   RunResponse,
@@ -392,7 +400,9 @@ export type TargetRef = TargetRefResponse;
  *  many of the protocol's runs reference it. Aliases the generated type. */
 export type ProtocolTargetRef = ProtocolTargetRefResponse;
 
-export interface Protocol {
+/** `has_measured_curves` (whether any run has measured curves) is filled only by
+ *  GET /protocols and GET /protocols/{id}; null or absent elsewhere. Typed off the DTO. */
+export interface Protocol extends Partial<Pick<ProtocolResponse, "has_measured_curves">> {
   /** Enriched from the workspace run summary; undefined means not available yet. */
   last_run_date?: ProtocolSummaryResponse["last_run_date"];
   created_at?: ProtocolResponse["created_at"];
@@ -788,3 +798,11 @@ export interface CompoundFlag {
 export type InstrumentPreview = InstrumentPreviewResponse;
 export type InstrumentImportResult = InstrumentImportResponse;
 export type RunCurves = RunCurvesResponse;
+export type PositionValues = PositionValuesModel;
+export type PositionEdit = PositionEditRequest;
+export type RelabelResult = RelabelPositionsResponse;
+export type InstrumentFileFormats = InstrumentFileFormatsResponse;
+export type CurvePositions = CurvePositionsResponse;
+export type MeasuredCurvesBatch = MeasuredCurvesBatchResponse;
+export type LayoutFile = LayoutFileResponse;
+export type LayoutFileRow = LayoutRowModel;

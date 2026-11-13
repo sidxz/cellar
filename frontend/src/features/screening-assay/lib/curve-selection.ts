@@ -1,4 +1,6 @@
-/** Position selection on the Curves tab. Pure; ids are well ids. */
+/** Position selection in the curve viewer. Pure; ids are well ids. */
+
+import type { CurveGroup, CurvePosition } from "./curve-plot";
 
 export interface SelectionState {
   selected: ReadonlySet<string>;
@@ -71,4 +73,81 @@ export function assignColourSlots(
     used.add(free);
   }
   return next;
+}
+
+/** At most this many positions are drawn at once. */
+export const MAX_DRAWN = 400;
+
+/** The selected positions in group then holder order, then, with the switch
+ *  on, every reference position of a group that has a selected position. */
+export function drawnPositionIds(
+  groups: readonly CurveGroup[],
+  selected: ReadonlySet<string>,
+  showReferences: boolean,
+): string[] {
+  const ids = groups
+    .flatMap((g) => g.positions.map((p) => p.well_id))
+    .filter((id) => selected.has(id));
+  if (!showReferences) return ids;
+  const seen = new Set(ids);
+  for (const g of groups) {
+    if (!g.positions.some((p) => selected.has(p.well_id))) continue;
+    for (const p of g.positions) {
+      if (p.well_type === "reference" && !seen.has(p.well_id)) {
+        seen.add(p.well_id);
+        ids.push(p.well_id);
+      }
+    }
+  }
+  return ids;
+}
+
+/** Case-insensitive: the text is in the label, compound name, batch number or
+ *  note. Blank text matches everything. */
+export function matchesFilter(p: CurvePosition, text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return true;
+  return [p.label, p.molecule_name, p.batch_number, p.note].some((v) =>
+    v?.toLowerCase().includes(t),
+  );
+}
+
+/** At most this many positions per curve request. */
+export const CURVES_PER_REQUEST = 100;
+
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/** At most this many runs at once on the protocol's Curves tab (also the
+ *  number of colours, so colour by run always works). */
+export const MAX_CURVE_RUNS = 8;
+
+/** Removes a chosen run, or adds it while fewer than MAX_CURVE_RUNS are chosen. */
+export function toggleRun(chosen: readonly string[], runId: string): string[] {
+  if (chosen.includes(runId)) return chosen.filter((id) => id !== runId);
+  return chosen.length < MAX_CURVE_RUNS ? [...chosen, runId] : [...chosen];
+}
+
+/** What "Compare curves" on the protocol's Runs tab will open: the selected
+ *  runs that have curves, why it cannot (none, or more than MAX_CURVE_RUNS),
+ *  and a note when some selected runs have no curves and are left out. */
+export function compareCurvesChoice(
+  selectedRunIds: readonly string[],
+  runIdsWithCurves: ReadonlySet<string>,
+): { runIds: string[]; disabledReason: string | null; note: string | null } {
+  const runIds = selectedRunIds.filter((id) => runIdsWithCurves.has(id));
+  const disabledReason =
+    runIds.length === 0
+      ? "Select runs that have curves"
+      : runIds.length > MAX_CURVE_RUNS
+        ? "At most 8 runs at once"
+        : null;
+  const note =
+    runIds.length > 0 && runIds.length < selectedRunIds.length
+      ? `${runIds.length} of the ${selectedRunIds.length} selected runs ${runIds.length === 1 ? "has" : "have"} curves`
+      : null;
+  return { runIds, disabledReason, note };
 }

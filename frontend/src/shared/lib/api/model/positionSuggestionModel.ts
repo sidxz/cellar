@@ -10,6 +10,7 @@ import type { PositionSuggestionModelBatchId } from './positionSuggestionModelBa
 export interface PositionSuggestionModel {
   molecule_id: string;
   molecule_name: string;
+  registration_number: string;
   batches: InstrumentBatchOptionModel[];
   batch_id: PositionSuggestionModelBatchId;
 }

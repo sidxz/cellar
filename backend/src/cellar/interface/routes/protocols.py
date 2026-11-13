@@ -272,6 +272,9 @@ class ProtocolResponse(BaseModel):
     # any draft, for an admin) that nothing still uses. Filled only by
     # GET /protocols/{id}; null on every other response means "not computed".
     can_delete: bool | None = None
+    # Whether any of its runs has measured curves. True or false from GET /protocols
+    # and GET /protocols/{id}; null on every other response means "not computed".
+    has_measured_curves: bool | None
     aliases: list[ProtocolAliasResponse] = []
     references: list[ProtocolReferenceResponse] = []
 
@@ -283,6 +286,7 @@ class ProtocolResponse(BaseModel):
         project_ids: list[uuid.UUID] | None = None,
         targets: list[TargetRefResponse] | None = None,
         can_delete: bool | None = None,
+        has_measured_curves: bool | None = None,
     ) -> ProtocolResponse:
         # Serialize ontology_annotations
         onto_annots = None
@@ -368,6 +372,7 @@ class ProtocolResponse(BaseModel):
             lock_reason=p.lock_reason,
             locked_at=p.locked_at,
             can_delete=can_delete,
+            has_measured_curves=has_measured_curves,
             aliases=[
                 ProtocolAliasResponse(
                     label=a.label, kind=a.kind.value, recorded_at=a.recorded_at, reason=a.reason
@@ -717,6 +722,7 @@ async def list_protocols(
             ProtocolResponse.from_domain(
                 item.protocol,
                 targets=[TargetRefResponse.from_ref(t) for t in item.targets],
+                has_measured_curves=item.has_measured_curves,
             )
             for item in page.items
         ],
@@ -843,6 +849,7 @@ async def get_protocol(
         item.protocol,
         targets=[TargetRefResponse.from_ref(t) for t in item.targets],
         can_delete=item.can_delete,
+        has_measured_curves=item.has_measured_curves,
     )
 
 

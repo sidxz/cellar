@@ -6,6 +6,7 @@ import math
 import uuid
 from dataclasses import dataclass
 
+from returns.pipeline import is_successful
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
@@ -111,20 +112,12 @@ class GetRunCurves:
             CurveSeries(well_id=c.well_id, x=c.x, y=c.y, reported=c.reported)
             for c in sorted(curves, key=lambda c: order.get(c.well_id, len(order)))
         ]
-        window: float | None = None
-        if input.view == "derivative" and series:
-            # One window for the whole response; calculated here, never stored.
-            ranges = [(min(s.x), max(s.x)) for s in series]
-            widest = max(hi - lo for lo, hi in ranges)
-            if input.window is not None and not (math.isfinite(input.window) and input.window > 0):
-                return Failure(
-                    ValidationError("The derivative window must be a finite number above 0")
-                )
-            # A window wider than the curves is clamped to their widest x range.
-            window = min(input.window, widest) if input.window else default_window(ranges)
-            series = [d for d in (self._differentiate(s, window) for s in series) if d.x]
-        elif input.view == "derivative":
-            window = input.window
+        viewed = apply_view(
+            series, view=input.view, window=input.window, derivative=self._derivative
+        )
+        if not is_successful(viewed):
+            return Failure(viewed.failure())
+        series, window = viewed.unwrap()
 
         return Success(
             RunCurves(
@@ -143,6 +136,32 @@ class GetRunCurves:
             )
         )
 
-    def _differentiate(self, s: CurveSeries, window: float) -> CurveSeries:
-        d = self._derivative.derivative(s.x, s.y, window=window)
-        return CurveSeries(well_id=s.well_id, x=d.x, y=d.y, reported=s.reported)
+
+def apply_view(
+    series: list[CurveSeries],
+    *,
+    view: str,
+    window: float | None,
+    derivative: CurveDerivativeService,
+) -> Result[tuple[list[CurveSeries], float | None], ValidationError]:
+    """The curves as asked to be viewed, with the window used (None for measured).
+
+    For the derivative: one window for all the series; by default 5% of their widest
+    x range, a wider one clamped to that range; calculated here, never stored. A series
+    whose derivative is empty is dropped.
+    """
+    if view != "derivative":
+        return Success((series, None))
+    if not series:
+        return Success((series, window))
+    ranges = [(min(s.x), max(s.x)) for s in series]
+    widest = max(hi - lo for lo, hi in ranges)
+    if window is not None and not (math.isfinite(window) and window > 0):
+        return Failure(ValidationError("The derivative window must be a finite number above 0"))
+    used = min(window, widest) if window else default_window(ranges)
+    out = []
+    for s in series:
+        d = derivative.derivative(s.x, s.y, window=used)
+        if d.x:
+            out.append(CurveSeries(well_id=s.well_id, x=d.x, y=d.y, reported=s.reported))
+    return Success((out, used))

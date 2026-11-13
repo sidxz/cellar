@@ -25,6 +25,11 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFileQuery,
 )
 from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
+from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
+from cellar.application.screening.list_instrument_file_formats import (
+    InstrumentFileFormat,
+    ListInstrumentFileFormatsQuery,
+)
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     ReadoutColumn,
@@ -56,6 +61,7 @@ from cellar.interface.dependencies import (
     ImportInstrumentFileDep,
     ImportRunFileDep,
     ImportSummaryFileDep,
+    ListInstrumentFileFormatsDep,
     ListRunImportTemplatesDep,
     PreviewInstrumentFileDep,
     PreviewRunFileDep,
@@ -862,6 +868,7 @@ class InstrumentBatchOptionModel(BaseModel):
 class PositionSuggestionModel(BaseModel):
     molecule_id: uuid.UUID
     molecule_name: str
+    registration_number: str
     batches: list[InstrumentBatchOptionModel]
     # Pre-selected only when the molecule has exactly one batch.
     batch_id: uuid.UUID | None
@@ -925,6 +932,7 @@ class InstrumentPreviewResponse(BaseModel):
                         PositionSuggestionModel(
                             molecule_id=pos.suggestion.molecule_id,
                             molecule_name=pos.suggestion.molecule_name,
+                            registration_number=pos.suggestion.registration_number,
                             batches=[
                                 InstrumentBatchOptionModel(
                                     batch_id=b.batch_id, batch_number=b.batch_number
@@ -1044,6 +1052,37 @@ class InstrumentImportResponse(BaseModel):
         )
 
 
+class InstrumentFileFormatModel(BaseModel):
+    id: str
+    # The format's name, printed as given.
+    label: str
+    # One sentence telling the user which export to make, printed as given.
+    hint: str
+
+
+class InstrumentFileFormatsResponse(BaseModel):
+    formats: list[InstrumentFileFormatModel]
+
+    @classmethod
+    def from_domain(
+        cls, formats: tuple[InstrumentFileFormat, ...]
+    ) -> InstrumentFileFormatsResponse:
+        return cls(
+            formats=[
+                InstrumentFileFormatModel(id=f.id, label=f.label, hint=f.hint) for f in formats
+            ]
+        )
+
+
+@router.get("/instrument-file-formats", response_model=InstrumentFileFormatsResponse)
+async def list_instrument_file_formats(
+    auth: AuthDep, uc: ListInstrumentFileFormatsDep
+) -> InstrumentFileFormatsResponse:
+    """The instrument files the import reads, in the order it tries them."""
+    result = await uc(ListInstrumentFileFormatsQuery(workspace_id=auth.workspace_id), auth=auth)
+    return InstrumentFileFormatsResponse.from_domain(result_to_response(result))
+
+
 @router.post(
     "/runs/{run_id}/preview-instrument-file",
     response_model=InstrumentPreviewResponse,
@@ -1056,7 +1095,8 @@ async def preview_instrument_file(
     file: Annotated[UploadFile, File()],
 ) -> InstrumentPreviewResponse:
     """Read an instrument file and propose a labelling of its positions. Writes nothing."""
-    content = await file.read()
+    # One byte past the limit is enough for the use case to refuse the file.
+    content = await file.read(MAX_INSTRUMENT_FILE_BYTES + 1)
     query = PreviewInstrumentFileQuery(
         workspace_id=auth.workspace_id,
         run_id=run_id,
@@ -1083,7 +1123,8 @@ async def import_instrument_file(
 
     The ``labelling`` form field is the ``InstrumentLabellingRequest`` JSON.
     """
-    content = await file.read()
+    # One byte past the limit is enough for the use case to refuse the file.
+    content = await file.read(MAX_INSTRUMENT_FILE_BYTES + 1)
     # Parsed here so malformed JSON surfaces as a domain ValidationError (HTTP 422).
     try:
         parsed = InstrumentLabellingRequest.model_validate_json(labelling)

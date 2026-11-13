@@ -1,10 +1,19 @@
 import type { Molecule } from "@/features/chemical-registration/types";
+import { CompoundCurvesProvider } from "@/features/screening-assay/components/compound-curves-dialog";
 import type { Protocol } from "@/features/screening-assay/types";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ActivityValue } from "../../types";
 import { CompoundComparison } from "./compound-comparison";
+
+const curvesProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+vi.mock("@/features/screening-assay/components/multi-run-curves", () => ({
+  MultiRunCurves: (props: Record<string, unknown>) => {
+    curvesProps.push(props);
+    return <div data-testid="multi-run-curves" />;
+  },
+}));
 
 beforeAll(() => {
   if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn();
@@ -125,4 +134,32 @@ it("keeps endpoint choices while replacing, removing, adding and reopening compo
   expect(screen.getByRole("dialog", { name: "Compare compounds" })).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Save shortlist (0)" })).toBeDisabled();
   expect(screen.getByRole("button", { name: "Add compound" })).toBeEnabled();
+});
+
+it("Curves on a protocol opens the curves of all compared compounds, once per protocol", () => {
+  render(
+    <CompoundCurvesProvider>
+      <CompoundComparison
+        molecules={molecules}
+        availableMolecules={allMolecules}
+        onMoleculesChange={() => {}}
+        endpointPair={{ targetId: "", counterId: "" }}
+        onEndpointPairChange={() => {}}
+        onSaveShortlist={() => {}}
+        protocols={[{ ...protocols[0], has_measured_curves: true }, protocols[1]]}
+        protocolColumns={["drc:Target", "drc:Counter"]}
+        mode="latest"
+        onClose={() => {}}
+      />
+    </CompoundCurvesProvider>,
+  );
+  // Target has two endpoint rows and curves; Counter has none.
+  const buttons = screen.getAllByRole("button", { name: "Curves" });
+  expect(buttons).toHaveLength(1);
+  fireEvent.click(buttons[0]);
+  expect(
+    screen.getByRole("dialog", { name: "All runs of Target with curves for A and B" }),
+  ).toBeInTheDocument();
+  expect(curvesProps.at(-1)?.protocolId).toBe("Target");
+  expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["A", "B"] });
 });

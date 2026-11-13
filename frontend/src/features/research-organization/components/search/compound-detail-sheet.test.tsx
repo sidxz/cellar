@@ -1,9 +1,18 @@
 import type { Molecule } from "@/features/chemical-registration/types";
+import { CompoundCurvesProvider } from "@/features/screening-assay/components/compound-curves-dialog";
 import type { Protocol } from "@/features/screening-assay/types";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivityValue, CurveDetail } from "../../types";
 import { CompoundDetailSheet, findSearchSourceCurve } from "./compound-detail-sheet";
+
+const curvesProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+vi.mock("@/features/screening-assay/components/multi-run-curves", () => ({
+  MultiRunCurves: (props: Record<string, unknown>) => {
+    curvesProps.push(props);
+    return <div data-testid="multi-run-curves" />;
+  },
+}));
 
 const mocks = vi.hoisted(() => ({ detail: vi.fn() }));
 vi.mock("../../hooks/use-molecule-activity-detail", () => ({
@@ -141,6 +150,50 @@ describe("compound drawer evidence", () => {
       within(screen.getByRole("region", { name: "Reported search results" })).getByText("ND"),
     ).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Source curves could not be loaded");
+  });
+});
+
+describe("curves from the compound sheet", () => {
+  it("offers Curves on the card of a protocol with measured curves and not on one without", () => {
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
+          { protocol_id: "proto", protocol_name: "Target assay", curves: [curve] },
+          { protocol_id: "plain", protocol_name: "Plain assay", curves: [] },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    const withCurves = [
+      { ...protocols[0], has_measured_curves: true },
+      { ...protocols[0], id: "plain", name: "Plain assay", has_measured_curves: false },
+    ];
+    render(
+      <CompoundCurvesProvider>
+        <CompoundDetailSheet
+          molecule={molecule}
+          protocols={withCurves}
+          protocolColumns={["drc:rd"]}
+          visibleProtocolIds={["proto", "plain"]}
+          currentQuery={null}
+          currentIndex={0}
+          totalCount={1}
+          onNavigate={() => {}}
+          onOpenChange={() => {}}
+        />
+      </CompoundCurvesProvider>,
+    );
+    const buttons = screen.getAllByRole("button", { name: "Curves" });
+    expect(buttons).toHaveLength(1);
+    // The card heading's expand button stays separate from Curves.
+    expect(screen.getByRole("button", { name: /Target assay/ })).not.toContainElement(buttons[0]);
+    fireEvent.click(buttons[0]);
+    expect(
+      screen.getByRole("dialog", { name: "All runs of Target assay with curves for CC-test" }),
+    ).toBeInTheDocument();
+    expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["mol"] });
   });
 });
 

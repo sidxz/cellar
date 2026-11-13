@@ -5,7 +5,6 @@ import {
   type PositionDraft,
   buildLabelling,
   draftFromPreview,
-  positionKey,
   setRoleForPositions,
 } from "../lib/instrument-labelling";
 import type { InstrumentImportResult, InstrumentPreview, WellType } from "../types";
@@ -31,6 +30,8 @@ export interface UseInstrumentImportWizardResult {
   handleFile: (f: File) => void;
   updatePosition: (key: string, patch: Partial<PositionDraft>) => void;
   setRole: (keys: ReadonlySet<string>, wellType: WellType) => void;
+  /** The positions after a layout file was applied. */
+  replacePositions: (rows: PositionDraft[]) => void;
   setSeriesReadout: (key: string, readoutId: string | null) => void;
   setStep: (s: 1 | 2 | 3 | 4) => void;
   handleImport: () => void;
@@ -40,7 +41,7 @@ export interface UseInstrumentImportWizardResult {
 const EMPTY_DRAFT: LabellingDraft = { positions: [], readoutBySeries: {} };
 
 // ApiError.message reads "API error: 422 — <detail>"; the detail alone is the API's wording.
-const apiReason = (e: unknown) =>
+export const apiReason = (e: unknown) =>
   (e instanceof Error ? e.message : String(e)).replace(/^API error: \d+ — /, "");
 
 export function useInstrumentImportWizard({
@@ -100,12 +101,16 @@ export function useInstrumentImportWizard({
   const updatePosition = useCallback((key: string, patch: Partial<PositionDraft>) => {
     setDraft((d) => ({
       ...d,
-      positions: d.positions.map((p) => (positionKey(p) === key ? { ...p, ...patch } : p)),
+      positions: d.positions.map((p) => (p.key === key ? { ...p, ...patch } : p)),
     }));
   }, []);
 
   const setRole = useCallback((keys: ReadonlySet<string>, wellType: WellType) => {
     setDraft((d) => setRoleForPositions(d, keys, wellType));
+  }, []);
+
+  const replacePositions = useCallback((rows: PositionDraft[]) => {
+    setDraft((d) => ({ ...d, positions: rows }));
   }, []);
 
   const setSeriesReadout = useCallback((key: string, readoutId: string | null) => {
@@ -142,6 +147,7 @@ export function useInstrumentImportWizard({
     handleFile,
     updatePosition,
     setRole,
+    replacePositions,
     setSeriesReadout,
     setStep,
     handleImport,

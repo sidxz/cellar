@@ -85,6 +85,7 @@ class PlateMapWellModel(BaseModel):
     batch_number: str | None = None
     molecule_id: uuid.UUID | None = None
     molecule_name: str | None = None
+    registration_number: str | None
     synonyms: list[str] = []
     smiles: str | None = None
     # Dose value in the protocol's dose_unit (carried at the response level
@@ -109,6 +110,7 @@ class PlateMapWellModel(BaseModel):
             batch_number=w.batch_number,
             molecule_id=w.molecule_id,
             molecule_name=w.molecule_name,
+            registration_number=w.registration_number,
             synonyms=list(w.synonyms),
             smiles=w.smiles,
             dose=w.dose,

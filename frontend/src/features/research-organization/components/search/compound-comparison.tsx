@@ -1,6 +1,7 @@
 "use client";
 
 import type { Molecule } from "@/features/chemical-registration/types";
+import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
 import type { Protocol } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { EntityLink } from "@/shared/components/entity-link";
@@ -16,6 +17,7 @@ import { ListPlus, X } from "lucide-react";
 import { useMemo } from "react";
 import { selectivityRatio } from "../../lib/assay-evidence";
 import { comparisonChannels } from "../../lib/comparison-channels";
+import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import { AGGREGATION_LABELS, type AggregationMode } from "../../lib/use-aggregation-mode";
 import type { ActivityValue } from "../../types";
 import { AssayResult } from "./assay-result";
@@ -217,11 +219,21 @@ export function CompoundComparison({
               </tr>
             </thead>
             <tbody>
-              {channels.map((channel) => (
+              {channels.map((channel, index) => (
                 <tr key={channel.id}>
                   <th scope="row" className={thClass}>
-                    <span className="block text-xs text-muted-foreground">
+                    <span className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                       {channel.protocolName}
+                      {/* Once per protocol, on its first row. */}
+                      {channels.findIndex((c) => c.protocolId === channel.protocolId) === index && (
+                        <CompoundCurvesButton
+                          className="text-foreground"
+                          target={curvesTarget(
+                            protocols.find((p) => p.id === channel.protocolId),
+                            molecules.map(compoundRef),
+                          )}
+                        />
+                      )}
                     </span>
                     {channel.label}
                     {channel.unit ? ` (${channel.unit})` : ""}

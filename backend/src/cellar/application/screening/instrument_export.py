@@ -80,6 +80,7 @@ class InstrumentFileError(ValueError):
 class InstrumentReader(Protocol):
     id: str
     label: str  # shown to the user: the format recognised, and the list of supported formats
+    hint: str  # one sentence telling the user which export to make
 
     def recognises(self, content: bytes, filename: str) -> bool: ...
 

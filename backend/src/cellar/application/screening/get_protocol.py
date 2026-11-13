@@ -47,6 +47,9 @@ class ProtocolWithTargets:
     #: Whether the caller could delete it right now. Only GetProtocol fills it;
     #: None elsewhere means "not computed", not "no".
     can_delete: bool | None = None
+    #: Whether any of its runs has measured curves. Filled by GetProtocol, ListProtocols
+    #: and the by-project list; None elsewhere means "not computed".
+    has_measured_curves: bool | None = None
 
 
 def may_delete_protocol(protocol: Protocol, auth: AuthContext | None) -> bool:
@@ -80,11 +83,15 @@ class GetProtocol:
             )
             if can_delete:
                 can_delete = not await self._repo.find_usages(input.workspace_id, protocol.id)
+            with_curves = await self._repo.find_ids_with_measured_curves(
+                input.workspace_id, [protocol.id]
+            )
             return Success(
                 ProtocolWithTargets(
                     protocol=protocol,
                     targets=targets.get(protocol.id, []),
                     can_delete=can_delete,
+                    has_measured_curves=protocol.id in with_curves,
                 )
             )
 
@@ -115,13 +122,19 @@ class ListProtocols:
                 protocols = protocols[:effective_limit]
                 next_cursor = str(protocols[-1].id)
 
+            ids = [p.id for p in protocols]
             targets = await self._repo.find_effective_targets_for_protocols(
-                input.workspace_id, [p.id for p in protocols]
+                input.workspace_id, ids
             )
+            with_curves = await self._repo.find_ids_with_measured_curves(input.workspace_id, ids)
             return Success(
                 PageResult(
                     items=[
-                        ProtocolWithTargets(protocol=p, targets=targets.get(p.id, []))
+                        ProtocolWithTargets(
+                            protocol=p,
+                            targets=targets.get(p.id, []),
+                            has_measured_curves=p.id in with_curves,
+                        )
                         for p in protocols
                     ],
                     next_cursor=next_cursor,

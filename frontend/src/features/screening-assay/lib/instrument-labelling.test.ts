@@ -28,6 +28,7 @@ const preview: InstrumentPreview = {
       suggestion: {
         molecule_id: "m1",
         molecule_name: "ABC-0000001",
+        registration_number: "REG-0001",
         batches: [{ batch_id: "b1", batch_number: "B-1" }],
         batch_id: "b1",
       },
@@ -40,6 +41,7 @@ const preview: InstrumentPreview = {
       suggestion: {
         molecule_id: "m2",
         molecule_name: "ABC-0000002",
+        registration_number: "REG-0002",
         batches: [
           { batch_id: "b2", batch_number: "B-2" },
           { batch_id: "b3", batch_number: "B-3" },
@@ -92,6 +94,14 @@ function withPosition(i: number, patch: Partial<(typeof draft.positions)[number]
 }
 
 describe("instrument labelling", () => {
+  it("keeps the compound's registration number and the pre-selected batch's number for the template", () => {
+    expect(draft.positions.map((p) => [p.moleculeRef, p.batchNumber])).toEqual([
+      ["REG-0001", "B-1"],
+      ["REG-0002", null],
+      [null, null],
+    ]);
+  });
+
   it("pre-fills from the preview and never selects a batch the API did not", () => {
     // position 1: one batch pre-selected; position 2: three batches, none; position 3: blank label, no suggestion
     expect(draft.positions.map((p) => p.batchId)).toEqual(["b1", null, null]);

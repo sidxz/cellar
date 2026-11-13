@@ -2,6 +2,7 @@
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
+import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
 import type {
   CurveClass,
   CurveType,
@@ -26,6 +27,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
 import { type ComparisonChannel, comparisonChannels } from "../../lib/comparison-channels";
 import { filterCurvesByRunScope, pickRepresentative } from "../../lib/compound-detail-selection";
+import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import {
   AGGREGATION_LABELS,
   type AggregationMode,
@@ -369,26 +371,30 @@ function ProtocolCard({
   );
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-      <button
-        type="button"
-        aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 bg-primary/5 px-4 py-3 text-left hover:bg-primary/10"
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <div className="min-w-0">
-          <p className="break-words text-sm font-semibold">{group.protocol_name}</p>
-          <p className="text-xs text-muted-foreground">
-            {loading
-              ? "Loading source curves…"
-              : `${inScopeCurves.length} source fit${inScopeCurves.length === 1 ? "" : "s"} in scope`}
-          </p>
-        </div>
-        {expanded ? (
-          <ChevronUp className="size-4 shrink-0" />
-        ) : (
-          <ChevronDown className="size-4 shrink-0" />
-        )}
-      </button>
+      <div className="flex items-center gap-2 bg-primary/5 pr-3">
+        <button
+          type="button"
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center justify-between gap-3 px-4 py-3 text-left hover:bg-primary/10"
+          onClick={() => setExpanded((value) => !value)}
+        >
+          <div className="min-w-0">
+            <p className="break-words text-sm font-semibold">{group.protocol_name}</p>
+            <p className="text-xs text-muted-foreground">
+              {loading
+                ? "Loading source curves…"
+                : `${inScopeCurves.length} source fit${inScopeCurves.length === 1 ? "" : "s"} in scope`}
+            </p>
+          </div>
+          {expanded ? (
+            <ChevronUp className="size-4 shrink-0" />
+          ) : (
+            <ChevronDown className="size-4 shrink-0" />
+          )}
+        </button>
+        {/* Beside the expand button, not inside it. */}
+        <CompoundCurvesButton target={curvesTarget(protocol, [compoundRef(molecule)])} />
+      </div>
       {expanded && (
         <div className="min-w-0 space-y-4 p-3 sm:p-4">
           <ReportedEndpoints channels={unmatched} molecule={molecule} mode={mode} />

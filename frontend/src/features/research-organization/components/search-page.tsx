@@ -2,6 +2,7 @@
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { consumeScaffoldSearch } from "@/features/research-organization/lib/scaffold-search-handoff";
+import { CompoundCurvesProvider } from "@/features/screening-assay/components/compound-curves-dialog";
 import { useProtocols } from "@/features/screening-assay/hooks/use-protocols";
 import { useTags } from "@/features/tagging/hooks/use-tags";
 import { CollectionPickerDialog } from "@/shared/components/collection-picker-dialog";
@@ -796,7 +797,9 @@ export function SearchPage() {
         </div>
       }
     >
-      <SearchPageInner />
+      <CompoundCurvesProvider>
+        <SearchPageInner />
+      </CompoundCurvesProvider>
     </Suspense>
   );
 }

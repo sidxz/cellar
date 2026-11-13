@@ -40,7 +40,21 @@ class TabularParser(Protocol):
     """Parses CSV/XLSX bytes into a ``ParsedTable``.
 
     Implementations detect format from filename extension + magic bytes and
-    raise ``TabularParseError`` on unparseable input.
+    raise ``TabularParseError`` on unparseable input. With ``max_rows``, reading
+    stops after ``max_rows + 1`` non-blank rows, so a longer file can be refused
+    without building every row. ``max_columns`` refuses a wider header before any
+    row is read; ``max_uncompressed_bytes`` refuses a spreadsheet that unpacks
+    larger before it is opened. ``quotechar`` fixes a CSV's quote character instead
+    of sniffing it. Each limit applies only when given.
     """
 
-    def parse(self, content: bytes, filename: str = "") -> ParsedTable: ...
+    def parse(
+        self,
+        content: bytes,
+        filename: str = "",
+        max_rows: int | None = None,
+        *,
+        max_columns: int | None = None,
+        max_uncompressed_bytes: int | None = None,
+        quotechar: str | None = None,
+    ) -> ParsedTable: ...

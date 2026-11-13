@@ -65,6 +65,23 @@ class TestCSV:
         with pytest.raises(TabularParseError):
             parse_tabular(b"   \n  \n", "x.csv")
 
+    def test_single_quoted_csv_is_read_by_default(self) -> None:
+        table = parse_tabular(b"Position,Label\n'P1','a,b'\n'P2','c,d'\n", "x.csv")
+        assert table.rows == [
+            {"Position": "P1", "Label": "a,b"},
+            {"Position": "P2", "Label": "c,d"},
+        ]
+
+    def test_leading_apostrophes_are_text_with_the_double_quote_given(self) -> None:
+        """A spreadsheet-safe file puts ' before = + - @; with the double quote as the
+        quote character those cells keep their columns."""
+        content = b"Position,Label,Note\n'+P1,'=a,'@n\n'+P2,'=b,'@m\n"
+        table = parse_tabular(content, "x.csv", quotechar='"')
+        assert table.rows == [
+            {"Position": "'+P1", "Label": "'=a", "Note": "'@n"},
+            {"Position": "'+P2", "Label": "'=b", "Note": "'@m"},
+        ]
+
     def test_short_row_pads_missing_columns(self) -> None:
         content = b"A,B,C\n1,2\n"
         table = parse_tabular(content, "x.csv")
@@ -125,3 +142,62 @@ class TestXLSX:
         # Pathological: .xlsx extension but CSV bytes. We attempt xlsx and fail.
         with pytest.raises(TabularParseError):
             parse_tabular(b"a,b\n1,2\n", "x.xlsx")
+
+
+class TestMaxRows:
+    """``max_rows`` stops the read one row past the limit, so a caller can refuse a long
+    file without the parser building every row."""
+
+    def test_csv_stops_one_row_past_the_limit(self) -> None:
+        content = ("Well\n" + "\n".join(f"A{n}" for n in range(1000))).encode()
+        table = parse_tabular(content, "x.csv", max_rows=3)
+        assert [r["Well"] for r in table.rows] == ["A0", "A1", "A2", "A3"]
+
+    def test_csv_blank_rows_do_not_count(self) -> None:
+        table = parse_tabular(b"Well\nA1\n\n\nA2\nA3\n", "x.csv", max_rows=2)
+        assert table.row_count == 3
+
+    def test_xlsx_stops_one_row_past_the_limit(self) -> None:
+        content = _xlsx_bytes(["Well"], [[f"A{n}"] for n in range(1000)])
+        table = parse_tabular(content, "x.xlsx", max_rows=3)
+        assert [r["Well"] for r in table.rows] == ["A0", "A1", "A2", "A3"]
+
+    def test_no_limit_by_default(self) -> None:
+        content = ("Well\n" + "\n".join(f"A{n}" for n in range(1000))).encode()
+        assert parse_tabular(content, "x.csv").row_count == 1000
+
+
+def test_openpyxl_reads_uploads_through_defusedxml() -> None:
+    import openpyxl.xml
+
+    assert openpyxl.xml.DEFUSEDXML
+
+
+class TestWidthAndUnpackedSize:
+    """``max_columns`` refuses a wider header before any row is read;
+    ``max_uncompressed_bytes`` refuses a spreadsheet that unpacks larger, before the
+    spreadsheet library opens it. Neither applies unless given."""
+
+    def test_csv_wider_than_the_cap_is_refused(self) -> None:
+        content = ",".join(f"c{i}" for i in range(65)).encode() + b"\nx\n"
+        with pytest.raises(TabularParseError, match="more than 64 columns"):
+            parse_tabular(content, "x.csv", max_columns=64)
+        assert len(parse_tabular(content, "x.csv").headers) == 65
+
+    def test_xlsx_wider_than_the_cap_is_refused(self) -> None:
+        content = _xlsx_bytes([f"c{i}" for i in range(65)], [["x"]])
+        with pytest.raises(TabularParseError, match="more than 64 columns"):
+            parse_tabular(content, "x.xlsx", max_columns=64)
+        assert len(parse_tabular(content, "x.xlsx").headers) == 65
+
+    def test_xlsx_that_unpacks_larger_than_the_limit_is_refused(self) -> None:
+        import zipfile
+
+        buf = io.BytesIO(_xlsx_bytes(["Position"], [["P1"]]))
+        with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("xl/padding.bin", b"\0" * (2 * 1024 * 1024))
+        content = buf.getvalue()
+        assert len(content) < 100_000
+        with pytest.raises(TabularParseError, match="larger than 1 MB when unpacked"):
+            parse_tabular(content, "x.xlsx", max_uncompressed_bytes=1024 * 1024)
+        assert parse_tabular(content, "x.xlsx").rows == [{"Position": "P1"}]
