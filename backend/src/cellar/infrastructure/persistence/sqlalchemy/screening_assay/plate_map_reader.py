@@ -96,6 +96,7 @@ class SQLAlchemyPlateMapReader:
             batch_numbers: dict[uuid.UUID, str] = {}
             mol_names: dict[uuid.UUID, str] = {}
             mol_smiles: dict[uuid.UUID, str | None] = {}
+            mol_regs: dict[uuid.UUID, str] = {}
             mol_synonyms: dict[uuid.UUID, list[str]] = {}
 
             if batch_ids:
@@ -116,14 +117,16 @@ class SQLAlchemyPlateMapReader:
                         MoleculeModel.id,
                         MoleculeModel.name,
                         MoleculeModel.smiles,
+                        MoleculeModel.registration_number,
                     ).where(
                         MoleculeModel.workspace_id == workspace_id,
                         MoleculeModel.id.in_(mol_ids),
                     )
                     mol_rows = await session.execute(mol_stmt)
-                    for mid, name, smiles in mol_rows:
+                    for mid, name, smiles, reg in mol_rows:
                         mol_names[mid] = name
                         mol_smiles[mid] = smiles
+                        mol_regs[mid] = reg
 
                     ident_stmt = select(
                         MoleculeIdentifierModel.molecule_id,
@@ -173,6 +176,9 @@ class SQLAlchemyPlateMapReader:
                             ),
                             molecule_id=molecule_id,
                             molecule_name=(mol_names.get(molecule_id) if molecule_id else None),
+                            registration_number=(
+                                mol_regs.get(molecule_id) if molecule_id else None
+                            ),
                             synonyms=tuple(
                                 mol_synonyms.get(molecule_id, []) if molecule_id else ()
                             ),

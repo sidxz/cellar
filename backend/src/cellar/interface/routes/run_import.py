@@ -862,6 +862,7 @@ class InstrumentBatchOptionModel(BaseModel):
 class PositionSuggestionModel(BaseModel):
     molecule_id: uuid.UUID
     molecule_name: str
+    registration_number: str
     batches: list[InstrumentBatchOptionModel]
     # Pre-selected only when the molecule has exactly one batch.
     batch_id: uuid.UUID | None
@@ -925,6 +926,7 @@ class InstrumentPreviewResponse(BaseModel):
                         PositionSuggestionModel(
                             molecule_id=pos.suggestion.molecule_id,
                             molecule_name=pos.suggestion.molecule_name,
+                            registration_number=pos.suggestion.registration_number,
                             batches=[
                                 InstrumentBatchOptionModel(
                                     batch_id=b.batch_id, batch_number=b.batch_number

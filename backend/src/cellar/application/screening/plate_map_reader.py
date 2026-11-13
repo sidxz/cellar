@@ -22,6 +22,7 @@ class WellMapEntry:
     batch_number: str | None = None
     molecule_id: uuid.UUID | None = None
     molecule_name: str | None = None
+    registration_number: str | None = None
     # Custom-type identifiers (synonyms / common names) for the molecule.
     synonyms: tuple[str, ...] = ()
     # SMILES for the molecule, used by the well tooltip to render a

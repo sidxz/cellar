@@ -1,19 +1,29 @@
-"""Edit a run's positions after an instrument import: label, note, role, batch, concentration."""
+"""Edit a run's positions after an instrument import: label, note, role, batch, concentration.
+
+Also reads a labelling layout file for the labelling table to fill itself from.
+"""
 
 from __future__ import annotations
 
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter
+from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
 
 from cellar.application.screening.relabel_run_positions import (
     RelabelResult,
     RelabelRunPositionsCommand,
 )
+from cellar.application.screening.resolve_layout_file import (
+    LayoutCompound,
+    LayoutFile,
+    LayoutRow,
+    ResolveLayoutFileQuery,
+)
 from cellar.domain.screening_assay.run import PositionEdit, PositionValues
 from cellar.domain.shared.enums import WellType
-from cellar.interface.dependencies import AuthDep, RelabelRunPositionsDep
+from cellar.interface.dependencies import AuthDep, RelabelRunPositionsDep, ResolveLayoutFileDep
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["run-positions"])
@@ -85,3 +95,80 @@ async def relabel_run_positions(
     )
     result = await uc(cmd, auth=auth)
     return RelabelPositionsResponse.from_domain(result_to_response(result))
+
+
+class LayoutCompoundModel(BaseModel):
+    molecule_id: uuid.UUID
+    molecule_name: str
+    registration_number: str
+    batch_id: uuid.UUID | None
+    batch_number: str | None
+    # The compound has several batches and the file named none.
+    needs_batch_choice: bool
+
+    @classmethod
+    def from_domain(cls, c: LayoutCompound) -> LayoutCompoundModel:
+        return cls(
+            molecule_id=c.molecule_id,
+            molecule_name=c.molecule_name,
+            registration_number=c.registration_number,
+            batch_id=c.batch_id,
+            batch_number=c.batch_number,
+            needs_batch_choice=c.needs_batch_choice,
+        )
+
+
+class LayoutRowModel(BaseModel):
+    # The Position cell, trimmed; the browser matches it to the table's position labels.
+    position: str
+    # A value is null when its cell was empty, its column absent, or it had a problem.
+    label: str | None
+    note: str | None
+    well_type: str | None
+    dose: float | None
+    use: bool | None
+    compound: LayoutCompoundModel | None
+    problems: list[str]
+
+    @classmethod
+    def from_domain(cls, r: LayoutRow) -> LayoutRowModel:
+        return cls(
+            position=r.position,
+            label=r.label,
+            note=r.note,
+            well_type=r.well_type.value if r.well_type is not None else None,
+            dose=r.dose,
+            use=r.use,
+            compound=LayoutCompoundModel.from_domain(r.compound) if r.compound else None,
+            problems=list(r.problems),
+        )
+
+
+class LayoutFileResponse(BaseModel):
+    rows: list[LayoutRowModel]
+    unrecognised_columns: list[str]
+
+    @classmethod
+    def from_domain(cls, f: LayoutFile) -> LayoutFileResponse:
+        return cls(
+            rows=[LayoutRowModel.from_domain(r) for r in f.rows],
+            unrecognised_columns=list(f.unrecognised_columns),
+        )
+
+
+@router.post("/runs/{run_id}/resolve-layout-file", response_model=LayoutFileResponse)
+async def resolve_layout_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ResolveLayoutFileDep,
+    file: Annotated[UploadFile, File()],
+) -> LayoutFileResponse:
+    """Read a labelling layout file and resolve its compounds and batches. Writes nothing."""
+    query = ResolveLayoutFileQuery(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        filename=file.filename or "upload",
+        content=await file.read(),
+    )
+    result = await uc(query, auth=auth)
+    return LayoutFileResponse.from_domain(result_to_response(result))

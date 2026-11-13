@@ -53,6 +53,7 @@ class BatchOption:
 class PositionSuggestion:
     molecule_id: uuid.UUID
     molecule_name: str
+    registration_number: str
     batches: tuple[BatchOption, ...]
     batch_id: uuid.UUID | None  # set only when the molecule has exactly one batch
 
@@ -220,6 +221,7 @@ class _Suggester:
             self._suggestions[molecule.id] = PositionSuggestion(
                 molecule_id=molecule.id,
                 molecule_name=molecule.name,
+                registration_number=molecule.registration_number.value,
                 batches=tuple(BatchOption(b.id, b.batch_number.value) for b in batches),
                 batch_id=batches[0].id if len(batches) == 1 else None,
             )

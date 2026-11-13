@@ -14,6 +14,7 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.preview_instrument_file import PreviewInstrumentFile
 from cellar.application.screening.relabel_run_positions import RelabelRunPositions
+from cellar.application.screening.resolve_layout_file import ResolveLayoutFile
 from cellar.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     DeleteRunImportTemplate,
@@ -33,6 +34,7 @@ __all__ = [
     "PreviewRunFileDep",
     "RelabelRunPositionsDep",
     "RepreviewRunFileDep",
+    "ResolveLayoutFileDep",
     "UpdateRunImportTemplateDep",
 ]
 
@@ -60,3 +62,4 @@ ImportInstrumentFileDep = Annotated[
 RelabelRunPositionsDep = Annotated[
     RelabelRunPositions, Depends(_get_use_case(RelabelRunPositions))
 ]
+ResolveLayoutFileDep = Annotated[ResolveLayoutFile, Depends(_get_use_case(ResolveLayoutFile))]
