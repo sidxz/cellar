@@ -1,7 +1,7 @@
 import { shortId } from "@/shared/lib/utils";
 import { describe, expect, it } from "vitest";
 
-import { CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import type { CurvePositions, RunCurves } from "../types";
 import {
   type CurveSet,
@@ -168,7 +168,15 @@ describe("buildCurveFigure", () => {
       set: curveSetFromRun(withTransitions),
       drawn: new Set(["w1", "w3"]),
       showReported: true,
-      steps: new Map([["w1", [36.6, 71.3]]]),
+      steps: new Map([
+        [
+          "w1",
+          [
+            { value: 36.6, reviewed: true },
+            { value: 71.3, reviewed: false },
+          ],
+        ],
+      ]),
     });
     const shapes = layout.shapes as { type: string; x0: number; line: { color: string } }[];
     // w1's reported transition gives way to its steps; its onset stays; w3 has none.
@@ -178,6 +186,70 @@ describe("buildCurveFigure", () => {
       ["line", 30.0],
     ]);
     expect(shapes[0].line.color).toBe(dark.reference);
+  });
+
+  describe("step line styles", () => {
+    const withReported: RunCurves = {
+      ...curves,
+      curves: curves.curves.map((c) =>
+        c.well_id === "w1"
+          ? {
+              ...c,
+              reported: [
+                { kind: "onset", ordinal: 1, label: "Onset 1", value: 30.0, unit: "°C" },
+                { kind: "k1", ordinal: 1, label: "Point 1", value: 21.5, unit: "°C" },
+              ],
+            }
+          : c,
+      ),
+    };
+    type Shape = {
+      x0: number;
+      opacity: number;
+      line: { color: string; width: number; dash: string };
+    };
+    const draw = (extra: object, focusedId: string | null = null) =>
+      buildCurveFigure({
+        ...base,
+        set: curveSetFromRun(withReported),
+        drawn: new Set(["w1"]),
+        showReported: true,
+        focusedId,
+        ...extra,
+      }).layout.shapes as Shape[];
+    const steps = new Map([
+      [
+        "w1",
+        [
+          { value: 36.6, reviewed: true },
+          { value: 71.3, reviewed: false },
+        ],
+      ],
+    ]);
+
+    it("buildCurveFigure draws reviewed steps solid and unreviewed dashed", () => {
+      const [rev, unrev] = draw({ steps });
+      expect(rev.line).toMatchObject({ dash: "solid", width: 1.5, color: dark.reference });
+      expect(unrev.line).toMatchObject({ dash: "dash", width: 1.5, color: dark.reference });
+      expect(rev.opacity).toBeCloseTo(0.9 * 1);
+      expect(draw({ steps }, "w1")[0].line.width).toBe(2.5);
+    });
+
+    it("other reported values are thin grey dots when steps are given", () => {
+      const rest = draw({ steps }).slice(2);
+      expect(rest.map((s) => s.x0)).toEqual([30, 21.5]);
+      for (const s of rest) {
+        expect(s.line).toEqual({ color: CHART_AXIS.tick, width: 1, dash: "dot" });
+        expect(s.opacity).toBe(0.5);
+      }
+    });
+
+    it("without steps every reported value keeps today's style", () => {
+      for (const s of draw({})) {
+        expect(s.line).toEqual({ color: dark.reference, width: 1, dash: "dot" });
+        expect(s.opacity).toBeCloseTo(0.8);
+      }
+    });
   });
 
   it("buildCurveFigure draws window bands", () => {

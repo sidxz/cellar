@@ -7,7 +7,12 @@ import { cn, shortId } from "@/shared/lib/utils";
 import { useMemo, useRef, useState } from "react";
 import { useMeltingAnalysis } from "../hooks/use-melting-analysis";
 import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
-import { currentChannel, curveSetFromRun, orderedPositions } from "../lib/curve-plot";
+import {
+  type PlotStep,
+  currentChannel,
+  curveSetFromRun,
+  orderedPositions,
+} from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
@@ -64,10 +69,13 @@ export function RunCurvesPanel({
   const channelKey = set?.channel ?? null;
   const steps = useMemo(() => {
     if (!analysis) return undefined;
-    const byWell = new Map<string, number[]>();
+    const byWell = new Map<string, PlotStep[]>();
     for (const s of analysis.steps) {
       if (s.channel_key !== channelKey || s.status === "rejected") continue;
-      byWell.set(s.well_id, [...(byWell.get(s.well_id) ?? []), s.value]);
+      byWell.set(s.well_id, [
+        ...(byWell.get(s.well_id) ?? []),
+        { value: s.value, reviewed: s.status === "accepted" },
+      ]);
     }
     return byWell;
   }, [analysis, channelKey]);

@@ -218,6 +218,12 @@ export function currentChannel(set: CurveSet) {
   return set.channels.find((c) => c.key === set.channel);
 }
 
+/** A counted melting step; reviewed ones are drawn solid, the rest dashed. */
+export interface PlotStep {
+  value: number;
+  reviewed: boolean;
+}
+
 /** A temperature window, drawn as a shaded band. */
 export interface CurveBand {
   low: number;
@@ -233,7 +239,7 @@ export function buildCurveFigure(
     canvas: "screen" | "export";
     /** By well id, the counted melting steps on this signal; given, they are
      *  drawn instead of the reported transitions. Other reported values stay. */
-    steps?: ReadonlyMap<string, readonly number[]>;
+    steps?: ReadonlyMap<string, readonly PlotStep[]>;
     windows?: readonly CurveBand[];
   } & CurveColouring,
 ): { data: Record<string, unknown>[]; layout: Record<string, unknown> } {
@@ -284,13 +290,12 @@ export function buildCurveFigure(
     });
     if (!showReported) continue;
     const reported = curve.reported.filter((r) => r.unit === xUnit);
-    const lines = steps
-      ? [
-          ...(steps.get(p.well_id) ?? []),
-          ...reported.filter((r) => r.kind !== STEP_KIND).map((r) => r.value),
-        ]
-      : reported.map((r) => r.value);
-    for (const x of lines) {
+    const focused = colouring.focusedId === p.well_id;
+    const line = (
+      x: number,
+      style: { color: string; width: number; dash: string },
+      opacity: number,
+    ) =>
       shapes.push({
         type: "line",
         xref: "x",
@@ -299,14 +304,26 @@ export function buildCurveFigure(
         yref: "paper",
         y0: 0,
         y1: 1,
-        line: {
-          color: style.color,
-          width: colouring.focusedId === p.well_id ? 2 : 1,
-          dash: "dot",
-        },
-        opacity: 0.8 * style.opacity,
+        line: style,
+        opacity,
       });
+    if (!steps) {
+      for (const r of reported)
+        line(
+          r.value,
+          { color: style.color, width: focused ? 2 : 1, dash: "dot" },
+          0.8 * style.opacity,
+        );
+      continue;
     }
+    for (const st of steps.get(p.well_id) ?? [])
+      line(
+        st.value,
+        { color: style.color, width: focused ? 2.5 : 1.5, dash: st.reviewed ? "solid" : "dash" },
+        0.9 * style.opacity,
+      );
+    for (const r of reported.filter((r) => r.kind !== STEP_KIND))
+      line(r.value, { color: CHART_AXIS.tick, width: 1, dash: "dot" }, 0.5);
   }
 
   const light = exporting || colouring.palette === "light";

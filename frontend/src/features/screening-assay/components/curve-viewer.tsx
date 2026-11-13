@@ -1,6 +1,11 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/components/ui/collapsible";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -37,6 +42,7 @@ import {
   type CurvePalette,
   type CurveSet,
   type GroupBy,
+  type PlotStep,
   buildCurveFigure,
   colourGroupKey,
   colourGroupLabel,
@@ -172,7 +178,11 @@ export interface CurveViewerProps {
   initialColour?: { mode: ColourMode; groupBy?: GroupBy };
   /** By well id, the counted melting steps on the current signal; given, they
    *  are drawn instead of the reported values. */
-  steps?: ReadonlyMap<string, readonly number[]>;
+  steps?: ReadonlyMap<string, readonly PlotStep[]>;
+  /** Hide the chip grid, filter, All/None, reference switch and selectorAction (the parent is the selector). */
+  hideSelector?: boolean;
+  /** Put the per-position table under a closed "Instrument values" disclosure. */
+  collapseReportedTable?: boolean;
   /** Temperature windows on the current signal, drawn as shaded bands. */
   windows?: readonly CurveBand[];
   /** The x of a clicked point on the plot. */
@@ -216,6 +226,8 @@ function CurveViewerBody({
   selectorAction,
   initialColour,
   steps,
+  hideSelector = false,
+  collapseReportedTable = false,
   windows,
   onPlotClick,
   scientistOf,
@@ -399,64 +411,72 @@ function CurveViewerBody({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <Input
-          type="search"
-          aria-label="Filter positions"
-          placeholder="Filter by label, compound, batch or note"
-          className="h-8 w-80"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <div className="flex items-center gap-2">
-          <Switch id={switchId} checked={showReferences} onCheckedChange={onShowReferencesChange} />
-          <Label htmlFor={switchId} className="text-sm font-normal">
-            {set.groups.length > 1
-              ? "Show each run's reference positions"
-              : "Show reference positions"}
-          </Label>
-        </div>
-      </div>
-
-      {set.groups.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{selectedIds.length} selected</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => onSelectionChange(EMPTY_SELECTION)}
-          >
-            Clear
-          </Button>
-        </div>
-      )}
-
-      {set.groups.map((g, i) => (
-        <div key={g.key} className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <PositionSelector
-              holder={g.holder}
-              positions={g.positions}
-              orderedIds={orderedIds}
-              disabledIds={filteredOut}
-              heading={
-                g.run && (
-                  <Link href={runHref(g.run.runId)} className="font-medium hover:underline">
-                    {headings.get(g.run.runId)}
-                  </Link>
-                )
-              }
-              selection={selection}
-              onChange={onSelectionChange}
-              focusedId={focusedId}
-              onFocus={setFocusedId}
-              colourOf={colourOf}
+      {!hideSelector && (
+        <>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Input
+              type="search"
+              aria-label="Filter positions"
+              placeholder="Filter by label, compound, batch or note"
+              className="h-8 w-80"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
             />
+            <div className="flex items-center gap-2">
+              <Switch
+                id={switchId}
+                checked={showReferences}
+                onCheckedChange={onShowReferencesChange}
+              />
+              <Label htmlFor={switchId} className="text-sm font-normal">
+                {set.groups.length > 1
+                  ? "Show each run's reference positions"
+                  : "Show reference positions"}
+              </Label>
+            </div>
           </div>
-          {i === 0 && selectorAction}
-        </div>
-      ))}
+
+          {set.groups.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{selectedIds.length} selected</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onSelectionChange(EMPTY_SELECTION)}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+
+          {set.groups.map((g, i) => (
+            <div key={g.key} className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <PositionSelector
+                  holder={g.holder}
+                  positions={g.positions}
+                  orderedIds={orderedIds}
+                  disabledIds={filteredOut}
+                  heading={
+                    g.run && (
+                      <Link href={runHref(g.run.runId)} className="font-medium hover:underline">
+                        {headings.get(g.run.runId)}
+                      </Link>
+                    )
+                  }
+                  selection={selection}
+                  onChange={onSelectionChange}
+                  focusedId={focusedId}
+                  onFocus={setFocusedId}
+                  colourOf={colourOf}
+                />
+              </div>
+              {i === 0 && selectorAction}
+            </div>
+          ))}
+        </>
+      )}
 
       <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
         {set.channels.length > 0 && (
@@ -690,86 +710,178 @@ function CurveViewerBody({
         </div>
       )}
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {hasRuns && <TableHead>Run</TableHead>}
-              <TableHead>Position</TableHead>
-              <TableHead>Label</TableHead>
-              <TableHead>Compound</TableHead>
-              <TableHead>Batch</TableHead>
-              <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Note</TableHead>
-              {columns.map((c) => (
-                <TableHead key={c.key} className="text-right">
-                  {c.unit ? `${c.label} (${c.unit})` : c.label}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={(hasRuns ? 8 : 7) + columns.length}
-                  className="text-muted-foreground"
-                >
-                  {selectedIds.length > 0 && filter.trim()
-                    ? "No selected position matches the filter."
-                    : "No positions selected."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow
-                  key={r.wellId}
-                  data-focused={focusedId === r.wellId || undefined}
-                  className={cn(focusedId === r.wellId && "bg-primary/10")}
-                  onMouseEnter={() => setFocusedId(r.wellId)}
-                  onMouseLeave={() => setFocusedId(null)}
-                >
-                  {hasRuns && (
-                    <TableCell>
-                      {r.run && (
-                        <Link href={runHref(r.run.runId)} className="hover:underline">
-                          {/* A run that shares its date reads as its heading does. */}
-                          {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
-                        </Link>
-                      )}
-                    </TableCell>
+      {collapseReportedTable ? (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm">
+              Instrument values
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <div className="rounded-md border">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    {hasRuns && <TableHead>Run</TableHead>}
+                    <TableHead>Position</TableHead>
+                    <TableHead>Label</TableHead>
+                    <TableHead>Compound</TableHead>
+                    <TableHead>Batch</TableHead>
+                    <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Note</TableHead>
+                    {columns.map((c) => (
+                      <TableHead key={c.key} className="text-right">
+                        {c.unit ? `${c.label} (${c.unit})` : c.label}
+                      </TableHead>
+                    ))}
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {rows.length === 0 ? (
+                    <TableRow>
+                      <TableCell
+                        colSpan={(hasRuns ? 8 : 7) + columns.length}
+                        className="text-muted-foreground"
+                      >
+                        {selectedIds.length > 0 && filter.trim()
+                          ? "No selected position matches the filter."
+                          : "No positions selected."}
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    rows.map((r) => (
+                      <TableRow
+                        key={r.wellId}
+                        data-focused={focusedId === r.wellId || undefined}
+                        className={cn(focusedId === r.wellId && "bg-primary/10")}
+                        onMouseEnter={() => setFocusedId(r.wellId)}
+                        onMouseLeave={() => setFocusedId(null)}
+                      >
+                        {hasRuns && (
+                          <TableCell>
+                            {r.run && (
+                              <Link href={runHref(r.run.runId)} className="hover:underline">
+                                {/* A run that shares its date reads as its heading does. */}
+                                {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
+                              </Link>
+                            )}
+                          </TableCell>
+                        )}
+                        <TableCell>
+                          <Swatch colour={colourOf(r.wellId)} />
+                          {r.positionLabel}
+                        </TableCell>
+                        <TableCell>{r.label}</TableCell>
+                        <TableCell className={cn(!r.compound && "text-muted-foreground")}>
+                          {r.compound ?? "No compound"}
+                        </TableCell>
+                        <TableCell className={cn(!r.batch && "text-muted-foreground")}>
+                          {r.batch ?? "None"}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono tabular-nums"
+                          title={r.dose == null ? undefined : String(r.dose)}
+                        >
+                          {formatValue(r.dose ?? undefined)}
+                        </TableCell>
+                        <TableCell>{r.role}</TableCell>
+                        <TableCell className="whitespace-normal">{r.note}</TableCell>
+                        {columns.map((c) => (
+                          <TableCell key={c.key} className="text-right font-mono tabular-nums">
+                            {formatValue(r.reported[c.key])}
+                          </TableCell>
+                        ))}
+                      </TableRow>
+                    ))
                   )}
-                  <TableCell>
-                    <Swatch colour={colourOf(r.wellId)} />
-                    {r.positionLabel}
-                  </TableCell>
-                  <TableCell>{r.label}</TableCell>
-                  <TableCell className={cn(!r.compound && "text-muted-foreground")}>
-                    {r.compound ?? "No compound"}
-                  </TableCell>
-                  <TableCell className={cn(!r.batch && "text-muted-foreground")}>
-                    {r.batch ?? "None"}
-                  </TableCell>
+                </TableBody>
+              </Table>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {hasRuns && <TableHead>Run</TableHead>}
+                <TableHead>Position</TableHead>
+                <TableHead>Label</TableHead>
+                <TableHead>Compound</TableHead>
+                <TableHead>Batch</TableHead>
+                <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
+                <TableHead>Role</TableHead>
+                <TableHead>Note</TableHead>
+                {columns.map((c) => (
+                  <TableHead key={c.key} className="text-right">
+                    {c.unit ? `${c.label} (${c.unit})` : c.label}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
                   <TableCell
-                    className="text-right font-mono tabular-nums"
-                    title={r.dose == null ? undefined : String(r.dose)}
+                    colSpan={(hasRuns ? 8 : 7) + columns.length}
+                    className="text-muted-foreground"
                   >
-                    {formatValue(r.dose ?? undefined)}
+                    {selectedIds.length > 0 && filter.trim()
+                      ? "No selected position matches the filter."
+                      : "No positions selected."}
                   </TableCell>
-                  <TableCell>{r.role}</TableCell>
-                  <TableCell className="whitespace-normal">{r.note}</TableCell>
-                  {columns.map((c) => (
-                    <TableCell key={c.key} className="text-right font-mono tabular-nums">
-                      {formatValue(r.reported[c.key])}
-                    </TableCell>
-                  ))}
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+              ) : (
+                rows.map((r) => (
+                  <TableRow
+                    key={r.wellId}
+                    data-focused={focusedId === r.wellId || undefined}
+                    className={cn(focusedId === r.wellId && "bg-primary/10")}
+                    onMouseEnter={() => setFocusedId(r.wellId)}
+                    onMouseLeave={() => setFocusedId(null)}
+                  >
+                    {hasRuns && (
+                      <TableCell>
+                        {r.run && (
+                          <Link href={runHref(r.run.runId)} className="hover:underline">
+                            {/* A run that shares its date reads as its heading does. */}
+                            {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
+                          </Link>
+                        )}
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      <Swatch colour={colourOf(r.wellId)} />
+                      {r.positionLabel}
+                    </TableCell>
+                    <TableCell>{r.label}</TableCell>
+                    <TableCell className={cn(!r.compound && "text-muted-foreground")}>
+                      {r.compound ?? "No compound"}
+                    </TableCell>
+                    <TableCell className={cn(!r.batch && "text-muted-foreground")}>
+                      {r.batch ?? "None"}
+                    </TableCell>
+                    <TableCell
+                      className="text-right font-mono tabular-nums"
+                      title={r.dose == null ? undefined : String(r.dose)}
+                    >
+                      {formatValue(r.dose ?? undefined)}
+                    </TableCell>
+                    <TableCell>{r.role}</TableCell>
+                    <TableCell className="whitespace-normal">{r.note}</TableCell>
+                    {columns.map((c) => (
+                      <TableCell key={c.key} className="text-right font-mono tabular-nums">
+                        {formatValue(r.reported[c.key])}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
     </div>
   );
 }

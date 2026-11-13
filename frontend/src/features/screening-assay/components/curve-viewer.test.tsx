@@ -350,6 +350,25 @@ describe("CurveViewer run cell", () => {
   });
 });
 
+describe("CurveViewer opt-in layout", () => {
+  it("hideSelector hides the chips and the reference switch", () => {
+    const { rerender } = render(<Harness callbacks={callbacks()} />);
+    expect(screen.getByRole("button", { name: "Position 2" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Show reference positions")).toBeInTheDocument();
+    rerender(<Harness callbacks={callbacks()} hideSelector />);
+    expect(screen.queryByRole("button", { name: "Position 2" })).toBeNull();
+    expect(screen.queryByLabelText("Show reference positions")).toBeNull();
+    expect(screen.queryByLabelText("Filter positions")).toBeNull();
+  });
+
+  it('collapseReportedTable hides the table until "Instrument values" is opened', () => {
+    render(<Harness callbacks={callbacks()} collapseReportedTable />);
+    expect(screen.queryByRole("table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Instrument values" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+});
+
 describe("CurveViewer", () => {
   it("reports a signal, view and window change to its parent and keeps the selection", () => {
     const cb = callbacks();
