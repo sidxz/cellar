@@ -391,6 +391,16 @@ async def test_on_a_run_whose_calculated_columns_are_locked_their_problems_are_n
     assert second.compound is not None
 
 
+async def test_a_concentration_the_template_guarded_reads_back_as_typed():
+    """The table's "+5" is written '+5; read back it is 5 again. "-5" reads back as -5,
+    which is refused for itself, not for the apostrophe."""
+    h = Harness()
+    out = await h.ok(csv("Position,Concentration", f"{P(1)},'+5", f"{P(2)},'-5"))
+    plus, minus = out.rows
+    assert (plus.dose, plus.problems) == (5.0, ())
+    assert minus.dose is None and minus.problems == ("Concentration must be a number, 0 or more",)
+
+
 async def test_missing_position_column_is_validation_error():
     h = Harness()
     failure = (await h(csv("Label,Note", "x,y"))).failure()

@@ -45,10 +45,11 @@ MAX_LAYOUT_UNPACKED_BYTES = 50 * 1024 * 1024
 _MAX_LABEL = 200
 _MAX_NOTE = 1000
 _COLUMNS = ("position", "label", "role", "compound", "batch", "note", "use")
-# The template writes ' before a text cell starting with one of these, so a spreadsheet
+# The template writes ' before a cell starting with one of these, so a spreadsheet
 # program keeps it as text instead of running it as a formula; reading drops that one '.
 _FORMULA_START = ("=", "+", "-", "@")
-_TEXT_COLUMNS = ("position", "label", "compound", "batch", "note")
+# Concentration too: the template writes the table's text, so "+5" goes out as '+5.
+_GUARDED_COLUMNS = ("position", "label", "compound", "batch", "concentration", "note")
 
 
 @dataclass(frozen=True)
@@ -153,7 +154,7 @@ class ResolveLayoutFile:
             rows = []
             for raw in table.iter_rows():
                 cells = {key: raw.get(header, "").strip() for key, header in columns.items()}
-                for key in _TEXT_COLUMNS:
+                for key in _GUARDED_COLUMNS:
                     if key in cells:
                         cells[key] = _without_formula_guard(cells[key])
                 rows.append(await _row(cells, resolver, report_calculated=report_calculated))
