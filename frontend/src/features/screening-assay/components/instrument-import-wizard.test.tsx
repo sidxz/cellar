@@ -39,6 +39,22 @@ const resolve = vi.hoisted(() => ({
 vi.mock("../hooks/use-layout-file", () => ({ useResolveLayoutFile: () => resolve }));
 const download = vi.hoisted(() => ({ saveText: vi.fn() }));
 vi.mock("@/shared/lib/api/download", () => download);
+const formats = vi.hoisted(() => ({
+  value: { data: undefined, isLoading: false, isError: false } as {
+    data: { formats: { id: string; label: string; hint: string }[] } | undefined;
+    isLoading: boolean;
+    isError: boolean;
+  },
+}));
+vi.mock("../hooks/use-instrument-import", () => ({
+  useInstrumentFileFormats: () => formats.value,
+}));
+const FORMATS = {
+  formats: [
+    { id: "a", label: "Format A", hint: "Export format A" },
+    { id: "b", label: "Format B", hint: "Export format B" },
+  ],
+};
 
 import { InstrumentImportWizard } from "./instrument-import-wizard";
 
@@ -300,5 +316,36 @@ describe("InstrumentImportWizard", () => {
         "Filled 1 position from layout.csv. Nothing is saved until you press Import.",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("step 1 lists the supported instrument files before a file is chosen", () => {
+    formats.value = { data: FORMATS, isLoading: false, isError: false };
+    hookState.value = baseHook({ step: 1 });
+    renderWizard();
+    const block = screen.getByRole("region", { name: "Supported instrument files" });
+    expect(within(block).getByText("Format A")).toBeInTheDocument();
+    expect(within(block).getByText("Export format A")).toBeInTheDocument();
+    expect(within(block).getByText("Format B")).toBeInTheDocument();
+    expect(within(block).getByText("Export format B")).toBeInTheDocument();
+  });
+
+  it("step 1 still lists the supported files beside a refusal", () => {
+    formats.value = { data: FORMATS, isLoading: false, isError: false };
+    hookState.value = baseHook({ step: 1, error: "Unrecognised instrument file." });
+    renderWizard();
+    expect(screen.getByText("Unrecognised instrument file.")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Supported instrument files" })).toBeInTheDocument();
+  });
+
+  it("step 1 shows nothing about supported files while loading or when the request fails", () => {
+    formats.value = { data: undefined, isLoading: true, isError: false };
+    hookState.value = baseHook({ step: 1 });
+    const { unmount } = renderWizard();
+    expect(screen.queryByText("Supported instrument files")).not.toBeInTheDocument();
+    unmount();
+    formats.value = { data: undefined, isLoading: false, isError: true };
+    renderWizard();
+    expect(screen.queryByText("Supported instrument files")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Choose file" })).toBeEnabled();
   });
 });

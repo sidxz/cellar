@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useId, useMemo, useRef } from "react";
 
 import { CsvDropzone } from "@/shared/components/csv-dropzone";
 import { Badge } from "@/shared/components/ui/badge";
@@ -23,6 +23,7 @@ import {
 } from "@/shared/components/ui/select";
 import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
 import { formatFileSize } from "@/shared/lib/format-number";
+import { useInstrumentFileFormats } from "../hooks/use-instrument-import";
 import { useInstrumentImportWizard } from "../hooks/use-instrument-import-wizard";
 import {
   type LabellingDraft,
@@ -108,6 +109,7 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
                 />
               </div>
               {w.error && <Notice tone="bad">{w.error}</Notice>}
+              {!preview && <SupportedFiles />}
               {preview && w.file && (
                 <RecognisedFile
                   preview={preview}
@@ -185,7 +187,30 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
   );
 }
 
-// ─── Step 1 — recognised file ─────────────────────────────────────────────────
+// ─── Step 1 — supported files and the recognised file ────────────────────────
+
+/** The formats the API reads, printed as it words them. Nothing while loading or on failure:
+ *  the upload works without it. */
+function SupportedFiles() {
+  const { data } = useInstrumentFileFormats();
+  const headingId = useId();
+  if (!data?.formats.length) return null;
+  return (
+    <section aria-labelledby={headingId} className="space-y-2 text-sm">
+      <h3 id={headingId} className="font-medium">
+        Supported instrument files
+      </h3>
+      <ul className="space-y-1.5">
+        {data.formats.map((f) => (
+          <li key={f.id}>
+            <div>{f.label}</div>
+            <div className="text-muted-foreground">{f.hint}</div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 function RecognisedFile({
   preview,

@@ -1,11 +1,18 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { InstrumentImportResult, InstrumentPreview, WellType } from "../types";
+import { STALE_TIME } from "@/shared/lib/query-defaults";
+import type {
+  InstrumentFileFormats,
+  InstrumentImportResult,
+  InstrumentPreview,
+  WellType,
+} from "../types";
 import {
   DOSE_RESPONSE_KEY,
+  INSTRUMENT_FILE_FORMATS_KEY,
   MEASURED_CURVES_KEY,
   PLATE_MAP_KEY,
   READOUT_DATA_KEY,
@@ -28,6 +35,20 @@ export interface InstrumentLabelling {
     dose: number | null;
   }[];
   series: { channel: string; kind: string; ordinal: number; readout_definition_id: string }[];
+}
+
+/** The instrument files the import reads, with which export to make; fixed for the session.
+ *  GET /api/v1/instrument-file-formats. */
+export function useInstrumentFileFormats() {
+  return useQuery({
+    queryKey: INSTRUMENT_FILE_FORMATS_KEY,
+    queryFn: () =>
+      customInstance<InstrumentFileFormats>({
+        url: `${API_V1}/instrument-file-formats`,
+        method: "GET",
+      }),
+    staleTime: STALE_TIME.STATIC,
+  });
 }
 
 /** Read an instrument file and propose a labelling. Writes nothing.
