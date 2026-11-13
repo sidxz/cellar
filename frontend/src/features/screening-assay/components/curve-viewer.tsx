@@ -501,23 +501,22 @@ function CurveViewerBody({
               ]}
               onChange={setColourMode}
             />
-            {/* Also while By group is unavailable: another grouping may have few enough groups. */}
-            {(colourMode === "group" || !groupAvailable) && (
-              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-                <SelectTrigger size="sm" aria-label="Group by">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
-                    .filter((by) => by !== "run" || hasRuns)
-                    .map((by) => (
-                      <SelectItem key={by} value={by}>
-                        {GROUP_BY_LABELS[by]}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            )}
+            {/* Always offered beside By group, so the grouping can be changed before
+                or after choosing it, whichever groupings have 8 or fewer groups. */}
+            <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+              <SelectTrigger size="sm" aria-label="Group by">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
+                  .filter((by) => by !== "run" || hasRuns)
+                  .map((by) => (
+                    <SelectItem key={by} value={by}>
+                      {GROUP_BY_LABELS[by]}
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
             {!distinctAvailable && (
               <span className="text-xs text-muted-foreground">
                 More than {COLOUR_SLOT_COUNT} selected

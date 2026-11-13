@@ -278,6 +278,9 @@ describe("CurveViewer colour by group", () => {
     fireEvent.click(screen.getByRole("combobox", { name: "Group by" }));
     fireEvent.click(await screen.findByRole("option", { name: "Role" }));
     expect(screen.getByRole("tab", { name: "By group" })).not.toBeDisabled();
+    // Still there to change the grouping again, though By group is not chosen.
+    expect(screen.getByRole("combobox", { name: "Group by" })).toHaveTextContent("Role");
+    expect(screen.getByRole("tab", { name: "Highlight" })).toHaveAttribute("aria-selected", "true");
   });
 
   it("starts in the colour mode given by initialColour", () => {
