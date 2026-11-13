@@ -81,6 +81,7 @@ from cellar.application.screening.instrument_export import InstrumentReaders
 from cellar.application.screening.link_run_plate import LinkRunPlate, UnlinkRunPlate
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
+from cellar.application.screening.list_instrument_file_formats import ListInstrumentFileFormats
 from cellar.application.screening.list_protocol_summaries import ListProtocolSummaries
 from cellar.application.screening.list_protocol_vocabulary import ListProtocolVocabulary
 from cellar.application.screening.list_readout_data_enriched import ListReadoutDataEnriched
@@ -1042,6 +1043,10 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(RelabelRunPositions, _relabel_run_positions)
+    container.define(
+        ListInstrumentFileFormats,
+        lambda c: ListInstrumentFileFormats(readers=c[InstrumentReaders]),
+    )
 
     def _resolve_layout_file(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

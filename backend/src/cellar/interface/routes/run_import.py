@@ -25,6 +25,10 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFileQuery,
 )
 from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
+from cellar.application.screening.list_instrument_file_formats import (
+    InstrumentFileFormat,
+    ListInstrumentFileFormatsQuery,
+)
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     ReadoutColumn,
@@ -56,6 +60,7 @@ from cellar.interface.dependencies import (
     ImportInstrumentFileDep,
     ImportRunFileDep,
     ImportSummaryFileDep,
+    ListInstrumentFileFormatsDep,
     ListRunImportTemplatesDep,
     PreviewInstrumentFileDep,
     PreviewRunFileDep,
@@ -1044,6 +1049,37 @@ class InstrumentImportResponse(BaseModel):
             attachment_warning=out.attachment_warning,
             stored_file_name=out.stored_file_name,
         )
+
+
+class InstrumentFileFormatModel(BaseModel):
+    id: str
+    # The format's name, printed as given.
+    label: str
+    # One sentence telling the user which export to make, printed as given.
+    hint: str
+
+
+class InstrumentFileFormatsResponse(BaseModel):
+    formats: list[InstrumentFileFormatModel]
+
+    @classmethod
+    def from_domain(
+        cls, formats: tuple[InstrumentFileFormat, ...]
+    ) -> InstrumentFileFormatsResponse:
+        return cls(
+            formats=[
+                InstrumentFileFormatModel(id=f.id, label=f.label, hint=f.hint) for f in formats
+            ]
+        )
+
+
+@router.get("/instrument-file-formats", response_model=InstrumentFileFormatsResponse)
+async def list_instrument_file_formats(
+    auth: AuthDep, uc: ListInstrumentFileFormatsDep
+) -> InstrumentFileFormatsResponse:
+    """The instrument files the import reads, in the order it tries them."""
+    result = await uc(ListInstrumentFileFormatsQuery(workspace_id=auth.workspace_id), auth=auth)
+    return InstrumentFileFormatsResponse.from_domain(result_to_response(result))
 
 
 @router.post(

@@ -107,6 +107,7 @@ def _export(
 class StubReader:
     id = "stub"
     label = "Stub format"
+    hint = "Export format A"
 
     def __init__(self, export: InstrumentExport, *, recognises: bool = True) -> None:
         self._export = export

@@ -102,6 +102,10 @@ def _load(content: bytes) -> tuple[Rows, list[tuple[str, Rows]]]:
 class PrometheusRawXlsxReader:
     id = "nanotemper-prometheus-raw-xlsx"
     label = "NanoTemper Prometheus raw export (.xlsx)"
+    hint = (
+        "Export the raw data from the instrument's software as an Excel workbook. "
+        "The processed export is not supported."
+    )
 
     def recognises(self, content: bytes, filename: str) -> bool:
         try:

@@ -34,6 +34,7 @@ FILE = {"file": ("f.bin", b"FAKE", "application/octet-stream")}
 class FakePlateReader:
     id = "fake-plate"
     label = "Fake plate format"
+    hint = "Export format A"
 
     def recognises(self, content: bytes, filename: str) -> bool:
         return content.startswith(b"FAKE")
@@ -150,3 +151,13 @@ async def test_fake_plate_reader_flows_through_preview_commit_and_curves(
         "",
         holder_label(HolderKind.PLATE, 2, 3),
     )
+
+
+async def test_fake_reader_is_listed_with_its_label_and_hint(
+    client: AsyncClient, fake_reader: None
+) -> None:
+    resp = await client.get("/api/v1/instrument-file-formats")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "formats": [{"id": "fake-plate", "label": "Fake plate format", "hint": "Export format A"}]
+    }

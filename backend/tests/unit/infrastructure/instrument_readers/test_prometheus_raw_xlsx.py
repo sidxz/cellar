@@ -182,3 +182,10 @@ def test_real_files_when_sample_dir_set():
         )
     assert (42, 24, False, True) in seen  # labelled run: 1,223 points on every curve
     assert any(s[:3] == (41, 21, True) for s in seen)  # run with blank labels
+
+
+def test_reader_tells_the_user_which_export_to_make():
+    assert READER.hint == (
+        "Export the raw data from the instrument's software as an Excel workbook. "
+        "The processed export is not supported."
+    )

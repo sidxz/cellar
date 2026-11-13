@@ -580,3 +580,18 @@ async def test_viewer_cannot_preview_or_import_but_can_read_curves(
         None,
         [],
     )
+
+
+async def test_instrument_file_formats_lists_the_readers(client: AsyncClient) -> None:
+    resp = await client.get("/api/v1/instrument-file-formats")
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {
+        "formats": [{"id": r.id, "label": r.label, "hint": r.hint} for r in default_readers()]
+    }
+    assert all(f["hint"] for f in resp.json()["formats"])
+
+
+async def test_a_viewer_can_list_instrument_file_formats(viewer_client: AsyncClient) -> None:
+    resp = await viewer_client.get("/api/v1/instrument-file-formats")
+    assert resp.status_code == 200, resp.text
+    assert [f["id"] for f in resp.json()["formats"]] == [r.id for r in default_readers()]

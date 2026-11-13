@@ -30,6 +30,7 @@ class _StubReader:
     def __init__(self, id: str, label: str, recognises: bool, error: str | None = None):
         self.id = id
         self.label = label
+        self.hint = "Export format A"
         self._recognises = recognises
         self._error = error
         self.calls = 0
