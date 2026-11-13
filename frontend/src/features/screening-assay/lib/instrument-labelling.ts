@@ -46,8 +46,12 @@ export function draftFromPreview(preview: InstrumentPreview): LabellingDraft {
       wellType: "sample",
       moleculeId: p.suggestion?.molecule_id ?? null,
       moleculeName: p.suggestion?.molecule_name ?? null,
+      moleculeRef: p.suggestion?.registration_number ?? null,
       // Only what the API pre-selected; several batches means the user chooses.
       batchId: p.suggestion?.batch_id ?? null,
+      batchNumber:
+        p.suggestion?.batches.find((b) => b.batch_id === p.suggestion?.batch_id)?.batch_number ??
+        null,
       dose: "",
     })),
     readoutBySeries: Object.fromEntries(

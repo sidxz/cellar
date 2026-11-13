@@ -19,6 +19,7 @@ export function rowsFromPositions(positions: readonly Position[]): LabellingRow[
     wellType: p.well_type as WellType,
     moleculeId: p.molecule_id ?? null,
     moleculeName: p.molecule_name ?? null,
+    moleculeRef: p.registration_number ?? null,
     batchId: p.batch_id ?? null,
     batchNumber: p.batch_number ?? null,
     dose: p.dose == null ? "" : String(p.dose),

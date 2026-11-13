@@ -75,13 +75,16 @@ describe("position edits", () => {
       moleculeName: "ABC-0000001",
       batchId: "b1",
       batchNumber: "B-1",
+      moleculeRef: "REG-0001",
       dose: "10",
     });
     expect(rows[2]).toMatchObject({
       label: "",
       note: "",
       moleculeId: null,
+      moleculeRef: null,
       batchId: null,
+      batchNumber: null,
       dose: "",
     });
   });

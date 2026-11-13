@@ -21,7 +21,9 @@ function row(patch: Partial<LabellingRow>): LabellingRow {
     wellType: "sample",
     moleculeId: null,
     moleculeName: null,
+    moleculeRef: null,
     batchId: null,
+    batchNumber: null,
     dose: "",
     ...patch,
   };

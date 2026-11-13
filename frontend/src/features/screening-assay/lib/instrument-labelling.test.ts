@@ -94,6 +94,14 @@ function withPosition(i: number, patch: Partial<(typeof draft.positions)[number]
 }
 
 describe("instrument labelling", () => {
+  it("keeps the compound's registration number and the pre-selected batch's number for the template", () => {
+    expect(draft.positions.map((p) => [p.moleculeRef, p.batchNumber])).toEqual([
+      ["REG-0001", "B-1"],
+      ["REG-0002", null],
+      [null, null],
+    ]);
+  });
+
   it("pre-fills from the preview and never selects a batch the API did not", () => {
     // position 1: one batch pre-selected; position 2: three batches, none; position 3: blank label, no suggestion
     expect(draft.positions.map((p) => p.batchId)).toEqual(["b1", null, null]);

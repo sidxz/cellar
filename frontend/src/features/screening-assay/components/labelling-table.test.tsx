@@ -35,6 +35,7 @@ const rows: LabellingRow[] = [
     wellType: "reference",
     moleculeId: "m1",
     moleculeName: "ABC-0000001",
+    moleculeRef: "REG-0001",
     batchId: "b1",
     batchNumber: "B-1",
     dose: "10",
@@ -48,7 +49,9 @@ const rows: LabellingRow[] = [
     wellType: "sample",
     moleculeId: "m2",
     moleculeName: "ABC-0000002",
+    moleculeRef: "REG-0002",
     batchId: null,
+    batchNumber: null,
     dose: "",
   },
   {
@@ -60,7 +63,9 @@ const rows: LabellingRow[] = [
     wellType: "sample",
     moleculeId: null,
     moleculeName: null,
+    moleculeRef: null,
     batchId: null,
+    batchNumber: null,
     dose: "",
   },
 ];

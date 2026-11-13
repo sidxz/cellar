@@ -18,9 +18,12 @@ export interface LabellingRow {
   wellType: WellType;
   moleculeId: string | null;
   moleculeName: string | null;
+  /** The compound's registration number, written to the layout template's Compound column. */
+  moleculeRef: string | null;
   batchId: string | null;
-  /** Shown in place of the batch picker when the batch is read-only. */
-  batchNumber?: string | null;
+  /** Shown in place of the batch picker when the batch is read-only, and written to the
+   *  layout template's Batch column. */
+  batchNumber: string | null;
   /** Text while editing; parsed with {@link parseDose}. */
   dose: string;
 }
