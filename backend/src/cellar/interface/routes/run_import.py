@@ -10,6 +10,13 @@ from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel, Field
 from pydantic import ValidationError as PydanticValidationError
 
+from cellar.application.screening.import_instrument_file import (
+    ImportInstrumentFileCommand,
+    InstrumentImportResult,
+    InstrumentLabelling,
+    PositionLabelling,
+    SeriesMapping,
+)
 from cellar.application.screening.import_run_file import (
     ImportRunFileCommand,
     ImportRunFileResult,
@@ -21,6 +28,10 @@ from cellar.application.screening.import_summary_file import ImportSummaryFileCo
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     ReadoutColumn,
+)
+from cellar.application.screening.preview_instrument_file import (
+    InstrumentFilePreview,
+    PreviewInstrumentFileQuery,
 )
 from cellar.application.screening.preview_summary_import import PreviewSummaryImportCommand
 from cellar.application.screening.run_import_templates import (
@@ -36,14 +47,17 @@ from cellar.application.screening.summary_import_models import (
     SummaryPreviewResult,
     UnmatchedCompound,
 )
+from cellar.domain.shared.enums import WellType
 from cellar.domain.shared.errors import ValidationError
 from cellar.interface.dependencies import (
     AuthDep,
     CreateRunImportTemplateDep,
     DeleteRunImportTemplateDep,
+    ImportInstrumentFileDep,
     ImportRunFileDep,
     ImportSummaryFileDep,
     ListRunImportTemplatesDep,
+    PreviewInstrumentFileDep,
     PreviewRunFileDep,
     PreviewSummaryFileDep,
     PreviewSummaryImportDep,
@@ -817,3 +831,262 @@ async def resolve_summary_file(
     result = await uc(cmd, auth=auth)
     out: SummaryImportPlanPreview = result_to_response(result)
     return SummaryResolveResponse.from_result(out)
+
+
+# ---------------------------------------------------------------------------
+# Instrument file import (curves + reported values from an instrument export)
+# ---------------------------------------------------------------------------
+
+
+class HolderModel(BaseModel):
+    kind: str
+    rows: int | None
+    columns: int | None
+    label: str
+
+
+class CurveChannelModel(BaseModel):
+    key: str
+    label: str
+    x_unit: str
+    y_unit: str | None
+
+
+class InstrumentBatchOptionModel(BaseModel):
+    batch_id: uuid.UUID
+    batch_number: str
+
+
+class PositionSuggestionModel(BaseModel):
+    molecule_id: uuid.UUID
+    molecule_name: str
+    batches: list[InstrumentBatchOptionModel]
+    # Pre-selected only when the molecule has exactly one batch.
+    batch_id: uuid.UUID | None
+
+
+class InstrumentPositionModel(BaseModel):
+    row: int
+    column: int
+    position_label: str
+    label: str
+    suggestion: PositionSuggestionModel | None
+
+
+class ReportedSeriesModel(BaseModel):
+    channel: str
+    kind: str
+    ordinal: int
+    label: str
+    unit: str
+    count: int
+    suggested_readout_definition_id: uuid.UUID | None
+
+
+class ReadoutOptionModel(BaseModel):
+    id: uuid.UUID
+    name: str
+    unit: str | None
+
+
+class InstrumentPreviewResponse(BaseModel):
+    reader: str
+    reader_label: str
+    holder: HolderModel
+    dose_unit: str
+    positions: list[InstrumentPositionModel]
+    channels: list[CurveChannelModel]
+    series: list[ReportedSeriesModel]
+    readouts: list[ReadoutOptionModel]
+    settings: dict[str, str]
+    warnings: list[str]
+
+    @classmethod
+    def from_result(cls, p: InstrumentFilePreview) -> InstrumentPreviewResponse:
+        return cls(
+            reader=p.reader,
+            reader_label=p.reader_label,
+            holder=HolderModel(
+                kind=p.holder_kind.value,
+                rows=p.holder_rows,
+                columns=p.holder_columns,
+                label=p.holder_label,
+            ),
+            dose_unit=p.dose_unit,
+            positions=[
+                InstrumentPositionModel(
+                    row=pos.row,
+                    column=pos.column,
+                    position_label=pos.position_label,
+                    label=pos.label,
+                    suggestion=(
+                        PositionSuggestionModel(
+                            molecule_id=pos.suggestion.molecule_id,
+                            molecule_name=pos.suggestion.molecule_name,
+                            batches=[
+                                InstrumentBatchOptionModel(
+                                    batch_id=b.batch_id, batch_number=b.batch_number
+                                )
+                                for b in pos.suggestion.batches
+                            ],
+                            batch_id=pos.suggestion.batch_id,
+                        )
+                        if pos.suggestion
+                        else None
+                    ),
+                )
+                for pos in p.positions
+            ],
+            channels=[
+                CurveChannelModel(key=c.key, label=c.label, x_unit=c.x_unit, y_unit=c.y_unit)
+                for c in p.channels
+            ],
+            series=[
+                ReportedSeriesModel(
+                    channel=s.series.channel,
+                    kind=s.series.kind,
+                    ordinal=s.series.ordinal,
+                    label=s.series.label,
+                    unit=s.series.unit,
+                    count=s.series.count,
+                    suggested_readout_definition_id=s.suggested_readout_definition_id,
+                )
+                for s in p.series
+            ],
+            readouts=[ReadoutOptionModel(id=r.id, name=r.name, unit=r.unit) for r in p.readouts],
+            settings=dict(p.settings),
+            warnings=list(p.warnings),
+        )
+
+
+class InstrumentPositionLabellingRequest(BaseModel):
+    row: int
+    column: int
+    used: bool = True
+    label: str = Field("", max_length=200)
+    well_type: WellType = WellType.SAMPLE
+    batch_id: uuid.UUID | None = None
+    # In the protocol's dose unit.
+    dose: float | None = Field(None, ge=0)
+
+
+class InstrumentSeriesMappingRequest(BaseModel):
+    channel: str
+    kind: str
+    ordinal: int
+    readout_definition_id: uuid.UUID
+
+
+class InstrumentLabellingRequest(BaseModel):
+    """The user's labelling of the file's positions, sent as the ``labelling`` form field."""
+
+    positions: list[InstrumentPositionLabellingRequest]
+    series: list[InstrumentSeriesMappingRequest] = Field(default_factory=list)
+
+    def to_domain(self) -> InstrumentLabelling:
+        return InstrumentLabelling(
+            positions=tuple(
+                PositionLabelling(
+                    row=p.row,
+                    column=p.column,
+                    used=p.used,
+                    label=p.label,
+                    well_type=p.well_type,
+                    batch_id=p.batch_id,
+                    dose=p.dose,
+                )
+                for p in self.positions
+            ),
+            series=tuple(
+                SeriesMapping(
+                    channel=m.channel,
+                    kind=m.kind,
+                    ordinal=m.ordinal,
+                    readout_definition_id=m.readout_definition_id,
+                )
+                for m in self.series
+            ),
+        )
+
+
+class InstrumentImportResponse(BaseModel):
+    reader: str
+    positions_created: int
+    curves_created: int
+    values_inserted: int
+    warnings: list[str]
+    compute_warning: str | None
+    file_attached: bool
+    attachment_id: uuid.UUID | None
+    attachment_warning: str | None
+
+    @classmethod
+    def from_result(cls, out: InstrumentImportResult) -> InstrumentImportResponse:
+        return cls(
+            reader=out.reader,
+            positions_created=out.positions_created,
+            curves_created=out.curves_created,
+            values_inserted=out.values_inserted,
+            warnings=list(out.warnings),
+            compute_warning=out.compute_warning,
+            file_attached=out.attachment_id is not None,
+            attachment_id=out.attachment_id,
+            attachment_warning=out.attachment_warning,
+        )
+
+
+@router.post(
+    "/runs/{run_id}/preview-instrument-file",
+    response_model=InstrumentPreviewResponse,
+    status_code=200,
+)
+async def preview_instrument_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: PreviewInstrumentFileDep,
+    file: Annotated[UploadFile, File()],
+) -> InstrumentPreviewResponse:
+    """Read an instrument file and propose a labelling of its positions. Writes nothing."""
+    content = await file.read()
+    query = PreviewInstrumentFileQuery(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        filename=file.filename or "upload",
+        content=content,
+    )
+    result = await uc(query, auth=auth)
+    return InstrumentPreviewResponse.from_result(result_to_response(result))
+
+
+@router.post(
+    "/runs/{run_id}/import-instrument-file",
+    response_model=InstrumentImportResponse,
+    status_code=201,
+)
+async def import_instrument_file(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: ImportInstrumentFileDep,
+    file: Annotated[UploadFile, File()],
+    labelling: Annotated[str, Form()],
+) -> InstrumentImportResponse:
+    """Store the file's curves and mapped reported values on the run.
+
+    The ``labelling`` form field is the ``InstrumentLabellingRequest`` JSON.
+    """
+    content = await file.read()
+    # Parsed here so malformed JSON surfaces as a domain ValidationError (HTTP 422).
+    try:
+        parsed = InstrumentLabellingRequest.model_validate_json(labelling)
+    except PydanticValidationError as exc:
+        raise ValidationError(f"Invalid labelling: {exc}") from exc
+    cmd = ImportInstrumentFileCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        filename=file.filename or "upload",
+        content=content,
+        content_type=file.content_type,
+        labelling=parsed.to_domain(),
+    )
+    result = await uc(cmd, auth=auth)
+    return InstrumentImportResponse.from_result(result_to_response(result))

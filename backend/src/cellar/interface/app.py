@@ -399,6 +399,10 @@ def create_app() -> FastAPI:
 
     app.include_router(run_import_router)
 
+    from cellar.interface.routes.measured_curves import router as measured_curves_router
+
+    app.include_router(measured_curves_router)
+
     from cellar.interface.routes.attachments import router as attachment_router
 
     app.include_router(attachment_router)

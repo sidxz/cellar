@@ -6,11 +6,13 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.screening.import_instrument_file import ImportInstrumentFile
 from cellar.application.screening.import_run_file import (
     ImportRunFile,
     PreviewRunFile,
     RepreviewRunFile,
 )
+from cellar.application.screening.preview_instrument_file import PreviewInstrumentFile
 from cellar.application.screening.run_import_templates import (
     CreateRunImportTemplate,
     DeleteRunImportTemplate,
@@ -23,8 +25,10 @@ from ._core import _get_use_case
 __all__ = [
     "CreateRunImportTemplateDep",
     "DeleteRunImportTemplateDep",
+    "ImportInstrumentFileDep",
     "ImportRunFileDep",
     "ListRunImportTemplatesDep",
+    "PreviewInstrumentFileDep",
     "PreviewRunFileDep",
     "RepreviewRunFileDep",
     "UpdateRunImportTemplateDep",
@@ -44,4 +48,10 @@ DeleteRunImportTemplateDep = Annotated[
 ]
 ListRunImportTemplatesDep = Annotated[
     ListRunImportTemplates, Depends(_get_use_case(ListRunImportTemplates))
+]
+PreviewInstrumentFileDep = Annotated[
+    PreviewInstrumentFile, Depends(_get_use_case(PreviewInstrumentFile))
+]
+ImportInstrumentFileDep = Annotated[
+    ImportInstrumentFile, Depends(_get_use_case(ImportInstrumentFile))
 ]

@@ -66,7 +66,9 @@ from cellar.application.screening.get_protocol_activity import GetProtocolActivi
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
 from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
+from cellar.application.screening.get_run_curves import GetRunCurves
 from cellar.application.screening.get_target import GetTarget, ListTargets
+from cellar.application.screening.import_instrument_file import ImportInstrumentFile
 from cellar.application.screening.import_run_file import (
     ImportRunFile,
     InMemoryPreviewStore,
@@ -153,6 +155,7 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_instrument_file import PreviewInstrumentFile
 from cellar.application.screening.preview_protocol_name import (
     ListDiscriminators,
     PreviewProtocolName,
@@ -983,6 +986,47 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ImportSummaryFile, _import_summary_file)
+
+    def _preview_instrument_file(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewInstrumentFile(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            readers=c[InstrumentReaders],
+        )
+
+    container.define(PreviewInstrumentFile, _preview_instrument_file)
+
+    def _import_instrument_file(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportInstrumentFile(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            readers=c[InstrumentReaders],
+            upload_attachment=c[UploadAttachment],
+            calculation_engine=c[ReadoutCalculationEngine],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ImportInstrumentFile, _import_instrument_file)
+
+    def _get_run_curves(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetRunCurves(
+            uow=uow,
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            plate_map_reader=c[PlateMapReader],
+        )
+
+    container.define(GetRunCurves, _get_run_curves)
 
     def _preview_summary_import(c: Container):
         # Dry-run forecast: owns + enters its own read UoW (no bulk_uc, no
