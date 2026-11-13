@@ -111,3 +111,12 @@ export function matchesFilter(p: CurvePosition, text: string): boolean {
     v?.toLowerCase().includes(t),
   );
 }
+
+/** At most this many positions per curve request. */
+export const CURVES_PER_REQUEST = 100;
+
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}

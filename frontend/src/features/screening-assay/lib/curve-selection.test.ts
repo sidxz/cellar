@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 
 import type { CurveGroup } from "./curve-plot";
 import {
+  CURVES_PER_REQUEST,
   EMPTY_SELECTION,
   applyClick,
   assignColourSlots,
+  chunk,
   drawnPositionIds,
   matchesFilter,
   selectAll,
@@ -118,5 +120,15 @@ describe("matchesFilter", () => {
     expect(matchesFilter(p1, "second")).toBe(false);
     expect(matchesFilter(p1, "Position 1")).toBe(false);
     expect(matchesFilter(p1, "  ")).toBe(true);
+  });
+});
+
+describe("chunk", () => {
+  it("splits a list into pieces of at most the size, in order", () => {
+    expect(CURVES_PER_REQUEST).toBe(100);
+    const ids = Array.from({ length: 250 }, (_, i) => i);
+    expect(chunk(ids, 100).map((c) => c.length)).toEqual([100, 100, 50]);
+    expect(chunk(ids, 100)[2][0]).toBe(200);
+    expect(chunk([], 100)).toEqual([]);
   });
 });

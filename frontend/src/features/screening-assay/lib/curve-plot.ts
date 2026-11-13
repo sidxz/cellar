@@ -6,6 +6,7 @@ import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/ch
 import { shortId } from "@/shared/lib/utils";
 import type { CurveView } from "../hooks/use-run-curves";
 import {
+  type CurvePositions,
   RUN_STATUS_LABELS,
   type RunCurves,
   type RunStatus,
@@ -59,6 +60,50 @@ export function curveSetFromRun(data: RunCurves): CurveSet {
       { key: data.run_id, run: null, holder: data.holder, positions: holderOrder(data.positions) },
     ],
     curves: new Map(data.curves.map((c) => [c.well_id, c])),
+  };
+}
+
+/** Positions found across runs, with the curves fetched so far. One group per
+ *  run that has a position, in the API's run order, leaving out runs whose
+ *  status is hidden; the signals are the union over those runs. */
+export function curveSetFromPositions(
+  found: CurvePositions,
+  args: {
+    channel: string | undefined;
+    view: CurveView;
+    window: number | null;
+    curves: ReadonlyMap<string, CurveSeriesData>;
+    hideStatuses?: readonly string[];
+  },
+): CurveSet {
+  const groups: CurveGroup[] = [];
+  const channels = new Map<string, RunCurves["channels"][number]>();
+  for (const r of found.runs) {
+    if (args.hideStatuses?.includes(r.status)) continue;
+    const positions = found.positions.filter((p) => p.run_id === r.run_id);
+    if (positions.length === 0) continue;
+    for (const c of r.channels) if (!channels.has(c.key)) channels.set(c.key, c);
+    groups.push({
+      key: r.run_id,
+      run: {
+        runId: r.run_id,
+        runDate: r.run_date,
+        operator: r.operator,
+        status: r.status,
+        notes: r.notes,
+      },
+      holder: r.holder,
+      positions: holderOrder(positions),
+    });
+  }
+  return {
+    doseUnit: found.dose_unit,
+    channels: [...channels.values()],
+    channel: args.channel ?? channels.keys().next().value ?? null,
+    view: args.view,
+    window: args.window,
+    groups,
+    curves: args.curves,
   };
 }
 

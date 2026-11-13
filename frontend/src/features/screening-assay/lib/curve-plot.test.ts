@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import { CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
-import type { RunCurves } from "../types";
+import type { CurvePositions, RunCurves } from "../types";
 import {
   type CurveSet,
   buildCurveFigure,
   colourGroupKey,
   colourGroupLabel,
+  curveSetFromPositions,
   curveSetFromRun,
   focusIdFromHover,
   orderedPositions,
@@ -368,5 +369,79 @@ describe("run groups", () => {
     });
     expect(positionsNotShown(set, ["w1", "w2", "w3"]).map((p) => p.well_id)).toEqual(["w2"]);
     expect(positionsNotShown(set, ["w1"])).toEqual([]);
+  });
+});
+
+describe("curveSetFromPositions", () => {
+  const holder = { kind: "cassette", rows: 1, columns: 2, label: "Holder of 2" };
+  const channel = (key: string) => ({
+    key,
+    label: `Signal ${key.toUpperCase()}`,
+    x_unit: "°C",
+    y_unit: null,
+    x_label: null,
+  });
+  const run = (runId: string, status: string, channels: string[]) => ({
+    run_id: runId,
+    run_date: "2026-11-03",
+    operator: "u1",
+    status,
+    notes: null,
+    holder,
+    channels: channels.map(channel),
+    position_count: 2,
+  });
+  const at = (runId: string, column: number) => ({
+    ...position(`${runId}-${column}`, column, "sample", null),
+    run_id: runId,
+  });
+  const found: CurvePositions = {
+    protocol_id: "p1",
+    dose_unit: "uM",
+    runs: [
+      run("r2", "completed", ["b", "a"]),
+      run("r1", "approved", ["a", "c"]),
+      run("r3", "draft", ["a"]),
+    ],
+    // r3 has no position; r1's positions come out of holder order.
+    positions: [at("r1", 2), at("r1", 1), at("r2", 1)],
+  };
+  const args = {
+    channel: undefined,
+    view: "measured" as const,
+    window: null,
+    curves: new Map(),
+  };
+
+  it("builds one group per run in the API's order, with the union of their signals", () => {
+    const set = curveSetFromPositions(found, args);
+    expect(set.groups.map((g) => g.key)).toEqual(["r2", "r1"]);
+    expect(set.groups[1].positions.map((p) => p.well_id)).toEqual(["r1-1", "r1-2"]);
+    expect(set.groups[0].run).toEqual({
+      runId: "r2",
+      runDate: "2026-11-03",
+      operator: "u1",
+      status: "completed",
+      notes: null,
+    });
+    expect(set.groups[0].holder).toEqual(holder);
+    expect(set.channels.map((c) => c.key)).toEqual(["b", "a", "c"]);
+    expect(set.channel).toBe("b");
+    expect(set.doseUnit).toBe("uM");
+    expect(curveSetFromPositions(found, { ...args, channel: "c" }).channel).toBe("c");
+  });
+
+  it("leaves out runs whose status is hidden, and has no group when all are", () => {
+    const set = curveSetFromPositions(found, { ...args, hideStatuses: ["completed"] });
+    expect(set.groups.map((g) => g.key)).toEqual(["r1"]);
+    expect(set.channels.map((c) => c.key)).toEqual(["a", "c"]);
+    const onlyRejected: CurvePositions = {
+      ...found,
+      runs: [run("r1", "rejected", ["a"])],
+      positions: [at("r1", 1)],
+    };
+    expect(
+      curveSetFromPositions(onlyRejected, { ...args, hideStatuses: ["rejected"] }).groups,
+    ).toEqual([]);
   });
 });
