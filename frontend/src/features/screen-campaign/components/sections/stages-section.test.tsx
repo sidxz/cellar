@@ -266,6 +266,25 @@ describe("StagesSection", () => {
     expect(screen.queryByText(/No criteria yet/)).not.toBeInTheDocument();
   });
 
+  it("shows an outside criterion as a range, not the operator name", () => {
+    const outside = makeStage({
+      id: "stage-outside",
+      name: "Shifted",
+      criteria: [{ channel_id: "ch-1", operator: "not_between", value: [-2, 2] }],
+    });
+    render(
+      <StagesSection
+        campaign={{ ...campaign, stages: [outside] } as unknown as CampaignResponse}
+        selectedStageId="stage-outside"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+    expect(screen.getAllByText("outside -2 – 2").length).toBeGreaterThan(0);
+    expect(screen.queryByText(/not_between/)).not.toBeInTheDocument();
+  });
+
   it("hides add/edit affordances when read-only", () => {
     render(
       <StagesSection

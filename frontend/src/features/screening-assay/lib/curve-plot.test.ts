@@ -147,18 +147,35 @@ describe("buildCurveFigure", () => {
     expect(layout.shapes).toEqual([]);
   });
 
-  it("buildCurveFigure draws steps instead of reported values when steps are given", () => {
+  it("buildCurveFigure draws steps in place of reported transitions, keeping other reported values", () => {
+    const withTransitions: RunCurves = {
+      ...curves,
+      curves: curves.curves.map((c) =>
+        c.well_id === "w1"
+          ? {
+              ...c,
+              reported: [
+                { kind: "transition", ordinal: 1, label: "Step 1", value: 36.0, unit: "°C" },
+                { kind: "onset", ordinal: 1, label: "Onset 1", value: 30.0, unit: "°C" },
+                { kind: "k2", ordinal: 1, label: "Share", value: 40, unit: "%" },
+              ],
+            }
+          : c,
+      ),
+    };
     const { layout } = buildCurveFigure({
       ...base,
+      set: curveSetFromRun(withTransitions),
       drawn: new Set(["w1", "w3"]),
       showReported: true,
       steps: new Map([["w1", [36.6, 71.3]]]),
     });
     const shapes = layout.shapes as { type: string; x0: number; line: { color: string } }[];
-    // w1's reported 21.5 and 22.5 give way to its steps; w3 has none.
+    // w1's reported transition gives way to its steps; its onset stays; w3 has none.
     expect(shapes.map((s) => [s.type, s.x0])).toEqual([
       ["line", 36.6],
       ["line", 71.3],
+      ["line", 30.0],
     ]);
     expect(shapes[0].line.color).toBe(dark.reference);
   });

@@ -177,7 +177,7 @@ function useHitCriteriaRules(
     (r) =>
       r.readout_name !== "" &&
       (r.operator !== "in" || (Array.isArray(r.value) && r.value.length > 0)) &&
-      (r.operator !== "not_between" || boundsOf(r.value)[0] <= boundsOf(r.value)[1]),
+      (r.operator !== "not_between" || boundsOf(r.value)[0] < boundsOf(r.value)[1]),
   );
 
   return {
@@ -428,11 +428,14 @@ export function RunHitCriteriaDialog({
 }: RunHitCriteriaDialogProps) {
   const setHitCriteria = useSetRunHitCriteria();
   const resetHitCriteria = useResetRunHitCriteria();
-  const seed = currentCriteria ?? recommendation ?? [];
+  // The run's filter cannot evaluate "outside", so such a rule is not carried in.
+  const source = currentCriteria ?? recommendation ?? [];
+  const seed = source.filter((r) => RUN_OPERATORS.includes(r.operator));
+  const droppedOutside = seed.length < source.length;
   const state = useHitCriteriaRules(readoutDefinitions, seed);
 
   const handleOpenChange = (next: boolean) => {
-    if (next) state.reset(currentCriteria ?? recommendation ?? []);
+    if (next) state.reset(seed);
     onOpenChange(next);
   };
 
@@ -455,6 +458,11 @@ export function RunHitCriteriaDialog({
             Saving with no rules records "show all compounds".
           </DialogDescription>
         </DialogHeader>
+        {droppedOutside && (
+          <p className="text-sm text-muted-foreground">
+            The “outside” rule is left out: this run's filter cannot evaluate it.
+          </p>
+        )}
 
         <HitCriteriaRulesEditor
           state={state}

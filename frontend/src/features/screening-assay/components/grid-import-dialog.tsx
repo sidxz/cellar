@@ -25,6 +25,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { DOSE_RESPONSE_KEY, PLATE_MAP_KEY, READOUT_DATA_KEY, RUNS_KEY } from "../hooks/query-keys";
 import { useProtocol } from "../hooks/use-protocols";
+import { hasRawLayer } from "../lib/readout-data-pivot";
 
 interface GridImportDialogProps {
   runId: string;
@@ -45,7 +46,7 @@ export function GridImportDialog({ runId, protocolId, open, onOpenChange }: Grid
   const qc = useQueryClient();
   const { data: protocol } = useProtocol(protocolId);
   // A calculated readout is computed from its formula — never an import target.
-  const readoutDefs = (protocol?.readout_definitions ?? []).filter((rd) => !rd.is_calculated);
+  const readoutDefs = (protocol?.readout_definitions ?? []).filter(hasRawLayer);
 
   const [file, setFile] = useState<File | null>(null);
   const [readoutId, setReadoutId] = useState<string>("");

@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { showError, showSuccess } from "@/shared/lib/toast";
+import { hasRawLayer } from "../lib/readout-data-pivot";
 import {
   type SummaryMappingDraft,
   buildMapping,
@@ -91,8 +92,8 @@ export function useSummaryImportWizard({
   const readoutDefOptions = useMemo(
     () =>
       (protocol?.readout_definitions ?? [])
-        // A calculated readout is computed from its formula — never an import target.
-        .filter((rd) => !rd.is_calculated)
+        // Calculated and temperature-window readouts are computed — never an import target.
+        .filter(hasRawLayer)
         .map((rd) => ({
           id: rd.id,
           name: rd.name,

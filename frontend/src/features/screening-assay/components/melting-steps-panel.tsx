@@ -40,7 +40,18 @@ const STATUS_LABELS: Record<MeltingStep["status"], string> = {
 
 type Form =
   | { kind: "add"; wellId: string; reason: string }
-  | { kind: "correct" | "reject"; step: MeltingStep; reason: string };
+  | { kind: "correct" | "reject"; step: MeltingStep; reason: string }
+  /** Taking a rejected step back: the rejection reason is shown, not silently kept. */
+  | { kind: "restore"; step: MeltingStep; status: "accepted" | "unreviewed"; reason: string };
+
+const baseline = (s: MeltingStep) => s.instrument_value ?? s.value;
+
+const FORM_TITLES = {
+  reject: "Reject",
+  correct: "Correct",
+  accepted: "Accept",
+  unreviewed: "Mark unreviewed",
+} as const;
 
 function fmt(v: number): string {
   return formatMeasurementValue(v, 4);
@@ -147,10 +158,11 @@ export function MeltingStepsPanel({
     !!form &&
     (form.kind === "reject"
       ? reason !== ""
-      : form.kind === "add"
-        ? validValue && byWell.has(form.wellId)
-        : validValue &&
-          (reason !== "" || parsed === (form.step.instrument_value ?? form.step.value)));
+      : form.kind === "restore"
+        ? reason !== "" || form.step.value === baseline(form.step)
+        : form.kind === "add"
+          ? validValue && byWell.has(form.wellId)
+          : validValue && (reason !== "" || parsed === baseline(form.step)));
 
   const save = () => {
     if (!form || !canSave) return;
@@ -167,8 +179,19 @@ export function MeltingStepsPanel({
       );
     } else if (form.kind === "reject") {
       send(form.step, review(form.step, "rejected", form.step.value, reason));
+    } else if (form.kind === "restore") {
+      send(form.step, review(form.step, form.status, form.step.value, reason));
     } else {
       send(form.step, review(form.step, "accepted", parsed, reason));
+    }
+  };
+
+  /** From rejected, open a form showing the rejection reason; otherwise save at once. */
+  const setStatus = (s: MeltingStep, status: "accepted" | "unreviewed") => {
+    if (s.status === "rejected") {
+      open({ kind: "restore", step: s, status, reason: s.reason ?? "" }, "");
+    } else {
+      send(s, review(s, status, s.value, s.reason));
     }
   };
 
@@ -262,9 +285,20 @@ export function MeltingStepsPanel({
                             variant="ghost"
                             size="sm"
                             disabled={busy}
-                            onClick={() => send(s, review(s, "accepted", s.value, s.reason))}
+                            onClick={() => setStatus(s, "accepted")}
                           >
                             Accept
+                          </Button>
+                        )}
+                        {s.status !== "unreviewed" && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => setStatus(s, "unreviewed")}
+                          >
+                            Mark unreviewed
                           </Button>
                         )}
                         {!rejected && (
@@ -309,8 +343,14 @@ export function MeltingStepsPanel({
           <p className="text-sm font-medium">
             {form.kind === "add"
               ? "Add a melting step"
-              : `${form.kind === "reject" ? "Reject" : "Correct"} the step at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
+              : `${FORM_TITLES[form.kind === "restore" ? form.status : form.kind]} the step at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
           </p>
+          {form.kind === "restore" && (
+            <p className="text-xs text-muted-foreground">
+              The reason below was given when the step was rejected. Clear it or change it if it no
+              longer applies.
+            </p>
+          )}
           <div className="flex flex-wrap items-end gap-3">
             {form.kind === "add" && (
               <div className="flex flex-col gap-1.5">
@@ -332,7 +372,7 @@ export function MeltingStepsPanel({
                 </Select>
               </div>
             )}
-            {form.kind !== "reject" && (
+            {(form.kind === "add" || form.kind === "correct") && (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor={`${ids}-value`}>Value</Label>
                 <div className="flex items-center gap-2">
@@ -371,7 +411,8 @@ export function MeltingStepsPanel({
                 placeholder={
                   form.kind === "reject"
                     ? "Required"
-                    : form.kind === "add"
+                    : form.kind === "add" ||
+                        (form.kind === "restore" && form.step.value === baseline(form.step))
                       ? "Optional"
                       : "Required when the value differs from the instrument's"
                 }
@@ -381,7 +422,7 @@ export function MeltingStepsPanel({
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {form.kind !== "reject" && (
+            {(form.kind === "add" || form.kind === "correct") && (
               <span className="text-xs text-muted-foreground">
                 Click a trace on the plot to fill the value.
               </span>

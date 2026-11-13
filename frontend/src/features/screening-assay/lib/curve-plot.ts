@@ -1,6 +1,7 @@
 /** The curve viewer's figure and table, built from a set of positions and
  *  their curves that may come from several runs. Pure. It draws what the API
- *  sends and knows nothing about what a reported value means. */
+ *  sends; the one meaning it knows is that a reported transition is a melting
+ *  step, which the reviewed steps replace when they are given. */
 
 import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { shortId } from "@/shared/lib/utils";
@@ -14,6 +15,9 @@ import {
   type WellType,
 } from "../types";
 import { holderOrder } from "./curve-selection";
+
+/** The reported-value kind that is a melting step (the backend's neutral kind). */
+const STEP_KIND = "transition";
 
 export type CurvePosition = RunCurves["positions"][number];
 export type CurveSeriesData = RunCurves["curves"][number];
@@ -228,7 +232,7 @@ export function buildCurveFigure(
     showReported: boolean;
     canvas: "screen" | "export";
     /** By well id, the counted melting steps on this signal; given, they are
-     *  the vertical lines instead of the reported values. */
+     *  drawn instead of the reported transitions. Other reported values stay. */
     steps?: ReadonlyMap<string, readonly number[]>;
     windows?: readonly CurveBand[];
   } & CurveColouring,
@@ -279,9 +283,13 @@ export function buildCurveFigure(
       ...(group && { legendgroup: group.key, showlegend: firstOfGroup }),
     });
     if (!showReported) continue;
+    const reported = curve.reported.filter((r) => r.unit === xUnit);
     const lines = steps
-      ? (steps.get(p.well_id) ?? [])
-      : curve.reported.filter((r) => r.unit === xUnit).map((r) => r.value);
+      ? [
+          ...(steps.get(p.well_id) ?? []),
+          ...reported.filter((r) => r.kind !== STEP_KIND).map((r) => r.value),
+        ]
+      : reported.map((r) => r.value);
     for (const x of lines) {
       shapes.push({
         type: "line",

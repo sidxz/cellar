@@ -254,6 +254,43 @@ describe("MeltingStepsPanel", () => {
     });
   });
 
+  it("Accept on a rejected step pre-fills the rejection reason and lets it be cleared", async () => {
+    renderPanel();
+    const table = await select("Position 2");
+    fireEvent.click(within(row(table, "70.1")).getByRole("button", { name: "Accept" }));
+    expect(writes()).toHaveLength(0);
+    expect(screen.getByLabelText("Reason")).toHaveValue("noise");
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0]).toEqual({
+      url: "/api/v1/melting-steps/s3",
+      method: "PATCH",
+      data: { expected_version: 3, status: "accepted", value: 70.1 },
+    });
+  });
+
+  it("Mark unreviewed sets an accepted step back, keeping its value and reason", async () => {
+    renderPanel();
+    const table = await select("Position 2");
+    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Mark unreviewed" }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].data).toEqual({
+      expected_version: 2,
+      status: "unreviewed",
+      value: 64,
+      reason: "shoulder peak",
+    });
+  });
+
+  it("an unreviewed step offers no Mark unreviewed", async () => {
+    renderPanel();
+    const table = await select("Position 1");
+    expect(
+      within(row(table, "36.6")).queryByRole("button", { name: "Mark unreviewed" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("a plot click fills the open form's value without saving", async () => {
     renderPanel();
     await select("Position 3");
@@ -295,7 +332,7 @@ describe("MeltingStepsPanel", () => {
     renderPanel();
     const table = await select("Position 1");
     expect(screen.getByText(refusal)).toBeInTheDocument();
-    for (const name of ["Accept", "Reject", "Correct", "Add step"]) {
+    for (const name of ["Accept", "Reject", "Correct", "Mark unreviewed", "Add step"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(within(table).getByText("36.6")).toBeInTheDocument();

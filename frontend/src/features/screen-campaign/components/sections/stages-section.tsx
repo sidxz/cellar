@@ -66,6 +66,10 @@ function criterionValueText(c: StageCriterionDTO): string {
     const [lo, hi] = c.value;
     return `${lo} – ${hi}`;
   }
+  if (c.operator === "not_between" && Array.isArray(c.value)) {
+    const [lo, hi] = c.value;
+    return `outside ${lo} – ${hi}`;
+  }
   const symbol = OPERATOR_SYMBOLS[c.operator] ?? c.operator;
   const value = Array.isArray(c.value) ? c.value.join(", ") : c.value;
   return `${symbol} ${value}`;

@@ -167,4 +167,38 @@ describe("outside operator", () => {
       recommended_hit_criteria: [{ operator: "not_between", value: [-3, 4] }],
     });
   });
+
+  it("run dialog drops an outside rule from the recommendation and says so", () => {
+    render(
+      <RunHitCriteriaDialog
+        runId="r1"
+        readoutDefinitions={[dtm]}
+        currentCriteria={null}
+        recommendation={[rule, outside]}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/“outside” rule is left out/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /save for this run/i }));
+    expect(setMutate.mock.calls[0][0]).toMatchObject({ runId: "r1", criteria: [rule] });
+  });
+
+  it("protocol dialog cannot save outside with low not below high", () => {
+    render(
+      <HitCriteriaDialog
+        protocolId="p1"
+        readoutDefinitions={[dtm]}
+        currentCriteria={[{ readout_name: "ΔTm (Main)", operator: "not_between", value: [0, 0] }]}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const save = screen.getByRole("button", { name: /save criteria/i });
+    expect(save).toBeDisabled();
+    const [low, high] = screen.getAllByRole("spinbutton");
+    fireEvent.change(low, { target: { value: "-2" } });
+    fireEvent.change(high, { target: { value: "2" } });
+    expect(save).toBeEnabled();
+  });
 });

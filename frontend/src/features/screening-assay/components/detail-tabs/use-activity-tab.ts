@@ -12,8 +12,8 @@ import type {
 } from "../../types";
 
 // ---------------------------------------------------------------------------
-// applyFilters — kept local; not exported. The component uses the filtered
-// list from the hook, not the filter function directly.
+// applyFilters — the component uses the filtered list from the hook; exported
+// for tests.
 // ---------------------------------------------------------------------------
 
 const OPERATOR_LABELS: Record<string, string> = {
@@ -22,9 +22,13 @@ const OPERATOR_LABELS: Record<string, string> = {
   gte: ">=",
   lte: "<=",
   in: "in",
+  not_between: "outside",
 };
 
-function applyFilters(items: CompoundActivity[], criteria: HitCriterion[]): CompoundActivity[] {
+export function applyFilters(
+  items: CompoundActivity[],
+  criteria: HitCriterion[],
+): CompoundActivity[] {
   if (criteria.length === 0) return items;
   return items.filter((item) =>
     criteria.every((rule) => {
@@ -53,6 +57,11 @@ function applyFilters(items: CompoundActivity[], criteria: HitCriterion[]): Comp
         measured = readout.best;
       }
       if (measured == null) return false;
+      if (rule.operator === "not_between") {
+        if (!Array.isArray(rule.value)) return false;
+        const [lo, hi] = rule.value as number[];
+        return measured < lo || measured > hi;
+      }
       const threshold = typeof rule.value === "number" ? rule.value : 0;
       switch (rule.operator) {
         case "gt":
@@ -72,7 +81,12 @@ function applyFilters(items: CompoundActivity[], criteria: HitCriterion[]): Comp
 
 export function criterionLabel(rule: HitCriterion): string {
   const op = OPERATOR_LABELS[rule.operator] ?? rule.operator;
-  const val = Array.isArray(rule.value) ? rule.value.join(", ") : rule.value;
+  const val =
+    rule.operator === "not_between" && Array.isArray(rule.value)
+      ? rule.value.join(" – ")
+      : Array.isArray(rule.value)
+        ? rule.value.join(", ")
+        : rule.value;
   if (rule.intercept_key) {
     // Surface the intercept (e.g. "Resazurin EC90 < 50"). Uses the implicit
     // KIND+LEVEL label since the protocol's `spec.label` isn't reachable

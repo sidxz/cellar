@@ -1,5 +1,5 @@
 import { groupBy } from "@/shared/lib/group-by";
-import type { DoseResponseCurve, ReadoutData } from "../types";
+import type { DoseResponseCurve, ReadoutData, ReadoutDefinition } from "../types";
 
 export interface PivotRow {
   key: string;
@@ -28,6 +28,21 @@ export interface PivotRow {
 
 export const valueKey = (defId: string, isComputed: boolean) =>
   `${defId}::${isComputed ? "c" : "r"}`;
+
+/** The engine writes is_computed rows for a readout that is calculated, normalized, or read
+ *  from a temperature window. */
+export function hasComputedLayer(
+  rd: Pick<ReadoutDefinition, "is_calculated" | "normalizations" | "melt_config">,
+): boolean {
+  return (
+    rd.is_calculated || !!rd.melt_config || (rd.normalizations?.some((n) => n !== "none") ?? false)
+  );
+}
+
+/** Calculated and temperature-window readouts are never imported, so they have no raw layer. */
+export function hasRawLayer(rd: Pick<ReadoutDefinition, "is_calculated" | "melt_config">): boolean {
+  return !rd.is_calculated && !rd.melt_config;
+}
 
 /** Aliases for a row from its enriched name + synonyms, deduped against the
  * registration number so the Compound column doesn't echo Aliases. */
