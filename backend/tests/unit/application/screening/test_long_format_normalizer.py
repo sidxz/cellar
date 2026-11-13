@@ -426,6 +426,24 @@ class TestNormalizeTextReadouts:
         assert rd_id not in out.rows[1].readouts
 
 
+    @pytest.mark.parametrize("cell", ["nan", "NaN", "inf", "-Infinity"])
+    def test_non_finite_cells_are_not_stored(self, cell: str) -> None:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Conc", "Batch", "Raw"],
+            [{"Well": "A1", "Conc": cell, "Batch": "CV-1", "Raw": cell}],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            concentration="Conc",
+            batch_ref="Batch",
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
+        )
+        row = normalize(table, mapping).unwrap().rows[0]
+        assert row.concentration is None
+        assert rd_id not in row.readouts
+
+
 class TestNormalizeMultiPlate:
     def test_two_plates_grouped_separately(self) -> None:
         rd_id = uuid.uuid4()

@@ -19,6 +19,7 @@ since the file format itself can't distinguish positive from negative controls.
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections import defaultdict
@@ -436,7 +437,7 @@ def normalize(
     - Well positions are canonicalized to ``WellPosition(row, column)``.
     - Plate name comes from ``mapping.plate_name`` if set; otherwise all
       rows are assigned to a single synthetic plate ``"Plate-1"``.
-    - Concentration is parsed as float; missing/invalid → ``None``.
+    - Concentration is parsed as float; missing/invalid/non-finite → ``None``.
     - Readouts are parsed per ``ReadoutColumn``; non-numeric cells are
       dropped silently from that row's readout dict.
 
@@ -549,9 +550,12 @@ def _parse_float(raw: object) -> float | None:
     if not s:
         return None
     try:
-        return float(s)
+        value = float(s)
     except ValueError:
         return None
+    # "nan" and "inf" parse as floats but are not numbers a cell can hold:
+    # treated like any other unparseable cell.
+    return value if math.isfinite(value) else None
 
 
 def _infer_plate_formats(rows: Iterable[LongFormatRow]) -> dict[str, PlateFormat]:
