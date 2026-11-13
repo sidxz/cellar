@@ -121,6 +121,28 @@ async def test_unique_per_well_and_channel(session_factory, workspace_id):
             await uow.session.flush()
 
 
+async def test_find_by_wells_filters_channel_and_workspace(session_factory, workspace_id):
+    run_id = await _seed_run(session_factory, workspace_id)
+    w1, w2, w3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    await _save(
+        session_factory,
+        [
+            _curve(workspace_id, run_id, w, key=key, order=order)
+            for key, order in (("ratio", 0), ("f330", 1))
+            for w in (w1, w2, w3)
+        ],
+    )
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        repo = SQLAlchemyMeasuredCurveRepository(uow)
+        found = await repo.find_by_wells(workspace_id, [w1, w2], channel_key="f330")
+        assert {c.well_id for c in found} == {w1, w2}
+        assert {c.channel_key for c in found} == {"f330"}
+        assert await repo.find_by_wells(uuid.uuid4(), [w1], channel_key="f330") == []
+        assert await repo.find_by_wells(workspace_id, [], channel_key="f330") == []
+        assert await repo.find_by_wells(workspace_id, [w1], channel_key="nope") == []
+
+
 async def test_check_constraint_refuses_unequal_lengths(session_factory, workspace_id):
     run_id = await _seed_run(session_factory, workspace_id)
     async with session_factory() as session:

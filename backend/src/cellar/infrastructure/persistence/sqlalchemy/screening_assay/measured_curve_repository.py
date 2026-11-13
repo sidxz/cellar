@@ -7,6 +7,7 @@ removed with the run or on data reset. Standalone repo with manual CRUD.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from dataclasses import asdict
 
 from sqlalchemy import delete, select
@@ -45,6 +46,19 @@ class SQLAlchemyMeasuredCurveRepository:
         if channel_key is not None:
             stmt = stmt.where(MeasuredCurveModel.channel_key == channel_key)
         stmt = stmt.order_by(MeasuredCurveModel.channel_order, MeasuredCurveModel.well_id)
+        result = await self._uow.session.execute(stmt)
+        return [self._to_domain(m) for m in result.scalars().all()]
+
+    async def find_by_wells(
+        self, workspace_id: uuid.UUID, well_ids: Sequence[uuid.UUID], *, channel_key: str
+    ) -> list[MeasuredCurve]:
+        if not well_ids:
+            return []
+        stmt = select(MeasuredCurveModel).where(
+            MeasuredCurveModel.workspace_id == workspace_id,
+            MeasuredCurveModel.well_id.in_(well_ids),
+            MeasuredCurveModel.channel_key == channel_key,
+        )
         result = await self._uow.session.execute(stmt)
         return [self._to_domain(m) for m in result.scalars().all()]
 

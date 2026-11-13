@@ -622,6 +622,12 @@ class MeasuredCurveRepository(Protocol):
         *,
         channel_key: str | None = None,
     ) -> list[MeasuredCurve]: ...
+    async def find_by_wells(
+        self, workspace_id: uuid.UUID, well_ids: Sequence[uuid.UUID], *, channel_key: str
+    ) -> list[MeasuredCurve]:
+        """The curves on ``channel_key`` of those positions; positions without one are absent."""
+        ...
+
     async def list_channels(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[CurveChannel]: ...
