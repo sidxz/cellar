@@ -34,6 +34,11 @@ import type { Run, RunCurves, WellType } from "../types";
 import { LabellingTable, Notice } from "./labelling-table";
 
 type Position = RunCurves["positions"][number];
+
+/** The API names the refusal of an edit made from values someone else changed since. */
+function isStaleEdit(body: unknown): boolean {
+  return (body as { error?: unknown } | null)?.error === "StaleEditError";
+}
 type EditableRun = Pick<Run, "id" | "status" | "is_locked">;
 
 interface EditLabellingDialogProps {
@@ -79,7 +84,7 @@ function EditLabellingBody({
     rows: LabellingRow[];
   } | null>(null);
   const [reason, setReason] = useState("");
-  const [error, setError] = useState<{ message: string; conflict: boolean } | null>(null);
+  const [error, setError] = useState<{ message: string; stale: boolean } | null>(null);
   const [reloading, setReloading] = useState(false);
   const relabel = useRelabelPositions(run.id);
   const reasonId = useId();
@@ -110,13 +115,18 @@ function EditLabellingBody({
       {
         onSuccess: (result) => {
           showSuccess("Labelling saved");
-          if (result.compute_warning) showWarning(result.compute_warning);
+          if (result.compute_warning) {
+            showWarning(
+              `The labelling was saved, but the calculations were not rebuilt: ${result.compute_warning}. Press Recompute on the run to rebuild them.`,
+            );
+          }
           onOpenChange(false);
         },
         onError: (e) =>
           setError({
             message: apiReason(e),
-            conflict: e instanceof ApiError && e.status === 409,
+            // Only a stale edit is helped by reloading; other refusals keep the edits.
+            stale: e instanceof ApiError && isStaleEdit(e.body),
           }),
       },
     );
@@ -170,7 +180,7 @@ function EditLabellingBody({
           <Notice tone="bad">
             <div className="flex flex-wrap items-center gap-3">
               <span>{error.message}</span>
-              {error.conflict && (
+              {error.stale && (
                 <Button
                   size="sm"
                   variant="outline"

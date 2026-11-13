@@ -407,7 +407,8 @@ function PositionRow({
         <Input
           className="h-8 w-44"
           aria-label={`Label for ${p.positionLabel}`}
-          placeholder="No name in file"
+          // The wizard's labels come from the instrument file; Edit labelling has none.
+          placeholder={showUse ? "No name in file" : "No label"}
           value={p.label}
           aria-invalid={p.label.length > 200}
           onChange={(e) => onUpdate({ label: e.target.value })}

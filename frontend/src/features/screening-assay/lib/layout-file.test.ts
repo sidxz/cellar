@@ -240,6 +240,24 @@ describe("apply layout", () => {
     });
   });
 
+  it("keeps the batch chosen in the table when the file names its compound and no batch", () => {
+    const sameCompound = {
+      ...compound,
+      molecule_id: "m1",
+      registration_number: "REG-0001",
+      batch_id: null,
+      batch_number: null,
+      needs_batch_choice: true,
+    };
+    const out = applyLayout(
+      rows,
+      file(fileRow("Position 2", { compound: sameCompound, dose: 20 })),
+      OPEN,
+    );
+    expect(out.rows[1]).toMatchObject({ moleculeId: "m1", batchId: "b1", batchNumber: "B-1" });
+    expect(out.rows[1].dose).toBe("20");
+  });
+
   it("sets used from the Use column in the wizard", () => {
     const out = applyLayout(
       rows,
@@ -303,23 +321,15 @@ describe("cells a spreadsheet would read as formulas", () => {
     expect(lines()[1]).toBe("Position 1,'=1+1,Reference,,,,'@sum");
   });
 
-  it("does not prefix a concentration, nor an ordinary label", () => {
-    expect(lines()[2]).toBe("Position 2,x,Sample,REG-0001,B-1,-5,");
+  it("prefixes a concentration that starts a formula too, but not an ordinary label", () => {
+    expect(lines()[2]).toBe("Position 2,x,Sample,REG-0001,B-1,'-5,");
   });
 
-  it("reads the written label and note back as they were", () => {
-    const fromFile = file(fileRow("Position 1", { label: "'=1+1", note: "'@sum" }));
+  it("applies the values as the server read them: the server drops the apostrophe", () => {
+    const fromFile = file(fileRow("Position 1", { label: "=1+1", note: "@sum" }));
     expect(applyLayout(risky, fromFile, OPEN)).toMatchObject({ filled: 0, problems: [] });
-    const out = applyLayout(rows, fromFile, OPEN);
-    expect(out.rows[0]).toMatchObject({ label: "=1+1", note: "@sum" });
-  });
-
-  it("matches a position written with the apostrophe", () => {
-    const out = applyLayout(
-      [{ ...rows[0], positionLabel: "-Position 1" }],
-      file(fileRow("'-Position 1", { label: "y" })),
-      OPEN,
-    );
-    expect(out).toMatchObject({ filled: 1, problems: [] });
+    // A value the server left an apostrophe on is the user's own; it stays.
+    const out = applyLayout(rows, file(fileRow("Position 1", { label: "'=x" })), OPEN);
+    expect(out.rows[0].label).toBe("'=x");
   });
 });

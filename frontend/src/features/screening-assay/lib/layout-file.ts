@@ -17,15 +17,10 @@ const LOCKED_NOTICE =
 /** A cell starting with one of these is run as a formula by a spreadsheet program. */
 const FORMULA_START = /^[=+\-@\t\r]/;
 
-/** A text cell as written: a leading apostrophe keeps it text. */
+/** A cell as written: a leading apostrophe keeps it text. The server drops
+ *  that apostrophe when it reads the file back. */
 function asText(value: string): string {
   return FORMULA_START.test(value) ? `'${value}` : value;
-}
-
-/** A text cell as read back: drops the apostrophe `asText` added. A value the
- *  user really wrote as `'=x` loses its apostrophe too; that is the accepted cost. */
-function fromText(value: string): string {
-  return value.startsWith("'") && FORMULA_START.test(value.slice(1)) ? value.slice(1) : value;
 }
 
 export function layoutTemplateCsv(
@@ -49,7 +44,7 @@ export function layoutTemplateCsv(
       WELL_TYPE_LABELS[r.wellType],
       asText(r.moleculeRef ?? ""),
       asText(r.batchNumber ?? ""),
-      r.dose,
+      asText(r.dose),
       asText(r.note),
     ];
     if (opts.withUse) line.push(r.used ? "Yes" : "No");
@@ -69,18 +64,9 @@ export interface LayoutApplication<T extends LabellingRow> {
 
 export function applyLayout<T extends LabellingRow>(
   rows: readonly T[],
-  written: LayoutFile,
+  file: LayoutFile,
   opts: { allowUse: boolean; calculatedLocked: boolean },
 ): LayoutApplication<T> {
-  const file = {
-    ...written,
-    rows: written.rows.map((f) => ({
-      ...f,
-      position: fromText(f.position),
-      label: f.label == null ? f.label : fromText(f.label),
-      note: f.note == null ? f.note : fromText(f.note),
-    })),
-  };
   const problems: string[] = [];
   const notices: string[] = [];
   const known = new Set(rows.map((r) => r.positionLabel.trim()));
@@ -141,8 +127,10 @@ export function applyLayout<T extends LabellingRow>(
         patch.moleculeId = f.compound.molecule_id;
         patch.moleculeName = f.compound.molecule_name;
         patch.moleculeRef = f.compound.registration_number;
-        patch.batchId = f.compound.batch_id ?? null;
-        patch.batchNumber = f.compound.batch_number ?? null;
+        // The file naming this row's compound and no batch leaves the chosen batch.
+        const keepBatch = f.compound.batch_id == null && f.compound.molecule_id === r.moleculeId;
+        patch.batchId = keepBatch ? r.batchId : (f.compound.batch_id ?? null);
+        patch.batchNumber = keepBatch ? r.batchNumber : (f.compound.batch_number ?? null);
       }
     }
     const keys = Object.keys(patch) as (keyof LabellingRow)[];

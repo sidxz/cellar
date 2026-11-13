@@ -160,7 +160,9 @@ describe("EditLabellingDialog", () => {
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
     expect(toast.showSuccess).toHaveBeenCalledWith("Labelling saved");
-    expect(toast.showWarning).toHaveBeenCalledWith("The calculation could not finish");
+    expect(toast.showWarning).toHaveBeenCalledWith(
+      "The labelling was saved, but the calculations were not rebuilt: The calculation could not finish. Press Recompute on the run to rebuild them.",
+    );
   });
 
   it("asks for a reason on a completed run and keeps Save disabled without one", () => {
@@ -211,13 +213,15 @@ describe("EditLabellingDialog", () => {
     });
   });
 
-  it("on a conflict shows the API's message and Reload, and Reload refills the table", async () => {
+  it("on a stale edit shows the API's message and Reload, and Reload refills the table", async () => {
     const onReload = vi.fn(async () => undefined);
     const { rerender } = renderDialog({ onReload });
     fireEvent.change(label("Position 2"), { target: { value: "mine" } });
     fireEvent.click(save());
     mutate.mock.calls[0][1]?.onError?.(
-      new ApiError("API error: 409 — Position 2 was changed since you opened it", 409, {}),
+      new ApiError("API error: 409 — Position 2 was changed since you opened it", 409, {
+        error: "StaleEditError",
+      }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Position 2 was changed since you opened it",
@@ -255,6 +259,25 @@ describe("EditLabellingDialog", () => {
       expect(label("Position 2")).toHaveValue("mine");
       expect(save()).toBeEnabled();
     });
+  });
+
+  it("offers no Reload on a conflict a reload cannot help, such as a campaign refusal", async () => {
+    renderDialog();
+    fireEvent.change(label("Position 2"), { target: { value: "mine" } });
+    fireEvent.click(save());
+    mutate.mock.calls[0][1]?.onError?.(
+      new ApiError("API error: 409 — Position 2: campaign 'C' may hold values", 409, {
+        error: "ConflictError",
+      }),
+    );
+    expect(await screen.findByRole("alert")).toHaveTextContent("campaign 'C' may hold values");
+    expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+    expect(label("Position 2")).toHaveValue("mine");
+  });
+
+  it("gives the label a placeholder that does not speak of a file", () => {
+    renderDialog();
+    expect(label("Position 1")).toHaveAttribute("placeholder", "No label");
   });
 
   it("offers a template without a Use column, and a filled table counts as changes to save", () => {
