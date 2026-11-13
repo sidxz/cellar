@@ -353,6 +353,7 @@ class ResetRunDataResponse(BaseModel):
     readouts_deleted: int
     curves_deleted: int
     measured_curves_deleted: int
+    melting_steps_deleted: int
 
 
 @router.post("/runs/{run_id}/reset-data", response_model=ResetRunDataResponse)
@@ -361,7 +362,8 @@ async def reset_run_data(
     auth: AuthDep,
     uc: ResetRunDataDep,
 ) -> ResetRunDataResponse:
-    """Wipe a run's plates, wells, readouts, dose-response and measured curves, and QC.
+    """Wipe a run's plates, wells, readouts, dose-response and measured curves, melting steps
+    and QC.
 
     The run row itself, its metadata, and any attached files are kept.
     Only DRAFT and IN_PROGRESS runs may be reset. Locked or terminal
@@ -379,6 +381,7 @@ async def reset_run_data(
         readouts_deleted=out.readouts_deleted,
         curves_deleted=out.curves_deleted,
         measured_curves_deleted=out.measured_curves_deleted,
+        melting_steps_deleted=out.melting_steps_deleted,
     )
 
 

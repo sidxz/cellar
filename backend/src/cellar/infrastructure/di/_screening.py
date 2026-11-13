@@ -270,6 +270,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.measured_curve_repository import (  # noqa: E501
     SQLAlchemyMeasuredCurveRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.melting_step_repository import (
+    SQLAlchemyMeltingStepRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_map_reader import (
     SQLAlchemyPlateMapReader,
 )
@@ -612,6 +615,7 @@ def register_screening(container: Container) -> None:
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
             dispatcher=c[EventDispatcher],
         )
 

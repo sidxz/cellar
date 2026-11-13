@@ -19,6 +19,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.measured_curve_repository import (  # noqa: E501
     SQLAlchemyMeasuredCurveRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.melting_step_repository import (
+    SQLAlchemyMeltingStepRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
     SQLAlchemyReadoutDataRepository,
 )
@@ -112,7 +115,11 @@ async def test_reset_run_data_leaves_no_curves(session_factory, workspace_id):
     run_id, _ = await _run_with_curves(session_factory, workspace_id)
 
     uow = AsyncUnitOfWork(session_factory)
-    uc = ResetRunData(**_repos(uow), measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow))
+    uc = ResetRunData(
+        **_repos(uow),
+        measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+        melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
+    )
     result = await uc(
         ResetRunDataCommand(workspace_id=workspace_id, run_id=run_id),
         auth=FakeAuth(workspace_id=workspace_id),

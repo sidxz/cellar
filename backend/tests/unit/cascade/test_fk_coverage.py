@@ -518,6 +518,7 @@ LEFT_ALONE: dict[str, str] = {
     "registered_plates.registered_by": _USER,
     "rgroup_decomposition_runs.requested_by": _USER,
     "run_tags.assigned_by": _USER,
+    "melting_steps.changed_by": _USER,
     "runs.hit_criteria_set_by": _USER,
     "runs.locked_by": _USER,
     "runs.operator": _USER,
@@ -584,6 +585,7 @@ LEFT_ALONE: dict[str, str] = {
     "protocols.recommended_hit_criteria": _BY_NAME,
     "protocols.references": _NO_IDS,
     "readout_definitions.dose_response_config": _BY_NAME,
+    "readout_definitions.melt_config": _NO_IDS,
     "readout_definitions.normalizations": _BY_NAME,
     "run_import_templates.column_mapping": _BY_NAME,
     "runs.conditions": _BY_NAME,
@@ -653,6 +655,7 @@ LEFT_ALONE: dict[str, str] = {
         "not rendered; unchecked reagent ids are docs/backlog/writers-accept-unchecked-ids.md"
     ),
     "measured_curves.well_id": "removed with its run or on data reset",
+    "melting_steps.well_id": "removed with its run or on data reset",
     "readout_data.well_id": "always deleted together with its wells",
     "runs.eln_entry_id": "ELN entries don't exist yet",
     "runs.qc_metrics": "keyed by the run's own plates, deleted with it",

@@ -8,6 +8,7 @@ under the non-destructive import semantics).
 What gets cleared:
     - dose_response_curves
     - measured_curves
+    - melting_steps
     - readout_data
     - plates (cascades to wells via FK)
     - run.qc_metrics
@@ -41,6 +42,7 @@ from cellar.domain.screening_assay.enums import RunStatus
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     MeasuredCurveRepository,
+    MeltingStepRepository,
     ReadoutDataRepository,
     RunRepository,
 )
@@ -64,6 +66,7 @@ class ResetRunDataResult:
     readouts_deleted: int
     curves_deleted: int
     measured_curves_deleted: int
+    melting_steps_deleted: int
 
 
 class ResetRunData:
@@ -74,6 +77,7 @@ class ResetRunData:
         readout_data_repo: ReadoutDataRepository,
         curve_repo: DoseResponseCurveRepository,
         measured_curve_repo: MeasuredCurveRepository,
+        melting_step_repo: MeltingStepRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
@@ -81,6 +85,7 @@ class ResetRunData:
         self._readout_data_repo = readout_data_repo
         self._curve_repo = curve_repo
         self._measured_curve_repo = measured_curve_repo
+        self._melting_step_repo = melting_step_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -120,6 +125,9 @@ class ResetRunData:
             measured_curves_deleted = await self._measured_curve_repo.delete_by_run(
                 input.workspace_id, input.run_id
             )
+            melting_steps_deleted = await self._melting_step_repo.delete_by_run(
+                input.workspace_id, input.run_id
+            )
             run.reset_data(
                 readouts_deleted=readouts_deleted,
                 curves_deleted=curves_deleted,
@@ -137,5 +145,6 @@ class ResetRunData:
                 readouts_deleted=readouts_deleted,
                 curves_deleted=curves_deleted,
                 measured_curves_deleted=measured_curves_deleted,
+                melting_steps_deleted=melting_steps_deleted,
             )
         )

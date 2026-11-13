@@ -302,6 +302,8 @@ class ReadoutDefinitionModel(Base, EntityModelMixin):
     display_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     pick_list_values: Mapped[list | None] = mapped_column(JSONB)
     dose_response_config: Mapped[dict | None] = mapped_column(JSONB)
+    # {"window", "measure", "channel_key", "low", "high"}: computed from melting steps.
+    melt_config: Mapped[dict | None] = mapped_column(JSONB)
 
     protocol: Mapped[ProtocolModel] = relationship(
         "ProtocolModel", back_populates="readout_definitions"
@@ -582,6 +584,35 @@ class MeasuredCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
         CheckConstraint(
             "cardinality(x) = cardinality(y) AND cardinality(x) >= 2",
             name="ck_measured_curve_points",
+        ),
+    )
+
+
+class MeltingStepModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """A melting step (Tm) on one position's trace, with its review state."""
+
+    __tablename__ = "melting_steps"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("runs.id", ondelete="CASCADE"), nullable=False
+    )
+    # No FK (like measured_curves.well_id): removed with its run or on data reset.
+    well_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    channel_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    source: Mapped[str] = mapped_column(String(20), nullable=False)
+    value: Mapped[float] = mapped_column(DOUBLE_PRECISION, nullable=False)
+    instrument_value: Mapped[float | None] = mapped_column(DOUBLE_PRECISION)
+    instrument_label: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(500))
+    changed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        Index("ix_melting_step_run", "run_id"),
+        CheckConstraint("source IN ('instrument', 'manual')", name="ck_melting_step_source"),
+        CheckConstraint(
+            "status IN ('unreviewed', 'accepted', 'rejected')", name="ck_melting_step_status"
         ),
     )
 
