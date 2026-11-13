@@ -58,7 +58,7 @@ class Seeded:
 
 
 async def _seed(session_factory: async_sessionmaker[AsyncSession], ws: uuid.UUID) -> Seeded:
-    """Org, protocol with a °C readout named like the file's first transition, draft run,
+    """Org, protocol with a °C readout named like the file's first onset, draft run,
     and a molecule with identifier ``ABC-0000001`` and one batch."""
     s = Seeded(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
     org_id, protocol_id = uuid.uuid4(), uuid.uuid4()
@@ -70,7 +70,7 @@ async def _seed(session_factory: async_sessionmaker[AsyncSession], ws: uuid.UUID
             sa.text(
                 "INSERT INTO readout_definitions "
                 "(id, protocol_id, name, data_type, unit, display_order, is_calculated) "
-                "VALUES (:id, :proto, 'Inflection Point #1 for Ratio', 'numeric', '°C', 0, false)"
+                "VALUES (:id, :proto, 'Onset #1 for Ratio', 'numeric', '°C', 0, false)"
             ),
             {"id": s.tm1_id, "proto": protocol_id},
         )
@@ -197,14 +197,12 @@ async def test_preview_then_import_then_read_curves(
     assert [b["batch_id"] for b in suggestion["batches"]] == [str(s.batch_id)]
     assert preview["positions"][0]["suggestion"] is None
     assert preview["positions"][2]["label"] == ""
-    transition = next(
-        x for x in preview["series"] if (x["kind"], x["ordinal"]) == ("transition", 1)
-    )
-    assert transition["suggested_readout_definition_id"] == str(s.tm1_id)
-    assert (transition["unit"], transition["count"]) == ("°C", 3)
+    onset = next(x for x in preview["series"] if (x["kind"], x["ordinal"]) == ("onset", 1))
+    assert onset["suggested_readout_definition_id"] == str(s.tm1_id)
+    assert (onset["unit"], onset["count"]) == ("°C", 3)
     assert [c["key"] for c in preview["channels"]] == ["ratio", "f330", "f350", "scattering"]
     assert preview["readouts"] == [
-        {"id": str(s.tm1_id), "name": "Inflection Point #1 for Ratio", "unit": "°C"}
+        {"id": str(s.tm1_id), "name": "Onset #1 for Ratio", "unit": "°C"}
     ]
     assert isinstance(preview["settings"], dict) and preview["warnings"] == []
 
@@ -236,7 +234,7 @@ async def test_preview_then_import_then_read_curves(
     unknown = await client.get(f"/api/v1/runs/{s.run_id}/curves", params={"channel": "nope"})
     assert unknown.status_code == 422
 
-    # The transition value landed as an ordinary readout row for the position,
+    # The onset value landed as an ordinary readout row for the position,
     # carrying batch and molecule.
     assert (
         await _count(session_factory, "readout_data", s.run_id, where="is_computed = false") == 3

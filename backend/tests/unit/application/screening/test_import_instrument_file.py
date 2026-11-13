@@ -78,15 +78,19 @@ CHANNELS = (
 
 
 def _reported(
-    column: int, channel: str = "ratio", kind: str = "transition", value: float = 55.0
+    column: int,
+    channel: str = "ratio",
+    kind: str = "onset",
+    value: float = 55.0,
+    ordinal: int = 1,
 ) -> ReportedValue:
     return ReportedValue(
         row=1,
         column=column,
         channel=channel,
         kind=kind,
-        ordinal=1,
-        label=f"{kind.title()} #1 for {channel.title()}",
+        ordinal=ordinal,
+        label=f"{kind.title()} #{ordinal} for {channel.title()}",
         value=value,
         unit="°C",
     )
@@ -156,7 +160,7 @@ class Harness:
             operator=uuid.uuid4(),
             status=RunStatus.IN_PROGRESS,
         )
-        self.tm1 = _definition("Transition #1 for Ratio")
+        self.tm1 = _definition("Onset #1 for Ratio")
         self.percent = _definition("Percent", "%")
         self.calculated = _definition("Derived", calculated=True)
         self.text = _definition("Comment", None, data_type=ReadoutDataType.TEXT)
@@ -219,7 +223,7 @@ class Harness:
                 row=1, column=3, label="ABC-0000002", batch_id=self.batch2.id, dose=10
             ),
         )
-        self.series = (SeriesMapping("ratio", "transition", 1, self.tm1.id),)
+        self.series = (SeriesMapping("ratio", "onset", 1, self.tm1.id),)
 
     def command(
         self,
@@ -338,7 +342,7 @@ async def test_unmapped_series_stays_on_the_curve_only():
         c for c in h.curve_repo.save_bulk.await_args.args[0] if c.channel_key == "ratio"
     ]
     assert all(c.reported for c in ratio_curves)
-    assert ratio_curves[0].reported[0].label == "Transition #1 for Ratio"
+    assert ratio_curves[0].reported[0].label == "Onset #1 for Ratio"
     h.engine.compute_for_run.assert_not_awaited()
 
 
@@ -469,7 +473,7 @@ async def test_batch_not_in_workspace_is_not_found_and_nothing_written():
 
 async def test_readout_with_different_unit_is_refused():
     h = Harness()
-    series = (SeriesMapping("ratio", "transition", 1, h.percent.id),)
+    series = (SeriesMapping("ratio", "onset", 1, h.percent.id),)
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError)
     assert "°C" in str(failure) and "%" in str(failure)
@@ -484,17 +488,17 @@ async def test_calculated_non_numeric_or_foreign_readout_is_refused(which):
         "text": h.text.id,
         "foreign": uuid.uuid4(),
     }[which]
-    series = (SeriesMapping("ratio", "transition", 1, target),)
+    series = (SeriesMapping("ratio", "onset", 1, target),)
     assert isinstance((await h(h.command(series=series))).failure(), ValidationError)
     h.assert_nothing_written()
 
 
 async def test_two_series_on_one_readout_is_refused():
-    reported = tuple(_reported(c, kind=k) for c in (1, 2, 3) for k in ("transition", "onset"))
+    reported = tuple(_reported(c, ordinal=o) for c in (1, 2, 3) for o in (1, 2))
     h = Harness(export=_export(reported=reported))
     series = (
-        SeriesMapping("ratio", "transition", 1, h.tm1.id),
         SeriesMapping("ratio", "onset", 1, h.tm1.id),
+        SeriesMapping("ratio", "onset", 2, h.tm1.id),
     )
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError)
@@ -506,12 +510,12 @@ async def test_two_series_on_one_readout_is_refused():
 
 
 async def test_two_series_on_one_unknown_readout_name_no_identifier():
-    reported = tuple(_reported(c, kind=k) for c in (1, 2, 3) for k in ("transition", "onset"))
+    reported = tuple(_reported(c, ordinal=o) for c in (1, 2, 3) for o in (1, 2))
     h = Harness(export=_export(reported=reported))
     foreign = uuid.uuid4()
     series = (
-        SeriesMapping("ratio", "transition", 1, foreign),
         SeriesMapping("ratio", "onset", 1, foreign),
+        SeriesMapping("ratio", "onset", 2, foreign),
     )
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError) and str(foreign) not in failure.message
@@ -521,7 +525,7 @@ async def test_two_series_on_one_unknown_readout_name_no_identifier():
 
 async def test_series_not_in_file_is_refused():
     h = Harness()
-    series = (SeriesMapping("ratio", "onset", 2, h.tm1.id),)
+    series = (SeriesMapping("ratio", "onset", 3, h.tm1.id),)
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError)
     # No internal signal key or grouping in the sentence.
@@ -607,7 +611,7 @@ async def test_reported_value_for_undeclared_channel_is_a_warning():
     h = Harness(export=_export(reported=reported))
     result = (await h()).unwrap()
     assert result.warnings == (
-        "Reported value 'Transition #1 for Ghost' belongs to a signal the file has no "
+        "Reported value 'Onset #1 for Ghost' belongs to a signal the file has no "
         "traces for. It is skipped.",
     )
     assert result.values_inserted == 3
@@ -643,3 +647,11 @@ async def test_plate_holder_keeps_the_run_plate_format():
     h.run.plate_format = PlateFormat.F96
     (await h()).unwrap()
     assert h.run.plate_format is PlateFormat.F96
+
+
+async def test_transition_series_cannot_be_mapped():
+    h = Harness(export=_export(reported=tuple(_reported(c, kind="transition") for c in (1, 2, 3))))
+    series = (SeriesMapping("ratio", "transition", 1, h.tm1.id),)
+    failure = (await h(h.command(series=series))).failure()
+    assert isinstance(failure, ValidationError) and "is a melting step" in failure.message
+    h.assert_nothing_written()

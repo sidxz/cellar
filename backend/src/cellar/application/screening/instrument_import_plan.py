@@ -15,6 +15,7 @@ from cellar.application.screening.instrument_export import InstrumentExport
 from cellar.application.screening.run_shape import refuse_if_wellless
 from cellar.domain.screening_assay.enums import ReadoutDataType, RunStatus
 from cellar.domain.screening_assay.holder import position_label, row_letters
+from cellar.domain.screening_assay.melt_window import STEP_KIND
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.repository import ReadoutDataRepository
 from cellar.domain.screening_assay.run import Run
@@ -83,15 +84,21 @@ def readout_mapping_error(
     series: ReportedSeries, definition: ReadoutDefinition | None
 ) -> ValidationError | None:
     """Why ``series`` cannot be written into ``definition``, or None when it can."""
+    if series.kind == STEP_KIND:
+        return ValidationError(
+            f"'{series.label}' is a melting step. Steps are kept on each position and "
+            "compared in temperature windows; they cannot be mapped to a readout."
+        )
     if definition is None:
         return ValidationError(
             f"The readout chosen for '{series.label}' is not on the run's protocol"
         )
     if definition.data_type != ReadoutDataType.NUMERIC:
         return ValidationError(f"Readout '{definition.name}' is not numeric")
-    if definition.is_calculated:
+    if definition.is_derived:
         return ValidationError(
-            f"Readout '{definition.name}' is calculated; values cannot be imported into it"
+            f"Readout '{definition.name}' is calculated or derived; "
+            "values cannot be imported into it"
         )
     series_unit = canonical_unit(series.unit)
     if definition.unit != series_unit:

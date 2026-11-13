@@ -680,7 +680,12 @@ def register_screening(container: Container) -> None:
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
         return CreateReadoutData(
-            uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher], run_repo=run_repo
+            uow,
+            SQLAlchemyReadoutDataRepository(uow),
+            guard,
+            c[EventDispatcher],
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            run_repo=run_repo,
         )
 
     def _readout_query(uc_cls: type):

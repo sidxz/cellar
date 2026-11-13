@@ -68,7 +68,7 @@ CHANNELS = (
 )
 
 
-def _reported(column: int, channel: str = "ratio", kind: str = "transition") -> ReportedValue:
+def _reported(column: int, channel: str = "ratio", kind: str = "onset") -> ReportedValue:
     label = f"{kind.title()} #1 for {channel.title()}"
     return ReportedValue(
         row=1,
@@ -247,7 +247,7 @@ async def test_success_lists_positions_channels_series_and_readouts():
         (1, 3, "ABC-0000002"),
     ]
     assert preview.channels == CHANNELS
-    assert [s.series.key for s in preview.series] == [("ratio", "transition", 1)]
+    assert [s.series.key for s in preview.series] == [("ratio", "onset", 1)]
     assert preview.series[0].series.count == 3
     assert [(r.id, r.name, r.unit) for r in preview.readouts] == [
         (numeric.id, "Melting point", "°C")
@@ -336,8 +336,8 @@ async def test_blank_label_gets_no_suggestion_and_no_lookup():
 
 
 async def test_series_is_prefilled_only_on_name_match():
-    matching = _definition("transition #1 for ratio")
-    reported = (_reported(1), _reported(1, kind="onset"))
+    matching = _definition("onset #1 for ratio")
+    reported = (_reported(1), _reported(1, kind="transition"))
     h = Harness(
         export=_export(("",), reported=reported),
         definitions=[matching, _definition("Onset")],
@@ -345,8 +345,8 @@ async def test_series_is_prefilled_only_on_name_match():
     preview = (await h()).unwrap()
 
     assert [(s.series.key, s.suggested_readout_definition_id) for s in preview.series] == [
-        (("ratio", "transition", 1), matching.id),
-        (("ratio", "onset", 1), None),
+        (("ratio", "onset", 1), matching.id),
+        (("ratio", "transition", 1), None),
     ]
 
 
@@ -357,7 +357,7 @@ async def test_reported_value_for_undeclared_channel_warns_and_is_not_a_series()
 
     assert [s.series.channel for s in preview.series] == ["ratio"]
     assert preview.warnings == (
-        "Reported value 'Transition #1 for Ghost' belongs to a signal the file has no "
+        "Reported value 'Onset #1 for Ghost' belongs to a signal the file has no "
         "traces for. It is skipped.",
     )
 

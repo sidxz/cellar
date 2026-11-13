@@ -47,3 +47,20 @@ class TestCalculatedReadoutError:
 
     def test_none_for_an_empty_mapping(self) -> None:
         assert calculated_readout_error([], {}) is None
+
+
+def test_entry_guard_refuses_melt_readout() -> None:
+    from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
+
+    melt = ReadoutDefinition(
+        protocol_id=uuid.uuid4(),
+        name="Tm (Main)",
+        data_type=ReadoutDataType.NUMERIC,
+        unit="°C",
+        melt_config=MeltReadoutConfig("Main", MeltMeasure.TM, "ratio", 50.0, 85.0),
+    )
+
+    error = calculated_readout_error([("Tm", melt.id)], {melt.id: melt})
+
+    assert isinstance(error, ValidationError)
+    assert "Tm (Main)" in str(error) and "derived" in str(error)

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from types import TracebackType
+from types import SimpleNamespace, TracebackType
 from typing import Self
 from unittest.mock import AsyncMock
 
@@ -19,6 +19,9 @@ from cellar.application.screening.create_readout_data import (
     CreateReadoutDataCommand,
 )
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
+from cellar.domain.screening_assay.enums import ReadoutDataType
+from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
+from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.events import DomainEvent
@@ -50,6 +53,11 @@ class FakeUoW:
         return None
 
 
+_plain = ReadoutDefinition(
+    protocol_id=uuid.uuid4(), name="Plain", data_type=ReadoutDataType.NUMERIC
+)
+
+
 def _make_run(workspace_id: uuid.UUID, *, welled: bool) -> Run:
     run = Run(
         workspace_id=workspace_id,
@@ -64,30 +72,39 @@ def _make_run(workspace_id: uuid.UUID, *, welled: bool) -> Run:
     return run
 
 
-def _build(run: Run) -> tuple[CreateReadoutData, FakeUoW, AsyncMock]:
+def _build(
+    run: Run, definitions: list[ReadoutDefinition] | None = None
+) -> tuple[CreateReadoutData, FakeUoW, AsyncMock]:
     uow = FakeUoW()
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
     run_repo.is_locked = AsyncMock(return_value=False)
     repo = AsyncMock()
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(
+        return_value=SimpleNamespace(readout_definitions=definitions or [_plain])
+    )
     uc = CreateReadoutData(
         uow=uow,  # type: ignore[arg-type]
         repo=repo,
         guard=DataLockGuard(run_repo),
         dispatcher=AsyncMock(),
+        protocol_repo=protocol_repo,
         run_repo=run_repo,
     )
     return uc, uow, repo
 
 
-def _command(run: Run, *, well_id: uuid.UUID | None) -> CreateReadoutDataCommand:
+def _command(
+    run: Run, *, well_id: uuid.UUID | None, readout_id: uuid.UUID | None = None
+) -> CreateReadoutDataCommand:
     return CreateReadoutDataCommand(
         workspace_id=run.workspace_id,
         run_id=run.id,
         well_id=well_id,
         molecule_id=uuid.uuid4(),
         batch_id=uuid.uuid4(),
-        readout_definition_id=uuid.uuid4(),
+        readout_definition_id=readout_id or _plain.id,
         value_numeric=5.0,
     )
 
@@ -134,3 +151,35 @@ class TestCreateReadoutDataRunShape:
         assert result.unwrap().well_id == well_id
         repo.save.assert_awaited_once()
         assert uow.committed
+
+
+class TestCreateReadoutDataDefinition:
+    async def test_refuses_calculated_melt_and_foreign_definitions(self) -> None:
+        calc = ReadoutDefinition(
+            protocol_id=uuid.uuid4(),
+            name="Calc",
+            data_type=ReadoutDataType.NUMERIC,
+            is_calculated=True,
+            calculation_formula="[Plain]",
+        )
+        melt = ReadoutDefinition(
+            protocol_id=uuid.uuid4(),
+            name="Tm (Main)",
+            data_type=ReadoutDataType.NUMERIC,
+            unit="°C",
+            melt_config=MeltReadoutConfig("Main", MeltMeasure.TM, "ratio", 50.0, 85.0),
+        )
+        run = _make_run(uuid.uuid4(), welled=False)
+        auth = FakeAuth(role="editor", workspace_id=run.workspace_id)
+        uc, uow, repo = _build(run, [_plain, calc, melt])
+
+        for rd in (calc, melt):
+            result = await uc(_command(run, well_id=None, readout_id=rd.id), auth=auth)
+            assert isinstance(result.failure(), ValidationError)
+            assert "calculated or derived" in str(result.failure())
+
+        foreign = uuid.uuid4()
+        result = await uc(_command(run, well_id=None, readout_id=foreign), auth=auth)
+        assert str(result.failure()) == f"Readout '{foreign}' is not on this run's protocol"
+        repo.save.assert_not_awaited()
+        assert not uow.committed
