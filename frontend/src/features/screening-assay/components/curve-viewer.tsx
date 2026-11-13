@@ -74,7 +74,7 @@ interface SegmentOption<T extends string> {
   disabled?: boolean;
 }
 
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   label,
   value,
   options,
