@@ -19,6 +19,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.curve_position
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.measured_curve_repository import (  # noqa: E501
     SQLAlchemyMeasuredCurveRepository,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+    SQLAlchemyProtocolRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
     SQLAlchemyRunRepository,
 )
@@ -282,3 +285,22 @@ async def test_other_workspace_or_unknown_protocol_is_none(session_factory, work
     reader = SQLAlchemyCurvePositionReader(session_factory)
     assert await reader.find(uuid.uuid4(), s.protocol_id, run_ids=[s.run_a]) is None
     assert await reader.find(workspace_id, uuid.uuid4()) is None
+
+
+async def test_find_ids_with_measured_curves(session_factory, workspace_id):
+    s = await _seed(session_factory, workspace_id)
+    bare_protocol_id = uuid.uuid4()
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        await _insert_protocol(uow, bare_protocol_id, workspace_id)
+        await uow.commit()
+    async with uow:
+        protocol_repo = SQLAlchemyProtocolRepository(uow)
+        assert await protocol_repo.find_ids_with_measured_curves(
+            workspace_id, [s.protocol_id, bare_protocol_id]
+        ) == {s.protocol_id}
+        assert (
+            await protocol_repo.find_ids_with_measured_curves(uuid.uuid4(), [s.protocol_id])
+            == set()
+        )
+        assert await protocol_repo.find_ids_with_measured_curves(workspace_id, []) == set()

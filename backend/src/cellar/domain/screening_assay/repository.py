@@ -138,6 +138,12 @@ class ProtocolRepository(Protocol):
     async def next_protocol_code(
         self, workspace_id: uuid.UUID, *, prefix: str, width: int
     ) -> str: ...
+    async def find_ids_with_measured_curves(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        """The protocols among ``protocol_ids`` with a run that has measured curves (one query)."""
+        ...
+
     async def find_usages(self, workspace_id: uuid.UUID, protocol_id: uuid.UUID) -> list[str]:
         """What still points at this protocol, one chemist-readable phrase each
         (``'campaign "Test-2" (2 readouts)'``, ``'3 runs'``). Empty when nothing

@@ -443,13 +443,19 @@ class ListProtocolsByProject:
                 protocols = protocols[:effective_limit]
                 next_cursor = str(protocols[-1].id)
 
+            ids = [p.id for p in protocols]
             targets = await self._repo.find_effective_targets_for_protocols(
-                input.workspace_id, [p.id for p in protocols]
+                input.workspace_id, ids
             )
+            with_curves = await self._repo.find_ids_with_measured_curves(input.workspace_id, ids)
             return Success(
                 PageResult(
                     items=[
-                        ProtocolWithTargets(protocol=p, targets=targets.get(p.id, []))
+                        ProtocolWithTargets(
+                            protocol=p,
+                            targets=targets.get(p.id, []),
+                            has_measured_curves=p.id in with_curves,
+                        )
                         for p in protocols
                     ],
                     next_cursor=next_cursor,
