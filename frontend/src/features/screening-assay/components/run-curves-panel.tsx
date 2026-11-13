@@ -51,6 +51,7 @@ export function RunCurvesPanel({
   const failed = !!error && !fetched;
 
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
+  const [showReferences, setShowReferences] = useState(false);
   const set = useMemo(() => (data ? curveSetFromRun(data) : null), [data]);
 
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
@@ -66,6 +67,8 @@ export function RunCurvesPanel({
   return (
     <CurveViewer
       set={set}
+      showReferences={showReferences}
+      onShowReferencesChange={setShowReferences}
       selection={selection}
       onSelectionChange={setSelection}
       onChannelChange={setChannel}

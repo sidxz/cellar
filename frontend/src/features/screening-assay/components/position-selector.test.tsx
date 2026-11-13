@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
+import { EMPTY_SELECTION, type SelectionState, holderOrder } from "../lib/curve-selection";
 import type { RunCurves } from "../types";
 import { PositionSelector } from "./position-selector";
 
@@ -39,6 +39,7 @@ function renderSelector(
       holder={cassette}
       positions={cassettePositions}
       selection={selection}
+      orderedIds={holderOrder(overrides.positions ?? cassettePositions).map((p) => p.well_id)}
       onChange={onChange}
       focusedId={null}
       onFocus={onFocus}
@@ -115,5 +116,44 @@ describe("PositionSelector", () => {
     expect(onFocus).toHaveBeenLastCalledWith("w1");
     fireEvent.mouseLeave(screen.getByRole("button", { name: "Position A1" }));
     expect(onFocus).toHaveBeenLastCalledWith(null);
+  });
+
+  it("dims a filtered-out position and does not let it be clicked", () => {
+    const { onChange } = renderSelector({ disabledIds: new Set(["w2"]) });
+    const slot = screen.getByRole("button", { name: "Position A2" });
+    expect(slot).toBeDisabled();
+    fireEvent.click(slot);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("leaves filtered-out positions out of All and out of a shift range", () => {
+    const anchored = { selected: new Set(["w1"]), anchor: "w1" };
+    const { onChange } = renderSelector({ disabledIds: new Set(["w2"]) }, anchored);
+    fireEvent.click(screen.getByRole("button", { name: "Position A5" }), { shiftKey: true });
+    expect([...onChange.mock.calls[0][0].selected].sort()).toEqual(["w1", "w5"]);
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect([...onChange.mock.calls[1][0].selected].sort()).toEqual(["w1", "w5"]);
+  });
+
+  it("adds its group to a selection from another group with All and removes only its group with None", () => {
+    const other = { selected: new Set(["x9", "w1"]), anchor: null };
+    const { onChange } = renderSelector({}, other);
+    expect(screen.getByText("1 of 3 selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect([...onChange.mock.calls[0][0].selected].sort()).toEqual(["w1", "w2", "w5", "x9"]);
+    fireEvent.click(screen.getByRole("button", { name: "None" }));
+    expect([...onChange.mock.calls[1][0].selected]).toEqual(["x9"]);
+  });
+
+  it("selects a shift range through the ids of other groups", () => {
+    const anchored = { selected: new Set(["x1"]), anchor: "x1" };
+    const { onChange } = renderSelector({ orderedIds: ["x1", "x2", "w1", "w2", "w5"] }, anchored);
+    fireEvent.click(screen.getByRole("button", { name: "Position A2" }), { shiftKey: true });
+    expect([...onChange.mock.calls[0][0].selected].sort()).toEqual(["w1", "w2", "x1", "x2"]);
+  });
+
+  it("shows the heading it is given", () => {
+    renderSelector({ heading: <a href="/somewhere">A run heading</a> });
+    expect(screen.getByRole("link", { name: "A run heading" })).toBeInTheDocument();
   });
 });

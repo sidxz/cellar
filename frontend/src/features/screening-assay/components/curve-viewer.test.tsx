@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { type CurveSet, curveSetFromRun } from "../lib/curve-plot";
+import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import { shortId } from "@/shared/lib/utils";
+import { type CurveGroup, type CurveSet, curveSetFromRun } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
 import type { RunCurves } from "../types";
 
@@ -14,6 +16,10 @@ vi.mock("@/shared/lib/plotly", () => ({
     return <div data-testid="plot" />;
   },
   getPlotlyGlobal: () => ({ downloadImage: vi.fn() }),
+}));
+
+vi.mock("@/shared/hooks/use-workspace-members", () => ({
+  useWorkspaceMembers: () => ({ data: [{ user_id: "u1", name: "A. Person" }] }),
 }));
 
 import { CurveViewer, type CurveViewerProps } from "./curve-viewer";
@@ -56,9 +62,12 @@ function Harness({
   ...rest
 }: { set?: CurveSet; callbacks: Callbacks } & Partial<CurveViewerProps>) {
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
+  const [showReferences, setShowReferences] = useState(false);
   return (
     <CurveViewer
       set={set}
+      showReferences={showReferences}
+      onShowReferencesChange={setShowReferences}
       selection={selection}
       onSelectionChange={(next) => {
         setSelection(next);
@@ -80,6 +89,67 @@ function callbacks(): Callbacks {
     onWindowChange: vi.fn(),
     onSelectionChange: vi.fn(),
   };
+}
+
+const RUN_A = "0a1b2c3d-0000-4000-8000-00000000000a";
+const RUN_B = "0a1b2c3d-0000-4000-8000-00000000000b";
+const UNKNOWN_OPERATOR = "9f8e7d6c-0000-4000-8000-000000000000";
+const LABELS: Record<string, string> = {
+  a1: "Ref A",
+  a2: "Alpha",
+  a3: "Gamma",
+  b1: "Ref B",
+  b2: "Beta",
+  b3: "Delta",
+};
+
+function runGroup(prefix: "a" | "b"): CurveGroup {
+  return {
+    key: prefix === "a" ? RUN_A : RUN_B,
+    run: {
+      runId: prefix === "a" ? RUN_A : RUN_B,
+      runDate: prefix === "a" ? "2026-11-03" : "2026-11-04",
+      operator: prefix === "a" ? "u1" : UNKNOWN_OPERATOR,
+      status: "completed",
+      notes: null,
+    },
+    holder: { kind: "cassette", rows: 1, columns: 3, label: "Holder of 3" },
+    positions: [1, 2, 3].map((column) => ({
+      well_id: `${prefix}${column}`,
+      position: `A${column}`,
+      row: "A",
+      column,
+      well_type: column === 1 ? "reference" : "sample",
+      registration_number: null,
+      position_label: `Position ${column}`,
+      label: LABELS[`${prefix}${column}`],
+      note: null,
+    })),
+  };
+}
+
+// Two runs of three positions, position 1 of each a reference; b3 has no curve.
+const twoRuns: CurveSet = {
+  ...curveSetFromRun(runCurves),
+  groups: [runGroup("a"), runGroup("b")],
+  curves: new Map(
+    ["a1", "a2", "a3", "b1", "b2"].map((id) => [
+      id,
+      { well_id: id, x: [20, 21], y: [1, 2], reported: [] },
+    ]),
+  ),
+};
+
+/** The slot of a position in the selector of group 0 or 1. */
+function slot(group: 0 | 1, column: number) {
+  return screen.getAllByRole("button", { name: `Position ${column}` })[group];
+}
+
+function lastTraces() {
+  return (plotCalls.at(-1)?.data ?? []) as Array<{
+    meta: string;
+    line: { color: string };
+  }>;
 }
 
 beforeEach(() => {
@@ -136,5 +206,121 @@ describe("CurveViewer", () => {
       .getByRole("button", { name: "Position 1" })
       .closest(".flex-1")?.parentElement;
     expect(selectorRow).toContainElement(action);
+  });
+
+  it("draws one selector per run under its heading, with a link to the run", () => {
+    render(<Harness callbacks={callbacks()} set={twoRuns} />);
+    const a = screen.getByRole("link", { name: "2026-11-03 · A. Person · Completed" });
+    expect(a).toHaveAttribute("href", `/assays/runs/${RUN_A}`);
+    const b = screen.getByRole("link", {
+      name: `2026-11-04 · ${shortId(UNKNOWN_OPERATOR)} · Completed`,
+    });
+    expect(b).toHaveAttribute("href", `/assays/runs/${RUN_B}`);
+    expect(screen.getAllByText("0 of 3 selected")).toHaveLength(2);
+  });
+
+  it("selects a shift range that crosses two runs", () => {
+    render(<Harness callbacks={callbacks()} set={twoRuns} />);
+    fireEvent.click(slot(0, 2));
+    fireEvent.click(slot(1, 2), { shiftKey: true });
+    const pressed = (g: 0 | 1, c: number) => slot(g, c).getAttribute("aria-pressed");
+    expect([pressed(0, 1), pressed(0, 2), pressed(0, 3), pressed(1, 1), pressed(1, 2)]).toEqual([
+      "false",
+      "true",
+      "true",
+      "true",
+      "true",
+    ]);
+    expect(screen.getByText("4 selected")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByText("0 selected")).toBeInTheDocument();
+  });
+
+  it("the filter dims positions in the selector and removes them from the table, and leaves the plot alone", () => {
+    render(<Harness callbacks={callbacks()} set={twoRuns} />);
+    fireEvent.click(slot(0, 1));
+    fireEvent.click(slot(0, 2), { metaKey: true });
+    expect(lastTraces()).toHaveLength(2);
+    fireEvent.change(screen.getByPlaceholderText("Filter by label, compound, batch or note"), {
+      target: { value: "alpha" },
+    });
+    expect(slot(0, 1)).toBeDisabled();
+    expect(slot(0, 2)).toBeEnabled();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("Alpha")).toBeInTheDocument();
+    expect(within(table).queryByText("Ref A")).not.toBeInTheDocument();
+    expect(lastTraces().map((t) => t.meta)).toEqual(["a1", "a2"]);
+  });
+
+  it("has a Run column for run groups and none on a set without run information", () => {
+    const { unmount } = render(<Harness callbacks={callbacks()} set={twoRuns} />);
+    fireEvent.click(slot(1, 2));
+    const table = screen.getByRole("table");
+    expect(within(table).getByRole("columnheader", { name: "Run" })).toBeInTheDocument();
+    expect(within(table).getByRole("link", { name: "2026-11-04" })).toHaveAttribute(
+      "href",
+      `/assays/runs/${RUN_B}`,
+    );
+    unmount();
+    render(<Harness callbacks={callbacks()} />);
+    expect(
+      within(screen.getByRole("table")).queryByRole("columnheader", { name: "Run" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("lists a drawn position without a curve as not shown, once loading has finished", () => {
+    const cb = callbacks();
+    const { rerender } = render(<Harness callbacks={cb} set={twoRuns} pending />);
+    fireEvent.click(slot(1, 2));
+    fireEvent.click(slot(1, 3), { metaKey: true });
+    expect(screen.queryByText(/Not shown/)).not.toBeInTheDocument();
+    rerender(<Harness callbacks={cb} set={twoRuns} pending={false} />);
+    expect(
+      screen.getByText("Not shown, no Signal A curve: Position 3 · Delta"),
+    ).toBeInTheDocument();
+  });
+
+  it("draws a reference position added by the switch in the reference colour in Distinct mode", () => {
+    render(<Harness callbacks={callbacks()} set={twoRuns} />);
+    fireEvent.click(slot(1, 2));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Distinct/ }));
+    fireEvent.click(screen.getByRole("switch", { name: "Show each run's reference positions" }));
+    const traces = lastTraces();
+    expect(traces.map((t) => t.meta)).toEqual(["b1", "b2"]);
+    expect(traces[0].line.color).toBe(MEASURED_CURVE_COLORS.dark.reference);
+    expect(traces[1].line.color).toBe(MEASURED_CURVE_COLORS.dark.series[0]);
+    // Not selected, so not a table row.
+    expect(within(screen.getByRole("table")).queryByText("Ref B")).not.toBeInTheDocument();
+  });
+
+  it("asks to narrow the selection above 400 and draws nothing", () => {
+    const many = Array.from({ length: 401 }, (_, i) => ({
+      ...positions[1],
+      well_id: `m${i + 1}`,
+      position: `A${i + 1}`,
+      column: i + 1,
+      position_label: `Position ${i + 1}`,
+    }));
+    const set: CurveSet = {
+      ...curveSetFromRun(runCurves),
+      groups: [
+        {
+          key: "r1",
+          run: null,
+          holder: { kind: "cassette", rows: 1, columns: 401, label: "Holder of 401" },
+          positions: many,
+        },
+      ],
+      curves: new Map(
+        many.map((p) => [p.well_id, { well_id: p.well_id, x: [20, 21], y: [1, 2], reported: [] }]),
+      ),
+    };
+    render(<Harness callbacks={callbacks()} set={set} />);
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(
+      screen.getByText("More than 400 positions are selected. Narrow the selection to draw them."),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PNG" })).toBeDisabled();
   });
 });

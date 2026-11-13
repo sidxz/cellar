@@ -8,7 +8,10 @@ import {
   curveSetFromRun,
   focusIdFromHover,
   orderedPositions,
+  positionsNotShown,
   reportedColumns,
+  runHeading,
+  runsSharingADate,
   tableRows,
 } from "./curve-plot";
 
@@ -269,5 +272,42 @@ describe("table helpers", () => {
       reported: { "k1:1": 20.7 },
     });
     expect(rows[1].note).toBe("bubble");
+  });
+});
+
+describe("run groups", () => {
+  const runA = {
+    runId: "0a1b2c3d-0000-4000-8000-000000000001",
+    runDate: "2026-11-03",
+    operator: "u1",
+    status: "completed",
+    notes: "second attempt, new buffer, longer equilibration before the ramp",
+  };
+  const runB = { ...runA, runId: "0a1b2c3d-0000-4000-8000-000000000002", notes: "first try" };
+  const runC = { ...runA, runId: "0a1b2c3d-0000-4000-8000-000000000003", runDate: "2026-11-04" };
+
+  it("tells two runs on the same date apart by the start of their notes, or by a short id without notes", () => {
+    expect(runHeading(runA, { scientist: "A. Person", sameDate: false })).toBe(
+      "2026-11-03 · A. Person · Completed",
+    );
+    expect(runHeading(runA, { scientist: "A. Person", sameDate: true })).toContain(
+      "second attempt, new buffer",
+    );
+    expect(runHeading(runA, { scientist: "A. Person", sameDate: true })).toBe(
+      `2026-11-03 · A. Person · Completed · ${runA.notes.slice(0, 40)}`,
+    );
+    expect(
+      runHeading({ ...runA, notes: null }, { scientist: "A. Person", sameDate: true }),
+    ).toMatch(/Run [0-9a-f]+$/);
+    expect([...runsSharingADate([runA, runB, runC])]).toEqual([runA.runId, runB.runId]);
+  });
+
+  it("lists drawn positions that have no curve in the set", () => {
+    const set = curveSetFromRun({
+      ...curves,
+      curves: curves.curves.filter((c) => c.well_id !== "w2"),
+    });
+    expect(positionsNotShown(set, ["w1", "w2", "w3"]).map((p) => p.well_id)).toEqual(["w2"]);
+    expect(positionsNotShown(set, ["w1"])).toEqual([]);
   });
 });

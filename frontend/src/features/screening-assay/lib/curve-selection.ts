@@ -1,4 +1,6 @@
-/** Position selection on the Curves tab. Pure; ids are well ids. */
+/** Position selection in the curve viewer. Pure; ids are well ids. */
+
+import type { CurveGroup, CurvePosition } from "./curve-plot";
 
 export interface SelectionState {
   selected: ReadonlySet<string>;
@@ -71,4 +73,41 @@ export function assignColourSlots(
     used.add(free);
   }
   return next;
+}
+
+/** At most this many positions are drawn at once. */
+export const MAX_DRAWN = 400;
+
+/** The selected positions in group then holder order, then, with the switch
+ *  on, every reference position of a group that has a selected position. */
+export function drawnPositionIds(
+  groups: readonly CurveGroup[],
+  selected: ReadonlySet<string>,
+  showReferences: boolean,
+): string[] {
+  const ids = groups
+    .flatMap((g) => g.positions.map((p) => p.well_id))
+    .filter((id) => selected.has(id));
+  if (!showReferences) return ids;
+  const seen = new Set(ids);
+  for (const g of groups) {
+    if (!g.positions.some((p) => selected.has(p.well_id))) continue;
+    for (const p of g.positions) {
+      if (p.well_type === "reference" && !seen.has(p.well_id)) {
+        seen.add(p.well_id);
+        ids.push(p.well_id);
+      }
+    }
+  }
+  return ids;
+}
+
+/** Case-insensitive: the text is in the label, compound name, batch number or
+ *  note. Blank text matches everything. */
+export function matchesFilter(p: CurvePosition, text: string): boolean {
+  const t = text.trim().toLowerCase();
+  if (!t) return true;
+  return [p.label, p.molecule_name, p.batch_number, p.note].some((v) =>
+    v?.toLowerCase().includes(t),
+  );
 }

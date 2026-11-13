@@ -2,14 +2,8 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import { useMemo } from "react";
-import {
-  EMPTY_SELECTION,
-  type SelectionState,
-  applyClick,
-  holderOrder,
-  selectAll,
-} from "../lib/curve-selection";
+import { type ReactNode, useMemo } from "react";
+import { type SelectionState, applyClick, holderOrder } from "../lib/curve-selection";
 import { rowLabel } from "../lib/plate-dimensions";
 import { type RunCurves, WELL_TYPE_LABELS } from "../types";
 
@@ -21,6 +15,12 @@ interface PositionSelectorProps {
   holder: RunCurves["holder"];
   positions: RunCurves["positions"];
   selection: SelectionState;
+  /** Every position of every group, so a shift range can cross groups. */
+  orderedIds: readonly string[];
+  /** Filtered out: dimmed, cannot be clicked. */
+  disabledIds?: ReadonlySet<string>;
+  /** Above the selector, for example the run's heading. */
+  heading?: ReactNode;
   onChange: (next: SelectionState) => void;
   focusedId: string | null;
   onFocus: (id: string | null) => void;
@@ -35,12 +35,34 @@ export function PositionSelector({
   holder,
   positions,
   selection,
+  orderedIds,
+  disabledIds,
+  heading,
   onChange,
   focusedId,
   onFocus,
   colourOf,
 }: PositionSelectorProps) {
-  const orderedIds = useMemo(() => holderOrder(positions).map((p) => p.well_id), [positions]);
+  const groupIds = useMemo(() => holderOrder(positions).map((p) => p.well_id), [positions]);
+  // A shift range skips what the filter hides.
+  const clickableIds = useMemo(
+    () => (disabledIds ? orderedIds.filter((id) => !disabledIds.has(id)) : orderedIds),
+    [orderedIds, disabledIds],
+  );
+  const selectedHere = groupIds.filter((id) => selection.selected.has(id)).length;
+  // All adds this group's selectable positions; None removes this group's.
+  const selectGroup = () =>
+    onChange({
+      selected: new Set([...selection.selected, ...groupIds.filter((id) => !disabledIds?.has(id))]),
+      anchor: null,
+    });
+  const clearGroup = () => {
+    const ids = new Set(groupIds);
+    onChange({
+      selected: new Set([...selection.selected].filter((id) => !ids.has(id))),
+      anchor: null,
+    });
+  };
   const isCassette = holder.kind === "cassette";
   const columns = holder.columns ?? Math.max(0, ...positions.map((p) => p.column));
   const rows = isCassette ? 1 : (holder.rows ?? 1);
@@ -70,6 +92,7 @@ export function PositionSelector({
     }
     const id = p.well_id;
     const on = selection.selected.has(id);
+    const disabled = disabledIds?.has(id) ?? false;
     const focused = focusedId === id;
     const colour = on || focused ? colourOf?.(id) : undefined;
     const mark = ROLE_MARKS[p.well_type];
@@ -78,11 +101,12 @@ export function PositionSelector({
         key={key}
         type="button"
         aria-pressed={on}
+        disabled={disabled}
         data-focused={focused || undefined}
         title={p.label ? `${p.position_label} · ${p.label}` : p.position_label}
         onClick={(e) =>
           onChange(
-            applyClick(selection, orderedIds, id, {
+            applyClick(selection, clickableIds, id, {
               shift: e.shiftKey,
               toggle: e.metaKey || e.ctrlKey,
             }),
@@ -99,6 +123,7 @@ export function PositionSelector({
             ? "h-12 min-w-10 rounded-md px-2 text-xs"
             : "size-8 rounded-full text-[10px] leading-none",
           on && "border-primary bg-primary/10 text-foreground",
+          disabled && "cursor-not-allowed opacity-40 hover:bg-muted/40",
         )}
       >
         <span>{p.position_label}</span>
@@ -128,19 +153,15 @@ export function PositionSelector({
 
   return (
     <div className="space-y-2">
+      {heading && <div className="text-sm">{heading}</div>}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <h3 className="text-sm font-medium">
-          {selection.selected.size} of {orderedIds.length} selected
+          {selectedHere} of {groupIds.length} selected
         </h3>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() => onChange(selectAll(orderedIds))}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={selectGroup}>
           All
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => onChange(EMPTY_SELECTION)}>
+        <Button type="button" variant="ghost" size="sm" onClick={clearGroup}>
           None
         </Button>
         <span className="text-xs text-muted-foreground">

@@ -3,8 +3,15 @@
  *  sends and knows nothing about what a reported value means. */
 
 import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import { shortId } from "@/shared/lib/utils";
 import type { CurveView } from "../hooks/use-run-curves";
-import { type RunCurves, WELL_TYPE_LABELS, type WellType } from "../types";
+import {
+  RUN_STATUS_LABELS,
+  type RunCurves,
+  type RunStatus,
+  WELL_TYPE_LABELS,
+  type WellType,
+} from "../types";
 import { holderOrder } from "./curve-selection";
 
 export type CurvePosition = RunCurves["positions"][number];
@@ -53,6 +60,26 @@ export function curveSetFromRun(data: RunCurves): CurveSet {
     ],
     curves: new Map(data.curves.map((c) => [c.well_id, c])),
   };
+}
+
+/** A run group's heading. Two runs on one date are told apart by the start of
+ *  their notes, or by a short id when a run has none. */
+export function runHeading(
+  run: CurveRunInfo,
+  opts: { scientist: string; sameDate: boolean },
+): string {
+  const status = RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status;
+  const heading = `${run.runDate} · ${opts.scientist} · ${status}`;
+  if (!opts.sameDate) return heading;
+  const notes = run.notes?.trim();
+  return `${heading} · ${notes ? notes.slice(0, 40) : `Run ${shortId(run.runId)}`}`;
+}
+
+/** The ids of the runs that share their date with another run. */
+export function runsSharingADate(runs: readonly CurveRunInfo[]): ReadonlySet<string> {
+  const count = new Map<string, number>();
+  for (const r of runs) count.set(r.runDate, (count.get(r.runDate) ?? 0) + 1);
+  return new Set(runs.filter((r) => (count.get(r.runDate) ?? 0) > 1).map((r) => r.runId));
 }
 
 /** Group order, then holder order. */
@@ -236,8 +263,19 @@ export function reportedColumns(set: CurveSet): ReportedColumn[] {
     .map(({ key, label, unit }) => ({ key, label, unit }));
 }
 
+/** Positions to draw that have no curve in the set, in the order given. */
+export function positionsNotShown(set: CurveSet, drawn: readonly string[]): CurvePosition[] {
+  const byId = new Map(orderedPositions(set).map((p) => [p.well_id, p]));
+  return drawn.flatMap((id) => {
+    const p = byId.get(id);
+    return p && !set.curves.has(id) ? [p] : [];
+  });
+}
+
 export interface CurveTableRow {
   wellId: string;
+  /** The position's run; null on a set without run information. */
+  run: CurveRunInfo | null;
   wellType: string;
   positionLabel: string;
   label: string | null;
@@ -250,20 +288,23 @@ export interface CurveTableRow {
 }
 
 export function tableRows(set: CurveSet, selected: ReadonlySet<string>): CurveTableRow[] {
-  return orderedPositions(set)
-    .filter((p) => selected.has(p.well_id))
-    .map((p) => ({
-      wellId: p.well_id,
-      wellType: p.well_type,
-      positionLabel: p.position_label,
-      label: p.label,
-      compound: p.molecule_name ?? null,
-      batch: p.batch_number ?? null,
-      dose: p.dose ?? null,
-      role: WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type,
-      note: p.note,
-      reported: Object.fromEntries(
-        (set.curves.get(p.well_id)?.reported ?? []).map((r) => [reportedKey(r), r.value]),
-      ),
-    }));
+  return set.groups.flatMap((g) =>
+    g.positions
+      .filter((p) => selected.has(p.well_id))
+      .map((p) => ({
+        wellId: p.well_id,
+        run: g.run,
+        wellType: p.well_type,
+        positionLabel: p.position_label,
+        label: p.label,
+        compound: p.molecule_name ?? null,
+        batch: p.batch_number ?? null,
+        dose: p.dose ?? null,
+        role: WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type,
+        note: p.note,
+        reported: Object.fromEntries(
+          (set.curves.get(p.well_id)?.reported ?? []).map((r) => [reportedKey(r), r.value]),
+        ),
+      })),
+  );
 }

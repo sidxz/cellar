@@ -2,6 +2,8 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
+import { Label } from "@/shared/components/ui/label";
+import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
   TableBody,
@@ -11,18 +13,21 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
-import { cn } from "@/shared/lib/utils";
+import { cn, shortId } from "@/shared/lib/utils";
 import { useTheme } from "next-themes";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import Link from "next/link";
+import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
 import type { CurveView } from "../hooks/use-run-curves";
 import {
   type ColourMode,
   type CurveColouring,
   type CurvePalette,
+  type CurveRunInfo,
   type CurveSet,
   buildCurveFigure,
   currentChannel,
@@ -30,10 +35,21 @@ import {
   focusIdFromHover,
   orderedPositions,
   positionName,
+  positionsNotShown,
   reportedColumns,
+  runHeading,
+  runsSharingADate,
   tableRows,
 } from "../lib/curve-plot";
-import { COLOUR_SLOT_COUNT, type SelectionState, assignColourSlots } from "../lib/curve-selection";
+import {
+  COLOUR_SLOT_COUNT,
+  EMPTY_SELECTION,
+  MAX_DRAWN,
+  type SelectionState,
+  assignColourSlots,
+  drawnPositionIds,
+  matchesFilter,
+} from "../lib/curve-selection";
 import { DOSE_UNIT_LABELS, type DoseUnit } from "../types";
 import { PositionSelector } from "./position-selector";
 
@@ -96,12 +112,31 @@ function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
   );
 }
 
+function runHref(runId: string): string {
+  return `/assays/runs/${runId}`;
+}
+
+/** A run group's heading, linking to the run. Only run groups ask for the
+ *  workspace's members, so the run's own Curves tab never does. */
+function RunHeading({ run, sameDate }: { run: CurveRunInfo; sameDate: boolean }) {
+  const { data: members } = useWorkspaceMembers();
+  const scientist = members?.find((m) => m.user_id === run.operator)?.name ?? shortId(run.operator);
+  return (
+    <Link href={runHref(run.runId)} className="font-medium hover:underline">
+      {runHeading(run, { scientist, sameDate })}
+    </Link>
+  );
+}
+
 function formatValue(v: number | undefined): string {
   return v === undefined ? "" : formatMeasurementValue(v, 4);
 }
 
 export interface CurveViewerProps {
   set: CurveSet;
+  /** Also draw each run's reference positions, for runs with a selected position. */
+  showReferences: boolean;
+  onShowReferencesChange: (on: boolean) => void;
   selection: SelectionState;
   onSelectionChange: (next: SelectionState) => void;
   onChannelChange: (key: string) => void;
@@ -123,6 +158,8 @@ export interface CurveViewerProps {
  *  through a CurveSet; the parent loads the curves. */
 export function CurveViewer({
   set,
+  showReferences,
+  onShowReferencesChange,
   selection,
   onSelectionChange,
   onChannelChange,
@@ -142,12 +179,32 @@ export function CurveViewer({
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [showReported, setShowReported] = useState(true);
   const [colourMode, setColourMode] = useState<ColourMode>("highlight");
+  // Narrows the selector and the table to what is loaded; never asks the server.
+  const [filter, setFilter] = useState("");
+  const switchId = useId();
   const { resolvedTheme } = useTheme();
   const palette: CurvePalette = resolvedTheme === "light" ? "light" : "dark";
   const shownView = view ?? set.view;
 
   const ordered = useMemo(() => orderedPositions(set), [set]);
   const byId = useMemo(() => new Map(ordered.map((p) => [p.well_id, p])), [ordered]);
+  const orderedIds = useMemo(() => ordered.map((p) => p.well_id), [ordered]);
+  const filteredOut = useMemo(
+    () => new Set(ordered.filter((p) => !matchesFilter(p, filter)).map((p) => p.well_id)),
+    [ordered, filter],
+  );
+  const sameDate = useMemo(
+    () => runsSharingADate(set.groups.flatMap((g) => (g.run ? [g.run] : []))),
+    [set.groups],
+  );
+  const hasRuns = set.groups.some((g) => g.run);
+
+  const drawnIds = useMemo(
+    () => drawnPositionIds(set.groups, selection.selected, showReferences),
+    [set.groups, selection.selected, showReferences],
+  );
+  const drawn = useMemo(() => new Set(drawnIds), [drawnIds]);
+  const tooMany = drawnIds.length > MAX_DRAWN;
 
   const changeSelection = (next: SelectionState) => {
     const selectedIds = ordered.filter((p) => next.selected.has(p.well_id)).map((p) => p.well_id);
@@ -168,17 +225,16 @@ export function CurveViewer({
   // the same figure, and the constant uirevision keeps the user's zoom.
   const figure = useMemo(
     () =>
-      buildCurveFigure({
-        set,
-        drawn: selection.selected,
-        showReported,
-        canvas: "screen",
-        ...colouring,
-      }),
-    [set, selection.selected, showReported, colouring],
+      tooMany
+        ? null
+        : buildCurveFigure({ set, drawn, showReported, canvas: "screen", ...colouring }),
+    [tooMany, set, drawn, showReported, colouring],
   );
   const columns = useMemo(() => reportedColumns(set), [set]);
-  const rows = useMemo(() => tableRows(set, selection.selected), [set, selection.selected]);
+  const rows = useMemo(
+    () => tableRows(set, selection.selected).filter((r) => !filteredOut.has(r.wellId)),
+    [set, selection.selected, filteredOut],
+  );
 
   // Plotly fires hover from its own emitter, outside React; flushSync makes
   // the focus render now rather than on some later event.
@@ -196,7 +252,7 @@ export function CurveViewer({
   const exportImage = (format: "png" | "svg") => {
     const exported = buildCurveFigure({
       set,
-      drawn: selection.selected,
+      drawn,
       showReported,
       canvas: "export",
       ...colouring,
@@ -218,19 +274,55 @@ export function CurveViewer({
     setWindowDraft(null);
   };
 
-  const hasTraces = !failed && figure.data.length > 0;
+  const hasTraces = !failed && !!figure && figure.data.length > 0;
   const colours = MEASURED_CURVE_COLORS[palette];
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
   const doseUnit = DOSE_UNIT_LABELS[set.doseUnit as DoseUnit] ?? set.doseUnit;
+  const notShown = pending || tooMany || failed ? [] : positionsNotShown(set, drawnIds);
+  const addedReferences = drawnIds.length > selection.selected.size;
 
   return (
     <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <Input
+          type="search"
+          aria-label="Filter positions"
+          placeholder="Filter by label, compound, batch or note"
+          className="h-8 w-80"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+        <div className="flex items-center gap-2">
+          <Switch id={switchId} checked={showReferences} onCheckedChange={onShowReferencesChange} />
+          <Label htmlFor={switchId} className="text-sm font-normal">
+            Show each run's reference positions
+          </Label>
+        </div>
+      </div>
+
+      {set.groups.length > 1 && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-medium">{selection.selected.size} selected</span>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => changeSelection(EMPTY_SELECTION)}
+          >
+            Clear
+          </Button>
+        </div>
+      )}
+
       {set.groups.map((g, i) => (
         <div key={g.key} className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <PositionSelector
               holder={g.holder}
               positions={g.positions}
+              orderedIds={orderedIds}
+              disabledIds={filteredOut}
+              heading={g.run && <RunHeading run={g.run} sameDate={sameDate.has(g.run.runId)} />}
               selection={selection}
               onChange={changeSelection}
               focusedId={focusedId}
@@ -344,7 +436,7 @@ export function CurveViewer({
         </div>
       </div>
 
-      {hasTraces ? (
+      {hasTraces && figure ? (
         <div className={cn("transition-opacity", pending && "opacity-60")}>
           <Plot
             data={figure.data}
@@ -365,21 +457,38 @@ export function CurveViewer({
         >
           {failed
             ? "Could not load the curves."
-            : selection.selected.size === 0
-              ? "Select positions above to draw their curves"
-              : "The selected positions have no curves for this signal."}
+            : tooMany
+              ? `More than ${MAX_DRAWN} positions are selected. Narrow the selection to draw them.`
+              : selection.selected.size === 0
+                ? "Select positions above to draw their curves"
+                : "The selected positions have no curves for this signal."}
         </div>
+      )}
+
+      {notShown.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Not shown, no {currentChannel(set)?.label ?? set.channel} curve:{" "}
+          {notShown.map(positionName).join(", ")}
+        </p>
       )}
 
       {hasTraces && (
         <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
           {effectiveMode === "distinct" ? (
-            selectedPositions.map((p) => (
-              <span key={p.well_id}>
-                <Swatch line colour={colourOf(p.well_id)} />
-                {positionName(p)}
-              </span>
-            ))
+            <>
+              {selectedPositions.map((p) => (
+                <span key={p.well_id}>
+                  <Swatch line colour={colourOf(p.well_id)} />
+                  {positionName(p)}
+                </span>
+              ))}
+              {addedReferences && (
+                <span>
+                  <Swatch line colour={colours.reference} />
+                  Reference positions
+                </span>
+              )}
+            </>
           ) : (
             <>
               <span>
@@ -406,6 +515,7 @@ export function CurveViewer({
         <Table>
           <TableHeader>
             <TableRow>
+              {hasRuns && <TableHead>Run</TableHead>}
               <TableHead>Position</TableHead>
               <TableHead>Label</TableHead>
               <TableHead>Compound</TableHead>
@@ -423,8 +533,13 @@ export function CurveViewer({
           <TableBody>
             {rows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7 + columns.length} className="text-muted-foreground">
-                  No positions selected.
+                <TableCell
+                  colSpan={(hasRuns ? 8 : 7) + columns.length}
+                  className="text-muted-foreground"
+                >
+                  {selection.selected.size > 0 && filter.trim()
+                    ? "No selected position matches the filter."
+                    : "No positions selected."}
                 </TableCell>
               </TableRow>
             ) : (
@@ -436,6 +551,15 @@ export function CurveViewer({
                   onMouseEnter={() => setFocusedId(r.wellId)}
                   onMouseLeave={() => setFocusedId(null)}
                 >
+                  {hasRuns && (
+                    <TableCell>
+                      {r.run && (
+                        <Link href={runHref(r.run.runId)} className="hover:underline">
+                          {r.run.runDate}
+                        </Link>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell>
                     <Swatch colour={colourOf(r.wellId)} />
                     {r.positionLabel}
