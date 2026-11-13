@@ -7,6 +7,7 @@
 import type { InstrumentImportResponseComputeWarning } from './instrumentImportResponseComputeWarning';
 import type { InstrumentImportResponseAttachmentId } from './instrumentImportResponseAttachmentId';
 import type { InstrumentImportResponseAttachmentWarning } from './instrumentImportResponseAttachmentWarning';
+import type { InstrumentImportResponseStoredFileName } from './instrumentImportResponseStoredFileName';
 
 export interface InstrumentImportResponse {
   reader: string;
@@ -18,4 +19,5 @@ export interface InstrumentImportResponse {
   file_attached: boolean;
   attachment_id: InstrumentImportResponseAttachmentId;
   attachment_warning: InstrumentImportResponseAttachmentWarning;
+  stored_file_name: InstrumentImportResponseStoredFileName;
 }

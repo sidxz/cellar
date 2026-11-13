@@ -34,7 +34,7 @@ import { customInstance } from '.././custom-instance';
  * The run's holder, positions and channels, with the curves of one channel
 (the one asked for, else the first). ``view=derivative`` returns the smoothed first
 derivative instead, calculated on request (``window`` in x units, default 5% of the
-widest x range) and never stored.
+widest x range; a wider window is clamped to that range) and never stored.
  * @summary Get Run Curves
  */
 export const getRunCurvesApiV1RunsRunIdCurvesGet = (

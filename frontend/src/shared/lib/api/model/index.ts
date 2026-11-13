@@ -774,6 +774,7 @@ export * from './instrumentImportResponse';
 export * from './instrumentImportResponseAttachmentId';
 export * from './instrumentImportResponseAttachmentWarning';
 export * from './instrumentImportResponseComputeWarning';
+export * from './instrumentImportResponseStoredFileName';
 export * from './instrumentPositionModel';
 export * from './instrumentPositionModelSuggestion';
 export * from './instrumentPreviewResponse';
