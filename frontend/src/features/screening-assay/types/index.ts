@@ -19,12 +19,15 @@ import type {
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
   PlateMapWellModel,
+  PositionEditRequest,
+  PositionValuesModel,
   ProtocolReferenceResponse,
   ProtocolResponse,
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
   RefitDoseResponseCurveRequest,
+  RelabelPositionsResponse,
   RunCountsResponse as RunCountsResponseModel,
   RunCurvesResponse,
   RunResponse,
@@ -788,3 +791,6 @@ export interface CompoundFlag {
 export type InstrumentPreview = InstrumentPreviewResponse;
 export type InstrumentImportResult = InstrumentImportResponse;
 export type RunCurves = RunCurvesResponse;
+export type PositionValues = PositionValuesModel;
+export type PositionEdit = PositionEditRequest;
+export type RelabelResult = RelabelPositionsResponse;
