@@ -19,6 +19,9 @@ vi.mock("../hooks/use-run-curves", () => ({
 }));
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
 vi.mock("./edit-labelling-dialog", () => ({ EditLabellingDialog: () => null }));
+vi.mock("@/shared/components/data-grid/data-grid", async () => ({
+  DataGrid: (await import("./test-data-grid")).TableGrid,
+}));
 
 const api = vi.fn();
 vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
@@ -28,6 +31,7 @@ vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { RunCurvesPanel } from "./run-curves-panel";
+import { gridRow } from "./test-data-grid";
 
 function position(id: string, column: number, wellType: string, label: string, batch: string) {
   return {
@@ -153,9 +157,11 @@ function renderPanel() {
   );
 }
 
+/** Selects through the results grid, the position picker. */
 async function select(...names: string[]) {
+  await screen.findByRole("heading", { name: "Results" });
   for (const [i, name] of names.entries()) {
-    fireEvent.click(screen.getByRole("button", { name }), { metaKey: i > 0 });
+    fireEvent.click(gridRow(name), { metaKey: i > 0 });
   }
   return screen.findByRole("list", { name: "Melting steps" });
 }

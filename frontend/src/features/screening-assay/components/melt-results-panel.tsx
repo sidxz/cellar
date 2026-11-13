@@ -2,6 +2,7 @@
 
 import { Label } from "@/shared/components/ui/label";
 import { Switch } from "@/shared/components/ui/switch";
+import Link from "next/link";
 import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
@@ -36,6 +37,8 @@ export interface MeltResultsPanelProps {
   headerAction?: ReactNode;
   /** The single chosen window (kept while comparing); null when the signal has none. */
   onLeadWindowChange?: (windowName: string | null) => void;
+  /** The protocol's Design tab, where windows are added; links the no-window note. */
+  designHref?: string;
 }
 
 /** The run's results for the signal on screen: a window picker, the counts
@@ -51,6 +54,7 @@ export function MeltResultsPanel({
   onShowReferencesChange,
   headerAction,
   onLeadWindowChange,
+  designHref,
 }: MeltResultsPanelProps) {
   const [threshold, setThreshold] = useShiftThreshold();
   // The window last chosen by name; kept across signals and used where it exists.
@@ -145,7 +149,15 @@ export function MeltResultsPanel({
           onFilterChange={setFilter}
         />
       ) : (
-        <p className="text-sm text-muted-foreground">{NO_WINDOW}</p>
+        <p className="text-sm text-muted-foreground">
+          {designHref ? (
+            <Link href={designHref} className="underline-offset-4 hover:underline">
+              {NO_WINDOW}
+            </Link>
+          ) : (
+            NO_WINDOW
+          )}
+        </p>
       )}
       <MeltResultsGrid
         rows={ordered}

@@ -248,6 +248,22 @@ export function orderRows(
   return { pinned, body: [...samples, ...rest] };
 }
 
+/** The row to select when the results open: the first sample needing review
+ *  (several steps or no step), else the largest |ΔTm|, else the first sample,
+ *  else the first position. Grid order, so the pick is the row seen first. */
+export function firstToSelect(
+  rows: readonly ResultRow[],
+  windowNames: readonly string[],
+): string | null {
+  const { body } = orderRows(rows, windowNames);
+  const review = body.find((r) => {
+    const s = r.isSample ? worstStatus(r, windowNames) : null;
+    return s === "several_steps" || s === "no_step";
+  });
+  // Samples lead the body, largest |ΔTm| first, then the rest in position order.
+  return (review ?? body.find((r) => r.isSample) ?? rows[0])?.wellId ?? null;
+}
+
 export function matchesFilter(
   row: ResultRow,
   windowNames: readonly string[],

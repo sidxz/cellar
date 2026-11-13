@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
-import type { RunCurves } from "../types";
+import type { MeltWindowPosition, MeltingAnalysis, RunCurves } from "../types";
 
 const plotCalls: Array<{ data: Array<Record<string, unknown>>; layout: Record<string, unknown> }> =
   [];
@@ -20,9 +20,16 @@ vi.mock("../hooks/use-run-curves", () => ({
   useRunCurves: (...args: unknown[]) => useRunCurves(...args),
 }));
 
-// Melting steps are covered in melting-steps-panel.test.tsx; here the run has none loaded.
+// Melting steps are covered in melting-steps-panel.test.tsx. Without an
+// analysis (it failed to load) the viewer keeps its own position selector.
+const melting: { data?: MeltingAnalysis; isLoading?: boolean } = {};
 vi.mock("../hooks/use-melting-analysis", () => ({
-  useMeltingAnalysis: () => ({ data: undefined, refetch: vi.fn() }),
+  useMeltingAnalysis: () => ({ ...melting, refetch: vi.fn() }),
+  useAddMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
+  useReviewMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@/shared/components/data-grid/data-grid", async () => ({
+  DataGrid: (await import("./test-data-grid")).TableGrid,
 }));
 
 const canEdit = { value: true };
@@ -33,6 +40,7 @@ vi.mock("./edit-labelling-dialog", () => ({
 }));
 
 import { RunCurvesPanel } from "./run-curves-panel";
+import { gridRow } from "./test-data-grid";
 
 const positions = Array.from({ length: 9 }, (_, i) => ({
   well_id: `w${i + 1}`,
@@ -73,6 +81,45 @@ const curves: RunCurves = {
   window: null,
 };
 
+const RUN = { id: "r1", protocol_id: "p1", status: "draft", is_locked: false } as const;
+
+type Cell = Partial<Omit<MeltWindowPosition, "well_id">>;
+/** An analysis with one window "Main" on signal a; `cells` by well id. */
+function withAnalysis(cells: Record<string, Cell>, windows = 1) {
+  const win = (name: string) => ({
+    window: name,
+    channel_key: "a",
+    low: 30,
+    high: 90,
+    tm_readout_id: null,
+    delta_tm_readout_id: null,
+    reference_tm: 60,
+    reference_count: 1,
+    flags: [],
+    positions: positions.map((p) => ({
+      well_id: p.well_id,
+      tm: null,
+      delta_tm: null,
+      flags: [],
+      ...cells[p.well_id],
+    })),
+  });
+  melting.data = {
+    run_id: "r1",
+    edit_refusal: null,
+    steps: [],
+    windows: windows ? [win("Main")] : [],
+    step_checks: [],
+  };
+}
+
+const selectedRows = () =>
+  [...document.querySelectorAll("tr[data-row-id]")]
+    .filter((tr) => tr.className.includes("bg-primary/10"))
+    .map((tr) => tr.getAttribute("data-row-id"));
+
+const drawnWells = () => lastPlot().data.map((t) => t.meta);
+
 function lastParams() {
   return useRunCurves.mock.calls.at(-1)?.[1];
 }
@@ -85,6 +132,8 @@ function lastPlot() {
 
 beforeEach(() => {
   canEdit.value = true;
+  melting.data = undefined;
+  melting.isLoading = false;
   plotCalls.length = 0;
   downloadImage.mockReset();
   useRunCurves.mockReset();
@@ -292,16 +341,14 @@ describe("RunCurvesPanel", () => {
   });
 
   it("offers Edit labelling beside the selector, disabled with the reason on a locked run", () => {
-    const { unmount } = render(
-      <RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />,
-    );
+    const { unmount } = render(<RunCurvesPanel runId="r1" run={RUN} />);
     const button = screen.getByRole("button", { name: "Edit labeling" });
     expect(button).toBeEnabled();
     fireEvent.click(button);
     expect(screen.getByTestId("edit-labelling")).toBeInTheDocument();
     unmount();
 
-    render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: true }} />);
+    render(<RunCurvesPanel runId="r1" run={{ ...RUN, is_locked: true }} />);
     const locked = screen.getByRole("button", { name: "Edit labeling" });
     expect(locked).toBeDisabled();
     expect(locked).toHaveAttribute("title", "The run is locked.");
@@ -309,12 +356,96 @@ describe("RunCurvesPanel", () => {
 
   it("does not offer Edit labelling to a viewer", () => {
     canEdit.value = false;
-    render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />);
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
     expect(screen.queryByRole("button", { name: "Edit labeling" })).not.toBeInTheDocument();
   });
 
   it("does not offer Edit labelling without a run", () => {
     render(<RunCurvesPanel runId="r1" />);
     expect(screen.queryByRole("button", { name: "Edit labeling" })).not.toBeInTheDocument();
+  });
+
+  describe("with the results", () => {
+    it("selects the first position needing review on load", () => {
+      withAnalysis({
+        w2: { tm: 59, delta_tm: -1 },
+        w3: { flags: ["no_step_in_window"] },
+        w4: { tm: 65, delta_tm: 5 },
+        w5: { flags: ["several_steps_in_window"] },
+      });
+      render(<RunCurvesPanel runId="r1" />);
+      expect(selectedRows()).toEqual(["w3"]);
+      expect(screen.queryByRole("button", { name: "Position 3" })).not.toBeInTheDocument();
+    });
+
+    it("falls back to the largest shift, then the first sample", () => {
+      withAnalysis({
+        w2: { tm: 59, delta_tm: -1 },
+        w4: { tm: 65, delta_tm: 5 },
+        w6: { tm: 53, delta_tm: -7 },
+      });
+      const { unmount } = render(<RunCurvesPanel runId="r1" />);
+      expect(selectedRows()).toEqual(["w6"]);
+      unmount();
+
+      withAnalysis({});
+      render(<RunCurvesPanel runId="r1" />);
+      expect(selectedRows()).toEqual(["w2"]);
+    });
+
+    it("reference traces are on by default", () => {
+      withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
+      render(<RunCurvesPanel runId="r1" />);
+      expect(screen.getByRole("switch", { name: "Reference traces" })).toBeChecked();
+      expect(drawnWells()).toEqual(expect.arrayContaining(["w1", "w2"]));
+    });
+
+    it("filtering keeps the selection", () => {
+      withAnalysis({ w2: { tm: 55, delta_tm: -5 }, w3: { flags: ["no_step_in_window"] } });
+      render(<RunCurvesPanel runId="r1" />);
+      expect(selectedRows()).toEqual(["w3"]);
+      fireEvent.click(screen.getByRole("button", { name: "1 down" }));
+      expect(document.querySelector('tr[data-row-id="w3"]')).toBeNull();
+      expect(drawnWells()).toContain("w3");
+    });
+
+    it("hints at the results when nothing is selected", () => {
+      withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
+      render(<RunCurvesPanel runId="r1" />);
+      expect(
+        screen.queryByText("Select a sample in the results to see its trace and steps."),
+      ).not.toBeInTheDocument();
+      fireEvent.click(gridRow("Position 2"), { metaKey: true });
+      expect(selectedRows()).toEqual([]);
+      expect(
+        screen.getByText("Select a sample in the results to see its trace and steps."),
+      ).toBeInTheDocument();
+    });
+
+    it("edit labeling sits in the results header", () => {
+      withAnalysis({});
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      const results = screen.getByRole("heading", { name: "Results" }).closest("section");
+      if (!results) throw new Error("no results section");
+      expect(within(results).getByRole("button", { name: "Edit labeling" })).toBeEnabled();
+      expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
+    });
+
+    it("links the no-window note to the protocol's Design tab", () => {
+      withAnalysis({}, 0);
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      expect(
+        screen.getByRole("link", {
+          name: "No temperature window on this signal — add one on the protocol's Design tab",
+        }),
+      ).toHaveAttribute("href", "/assays/protocols/p1#design");
+    });
+
+    it("shows a placeholder while the results load", () => {
+      melting.isLoading = true;
+      render(<RunCurvesPanel runId="r1" />);
+      expect(screen.getByTestId("results-loading")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Position 1" })).not.toBeInTheDocument();
+    });
   });
 });

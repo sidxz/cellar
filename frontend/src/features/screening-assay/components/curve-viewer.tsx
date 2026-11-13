@@ -628,7 +628,9 @@ function CurveViewerBody({
             : tooMany
               ? `More than ${MAX_DRAWN} positions would be plotted. ${showReferences ? "Select fewer positions or turn off reference positions." : "Select fewer positions."}`
               : selectedIds.length === 0
-                ? "Select positions above to draw their traces"
+                ? hideSelector
+                  ? "No sample selected"
+                  : "Select positions above to draw their traces"
                 : pending
                   ? "Loading traces…"
                   : set.view === "derivative"
