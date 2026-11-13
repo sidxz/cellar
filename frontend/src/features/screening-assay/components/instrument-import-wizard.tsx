@@ -121,9 +121,12 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
           {step === 2 && preview && (
             <LabellingTable
               rows={w.draft.positions}
+              runId={runId}
               doseUnit={DOSE_UNIT_LABELS[preview.dose_unit as DoseUnit] ?? preview.dose_unit}
               onUpdate={w.updatePosition}
               onSetRole={w.setRole}
+              onReplaceRows={w.replacePositions}
+              templateName="labelling-template.csv"
               showUse
               hints={hints}
               problem={labellingProblem(w.draft)}

@@ -30,6 +30,8 @@ export interface UseInstrumentImportWizardResult {
   handleFile: (f: File) => void;
   updatePosition: (key: string, patch: Partial<PositionDraft>) => void;
   setRole: (keys: ReadonlySet<string>, wellType: WellType) => void;
+  /** The positions after a layout file was applied. */
+  replacePositions: (rows: PositionDraft[]) => void;
   setSeriesReadout: (key: string, readoutId: string | null) => void;
   setStep: (s: 1 | 2 | 3 | 4) => void;
   handleImport: () => void;
@@ -107,6 +109,10 @@ export function useInstrumentImportWizard({
     setDraft((d) => setRoleForPositions(d, keys, wellType));
   }, []);
 
+  const replacePositions = useCallback((rows: PositionDraft[]) => {
+    setDraft((d) => ({ ...d, positions: rows }));
+  }, []);
+
   const setSeriesReadout = useCallback((key: string, readoutId: string | null) => {
     setDraft((d) => ({ ...d, readoutBySeries: { ...d.readoutBySeries, [key]: readoutId } }));
   }, []);
@@ -141,6 +147,7 @@ export function useInstrumentImportWizard({
     handleFile,
     updatePosition,
     setRole,
+    replacePositions,
     setSeriesReadout,
     setStep,
     handleImport,

@@ -139,6 +139,7 @@ function EditLabellingBody({
       <div className="flex min-h-0 min-w-0 flex-col gap-3">
         <LabellingTable
           rows={rows}
+          runId={run.id}
           doseUnit={doseUnit}
           onUpdate={(key, patch) =>
             edit((rs) => rs.map((r) => (r.key === key ? { ...r, ...patch } : r)))
@@ -146,6 +147,8 @@ function EditLabellingBody({
           onSetRole={(keys: ReadonlySet<string>, wellType: WellType) =>
             edit((rs) => setRoleForRows(rs, keys, wellType))
           }
+          onReplaceRows={(filled) => edit(() => filled)}
+          templateName="labelling-template.csv"
           showUse={false}
           calculatedLocked={calculatedLockedReason(run)}
           problem={problem}

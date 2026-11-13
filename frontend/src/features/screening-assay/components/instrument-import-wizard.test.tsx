@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { UseInstrumentImportWizardResult } from "../hooks/use-instrument-import-wizard";
 import { draftFromPreview } from "../lib/instrument-labelling";
-import type { InstrumentImportResult, InstrumentPreview } from "../types";
+import type { InstrumentImportResult, InstrumentPreview, LayoutFile } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
 // hasPointerCapture on its items — jsdom ships neither.
@@ -30,6 +30,15 @@ vi.mock("@/features/inventory/components/molecule-selector", () => ({
 vi.mock("@/features/inventory/components/batch-selector", () => ({
   BatchSelector: () => <span>batch picker</span>,
 }));
+
+type ResolveOptions = { onSuccess?: (f: LayoutFile) => void; onError?: (e: unknown) => void };
+const resolve = vi.hoisted(() => ({
+  mutate: vi.fn<(vars: { file: File }, opts?: ResolveOptions) => void>(),
+  isPending: false,
+}));
+vi.mock("../hooks/use-layout-file", () => ({ useResolveLayoutFile: () => resolve }));
+const download = vi.hoisted(() => ({ saveText: vi.fn() }));
+vi.mock("@/shared/lib/api/download", () => download);
 
 import { InstrumentImportWizard } from "./instrument-import-wizard";
 
@@ -104,6 +113,7 @@ function baseHook(
     handleFile: vi.fn(),
     updatePosition: vi.fn(),
     setRole: vi.fn(),
+    replacePositions: vi.fn(),
     setSeriesReadout: vi.fn(),
     setStep: vi.fn(),
     handleImport: vi.fn(),
@@ -242,6 +252,53 @@ describe("InstrumentImportWizard", () => {
     renderWizard();
     expect(
       screen.getByText(/the original file is on the files tab as run \(2\)\.xlsx/i),
+    ).toBeInTheDocument();
+  });
+
+  it("offers a template with a Use column", () => {
+    download.saveText.mockReset();
+    hookState.value = withPreview(2);
+    renderWizard();
+    fireEvent.click(screen.getByRole("button", { name: "Download template" }));
+    const [csv, name] = download.saveText.mock.calls[0] as [string, string];
+    expect(csv.split("\r\n")[0]).toBe(
+      "\uFEFFPosition,Label,Role,Compound,Batch,Concentration (µM),Note,Use",
+    );
+    expect(csv.split("\r\n")[1]).toBe("Position 1,ABC-0000001,Sample,REG-0001,B-1,,,Yes");
+    expect(name.endsWith(".csv")).toBe(true);
+  });
+
+  it("puts the rows filled from a file in the draft", () => {
+    const replacePositions = vi.fn();
+    hookState.value = withPreview(2, { replacePositions });
+    const { container } = renderWizard();
+    resolve.mutate.mockImplementation((_vars, opts) =>
+      opts?.onSuccess?.({
+        rows: [
+          {
+            position: "Position 3",
+            label: null,
+            note: null,
+            well_type: null,
+            dose: 5,
+            use: false,
+            compound: null,
+            problems: [],
+          },
+        ],
+        unrecognised_columns: [],
+      }),
+    );
+    const input = container.ownerDocument.querySelector(
+      'input[type="file"][accept=".csv,.xlsx"]',
+    ) as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "layout.csv")] } });
+    const filled = replacePositions.mock.calls[0][0];
+    expect(filled[2]).toMatchObject({ row: 1, column: 3, dose: "5", used: false });
+    expect(
+      screen.getByText(
+        "Filled 1 position from layout.csv. Nothing is saved until you press Import.",
+      ),
     ).toBeInTheDocument();
   });
 });

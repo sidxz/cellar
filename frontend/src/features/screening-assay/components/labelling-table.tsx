@@ -1,7 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Download, Upload, X } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
 
 import { BatchSelector } from "@/features/inventory/components/batch-selector";
 import { MoleculeSelector } from "@/features/inventory/components/molecule-selector";
@@ -16,8 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { saveText } from "@/shared/lib/api/download";
 import { cn } from "@/shared/lib/utils";
+import { apiReason } from "../hooks/use-instrument-import-wizard";
+import { useResolveLayoutFile } from "../hooks/use-layout-file";
 import { type LabellingRow, parseDose } from "../lib/labelling-rows";
+import { applyLayout, layoutTemplateCsv } from "../lib/layout-file";
 import { WELL_TYPE_LABELS, type WellType } from "../types";
 
 const WELL_TYPES = Object.keys(WELL_TYPE_LABELS) as WellType[];
@@ -49,12 +53,18 @@ export function Notice({ tone, children }: { tone: "ok" | "warn" | "bad"; childr
   );
 }
 
-export interface LabellingTableProps {
-  rows: readonly LabellingRow[];
+export interface LabellingTableProps<T extends LabellingRow = LabellingRow> {
+  rows: readonly T[];
+  /** The run a layout file is read for. */
+  runId: string;
   /** Printed as given. */
   doseUnit: string;
   onUpdate: (key: string, patch: Partial<LabellingRow>) => void;
   onSetRole: (keys: ReadonlySet<string>, wellType: WellType) => void;
+  /** The table after a layout file was applied. */
+  onReplaceRows: (rows: T[]) => void;
+  /** File name of the layout template, ending in .csv. */
+  templateName: string;
   /** The Use column, "Mark unused" and "Use again". */
   showUse: boolean;
   /** When set, Role, Compound, Batch and Concentration are read-only and this
@@ -68,16 +78,19 @@ export interface LabellingTableProps {
 
 /** One row per position: label, role, compound and batch, concentration and
  *  note, with bulk role and (optionally) marking positions unused. */
-export function LabellingTable({
+export function LabellingTable<T extends LabellingRow>({
   rows,
+  runId,
   doseUnit: unit,
   onUpdate,
   onSetRole,
+  onReplaceRows,
+  templateName,
   showUse,
   calculatedLocked,
   hints,
   problem,
-}: LabellingTableProps) {
+}: LabellingTableProps<T>) {
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [bulkRole, setBulkRole] = useState<WellType>("sample");
   const locked = !!calculatedLocked;
@@ -85,6 +98,12 @@ export function LabellingTable({
   const selectable = showUse || !locked;
   const allKeys = rows.map((r) => r.key);
   const allSelected = allKeys.length > 0 && selected.size === allKeys.length;
+  const layout = useLayoutFile(runId, rows, onReplaceRows, {
+    allowUse: showUse,
+    calculatedLocked: locked,
+    // Only the wizard can add or remove positions; it stores on Import, Edit labelling on Save.
+    saveButton: showUse ? "Import" : "Save",
+  });
 
   const toggle = (key: string, on: boolean) =>
     setSelected((s) => {
@@ -143,7 +162,38 @@ export function LabellingTable({
         <span className="ml-auto text-xs text-muted-foreground">
           Concentration is in {unit}, the protocol&apos;s dose unit
         </span>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            saveText(layoutTemplateCsv(rows, { doseUnit: unit, withUse: showUse }), templateName)
+          }
+        >
+          <Download className="h-4 w-4" /> Download template
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={layout.reading}
+          onClick={() => layout.inputRef.current?.click()}
+        >
+          <Upload className="h-4 w-4" /> {layout.reading ? "Reading…" : "Fill from file"}
+        </Button>
+        <input
+          ref={layout.inputRef}
+          type="file"
+          accept=".csv,.xlsx"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            // Cleared, so choosing the same file again reads it again.
+            e.target.value = "";
+            if (file) layout.read(file);
+          }}
+        />
       </div>
+
+      <LayoutMessages outcome={layout.outcome} />
 
       {locked && <p className="text-sm text-muted-foreground">{calculatedLocked}</p>}
 
@@ -203,6 +253,87 @@ export function LabellingTable({
       {problem && (
         <output className="block text-sm text-destructive">To continue, correct {problem}</output>
       )}
+    </div>
+  );
+}
+
+type LayoutOutcome =
+  | { kind: "refused"; message: string }
+  | {
+      kind: "applied";
+      fileName: string;
+      filled: number;
+      problems: string[];
+      notices: string[];
+      saveButton: string;
+    };
+
+/** Fill from file: send the file (reading changes nothing stored), apply the answer to the
+ *  rows as they are when it arrives, and keep what to tell the user about it. */
+function useLayoutFile<T extends LabellingRow>(
+  runId: string,
+  rows: readonly T[],
+  onReplaceRows: (rows: T[]) => void,
+  opts: { allowUse: boolean; calculatedLocked: boolean; saveButton: string },
+) {
+  const resolve = useResolveLayoutFile(runId);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [outcome, setOutcome] = useState<LayoutOutcome | null>(null);
+  const latest = useRef({ rows, onReplaceRows, opts });
+  latest.current = { rows, onReplaceRows, opts };
+
+  const read = (file: File) => {
+    setOutcome(null);
+    resolve.mutate(
+      { file },
+      {
+        onSuccess: (answer) => {
+          const { rows: now, onReplaceRows: replace, opts: o } = latest.current;
+          const applied = applyLayout(now, answer, o);
+          if (applied.filled > 0) replace(applied.rows);
+          setOutcome({
+            kind: "applied",
+            fileName: file.name,
+            saveButton: o.saveButton,
+            ...applied,
+          });
+        },
+        onError: (e) => setOutcome({ kind: "refused", message: apiReason(e) }),
+      },
+    );
+  };
+  return { inputRef, read, reading: resolve.isPending, outcome };
+}
+
+function LayoutMessages({ outcome }: { outcome: LayoutOutcome | null }) {
+  if (!outcome) return null;
+  if (outcome.kind === "refused") return <Notice tone="bad">{outcome.message}</Notice>;
+  const { fileName, filled, problems, notices, saveButton } = outcome;
+  return (
+    <div className="flex flex-col gap-2">
+      <Notice tone="ok">
+        Filled {filled} position{filled === 1 ? "" : "s"} from {fileName}. Nothing is saved until
+        you press {saveButton}.
+      </Notice>
+      {problems.length > 0 && (
+        <Notice tone="warn">
+          <p className="font-medium">
+            {problems.length === 1 ? "1 row needs" : `${problems.length} rows need`} attention
+          </p>
+          <ul className="mt-1 list-disc pl-5">
+            {problems.map((line, i) => (
+              // A file can repeat the same line, so the index keeps keys unique.
+              // biome-ignore lint/suspicious/noArrayIndexKey: lines are static per outcome
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+        </Notice>
+      )}
+      {notices.map((notice) => (
+        <Notice key={notice} tone="warn">
+          {notice}
+        </Notice>
+      ))}
     </div>
   );
 }
@@ -321,7 +452,15 @@ function PositionRow({
               variant="ghost"
               className="h-6 w-6"
               aria-label={`Change compound for ${p.positionLabel}`}
-              onClick={() => onUpdate({ moleculeId: null, moleculeName: null, batchId: null })}
+              onClick={() =>
+                onUpdate({
+                  moleculeId: null,
+                  moleculeName: null,
+                  moleculeRef: null,
+                  batchId: null,
+                  batchNumber: null,
+                })
+              }
             >
               <X className="h-3.5 w-3.5" />
             </Button>
@@ -335,7 +474,9 @@ function PositionRow({
                 onUpdate({
                   moleculeId: id,
                   moleculeName: mol?.name ?? null,
+                  moleculeRef: mol?.registration_number ?? null,
                   batchId: null,
+                  batchNumber: null,
                 })
               }
             />
@@ -352,7 +493,9 @@ function PositionRow({
             <BatchSelector
               moleculeId={p.moleculeId}
               selectedId={p.batchId}
-              onSelect={(batchId) => onUpdate({ batchId })}
+              onSelect={(batchId, batch) =>
+                onUpdate({ batchId, batchNumber: batch?.batch_number ?? null })
+              }
             />
             {!p.batchId && (
               <Badge

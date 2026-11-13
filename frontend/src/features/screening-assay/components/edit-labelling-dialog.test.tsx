@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { valuesOf } from "../lib/position-edits";
-import type { RelabelResult, Run, RunCurves } from "../types";
+import type { LayoutFile, RelabelResult, Run, RunCurves } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
 // hasPointerCapture on its items — jsdom ships neither.
@@ -42,6 +42,15 @@ vi.mock("@/features/inventory/components/molecule-selector", () => ({
 vi.mock("@/features/inventory/components/batch-selector", () => ({
   BatchSelector: () => <span>batch picker</span>,
 }));
+
+type ResolveOptions = { onSuccess?: (f: LayoutFile) => void; onError?: (e: unknown) => void };
+const resolve = vi.hoisted(() => ({
+  mutate: vi.fn<(vars: { file: File }, opts?: ResolveOptions) => void>(),
+  isPending: false,
+}));
+vi.mock("../hooks/use-layout-file", () => ({ useResolveLayoutFile: () => resolve }));
+const download = vi.hoisted(() => ({ saveText: vi.fn() }));
+vi.mock("@/shared/lib/api/download", () => download);
 
 import { EditLabellingDialog } from "./edit-labelling-dialog";
 
@@ -246,5 +255,42 @@ describe("EditLabellingDialog", () => {
       expect(label("Position 2")).toHaveValue("mine");
       expect(save()).toBeEnabled();
     });
+  });
+
+  it("offers a template without a Use column, and a filled table counts as changes to save", () => {
+    download.saveText.mockReset();
+    const { container } = renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: "Download template" }));
+    const csv = download.saveText.mock.calls[0][0] as string;
+    expect(csv.split("\r\n")[0]).toBe(
+      "\uFEFFPosition,Label,Role,Compound,Batch,Concentration (µM),Note",
+    );
+    expect(save()).toBeDisabled();
+    resolve.mutate.mockImplementation((_vars, opts) =>
+      opts?.onSuccess?.({
+        rows: [
+          {
+            position: "Position 2",
+            label: "from file",
+            note: null,
+            well_type: null,
+            dose: null,
+            use: null,
+            compound: null,
+            problems: [],
+          },
+        ],
+        unrecognised_columns: [],
+      }),
+    );
+    const input = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { files: [new File(["x"], "layout.csv")] } });
+    expect(label("Position 2")).toHaveValue("from file");
+    expect(screen.getByText("1 position changed")).toBeInTheDocument();
+    expect(
+      screen.getByText("Filled 1 position from layout.csv. Nothing is saved until you press Save."),
+    ).toBeInTheDocument();
+    expect(save()).toBeEnabled();
+    expect(mutate).not.toHaveBeenCalled();
   });
 });
