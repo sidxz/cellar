@@ -20,7 +20,6 @@ export interface PositionDraft {
   moleculeId: string | null;
   moleculeName: string | null;
   batchId: string | null;
-  batchOptions: { batch_id: string; batch_number: string }[];
   /** Text while editing; parsed in {@link buildLabelling}. */
   dose: string;
 }
@@ -59,7 +58,6 @@ export function draftFromPreview(preview: InstrumentPreview): LabellingDraft {
       moleculeName: p.suggestion?.molecule_name ?? null,
       // Only what the API pre-selected; several batches means the user chooses.
       batchId: p.suggestion?.batch_id ?? null,
-      batchOptions: p.suggestion?.batches ?? [],
       dose: "",
     })),
     readoutBySeries: Object.fromEntries(
@@ -106,17 +104,33 @@ function parseDose(text: string): number | null | undefined {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
+/** Why the draft cannot be imported yet, naming the first used position that holds an
+ *  invalid value, or null when it can. */
+export function labellingProblem(draft: LabellingDraft): string | null {
+  for (const p of draft.positions) {
+    if (!p.used) continue;
+    if (parseDose(p.dose) === undefined) {
+      return `${p.positionLabel}: the concentration must be a number, 0 or more.`;
+    }
+    if (p.label.length > MAX_LABEL) {
+      return `${p.positionLabel}: the label is longer than ${MAX_LABEL} characters.`;
+    }
+    if (p.note.length > MAX_NOTE) {
+      return `${p.positionLabel}: the note is longer than ${MAX_NOTE} characters.`;
+    }
+  }
+  return null;
+}
+
 /** The `labelling` payload, or null while a used position holds an invalid value. */
 export function buildLabelling(
   draft: LabellingDraft,
   preview: InstrumentPreview,
 ): InstrumentLabelling | null {
+  if (labellingProblem(draft) !== null) return null;
   const positions: InstrumentLabelling["positions"] = [];
   for (const p of draft.positions) {
     const dose = parseDose(p.dose);
-    if (p.used && (dose === undefined || p.label.length > MAX_LABEL || p.note.length > MAX_NOTE)) {
-      return null;
-    }
     positions.push({
       row: p.row,
       column: p.column,
@@ -156,6 +170,15 @@ export function labellingSummary(
   };
 }
 
+/** Why the run cannot take an instrument file, or null when it can. */
+export function instrumentFileRefusal(run: Pick<Run, "is_locked" | "status">): string | null {
+  if (run.is_locked) return "The run is locked.";
+  if (run.status !== "draft" && run.status !== "in_progress") {
+    return "Only draft or in-progress runs accept an instrument file.";
+  }
+  return null;
+}
+
 export function canImportInstrumentFile(run: Pick<Run, "is_locked" | "status">): boolean {
-  return !run.is_locked && (run.status === "draft" || run.status === "in_progress");
+  return instrumentFileRefusal(run) === null;
 }

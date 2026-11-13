@@ -32,6 +32,7 @@ import { useInstrumentImportWizard } from "../hooks/use-instrument-import-wizard
 import {
   type LabellingDraft,
   type PositionDraft,
+  labellingProblem,
   labellingSummary,
   positionKey,
   selectableReadouts,
@@ -47,9 +48,8 @@ import {
 } from "../types";
 import { StatCard } from "./import-outcome-cards";
 
-const XLSX_ACCEPT = {
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-};
+/** Any file: the API names the formats it reads when it cannot read one. */
+const ANY_FILE = {};
 const WELL_TYPES = Object.keys(WELL_TYPE_LABELS) as WellType[];
 /** Radix Select forbids an empty item value; this stands for "no readout". */
 const NO_READOUT = "__none__";
@@ -87,7 +87,7 @@ interface InstrumentImportWizardProps {
 }
 
 export function InstrumentImportWizard({ runId, open, onOpenChange }: InstrumentImportWizardProps) {
-  const w = useInstrumentImportWizard({ runId, open, onOpenChange });
+  const w = useInstrumentImportWizard({ runId, onOpenChange });
   const { step, preview, result, isPreviewing, isImporting, canImport, setStep } = w;
 
   const openPickerRef = useRef<(() => void) | null>(null);
@@ -123,9 +123,8 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
                   isPending={isPreviewing}
                   onFile={w.handleFile}
                   onOpenReady={handleOpenReady}
-                  accept={XLSX_ACCEPT}
+                  accept={ANY_FILE}
                   prompt="Drop the instrument's file here, or click to browse"
-                  hint=".xlsx"
                 />
               </div>
               {w.error && <Notice tone="bad">{w.error}</Notice>}
@@ -272,6 +271,7 @@ function LabelStep({
     });
 
   const unit = DOSE_UNIT_LABELS[preview.dose_unit as DoseUnit] ?? preview.dose_unit;
+  const problem = labellingProblem(draft);
 
   return (
     <div className="flex min-h-0 flex-col gap-3 py-2">
@@ -360,6 +360,9 @@ function LabelStep({
           </tbody>
         </table>
       </div>
+      {problem && (
+        <output className="block text-sm text-destructive">To continue, correct {problem}</output>
+      )}
     </div>
   );
 }
@@ -457,9 +460,7 @@ function PositionRow({
               variant="ghost"
               className="h-6 w-6"
               aria-label={`Change compound for ${p.positionLabel}`}
-              onClick={() =>
-                onUpdate({ moleculeId: null, moleculeName: null, batchId: null, batchOptions: [] })
-              }
+              onClick={() => onUpdate({ moleculeId: null, moleculeName: null, batchId: null })}
             >
               <X className="h-3.5 w-3.5" />
             </Button>
@@ -474,7 +475,6 @@ function PositionRow({
                   moleculeId: id,
                   moleculeName: mol?.name ?? null,
                   batchId: null,
-                  batchOptions: [],
                 })
               }
             />
@@ -677,8 +677,8 @@ function ResultView({ result }: { result: InstrumentImportResult }) {
       </Notice>
       {!result.file_attached && (
         <Notice tone="warn">
-          <b>The file could not be attached.</b> The data is imported; upload the workbook on the
-          Files tab.
+          <b>The file could not be attached.</b> The data is imported; upload the file on the Files
+          tab.
           {result.attachment_warning && ` (${result.attachment_warning})`}
         </Notice>
       )}

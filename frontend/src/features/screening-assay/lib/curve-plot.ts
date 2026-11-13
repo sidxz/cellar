@@ -135,7 +135,8 @@ export function buildCurveFigure(
       margin: { l: 64, r: 16, t: 10, b: 44 },
       paper_bgcolor: background,
       plot_bgcolor: background,
-      showlegend: exporting,
+      // In Highlight mode every entry shares a colour, so a legend could not be read.
+      showlegend: exporting && colouring.colourMode === "distinct",
       hovermode: "closest",
       font: { color: ink, size: 12 },
       shapes,

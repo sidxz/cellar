@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { UseInstrumentImportWizardResult } from "../hooks/use-instrument-import-wizard";
@@ -143,6 +143,31 @@ describe("InstrumentImportWizard", () => {
     hookState.value = baseHook({ step: 1, error: "File is larger than 20 MB" });
     renderWizard();
     expect(screen.getByText("File is larger than 20 MB")).toBeInTheDocument();
+  });
+
+  it("step 1 takes a file of any type and leaves the format check to the API", async () => {
+    const handleFile = vi.fn();
+    hookState.value = baseHook({ step: 1, handleFile });
+    const { container } = renderWizard();
+    expect(screen.queryByText(".xlsx")).not.toBeInTheDocument();
+    const input = container.ownerDocument.querySelector('input[type="file"]') as HTMLInputElement;
+    expect(input.getAttribute("accept") ?? "").toBe("");
+    const other = new File(["a,b"], "export.csv", { type: "text/csv" });
+    fireEvent.change(input, { target: { files: [other] } });
+    await waitFor(() => expect(handleFile).toHaveBeenCalledWith(other));
+  });
+
+  it("step 2 says which position blocks Continue and why", () => {
+    const draft = draftFromPreview(preview);
+    draft.positions[1] = { ...draft.positions[1], dose: "abc" };
+    hookState.value = withPreview(2, { draft, canImport: false });
+    renderWizard();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+    expect(
+      screen.getByText(
+        "To continue, correct Position 2: the concentration must be a number, 0 or more.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("step 2 renders one row per position with the API's position label and the dose unit", () => {

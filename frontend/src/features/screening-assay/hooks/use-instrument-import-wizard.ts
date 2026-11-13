@@ -13,7 +13,6 @@ import { useImportInstrumentFile, usePreviewInstrumentFile } from "./use-instrum
 
 export interface UseInstrumentImportWizardOptions {
   runId: string;
-  open: boolean;
   onOpenChange: (open: boolean) => void;
 }
 

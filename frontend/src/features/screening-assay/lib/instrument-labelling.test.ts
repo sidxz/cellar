@@ -5,6 +5,8 @@ import {
   buildLabelling,
   canImportInstrumentFile,
   draftFromPreview,
+  instrumentFileRefusal,
+  labellingProblem,
   labellingSummary,
   positionKey,
   selectableReadouts,
@@ -93,7 +95,6 @@ describe("instrument labelling", () => {
   it("pre-fills from the preview and never selects a batch the API did not", () => {
     // position 1: one batch pre-selected; position 2: three batches, none; position 3: blank label, no suggestion
     expect(draft.positions.map((p) => p.batchId)).toEqual(["b1", null, null]);
-    expect(draft.positions[1].batchOptions).toHaveLength(3);
     expect(draft.positions[2]).toMatchObject({ used: true, label: "", moleculeId: null });
     expect(draft.positions.every((p) => p.wellType === "sample" && p.note === "")).toBe(true);
     expect(draft.readoutBySeries[seriesKey(preview.series[0])]).toBe("r1");
@@ -136,6 +137,20 @@ describe("instrument labelling", () => {
     expect(buildLabelling(withPosition(0, { note: "x".repeat(1001) }), preview)).toBeNull();
   });
 
+  it("names the first used position whose value blocks the import", () => {
+    expect(labellingProblem(draft)).toBeNull();
+    expect(labellingProblem(withPosition(1, { dose: "abc" }))).toBe(
+      "Position 2: the concentration must be a number, 0 or more.",
+    );
+    expect(labellingProblem(withPosition(0, { label: "x".repeat(201) }))).toBe(
+      "Position 1: the label is longer than 200 characters.",
+    );
+    expect(labellingProblem(withPosition(2, { note: "x".repeat(1001) }))).toBe(
+      "Position 3: the note is longer than 1000 characters.",
+    );
+    expect(labellingProblem(withPosition(1, { dose: "abc", used: false }))).toBeNull();
+  });
+
   it("sets one role on all selected positions and leaves the rest", () => {
     const keys = new Set([positionKey(preview.positions[0]), positionKey(preview.positions[2])]);
     const out = setRoleForPositions(draft, keys, "reference");
@@ -171,5 +186,11 @@ describe("instrument labelling", () => {
     expect(canImportInstrumentFile({ is_locked: false, status: "in_progress" })).toBe(true);
     expect(canImportInstrumentFile({ is_locked: false, status: "completed" })).toBe(false);
     expect(canImportInstrumentFile({ is_locked: true, status: "in_progress" })).toBe(false);
+    expect(instrumentFileRefusal({ is_locked: true, status: "in_progress" })).toBe(
+      "The run is locked.",
+    );
+    expect(instrumentFileRefusal({ is_locked: false, status: "completed" })).toBe(
+      "Only draft or in-progress runs accept an instrument file.",
+    );
   });
 });

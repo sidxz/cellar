@@ -33,6 +33,9 @@ import { TargetMultiSelect } from "./target-multi-select";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
+/** Select value for a run with no plate (its holder is another kind). */
+const NO_PLATE = "none";
+
 const schema = z.object({
   runDate: z.string().min(1, "Run date is required"),
   plateFormat: z.string().min(1, "Plate format is required"),
@@ -148,9 +151,12 @@ export function CreateRunDialog({
       {
         protocol_id: protocolId,
         run_date: values.runDate,
-        plate_format: values.plateFormat as PlateFormat,
+        plate_format:
+          values.plateFormat === NO_PLATE ? undefined : (values.plateFormat as PlateFormat),
         plate_template_id:
-          values.plateTemplateId && values.plateTemplateId !== "__none__"
+          values.plateFormat !== NO_PLATE &&
+          values.plateTemplateId &&
+          values.plateTemplateId !== "__none__"
             ? values.plateTemplateId
             : null,
         notes: values.notes || null,
@@ -205,6 +211,7 @@ export function CreateRunDialog({
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value={NO_PLATE}>No plate</SelectItem>
                       {Object.entries(PLATE_FORMAT_LABELS).map(([value, label]) => {
                         const hasLayout = protocolControlLayouts?.[value] !== undefined;
                         return (

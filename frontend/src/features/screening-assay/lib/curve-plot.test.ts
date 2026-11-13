@@ -172,6 +172,14 @@ describe("buildCurveFigure", () => {
     expect(data[0].line.color).toBe(light.reference);
   });
 
+  it("puts a legend on the exported figure in Distinct mode only", () => {
+    const legend = (colourMode: "highlight" | "distinct") =>
+      buildCurveFigure({ ...base, canvas: "export", colourMode }).layout.showlegend;
+    expect(legend("distinct")).toBe(true);
+    expect(legend("highlight")).toBe(false);
+    expect(buildCurveFigure({ ...base, colourMode: "distinct" }).layout.showlegend).toBe(false);
+  });
+
   it("keeps uirevision constant so a redraw keeps the zoom", () => {
     const a = buildCurveFigure(base).layout.uirevision;
     const b = buildCurveFigure({ ...base, focusedId: "w1", selected: new Set(["w1"]) }).layout

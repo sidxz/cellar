@@ -13,8 +13,9 @@ import {
 } from "@/shared/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
-import { cn } from "@/shared/lib/utils";
+import { cn, shortId } from "@/shared/lib/utils";
 import { useTheme } from "next-themes";
 import { useCallback, useMemo, useState } from "react";
 import { flushSync } from "react-dom";
@@ -101,7 +102,7 @@ function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
 }
 
 function formatValue(v: number | undefined): string {
-  return v === undefined ? "" : v.toFixed(2);
+  return v === undefined ? "" : formatMeasurementValue(v);
 }
 
 /** The Curves tab: pick positions, overlay their curves for one signal with
@@ -199,14 +200,16 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
       format,
       width: 1200,
       height: 600,
-      filename: "run-curves",
+      filename: `run-curves-${shortId(data.run_id)}`,
     });
   };
 
+  // Blank means "use the default": the request goes without a window.
   const commitWindow = () => {
     if (windowDraft === null) return;
     const n = Number(windowDraft);
-    if (windowDraft.trim() !== "" && Number.isFinite(n) && n > 0) setDerivativeWindow(n);
+    if (windowDraft.trim() === "") setDerivativeWindow(undefined);
+    else if (Number.isFinite(n) && n > 0) setDerivativeWindow(n);
     setWindowDraft(null);
   };
 

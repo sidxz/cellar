@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const state: { plateMap: unknown } = { plateMap: undefined };
@@ -15,7 +15,11 @@ vi.mock("./grid-import-dialog", () => ({ GridImportDialog: () => null }));
 vi.mock("./instrument-import-wizard", () => ({ InstrumentImportWizard: () => null }));
 vi.mock("./plate-heatmap", () => ({ PlateHeatmap: () => null }));
 vi.mock("./plate-map-viewer", () => ({ PlateMapViewer: () => null }));
-vi.mock("./readout-data-table", () => ({ ReadoutDataTable: () => null }));
+vi.mock("./readout-data-table", () => ({
+  ReadoutDataTable: ({ toolbarActions }: { toolbarActions: React.ReactNode }) => (
+    <div>{toolbarActions}</div>
+  ),
+}));
 vi.mock("./run-dr-results", () => ({ RunDoseResponseResults: () => null }));
 vi.mock("./run-heatmap-panel", () => ({ RunHeatmapPanel: () => null }));
 vi.mock("./run-import-wizard", () => ({ RunImportWizard: () => null }));
@@ -25,7 +29,19 @@ vi.mock("./summary-import-wizard", () => ({ SummaryImportWizard: () => null }));
 import type { Run } from "../types";
 import { RunDataPanel } from "./run-data-panel";
 
-const run = { id: "r1", protocol_id: "p1", is_locked: false, qc_metrics: null } as unknown as Run;
+const run = {
+  id: "r1",
+  protocol_id: "p1",
+  is_locked: false,
+  status: "in_progress",
+  qc_metrics: null,
+} as unknown as Run;
+
+const NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it.";
+
+function openImportMenu() {
+  fireEvent.keyDown(screen.getByRole("button", { name: /^import$/i }), { key: "Enter" });
+}
 
 function plateMap(kind: string, curves: boolean) {
   return {
@@ -63,6 +79,40 @@ describe("RunDataPanel holder awareness", () => {
     expect(screen.getByRole("tab", { name: "Readout Data" })).toHaveAttribute(
       "data-state",
       "active",
+    );
+  });
+
+  it("disables the plate-shaped imports, saying why, on a run whose holder is not a plate", () => {
+    state.plateMap = plateMap("cassette", true);
+    render(<RunDataPanel run={run} />);
+    const grid = screen.getByRole("button", { name: /import grid/i });
+    expect(grid).toBeDisabled();
+    expect(grid.parentElement).toHaveAttribute("title", NOT_A_PLATE);
+    openImportMenu();
+    const runFile = screen.getByRole("menuitem", { name: /import run file/i });
+    expect(runFile).toHaveAttribute("data-disabled");
+    expect(runFile).toHaveAttribute("title", NOT_A_PLATE);
+  });
+
+  it("keeps the plate-shaped imports for a plate run", () => {
+    state.plateMap = plateMap("plate", false);
+    render(<RunDataPanel run={run} />);
+    expect(screen.getByRole("button", { name: /import grid/i })).toBeEnabled();
+    openImportMenu();
+    const runFile = screen.getByRole("menuitem", { name: /import run file/i });
+    expect(runFile).not.toHaveAttribute("data-disabled");
+    expect(runFile).not.toHaveAttribute("title");
+  });
+
+  it("says why the instrument file entry is disabled", () => {
+    state.plateMap = plateMap("plate", false);
+    render(<RunDataPanel run={{ ...run, is_locked: false, status: "completed" } as Run} />);
+    openImportMenu();
+    const entry = screen.getByRole("menuitem", { name: /instrument file/i });
+    expect(entry).toHaveAttribute("data-disabled");
+    expect(entry).toHaveAttribute(
+      "title",
+      "Only draft or in-progress runs accept an instrument file.",
     );
   });
 });

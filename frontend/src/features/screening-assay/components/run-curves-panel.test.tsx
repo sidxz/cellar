@@ -50,7 +50,10 @@ const curves: RunCurves = {
     y: [1, 2, 3],
     reported:
       p.well_id === "w1"
-        ? [{ kind: "k1", ordinal: 1, label: "Point 1", value: 21.25, unit: "°C" }]
+        ? [
+            { kind: "k1", ordinal: 1, label: "Point 1", value: 21.25, unit: "°C" },
+            { kind: "k2", ordinal: 1, label: "Point 2", value: 0.004, unit: "°C" },
+          ]
         : [],
   })),
   view: "measured",
@@ -134,7 +137,9 @@ describe("RunCurvesPanel", () => {
     expect(within(table).getByText("Point 1 (°C)")).toBeInTheDocument();
     expect(within(table).getByText("Protein alone")).toBeInTheDocument();
     expect(within(table).getByText("bubble at start")).toBeInTheDocument();
-    expect(within(table).getByText("21.25")).toBeInTheDocument();
+    // The application's number format, not a fixed two decimals.
+    expect(within(table).getByText("21.3")).toBeInTheDocument();
+    expect(within(table).getByText("0.004")).toBeInTheDocument();
     expect(lastPlot().data).toHaveLength(1);
   });
 
@@ -174,7 +179,12 @@ describe("RunCurvesPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
     fireEvent.click(screen.getByRole("button", { name: "PNG" }));
     const [figure, opts] = downloadImage.mock.calls[0];
-    expect(opts).toMatchObject({ format: "png", width: 1200, height: 600 });
+    expect(opts).toMatchObject({
+      format: "png",
+      width: 1200,
+      height: 600,
+      filename: "run-curves-r1",
+    });
     expect(figure.layout.paper_bgcolor).toBe("#ffffff");
   });
 
@@ -203,5 +213,19 @@ describe("RunCurvesPanel", () => {
     expect(lastParams()?.window).toBe(2);
     fireEvent.keyDown(field, { key: "Enter" });
     expect(lastParams()).toMatchObject({ window: 4 });
+  });
+
+  it("goes back to the default window when the field is cleared", () => {
+    render(<RunCurvesPanel runId="r1" />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    const field = screen.getByLabelText("Window");
+    fireEvent.change(field, { target: { value: "2" } });
+    fireEvent.blur(field);
+    expect(lastParams()).toMatchObject({ window: 2 });
+    fireEvent.change(field, { target: { value: "" } });
+    fireEvent.blur(field);
+    expect(lastParams()).toMatchObject({ view: "derivative" });
+    expect(lastParams()?.window).toBeUndefined();
+    expect(screen.getByLabelText("Window")).toHaveValue(3.5);
   });
 });

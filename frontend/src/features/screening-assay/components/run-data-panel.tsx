@@ -17,7 +17,7 @@ import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
-import { canImportInstrumentFile } from "../lib/instrument-labelling";
+import { instrumentFileRefusal } from "../lib/instrument-labelling";
 import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 import type { PlateData, PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
@@ -150,6 +150,11 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
 
 // ─── Run Data Panel ───────────────────────────────────────────────────────────
 
+/** The API's refusal for plate-shaped imports onto a run whose holder is not a plate. */
+const NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it.";
+/** A disabled menu item ignores the pointer, which would hide its title; keep hover on. */
+const HOVERABLE_WHEN_DISABLED = "data-[disabled]:pointer-events-auto";
+
 interface RunDataPanelProps {
   run: Run;
 }
@@ -169,12 +174,14 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
   const canEdit = useCanEdit();
 
-  // A cassette has no plate geometry, so the two plate-shaped tabs are hidden.
-  const isCassette = plates.some((p) => p.holder_kind === "cassette");
+  // A holder that is not a plate has no plate geometry: the plate-shaped tabs are
+  // hidden and the plate-shaped imports refused.
+  const notPlate = plates.some((p) => p.holder_kind !== "plate");
+  const instrumentRefusal = instrumentFileRefusal(run);
   const hasCurves = !!plateMap?.has_measured_curves;
 
   const [hashTab, setActiveTab] = useHashTab("readout");
-  const hiddenTabs = new Set<string>(isCassette ? ["plate-map", "heat-map"] : []);
+  const hiddenTabs = new Set<string>(notPlate ? ["plate-map", "heat-map"] : []);
   if (!hasCurves) hiddenTabs.add("curves");
   const activeTab = hiddenTabs.has(hashTab) ? "readout" : hashTab;
 
@@ -194,8 +201,8 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
-          {!isCassette && <TabsTrigger value="plate-map">Plate Map</TabsTrigger>}
-          {!isCassette && <TabsTrigger value="heat-map">Heat Map</TabsTrigger>}
+          {!notPlate && <TabsTrigger value="plate-map">Plate Map</TabsTrigger>}
+          {!notPlate && <TabsTrigger value="heat-map">Heat Map</TabsTrigger>}
           {hasCurves && <TabsTrigger value="curves">Curves</TabsTrigger>}
           <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
           <TabsTrigger value="qc">QC Metrics</TabsTrigger>
@@ -220,28 +227,38 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setRunImportWizardOpen(true)}>
+                      <DropdownMenuItem
+                        disabled={notPlate}
+                        title={notPlate ? NOT_A_PLATE : undefined}
+                        className={HOVERABLE_WHEN_DISABLED}
+                        onClick={() => setRunImportWizardOpen(true)}
+                      >
                         Import Run File (plate/well)
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setSummaryWizardOpen(true)}>
                         Import Summary Results (compound + endpoints)
                       </DropdownMenuItem>
                       <DropdownMenuItem
-                        disabled={!canImportInstrumentFile(run)}
+                        disabled={instrumentRefusal !== null}
+                        title={instrumentRefusal ?? undefined}
+                        className={HOVERABLE_WHEN_DISABLED}
                         onClick={() => setInstrumentWizardOpen(true)}
                       >
                         Instrument file
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setGridImportOpen(true)}
-                    disabled={run.is_locked}
-                  >
-                    <Grid3x3 className="mr-2 h-4 w-4" /> Import Grid
-                  </Button>
+                  {/* A disabled button ignores the pointer; the wrapper carries the title. */}
+                  <span title={notPlate ? NOT_A_PLATE : undefined}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setGridImportOpen(true)}
+                      disabled={run.is_locked || notPlate}
+                    >
+                      <Grid3x3 className="mr-2 h-4 w-4" /> Import Grid
+                    </Button>
+                  </span>
                 </>
               }
             />
@@ -249,7 +266,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         </TabsContent>
 
         {/* Plate Map — pure viewer. Ingest lives on the Readout Data tab. */}
-        {!isCassette && (
+        {!notPlate && (
           <TabsContent value="plate-map">
             <div className="mt-3 space-y-3">
               {hasPlateMap ? (
@@ -312,7 +329,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         )}
 
         {/* Heat Map */}
-        {!isCassette && (
+        {!notPlate && (
           <TabsContent value="heat-map">
             <RunHeatmapPanel run={run} />
           </TabsContent>
