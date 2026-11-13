@@ -20,6 +20,13 @@ vi.mock("../hooks/use-run-curves", () => ({
   useRunCurves: (...args: unknown[]) => useRunCurves(...args),
 }));
 
+const canEdit = { value: true };
+vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => canEdit.value }));
+vi.mock("./edit-labelling-dialog", () => ({
+  EditLabellingDialog: ({ open }: { open: boolean }) =>
+    open ? <div data-testid="edit-labelling">edit labelling dialog</div> : null,
+}));
+
 import { RunCurvesPanel } from "./run-curves-panel";
 
 const positions = Array.from({ length: 9 }, (_, i) => ({
@@ -71,6 +78,7 @@ function lastPlot() {
 }
 
 beforeEach(() => {
+  canEdit.value = true;
   plotCalls.length = 0;
   downloadImage.mockReset();
   useRunCurves.mockReset();
@@ -271,5 +279,32 @@ describe("RunCurvesPanel", () => {
     expect(screen.getByRole("tab", { name: "Measured" })).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Measured" }));
     expect(screen.queryByText("Could not load the curves.")).not.toBeInTheDocument();
+  });
+
+  it("offers Edit labelling beside the selector, disabled with the reason on a locked run", () => {
+    const { unmount } = render(
+      <RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />,
+    );
+    const button = screen.getByRole("button", { name: "Edit labelling" });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(screen.getByTestId("edit-labelling")).toBeInTheDocument();
+    unmount();
+
+    render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: true }} />);
+    const locked = screen.getByRole("button", { name: "Edit labelling" });
+    expect(locked).toBeDisabled();
+    expect(locked).toHaveAttribute("title", "The run is locked.");
+  });
+
+  it("does not offer Edit labelling to a viewer", () => {
+    canEdit.value = false;
+    render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />);
+    expect(screen.queryByRole("button", { name: "Edit labelling" })).not.toBeInTheDocument();
+  });
+
+  it("does not offer Edit labelling without a run", () => {
+    render(<RunCurvesPanel runId="r1" />);
+    expect(screen.queryByRole("button", { name: "Edit labelling" })).not.toBeInTheDocument();
   });
 });

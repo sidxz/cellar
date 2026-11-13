@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
@@ -39,7 +40,9 @@ import {
   assignColourSlots,
   holderOrder,
 } from "../lib/curve-selection";
-import { DOSE_UNIT_LABELS, type DoseUnit } from "../types";
+import { labellingEditRefusal } from "../lib/position-edits";
+import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
+import { EditLabellingDialog } from "./edit-labelling-dialog";
 import { PositionSelector } from "./position-selector";
 
 const PLOT_CONFIG = { displaylogo: false, responsive: true };
@@ -108,7 +111,16 @@ function formatValue(v: number | undefined): string {
 /** The Curves tab: pick positions, overlay their curves for one signal with
  *  the instrument's reported values as lines, read a table of them, export
  *  the figure. */
-export function RunCurvesPanel({ runId }: { runId: string }) {
+export function RunCurvesPanel({
+  runId,
+  run,
+}: {
+  runId: string;
+  /** Given, Edit labelling is offered to editors. */
+  run?: Pick<Run, "id" | "status" | "is_locked">;
+}) {
+  const canEdit = useCanEdit();
+  const [editOpen, setEditOpen] = useState(false);
   const [channel, setChannel] = useState<string | undefined>();
   const [view, setView] = useState<CurveView>("measured");
   // The committed window; undefined lets the API choose. The draft is what is
@@ -120,6 +132,7 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
     isLoading,
     isPlaceholderData,
     error,
+    refetch,
   } = useRunCurves(runId, {
     channel,
     view,
@@ -227,18 +240,46 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
   const hasTraces = !failed && (figure?.data.length ?? 0) > 0;
   const colours = MEASURED_CURVE_COLORS[palette];
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
+  const doseUnit = DOSE_UNIT_LABELS[data.dose_unit as DoseUnit] ?? data.dose_unit;
+  const editRefusal = run ? labellingEditRefusal(run) : null;
 
   return (
     <div className="space-y-4">
-      <PositionSelector
-        holder={data.holder}
-        positions={data.positions}
-        selection={selection}
-        onChange={changeSelection}
-        focusedId={focusedId}
-        onFocus={setFocusedId}
-        colourOf={colourOf}
-      />
+      <div className="flex items-start gap-3">
+        <div className="min-w-0 flex-1">
+          <PositionSelector
+            holder={data.holder}
+            positions={data.positions}
+            selection={selection}
+            onChange={changeSelection}
+            focusedId={focusedId}
+            onFocus={setFocusedId}
+            colourOf={colourOf}
+          />
+        </div>
+        {run && canEdit && (
+          <>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!!editRefusal}
+              title={editRefusal ?? undefined}
+              onClick={() => setEditOpen(true)}
+            >
+              Edit labelling
+            </Button>
+            <EditLabellingDialog
+              run={run}
+              positions={data.positions}
+              doseUnit={doseUnit}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              onReload={refetch}
+            />
+          </>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
         {data.channels.length > 0 && (
@@ -402,9 +443,7 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
               <TableHead>Label</TableHead>
               <TableHead>Compound</TableHead>
               <TableHead>Batch</TableHead>
-              <TableHead className="text-right">
-                Conc. ({DOSE_UNIT_LABELS[data.dose_unit as DoseUnit] ?? data.dose_unit})
-              </TableHead>
+              <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Note</TableHead>
               {columns.map((c) => (

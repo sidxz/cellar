@@ -340,7 +340,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         {/* Curves */}
         {hasCurves && (
           <TabsContent value="curves">
-            <RunCurvesPanel runId={run.id} />
+            <RunCurvesPanel runId={run.id} run={run} />
           </TabsContent>
         )}
 
