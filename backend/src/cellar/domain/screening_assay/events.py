@@ -249,3 +249,12 @@ class RunInstrumentFileImported(DomainEvent):
     positions: int
     curves: int
     readout_values: int
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [
+            ("file_name", None, self.file_name),
+            ("reader", None, self.reader),
+            ("positions", None, str(self.positions)),
+            ("curves", None, str(self.curves)),
+            ("readout_values", None, str(self.readout_values)),
+        ]
