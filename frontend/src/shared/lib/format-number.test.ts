@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatFileSize } from "./format-number";
+import { formatCount, formatFileSize } from "./format-number";
 
 describe("formatFileSize", () => {
   it("formats bytes", () => {
@@ -28,5 +28,13 @@ describe("formatFileSize", () => {
 
   it("returns — for negative values", () => {
     expect(formatFileSize(-1)).toBe("—");
+  });
+});
+
+describe("formatCount", () => {
+  it("puts the noun in the singular for one and the plural otherwise", () => {
+    expect(formatCount(1, "trace")).toBe("1 trace");
+    expect(formatCount(0, "trace")).toBe("0 traces");
+    expect(formatCount(3, "readout value")).toBe("3 readout values");
   });
 });

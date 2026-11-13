@@ -168,7 +168,7 @@ describe("buildCurveFigure", () => {
       ...base,
       set: curveSetFromRun({ ...named, view: "derivative", window: 1.5 }),
     }) as unknown as { layout: { yaxis: { title: { text: string } } } };
-    expect(derivative.layout.yaxis.title.text).toBe("d(Signal A)/d(°C)");
+    expect(derivative.layout.yaxis.title.text).toBe("Derivative of Signal A (u/°C)");
   });
 
   it("titles the y axis as a derivative in the derivative view", () => {
@@ -176,7 +176,30 @@ describe("buildCurveFigure", () => {
       ...base,
       set: curveSetFromRun({ ...curves, view: "derivative", window: 1.5 }),
     }) as unknown as { layout: { yaxis: { title: { text: string } } } };
-    expect(layout.yaxis.title.text).toBe("d(Signal A)/d(°C)");
+    expect(layout.yaxis.title.text).toBe("Derivative of Signal A (u/°C)");
+  });
+
+  it("gives a derivative of a signal without a unit the unit 1 per x unit", () => {
+    const unitless = {
+      ...curves,
+      view: "derivative",
+      window: 1.5,
+      channels: [{ ...curves.channels[0], y_unit: null }],
+    };
+    const { data, layout } = buildCurveFigure({
+      ...base,
+      set: curveSetFromRun(unitless),
+    }) as unknown as {
+      data: { hovertemplate: string }[];
+      layout: { yaxis: { title: { text: string } } };
+    };
+    expect(layout.yaxis.title.text).toBe("Derivative of Signal A (1/°C)");
+    expect(data[0].hovertemplate).toContain("%{y:.4g} 1/°C<extra>");
+  });
+
+  it("names the signal's unit beside the hovered value", () => {
+    const { data } = buildCurveFigure(base) as unknown as { data: { hovertemplate: string }[] };
+    expect(data[0].hovertemplate).toContain("%{x} °C · %{y:.4g} u<extra>");
   });
 
   it("uses the white canvas and the light colours for export", () => {

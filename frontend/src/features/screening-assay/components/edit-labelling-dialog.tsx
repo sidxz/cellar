@@ -58,7 +58,7 @@ export function EditLabellingDialog({ open, onOpenChange, ...rest }: EditLabelli
       {/* Header and footer stay put; only the labelling table scrolls. */}
       <DialogContent className="flex max-h-[90vh] w-[min(95vw,1280px)] max-w-[1280px] flex-col overflow-hidden sm:max-w-[1280px]">
         <DialogHeader>
-          <DialogTitle>Edit labelling</DialogTitle>
+          <DialogTitle>Edit labeling</DialogTitle>
           <DialogDescription>
             Change what was in each position. Nothing is saved until you press Save.
           </DialogDescription>
@@ -114,12 +114,9 @@ function EditLabellingBody({
       { positions: edits, ...(needsReason ? { reason: reason.trim() } : {}) },
       {
         onSuccess: (result) => {
-          showSuccess("Labelling saved");
-          if (result.compute_warning) {
-            showWarning(
-              `The labelling was saved, but the calculations were not rebuilt: ${result.compute_warning}. Press Recompute on the run to rebuild them.`,
-            );
-          }
+          showSuccess("Labeling saved");
+          // The API words it in full, Recompute included.
+          if (result.compute_warning) showWarning(result.compute_warning);
           onOpenChange(false);
         },
         onError: (e) =>
@@ -158,7 +155,7 @@ function EditLabellingBody({
             edit((rs) => setRoleForRows(rs, keys, wellType))
           }
           onReplaceRows={(filled) => edit(() => filled)}
-          templateName="labelling-template.csv"
+          templateName="labeling-template.csv"
           showUse={false}
           calculatedLocked={calculatedLockedReason(run)}
           problem={problem}
@@ -170,7 +167,7 @@ function EditLabellingBody({
               id={reasonId}
               required
               maxLength={500}
-              placeholder="Why the labelling of a completed or approved run is changing"
+              placeholder="Why the labeling of a completed or approved run is changing"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
             />
@@ -188,7 +185,7 @@ function EditLabellingBody({
                   disabled={reloading}
                   onClick={reload}
                 >
-                  Reload
+                  Discard edits and reload
                 </Button>
               )}
             </div>

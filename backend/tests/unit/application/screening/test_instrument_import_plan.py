@@ -92,7 +92,11 @@ def test_reported_series_groups_and_warns_on_undeclared_channel():
         (("ratio", "onset", 1), 2),
         (("ratio", "transition", 1), 3),
     ]
-    assert len(warnings) == 1 and "ghost" in warnings[0]
+    # Named by its label; the signal's internal key is not shown.
+    assert warnings == [
+        "Reported value 'Ghost onset' belongs to a signal the file has no traces for. "
+        "It is skipped."
+    ]
 
 
 def test_readout_mapping_error_cases():

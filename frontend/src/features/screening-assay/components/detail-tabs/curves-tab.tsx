@@ -43,12 +43,14 @@ export function CurvesTab({
   );
   const tags = useMemo(() => sameDateTags(runs), [runs]);
   const scientistOf = (userId: string) =>
-    members?.find((m) => m.user_id === userId)?.name ?? shortId(userId);
+    members?.find((m) => m.user_id === userId)?.name ?? "Scientist unavailable";
 
   if (isLoading) return <Skeleton data-testid="curves-tab-loading" className="h-[400px] w-full" />;
   if (error || !data) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">Could not load the runs.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Could not load the runs. Reload the page and try again.
+      </p>
     );
   }
 
@@ -60,7 +62,7 @@ export function CurvesTab({
     <div className="space-y-4">
       <div className="rounded-md border">
         <div className="flex items-center gap-3 border-b px-3 py-2 text-sm">
-          <span className="font-medium">Runs with curves</span>
+          <span className="font-medium">Runs with traces</span>
           {full && <span className="text-muted-foreground">At most 8 runs at once</span>}
           <Button
             type="button"
@@ -73,7 +75,7 @@ export function CurvesTab({
             Clear
           </Button>
         </div>
-        <ul aria-label="Runs with curves" className="max-h-64 divide-y overflow-y-auto">
+        <ul aria-label="Runs with traces" className="max-h-64 divide-y overflow-y-auto">
           {runs.map((run) => {
             const scientist = scientistOf(run.operator);
             const tag = tags.get(run.runId);
@@ -111,7 +113,7 @@ export function CurvesTab({
 
       {runIds.length === 0 ? (
         <div className="rounded-md border border-dashed py-12 text-center text-sm text-muted-foreground">
-          Choose runs above to see their curves
+          Choose runs above to see their traces
         </div>
       ) : (
         <MultiRunCurves
@@ -122,10 +124,10 @@ export function CurvesTab({
             showReferences: false,
             colour: { mode: "group", groupBy: "run" },
           }}
-          exportName={`protocol-curves-${shortId(protocolId)}`}
+          exportName={`traces-protocol-${shortId(protocolId)}`}
           empty={
             <p className="py-8 text-center text-sm text-muted-foreground">
-              None of the chosen runs has curves.
+              None of the chosen runs has traces.
             </p>
           }
         />

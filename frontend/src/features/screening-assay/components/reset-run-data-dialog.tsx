@@ -10,6 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/shared/components/ui/alert-dialog";
+import { formatCount } from "@/shared/lib/format-number";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { useResetRunData } from "../hooks/use-run-import";
@@ -38,10 +39,12 @@ export function ResetRunDataDialog({
     reset.mutate(undefined, {
       onSuccess: (out) => {
         const measured =
-          out.measured_curves_deleted > 0 ? `, ${out.measured_curves_deleted} measured curves` : "";
+          out.measured_curves_deleted > 0
+            ? `, ${formatCount(out.measured_curves_deleted, "trace")}`
+            : "";
         showSuccess(
           holder
-            ? `Reset run data — ${out.wells_deleted} positions, ${out.readouts_deleted} readouts, ${out.curves_deleted} dose-response curves${measured} removed.`
+            ? `Reset run data — ${formatCount(out.wells_deleted, "position")}, ${formatCount(out.readouts_deleted, "readout")}, ${formatCount(out.curves_deleted, "dose-response curve")}${measured} removed.`
             : `Reset run data — ${out.plates_deleted} plates, ${out.wells_deleted} wells, ${out.readouts_deleted} readouts, ${out.curves_deleted} curves${measured} removed.`,
         );
         onOpenChange(false);
@@ -59,8 +62,8 @@ export function ResetRunDataDialog({
           <AlertDialogTitle>Reset run data?</AlertDialogTitle>
           <AlertDialogDescription>
             {holder
-              ? `This will delete the holder (${holder.holder_label}) and its positions, readout data, dose-response curves${hasMeasuredCurves ? ", measured curves" : ""} and QC metrics for this run.`
-              : `This will delete all plates (${plateCount}), wells, readout data, dose-response curves,${hasMeasuredCurves ? " measured curves," : ""} and QC metrics for this run.`}
+              ? `This will delete the holder (${holder.holder_label}) and its positions, readout data, dose-response curves${hasMeasuredCurves ? ", traces" : ""} and QC metrics for this run.`
+              : `This will delete all plates (${plateCount}), wells, readout data, dose-response curves,${hasMeasuredCurves ? " traces," : ""} and QC metrics for this run.`}
             <br />
             <br />
             The run itself, its metadata, and any uploaded files will be kept. This cannot be

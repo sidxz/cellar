@@ -96,7 +96,7 @@ beforeEach(() => {
 describe("RunCurvesPanel", () => {
   it("shows an empty state when nothing is selected", () => {
     render(<RunCurvesPanel runId="r1" />);
-    expect(screen.getByText("Select positions above to draw their curves")).toBeInTheDocument();
+    expect(screen.getByText("Select positions above to draw their traces")).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.getByText("No positions selected.")).toBeInTheDocument();
   });
@@ -120,7 +120,7 @@ describe("RunCurvesPanel", () => {
       ["Signal", "Signal A", "Signal B"],
       ["View", "Measured", "Derivative"],
       ["Reported values", "Lines on", "Off"],
-      ["Colour", "Highlight", /Distinct/],
+      ["Color", "Highlight", /Distinct/],
     ] as const) {
       const list = screen.getByRole("tablist", { name: group });
       expect(within(list).getByRole("tab", { name: current })).toHaveAttribute(
@@ -192,32 +192,32 @@ describe("RunCurvesPanel", () => {
       format: "png",
       width: 1200,
       height: 600,
-      filename: "run-curves-r1",
+      filename: "traces-run-r1",
     });
     expect(figure.layout.paper_bgcolor).toBe("#ffffff");
   });
 
   it("hides the window field in the measured view", () => {
     render(<RunCurvesPanel runId="r1" />);
-    expect(screen.queryByLabelText("Window")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Smoothing window")).not.toBeInTheDocument();
   });
 
   it("requests view=derivative when the switch is on and shows the window the API used", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
     expect(lastParams()).toMatchObject({ view: "derivative" });
-    expect(screen.getByLabelText("Window")).toHaveValue(3.5);
+    expect(screen.getByLabelText("Smoothing window")).toHaveValue(3.5);
   });
 
   it("refetches with the edited window on commit, not on each keystroke", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
-    const field = screen.getByLabelText("Window");
+    const field = screen.getByLabelText("Smoothing window");
     fireEvent.change(field, { target: { value: "2" } });
     expect(lastParams()?.window).toBeUndefined();
     fireEvent.blur(field);
     expect(lastParams()).toMatchObject({ view: "derivative", window: 2 });
-    expect(screen.getByLabelText("Window")).toHaveValue(2);
+    expect(screen.getByLabelText("Smoothing window")).toHaveValue(2);
     fireEvent.change(field, { target: { value: "4" } });
     expect(lastParams()?.window).toBe(2);
     fireEvent.keyDown(field, { key: "Enter" });
@@ -227,7 +227,7 @@ describe("RunCurvesPanel", () => {
   it("goes back to the default window when the field is cleared", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
-    const field = screen.getByLabelText("Window");
+    const field = screen.getByLabelText("Smoothing window");
     fireEvent.change(field, { target: { value: "2" } });
     fireEvent.blur(field);
     expect(lastParams()).toMatchObject({ window: 2 });
@@ -235,7 +235,7 @@ describe("RunCurvesPanel", () => {
     fireEvent.blur(field);
     expect(lastParams()).toMatchObject({ view: "derivative" });
     expect(lastParams()?.window).toBeUndefined();
-    expect(screen.getByLabelText("Window")).toHaveValue(3.5);
+    expect(screen.getByLabelText("Smoothing window")).toHaveValue(3.5);
   });
 
   it("shows the window the API used when it clamps an oversized one", () => {
@@ -251,11 +251,11 @@ describe("RunCurvesPanel", () => {
     );
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
-    const field = screen.getByLabelText("Window");
+    const field = screen.getByLabelText("Smoothing window");
     fireEvent.change(field, { target: { value: "99" } });
     fireEvent.blur(field);
     expect(lastParams()).toMatchObject({ window: 99 });
-    expect(screen.getByLabelText("Window")).toHaveValue(2);
+    expect(screen.getByLabelText("Smoothing window")).toHaveValue(2);
   });
 
   it("keeps the toolbar on screen when a refetch with a window fails", () => {
@@ -273,27 +273,31 @@ describe("RunCurvesPanel", () => {
     );
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
-    fireEvent.change(screen.getByLabelText("Window"), { target: { value: "5" } });
-    fireEvent.keyDown(screen.getByLabelText("Window"), { key: "Enter" });
-    expect(screen.getByText("Could not load the curves.")).toBeInTheDocument();
-    expect(screen.getByLabelText("Window")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Smoothing window"), { target: { value: "5" } });
+    fireEvent.keyDown(screen.getByLabelText("Smoothing window"), { key: "Enter" });
+    expect(
+      screen.getByText("Could not load the traces. Reload the page and try again."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Smoothing window")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Measured" })).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Measured" }));
-    expect(screen.queryByText("Could not load the curves.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("Could not load the traces. Reload the page and try again."),
+    ).not.toBeInTheDocument();
   });
 
   it("offers Edit labelling beside the selector, disabled with the reason on a locked run", () => {
     const { unmount } = render(
       <RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />,
     );
-    const button = screen.getByRole("button", { name: "Edit labelling" });
+    const button = screen.getByRole("button", { name: "Edit labeling" });
     expect(button).toBeEnabled();
     fireEvent.click(button);
     expect(screen.getByTestId("edit-labelling")).toBeInTheDocument();
     unmount();
 
     render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: true }} />);
-    const locked = screen.getByRole("button", { name: "Edit labelling" });
+    const locked = screen.getByRole("button", { name: "Edit labeling" });
     expect(locked).toBeDisabled();
     expect(locked).toHaveAttribute("title", "The run is locked.");
   });
@@ -301,11 +305,11 @@ describe("RunCurvesPanel", () => {
   it("does not offer Edit labelling to a viewer", () => {
     canEdit.value = false;
     render(<RunCurvesPanel runId="r1" run={{ id: "r1", status: "draft", is_locked: false }} />);
-    expect(screen.queryByRole("button", { name: "Edit labelling" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit labeling" })).not.toBeInTheDocument();
   });
 
   it("does not offer Edit labelling without a run", () => {
     render(<RunCurvesPanel runId="r1" />);
-    expect(screen.queryByRole("button", { name: "Edit labelling" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit labeling" })).not.toBeInTheDocument();
   });
 });

@@ -8,7 +8,7 @@ import type { InstrumentImportResult, InstrumentPreview } from "../types";
 // No signed-in client in tests: requests carry no auth headers.
 vi.mock("@/shared/lib/auth/config", () => ({ getDuarClient: () => null }));
 
-import { useInstrumentImportWizard } from "./use-instrument-import-wizard";
+import { apiReason, useInstrumentImportWizard } from "./use-instrument-import-wizard";
 
 const preview: InstrumentPreview = {
   reader: "reader-1",
@@ -107,14 +107,14 @@ describe("useInstrumentImportWizard", () => {
 
   it("shows the API's own words when the preview is refused", async () => {
     fetchMock.mockResolvedValue(
-      json({ detail: "Unrecognised instrument file. Supported formats: Reader one" }, 422),
+      json({ detail: "Unrecognized instrument file. Supported formats: Reader one" }, 422),
     );
     const { result: hook } = renderWizardHook();
 
     act(() => hook.current.handleFile(file));
     await waitFor(() =>
       expect(hook.current.error).toBe(
-        "Unrecognised instrument file. Supported formats: Reader one",
+        "Unrecognized instrument file. Supported formats: Reader one",
       ),
     );
     expect(hook.current.preview).toBeNull();
@@ -139,5 +139,23 @@ describe("useInstrumentImportWizard", () => {
       error: null,
       draft: { positions: [], readoutBySeries: {} },
     });
+  });
+});
+
+describe("apiReason", () => {
+  it("gives the API's detail as it worded it", () => {
+    expect(apiReason(new Error("API error: 422 — File is empty"))).toBe("File is empty");
+  });
+
+  it("gives a plain sentence when the API sent no detail", () => {
+    expect(apiReason(new Error("API error: 500"))).toBe(
+      "The server could not complete the request. Try again.",
+    );
+  });
+
+  it("gives a plain sentence when the server was never reached", () => {
+    expect(apiReason(new TypeError("Failed to fetch"))).toBe(
+      "Could not reach the server. Check your connection and try again.",
+    );
   });
 });

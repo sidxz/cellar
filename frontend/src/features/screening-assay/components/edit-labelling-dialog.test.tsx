@@ -116,6 +116,8 @@ function renderDialog(
   return { ...view, onOpenChange };
 }
 
+const COMPUTE_WARNING =
+  "The labeling was saved, but the calculations could not be updated. Select Recompute on the run to update them.";
 const save = () => screen.getByRole("button", { name: "Save" });
 const label = (position: string) => screen.getByRole("textbox", { name: `Label for ${position}` });
 
@@ -128,7 +130,7 @@ beforeEach(() => {
 describe("EditLabellingDialog", () => {
   it("keeps Save disabled until something changes, then shows the count beside it", () => {
     renderDialog();
-    expect(screen.getByRole("heading", { name: "Edit labelling" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Edit labeling" })).toBeInTheDocument();
     expect(save()).toBeDisabled();
     expect(screen.queryByText(/positions? changed/)).not.toBeInTheDocument();
     fireEvent.change(label("Position 2"), { target: { value: "y" } });
@@ -156,13 +158,12 @@ describe("EditLabellingDialog", () => {
       positions_changed: 1,
       readouts_repointed: 0,
       recalculated: false,
-      compute_warning: "The calculation could not finish",
+      compute_warning: COMPUTE_WARNING,
     });
     expect(onOpenChange).toHaveBeenCalledWith(false);
-    expect(toast.showSuccess).toHaveBeenCalledWith("Labelling saved");
-    expect(toast.showWarning).toHaveBeenCalledWith(
-      "The labelling was saved, but the calculations were not rebuilt: The calculation could not finish. Press Recompute on the run to rebuild them.",
-    );
+    expect(toast.showSuccess).toHaveBeenCalledWith("Labeling saved");
+    // The API words the warning in full; the dialog shows it as sent.
+    expect(toast.showWarning).toHaveBeenCalledWith(COMPUTE_WARNING);
   });
 
   it("asks for a reason on a completed run and keeps Save disabled without one", () => {
@@ -203,7 +204,7 @@ describe("EditLabellingDialog", () => {
     fireEvent.click(within(row).getByRole("button", { name: "compound picker" }));
     expect(
       screen.getByText(
-        "1 position has a compound but no batch; it will be stored without a compound",
+        "1 position has a compound but no batch. Choose a batch to link its traces and values to the compound.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("1 position changed")).toBeInTheDocument();
@@ -226,7 +227,7 @@ describe("EditLabellingDialog", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Position 2 was changed since you opened it",
     );
-    fireEvent.click(screen.getByRole("button", { name: "Reload" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard edits and reload" }));
     await waitFor(() => expect(onReload).toHaveBeenCalledTimes(1));
     const fresh = positions.map((p) => (p.well_id === "w2" ? { ...p, label: "theirs" } : p));
     rerender(
@@ -255,7 +256,9 @@ describe("EditLabellingDialog", () => {
       expect(screen.getByRole("alert")).toHaveTextContent(
         "The batch does not belong to this workspace",
       );
-      expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Discard edits and reload" }),
+      ).not.toBeInTheDocument();
       expect(label("Position 2")).toHaveValue("mine");
       expect(save()).toBeEnabled();
     });
@@ -271,7 +274,9 @@ describe("EditLabellingDialog", () => {
       }),
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("campaign 'C' may hold values");
-    expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Discard edits and reload" }),
+    ).not.toBeInTheDocument();
     expect(label("Position 2")).toHaveValue("mine");
   });
 

@@ -157,7 +157,9 @@ async def test_returns_requested_channel():
 async def test_unknown_channel_is_validation_error():
     h = Harness()
     failure = (await h.uc(h.query("nope"), auth=h.viewer)).failure()
-    assert isinstance(failure, ValidationError) and "Unknown channel 'nope'" in str(failure)
+    assert isinstance(failure, ValidationError)
+    # Worded as the viewer names it, without the internal signal key.
+    assert failure.message == "The selected signal is unavailable. Choose another signal."
     h.curve_repo.find_by_run.assert_not_awaited()
 
 
@@ -243,7 +245,7 @@ async def test_window_not_finite_or_not_positive_is_a_validation_error(window):
     h = Harness()
     result = await h.uc(h.query(view="derivative", window=window), auth=h.viewer)
     assert isinstance(result.failure(), ValidationError)
-    assert "above 0" in str(result.failure())
+    assert result.failure().message == "Enter a smoothing window greater than 0."
     h.derivative.derivative.assert_not_called()
 
 

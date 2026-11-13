@@ -111,7 +111,17 @@ def test_position_listed_twice_is_refused():
     wb["Overview"].append([1, "again"])
     buf = io.BytesIO()
     wb.save(buf)
-    with pytest.raises(InstrumentFileError, match="capillary 1 more than once"):
+    with pytest.raises(InstrumentFileError, match="lists capillary 1 more than once"):
+        READER.read(buf.getvalue(), "run.xlsx")
+
+
+def test_positions_listed_twice_are_named_in_the_plural():
+    wb = load_workbook(io.BytesIO(build_raw_workbook(positions={1: "a", 2: "b"})))
+    wb["Overview"].append([1, "again"])
+    wb["Overview"].append([2, "again"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    with pytest.raises(InstrumentFileError, match="lists capillaries 1, 2 more than once"):
         READER.read(buf.getvalue(), "run.xlsx")
 
 

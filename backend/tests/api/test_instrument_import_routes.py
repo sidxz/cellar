@@ -23,6 +23,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_stats
     SQLAlchemyProtocolStatsReader,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
+from cellar.interface.routes.run_import import LABELING_INVALID
 from tests.fakes.fake_auth import FakeAuth
 from tests.fixtures.dose_response_curves import _insert_org, _insert_protocol, _insert_run
 from tests.helpers.instrument_workbook import (
@@ -328,7 +329,9 @@ async def test_note_over_1000_characters_returns_422(
     labelling = labelling_from(preview)
     labelling["positions"][0]["note"] = "x" * 1001
     resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
-    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert resp.status_code == 422 and LABELING_INVALID in resp.text
+    # The validator's diagnostics (field paths, limits, input) stay in the log.
+    assert "1000" not in resp.text and "note" not in resp.text
     assert await _count(session_factory, "plates", s.run_id) == 0
 
 
@@ -509,10 +512,10 @@ async def test_malformed_labelling_returns_422(
 ) -> None:
     s = await _seed(session_factory, fake_auth.workspace_id)
     resp = await client.post(s.import_url, files=FILE, data={"labelling": "{not json"})
-    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert resp.status_code == 422 and LABELING_INVALID in resp.text
     negative = {"positions": [{"row": 1, "column": 1, "dose": -1}]}
     resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(negative)})
-    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert resp.status_code == 422 and LABELING_INVALID in resp.text
     assert await _count(session_factory, "plates", s.run_id) == 0
 
 

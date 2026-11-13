@@ -16,6 +16,7 @@ def test_position_label_by_holder_kind():
 
 def test_holder_label():
     assert holder_label(HolderKind.CASSETTE, 1, 24) == "Cassette, 24 capillaries"
+    assert holder_label(HolderKind.CASSETTE, 1, 1) == "Cassette, 1 capillary"
     assert holder_label(HolderKind.PLATE, 8, 12) == "Plate, 8 × 12"
     assert holder_label(HolderKind.PLATE, None, None) == "Plate"
 

@@ -185,13 +185,16 @@ describe("curves from the compound sheet", () => {
         />
       </CompoundCurvesProvider>,
     );
-    const buttons = screen.getAllByRole("button", { name: "Curves" });
+    const buttons = screen.getAllByRole("button", { name: "Traces" });
     expect(buttons).toHaveLength(1);
     // The card heading's expand button stays separate from Curves.
     expect(screen.getByRole("button", { name: /Target assay/ })).not.toContainElement(buttons[0]);
     fireEvent.click(buttons[0]);
     expect(
-      screen.getByRole("dialog", { name: "All runs of Target assay with curves for CC-test" }),
+      screen.getByRole("dialog", {
+        name: "Traces across runs",
+        description: /^Target assay · CC-test\./,
+      }),
     ).toBeInTheDocument();
     expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["mol"] });
   });

@@ -57,7 +57,9 @@ export function RunCurvesPanel({
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
   if (!data || !set) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">Could not load the curves.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Could not load the traces. Reload the page and try again.
+      </p>
     );
   }
 
@@ -76,7 +78,7 @@ export function RunCurvesPanel({
       onWindowChange={setDerivativeWindow}
       pending={isPlaceholderData}
       failed={failed}
-      exportName={`run-curves-${shortId(data.run_id)}`}
+      exportName={`traces-run-${shortId(data.run_id)}`}
       selectorAction={
         run &&
         canEdit && (
@@ -89,7 +91,7 @@ export function RunCurvesPanel({
               title={editRefusal ?? undefined}
               onClick={() => setEditOpen(true)}
             >
-              Edit labelling
+              Edit labeling
             </Button>
             <EditLabellingDialog
               run={run}

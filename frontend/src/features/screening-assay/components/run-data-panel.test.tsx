@@ -64,7 +64,7 @@ describe("RunDataPanel holder awareness", () => {
     render(<RunDataPanel run={run} />);
     expect(screen.queryByRole("tab", { name: "Plate Map" })).toBeNull();
     expect(screen.queryByRole("tab", { name: "Heat Map" })).toBeNull();
-    expect(screen.getByRole("tab", { name: "Curves" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Traces" })).toBeInTheDocument();
   });
 
   it("keeps today's tabs and no Curves tab for a plate run without curves", () => {
@@ -72,7 +72,7 @@ describe("RunDataPanel holder awareness", () => {
     render(<RunDataPanel run={run} />);
     expect(screen.getByRole("tab", { name: "Plate Map" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Heat Map" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: "Curves" })).toBeNull();
+    expect(screen.queryByRole("tab", { name: "Traces" })).toBeNull();
   });
 
   it("falls back to Readout Data when the hash names a hidden tab", () => {
@@ -96,7 +96,7 @@ describe("RunDataPanel holder awareness", () => {
     );
     state.plateMap = plateMap("cassette", true);
     rerender(<RunDataPanel run={run} />);
-    expect(screen.getByRole("tab", { name: "Curves" })).toHaveAttribute("data-state", "active");
+    expect(screen.getByRole("tab", { name: "Traces" })).toHaveAttribute("data-state", "active");
     expect(window.location.hash).toBe("#curves");
   });
 
@@ -138,7 +138,7 @@ describe("RunDataPanel holder awareness", () => {
     state.plateMap = plateMap("plate", false);
     render(<RunDataPanel run={{ ...run, is_locked: false, status: "completed" } as Run} />);
     openImportMenu();
-    const entry = screen.getByRole("menuitem", { name: /instrument file/i });
+    const entry = screen.getByRole("menuitem", { name: "Import Instrument File" });
     expect(entry).toHaveAttribute("data-disabled");
     expect(entry).toHaveAttribute(
       "title",

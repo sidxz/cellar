@@ -80,9 +80,9 @@ class MeasuredCurve(Entity):
         if len(x) != len(y):
             raise ValidationError("x and y must have the same length")
         if len(x) < 2:
-            raise ValidationError("A curve needs at least 2 points")
+            raise ValidationError("A trace needs at least 2 points")
         if not all(math.isfinite(v) for v in (*x, *y)):
-            raise ValidationError("Curve points must be finite numbers")
+            raise ValidationError("Trace points must be finite numbers")
         if not all(math.isfinite(r.value) for r in reported):
             raise ValidationError("Reported values must be finite numbers")
         if x_label is not None and len(x_label) > X_LABEL_MAX_LENGTH:

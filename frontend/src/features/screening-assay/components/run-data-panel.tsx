@@ -205,7 +205,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
           {!notPlate && <TabsTrigger value="plate-map">Plate Map</TabsTrigger>}
           {!notPlate && <TabsTrigger value="heat-map">Heat Map</TabsTrigger>}
-          {hasCurves && <TabsTrigger value="curves">Curves</TabsTrigger>}
+          {hasCurves && <TabsTrigger value="curves">Traces</TabsTrigger>}
           <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
           <TabsTrigger value="qc">QC Metrics</TabsTrigger>
           <TabsTrigger value="files">
@@ -246,7 +246,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                         className={HOVERABLE_WHEN_DISABLED}
                         onClick={() => setInstrumentWizardOpen(true)}
                       >
-                        Instrument file
+                        Import Instrument File
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

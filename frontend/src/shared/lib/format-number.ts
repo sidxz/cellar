@@ -39,6 +39,11 @@ export function formatMeasurementValue(value: number | null | undefined, sigFigs
   return s;
 }
 
+/** A count and its noun: "1 trace", "3 traces". Only for nouns plural with an "s". */
+export function formatCount(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 export function formatFileSize(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "—";
   if (bytes < 1024) return `${bytes} B`;

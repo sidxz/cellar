@@ -70,9 +70,9 @@ export interface LabellingTableProps<T extends LabellingRow = LabellingRow> {
   /** When set, Role, Compound, Batch and Concentration are read-only and this
    *  sentence is shown above the table. */
   calculatedLocked?: string | null;
-  /** The wizard's "No match" and "matched" badges, by row key. */
+  /** The wizard's "No match" and "Matched" badges, by row key. */
   hints?: ReadonlyMap<string, { noMatch: boolean; suggestedId: string | null }>;
-  /** Why the rows cannot be stored yet, shown as "To continue, correct …". */
+  /** Why the rows cannot be stored yet, shown after "Correct the following before continuing:". */
   problem: string | null;
 }
 
@@ -251,7 +251,9 @@ export function LabellingTable<T extends LabellingRow>({
         </table>
       </div>
       {problem && (
-        <output className="block text-sm text-destructive">To continue, correct {problem}</output>
+        <output className="block text-sm text-destructive">
+          Correct the following before continuing: {problem}
+        </output>
       )}
     </div>
   );
@@ -318,7 +320,7 @@ function LayoutMessages({ outcome }: { outcome: LayoutOutcome | null }) {
       {problems.length > 0 && (
         <Notice tone="warn">
           <p className="font-medium">
-            {problems.length === 1 ? "1 row needs" : `${problems.length} rows need`} attention
+            {problems.length === 1 ? "1 issue needs" : `${problems.length} issues need`} attention
           </p>
           <ul className="mt-1 list-disc pl-5">
             {problems.map((line, i) => (
@@ -382,7 +384,7 @@ function PositionRow({
       <tr className="border-b text-muted-foreground last:border-b-0">
         {checkbox}
         {positionCell}
-        <td className={cell}>{p.label || "empty"}</td>
+        <td className={cell}>{p.label || "No label"}</td>
         <td className={cell}>{WELL_TYPE_LABELS[p.wellType]}</td>
         <td className={cell}>{p.moleculeName ?? "No compound"}</td>
         <td className={cell}>None</td>
@@ -408,7 +410,7 @@ function PositionRow({
           className="h-8 w-44"
           aria-label={`Label for ${p.positionLabel}`}
           // The wizard's labels come from the instrument file; Edit labelling has none.
-          placeholder={showUse ? "No name in file" : "No label"}
+          placeholder={showUse ? "No label in file" : "No label"}
           value={p.label}
           aria-invalid={p.label.length > 200}
           onChange={(e) => onUpdate({ label: e.target.value })}
@@ -445,7 +447,7 @@ function PositionRow({
                 variant="outline"
                 className="border-green-500/30 bg-green-500/10 text-green-400"
               >
-                matched
+                Matched
               </Badge>
             )}
             <Button
@@ -487,7 +489,7 @@ function PositionRow({
       <td className={cell}>
         {locked ? (
           <span className={cn(!p.batchId && "text-muted-foreground")}>
-            {p.batchId ? (p.batchNumber ?? p.batchId) : "None"}
+            {p.batchId ? (p.batchNumber ?? "Batch unavailable") : "None"}
           </span>
         ) : p.moleculeId ? (
           <div className="flex items-center gap-1.5">
@@ -503,7 +505,7 @@ function PositionRow({
                 variant="outline"
                 className="border-amber-500/30 bg-amber-500/10 text-amber-400"
               >
-                not chosen
+                No batch selected
               </Badge>
             )}
           </div>

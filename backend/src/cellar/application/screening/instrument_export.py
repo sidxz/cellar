@@ -101,7 +101,7 @@ def read_instrument_file(
     if reader is None:
         return Failure(
             ValidationError(
-                "Unrecognised instrument file. Supported formats: "
+                "Unrecognized instrument file. Supported formats: "
                 + "; ".join(r.label for r in readers)
             )
         )

@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { shortId } from "@/shared/lib/utils";
 import { type ReactNode, createContext, useContext, useState } from "react";
 import { MultiRunCurves } from "./multi-run-curves";
 
@@ -25,9 +24,17 @@ function listNames(names: readonly string[]): string {
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 }
 
-export function compoundCurvesTitle(target: CompoundCurvesTarget): string {
-  const names = listNames(target.molecules.map((m) => m.name));
-  return `All runs of ${target.protocol.name} with curves for ${names}`;
+/** "Protocol · A and B": what the dialog shows, under its title. */
+export function compoundCurvesSummary(target: CompoundCurvesTarget): string {
+  return `${target.protocol.name} · ${listNames(target.molecules.map((m) => m.name))}`;
+}
+
+/** A file name part: runs of anything but letters, digits, "." and "-" become one "-". */
+function fileNamePart(text: string): string {
+  return text
+    .replace(/[^\p{L}\p{N}.-]+/gu, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 60);
 }
 
 const OpenContext = createContext<((target: CompoundCurvesTarget) => void) | null>(null);
@@ -59,7 +66,7 @@ export function CompoundCurvesButton({
         open(target);
       }}
     >
-      Curves
+      Traces
     </Button>
   );
 }
@@ -83,10 +90,10 @@ function CompoundCurvesContent({ target }: { target: CompoundCurvesTarget }) {
   return (
     <DialogContent className="flex max-h-[90vh] w-[min(95vw,1280px)] max-w-[1280px] flex-col overflow-hidden sm:max-w-[1280px]">
       <DialogHeader>
-        <DialogTitle>{compoundCurvesTitle(target)}</DialogTitle>
+        <DialogTitle>Traces across runs</DialogTitle>
         <DialogDescription>
-          A live view of every run with curves, except rejected runs. It can include runs that this
-          search&apos;s run scope and aggregation rule did not count.
+          {compoundCurvesSummary(target)}. Includes every run except rejected runs, regardless of
+          this search&apos;s run scope or aggregation.
         </DialogDescription>
       </DialogHeader>
       <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
@@ -102,10 +109,10 @@ function CompoundCurvesContent({ target }: { target: CompoundCurvesTarget }) {
               groupBy: target.molecules.length === 1 ? "batch" : "compound",
             },
           }}
-          exportName={`compound-curves-${shortId(target.protocol.id)}`}
+          exportName={`traces-${fileNamePart(target.protocol.name)}-${fileNamePart(names)}`}
           empty={
             <p className="py-8 text-center text-sm text-muted-foreground">
-              No curves for {names} in runs that are not rejected.
+              No traces for {names} in runs that are not rejected.
             </p>
           }
         />

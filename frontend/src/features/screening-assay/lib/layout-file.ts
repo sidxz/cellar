@@ -96,7 +96,7 @@ export function applyLayout<T extends LabellingRow>(
     for (const problem of f.problems) problems.push(`${p}: ${problem}`);
     if (!opts.allowUse && f.use === false) {
       problems.push(
-        `${p}: positions cannot be removed here; reset the run and import again to leave one out`,
+        `${p}: positions cannot be removed here. For a draft or in-progress run, reset all run data and import again. Otherwise, import into a new run.`,
       );
       continue;
     }
@@ -105,7 +105,7 @@ export function applyLayout<T extends LabellingRow>(
   // The server tells: only it saw the cells, including ones it could not read.
   if (file.calculated_columns_ignored) notices.push(LOCKED_NOTICE);
   if (file.unrecognised_columns.length > 0) {
-    notices.push(`Columns not recognised and ignored: ${file.unrecognised_columns.join(", ")}`);
+    notices.push(`Columns not recognized and ignored: ${file.unrecognised_columns.join(", ")}`);
   }
 
   let filled = 0;

@@ -170,7 +170,7 @@ describe("LabellingTable", () => {
 
   it("marks a row with a compound and no batch as not chosen", () => {
     renderTable();
-    expect(screen.getAllByText("not chosen")).toHaveLength(1);
+    expect(screen.getAllByText("No batch selected")).toHaveLength(1);
   });
 
   it("applies a role to the selected rows through onSetRole", () => {
@@ -197,11 +197,11 @@ describe("LabellingTable", () => {
       ]),
       problem: "Position 3: the concentration must be a number, 0 or more.",
     });
-    expect(screen.getByText("matched")).toBeInTheDocument();
+    expect(screen.getByText("Matched")).toBeInTheDocument();
     expect(screen.getByText("No match")).toBeInTheDocument();
     expect(
       screen.getByText(
-        "To continue, correct Position 3: the concentration must be a number, 0 or more.",
+        "Correct the following before continuing: Position 3: the concentration must be a number, 0 or more.",
       ),
     ).toBeInTheDocument();
   });
@@ -270,13 +270,13 @@ describe("LabellingTable", () => {
         calculated_columns_ignored: false,
       }),
     );
-    const heading = screen.getByText("2 rows need attention");
+    const heading = screen.getByText("2 issues need attention");
     const notice = heading.parentElement as HTMLElement;
     expect(within(notice).getByText("Position 1: Use must be Yes or No")).toBeInTheDocument();
     expect(
       within(notice).getByText("Position 9: not a position in this table; skipped"),
     ).toBeInTheDocument();
-    expect(screen.getByText("Columns not recognised and ignored: Plate")).toBeInTheDocument();
+    expect(screen.getByText("Columns not recognized and ignored: Plate")).toBeInTheDocument();
     // Above the table.
     const table = screen.getByRole("table");
     expect(heading.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -313,5 +313,27 @@ describe("LabellingTable", () => {
     } finally {
       resolve.isPending = false;
     }
+  });
+});
+
+describe("LabellingTable label and batch wording", () => {
+  it("says No label for an unused row without one, and No label in file in the wizard", () => {
+    renderTable({ rows: [rows[0], { ...rows[2], used: false }] });
+    expect(screen.getByText("No label")).toBeInTheDocument();
+    renderTable({ rows: [rows[1]] });
+    expect(screen.getByRole("textbox", { name: "Label for Position 2" })).toHaveAttribute(
+      "placeholder",
+      "No label in file",
+    );
+  });
+
+  it("shows Batch unavailable, not an identifier, for a read-only batch without a number", () => {
+    renderTable({
+      rows: [{ ...rows[0], batchNumber: null }],
+      showUse: false,
+      calculatedLocked: "Locked.",
+    });
+    expect(screen.getByText("Batch unavailable")).toBeInTheDocument();
+    expect(screen.queryByText("b1")).not.toBeInTheDocument();
   });
 });

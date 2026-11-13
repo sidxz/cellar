@@ -13,6 +13,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
@@ -32,9 +33,15 @@ from cellar.domain.screening_assay.run import PositionEdit
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 
 NO_MEASURED_CURVES = (
-    "This run has no measured curves. Positions can be edited here only on a run "
+    "This run has no traces. Positions can be edited here only on a run "
     "imported from an instrument file."
 )
+COMPUTE_FAILED = (
+    "The labeling was saved, but the calculations could not be updated. "
+    "Select Recompute on the run to update them."
+)
+
+_log = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -130,8 +137,9 @@ class RelabelRunPositions:
                     )
                     return Failure(
                         ConflictError(
-                            f"{label}: campaign '{name}' may hold values of its compound "
-                            "from this run, so its batch cannot be changed"
+                            f"Cannot change the batch for {label}: campaign '{name}' "
+                            "contains results for this compound that may use this run. "
+                            "Review those campaign results before changing the batch."
                         )
                     )
 
@@ -166,7 +174,13 @@ class RelabelRunPositions:
         if any(change.touches_calculation for change in changes):
             computed = await self._calculation_engine.compute_for_run(run.id, workspace_id=ws)
             if isinstance(computed, Failure):
-                warning = str(computed.failure())
+                _log.warning(
+                    "run_positions.compute_failed",
+                    run_id=str(run.id),
+                    workspace_id=str(ws),
+                    reason=str(computed.failure()),
+                )
+                warning = COMPUTE_FAILED
             else:
                 recalculated = True
         return Success(RelabelResult(len(changes), repointed, recalculated, warning))

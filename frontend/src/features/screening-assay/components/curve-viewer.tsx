@@ -186,7 +186,7 @@ export function CurveViewer(props: CurveViewerProps) {
 function CurveViewerWithMembers(props: CurveViewerProps) {
   const { data: members } = useWorkspaceMembers();
   const scientistOf = useCallback(
-    (userId: string) => members?.find((m) => m.user_id === userId)?.name ?? shortId(userId),
+    (userId: string) => members?.find((m) => m.user_id === userId)?.name ?? "Scientist unavailable",
     [members],
   );
   return <CurveViewerBody {...props} scientistOf={scientistOf} />;
@@ -457,10 +457,10 @@ function CurveViewerBody({
             />
             {shownView === "derivative" && (
               <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                window
+                smoothing window
                 <Input
                   type="number"
-                  aria-label="Window"
+                  aria-label="Smoothing window"
                   min={0}
                   step="any"
                   className="h-8 w-20"
@@ -487,10 +487,10 @@ function CurveViewerBody({
             onChange={(v) => setShowReported(v === "on")}
           />
         </Field>
-        <Field label="Colour">
+        <Field label="Color">
           <div className="flex items-center gap-2">
             <Segmented
-              label="Colour"
+              label="Color"
               value={effectiveMode}
               options={[
                 { value: "highlight", label: "Highlight" },
@@ -571,20 +571,23 @@ function CurveViewerBody({
           )}
         >
           {failed
-            ? "Could not load the curves."
+            ? "Could not load the traces. Reload the page and try again."
             : tooMany
-              ? `More than ${MAX_DRAWN} positions are selected. Narrow the selection to draw them.`
+              ? `More than ${MAX_DRAWN} positions would be plotted. ${showReferences ? "Select fewer positions or turn off reference positions." : "Select fewer positions."}`
               : selectedIds.length === 0
-                ? "Select positions above to draw their curves"
+                ? "Select positions above to draw their traces"
                 : pending
-                  ? "Loading curves…"
-                  : "The selected positions have no curves for this signal."}
+                  ? "Loading traces…"
+                  : set.view === "derivative"
+                    ? "No derivative could be calculated for the selected positions. Switch to Measured to see their traces."
+                    : "The selected positions have no traces for this signal."}
         </div>
       )}
 
       {notShown.length > 0 && (
         <p className="text-xs text-muted-foreground">
-          Not shown, no {currentChannel(set)?.label ?? set.channel} curve:{" "}
+          Not shown, no {currentChannel(set)?.label ?? set.channel}{" "}
+          {set.view === "derivative" ? "derivative" : "trace"}:{" "}
           {notShown.map(positionName).join(", ")}
         </p>
       )}
@@ -641,13 +644,13 @@ function CurveViewerBody({
               </span>
               <span>
                 <Swatch line colour={colours.focus} />
-                The curve under the pointer
+                The trace under the pointer
               </span>
               {colourMode === "distinct" && (
-                <span>More than {COLOUR_SLOT_COUNT} selected: distinct colours are off</span>
+                <span>More than {COLOUR_SLOT_COUNT} selected: distinct colors are off</span>
               )}
               {colourMode === "group" && (
-                <span>More than {COLOUR_SLOT_COUNT} groups: group colours are off</span>
+                <span>More than {COLOUR_SLOT_COUNT} groups: group colors are off</span>
               )}
             </>
           )}
@@ -715,8 +718,11 @@ function CurveViewerBody({
                   <TableCell className={cn(!r.batch && "text-muted-foreground")}>
                     {r.batch ?? "None"}
                   </TableCell>
-                  <TableCell className="text-right font-mono tabular-nums">
-                    {r.dose ?? ""}
+                  <TableCell
+                    className="text-right font-mono tabular-nums"
+                    title={r.dose == null ? undefined : String(r.dose)}
+                  >
+                    {formatValue(r.dose ?? undefined)}
                   </TableCell>
                   <TableCell>{r.role}</TableCell>
                   <TableCell className="whitespace-normal">{r.note}</TableCell>

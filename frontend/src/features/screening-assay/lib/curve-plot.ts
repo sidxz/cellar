@@ -233,6 +233,12 @@ export function buildCurveFigure(
   const channel = currentChannel(set);
   const xUnit = channel?.x_unit ?? "";
   const xTitle = channel?.x_label ? `${channel.x_label} [${xUnit}]` : xUnit;
+  // The derivative's unit is the signal's per x unit; a signal without a unit gives 1/x.
+  const yUnit = !channel
+    ? ""
+    : set.view === "derivative"
+      ? `${channel.y_unit || "1"}/${xUnit}`
+      : (channel.y_unit ?? "");
 
   const traces: Record<string, unknown>[] = [];
   const shapes: Record<string, unknown>[] = [];
@@ -258,7 +264,7 @@ export function buildCurveFigure(
       meta: p.well_id,
       line: { color: style.color, width: style.width },
       opacity: style.opacity,
-      hovertemplate: `<b>${group ? positionName(p) : "%{fullData.name}"}</b><br>%{x} ${xUnit} · %{y:.4g}<extra></extra>`,
+      hovertemplate: `<b>${group ? positionName(p) : "%{fullData.name}"}</b><br>%{x} ${xUnit} · %{y:.4g}${yUnit ? ` ${yUnit}` : ""}<extra></extra>`,
       ...(group && { legendgroup: group.key, showlegend: firstOfGroup }),
     });
     if (!showReported) continue;
@@ -289,9 +295,9 @@ export function buildCurveFigure(
   const yTitle = !channel
     ? ""
     : set.view === "derivative"
-      ? `d(${channel.label})/d(${xUnit})`
-      : channel.y_unit
-        ? `${channel.label} (${channel.y_unit})`
+      ? `Derivative of ${channel.label} (${yUnit})`
+      : yUnit
+        ? `${channel.label} (${yUnit})`
         : channel.label;
 
   return {
