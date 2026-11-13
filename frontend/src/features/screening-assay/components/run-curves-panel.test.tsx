@@ -94,7 +94,7 @@ describe("RunCurvesPanel", () => {
     expect(useRunCurves).toHaveBeenCalledWith("r1", expect.anything());
     const slot = screen.getByRole("button", { name: "Position 1" });
     fireEvent.click(slot);
-    fireEvent.click(screen.getByRole("button", { name: "Signal B" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Signal B" }));
     expect(lastParams()).toMatchObject({ channel: "b" });
     expect(screen.getByRole("button", { name: "Position 1" })).toHaveAttribute(
       "aria-pressed",
@@ -102,11 +102,35 @@ describe("RunCurvesPanel", () => {
     );
   });
 
+  it("marks the current option of each segmented control as selected", () => {
+    render(<RunCurvesPanel runId="r1" />);
+    for (const [group, current, other] of [
+      ["Signal", "Signal A", "Signal B"],
+      ["View", "Measured", "Derivative"],
+      ["Reported values", "Lines on", "Off"],
+      ["Colour", "Highlight", /Distinct/],
+    ] as const) {
+      const list = screen.getByRole("tablist", { name: group });
+      expect(within(list).getByRole("tab", { name: current })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(within(list).getByRole("tab", { name: other })).toHaveAttribute(
+        "aria-selected",
+        "false",
+      );
+    }
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Off" }));
+    expect(screen.getByRole("tab", { name: "Off" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Lines on" })).toHaveAttribute("aria-selected", "false");
+  });
+
   it("lists the selected positions in the table with their reported values", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
     const table = screen.getByRole("table");
     expect(within(table).getByText("Note")).toBeInTheDocument();
+    expect(within(table).getByText("Conc. (µM)")).toBeInTheDocument();
     expect(within(table).getByText("Point 1 (°C)")).toBeInTheDocument();
     expect(within(table).getByText("Protein alone")).toBeInTheDocument();
     expect(within(table).getByText("bubble at start")).toBeInTheDocument();
@@ -135,11 +159,11 @@ describe("RunCurvesPanel", () => {
   it("disables distinct colours when more than 8 are selected", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
-    fireEvent.click(screen.getByRole("button", { name: /Distinct/ }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: /Distinct/ }));
     const traces = lastPlot().data as Array<{ line: { color: string } }>;
     expect(traces[0].line.color).toBe(MEASURED_CURVE_COLORS.dark.series[0]);
     fireEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(screen.getByRole("button", { name: /Distinct/ })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: /Distinct/ })).toBeDisabled();
     expect(screen.getAllByText(/More than 8 selected/).length).toBeGreaterThan(0);
     const after = lastPlot().data as Array<{ line: { color: string } }>;
     expect(after[0].line.color).toBe(MEASURED_CURVE_COLORS.dark.reference);
@@ -161,14 +185,14 @@ describe("RunCurvesPanel", () => {
 
   it("requests view=derivative when the switch is on and shows the window the API used", () => {
     render(<RunCurvesPanel runId="r1" />);
-    fireEvent.click(screen.getByRole("button", { name: "Derivative" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
     expect(lastParams()).toMatchObject({ view: "derivative" });
     expect(screen.getByLabelText("Window")).toHaveValue(3.5);
   });
 
   it("refetches with the edited window on commit, not on each keystroke", () => {
     render(<RunCurvesPanel runId="r1" />);
-    fireEvent.click(screen.getByRole("button", { name: "Derivative" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
     const field = screen.getByLabelText("Window");
     fireEvent.change(field, { target: { value: "2" } });
     expect(lastParams()?.window).toBeUndefined();

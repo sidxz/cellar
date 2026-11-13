@@ -73,6 +73,7 @@ export function buildCurveFigure(
   };
   const channel = currentChannel(data);
   const xUnit = channel?.x_unit ?? "";
+  const xTitle = channel?.x_label ? `${channel.x_label} [${xUnit}]` : xUnit;
   const curveById = new Map(data.curves.map((c) => [c.well_id, c]));
 
   const traces: Record<string, unknown>[] = [];
@@ -138,7 +139,7 @@ export function buildCurveFigure(
       hovermode: "closest",
       font: { color: ink, size: 12 },
       shapes,
-      xaxis: { title: { text: xUnit }, gridcolor: grid, linecolor: grid, zeroline: false },
+      xaxis: { title: { text: xTitle }, gridcolor: grid, linecolor: grid, zeroline: false },
       yaxis: {
         title: { text: yTitle },
         gridcolor: grid,

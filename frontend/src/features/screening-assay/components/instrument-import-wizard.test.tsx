@@ -151,7 +151,8 @@ describe("InstrumentImportWizard", () => {
     for (const label of ["Position 1", "Position 2", "Position 3"]) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
-    expect(screen.getByText("Conc. (uM)")).toBeInTheDocument();
+    expect(screen.getByText("Conc. (µM)")).toBeInTheDocument();
+    expect(screen.getByText(/Concentration is in µM/)).toBeInTheDocument();
     expect(screen.getByText("ABC-0000001", { selector: "span" })).toBeInTheDocument();
   });
 

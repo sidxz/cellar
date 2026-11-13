@@ -11,6 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn } from "@/shared/lib/utils";
@@ -37,6 +38,7 @@ import {
   assignColourSlots,
   holderOrder,
 } from "../lib/curve-selection";
+import { DOSE_UNIT_LABELS, type DoseUnit } from "../types";
 import { PositionSelector } from "./position-selector";
 
 const PLOT_CONFIG = { displaylogo: false, responsive: true };
@@ -61,25 +63,15 @@ function Segmented<T extends string>({
   onChange: (value: T) => void;
 }) {
   return (
-    <fieldset
-      aria-label={label}
-      className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1"
-    >
-      {options.map((o) => (
-        <Button
-          key={o.value}
-          type="button"
-          size="sm"
-          variant={o.value === value ? "secondary" : "ghost"}
-          aria-pressed={o.value === value}
-          disabled={o.disabled}
-          className="h-7 rounded-sm px-2.5 text-xs"
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </Button>
-      ))}
-    </fieldset>
+    <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
+      <TabsList aria-label={label}>
+        {options.map((o) => (
+          <TabsTrigger key={o.value} value={o.value} disabled={o.disabled} className="text-xs">
+            {o.label}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
 
@@ -394,7 +386,9 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
               <TableHead>Label</TableHead>
               <TableHead>Compound</TableHead>
               <TableHead>Batch</TableHead>
-              <TableHead className="text-right">Conc. ({data.dose_unit})</TableHead>
+              <TableHead className="text-right">
+                Conc. ({DOSE_UNIT_LABELS[data.dose_unit as DoseUnit] ?? data.dose_unit})
+              </TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Note</TableHead>
               {columns.map((c) => (

@@ -13,6 +13,10 @@ vi.mock("./run-relations", () => ({
   TagsRelation: () => null,
 }));
 vi.mock("./run-notes-line", () => ({ RunNotesLine: () => null }));
+const usePlateMap = vi.fn((_runId: string) => ({ data: undefined as unknown }));
+vi.mock("../hooks/use-plate-setup", () => ({
+  usePlateMap: (runId: string) => usePlateMap(runId),
+}));
 vi.mock("@/shared/components/entity-name", () => ({
   ProtocolName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
@@ -41,6 +45,29 @@ describe("RunSummaryCard facts band", () => {
     expect(screen.getByText("2026-05-15")).toBeInTheDocument();
     expect(screen.getByText("384-Well")).toBeInTheDocument();
     expect(screen.getByText("1 plate")).toBeInTheDocument();
+  });
+
+  it("prints the API's holder wording in place of format and count for a cassette run", () => {
+    usePlateMap.mockReturnValueOnce({
+      data: {
+        plates: [{ holder_kind: "cassette", holder_label: "Holder of 3 positions" }],
+      },
+    });
+    render(<RunSummaryCard run={run()} protocol={undefined} canEditMeta canEditTags />);
+    expect(usePlateMap).toHaveBeenCalledWith("r1");
+    expect(screen.getByText("Holder of 3 positions")).toBeInTheDocument();
+    expect(screen.queryByText("384-Well")).not.toBeInTheDocument();
+    expect(screen.queryByText("1 plate")).not.toBeInTheDocument();
+  });
+
+  it("keeps format and count for a run on ordinary plates", () => {
+    usePlateMap.mockReturnValueOnce({
+      data: { plates: [{ holder_kind: "plate", holder_label: "Plate" }] },
+    });
+    render(<RunSummaryCard run={run()} protocol={undefined} canEditMeta canEditTags />);
+    expect(screen.getByText("384-Well")).toBeInTheDocument();
+    expect(screen.getByText("1 plate")).toBeInTheDocument();
+    expect(screen.queryByText("Plate")).not.toBeInTheDocument();
   });
 
   it("pluralizes the plate count", () => {

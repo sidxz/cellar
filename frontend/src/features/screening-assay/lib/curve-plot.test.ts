@@ -139,6 +139,22 @@ describe("buildCurveFigure", () => {
     expect(layout.yaxis.title.text).toBe("Signal A (u)");
   });
 
+  it("names the x axis with its quantity when the API gives one", () => {
+    const named = {
+      ...curves,
+      channels: [{ ...curves.channels[0], x_label: "Temperature" }],
+    };
+    const { layout } = buildCurveFigure({ ...base, data: named }) as unknown as {
+      layout: { xaxis: { title: { text: string } } };
+    };
+    expect(layout.xaxis.title.text).toBe("Temperature [°C]");
+    const derivative = buildCurveFigure({
+      ...base,
+      data: { ...named, view: "derivative", window: 1.5 },
+    }) as unknown as { layout: { yaxis: { title: { text: string } } } };
+    expect(derivative.layout.yaxis.title.text).toBe("d(Signal A)/d(°C)");
+  });
+
   it("titles the y axis as a derivative in the derivative view", () => {
     const { layout } = buildCurveFigure({
       ...base,

@@ -38,6 +38,8 @@ import {
   seriesKey,
 } from "../lib/instrument-labelling";
 import {
+  DOSE_UNIT_LABELS,
+  type DoseUnit,
   type InstrumentImportResult,
   type InstrumentPreview,
   WELL_TYPE_LABELS,
@@ -51,6 +53,12 @@ const XLSX_ACCEPT = {
 const WELL_TYPES = Object.keys(WELL_TYPE_LABELS) as WellType[];
 /** Radix Select forbids an empty item value; this stands for "no readout". */
 const NO_READOUT = "__none__";
+
+/** Left-pinned columns of the labelling table: select (fixed width) then Position. */
+const STICKY_SELECT = "sticky left-0 z-[1] w-10 min-w-10";
+const STICKY_POSITION = "sticky left-10 z-[1] whitespace-nowrap";
+/** ``bg-muted/40`` over the background, made opaque for pinned cells. */
+const SELECTED_OPAQUE = "bg-[color-mix(in_oklab,var(--muted)_40%,var(--background))]";
 
 const isBadDose = (dose: string) =>
   dose.trim() !== "" && !(Number.isFinite(Number(dose)) && Number(dose) >= 0);
@@ -89,7 +97,9 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
 
   return (
     <Dialog open={open} onOpenChange={w.handleOpenChange}>
-      <DialogContent className="w-[min(95vw,1200px)] max-w-[1200px] sm:max-w-[1200px] max-h-[90vh] overflow-y-auto">
+      {/* Header, steps and footer stay put; only the body below them scrolls,
+          and in step 2 only the labelling table does. */}
+      <DialogContent className="flex max-h-[90vh] w-[min(95vw,1280px)] max-w-[1280px] flex-col overflow-hidden sm:max-w-[1280px]">
         <DialogHeader>
           <DialogTitle>Import instrument file</DialogTitle>
           <DialogDescription>
@@ -103,48 +113,50 @@ export function InstrumentImportWizard({ runId, open, onOpenChange }: Instrument
           current={step}
         />
 
-        {step === 1 && (
-          <div className="space-y-4 py-2">
-            {/* Stays mounted once a file is recognised so "Choose another file" can open it. */}
-            <div hidden={!!preview}>
-              <CsvDropzone
-                file={w.file}
-                isPending={isPreviewing}
-                onFile={w.handleFile}
-                onOpenReady={handleOpenReady}
-                accept={XLSX_ACCEPT}
-                prompt="Drop the instrument's file here, or click to browse"
-                hint=".xlsx"
-              />
+        <div className="flex min-h-0 min-w-0 flex-col overflow-y-auto">
+          {step === 1 && (
+            <div className="space-y-4 py-2">
+              {/* Stays mounted once a file is recognised so "Choose another file" can open it. */}
+              <div hidden={!!preview}>
+                <CsvDropzone
+                  file={w.file}
+                  isPending={isPreviewing}
+                  onFile={w.handleFile}
+                  onOpenReady={handleOpenReady}
+                  accept={XLSX_ACCEPT}
+                  prompt="Drop the instrument's file here, or click to browse"
+                  hint=".xlsx"
+                />
+              </div>
+              {w.error && <Notice tone="bad">{w.error}</Notice>}
+              {preview && w.file && (
+                <RecognisedFile
+                  preview={preview}
+                  file={w.file}
+                  onChooseAnother={() => openPickerRef.current?.()}
+                />
+              )}
             </div>
-            {w.error && <Notice tone="bad">{w.error}</Notice>}
-            {preview && w.file && (
-              <RecognisedFile
-                preview={preview}
-                file={w.file}
-                onChooseAnother={() => openPickerRef.current?.()}
-              />
-            )}
-          </div>
-        )}
+          )}
 
-        {step === 2 && preview && (
-          <LabelStep
-            preview={preview}
-            draft={w.draft}
-            onUpdate={w.updatePosition}
-            onSetRole={w.setRole}
-          />
-        )}
+          {step === 2 && preview && (
+            <LabelStep
+              preview={preview}
+              draft={w.draft}
+              onUpdate={w.updatePosition}
+              onSetRole={w.setRole}
+            />
+          )}
 
-        {step === 3 && preview && (
-          <MapStep preview={preview} draft={w.draft} onSetReadout={w.setSeriesReadout} />
-        )}
+          {step === 3 && preview && (
+            <MapStep preview={preview} draft={w.draft} onSetReadout={w.setSeriesReadout} />
+          )}
 
-        {step === 4 && preview && !result && (
-          <ReviewStep preview={preview} draft={w.draft} error={w.error} />
-        )}
-        {step === 4 && result && <ResultView result={result} />}
+          {step === 4 && preview && !result && (
+            <ReviewStep preview={preview} draft={w.draft} error={w.error} />
+          )}
+          {step === 4 && result && <ResultView result={result} />}
+        </div>
 
         <DialogFooter className="gap-2">
           {step > 1 && !result && (
@@ -259,8 +271,10 @@ function LabelStep({
       return next;
     });
 
+  const unit = DOSE_UNIT_LABELS[preview.dose_unit as DoseUnit] ?? preview.dose_unit;
+
   return (
-    <div className="space-y-3 py-2">
+    <div className="flex min-h-0 flex-col gap-3 py-2">
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="text-muted-foreground">
           {selected.size} row{selected.size === 1 ? "" : "s"} selected
@@ -298,27 +312,31 @@ function LabelStep({
           Mark unused
         </Button>
         <span className="ml-auto text-xs text-muted-foreground">
-          Concentration is in {preview.dose_unit}, the protocol&apos;s dose unit
+          Concentration is in {unit}, the protocol&apos;s dose unit
         </span>
       </div>
 
-      <div className="max-h-[420px] overflow-auto rounded-md border">
+      {/* The only scroller in this step: header row sticks to the top, the
+          select and Position columns stick to the left. */}
+      <div className="min-h-0 overflow-auto rounded-md border">
         <table className="w-full text-sm">
           <thead className="sticky top-0 z-10 bg-muted">
             <tr className="border-b">
-              <th className="px-3 py-2">
+              <th className={cn(STICKY_SELECT, "bg-muted px-3 py-2")}>
                 <Checkbox
                   aria-label="Select all positions"
                   checked={allSelected}
                   onCheckedChange={(on) => setSelected(new Set(on === true ? allKeys : []))}
                 />
               </th>
-              <th className="px-3 py-2 text-left font-medium">Position</th>
+              <th className={cn(STICKY_POSITION, "bg-muted px-3 py-2 text-left font-medium")}>
+                Position
+              </th>
               <th className="px-3 py-2 text-left font-medium">Label</th>
               <th className="px-3 py-2 text-left font-medium">Role</th>
               <th className="px-3 py-2 text-left font-medium">Compound</th>
               <th className="px-3 py-2 text-left font-medium">Batch</th>
-              <th className="px-3 py-2 text-left font-medium">Conc. ({preview.dose_unit})</th>
+              <th className="px-3 py-2 text-left font-medium">Conc. ({unit})</th>
               <th className="px-3 py-2 text-left font-medium">Note</th>
               <th className="px-3 py-2 text-left font-medium">Use</th>
             </tr>
@@ -362,8 +380,10 @@ function PositionRow({
   onUpdate: (patch: Partial<PositionDraft>) => void;
 }) {
   const cell = "px-3 py-1.5 align-middle";
+  // Opaque, so scrolled cells pass beneath; matches the row's selected tint.
+  const stickyBg = selected ? SELECTED_OPAQUE : "bg-background";
   const checkbox = (
-    <td className={cell}>
+    <td className={cn(cell, STICKY_SELECT, stickyBg)}>
       <Checkbox
         aria-label={`Select ${p.positionLabel}`}
         checked={selected}
@@ -376,7 +396,7 @@ function PositionRow({
     return (
       <tr className="border-b text-muted-foreground last:border-b-0">
         {checkbox}
-        <td className={cell}>{p.positionLabel}</td>
+        <td className={cn(cell, STICKY_POSITION, stickyBg)}>{p.positionLabel}</td>
         <td className={cell}>{p.label || "empty"}</td>
         <td className={cell}>{WELL_TYPE_LABELS[p.wellType]}</td>
         <td className={cell}>{p.moleculeName ?? "No compound"}</td>
@@ -395,7 +415,7 @@ function PositionRow({
   return (
     <tr className={cn("border-b last:border-b-0", selected && "bg-muted/40")}>
       {checkbox}
-      <td className={cn(cell, "whitespace-nowrap")}>{p.positionLabel}</td>
+      <td className={cn(cell, STICKY_POSITION, stickyBg)}>{p.positionLabel}</td>
       <td className={cell}>
         <Input
           className="h-8 w-44"
