@@ -14,6 +14,20 @@ const BOM = "﻿";
 const LOCKED_NOTICE =
   "Role, Compound, Batch and Concentration in the file were ignored: they can be changed only while the run is draft or in progress.";
 
+/** A cell starting with one of these is run as a formula by a spreadsheet program. */
+const FORMULA_START = /^[=+\-@\t\r]/;
+
+/** A text cell as written: a leading apostrophe keeps it text. */
+function asText(value: string): string {
+  return FORMULA_START.test(value) ? `'${value}` : value;
+}
+
+/** A text cell as read back: drops the apostrophe `asText` added. A value the
+ *  user really wrote as `'=x` loses its apostrophe too; that is the accepted cost. */
+function fromText(value: string): string {
+  return value.startsWith("'") && FORMULA_START.test(value.slice(1)) ? value.slice(1) : value;
+}
+
 export function layoutTemplateCsv(
   rows: readonly LabellingRow[],
   opts: { doseUnit: string; withUse: boolean },
@@ -30,13 +44,13 @@ export function layoutTemplateCsv(
   if (opts.withUse) fields.push("Use");
   const data = rows.map((r) => {
     const line = [
-      r.positionLabel,
-      r.label,
+      asText(r.positionLabel),
+      asText(r.label),
       WELL_TYPE_LABELS[r.wellType],
-      r.moleculeRef ?? "",
-      r.batchNumber ?? "",
+      asText(r.moleculeRef ?? ""),
+      asText(r.batchNumber ?? ""),
       r.dose,
-      r.note,
+      asText(r.note),
     ];
     if (opts.withUse) line.push(r.used ? "Yes" : "No");
     return line;
@@ -55,9 +69,18 @@ export interface LayoutApplication<T extends LabellingRow> {
 
 export function applyLayout<T extends LabellingRow>(
   rows: readonly T[],
-  file: LayoutFile,
+  written: LayoutFile,
   opts: { allowUse: boolean; calculatedLocked: boolean },
 ): LayoutApplication<T> {
+  const file = {
+    ...written,
+    rows: written.rows.map((f) => ({
+      ...f,
+      position: fromText(f.position),
+      label: f.label == null ? f.label : fromText(f.label),
+      note: f.note == null ? f.note : fromText(f.note),
+    })),
+  };
   const problems: string[] = [];
   const notices: string[] = [];
   const known = new Set(rows.map((r) => r.positionLabel.trim()));

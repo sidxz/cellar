@@ -291,3 +291,35 @@ describe("apply layout", () => {
     expect(out.notices).toEqual(["Columns not recognised and ignored: Plate, Well"]);
   });
 });
+
+describe("cells a spreadsheet would read as formulas", () => {
+  const risky: LabellingRow[] = [
+    { ...rows[0], label: "=1+1", note: "@sum" },
+    { ...rows[1], dose: "-5" },
+  ];
+  const lines = () => layoutTemplateCsv(risky, { doseUnit: "µM", withUse: false }).split("\r\n");
+
+  it("writes a label and a note that start a formula with a leading apostrophe", () => {
+    expect(lines()[1]).toBe("Position 1,'=1+1,Reference,,,,'@sum");
+  });
+
+  it("does not prefix a concentration, nor an ordinary label", () => {
+    expect(lines()[2]).toBe("Position 2,x,Sample,REG-0001,B-1,-5,");
+  });
+
+  it("reads the written label and note back as they were", () => {
+    const fromFile = file(fileRow("Position 1", { label: "'=1+1", note: "'@sum" }));
+    expect(applyLayout(risky, fromFile, OPEN)).toMatchObject({ filled: 0, problems: [] });
+    const out = applyLayout(rows, fromFile, OPEN);
+    expect(out.rows[0]).toMatchObject({ label: "=1+1", note: "@sum" });
+  });
+
+  it("matches a position written with the apostrophe", () => {
+    const out = applyLayout(
+      [{ ...rows[0], positionLabel: "-Position 1" }],
+      file(fileRow("'-Position 1", { label: "y" })),
+      OPEN,
+    );
+    expect(out).toMatchObject({ filled: 1, problems: [] });
+  });
+});
