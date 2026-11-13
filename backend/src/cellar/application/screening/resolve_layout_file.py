@@ -136,13 +136,15 @@ class ResolveLayoutFile:
                 return Failure(ValidationError(f"The file has more than {MAX_LAYOUT_ROWS} rows"))
 
             resolver = _Resolver(input.workspace_id, self._molecule_repo, self._batch_repo)
+            # Where those columns cannot change, their problems are not worth listing.
+            report_calculated = run.calculated_positions_editable
             rows = []
             for raw in table.iter_rows():
                 cells = {key: raw.get(header, "").strip() for key, header in columns.items()}
                 for key in _TEXT_COLUMNS:
                     if key in cells:
                         cells[key] = _without_formula_guard(cells[key])
-                rows.append(await _row(cells, resolver))
+                rows.append(await _row(cells, resolver, report_calculated=report_calculated))
 
         return Success(LayoutFile(rows=tuple(rows), unrecognised_columns=tuple(unrecognised)))
 
@@ -151,8 +153,13 @@ def _without_formula_guard(text: str) -> str:
     return text[1:] if text[:1] == "'" and text[1:2] in _FORMULA_START else text
 
 
-async def _row(cells: dict[str, str], resolver: _Resolver) -> LayoutRow:
+async def _row(
+    cells: dict[str, str], resolver: _Resolver, *, report_calculated: bool = True
+) -> LayoutRow:
+    """``report_calculated`` off leaves out the problems of role, compound, batch and
+    concentration; their values are still read."""
     problems: list[str] = []
+    calculated = problems if report_calculated else []
 
     def text(key: str, limit: int, name: str) -> str | None:
         value = cells.get(key) or None
@@ -167,7 +174,7 @@ async def _row(cells: dict[str, str], resolver: _Resolver) -> LayoutRow:
     if role := cells.get("role"):
         well_type = ROLE_NAMES.get(" ".join(role.split()).casefold())
         if well_type is None:
-            problems.append(
+            calculated.append(
                 f"Unknown role '{role}'. Use Sample, Reference, Blank, "
                 "Positive control or Negative control"
             )
@@ -185,7 +192,7 @@ async def _row(cells: dict[str, str], resolver: _Resolver) -> LayoutRow:
             dose = None
         if dose is None or not math.isfinite(dose) or dose < 0:
             dose = None
-            problems.append("Concentration must be a number, 0 or more")
+            calculated.append("Concentration must be a number, 0 or more")
 
     note = text("note", _MAX_NOTE, "Note")
 
@@ -195,7 +202,7 @@ async def _row(cells: dict[str, str], resolver: _Resolver) -> LayoutRow:
         if use is None:
             problems.append("Use must be Yes or No")
 
-    compound = await resolver(cells.get("compound", ""), cells.get("batch", ""), problems)
+    compound = await resolver(cells.get("compound", ""), cells.get("batch", ""), calculated)
     return LayoutRow(
         position=cells.get("position", ""),
         label=label,

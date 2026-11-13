@@ -563,6 +563,12 @@ class Run(AggregateRoot):
             )
         )
 
+    @property
+    def calculated_positions_editable(self) -> bool:
+        """Whether positions' role, batch and concentration can be changed: only while
+        the run is draft or in progress."""
+        return self.status in _CALCULATION_EDIT_STATES
+
     def check_position_edits(self, edits: Sequence[PositionEdit]) -> None:
         """The checks ``relabel_positions`` makes before it compares anything: the run is
         not locked, each position is on the run and given once, its values are valid, and
@@ -598,7 +604,7 @@ class Run(AggregateRoot):
 
         if (
             any(change.touches_calculation for _, _, change in changed)
-            and self.status not in _CALCULATION_EDIT_STATES
+            and not self.calculated_positions_editable
         ):
             raise ConflictError(
                 "Role, batch and concentration can be changed only while the run is "

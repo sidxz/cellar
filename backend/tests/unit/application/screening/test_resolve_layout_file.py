@@ -17,7 +17,7 @@ from cellar.application.screening.resolve_layout_file import (
     ResolveLayoutFile,
     ResolveLayoutFileQuery,
 )
-from cellar.domain.screening_assay.enums import HolderKind, WellType
+from cellar.domain.screening_assay.enums import HolderKind, RunStatus, WellType
 from cellar.domain.screening_assay.holder import position_label
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
@@ -365,6 +365,28 @@ async def test_the_apostrophe_a_template_puts_before_a_formula_character_is_drop
     )
     assert first.compound is not None and first.compound.batch_id == b1.id
     assert second.label == "'plain"
+
+
+@pytest.mark.parametrize("status", [RunStatus.COMPLETED, RunStatus.APPROVED])
+async def test_on_a_run_whose_calculated_columns_are_locked_their_problems_are_not_listed(status):
+    """Role, compound, batch and concentration are ignored there, so their problems are
+    noise; label and note problems still count."""
+    m1 = _molecule("REG-0001")
+    h = Harness(by_reg={"REG-0001": m1})
+    h.run.status = status
+    out = await h.ok(
+        csv(
+            HEADER,
+            f"{P(1)},{'x' * 201},Standard,NOPE,B-404,-1,",
+            f"{P(2)},y,Blank,REG-0001,,5,",
+        )
+    )
+    first, second = out.rows
+    assert first.problems == ("Label is longer than 200 characters",)
+    assert second.problems == ()
+    # Still read, so the browser can say the columns were ignored.
+    assert (second.well_type, second.dose) == (WellType.BLANK, 5.0)
+    assert second.compound is not None
 
 
 async def test_missing_position_column_is_validation_error():
