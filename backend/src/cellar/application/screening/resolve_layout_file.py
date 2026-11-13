@@ -114,7 +114,13 @@ class ResolveLayoutFile:
             if len(input.content) > MAX_INSTRUMENT_FILE_BYTES:
                 return Failure(ValidationError("File is larger than 20 MB"))
             try:
-                table = self._parser.parse(input.content, input.filename, max_rows=MAX_LAYOUT_ROWS)
+                table = self._parser.parse(
+                    input.content,
+                    input.filename,
+                    max_rows=MAX_LAYOUT_ROWS,
+                    # The template's leading apostrophes are text, never quotes.
+                    quotechar='"',
+                )
             except TabularParseError as exc:
                 return Failure(ValidationError(str(exc)))
 

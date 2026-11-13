@@ -419,8 +419,8 @@ async def test_too_many_rows_is_refused_without_building_every_row():
     built: list[int] = []
 
     class CountingParser(TabularFileParser):
-        def parse(self, content: bytes, filename: str = "", max_rows: int | None = None):  # type: ignore[no-untyped-def]
-            table = super().parse(content, filename, max_rows=max_rows)
+        def parse(self, content: bytes, filename: str = "", max_rows=None, **kw):  # type: ignore[no-untyped-def]
+            table = super().parse(content, filename, max_rows, **kw)
             built.append(table.row_count)
             return table
 

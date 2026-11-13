@@ -42,9 +42,15 @@ class TabularParser(Protocol):
     Implementations detect format from filename extension + magic bytes and
     raise ``TabularParseError`` on unparseable input. With ``max_rows``, reading
     stops after ``max_rows + 1`` non-blank rows, so a longer file can be refused
-    without building every row.
+    without building every row. ``quotechar`` fixes a CSV's quote character instead
+    of sniffing it.
     """
 
     def parse(
-        self, content: bytes, filename: str = "", max_rows: int | None = None
+        self,
+        content: bytes,
+        filename: str = "",
+        max_rows: int | None = None,
+        *,
+        quotechar: str | None = None,
     ) -> ParsedTable: ...

@@ -35,7 +35,11 @@ def _detect_format(content: bytes, filename: str) -> str:
 
 
 def parse_tabular(
-    content: bytes, filename: str = "", *, max_rows: int | None = None
+    content: bytes,
+    filename: str = "",
+    *,
+    max_rows: int | None = None,
+    quotechar: str | None = None,
 ) -> ParsedTable:
     """Parse a tabular file into a ParsedTable.
 
@@ -46,6 +50,10 @@ def parse_tabular(
     With ``max_rows``, reading stops once ``max_rows + 1`` non-blank rows are
     read, so a caller can refuse a longer file without every row being built.
 
+    ``quotechar`` fixes a CSV's quote character; by default it is sniffed with the
+    delimiter. A file whose cells may start with an apostrophe (one that keeps a
+    spreadsheet from reading the cell as a formula) passes the double quote.
+
     Raises TabularParseError on unparseable input.
     """
     if not content:
@@ -54,16 +62,21 @@ def parse_tabular(
     fmt = _detect_format(content, filename)
     if fmt == "xlsx":
         return _parse_xlsx(content, max_rows)
-    return _parse_csv(content, max_rows)
+    return _parse_csv(content, max_rows, quotechar)
 
 
 class TabularFileParser:
     """``TabularParser`` Protocol implementation backed by ``parse_tabular``."""
 
     def parse(
-        self, content: bytes, filename: str = "", max_rows: int | None = None
+        self,
+        content: bytes,
+        filename: str = "",
+        max_rows: int | None = None,
+        *,
+        quotechar: str | None = None,
     ) -> ParsedTable:
-        return parse_tabular(content, filename, max_rows=max_rows)
+        return parse_tabular(content, filename, max_rows=max_rows, quotechar=quotechar)
 
 
 # ---------------------------------------------------------------------------
@@ -71,7 +84,9 @@ class TabularFileParser:
 # ---------------------------------------------------------------------------
 
 
-def _parse_csv(content: bytes, max_rows: int | None = None) -> ParsedTable:
+def _parse_csv(
+    content: bytes, max_rows: int | None = None, quotechar: str | None = None
+) -> ParsedTable:
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -86,9 +101,8 @@ def _parse_csv(content: bytes, max_rows: int | None = None) -> ParsedTable:
     except csv.Error:
         dialect = csv.excel  # type: ignore[assignment]
 
-    # Only the delimiter is sniffed. Quoting is always the double quote: a leading
-    # apostrophe (which keeps a cell from being read as a formula) is text.
-    reader = csv.reader(io.StringIO(text), dialect, quotechar='"', doublequote=True)
+    quoting = {} if quotechar is None else {"quotechar": quotechar, "doublequote": True}
+    reader = csv.reader(io.StringIO(text), dialect, **quoting)
     first = next(reader, None)
     if first is None:
         raise TabularParseError("CSV has no rows")

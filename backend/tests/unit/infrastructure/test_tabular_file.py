@@ -65,11 +65,18 @@ class TestCSV:
         with pytest.raises(TabularParseError):
             parse_tabular(b"   \n  \n", "x.csv")
 
-    def test_leading_apostrophes_are_text_not_quotes(self) -> None:
-        """A spreadsheet-safe file puts ' before = + - @; quoting is always the double
-        quote, so those cells keep their columns."""
+    def test_single_quoted_csv_is_read_by_default(self) -> None:
+        table = parse_tabular(b"Position,Label\n'P1','a,b'\n'P2','c,d'\n", "x.csv")
+        assert table.rows == [
+            {"Position": "P1", "Label": "a,b"},
+            {"Position": "P2", "Label": "c,d"},
+        ]
+
+    def test_leading_apostrophes_are_text_with_the_double_quote_given(self) -> None:
+        """A spreadsheet-safe file puts ' before = + - @; with the double quote as the
+        quote character those cells keep their columns."""
         content = b"Position,Label,Note\n'+P1,'=a,'@n\n'+P2,'=b,'@m\n"
-        table = parse_tabular(content, "x.csv")
+        table = parse_tabular(content, "x.csv", quotechar='"')
         assert table.rows == [
             {"Position": "'+P1", "Label": "'=a", "Note": "'@n"},
             {"Position": "'+P2", "Label": "'=b", "Note": "'@m"},
