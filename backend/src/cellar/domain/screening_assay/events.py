@@ -258,3 +258,57 @@ class RunInstrumentFileImported(DomainEvent):
             ("curves", None, str(self.curves)),
             ("readout_values", None, str(self.readout_values)),
         ]
+
+
+_CALCULATION_FIELDS = frozenset({"role", "batch", "concentration"})
+
+
+@dataclass(frozen=True)
+class FieldChange:
+    """One changed field of a position, as display text.
+
+    ``field`` is one of "label", "note", "role", "batch", "concentration".
+    """
+
+    field: str
+    old: str | None
+    new: str | None
+
+
+@dataclass(frozen=True)
+class PositionChange:
+    """The fields that changed on one position, in the order label, note, role, batch,
+    concentration."""
+
+    well_id: uuid.UUID
+    position_label: str
+    fields: tuple[FieldChange, ...]
+
+    @property
+    def batch_changed(self) -> bool:
+        return any(f.field == "batch" for f in self.fields)
+
+    @property
+    def touches_calculation(self) -> bool:
+        """A role, batch or concentration change: the run's calculations must run again."""
+        return any(f.field in _CALCULATION_FIELDS for f in self.fields)
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunPositionsRelabelled(DomainEvent):
+    """Positions of a run were edited after import. Audited with the old and new value of
+    every changed field, and the reason when one was given."""
+
+    positions: tuple[PositionChange, ...]
+    reason: str | None = None
+
+    @property
+    def audit_reason(self) -> str | None:
+        return self.reason
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [
+            (f"{p.position_label}: {f.field}", f.old, f.new)
+            for p in self.positions
+            for f in p.fields
+        ]
