@@ -288,12 +288,21 @@ class CampaignRepository(Protocol):
         """True when a link row was actually removed."""
         ...
 
-    async def find_names_using_readouts(
-        self, workspace_id: uuid.UUID, readout_ids: list[uuid.UUID]
+    async def find_names_holding_run_values(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
     ) -> dict[uuid.UUID, str]:
-        """Readout row id -> name of a campaign with a measurement sourced from that row.
+        """Molecule id -> name of a campaign whose result for that molecule may hold a value
+        taken from the run.
 
-        Rows no campaign uses are absent; an empty list gives ``{}``.
+        Judged by run and compound, not by readout row: a measurement on a channel of the
+        run's protocol counts when it names the run as its source, lists it among its
+        contributing runs, or names no source run but carries a value or a curve (an
+        aggregate or unpinned value, which keeps no row id and may include the run).
+        Molecules no campaign holds are absent; an empty list gives ``{}``.
         """
         ...
 

@@ -52,8 +52,10 @@ class Harness:
             id=uuid.uuid4(), molecule_id=uuid.uuid4(), batch_number=SimpleNamespace(value="B-2")
         )
         known = {b.id: b for b in (self.batch1, self.batch2)}
-        self.readout_on_w2 = SimpleNamespace(id=uuid.uuid4(), well_id=self.w2.id)
-        self.readout_on_w3 = SimpleNamespace(id=uuid.uuid4(), well_id=self.w3.id)
+        self.readout_on_w2 = SimpleNamespace(
+            id=uuid.uuid4(), well_id=self.w2.id, molecule_id=self.batch1.molecule_id
+        )
+        self.readout_on_w3 = SimpleNamespace(id=uuid.uuid4(), well_id=self.w3.id, molecule_id=None)
 
         self.uow = FakeUoW([self.run])
         self.run_repo = AsyncMock()
@@ -70,7 +72,7 @@ class Harness:
             side_effect=lambda ws, ids: [known[i] for i in ids if i in known]
         )
         self.campaign_repo = AsyncMock()
-        self.campaign_repo.find_names_using_readouts = AsyncMock(return_value={})
+        self.campaign_repo.find_names_holding_run_values = AsyncMock(return_value={})
         self.engine = AsyncMock()
         self.engine.compute_for_run = AsyncMock(return_value=Success(SimpleNamespace()))
         self.dispatcher = AsyncMock()
@@ -108,7 +110,7 @@ async def test_label_and_note_change_saves_once_and_does_not_recalculate():
     h.run_repo.save.assert_awaited_once_with(h.run)
     h.readout_repo.repoint_well.assert_not_awaited()
     h.engine.compute_for_run.assert_not_awaited()
-    h.campaign_repo.find_names_using_readouts.assert_not_awaited()
+    h.campaign_repo.find_names_holding_run_values.assert_not_awaited()
     assert h.uow.committed
     (event,) = h.dispatcher.dispatch_all.await_args.args[0]
     assert isinstance(event, RunPositionsRelabelled)
@@ -123,7 +125,9 @@ async def test_batch_change_repoints_readouts_and_recalculates():
     )
     h.engine.compute_for_run.assert_awaited_once_with(h.run.id, workspace_id=h.ws)
     assert (out.readouts_repointed, out.recalculated, out.compute_warning) == (2, True, None)
-    h.campaign_repo.find_names_using_readouts.assert_awaited_once_with(h.ws, [h.readout_on_w2.id])
+    h.campaign_repo.find_names_holding_run_values.assert_awaited_once_with(
+        h.ws, h.run.id, h.run.protocol_id, [h.batch1.molecule_id]
+    )
     (event,) = h.dispatcher.dispatch_all.await_args.args[0]
     assert event.positions[0].fields[0].old == "B-1" and event.positions[0].fields[0].new == "B-2"
 
@@ -211,9 +215,11 @@ async def test_batch_not_in_workspace_is_not_found_and_nothing_written():
     assert h.w3.batch_id is None
 
 
-async def test_batch_change_refused_when_a_campaign_uses_the_readouts():
+async def test_batch_change_refused_when_a_campaign_may_hold_the_compounds_values_from_the_run():
     h = Harness()
-    h.campaign_repo.find_names_using_readouts.return_value = {h.readout_on_w2.id: "Campaign A"}
+    h.campaign_repo.find_names_holding_run_values.return_value = {
+        h.batch1.molecule_id: "Campaign A"
+    }
     failure = (await h([E(h.w2, batch_id=h.batch2.id)])).failure()
     assert isinstance(failure, ConflictError) and "Campaign A" in str(failure)
     assert P(2) in str(failure)
@@ -223,9 +229,11 @@ async def test_batch_change_refused_when_a_campaign_uses_the_readouts():
 
 async def test_label_change_on_a_position_a_campaign_uses_is_allowed():
     h = Harness()
-    h.campaign_repo.find_names_using_readouts.return_value = {h.readout_on_w2.id: "Campaign A"}
+    h.campaign_repo.find_names_holding_run_values.return_value = {
+        h.batch1.molecule_id: "Campaign A"
+    }
     assert isinstance(await h([E(h.w2, label="y", dose=12.0)]), Success)
-    h.campaign_repo.find_names_using_readouts.assert_not_awaited()
+    h.campaign_repo.find_names_holding_run_values.assert_not_awaited()
     h.readout_repo.find_by_run.assert_not_awaited()
 
 

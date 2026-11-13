@@ -3,8 +3,9 @@
 The user sends, per position, the values they started from and the values to store.
 Label and note change nothing calculated; role, batch and concentration do. A batch
 change re-points that position's readout rows to the new batch and its molecule in the
-same unit of work, and is refused when a campaign uses those rows. After a save that
-changed a role, a batch or a concentration, the calculation engine runs for the run.
+same unit of work, and is refused when a campaign may hold a value of that position's
+compound taken from this run. After a save that changed a role, a batch or a
+concentration, the calculation engine runs for the run.
 """
 
 from __future__ import annotations
@@ -105,20 +106,28 @@ class RelabelRunPositions:
                 if e.well_id in wells and e.new.batch_id != wells[e.well_id].batch_id
             }
             if moving:
+                # A campaign can hold a position's value without naming its readout row
+                # (a mean across runs keeps none), so the check is by run and compound.
                 rows = await self._readout_repo.find_by_run(ws, run.id)
-                row_well = {r.id: r.well_id for r in rows if r.well_id in moving}
-                used = await self._campaign_repo.find_names_using_readouts(ws, list(row_well))
+                held = {
+                    r.molecule_id: r.well_id
+                    for r in rows
+                    if r.well_id in moving and r.molecule_id is not None
+                }
+                used = await self._campaign_repo.find_names_holding_run_values(
+                    ws, run.id, run.protocol_id, list(held)
+                )
                 if used:
                     plates = {p.id: p for p in run.plates}
-                    readout_id, name = next(iter(used.items()))
-                    well = wells[row_well[readout_id]]
+                    molecule_id, name = next(iter(used.items()))
+                    well = wells[held[molecule_id]]
                     label = position_label(
                         plates[well.plate_id].holder_kind, well.row, well.column
                     )
                     return Failure(
                         ConflictError(
-                            f"{label}: its values are used by campaign '{name}', "
-                            "so its batch cannot be changed"
+                            f"{label}: campaign '{name}' may hold values of its compound "
+                            "from this run, so its batch cannot be changed"
                         )
                     )
 

@@ -151,57 +151,102 @@ async def test_run_save_persists_relabelled_wells_and_keeps_curves(session_facto
         assert len(await curve_repo.find_by_run(workspace_id, run_id)) == 6
 
 
-async def test_find_names_using_readouts(session_factory, workspace_id):
-    run_id, _, rows, _ = await _with_readouts(session_factory, workspace_id, [0, 1])
-    used, unused = rows[0].id, rows[1].id
-    campaign_id, result_id, channel_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+async def test_find_names_holding_run_values(session_factory, workspace_id):
+    """A campaign holds a value of the run for a compound when a measurement on a channel
+    of the run's protocol names the run, lists it among its contributing runs, or names
+    no run but has a value or a curve (an aggregate keeps no readout row id)."""
+    run_id, _, rows, _ = await _with_readouts(session_factory, workspace_id, [0])
+    other_run = uuid.uuid4()
+    held_by_source, held_by_aggregate, held_unpinned, held_nd_curve = (
+        uuid.uuid4() for _ in "abcd"
+    )
+    untested, other_run_only, other_protocol = (uuid.uuid4() for _ in "abc")
+    campaign_a, campaign_b = uuid.uuid4(), uuid.uuid4()
+    channel_a, channel_b = uuid.uuid4(), uuid.uuid4()
     async with session_factory() as s:
         protocol_id = await _protocol_id(s, run_id)
-        s.add(
-            CampaignModel(
-                id=campaign_id,
-                workspace_id=workspace_id,
-                project_id=uuid.uuid4(),
-                name="Campaign A",
-                created_by=uuid.uuid4(),
+        for cid, name in ((campaign_a, "Campaign A"), (campaign_b, "Campaign B")):
+            s.add(
+                CampaignModel(
+                    id=cid,
+                    workspace_id=workspace_id,
+                    project_id=uuid.uuid4(),
+                    name=name,
+                    created_by=uuid.uuid4(),
+                )
             )
-        )
         await s.flush()
-        s.add(
-            CampaignChannelModel(
-                id=channel_id,
-                campaign_id=campaign_id,
-                label="ch",
-                protocol_id=protocol_id,
-                readout_definition_id=rows[0].readout_definition_id,
-                source_kind="readout_data",
-                selection_rule="latest_approved_run",
-                qualifier_handling="include_qualified",
+        for chid, cid, pid in (
+            (channel_a, campaign_a, protocol_id),
+            (channel_b, campaign_b, uuid.uuid4()),
+        ):
+            s.add(
+                CampaignChannelModel(
+                    id=chid,
+                    campaign_id=cid,
+                    label="ch",
+                    protocol_id=pid,
+                    readout_definition_id=rows[0].readout_definition_id,
+                    source_kind="readout_data",
+                    selection_rule="mean_across_runs",
+                    qualifier_handling="include_qualified",
+                )
             )
-        )
-        s.add(CampaignResultModel(id=result_id, campaign_id=campaign_id, molecule_id=uuid.uuid4()))
         await s.flush()
-        s.add(
-            CampaignMeasurementModel(
-                id=uuid.uuid4(),
-                result_id=result_id,
-                channel_id=channel_id,
-                source_run_id=run_id,
-                source_readout_id=used,
-                value=50.0,
-                value_qualifier="=",
-                unit="uM",
-                protocol_name_snapshot="P",
-                protocol_version_snapshot=1,
+        cells = [
+            (campaign_a, channel_a, held_by_source, {"source_run_id": run_id, "value": 1.0}),
+            (
+                campaign_a,
+                channel_a,
+                held_by_aggregate,
+                # An ND cell pinned to another run still lists every candidate run.
+                {"source_run_id": other_run, "contributing_run_ids": [other_run, run_id]},
+            ),
+            (campaign_a, channel_a, held_unpinned, {"value": 3.0}),
+            (campaign_a, channel_a, held_nd_curve, {"curve_snapshot": {"top": 100.0}}),
+            (campaign_a, channel_a, untested, {}),
+            (
+                campaign_a,
+                channel_a,
+                other_run_only,
+                {"source_run_id": other_run, "contributing_run_ids": [other_run], "value": 4.0},
+            ),
+            (campaign_b, channel_b, other_protocol, {"source_run_id": run_id, "value": 5.0}),
+        ]
+        for cid, chid, molecule_id, fields in cells:
+            result_id = uuid.uuid4()
+            s.add(CampaignResultModel(id=result_id, campaign_id=cid, molecule_id=molecule_id))
+            await s.flush()
+            s.add(
+                CampaignMeasurementModel(
+                    id=uuid.uuid4(),
+                    result_id=result_id,
+                    channel_id=chid,
+                    value_qualifier="=" if "value" in fields else "ND",
+                    unit="uM",
+                    protocol_name_snapshot="P",
+                    protocol_version_snapshot=1,
+                    **fields,
+                )
             )
-        )
         await s.commit()
 
+    everything = [m for _, _, m, _ in cells]
     uow = AsyncUnitOfWork(session_factory)
     async with uow:
-        campaign_repo = SQLAlchemyCampaignRepository(uow)
-        assert await campaign_repo.find_names_using_readouts(workspace_id, [used, unused]) == {
-            used: "Campaign A"
+        repo = SQLAlchemyCampaignRepository(uow)
+        assert await repo.find_names_holding_run_values(
+            workspace_id, run_id, protocol_id, everything
+        ) == {
+            held_by_source: "Campaign A",
+            held_by_aggregate: "Campaign A",
+            held_unpinned: "Campaign A",
+            held_nd_curve: "Campaign A",
         }
-        assert await campaign_repo.find_names_using_readouts(uuid.uuid4(), [used]) == {}
-        assert await campaign_repo.find_names_using_readouts(workspace_id, []) == {}
+        assert (
+            await repo.find_names_holding_run_values(uuid.uuid4(), run_id, protocol_id, everything)
+            == {}
+        )
+        assert (
+            await repo.find_names_holding_run_values(workspace_id, run_id, protocol_id, []) == {}
+        )
