@@ -14,9 +14,10 @@ import {
   orderedPositions,
 } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState, applyClick } from "../lib/curve-selection";
-import { firstToSelect, resultRows } from "../lib/melt-results";
+import { batchSeries, firstToSelect, resultRows } from "../lib/melt-results";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
+import { ConcentrationChart } from "./concentration-chart";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
 import { MeltResultsPanel } from "./melt-results-panel";
@@ -84,6 +85,7 @@ export function RunCurvesPanel({
   }, [analysis, channelKey]);
   // Once per run: with nothing selected yet, start on the row most worth a look.
   const [leadWindow, setLeadWindow] = useState<string | null>(null);
+  const [threshold, setThreshold] = useState(2);
   const initialised = useRef<string | null>(null);
   useEffect(() => {
     if (!analysis || !data || initialised.current === runId) return;
@@ -114,6 +116,20 @@ export function RunCurvesPanel({
   }
 
   const doseUnit = DOSE_UNIT_LABELS[data.dose_unit as DoseUnit] ?? data.dose_unit;
+  const anchor = data.positions.find((p) => p.well_id === selection.anchor);
+  const lead = analysis?.windows.find(
+    (w) => w.window === leadWindow && w.channel_key === set.channel,
+  );
+  const series =
+    lead && anchor?.well_type === "sample" && anchor.batch_id
+      ? batchSeries(lead, data.positions, anchor.batch_id)
+      : [];
+  const batchSuffix =
+    anchor?.batch_number && anchor.registration_number
+      ? anchor.batch_number.startsWith(anchor.registration_number)
+        ? anchor.batch_number.slice(anchor.registration_number.length).replace(/^[\s\-·]+/, "")
+        : anchor.batch_number
+      : anchor?.batch_number;
   const editRefusal = run ? labellingEditRefusal(run) : null;
 
   // The grid is the selector; without an analysis (it failed) the viewer's own stays.
@@ -157,6 +173,7 @@ export function RunCurvesPanel({
               onShowReferencesChange={setShowReferences}
               headerAction={editLabelling}
               onLeadWindowChange={setLeadWindow}
+              onThresholdChange={setThreshold}
               designHref={run && `/assays/protocols/${run.protocol_id}#design`}
             />
           ) : (
@@ -200,6 +217,18 @@ export function RunCurvesPanel({
               value={stepValue}
               onValueChange={setStepValue}
               onReload={melting.refetch}
+            />
+          )}
+          {lead && anchor && series.length > 0 && (
+            <ConcentrationChart
+              title={`${anchor.registration_number} · ${batchSuffix} — ΔTm (${lead.window}) by concentration`}
+              points={series}
+              doseUnit={doseUnit}
+              threshold={threshold}
+              selected={selection.selected}
+              onSelect={(id) =>
+                setSelection(applyClick(selection, [id], id, { shift: false, toggle: false }))
+              }
             />
           )}
         </div>

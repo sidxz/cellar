@@ -39,6 +39,8 @@ export interface MeltResultsPanelProps {
   headerAction?: ReactNode;
   /** The single chosen window (kept while comparing); null when the signal has none. */
   onLeadWindowChange?: (windowName: string | null) => void;
+  /** Reports the ΔTm threshold in use (the chart beside the grid shows the same band). */
+  onThresholdChange?: (threshold: number) => void;
   /** The protocol's Design tab, where windows are added; links the no-window note. */
   designHref?: string;
 }
@@ -56,6 +58,7 @@ export function MeltResultsPanel({
   onShowReferencesChange,
   headerAction,
   onLeadWindowChange,
+  onThresholdChange,
   designHref,
 }: MeltResultsPanelProps) {
   const [threshold, setThreshold] = useShiftThreshold();
@@ -80,6 +83,9 @@ export function MeltResultsPanel({
   useEffect(() => {
     onLeadWindowChange?.(leadName);
   }, [leadName, onLeadWindowChange]);
+  useEffect(() => {
+    onThresholdChange?.(threshold);
+  }, [threshold, onThresholdChange]);
 
   const rows = useMemo(
     () => resultRows(windows, positions, analysis.steps, analysis.step_checks),
