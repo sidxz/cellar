@@ -115,9 +115,14 @@ export function runHeading(
 ): string {
   const status = RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status;
   const heading = `${run.runDate} · ${opts.scientist} · ${status}`;
-  if (!opts.sameDate) return heading;
+  return opts.sameDate ? `${heading} · ${sameDateTag(run)}` : heading;
+}
+
+/** What tells a run apart from another on its date: the start of its notes,
+ *  or a short id when it has none. */
+export function sameDateTag(run: Pick<CurveRunInfo, "runId" | "notes">): string {
   const notes = run.notes?.trim();
-  return `${heading} · ${notes ? notes.slice(0, 40) : `Run ${shortId(run.runId)}`}`;
+  return notes ? notes.slice(0, 40) : `Run ${shortId(run.runId)}`;
 }
 
 /** The ids of the runs that share their date with another run. */

@@ -120,3 +120,13 @@ export function chunk<T>(items: readonly T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
   return out;
 }
+
+/** At most this many runs at once on the protocol's Curves tab (also the
+ *  number of colours, so colour by run always works). */
+export const MAX_CURVE_RUNS = 8;
+
+/** Removes a chosen run, or adds it while fewer than MAX_CURVE_RUNS are chosen. */
+export function toggleRun(chosen: readonly string[], runId: string): string[] {
+  if (chosen.includes(runId)) return chosen.filter((id) => id !== runId);
+  return chosen.length < MAX_CURVE_RUNS ? [...chosen, runId] : [...chosen];
+}

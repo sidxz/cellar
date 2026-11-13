@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../types";
 import { ProtocolDetail } from "./protocol-detail";
 
-const state = vi.hoisted(() => ({ protocol: null as unknown, canCreate: true }));
+const state = vi.hoisted(() => ({ protocol: null as unknown, canCreate: true, hash: "" }));
 
 vi.mock("@duar-auth/nextjs", () => ({
   useAuthzHasRole: (role: string) => role === "editor" && state.canCreate,
@@ -13,7 +13,10 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   usePathname: () => "/assays/protocols/p1",
 }));
-vi.mock("@/shared/hooks/use-hash-tab", () => ({ useHashTab: () => ["overview", vi.fn()] }));
+vi.mock("@/shared/hooks/use-hash-tab", async () => {
+  const { useState } = await import("react");
+  return { useHashTab: (fallback: string) => useState(state.hash || fallback) };
+});
 vi.mock("../hooks/use-protocol-name-preview", () => ({
   useProtocolNamePreview: () => ({ data: null }),
 }));
@@ -34,8 +37,11 @@ vi.mock("./detail-tabs", () => ({
   ActivityTab: () => null,
   DesignTab: () => null,
   FilesTab: () => null,
-  OverviewTab: () => null,
+  OverviewTab: () => <div>Overview content</div>,
   RunsTab: () => null,
+  CurvesTab: ({ runIds }: { runIds: readonly string[] }) => (
+    <div>Curves for {runIds.join(",") || "none"}</div>
+  ),
 }));
 vi.mock("./correct-protocol-dialog", () => ({ CorrectProtocolDialog: () => null }));
 vi.mock("./create-run-dialog", () => ({ CreateRunDialog: () => null }));
@@ -117,5 +123,39 @@ describe("ProtocolDetail actions", () => {
     expect(
       screen.queryByRole("menuitem", { name: "New protocol from this" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("ProtocolDetail Curves tab", () => {
+  beforeEach(() => {
+    state.canCreate = true;
+    state.hash = "";
+  });
+
+  it("shows the Curves tab only when the protocol has measured curves", () => {
+    for (const has_measured_curves of [false, null, undefined]) {
+      state.protocol = protocol({ has_measured_curves } as Partial<Protocol>);
+      const { unmount } = render();
+      expect(screen.queryByRole("tab", { name: "Curves" })).not.toBeInTheDocument();
+      unmount();
+    }
+    state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
+    render();
+    const names = screen.getAllByRole("tab").map((t) => t.textContent);
+    expect(names.indexOf("Curves")).toBe(names.indexOf("Runs") + 1);
+  });
+
+  it("shows the overview when the hash names curves on a protocol without curves", () => {
+    state.hash = "curves";
+    state.protocol = protocol({ has_measured_curves: false } as Partial<Protocol>);
+    render();
+    expect(screen.getByText("Overview content")).toBeInTheDocument();
+  });
+
+  it("opens the Curves tab with no run chosen", () => {
+    state.hash = "curves";
+    state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
+    render();
+    expect(screen.getByText("Curves for none")).toBeInTheDocument();
   });
 });

@@ -4,12 +4,14 @@ import type { CurveGroup } from "./curve-plot";
 import {
   CURVES_PER_REQUEST,
   EMPTY_SELECTION,
+  MAX_CURVE_RUNS,
   applyClick,
   assignColourSlots,
   chunk,
   drawnPositionIds,
   matchesFilter,
   selectAll,
+  toggleRun,
 } from "./curve-selection";
 
 const ids = ["w1", "w2", "w3", "w4", "w5"];
@@ -130,5 +132,17 @@ describe("chunk", () => {
     expect(chunk(ids, 100).map((c) => c.length)).toEqual([100, 100, 50]);
     expect(chunk(ids, 100)[2][0]).toBe(200);
     expect(chunk([], 100)).toEqual([]);
+  });
+});
+
+describe("toggleRun", () => {
+  const eight = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"];
+
+  it("adds a run up to 8 and removes one that is chosen", () => {
+    expect(MAX_CURVE_RUNS).toBe(8);
+    expect(toggleRun(["r1"], "r2")).toEqual(["r1", "r2"]);
+    expect(toggleRun(eight, "r9")).toEqual(eight);
+    expect(toggleRun(["r1", "r2"], "r1")).toEqual(["r2"]);
+    expect(toggleRun(eight, "r8")).toEqual(eight.slice(0, 7));
   });
 });

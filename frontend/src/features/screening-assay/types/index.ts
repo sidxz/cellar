@@ -400,7 +400,9 @@ export type TargetRef = TargetRefResponse;
  *  many of the protocol's runs reference it. Aliases the generated type. */
 export type ProtocolTargetRef = ProtocolTargetRefResponse;
 
-export interface Protocol {
+/** `has_measured_curves` (whether any run has measured curves) is filled only by
+ *  GET /protocols and GET /protocols/{id}; null or absent elsewhere. Typed off the DTO. */
+export interface Protocol extends Partial<Pick<ProtocolResponse, "has_measured_curves">> {
   /** Enriched from the workspace run summary; undefined means not available yet. */
   last_run_date?: ProtocolSummaryResponse["last_run_date"];
   created_at?: ProtocolResponse["created_at"];
