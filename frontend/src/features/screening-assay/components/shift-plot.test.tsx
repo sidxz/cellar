@@ -67,4 +67,19 @@ describe("ShiftPlot", () => {
     fireEvent.click(getByTestId("plot"));
     expect(onSelect).toHaveBeenCalledWith("b");
   });
+
+  it("scrolls beyond 60 rows, not before", () => {
+    const many = (n: number) =>
+      Array.from({ length: n }, (_, i) => ({ wellId: `w${i}`, label: `L${i}`, deltaTm: i }));
+    const view = (n: number) =>
+      render(<ShiftPlot rows={many(n)} threshold={2} selected={new Set()} onSelect={() => {}} />);
+    const a = view(61);
+    expect(a.getByTestId("plot").parentElement).toHaveStyle({
+      maxHeight: "560px",
+      overflowY: "auto",
+    });
+    a.unmount();
+    const b = view(20);
+    expect(b.getByTestId("plot").parentElement?.style.overflowY ?? "").toBe("");
+  });
 });

@@ -85,6 +85,7 @@ export function RunCurvesPanel({
   }, [analysis, channelKey]);
   // Once per run: with nothing selected yet, start on the row most worth a look.
   const [leadWindow, setLeadWindow] = useState<string | null>(null);
+  const [shown, setShown] = useState<readonly string[]>([]);
   const [threshold, setThreshold] = useState(2);
   const initialised = useRef<string | null>(null);
   useEffect(() => {
@@ -102,8 +103,13 @@ export function RunCurvesPanel({
     () =>
       analysis?.windows
         .filter((w) => w.channel_key === channelKey)
-        .map((w) => ({ low: w.low, high: w.high, label: w.window })),
-    [analysis, channelKey],
+        .map((w) => ({
+          low: w.low,
+          high: w.high,
+          label: w.window,
+          active: shown.includes(w.window),
+        })),
+    [analysis, channelKey, shown],
   );
 
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
@@ -173,6 +179,7 @@ export function RunCurvesPanel({
               onShowReferencesChange={setShowReferences}
               headerAction={editLabelling}
               onLeadWindowChange={setLeadWindow}
+              onShownWindowsChange={setShown}
               onThresholdChange={setThreshold}
               designHref={run && `/assays/protocols/${run.protocol_id}#design`}
             />
@@ -201,6 +208,7 @@ export function RunCurvesPanel({
             hideSelector={!fallback}
             collapseReportedTable={!fallback}
             selectorAction={fallback && editLabelling}
+            compactControls
           />
           {analysis && selection.selected.size === 0 && (
             <p className="text-sm text-muted-foreground">

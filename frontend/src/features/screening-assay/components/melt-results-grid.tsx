@@ -82,7 +82,10 @@ function SampleCell({ row }: { row: ResultRow }) {
       <span className="font-mono text-sm">{registrationNumber}</span>
     );
     return (
-      <span className="flex items-baseline gap-1 truncate">
+      <span
+        className="flex h-full items-center gap-1 truncate"
+        title={[registrationNumber, batchSuffix && `·${batchSuffix}`].filter(Boolean).join("")}
+      >
         {smiles ? (
           <Tooltip>
             <TooltipTrigger asChild>{id}</TooltipTrigger>
@@ -109,15 +112,20 @@ function SampleCell({ row }: { row: ResultRow }) {
   const text = label ?? row.position;
   if (row.isSample) {
     return (
-      <span className="flex items-baseline gap-1.5 truncate">
+      <span className="flex items-baseline gap-1.5 truncate" title={text}>
         <span className="truncate">{text}</span>
         <span className="text-xs text-muted-foreground">unregistered</span>
       </span>
     );
   }
-  if (row.wellType === "reference") return <span className="truncate">{text}</span>;
+  if (row.wellType === "reference")
+    return (
+      <span className="truncate" title={text}>
+        {text}
+      </span>
+    );
   return (
-    <span className="flex items-baseline gap-1.5 truncate">
+    <span className="flex items-baseline gap-1.5 truncate" title={text}>
       <span className="truncate">{text}</span>
       <span className="text-xs">
         {(WELL_TYPE_LABELS[row.wellType as WellType] ?? row.wellType).toLowerCase()}
@@ -130,7 +138,7 @@ function StatusCell({ row, windowNames }: { row: ResultRow; windowNames: readonl
   const status = worstStatus(row, windowNames);
   const differs = windowNames.some((n) => row.cells[n]?.differs);
   return (
-    <span className="flex items-center gap-1.5">
+    <span className="flex h-full items-center gap-1.5">
       {status && (
         <Badge variant={STATUS[status].variant} className={STATUS[status].className}>
           {STATUS[status].label}
@@ -156,7 +164,7 @@ function windowColumns(name: string, threshold: number, grouped: boolean): ColDe
     {
       colId: `${name}:tm`,
       headerName: "Tm (°C)",
-      width: 90,
+      width: 80,
       headerClass: "ag-right-aligned-header",
       cellClass: NUMERIC,
       valueGetter: (p) => cell(p.data)?.tm ?? null,
@@ -165,7 +173,7 @@ function windowColumns(name: string, threshold: number, grouped: boolean): ColDe
     {
       colId: `${name}:delta`,
       headerName: "ΔTm (°C)",
-      width: grouped ? 90 : 100,
+      width: 90,
       headerClass: "ag-right-aligned-header",
       valueGetter: (p) =>
         p.data?.wellType === "reference" ? null : (cell(p.data)?.deltaTm ?? null),
@@ -213,20 +221,20 @@ export function MeltResultsGrid({
         colId: "sample",
         headerName: "Sample",
         flex: 1,
-        minWidth: 170,
+        minWidth: 180,
         valueGetter: (p) => p.data?.sampleText ?? "",
         cellRenderer: (p: Params) => (p.data ? <SampleCell row={p.data} /> : null),
       },
       {
         colId: "position",
         headerName: "Position",
-        width: 120,
+        width: 110,
         valueGetter: (p) => p.data?.position,
       },
       {
         colId: "conc",
         headerName: `Conc. (${doseUnit})`,
-        width: 100,
+        width: 90,
         headerClass: "ag-right-aligned-header",
         cellClass: NUMERIC,
         valueGetter: (p) => p.data?.concentration ?? null,

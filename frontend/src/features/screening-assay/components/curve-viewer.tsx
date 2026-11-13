@@ -8,6 +8,7 @@ import {
 } from "@/shared/components/ui/collapsible";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -104,7 +105,13 @@ export function Segmented<T extends string>({
   );
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  children,
+  bare = false,
+}: { label: string; children: ReactNode; bare?: boolean }) {
+  // Bare: the control carries its own aria-label, the caption is dropped.
+  if (bare) return <>{children}</>;
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -187,6 +194,9 @@ export interface CurveViewerProps {
   windows?: readonly CurveBand[];
   /** The x of a clicked point on the plot. */
   onPlotClick?: (x: number) => void;
+  /** Narrow layout: Signal and View on one row, Markers, Color and Export
+   *  behind a "Display" button. */
+  compactControls?: boolean;
 }
 
 /** Pick positions, overlay their curves for one signal with the instrument's
@@ -230,6 +240,7 @@ function CurveViewerBody({
   collapseReportedTable = false,
   windows,
   onPlotClick,
+  compactControls = false,
   scientistOf,
 }: CurveViewerProps & { scientistOf: (userId: string) => string }) {
   // The signal and view last asked for, shown at once while their curves load.
@@ -409,6 +420,137 @@ function CurveViewerBody({
   const notShown = pending || tooMany || failed ? [] : positionsNotShown(set, drawnIds);
   const addedReferences = drawnIds.length > selectedIds.length;
 
+  const signalAndView = (
+    <>
+      {set.channels.length > 0 && (
+        <Field label="Signal" bare={compactControls}>
+          <Segmented
+            label="Signal"
+            value={channel ?? set.channel ?? ""}
+            options={set.channels.map((c) => ({ value: c.key, label: c.label }))}
+            onChange={(key) => {
+              setChannel(key);
+              onChannelChange(key);
+            }}
+          />
+        </Field>
+      )}
+      <Field label="View" bare={compactControls}>
+        <div className="flex items-center gap-2">
+          <Segmented
+            label="View"
+            value={shownView}
+            options={[
+              { value: "measured", label: "Measured" },
+              { value: "derivative", label: "Derivative" },
+            ]}
+            onChange={(v) => {
+              setView(v);
+              onViewChange(v);
+            }}
+          />
+          {shownView === "derivative" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              smoothing window
+              <Input
+                type="number"
+                aria-label="Smoothing window"
+                min={0}
+                step="any"
+                className="h-8 w-20"
+                value={windowDraft ?? set.window ?? ""}
+                onChange={(e) => setWindowDraft(e.target.value)}
+                onBlur={commitWindow}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitWindow();
+                }}
+              />
+              {currentChannel(set)?.x_unit}
+            </span>
+          )}
+        </div>
+      </Field>
+    </>
+  );
+  const markersAndColour = (
+    <>
+      {/* With steps it governs both step and onset lines, so it names neither. */}
+      <Field label={steps ? "Markers" : "Reported values"}>
+        <Segmented
+          label={steps ? "Markers" : "Reported values"}
+          value={showReported ? "on" : "off"}
+          options={[
+            { value: "on", label: "Lines on" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setShowReported(v === "on")}
+        />
+      </Field>
+      <Field label="Color">
+        <div className="flex items-center gap-2">
+          <Segmented
+            label="Color"
+            value={effectiveMode}
+            options={[
+              { value: "highlight", label: "Highlight" },
+              {
+                value: "distinct",
+                label: `Distinct (${COLOUR_SLOT_COUNT} or fewer)`,
+                disabled: !distinctAvailable,
+              },
+              { value: "group", label: "By group", disabled: !groupAvailable },
+            ]}
+            onChange={setColourMode}
+          />
+          {/* Always offered beside By group, so the grouping can be changed before
+                or after choosing it, whichever groupings have 8 or fewer groups. */}
+          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+            <SelectTrigger size="sm" aria-label="Group by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
+                .filter((by) => by !== "run" || hasRuns)
+                .map((by) => (
+                  <SelectItem key={by} value={by}>
+                    {GROUP_BY_LABELS[by]}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          {!distinctAvailable && (
+            <span className="text-xs text-muted-foreground">
+              More than {COLOUR_SLOT_COUNT} selected
+            </span>
+          )}
+          {!groupAvailable && (
+            <span className="text-xs text-muted-foreground">
+              More than {COLOUR_SLOT_COUNT} groups
+            </span>
+          )}
+        </div>
+      </Field>
+    </>
+  );
+  const exportField = (
+    <Field label="Export, white background">
+      <div className="flex gap-2">
+        {(["png", "svg"] as const).map((format) => (
+          <Button
+            key={format}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!hasTraces}
+            onClick={() => exportImage(format)}
+          >
+            {format.toUpperCase()}
+          </Button>
+        ))}
+      </div>
+    </Field>
+  );
+
   return (
     <div className="space-y-4">
       {!hideSelector && (
@@ -478,130 +620,28 @@ function CurveViewerBody({
         </>
       )}
 
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
-        {set.channels.length > 0 && (
-          <Field label="Signal">
-            <Segmented
-              label="Signal"
-              value={channel ?? set.channel ?? ""}
-              options={set.channels.map((c) => ({ value: c.key, label: c.label }))}
-              onChange={(key) => {
-                setChannel(key);
-                onChannelChange(key);
-              }}
-            />
-          </Field>
-        )}
-        <Field label="View">
-          <div className="flex items-center gap-2">
-            <Segmented
-              label="View"
-              value={shownView}
-              options={[
-                { value: "measured", label: "Measured" },
-                { value: "derivative", label: "Derivative" },
-              ]}
-              onChange={(v) => {
-                setView(v);
-                onViewChange(v);
-              }}
-            />
-            {shownView === "derivative" && (
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                smoothing window
-                <Input
-                  type="number"
-                  aria-label="Smoothing window"
-                  min={0}
-                  step="any"
-                  className="h-8 w-20"
-                  value={windowDraft ?? set.window ?? ""}
-                  onChange={(e) => setWindowDraft(e.target.value)}
-                  onBlur={commitWindow}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitWindow();
-                  }}
-                />
-                {currentChannel(set)?.x_unit}
-              </span>
-            )}
-          </div>
-        </Field>
-        {/* With steps it governs both step and onset lines, so it names neither. */}
-        <Field label={steps ? "Markers" : "Reported values"}>
-          <Segmented
-            label={steps ? "Markers" : "Reported values"}
-            value={showReported ? "on" : "off"}
-            options={[
-              { value: "on", label: "Lines on" },
-              { value: "off", label: "Off" },
-            ]}
-            onChange={(v) => setShowReported(v === "on")}
-          />
-        </Field>
-        <Field label="Color">
-          <div className="flex items-center gap-2">
-            <Segmented
-              label="Color"
-              value={effectiveMode}
-              options={[
-                { value: "highlight", label: "Highlight" },
-                {
-                  value: "distinct",
-                  label: `Distinct (${COLOUR_SLOT_COUNT} or fewer)`,
-                  disabled: !distinctAvailable,
-                },
-                { value: "group", label: "By group", disabled: !groupAvailable },
-              ]}
-              onChange={setColourMode}
-            />
-            {/* Always offered beside By group, so the grouping can be changed before
-                or after choosing it, whichever groupings have 8 or fewer groups. */}
-            <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-              <SelectTrigger size="sm" aria-label="Group by">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
-                  .filter((by) => by !== "run" || hasRuns)
-                  .map((by) => (
-                    <SelectItem key={by} value={by}>
-                      {GROUP_BY_LABELS[by]}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {!distinctAvailable && (
-              <span className="text-xs text-muted-foreground">
-                More than {COLOUR_SLOT_COUNT} selected
-              </span>
-            )}
-            {!groupAvailable && (
-              <span className="text-xs text-muted-foreground">
-                More than {COLOUR_SLOT_COUNT} groups
-              </span>
-            )}
-          </div>
-        </Field>
-        <div className="ml-auto">
-          <Field label="Export, white background">
-            <div className="flex gap-2">
-              {(["png", "svg"] as const).map((format) => (
-                <Button
-                  key={format}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!hasTraces}
-                  onClick={() => exportImage(format)}
-                >
-                  {format.toUpperCase()}
-                </Button>
-              ))}
-            </div>
-          </Field>
+      {compactControls ? (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{signalAndView}</div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                Display
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto max-w-[min(32rem,90vw)] space-y-3">
+              {markersAndColour}
+              {exportField}
+            </PopoverContent>
+          </Popover>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+          {signalAndView}
+          {markersAndColour}
+          <div className="ml-auto">{exportField}</div>
+        </div>
+      )}
 
       {hasTraces && figure ? (
         <div className={cn("transition-opacity", pending && "opacity-60")}>

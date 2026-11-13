@@ -39,6 +39,8 @@ export interface MeltResultsPanelProps {
   headerAction?: ReactNode;
   /** The single chosen window (kept while comparing); null when the signal has none. */
   onLeadWindowChange?: (windowName: string | null) => void;
+  /** The windows the results show: the lead, or all of them in Compare. */
+  onShownWindowsChange?: (names: readonly string[]) => void;
   /** Reports the ΔTm threshold in use (the chart beside the grid shows the same band). */
   onThresholdChange?: (threshold: number) => void;
   /** The protocol's Design tab, where windows are added; links the no-window note. */
@@ -58,6 +60,7 @@ export function MeltResultsPanel({
   onShowReferencesChange,
   headerAction,
   onLeadWindowChange,
+  onShownWindowsChange,
   onThresholdChange,
   designHref,
 }: MeltResultsPanelProps) {
@@ -83,6 +86,9 @@ export function MeltResultsPanel({
   useEffect(() => {
     onLeadWindowChange?.(leadName);
   }, [leadName, onLeadWindowChange]);
+  useEffect(() => {
+    onShownWindowsChange?.(windowNames);
+  }, [windowNames, onShownWindowsChange]);
   useEffect(() => {
     onThresholdChange?.(threshold);
   }, [threshold, onThresholdChange]);

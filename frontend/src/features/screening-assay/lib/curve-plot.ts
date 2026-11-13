@@ -229,6 +229,9 @@ export interface CurveBand {
   low: number;
   high: number;
   label: string;
+  /** Explicitly false: drawn as dotted boundaries only, for the windows the
+   *  results are not showing. Unset, the band is filled. */
+  active?: boolean;
 }
 
 export function buildCurveFigure(
@@ -330,20 +333,40 @@ export function buildCurveFigure(
   const grid = light ? CHART_CANVAS.gridLight : CHART_AXIS.grid;
   const ink = light ? CHART_CANVAS.label : CHART_AXIS.label;
   const background = exporting ? CHART_CANVAS.background : "rgba(0,0,0,0)";
-  const bands = windows.map((w) => ({
-    type: "rect",
-    xref: "x",
-    x0: w.low,
-    x1: w.high,
-    yref: "paper",
-    y0: 0,
-    y1: 1,
-    // Alpha in the fill, not shape opacity, so the label stays legible.
-    fillcolor: `${ink}1f`,
-    line: { width: 0 },
-    layer: "below",
-    label: { text: w.label, textposition: "top center", font: { color: ink, size: 11 } },
-  }));
+  const bands = windows.flatMap((w) => {
+    const inactive = w.active === false;
+    const rect = {
+      type: "rect",
+      xref: "x",
+      x0: w.low,
+      x1: w.high,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      // Alpha in the fill, not shape opacity, so the label stays legible.
+      fillcolor: inactive ? "rgba(0,0,0,0)" : `${ink}1f`,
+      line: { width: 0 },
+      layer: "below",
+      label: {
+        text: w.label,
+        textposition: "top center",
+        font: { color: ink, size: 11, weight: inactive ? 300 : 400 },
+      },
+    };
+    const edge = (x: number) => ({
+      type: "line",
+      xref: "x",
+      x0: x,
+      x1: x,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      line: { color: ink, width: 1, dash: "dot" },
+      opacity: 0.5,
+      layer: "below",
+    });
+    return inactive ? [rect, edge(w.low), edge(w.high)] : [rect];
+  });
   const yTitle = !channel
     ? ""
     : set.view === "derivative"

@@ -19,7 +19,7 @@ export function ShiftPlot({
   const longest = Math.max(0, ...rows.map((r) => r.label.length));
   const left = Math.min(180, 40 + longest * 7);
   const { shapes, annotations } = shiftBand(threshold, "x");
-  return (
+  const plot = (
     <Plot
       data={[
         {
@@ -66,4 +66,6 @@ export function ShiftPlot({
       }}
     />
   );
+  // Beyond 60 rows the panel scrolls; the figure keeps its full height inside.
+  return rows.length > 60 ? <div style={{ maxHeight: 560, overflowY: "auto" }}>{plot}</div> : plot;
 }

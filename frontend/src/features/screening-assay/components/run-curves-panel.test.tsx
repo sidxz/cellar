@@ -118,6 +118,9 @@ const selectedRows = () =>
     .filter((tr) => tr.className.includes("bg-primary/10"))
     .map((tr) => tr.getAttribute("data-row-id"));
 
+/** The run tab keeps Markers, Color and Export behind the Display button. */
+const openDisplay = () => fireEvent.click(screen.getByRole("button", { name: "Display" }));
+
 const drawnWells = () => lastPlot().data.map((t) => t.meta);
 
 function lastParams() {
@@ -170,6 +173,7 @@ describe("RunCurvesPanel", () => {
 
   it("marks the current option of each segmented control as selected", () => {
     render(<RunCurvesPanel runId="r1" />);
+    openDisplay();
     for (const [group, current, other] of [
       ["Signal", "Signal A", "Signal B"],
       ["View", "Measured", "Derivative"],
@@ -227,6 +231,7 @@ describe("RunCurvesPanel", () => {
   it("disables distinct colours when more than 8 are selected", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
+    openDisplay();
     fireEvent.mouseDown(screen.getByRole("tab", { name: /Distinct/ }));
     const traces = lastPlot().data as Array<{ line: { color: string } }>;
     expect(traces[0].line.color).toBe(MEASURED_CURVE_COLORS.dark.series[0]);
@@ -240,6 +245,7 @@ describe("RunCurvesPanel", () => {
   it("exports the figure on a white background at 1200 by 600", () => {
     render(<RunCurvesPanel runId="r1" />);
     fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
+    openDisplay();
     fireEvent.click(screen.getByRole("button", { name: "PNG" }));
     const [figure, opts] = downloadImage.mock.calls[0];
     expect(opts).toMatchObject({
@@ -447,5 +453,75 @@ describe("RunCurvesPanel", () => {
       expect(screen.getByTestId("results-loading")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Position 1" })).not.toBeInTheDocument();
     });
+  });
+});
+
+describe("RunCurvesPanel concentration chart and window bands", () => {
+  const dosed = {
+    ...curves,
+    positions: curves.positions.map((p, i) =>
+      i === 1 || i === 2
+        ? {
+            ...p,
+            registration_number: "REG-1",
+            batch_id: "b1",
+            batch_number: "REG-1-B2",
+            dose: i === 1 ? 10 : 50,
+          }
+        : p,
+    ),
+  };
+  const setup = () => {
+    useRunCurves.mockImplementation(() => ({
+      data: dosed,
+      isLoading: false,
+      isPlaceholderData: false,
+    }));
+    withAnalysis({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 } });
+    const main = melting.data?.windows[0] as NonNullable<typeof melting.data>["windows"][number];
+    (melting.data as MeltingAnalysis).windows.push({ ...main, window: "Alt", low: 10, high: 30 });
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
+  };
+  const bands = () =>
+    // The trace plot is the last one drawn that has bands (the chart's rect has no label).
+    (
+      plotCalls
+        .map((c) => c.layout.shapes as { fillcolor?: string; label?: { text: string } }[])
+        .filter((sh) => sh?.some((s) => s.label))
+        .at(-1) ?? []
+    )
+      .filter((s) => s.label)
+      .map((s) => [s.label?.text, s.fillcolor !== "rgba(0,0,0,0)"]);
+
+  it("titles the chart by batch and lead window, and follows the window", () => {
+    setup();
+    fireEvent.click(gridRow("Position 2"));
+    expect(screen.getByText("REG-1 · B2 — ΔTm (Main) by concentration")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt" }));
+    expect(screen.getByText("REG-1 · B2 — ΔTm (Alt) by concentration")).toBeInTheDocument();
+  });
+
+  it("shows no chart for a sample without a batch", () => {
+    setup();
+    fireEvent.click(gridRow("Position 4"));
+    expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
+  });
+
+  it("fills only the lead window's band, and all of them in Compare", () => {
+    setup();
+    expect(bands()).toEqual([
+      ["Main", true],
+      ["Alt", false],
+    ]);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt" }));
+    expect(bands()).toEqual([
+      ["Main", false],
+      ["Alt", true],
+    ]);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
+    expect(bands()).toEqual([
+      ["Main", true],
+      ["Alt", true],
+    ]);
   });
 });

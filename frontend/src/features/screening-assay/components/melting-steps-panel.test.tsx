@@ -279,6 +279,7 @@ describe("MeltingStepsPanel", () => {
   it("names the line switch Markers, since it covers steps and onsets", async () => {
     renderPanel();
     await select("Position 1");
+    fireEvent.click(screen.getByRole("button", { name: "Display" }));
     expect(screen.getByRole("tablist", { name: "Markers" })).toBeInTheDocument();
   });
 

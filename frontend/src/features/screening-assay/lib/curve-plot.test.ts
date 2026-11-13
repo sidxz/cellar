@@ -269,6 +269,35 @@ describe("buildCurveFigure", () => {
     expect(shapes[0].label.text).toBe("Main");
   });
 
+  it("an inactive band is unfilled, with dotted boundary lines", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      windows: [
+        { low: 25, high: 50, label: "Low", active: false },
+        { low: 50, high: 85, label: "Main", active: true },
+      ],
+    });
+    const shapes = layout.shapes as any[];
+    const rects = shapes.filter((s) => s.type === "rect");
+    expect(rects).toHaveLength(2);
+    const [low, main] = rects;
+    expect(low.fillcolor).toBe("rgba(0,0,0,0)");
+    expect(low.label.text).toBe("Low");
+    expect(main.fillcolor).not.toBe("rgba(0,0,0,0)");
+    const lines = shapes.filter(
+      (s) => s.type === "line" && s.line.dash === "dot" && s.opacity === 0.5,
+    );
+    expect(lines.map((l) => l.x0).sort((a, b) => a - b)).toEqual([25, 50]);
+  });
+
+  it("bands with no active flag keep today's shapes", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      windows: [{ low: 50, high: 85, label: "Main" }],
+    });
+    expect(layout.shapes as any[]).toHaveLength(1);
+  });
+
   it("titles the axes from the channel", () => {
     const { layout } = buildCurveFigure(base) as unknown as {
       layout: { xaxis: { title: { text: string } }; yaxis: { title: { text: string } } };

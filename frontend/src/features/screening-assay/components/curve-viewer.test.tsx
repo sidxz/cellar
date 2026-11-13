@@ -612,3 +612,25 @@ describe("CurveViewer", () => {
     expect(cell).toHaveAttribute("title", String(0.1 + 0.2));
   });
 });
+
+describe("CurveViewer compactControls", () => {
+  it("keeps Markers, Colour and Export behind a Display popover", async () => {
+    render(<Harness callbacks={callbacks()} compactControls />);
+    expect(screen.getByRole("tablist", { name: "Signal" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "View" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Reported values" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Color" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "PNG" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Display" }));
+    expect(await screen.findByRole("tablist", { name: "Reported values" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Color" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
+  });
+
+  it("renders them in the bar without the prop", () => {
+    render(<Harness callbacks={callbacks()} />);
+    expect(screen.getByRole("tablist", { name: "Color" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
+  });
+});
