@@ -38,7 +38,11 @@ vi.mock("./detail-tabs", () => ({
   DesignTab: () => null,
   FilesTab: () => null,
   OverviewTab: () => <div>Overview content</div>,
-  RunsTab: () => null,
+  RunsTab: ({ onCompareCurves }: { onCompareCurves: (ids: string[]) => void }) => (
+    <button type="button" onClick={() => onCompareCurves(["r1", "r3"])}>
+      Compare curves
+    </button>
+  ),
   CurvesTab: ({ runIds }: { runIds: readonly string[] }) => (
     <div>Curves for {runIds.join(",") || "none"}</div>
   ),
@@ -157,5 +161,14 @@ describe("ProtocolDetail Curves tab", () => {
     state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
     render();
     expect(screen.getByText("Curves for none")).toBeInTheDocument();
+  });
+
+  it("Compare curves opens the Curves tab with those runs chosen", () => {
+    state.hash = "runs";
+    state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
+    render();
+    fireEvent.click(screen.getByRole("button", { name: "Compare curves" }));
+    expect(screen.getByRole("tab", { name: "Curves" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("Curves for r1,r3")).toBeInTheDocument();
   });
 });

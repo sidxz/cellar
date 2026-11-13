@@ -8,6 +8,7 @@ import {
   applyClick,
   assignColourSlots,
   chunk,
+  compareCurvesChoice,
   drawnPositionIds,
   matchesFilter,
   selectAll,
@@ -144,5 +145,39 @@ describe("toggleRun", () => {
     expect(toggleRun(eight, "r9")).toEqual(eight);
     expect(toggleRun(["r1", "r2"], "r1")).toEqual(["r2"]);
     expect(toggleRun(eight, "r8")).toEqual(eight.slice(0, 7));
+  });
+});
+
+describe("compareCurvesChoice", () => {
+  it("keeps the selected runs that have curves and says how many do", () => {
+    expect(compareCurvesChoice(["r1", "r2", "r3"], new Set(["r1", "r3"]))).toEqual({
+      runIds: ["r1", "r3"],
+      disabledReason: null,
+      note: "2 of the 3 selected runs have curves",
+    });
+    expect(compareCurvesChoice(["r1", "r2"], new Set(["r2"])).note).toBe(
+      "1 of the 2 selected runs has curves",
+    );
+    expect(compareCurvesChoice(["r1", "r2"], new Set(["r1", "r2"]))).toEqual({
+      runIds: ["r1", "r2"],
+      disabledReason: null,
+      note: null,
+    });
+  });
+
+  it("gives a reason when no selected run has curves, and above 8", () => {
+    expect(compareCurvesChoice([], new Set(["r1"]))).toEqual({
+      runIds: [],
+      disabledReason: "Select runs that have curves",
+      note: null,
+    });
+    expect(compareCurvesChoice(["r2"], new Set(["r1"])).disabledReason).toBe(
+      "Select runs that have curves",
+    );
+    const nine = Array.from({ length: 9 }, (_, i) => `r${i}`);
+    expect(compareCurvesChoice(nine, new Set(nine)).disabledReason).toBe("At most 8 runs at once");
+    expect(compareCurvesChoice(nine.slice(0, 8), new Set(nine)).disabledReason).toBeNull();
+    // Only runs with curves count toward the limit.
+    expect(compareCurvesChoice(nine, new Set(nine.slice(1))).disabledReason).toBeNull();
   });
 });

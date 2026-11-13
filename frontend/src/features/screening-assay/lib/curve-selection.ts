@@ -130,3 +130,24 @@ export function toggleRun(chosen: readonly string[], runId: string): string[] {
   if (chosen.includes(runId)) return chosen.filter((id) => id !== runId);
   return chosen.length < MAX_CURVE_RUNS ? [...chosen, runId] : [...chosen];
 }
+
+/** What "Compare curves" on the protocol's Runs tab will open: the selected
+ *  runs that have curves, why it cannot (none, or more than MAX_CURVE_RUNS),
+ *  and a note when some selected runs have no curves and are left out. */
+export function compareCurvesChoice(
+  selectedRunIds: readonly string[],
+  runIdsWithCurves: ReadonlySet<string>,
+): { runIds: string[]; disabledReason: string | null; note: string | null } {
+  const runIds = selectedRunIds.filter((id) => runIdsWithCurves.has(id));
+  const disabledReason =
+    runIds.length === 0
+      ? "Select runs that have curves"
+      : runIds.length > MAX_CURVE_RUNS
+        ? "At most 8 runs at once"
+        : null;
+  const note =
+    runIds.length > 0 && runIds.length < selectedRunIds.length
+      ? `${runIds.length} of the ${selectedRunIds.length} selected runs ${runIds.length === 1 ? "has" : "have"} curves`
+      : null;
+  return { runIds, disabledReason, note };
+}

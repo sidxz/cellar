@@ -375,7 +375,14 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               <DesignTab protocol={protocol} protocolId={protocolId} />
             </TabsContent>
             <TabsContent value="runs">
-              <RunsTab protocol={protocol} protocolId={protocolId} />
+              <RunsTab
+                protocol={protocol}
+                protocolId={protocolId}
+                onCompareCurves={(ids) => {
+                  setCurveRunIds(ids);
+                  setActiveTab("curves");
+                }}
+              />
             </TabsContent>
             {hasCurves && (
               <TabsContent value="curves">

@@ -5,6 +5,7 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
 import { StatusBadge } from "@/shared/components/status-badge";
 import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -14,17 +15,29 @@ import {
 } from "@/shared/components/ui/select";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { shortId } from "@/shared/lib/utils";
-import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
+import type {
+  ColDef,
+  ColGroupDef,
+  ICellRendererParams,
+  SelectionChangedEvent,
+} from "ag-grid-community";
 import { FlaskConical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
+import { useCurvePositions } from "../../hooks/use-curve-positions";
 import { useRunsByProtocol } from "../../hooks/use-runs";
 import { deriveConditionColumns, readConditionCell } from "../../lib/conditions";
+import { compareCurvesChoice } from "../../lib/curve-selection";
 import { worstZPrime } from "../../lib/qc-metrics";
 import { type Protocol, RUN_STATUS_LABELS, type Run } from "../../types";
+
+const NO_FILTER = {};
+
 interface RunsTabProps {
   protocol: Protocol;
   protocolId: string;
+  /** "Compare curves": the selected runs that have curves. */
+  onCompareCurves: (runIds: string[]) => void;
 }
 
 /** Coverage fraction (0–1, or null) → "42%" / "—". */
@@ -54,10 +67,23 @@ function zPrimeBadge(qcMetrics: Record<string, unknown> | null) {
   );
 }
 
-export function RunsTab({ protocol, protocolId }: RunsTabProps) {
+export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps) {
   const router = useRouter();
   const { data: runs, isLoading } = useRunsByProtocol(protocolId);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Ticked rows (the checkbox column); a row click still opens the run.
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const hasCurves = protocol.has_measured_curves === true;
+  // A run in this list does not say whether it has curves; the curve positions'
+  // run list (no filter, so no positions) does.
+  const { data: curveRuns } = useCurvePositions(protocolId, NO_FILTER, hasCurves);
+  const choice = useMemo(
+    () => compareCurvesChoice(selectedIds, new Set(curveRuns?.runs.map((r) => r.run_id))),
+    [selectedIds, curveRuns],
+  );
+  const handleSelectionChanged = useCallback((e: SelectionChangedEvent<Run>) => {
+    setSelectedIds(e.api.getSelectedRows().map((r) => r.id));
+  }, []);
   const { data: members } = useWorkspaceMembers();
   const { data: orgs } = useOrganizations();
 
@@ -225,21 +251,43 @@ export function RunsTab({ protocol, protocolId }: RunsTabProps) {
       loading={isLoading}
       height="500px"
       suppressFilters
-      // Status filter shares the grid's toolbar row, right of the quick filter.
+      enableMultiSelect
+      onSelectionChanged={handleSelectionChanged}
+      // Keeps the ticks across a refetch.
+      getRowId={(p) => p.data.id}
+      // Compare curves and the status filter share the grid's toolbar row,
+      // right of the quick filter.
       toolbarActions={
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[160px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {Object.entries(RUN_STATUS_LABELS).map(([v, l]) => (
-              <SelectItem key={v} value={v}>
-                {l}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <>
+          {hasCurves && (
+            <>
+              {choice.note && <span className="text-sm text-muted-foreground">{choice.note}</span>}
+              <span className="text-sm text-muted-foreground">{selectedIds.length} selected</span>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!curveRuns || !!choice.disabledReason}
+                title={choice.disabledReason ?? undefined}
+                onClick={() => onCompareCurves(choice.runIds)}
+              >
+                Compare curves
+              </Button>
+            </>
+          )}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              {Object.entries(RUN_STATUS_LABELS).map(([v, l]) => (
+                <SelectItem key={v} value={v}>
+                  {l}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </>
       }
       onRowClick={(run) => router.push(`/assays/runs/${run.id}`)}
       emptyState={
