@@ -110,7 +110,7 @@ describe("CurvesTab", () => {
       protocolId: "p1-0000-0000",
       filter: { runIds: ["r2", "r3"] },
       initial: { select: "none", showReferences: false, colour: { mode: "group", groupBy: "run" } },
-      exportName: "protocol-traces-p1-0000-",
+      exportName: "traces-protocol-p1-0000-",
     });
     expect(screen.queryByText("Choose runs above to see their traces")).not.toBeInTheDocument();
 
@@ -134,6 +134,8 @@ describe("CurvesTab", () => {
     unmount();
     positions = { error: new Error("boom") };
     render(<Host />);
-    expect(screen.getByText("Could not load the runs.")).toBeInTheDocument();
+    expect(
+      screen.getByText("Could not load the runs. Reload the page and try again."),
+    ).toBeInTheDocument();
   });
 });

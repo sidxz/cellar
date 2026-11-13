@@ -115,11 +115,8 @@ function EditLabellingBody({
       {
         onSuccess: (result) => {
           showSuccess("Labeling saved");
-          if (result.compute_warning) {
-            showWarning(
-              `The labeling was saved, but the calculations were not rebuilt: ${result.compute_warning}. Press Recompute on the run to rebuild them.`,
-            );
-          }
+          // The API words it in full, Recompute included.
+          if (result.compute_warning) showWarning(result.compute_warning);
           onOpenChange(false);
         },
         onError: (e) =>
@@ -188,7 +185,7 @@ function EditLabellingBody({
                   disabled={reloading}
                   onClick={reload}
                 >
-                  Reload
+                  Discard edits and reload
                 </Button>
               )}
             </div>

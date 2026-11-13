@@ -290,7 +290,8 @@ it("offers Curves in its evidence popover when given a target", async () => {
   fireEvent.click(await screen.findByRole("button", { name: "Traces" }));
   expect(
     await screen.findByRole("dialog", {
-      name: "All runs of Protocol 1 with traces for ABC-0000001",
+      name: "Traces across runs",
+      description: /^Protocol 1 · ABC-0000001\./,
     }),
   ).toBeInTheDocument();
 });

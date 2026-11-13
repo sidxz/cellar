@@ -191,7 +191,10 @@ describe("curves from the compound sheet", () => {
     expect(screen.getByRole("button", { name: /Target assay/ })).not.toContainElement(buttons[0]);
     fireEvent.click(buttons[0]);
     expect(
-      screen.getByRole("dialog", { name: "All runs of Target assay with traces for CC-test" }),
+      screen.getByRole("dialog", {
+        name: "Traces across runs",
+        description: /^Target assay · CC-test\./,
+      }),
     ).toBeInTheDocument();
     expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["mol"] });
   });

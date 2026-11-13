@@ -193,7 +193,7 @@ describe("InstrumentImportWizard", () => {
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
     expect(
       screen.getByText(
-        "To continue, correct Position 2: the concentration must be a number, 0 or more.",
+        "Correct the following before continuing: Position 2: the concentration must be a number, 0 or more.",
       ),
     ).toBeInTheDocument();
   });
@@ -238,6 +238,11 @@ describe("InstrumentImportWizard", () => {
     renderWizard();
     expect(screen.getByRole("button", { name: /^import$/i })).toBeDisabled();
     expect(screen.getByText(/2 positions have no batch/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Choose a batch for each to link their traces and reported values to a compound.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText(/which the file has no curves for/)).toBeInTheDocument();
     const used = screen.getByText("positions used").parentElement as HTMLElement;
     expect(within(used).getByText("3")).toBeInTheDocument();
@@ -271,6 +276,29 @@ describe("InstrumentImportWizard", () => {
     ).toBeInTheDocument();
   });
 
+  it("the result step counts in the singular and the plural", () => {
+    hookState.value = withPreview(4, { result });
+    const { unmount } = renderWizard();
+    expect(screen.getByText(/3 positions, 3 traces, 3 readout values\./)).toBeInTheDocument();
+    unmount();
+
+    hookState.value = withPreview(4, {
+      result: { ...result, positions_created: 1, curves_created: 1, values_inserted: 1 },
+    });
+    renderWizard();
+    expect(screen.getByText(/1 position, 1 trace, 1 readout value\./)).toBeInTheDocument();
+  });
+
+  it("step 3 offers No readout and marks an unmapped value Not mapped", async () => {
+    hookState.value = withPreview(3, {
+      draft: { ...draftFromPreview(preview), readoutBySeries: {} },
+    });
+    renderWizard();
+    expect(screen.getAllByText("Not mapped").length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("combobox", { name: /readout for transition 1/i }));
+    expect(await screen.findByRole("option", { name: "No readout" })).toBeInTheDocument();
+  });
+
   it("offers a template with a Use column", () => {
     download.saveText.mockReset();
     hookState.value = withPreview(2);
@@ -281,7 +309,7 @@ describe("InstrumentImportWizard", () => {
       "\uFEFFPosition,Label,Role,Compound,Batch,Concentration (µM),Note,Use",
     );
     expect(csv.split("\r\n")[1]).toBe("Position 1,ABC-0000001,Sample,REG-0001,B-1,,,Yes");
-    expect(name.endsWith(".csv")).toBe(true);
+    expect(name).toBe("labeling-template.csv");
   });
 
   it("puts the rows filled from a file in the draft", () => {

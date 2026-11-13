@@ -96,7 +96,7 @@ export function applyLayout<T extends LabellingRow>(
     for (const problem of f.problems) problems.push(`${p}: ${problem}`);
     if (!opts.allowUse && f.use === false) {
       problems.push(
-        `${p}: positions cannot be removed here; reset the run and import again to leave one out`,
+        `${p}: positions cannot be removed here. For a draft or in-progress run, reset all run data and import again. Otherwise, import into a new run.`,
       );
       continue;
     }

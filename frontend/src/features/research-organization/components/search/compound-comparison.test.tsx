@@ -158,7 +158,7 @@ it("Curves on a protocol opens the curves of all compared compounds, once per pr
   expect(buttons).toHaveLength(1);
   fireEvent.click(buttons[0]);
   expect(
-    screen.getByRole("dialog", { name: "All runs of Target with traces for A and B" }),
+    screen.getByRole("dialog", { name: "Traces across runs", description: /^Target · A and B\./ }),
   ).toBeInTheDocument();
   expect(curvesProps.at(-1)?.protocolId).toBe("Target");
   expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["A", "B"] });

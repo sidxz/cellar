@@ -79,4 +79,19 @@ describe("ResetRunDataDialog", () => {
     );
     expect(showSuccess.mock.calls[0][0]).toContain("0 curves, 4 traces removed.");
   });
+
+  it("counts one of each in the singular for a non-plate run", () => {
+    state.plateMap = plateMap("cassette", true);
+    state.out = {
+      plates_deleted: 1,
+      wells_deleted: 1,
+      readouts_deleted: 1,
+      curves_deleted: 1,
+      measured_curves_deleted: 1,
+    };
+    confirm(0);
+    expect(showSuccess.mock.calls[0][0]).toBe(
+      "Reset run data — 1 position, 1 readout, 1 dose-response curve, 1 trace removed.",
+    );
+  });
 });

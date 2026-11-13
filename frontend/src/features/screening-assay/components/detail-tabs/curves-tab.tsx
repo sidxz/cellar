@@ -43,12 +43,14 @@ export function CurvesTab({
   );
   const tags = useMemo(() => sameDateTags(runs), [runs]);
   const scientistOf = (userId: string) =>
-    members?.find((m) => m.user_id === userId)?.name ?? shortId(userId);
+    members?.find((m) => m.user_id === userId)?.name ?? "Scientist unavailable";
 
   if (isLoading) return <Skeleton data-testid="curves-tab-loading" className="h-[400px] w-full" />;
   if (error || !data) {
     return (
-      <p className="py-8 text-center text-sm text-muted-foreground">Could not load the runs.</p>
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Could not load the runs. Reload the page and try again.
+      </p>
     );
   }
 
@@ -122,7 +124,7 @@ export function CurvesTab({
             showReferences: false,
             colour: { mode: "group", groupBy: "run" },
           }}
-          exportName={`protocol-traces-${shortId(protocolId)}`}
+          exportName={`traces-protocol-${shortId(protocolId)}`}
           empty={
             <p className="py-8 text-center text-sm text-muted-foreground">
               None of the chosen runs has traces.

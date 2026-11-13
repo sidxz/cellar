@@ -70,6 +70,6 @@ export function compoundWithoutBatch(rows: readonly LabellingRow[]): number {
 export function withoutBatchLine(count: number): string | null {
   if (count === 0) return null;
   return count === 1
-    ? "1 position has a compound but no batch; it will be stored without a compound"
-    : `${count} positions have a compound but no batch; they will be stored without a compound`;
+    ? "1 position has a compound but no batch. Choose a batch to link its traces and values to the compound."
+    : `${count} positions have a compound but no batch. Choose a batch for each to link their traces and values to their compounds.`;
 }

@@ -13,7 +13,7 @@ vi.mock("./multi-run-curves", () => ({
 import {
   CompoundCurvesProvider,
   type CompoundCurvesTarget,
-  compoundCurvesTitle,
+  compoundCurvesSummary,
   useOpenCompoundCurves,
 } from "./compound-curves-dialog";
 
@@ -47,25 +47,21 @@ beforeEach(() => {
 
 describe("compound curves dialog", () => {
   it("states what it shows, for one compound and for several", () => {
-    expect(compoundCurvesTitle({ protocol: P, molecules: [A] })).toBe(
-      "All runs of Protocol 1 with traces for Compound A",
+    expect(compoundCurvesSummary({ protocol: P, molecules: [A] })).toBe("Protocol 1 · Compound A");
+    expect(compoundCurvesSummary({ protocol: P, molecules: [A, B] })).toBe(
+      "Protocol 1 · Compound A and Compound B",
     );
-    expect(compoundCurvesTitle({ protocol: P, molecules: [A, B] })).toBe(
-      "All runs of Protocol 1 with traces for Compound A and Compound B",
-    );
-    expect(compoundCurvesTitle({ protocol: P, molecules: [A, B, C] })).toBe(
-      "All runs of Protocol 1 with traces for Compound A, Compound B and Compound C",
+    expect(compoundCurvesSummary({ protocol: P, molecules: [A, B, C] })).toBe(
+      "Protocol 1 · Compound A, Compound B and Compound C",
     );
   });
 
   it("says in one line that runs outside the search's scope can be included", () => {
     openFor({ protocol: P, molecules: [A] });
-    expect(
-      screen.getByRole("dialog", { name: "All runs of Protocol 1 with traces for Compound A" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Traces across runs" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        "A live view of every run with traces, except rejected runs. It can include runs that this search's run scope and aggregation rule did not count.",
+        "Protocol 1 · Compound A. Includes every run except rejected runs, regardless of this search's run scope or aggregation.",
       ),
     ).toBeInTheDocument();
   });
@@ -80,7 +76,8 @@ describe("compound curves dialog", () => {
       showReferences: true,
       colour: { mode: "group", groupBy: "batch" },
     });
-    expect(typeof props.exportName).toBe("string");
+    // Named for what it shows, so exports of two compounds of one protocol differ.
+    expect(props.exportName).toBe("traces-Protocol-1-Compound-A");
   });
 
   it("colours by compound for several compounds", () => {
@@ -90,6 +87,7 @@ describe("compound curves dialog", () => {
       mode: "group",
       groupBy: "compound",
     });
+    expect(props.exportName).toBe("traces-Protocol-1-Compound-A-and-Compound-B");
   });
 
   it("says so when the compound has no curves outside rejected runs", () => {

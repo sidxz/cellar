@@ -282,7 +282,7 @@ describe("apply layout", () => {
     expect(out.rows[0]).toBe(rows[0]);
     expect(out.rows[1]).toMatchObject({ used: true, label: "z" });
     expect(out.problems).toEqual([
-      "Position 1: positions cannot be removed here; reset the run and import again to leave one out",
+      "Position 1: positions cannot be removed here. For a draft or in-progress run, reset all run data and import again. Otherwise, import into a new run.",
     ]);
     expect(out.filled).toBe(1);
   });

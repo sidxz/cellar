@@ -41,8 +41,14 @@ export interface UseInstrumentImportWizardResult {
 const EMPTY_DRAFT: LabellingDraft = { positions: [], readoutBySeries: {} };
 
 // ApiError.message reads "API error: 422 — <detail>"; the detail alone is the API's wording.
-export const apiReason = (e: unknown) =>
-  (e instanceof Error ? e.message : String(e)).replace(/^API error: \d+ — /, "");
+const API_ERROR = /^API error: \d+(?: — ([\s\S]*))?$/;
+
+/** The API's reason, or a plain sentence when it sent none or was never reached. */
+export function apiReason(e: unknown): string {
+  const match = API_ERROR.exec(e instanceof Error ? e.message : String(e));
+  if (!match) return "Could not reach the server. Check your connection and try again.";
+  return match[1] || "The server could not complete the request. Try again.";
+}
 
 export function useInstrumentImportWizard({
   runId,

@@ -50,7 +50,8 @@ describe("<AssayEvidence /> curves", () => {
     fireEvent.click(screen.getByRole("button", { name: "Traces" }));
     expect(
       await screen.findByRole("dialog", {
-        name: "All runs of Protocol 1 with traces for ABC-0000001",
+        name: "Traces across runs",
+        description: /^Protocol 1 · ABC-0000001\./,
       }),
     ).toBeInTheDocument();
     expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["m1"] });

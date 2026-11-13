@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { WizardStepIndicator } from "@/shared/components/wizard-step-indicator";
-import { formatFileSize } from "@/shared/lib/format-number";
+import { formatCount, formatFileSize } from "@/shared/lib/format-number";
 import { useInstrumentFileFormats } from "../hooks/use-instrument-import";
 import { useInstrumentImportWizard } from "../hooks/use-instrument-import-wizard";
 import {
@@ -266,9 +266,9 @@ function MapStep({
   return (
     <div className="space-y-3 py-2">
       <p className="text-sm text-muted-foreground">
-        The instrument&apos;s own software calculated these values. Choose which of the
-        protocol&apos;s readouts each one is stored in, or leave it out. Values left out are still
-        kept with the trace.
+        The instrument&apos;s own software calculated these values. Choose a protocol readout to
+        include a value in the assay results. Values without a readout stay with their
+        position&apos;s trace, when it has one.
       </p>
       <div className="overflow-x-auto rounded-md border">
         <table className="w-full text-sm">
@@ -301,7 +301,7 @@ function MapStep({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value={NO_READOUT}>Don&apos;t store</SelectItem>
+                        <SelectItem value={NO_READOUT}>No readout</SelectItem>
                         {selectableReadouts(preview, s, draft.readoutBySeries).map((r) => (
                           <SelectItem key={r.id} value={r.id} disabled={r.disabled}>
                             {r.name}
@@ -313,7 +313,7 @@ function MapStep({
                   </td>
                   <td className="px-3 py-2">
                     {chosen === null ? (
-                      <span className="text-muted-foreground">Left out</span>
+                      <span className="text-muted-foreground">Not mapped</span>
                     ) : chosen === s.suggested_readout_definition_id ? (
                       <Badge
                         variant="outline"
@@ -373,7 +373,9 @@ function ReviewStep({
           <b>
             {s.withoutBatch} position{s.withoutBatch === 1 ? " has" : "s have"} no batch.
           </b>{" "}
-          They keep their label and traces, but their values will not appear under a compound.
+          {s.withoutBatch === 1
+            ? "Choose a batch to link its traces and reported values to a compound."
+            : "Choose a batch for each to link their traces and reported values to a compound."}
         </Notice>
       )}
       {preview.warnings.map((warning) => (
@@ -391,8 +393,9 @@ function ResultView({ result }: { result: InstrumentImportResult }) {
   return (
     <div className="space-y-3 py-2">
       <Notice tone="ok">
-        <b>Imported.</b> {result.positions_created} positions, {result.curves_created} traces,{" "}
-        {result.values_inserted} readout values.
+        <b>Imported.</b> {formatCount(result.positions_created, "position")},{" "}
+        {formatCount(result.curves_created, "trace")},{" "}
+        {formatCount(result.values_inserted, "readout value")}.
         {result.file_attached &&
           (result.stored_file_name
             ? ` The original file is on the Files tab as ${result.stored_file_name}.`

@@ -138,7 +138,7 @@ describe("RunDataPanel holder awareness", () => {
     state.plateMap = plateMap("plate", false);
     render(<RunDataPanel run={{ ...run, is_locked: false, status: "completed" } as Run} />);
     openImportMenu();
-    const entry = screen.getByRole("menuitem", { name: /instrument file/i });
+    const entry = screen.getByRole("menuitem", { name: "Import Instrument File" });
     expect(entry).toHaveAttribute("data-disabled");
     expect(entry).toHaveAttribute(
       "title",

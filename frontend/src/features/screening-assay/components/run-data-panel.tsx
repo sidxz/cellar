@@ -246,7 +246,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                         className={HOVERABLE_WHEN_DISABLED}
                         onClick={() => setInstrumentWizardOpen(true)}
                       >
-                        Instrument file
+                        Import Instrument File
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

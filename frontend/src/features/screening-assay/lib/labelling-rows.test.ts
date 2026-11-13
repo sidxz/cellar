@@ -44,10 +44,10 @@ describe("labelling rows", () => {
   it("words the line beside the button", () => {
     expect(withoutBatchLine(0)).toBeNull();
     expect(withoutBatchLine(1)).toBe(
-      "1 position has a compound but no batch; it will be stored without a compound",
+      "1 position has a compound but no batch. Choose a batch to link its traces and values to the compound.",
     );
     expect(withoutBatchLine(3)).toBe(
-      "3 positions have a compound but no batch; they will be stored without a compound",
+      "3 positions have a compound but no batch. Choose a batch for each to link their traces and values to their compounds.",
     );
   });
 

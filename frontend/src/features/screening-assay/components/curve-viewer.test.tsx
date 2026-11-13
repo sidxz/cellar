@@ -3,7 +3,6 @@ import { useState } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
-import { shortId } from "@/shared/lib/utils";
 import { type CurveGroup, type CurveSet, curveSetFromRun } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
 import type { RunCurves } from "../types";
@@ -340,7 +339,7 @@ describe("CurveViewer run cell", () => {
       fireEvent.click(s, { metaKey: true });
     }
     const table = screen.getByRole("table");
-    const heading = `2026-11-03 · ${shortId(UNKNOWN_OPERATOR)} · Completed · second attempt`;
+    const heading = "2026-11-03 · Scientist unavailable · Completed · second attempt";
     // The same text as the selector's heading for that run: the heading and the cell.
     expect(screen.getAllByRole("link", { name: heading })).toHaveLength(2);
     expect(within(table).getByRole("link", { name: heading })).toHaveAttribute(
@@ -361,7 +360,7 @@ describe("CurveViewer", () => {
     expect(cb.onChannelChange).toHaveBeenCalledWith("b");
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
     expect(cb.onViewChange).toHaveBeenCalledWith("derivative");
-    const field = screen.getByLabelText("Window");
+    const field = screen.getByLabelText("Smoothing window");
     fireEvent.change(field, { target: { value: "2" } });
     fireEvent.blur(field);
     expect(cb.onWindowChange).toHaveBeenCalledWith(2);
@@ -376,7 +375,7 @@ describe("CurveViewer", () => {
     const cb = callbacks();
     render(<Harness callbacks={cb} set={{ ...curveSetFromRun(runCurves), view: "derivative" }} />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
-    const field = screen.getByLabelText("Window");
+    const field = screen.getByLabelText("Smoothing window");
     fireEvent.change(field, { target: { value: "3" } });
     fireEvent.change(field, { target: { value: "3.5" } });
     expect(cb.onWindowChange).not.toHaveBeenCalled();
@@ -408,7 +407,7 @@ describe("CurveViewer", () => {
     const a = screen.getByRole("link", { name: "2026-11-03 · A. Person · Completed" });
     expect(a).toHaveAttribute("href", `/assays/runs/${RUN_A}`);
     const b = screen.getByRole("link", {
-      name: `2026-11-04 · ${shortId(UNKNOWN_OPERATOR)} · Completed`,
+      name: "2026-11-04 · Scientist unavailable · Completed",
     });
     expect(b).toHaveAttribute("href", `/assays/runs/${RUN_B}`);
     expect(screen.getAllByText("0 of 3 selected")).toHaveLength(2);
@@ -551,9 +550,46 @@ describe("CurveViewer", () => {
     render(<Harness callbacks={callbacks()} set={set} />);
     fireEvent.click(screen.getByRole("button", { name: "All" }));
     expect(
-      screen.getByText("More than 400 positions are selected. Narrow the selection to draw them."),
+      screen.getByText("More than 400 positions would be plotted. Select fewer positions."),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "PNG" })).toBeDisabled();
+    // Reference positions count too, so turning them off is offered once they are on.
+    fireEvent.click(screen.getByRole("switch", { name: "Show reference positions" }));
+    expect(
+      screen.getByText(
+        "More than 400 positions would be plotted. Select fewer positions or turn off reference positions.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says no derivative could be calculated, not that there are no traces, in the derivative view", () => {
+    const derivative: CurveSet = { ...twoRuns, view: "derivative", window: 1, curves: new Map() };
+    render(<Harness callbacks={callbacks()} set={derivative} />);
+    fireEvent.click(slot(1, 2));
+    expect(
+      screen.getByText(
+        "No derivative could be calculated for the selected positions. Switch to Measured to see their traces.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Not shown, no Signal A derivative: Position 2 · Beta"),
+    ).toBeInTheDocument();
+  });
+
+  it("formats a concentration in the table and keeps the stored value in its title", () => {
+    const withDose: CurveSet = {
+      ...twoRuns,
+      groups: [
+        {
+          ...runGroup("a"),
+          positions: runGroup("a").positions.map((p) => ({ ...p, dose: 0.1 + 0.2 })),
+        },
+      ],
+    };
+    render(<Harness callbacks={callbacks()} set={withDose} />);
+    fireEvent.click(slot(0, 2));
+    const cell = within(screen.getByRole("table")).getByText("0.3");
+    expect(cell).toHaveAttribute("title", String(0.1 + 0.2));
   });
 });
