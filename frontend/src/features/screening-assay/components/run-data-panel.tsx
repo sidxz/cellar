@@ -17,10 +17,12 @@ import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
+import { canImportInstrumentFile } from "../lib/instrument-labelling";
 import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 import type { PlateData, PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { GridImportDialog } from "./grid-import-dialog";
+import { InstrumentImportWizard } from "./instrument-import-wizard";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { ReadoutDataTable } from "./readout-data-table";
@@ -159,6 +161,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
   const [summaryWizardOpen, setSummaryWizardOpen] = useState(false);
   const [gridImportOpen, setGridImportOpen] = useState(false);
+  const [instrumentWizardOpen, setInstrumentWizardOpen] = useState(false);
 
   const plates = plateMap?.plates ?? [];
   const doseUnit = plateMap?.dose_unit ?? "uM";
@@ -221,6 +224,12 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setSummaryWizardOpen(true)}>
                         Import Summary Results (compound + endpoints)
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={!canImportInstrumentFile(run)}
+                        onClick={() => setInstrumentWizardOpen(true)}
+                      >
+                        Instrument file
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -355,6 +364,11 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         protocolId={run.protocol_id}
         open={summaryWizardOpen}
         onOpenChange={setSummaryWizardOpen}
+      />
+      <InstrumentImportWizard
+        runId={run.id}
+        open={instrumentWizardOpen}
+        onOpenChange={setInstrumentWizardOpen}
       />
       <GridImportDialog
         runId={run.id}

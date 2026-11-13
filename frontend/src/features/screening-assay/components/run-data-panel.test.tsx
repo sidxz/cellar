@@ -12,6 +12,7 @@ vi.mock("@/features/attachment", () => ({
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
 vi.mock("./edit-qc-metrics-dialog", () => ({ EditQcMetricsDialog: () => null }));
 vi.mock("./grid-import-dialog", () => ({ GridImportDialog: () => null }));
+vi.mock("./instrument-import-wizard", () => ({ InstrumentImportWizard: () => null }));
 vi.mock("./plate-heatmap", () => ({ PlateHeatmap: () => null }));
 vi.mock("./plate-map-viewer", () => ({ PlateMapViewer: () => null }));
 vi.mock("./readout-data-table", () => ({ ReadoutDataTable: () => null }));
