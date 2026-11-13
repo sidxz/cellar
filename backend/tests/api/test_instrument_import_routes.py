@@ -341,6 +341,40 @@ async def test_second_import_is_refused_until_reset(
     assert again.status_code == 201, again.text
 
 
+async def test_plate_imports_are_refused_on_a_run_whose_holder_is_not_a_plate(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    await _import(client, s)
+    message = "This run's holder is not a plate, so plate imports are not available for it."
+
+    grid = await client.post(
+        f"/api/v1/runs/{s.run_id}/import-readouts",
+        params={"readout_definition_id": str(s.tm1_id)},
+        files={"file": ("v.csv", b"Well,Value\nA1,2.3\n", "text/csv")},
+    )
+    assert grid.status_code == 409 and message in grid.text
+    setup = await client.post(
+        f"/api/v1/runs/{s.run_id}/plate-setup",
+        json={
+            "plate_number": 2,
+            "compound_assignments": [{"molecule_ref": "Molecule 1", "well_positions": ["A1"]}],
+        },
+    )
+    assert setup.status_code == 409 and message in setup.text
+    run_file = await client.post(
+        f"/api/v1/runs/{s.run_id}/preview-file",
+        files={"file": ("r.csv", b"Plate Name,Well,Value\nP1,A1,1\n", "text/csv")},
+    )
+    assert run_file.status_code == 409 and message in run_file.text
+    assert await _count(session_factory, "plates", s.run_id) == 1
+    assert (
+        await _count(session_factory, "readout_data", s.run_id, where="is_computed = false") == 3
+    )
+
+
 async def test_run_update_after_import_keeps_curves(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

@@ -27,12 +27,13 @@ from cellar.application.shared.molecule_resolver import (
     UnresolvedMolecule,
 )
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
 )
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-from cellar.domain.screening_assay.run import Run
+from cellar.domain.screening_assay.run import Plate, Run
 from cellar.domain.shared.errors import AuthorizationError, ConflictError
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
@@ -462,6 +463,46 @@ class TestSetUpRunPlate:
         error = result.failure()
         assert isinstance(error, ConflictError)
         assert "well-less summary results" in str(error)
+        resolver.resolve.assert_not_awaited()
+        run_repo.save.assert_not_awaited()
+        assert not uow.committed
+
+    @pytest.mark.asyncio
+    async def test_fails_if_run_holder_is_not_a_plate(self):
+        ws_id = uuid.uuid4()
+        user_id = uuid.uuid4()
+        auth = FakeAuth(user_id=user_id, workspace_id=ws_id)
+        protocol = _make_protocol(ws_id, user_id)
+        run = _make_run(ws_id, protocol.id, user_id)
+        run.plates = [
+            Plate(
+                run_id=run.id,
+                plate_number=1,
+                holder_kind=HolderKind.CASSETTE,
+                holder_rows=1,
+                holder_columns=3,
+            )
+        ]
+        uc, uow, run_repo, resolver = self._build(run=run, protocol=protocol)
+
+        result = await uc(
+            SetUpRunPlateCommand(
+                workspace_id=ws_id,
+                run_id=run.id,
+                compound_assignments=[
+                    CompoundAssignment(molecule_ref="Aspirin", well_positions=["A1"]),
+                ],
+                concentration_series=[1000.0],
+                plate_number=2,
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ConflictError)
+        assert str(result.failure()) == (
+            "This run's holder is not a plate, so plate imports are not available for it."
+        )
         resolver.resolve.assert_not_awaited()
         run_repo.save.assert_not_awaited()
         assert not uow.committed

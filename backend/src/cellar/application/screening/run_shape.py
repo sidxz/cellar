@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import uuid
 
+from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.repository import ReadoutDataRepository
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import ConflictError
@@ -39,5 +40,18 @@ async def refuse_if_wellless(
         return ConflictError(
             f"Run {run_id} holds well-less summary results; "
             "plate setup and plate import cannot be applied to it"
+        )
+    return None
+
+
+def refuse_if_not_plate_holder(run: Run) -> ConflictError | None:
+    """Plate-shaped imports onto a run whose holder is not a plate.
+
+    Those paths address positions as plate wells (row letter + column), which
+    would put values on the wrong kind of position.
+    """
+    if any(p.holder_kind is not HolderKind.PLATE for p in run.plates):
+        return ConflictError(
+            "This run's holder is not a plate, so plate imports are not available for it."
         )
     return None
