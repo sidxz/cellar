@@ -19,6 +19,7 @@ from cellar.application.screening.import_run_readouts import (
 )
 from cellar.application.shared.grid_plate_reshaper import reshape_grid_to_well_value_csv
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
@@ -188,7 +189,6 @@ def _build_use_case(
 
 
 class TestImportRunReadouts:
-
     @pytest.mark.asyncio
     async def test_successful_single_value_import(self):
         """CSV with Well + Value columns, readout_definition_id supplied."""
@@ -253,9 +253,7 @@ class TestImportRunReadouts:
         rd_id = protocol.readout_definitions[0].id
 
         saved: list = []
-        uc, _, _ = _build_use_case(
-            run=run, protocol=protocol, batch=batch, save_bulk_called=saved
-        )
+        uc, _, _ = _build_use_case(run=run, protocol=protocol, batch=batch, save_bulk_called=saved)
 
         # A1 matches, B1 and C3 do not
         csv_bytes = b"Well,Value\nA1,2.3\nB1,5.1\nC3,9.9\n"
@@ -327,6 +325,40 @@ class TestImportRunReadouts:
         assert not uow.committed
 
     @pytest.mark.asyncio
+    async def test_run_whose_holder_is_not_a_plate_is_refused(self):
+        ws_id, auth = _make_ws_and_auth()
+        protocol = _make_protocol(ws_id)
+        plate = Plate(
+            run_id=uuid.uuid4(),
+            plate_number=1,
+            holder_kind=HolderKind.CASSETTE,
+            holder_rows=1,
+            holder_columns=3,
+        )
+        run = _make_run_with_wells(ws_id, wells=[_make_well(plate.id, "A", 1)])
+        run.plates = [plate]
+        saved: list = []
+        uc, uow, _ = _build_use_case(run=run, protocol=protocol, save_bulk_called=saved)
+
+        result = await uc(
+            ImportRunReadoutsCommand(
+                workspace_id=ws_id,
+                run_id=run.id,
+                file_content=b"Well,Value\nA1,2.3\n",
+                readout_definition_id=protocol.readout_definitions[0].id,
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ConflictError)
+        assert str(result.failure()) == (
+            "This run's holder is not a plate, so plate imports are not available for it."
+        )
+        assert saved == []
+        assert not uow.committed
+
+    @pytest.mark.asyncio
     async def test_run_not_found_returns_not_found_error(self):
         """When run_repo returns None, a NotFoundError is returned."""
         ws_id, auth = _make_ws_and_auth()
@@ -364,9 +396,7 @@ class TestImportRunReadouts:
         abs_id = protocol.readout_definitions[1].id
 
         saved: list = []
-        uc, _, _ = _build_use_case(
-            run=run, protocol=protocol, batch=batch, save_bulk_called=saved
-        )
+        uc, _, _ = _build_use_case(run=run, protocol=protocol, batch=batch, save_bulk_called=saved)
 
         csv_bytes = b"Well,% Inhibition,Absorbance\nA1,2.3,0.95\nA2,5.1,0.88\n"
         cmd = ImportRunReadoutsCommand(
@@ -418,6 +448,7 @@ class TestImportRunReadouts:
         )
 
         from cellar.domain.shared.errors import AuthorizationError
+
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
 
@@ -441,9 +472,7 @@ class TestImportRunReadouts:
         rd_id = protocol.readout_definitions[0].id
 
         saved: list = []
-        uc, _, _ = _build_use_case(
-            run=run, protocol=protocol, batch=batch, save_bulk_called=saved
-        )
+        uc, _, _ = _build_use_case(run=run, protocol=protocol, batch=batch, save_bulk_called=saved)
 
         # Grid covers A1,A2,B1,B2 — but B2 is not a run well.
         grid = b",1,2\nA,2.3,5.1\nB,4.2,6.3\n"

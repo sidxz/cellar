@@ -34,6 +34,7 @@ from cellar.application.screening.get_protocol_activity import GetProtocolActivi
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
 from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
+from cellar.application.screening.get_run_curves import GetRunCurves
 from cellar.application.screening.get_target import GetTarget, ListTargets
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
@@ -184,6 +185,7 @@ __all__ = [
     "GetProtocolStatsDep",
     "GetProtocolTargetsDep",
     "GetRunCollectionGapDep",
+    "GetRunCurvesDep",
     "GetRunDep",
     "GetTargetDep",
     "ImportRunReadoutsDep",
@@ -428,6 +430,7 @@ ListDoseResponseEnrichedDep = Annotated[
     ListDoseResponseEnriched, Depends(_get_use_case(ListDoseResponseEnriched))
 ]
 GetPlateMapDep = Annotated[GetPlateMap, Depends(_get_use_case(GetPlateMap))]
+GetRunCurvesDep = Annotated[GetRunCurves, Depends(_get_use_case(GetRunCurves))]
 FindSimilarProtocolsDep = Annotated[
     FindSimilarProtocols, Depends(_get_use_case(FindSimilarProtocols))
 ]

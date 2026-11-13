@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import UTC, date, datetime
 from typing import Any
 
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     PlateFormat,
     RunRelationshipType,
     RunStatus,
@@ -18,6 +20,7 @@ from cellar.domain.screening_assay.events import (
     RunCreated,
     RunHitCriteriaCleared,
     RunHitCriteriaSet,
+    RunInstrumentFileImported,
     RunLocked,
     RunRejected,
     RunUnlocked,
@@ -41,6 +44,9 @@ _RUN_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
 
 _LOCKABLE_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
 
+_WELL_LABEL_MAX = 200
+_WELL_NOTE_MAX = 1000
+
 
 # ---------------------------------------------------------------------------
 # Owned entities
@@ -54,6 +60,8 @@ class Plate(Entity):
 
     Invariants:
         - plate_number >= 1
+        - holder size is both rows and columns or neither, each >= 1
+        - a cassette has one row and no plate format
     """
 
     def __init__(
@@ -68,6 +76,9 @@ class Plate(Entity):
         parent_plate_id: uuid.UUID | None = None,
         template_id: uuid.UUID | None = None,
         registered_plate_id: uuid.UUID | None = None,
+        holder_kind: HolderKind = HolderKind.PLATE,
+        holder_rows: int | None = None,
+        holder_columns: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -75,6 +86,19 @@ class Plate(Entity):
 
         if plate_number < 1:
             raise ValidationError("plate_number must be >= 1")
+        if (holder_rows is None) != (holder_columns is None):
+            raise ValidationError("holder_rows and holder_columns must be set together")
+        if (
+            holder_rows is not None
+            and holder_columns is not None
+            and min(holder_rows, holder_columns) < 1
+        ):
+            raise ValidationError("holder size must be >= 1")
+        if holder_kind is HolderKind.CASSETTE:
+            if holder_rows is not None and holder_rows != 1:
+                raise ValidationError("A cassette has exactly one row")
+            if format is not None:
+                raise ValidationError("A cassette has no plate format")
 
         self.run_id = run_id
         self.plate_number = plate_number
@@ -86,6 +110,9 @@ class Plate(Entity):
         # Optional link to the physical inventory plate (RegisteredPlate) this
         # run plate was run on. Null is normal — nothing depends on it.
         self.registered_plate_id = registered_plate_id
+        self.holder_kind = holder_kind
+        self.holder_rows = holder_rows
+        self.holder_columns = holder_columns
 
 
 class Well(Entity):
@@ -96,6 +123,9 @@ class Well(Entity):
     Invariants:
         - row: 1-2 uppercase characters
         - column >= 1
+        - dose, when given, is finite and >= 0
+        - label, when given, is trimmed and at most 200 characters
+        - note, when given, is trimmed and at most 1000 characters
     """
 
     def __init__(
@@ -108,10 +138,20 @@ class Well(Entity):
         well_type: WellType = WellType.SAMPLE,
         batch_id: uuid.UUID | None = None,
         dose: float | None = None,
+        label: str | None = None,
+        note: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
         super().__init__(id=id, created_at=created_at, updated_at=updated_at)
+
+        label = (label or "").strip() or None
+        if label is not None and len(label) > _WELL_LABEL_MAX:
+            raise ValidationError(f"Well label must be at most {_WELL_LABEL_MAX} characters")
+
+        note = (note or "").strip() or None
+        if note is not None and len(note) > _WELL_NOTE_MAX:
+            raise ValidationError(f"Well note must be at most {_WELL_NOTE_MAX} characters")
 
         # Normalize row to uppercase
         row = row.upper()
@@ -119,6 +159,8 @@ class Well(Entity):
             raise ValidationError("Well row must be 1-2 alphabetic characters")
         if column < 1:
             raise ValidationError("Well column must be >= 1")
+        if dose is not None and not math.isfinite(dose):
+            raise ValidationError("Well dose must be a finite number")
         if dose is not None and dose < 0:
             raise ValidationError("Well dose must be >= 0")
 
@@ -130,6 +172,10 @@ class Well(Entity):
         # Dose value only — unit is the owning protocol's dose_unit. Not
         # carried per-well to avoid duplication and inconsistency.
         self.dose = dose
+        # Free-text identifier of what was measured here (e.g. a sample name).
+        self.label = label
+        # Free-text observation made at the bench about this sample in this run.
+        self.note = note
 
 
 # ---------------------------------------------------------------------------
@@ -394,7 +440,46 @@ class Run(AggregateRoot):
         plate.registered_plate_id = registered_plate_id
         self.updated_at = datetime.now(UTC)
 
-    def reset_data(self, *, readouts_deleted: int, curves_deleted: int) -> None:
+    def clear_plate_format(self) -> None:
+        """Forget the run's plate format, for a run whose holder is not a plate.
+
+        Blocked when the run is locked.
+        """
+        self._guard_not_locked()
+        self.plate_format = None
+        self.updated_at = datetime.now(UTC)
+
+    def record_instrument_import(
+        self,
+        *,
+        reader: str,
+        file_name: str,
+        positions: int,
+        curves: int,
+        readout_values: int,
+    ) -> None:
+        """Record that an instrument file was imported into this run (blocked when locked)."""
+        self._guard_not_locked()
+        self.register_event(
+            RunInstrumentFileImported(
+                workspace_id=self.workspace_id,
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                reader=reader,
+                file_name=file_name,
+                positions=positions,
+                curves=curves,
+                readout_values=readout_values,
+            )
+        )
+
+    def reset_data(
+        self,
+        *,
+        readouts_deleted: int,
+        curves_deleted: int,
+        measured_curves_deleted: int = 0,
+    ) -> None:
         """Wipe plates, wells, and QC metrics on this run.
 
         Cascades plates → wells via the FK relationship at persistence
@@ -423,6 +508,7 @@ class Run(AggregateRoot):
                 wells_deleted=wells_deleted,
                 readouts_deleted=readouts_deleted,
                 curves_deleted=curves_deleted,
+                measured_curves_deleted=measured_curves_deleted,
             )
         )
 

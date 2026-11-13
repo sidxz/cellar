@@ -17,13 +17,16 @@ import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
+import { instrumentFileRefusal } from "../lib/instrument-labelling";
 import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 import type { PlateData, PlateFormat, Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { GridImportDialog } from "./grid-import-dialog";
+import { InstrumentImportWizard } from "./instrument-import-wizard";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { ReadoutDataTable } from "./readout-data-table";
+import { RunCurvesPanel } from "./run-curves-panel";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
@@ -147,25 +150,42 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
 
 // ─── Run Data Panel ───────────────────────────────────────────────────────────
 
+/** The API's refusal for plate-shaped imports onto a run whose holder is not a plate. */
+const NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it.";
+/** A disabled menu item ignores the pointer, which would hide its title; keep hover on. */
+const HOVERABLE_WHEN_DISABLED = "data-[disabled]:pointer-events-auto";
+
 interface RunDataPanelProps {
   run: Run;
 }
 
 export function RunDataPanel({ run }: RunDataPanelProps) {
   const { data: curves } = useDoseResponseByRun(run.id);
-  const { data: plateMap } = usePlateMap(run.id);
+  const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
 
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
   const [summaryWizardOpen, setSummaryWizardOpen] = useState(false);
   const [gridImportOpen, setGridImportOpen] = useState(false);
+  const [instrumentWizardOpen, setInstrumentWizardOpen] = useState(false);
 
   const plates = plateMap?.plates ?? [];
   const doseUnit = plateMap?.dose_unit ?? "uM";
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
   const canEdit = useCanEdit();
 
-  const [activeTab, setActiveTab] = useHashTab("readout");
+  // A holder that is not a plate has no plate geometry: the plate-shaped tabs are
+  // hidden and the plate-shaped imports refused.
+  const notPlate = plates.some((p) => p.holder_kind !== "plate");
+  const instrumentRefusal = instrumentFileRefusal(run);
+  const hasCurves = !!plateMap?.has_measured_curves;
+
+  const [hashTab, setActiveTab] = useHashTab("readout");
+  const hiddenTabs = new Set<string>(notPlate ? ["plate-map", "heat-map"] : []);
+  if (!hasCurves) hiddenTabs.add("curves");
+  // Which tabs exist is known only once the plate map has loaded; until then keep the
+  // hash's tab rather than falling back, so a link to #curves still opens Curves.
+  const activeTab = !plateMapLoading && hiddenTabs.has(hashTab) ? "readout" : hashTab;
 
   // Plate header (number + physical-plate link) above each plate map.
   const renderPlate = (p: PlateData) => (
@@ -183,8 +203,9 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
-          <TabsTrigger value="plate-map">Plate Map</TabsTrigger>
-          <TabsTrigger value="heat-map">Heat Map</TabsTrigger>
+          {!notPlate && <TabsTrigger value="plate-map">Plate Map</TabsTrigger>}
+          {!notPlate && <TabsTrigger value="heat-map">Heat Map</TabsTrigger>}
+          {hasCurves && <TabsTrigger value="curves">Curves</TabsTrigger>}
           <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
           <TabsTrigger value="qc">QC Metrics</TabsTrigger>
           <TabsTrigger value="files">
@@ -208,22 +229,38 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setRunImportWizardOpen(true)}>
+                      <DropdownMenuItem
+                        disabled={notPlate}
+                        title={notPlate ? NOT_A_PLATE : undefined}
+                        className={HOVERABLE_WHEN_DISABLED}
+                        onClick={() => setRunImportWizardOpen(true)}
+                      >
                         Import Run File (plate/well)
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setSummaryWizardOpen(true)}>
                         Import Summary Results (compound + endpoints)
                       </DropdownMenuItem>
+                      <DropdownMenuItem
+                        disabled={instrumentRefusal !== null}
+                        title={instrumentRefusal ?? undefined}
+                        className={HOVERABLE_WHEN_DISABLED}
+                        onClick={() => setInstrumentWizardOpen(true)}
+                      >
+                        Instrument file
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setGridImportOpen(true)}
-                    disabled={run.is_locked}
-                  >
-                    <Grid3x3 className="mr-2 h-4 w-4" /> Import Grid
-                  </Button>
+                  {/* A disabled button ignores the pointer; the wrapper carries the title. */}
+                  <span title={notPlate ? NOT_A_PLATE : undefined}>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setGridImportOpen(true)}
+                      disabled={run.is_locked || notPlate}
+                    >
+                      <Grid3x3 className="mr-2 h-4 w-4" /> Import Grid
+                    </Button>
+                  </span>
                 </>
               }
             />
@@ -231,70 +268,81 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         </TabsContent>
 
         {/* Plate Map — pure viewer. Ingest lives on the Readout Data tab. */}
-        <TabsContent value="plate-map">
-          <div className="mt-3 space-y-3">
-            {hasPlateMap ? (
-              plates.length > 1 ? (
-                <Tabs defaultValue={plates[0].plate_id}>
-                  <TabsList>
+        {!notPlate && (
+          <TabsContent value="plate-map">
+            <div className="mt-3 space-y-3">
+              {hasPlateMap ? (
+                plates.length > 1 ? (
+                  <Tabs defaultValue={plates[0].plate_id}>
+                    <TabsList>
+                      {plates.map((p) => (
+                        <TabsTrigger key={p.plate_id} value={p.plate_id}>
+                          Plate {p.plate_number}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
                     {plates.map((p) => (
-                      <TabsTrigger key={p.plate_id} value={p.plate_id}>
-                        Plate {p.plate_number}
-                      </TabsTrigger>
+                      <TabsContent key={p.plate_id} value={p.plate_id}>
+                        <div className="mt-3">{renderPlate(p)}</div>
+                      </TabsContent>
                     ))}
-                  </TabsList>
-                  {plates.map((p) => (
-                    <TabsContent key={p.plate_id} value={p.plate_id}>
-                      <div className="mt-3">{renderPlate(p)}</div>
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                  </Tabs>
+                ) : (
+                  renderPlate(plates[0])
+                )
+              ) : run.plate_format ? (
+                <div className="space-y-3">
+                  <PlateHeatmap format={run.plate_format as PlateFormat} />
+                  {!run.is_locked && (
+                    <p className="text-center text-sm text-muted-foreground">
+                      No data imported yet.{" "}
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-4 hover:underline"
+                        onClick={() => setActiveTab("readout")}
+                      >
+                        Import on the Readout Data tab
+                      </button>
+                      .
+                    </p>
+                  )}
+                </div>
               ) : (
-                renderPlate(plates[0])
-              )
-            ) : run.plate_format ? (
-              <div className="space-y-3">
-                <PlateHeatmap format={run.plate_format as PlateFormat} />
-                {!run.is_locked && (
-                  <p className="text-center text-sm text-muted-foreground">
-                    No data imported yet.{" "}
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => setActiveTab("readout")}
-                    >
-                      Import on the Readout Data tab
-                    </button>
-                    .
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 py-8">
-                <p className="text-sm text-muted-foreground">
-                  No plate map has been configured for this run.
-                </p>
-                {!run.is_locked && (
+                <div className="flex flex-col items-center gap-2 py-8">
                   <p className="text-sm text-muted-foreground">
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => setActiveTab("readout")}
-                    >
-                      Import on the Readout Data tab
-                    </button>{" "}
-                    to populate it.
+                    No plate map has been configured for this run.
                   </p>
-                )}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+                  {!run.is_locked && (
+                    <p className="text-sm text-muted-foreground">
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-4 hover:underline"
+                        onClick={() => setActiveTab("readout")}
+                      >
+                        Import on the Readout Data tab
+                      </button>{" "}
+                      to populate it.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
 
         {/* Heat Map */}
-        <TabsContent value="heat-map">
-          <RunHeatmapPanel run={run} />
-        </TabsContent>
+        {!notPlate && (
+          <TabsContent value="heat-map">
+            <RunHeatmapPanel run={run} />
+          </TabsContent>
+        )}
+
+        {/* Curves */}
+        {hasCurves && (
+          <TabsContent value="curves">
+            <RunCurvesPanel runId={run.id} />
+          </TabsContent>
+        )}
 
         {/* Dose-Response */}
         <TabsContent value="dose-response">
@@ -336,6 +384,11 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         protocolId={run.protocol_id}
         open={summaryWizardOpen}
         onOpenChange={setSummaryWizardOpen}
+      />
+      <InstrumentImportWizard
+        runId={run.id}
+        open={instrumentWizardOpen}
+        onOpenChange={setInstrumentWizardOpen}
       />
       <GridImportDialog
         runId={run.id}

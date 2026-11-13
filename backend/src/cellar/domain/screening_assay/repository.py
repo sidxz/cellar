@@ -15,6 +15,7 @@ from cellar.domain.screening_assay.collection_coverage import (
     EffectiveCollectionCoverage,
 )
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
+from cellar.domain.screening_assay.measured_curve import CurveChannel, MeasuredCurve
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
@@ -593,6 +594,23 @@ class DoseResponseCurveRepository(Protocol):
     async def save(self, entity: DoseResponseCurve) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
     async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None: ...
+
+
+class MeasuredCurveRepository(Protocol):
+    """Repository for MeasuredCurve entities (written once, removed with the run's data)."""
+
+    async def save_bulk(self, curves: list[MeasuredCurve]) -> None: ...
+    async def find_by_run(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        *,
+        channel_key: str | None = None,
+    ) -> list[MeasuredCurve]: ...
+    async def list_channels(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> list[CurveChannel]: ...
+    async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int: ...
 
 
 @runtime_checkable

@@ -10,6 +10,8 @@ import type { PlateMapWellModelMoleculeId } from './plateMapWellModelMoleculeId'
 import type { PlateMapWellModelMoleculeName } from './plateMapWellModelMoleculeName';
 import type { PlateMapWellModelSmiles } from './plateMapWellModelSmiles';
 import type { PlateMapWellModelDose } from './plateMapWellModelDose';
+import type { PlateMapWellModelLabel } from './plateMapWellModelLabel';
+import type { PlateMapWellModelNote } from './plateMapWellModelNote';
 
 export interface PlateMapWellModel {
   well_id: string;
@@ -24,4 +26,7 @@ export interface PlateMapWellModel {
   synonyms?: string[];
   smiles?: PlateMapWellModelSmiles;
   dose?: PlateMapWellModelDose;
+  position_label: string;
+  label: PlateMapWellModelLabel;
+  note: PlateMapWellModelNote;
 }

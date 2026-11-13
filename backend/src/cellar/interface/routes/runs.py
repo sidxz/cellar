@@ -45,6 +45,7 @@ from cellar.application.screening.set_run_hit_criteria import (
 )
 from cellar.application.screening.update_run import UpdateRunCommand
 from cellar.application.shared.sentinel import UNSET
+from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.run import Run
 from cellar.interface.dependencies import (
     AddRunCollectionDep,
@@ -159,7 +160,8 @@ class RunResponse(BaseModel):
             lock_reason=r.lock_reason,
             qc_metrics=r.qc_metrics,
             notes=r.notes,
-            plate_count=len(r.plates),
+            # Plates only: a run whose holder is another kind (a cassette) shows 0.
+            plate_count=sum(p.holder_kind is HolderKind.PLATE for p in r.plates),
             plate_barcodes=plate_barcodes,
             molecule_count=molecule_count,
             performed_at_org_id=r.performed_at_org_id,
@@ -350,6 +352,7 @@ class ResetRunDataResponse(BaseModel):
     wells_deleted: int
     readouts_deleted: int
     curves_deleted: int
+    measured_curves_deleted: int
 
 
 @router.post("/runs/{run_id}/reset-data", response_model=ResetRunDataResponse)
@@ -358,7 +361,7 @@ async def reset_run_data(
     auth: AuthDep,
     uc: ResetRunDataDep,
 ) -> ResetRunDataResponse:
-    """Wipe a run's plates, wells, readouts, dose-response curves, and QC.
+    """Wipe a run's plates, wells, readouts, dose-response and measured curves, and QC.
 
     The run row itself, its metadata, and any attached files are kept.
     Only DRAFT and IN_PROGRESS runs may be reset. Locked or terminal
@@ -375,6 +378,7 @@ async def reset_run_data(
         wells_deleted=out.wells_deleted,
         readouts_deleted=out.readouts_deleted,
         curves_deleted=out.curves_deleted,
+        measured_curves_deleted=out.measured_curves_deleted,
     )
 
 

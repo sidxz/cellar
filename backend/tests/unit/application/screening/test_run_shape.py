@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from cellar.application.screening.run_shape import refuse_if_welled, refuse_if_wellless
+from cellar.application.screening.run_shape import (
+    refuse_if_not_plate_holder,
+    refuse_if_welled,
+    refuse_if_wellless,
+)
+from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.run import Plate, Run, Well
 from cellar.domain.shared.errors import ConflictError
 
@@ -62,3 +67,32 @@ class TestRefuseIfWellless:
         assert isinstance(error, ConflictError)
         assert "well-less summary results" in str(error)
         assert str(run_id) in str(error)
+
+
+NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it."
+
+
+class TestRefuseIfNotPlateHolder:
+    def test_run_without_plates_is_allowed(self):
+        assert refuse_if_not_plate_holder(_make_run(with_plate=False)) is None
+
+    def test_plate_run_is_allowed(self):
+        assert refuse_if_not_plate_holder(_make_run(with_plate=True)) is None
+
+    def test_run_with_a_non_plate_holder_is_refused(self):
+        run = _make_run(with_plate=False)
+        run.plates = [
+            Plate(run_id=run.id, plate_number=1),
+            Plate(
+                run_id=run.id,
+                plate_number=2,
+                holder_kind=HolderKind.CASSETTE,
+                holder_rows=1,
+                holder_columns=3,
+            ),
+        ]
+
+        error = refuse_if_not_plate_holder(run)
+
+        assert isinstance(error, ConflictError)
+        assert str(error) == NOT_A_PLATE

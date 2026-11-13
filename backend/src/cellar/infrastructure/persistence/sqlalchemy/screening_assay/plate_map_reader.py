@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from collections import Counter
 
-from sqlalchemy import select
+from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.application.screening.plate_map_reader import (
@@ -14,6 +14,8 @@ from cellar.application.screening.plate_map_reader import (
     PlateMapSummary,
     WellMapEntry,
 )
+from cellar.domain.screening_assay.enums import HolderKind
+from cellar.domain.screening_assay.holder import holder_label, position_label
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeIdentifierModel,
     MoleculeModel,
@@ -23,6 +25,7 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     RegisteredPlateModel,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    MeasuredCurveModel,
     PlateModel,
     ProtocolModel,
     RunModel,
@@ -140,8 +143,20 @@ class SQLAlchemyPlateMapReader:
             for w in wells:
                 plate_wells[w.plate_id].append(w)
 
+            has_measured_curves = bool(
+                await session.scalar(
+                    select(
+                        exists().where(
+                            MeasuredCurveModel.workspace_id == workspace_id,
+                            MeasuredCurveModel.run_id == run_id,
+                        )
+                    )
+                )
+            )
+
             plates_data: list[PlateMapData] = []
             for plate in sorted(plates, key=lambda p: p.plate_number):
+                holder_kind = HolderKind(plate.holder_kind)
                 well_entries: list[WellMapEntry] = []
                 for well in sorted(plate_wells[plate.id], key=lambda w: (w.row, w.column)):
                     molecule_id = batch_to_mol.get(well.batch_id) if well.batch_id else None
@@ -163,6 +178,9 @@ class SQLAlchemyPlateMapReader:
                             ),
                             smiles=(mol_smiles.get(molecule_id) if molecule_id else None),
                             dose=well.dose,
+                            label=well.label,
+                            note=well.note,
+                            position_label=position_label(holder_kind, well.row, well.column),
                         )
                     )
                 link = linked.get(plate.registered_plate_id) if plate.registered_plate_id else None
@@ -176,10 +194,21 @@ class SQLAlchemyPlateMapReader:
                         registered_plate_id=plate.registered_plate_id,
                         registered_plate_barcode=link[0] if link else None,
                         registered_plate_label=link[1] if link else None,
+                        holder_kind=holder_kind.value,
+                        holder_rows=plate.holder_rows,
+                        holder_columns=plate.holder_columns,
+                        holder_label=holder_label(
+                            holder_kind, plate.holder_rows, plate.holder_columns
+                        ),
                     )
                 )
 
-        return PlateMapResult(run_id=run_id, dose_unit=dose_unit, plates=plates_data)
+        return PlateMapResult(
+            run_id=run_id,
+            dose_unit=dose_unit,
+            plates=plates_data,
+            has_measured_curves=has_measured_curves,
+        )
 
 
 def _summarize(wells: list[WellMapEntry]) -> PlateMapSummary:

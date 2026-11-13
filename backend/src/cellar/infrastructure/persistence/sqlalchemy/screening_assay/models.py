@@ -1,7 +1,8 @@
 """SQLAlchemy models for screening & assay context.
 
-10 tables: targets, plate_templates, protocols, readout_definitions,
-condition_definitions, runs, plates, wells, readout_data, dose_response_curves.
+11 tables: targets, plate_templates, protocols, readout_definitions,
+condition_definitions, runs, plates, wells, readout_data, dose_response_curves,
+measured_curves.
 """
 
 from __future__ import annotations
@@ -11,6 +12,7 @@ from datetime import date, datetime
 
 from sqlalchemy import (
     Boolean,
+    CheckConstraint,
     Column,
     Date,
     DateTime,
@@ -25,7 +27,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, DOUBLE_PRECISION, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from cellar.infrastructure.persistence.sqlalchemy.base import (
@@ -401,6 +403,9 @@ class PlateModel(Base, EntityModelMixin):
     registered_plate_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid, ForeignKey("registered_plates.id", ondelete="SET NULL")
     )
+    holder_kind: Mapped[str] = mapped_column(String(20), nullable=False, server_default="plate")
+    holder_rows: Mapped[int | None] = mapped_column(Integer)
+    holder_columns: Mapped[int | None] = mapped_column(Integer)
 
     run: Mapped[RunModel] = relationship("RunModel", back_populates="plates")
     wells: Mapped[list[WellModel]] = relationship(
@@ -430,6 +435,8 @@ class WellModel(Base, EntityModelMixin):
     batch_id: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     # Dose value in the owning protocol's dose_unit. Unit not denormalized.
     dose: Mapped[float | None] = mapped_column(Float)
+    label: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(Text)
 
     plate: Mapped[PlateModel] = relationship("PlateModel", back_populates="wells")
 
@@ -541,6 +548,40 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
             "batch_id",
             "readout_definition_id",
             name="uq_drc_run_well_readout",
+        ),
+    )
+
+
+class MeasuredCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
+    """Raw (x, y) points an instrument recorded at one well, for one channel."""
+
+    __tablename__ = "measured_curves"
+
+    run_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid, ForeignKey("runs.id", ondelete="CASCADE"), nullable=False
+    )
+    # No FK (like readout_data.well_id): removed with its run or on data reset.
+    well_id: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    channel_key: Mapped[str] = mapped_column(String(100), nullable=False)
+    channel_label: Mapped[str] = mapped_column(String(200), nullable=False)
+    x_unit: Mapped[str] = mapped_column(String(40), nullable=False)
+    y_unit: Mapped[str | None] = mapped_column(String(40))
+    x_label: Mapped[str | None] = mapped_column(String(100))
+    channel_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    x: Mapped[list[float]] = mapped_column(ARRAY(DOUBLE_PRECISION), nullable=False)
+    y: Mapped[list[float]] = mapped_column(ARRAY(DOUBLE_PRECISION), nullable=False)
+    # [{"kind", "ordinal", "label", "value", "unit"}]
+    reported: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
+    reader: Mapped[str] = mapped_column(String(100), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("well_id", "channel_key", name="uq_measured_curve_well_channel"),
+        Index("ix_measured_curve_run_channel", "run_id", "channel_key"),
+        CheckConstraint(
+            "cardinality(x) = cardinality(y) AND cardinality(x) >= 2",
+            name="ck_measured_curve_points",
         ),
     )
 

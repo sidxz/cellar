@@ -11,6 +11,8 @@ import uuid
 import pytest
 from httpx import AsyncClient
 
+from cellar.domain.screening_assay.enums import HolderKind
+from cellar.domain.screening_assay.holder import holder_label
 from tests.api._protocols import protocol_body
 
 pytestmark = pytest.mark.asyncio
@@ -180,6 +182,12 @@ class TestUnlinkAndPlateMap:
         plate_id = await _mk_run_plate(client, run_id)
 
         entry = await _plate_map_entry(client, run_id, plate_id)
+        assert (entry["holder_kind"], entry["holder_rows"], entry["holder_columns"]) == (
+            "plate",
+            None,
+            None,
+        )
+        assert entry["holder_label"] == holder_label(HolderKind.PLATE, None, None)
         assert entry["registered_plate_id"] is None
         assert entry["registered_plate_barcode"] is None
         assert entry["registered_plate_label"] is None

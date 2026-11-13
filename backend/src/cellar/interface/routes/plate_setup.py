@@ -20,6 +20,7 @@ from cellar.application.screening.link_run_plate import (
     RunPlateLink,
     UnlinkRunPlateCommand,
 )
+from cellar.application.screening.plate_map_reader import WellMapEntry
 from cellar.application.screening.plate_setup import (
     CompoundAssignment,
     ParsedPlateMap,
@@ -89,6 +90,32 @@ class PlateMapWellModel(BaseModel):
     # Dose value in the protocol's dose_unit (carried at the response level
     # so the client does not need to look up the protocol separately).
     dose: float | None = None
+    # Display label for the position, from the holder kind; clients print it as is.
+    position_label: str
+    # Free-text sample name recorded for the position.
+    label: str | None
+    # Free-text bench observation about the position.
+    note: str | None
+
+    @classmethod
+    def from_entry(cls, w: WellMapEntry) -> PlateMapWellModel:
+        return cls(
+            well_id=w.well_id,
+            position=w.position,
+            row=w.row,
+            column=w.column,
+            well_type=w.well_type,
+            batch_id=w.batch_id,
+            batch_number=w.batch_number,
+            molecule_id=w.molecule_id,
+            molecule_name=w.molecule_name,
+            synonyms=list(w.synonyms),
+            smiles=w.smiles,
+            dose=w.dose,
+            position_label=w.position_label,
+            label=w.label,
+            note=w.note,
+        )
 
 
 class PlateMapSummaryModel(BaseModel):
@@ -110,6 +137,13 @@ class PlateData(BaseModel):
     registered_plate_id: uuid.UUID | None = None
     registered_plate_barcode: str | None = None
     registered_plate_label: str | None = None
+    # What holds the positions ("plate" or "cassette") and its full size; sizes are
+    # null on plates that predate holders (they go by ``format``).
+    holder_kind: str
+    holder_rows: int | None
+    holder_columns: int | None
+    # How the holder is named for display, e.g. a plate's size.
+    holder_label: str
 
 
 class PlateMapResponse(BaseModel):
@@ -117,6 +151,7 @@ class PlateMapResponse(BaseModel):
     # The protocol's dose_unit. All `wells[].dose` values are in this unit.
     dose_unit: str
     plates: list[PlateData]
+    has_measured_curves: bool
 
 
 class LinkRunPlateBody(BaseModel):
@@ -246,23 +281,7 @@ async def get_plate_map(
 
     plates_data: list[PlateData] = []
     for plate in data.plates:
-        well_entries = [
-            PlateMapWellModel(
-                well_id=w.well_id,
-                position=w.position,
-                row=w.row,
-                column=w.column,
-                well_type=w.well_type,
-                batch_id=w.batch_id,
-                batch_number=w.batch_number,
-                molecule_id=w.molecule_id,
-                molecule_name=w.molecule_name,
-                synonyms=list(w.synonyms),
-                smiles=w.smiles,
-                dose=w.dose,
-            )
-            for w in plate.wells
-        ]
+        well_entries = [PlateMapWellModel.from_entry(w) for w in plate.wells]
         summary = plate.summary
         plates_data.append(
             PlateData(
@@ -272,6 +291,10 @@ async def get_plate_map(
                 registered_plate_id=plate.registered_plate_id,
                 registered_plate_barcode=plate.registered_plate_barcode,
                 registered_plate_label=plate.registered_plate_label,
+                holder_kind=plate.holder_kind,
+                holder_rows=plate.holder_rows,
+                holder_columns=plate.holder_columns,
+                holder_label=plate.holder_label,
                 wells=well_entries,
                 summary=PlateMapSummaryModel(
                     total_wells=summary.total_wells if summary else 0,
@@ -286,7 +309,12 @@ async def get_plate_map(
             )
         )
 
-    return PlateMapResponse(run_id=run_id, dose_unit=data.dose_unit, plates=plates_data)
+    return PlateMapResponse(
+        run_id=run_id,
+        dose_unit=data.dose_unit,
+        plates=plates_data,
+        has_measured_curves=data.has_measured_curves,
+    )
 
 
 @router.post("/runs/{run_id}/plates/{plate_id}:link", response_model=RunPlateLinkResponse)

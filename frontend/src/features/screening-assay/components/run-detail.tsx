@@ -49,6 +49,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { usePlateMap } from "../hooks/use-plate-setup";
 import { useProtocol } from "../hooks/use-protocols";
 import { useRecomputeOverrides } from "../hooks/use-recompute-overrides";
 import {
@@ -77,6 +78,10 @@ export function RunDetail({ runId }: RunDetailProps) {
   const canEditTags = useAuthzHasRole("editor");
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
+  // plate_count counts plates only; a run whose holder is another kind still has data to
+  // reset and recompute. The plate map is already fetched for the summary card.
+  const { data: plateMap } = usePlateMap(runId);
+  const holderCount = plateMap?.plates.length ?? 0;
   const startMutation = useStartRun();
   const completeMutation = useCompleteRun();
   const approveMutation = useApproveRun();
@@ -210,7 +215,9 @@ export function RunDetail({ runId }: RunDetailProps) {
           const canLockToggle = status !== "draft";
           const canReject = status === "completed";
           const canReset =
-            (status === "draft" || status === "in_progress") && !r.is_locked && r.plate_count > 0;
+            (status === "draft" || status === "in_progress") &&
+            !r.is_locked &&
+            (r.plate_count > 0 || holderCount > 0);
           const canDeleteRun = (status === "draft" || status === "in_progress") && !r.is_locked;
           const hasDestructive = canReject || canReset || canDeleteRun;
           const hasMore = canLockToggle || hasDestructive;
@@ -252,7 +259,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                   {approveMutation.isPending ? "Approving..." : "Approve"}
                 </Button>
               )}
-              {!r.is_locked && r.plate_count > 0 && (
+              {!r.is_locked && (r.plate_count > 0 || holderCount > 0) && (
                 <div className="inline-flex">
                   <Button
                     size="sm"

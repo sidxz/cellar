@@ -559,6 +559,7 @@ LEFT_ALONE: dict[str, str] = {
     "dose_response_curves.fit_quality_warnings": _NO_IDS,
     "dose_response_curves.intercept_values": _NO_IDS,
     "dose_response_curves.raw_data": _NO_IDS,
+    "measured_curves.reported": _NO_IDS,
     "molecules.custom_fields": _NO_IDS,
     "ontology_slot_definitions.ontology_sources": _NO_IDS,
     "plate_templates.template_map": _NO_IDS,
@@ -651,6 +652,7 @@ LEFT_ALONE: dict[str, str] = {
     "reaction_steps.reagents": (
         "not rendered; unchecked reagent ids are docs/backlog/writers-accept-unchecked-ids.md"
     ),
+    "measured_curves.well_id": "removed with its run or on data reset",
     "readout_data.well_id": "always deleted together with its wells",
     "runs.eln_entry_id": "ELN entries don't exist yet",
     "runs.qc_metrics": "keyed by the run's own plates, deleted with it",

@@ -9,7 +9,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 
 interface MoleculeSelectorProps {
   selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  /** The picked molecule rides along so a caller can keep showing it once the search clears. */
+  onSelect: (id: string | null, molecule?: Molecule) => void;
 }
 
 export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps) {
@@ -30,7 +31,7 @@ export function MoleculeSelector({ selectedId, onSelect }: MoleculeSelectorProps
     (mol: Molecule) => {
       setSearchTerm("");
       setIsOpen(false);
-      onSelect(mol.id);
+      onSelect(mol.id, mol);
     },
     [onSelect],
   );

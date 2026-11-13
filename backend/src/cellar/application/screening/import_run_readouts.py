@@ -28,7 +28,10 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.screening.run_shape import refuse_if_wellless
+from cellar.application.screening.run_shape import (
+    refuse_if_not_plate_holder,
+    refuse_if_wellless,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.parsers import TabularParseError, TabularParser
@@ -128,6 +131,8 @@ class ImportRunReadouts:
         run = await self._run_repo.find_by_id_in_workspace(cmd.workspace_id, cmd.run_id)
         if run is None:
             return Failure(NotFoundError("Run", str(cmd.run_id)))
+        if (not_plate := refuse_if_not_plate_holder(run)) is not None:
+            return Failure(not_plate)
 
         wellless = await refuse_if_wellless(self._readout_data_repo, cmd.workspace_id, run.id)
         if wellless is not None:

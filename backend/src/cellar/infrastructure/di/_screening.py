@@ -66,7 +66,9 @@ from cellar.application.screening.get_protocol_activity import GetProtocolActivi
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
 from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
+from cellar.application.screening.get_run_curves import GetRunCurves
 from cellar.application.screening.get_target import GetTarget, ListTargets
+from cellar.application.screening.import_instrument_file import ImportInstrumentFile
 from cellar.application.screening.import_run_file import (
     ImportRunFile,
     InMemoryPreviewStore,
@@ -75,6 +77,7 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.import_run_readouts import ImportRunReadouts
 from cellar.application.screening.import_summary_file import ImportSummaryFile
+from cellar.application.screening.instrument_export import InstrumentReaders
 from cellar.application.screening.link_run_plate import LinkRunPlate, UnlinkRunPlate
 from cellar.application.screening.list_compound_flags import ListCompoundFlags
 from cellar.application.screening.list_dose_response_enriched import ListDoseResponseEnriched
@@ -152,6 +155,7 @@ from cellar.application.screening.plate_templates import (
     ListPlateTemplates,
     UpdatePlateTemplate,
 )
+from cellar.application.screening.preview_instrument_file import PreviewInstrumentFile
 from cellar.application.screening.preview_protocol_name import (
     ListDiscriminators,
     PreviewProtocolName,
@@ -202,6 +206,7 @@ from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.parsers import TabularParser
 from cellar.domain.audit_compliance.repository import AuditRepository
+from cellar.domain.screening_assay.curve_derivative import CurveDerivativeService
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
@@ -211,8 +216,12 @@ from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregat
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
 from cellar.infrastructure.external.bioportal.client import BioPortalClient
+from cellar.infrastructure.instrument_readers import default_readers
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser
+from cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_repository import (
+    SQLAlchemyAttachmentRepository,
+)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_repository import (  # noqa: E501
     SQLAlchemyMoleculeRepository,
 )
@@ -245,6 +254,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_enriched_reader import (  # noqa: E501
     SQLAlchemyDoseResponseEnrichedReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.measured_curve_repository import (  # noqa: E501
+    SQLAlchemyMeasuredCurveRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_map_reader import (
     SQLAlchemyPlateMapReader,
@@ -456,6 +468,7 @@ def register_screening(container: Container) -> None:
     container.define(PlateQualityCalculator, Singleton(PlateQualityCalculator))
     container.define(TabularFileParser, Singleton(TabularFileParser))
     container.define(TabularParser, lambda c: c[TabularFileParser])
+    container.define(InstrumentReaders, Singleton(default_readers))
     container.define(ParsePlateMapFile, lambda c: ParsePlateMapFile(c[TabularParser]))
 
     def _add_readout_def(c: Container):
@@ -586,6 +599,7 @@ def register_screening(container: Container) -> None:
             run_repo=SQLAlchemyRunRepository(uow),
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
             dispatcher=c[EventDispatcher],
         )
 
@@ -976,6 +990,49 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ImportSummaryFile, _import_summary_file)
+
+    def _preview_instrument_file(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return PreviewInstrumentFile(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            readers=c[InstrumentReaders],
+        )
+
+    container.define(PreviewInstrumentFile, _preview_instrument_file)
+
+    def _import_instrument_file(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ImportInstrumentFile(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+            readers=c[InstrumentReaders],
+            attachment_repo=SQLAlchemyAttachmentRepository(uow),
+            upload_attachment=c[UploadAttachment],
+            calculation_engine=c[ReadoutCalculationEngine],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ImportInstrumentFile, _import_instrument_file)
+
+    def _get_run_curves(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetRunCurves(
+            uow=uow,
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            plate_map_reader=c[PlateMapReader],
+            derivative=c[CurveDerivativeService],
+        )
+
+    container.define(GetRunCurves, _get_run_curves)
 
     def _preview_summary_import(c: Container):
         # Dry-run forecast: owns + enters its own read UoW (no bulk_uc, no

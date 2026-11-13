@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.curve_derivative import CurveDerivativeService
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
 from cellar.domain.shared.secret_provider import SecretProvider
+from cellar.infrastructure.computation.savgol_derivative import SavgolCurveDerivative
 from cellar.infrastructure.duar.org_directory import OrgDirectory
 from cellar.infrastructure.duar.settings import DuarSettings
 from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
@@ -95,6 +97,8 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
     # --- Curve Fitting ---
     container.define(LmfitCurveFitter, Singleton(LmfitCurveFitter))
     container.define(CurveFittingService, lambda c: c[LmfitCurveFitter])
+    container.define(SavgolCurveDerivative, Singleton(SavgolCurveDerivative))
+    container.define(CurveDerivativeService, lambda c: c[SavgolCurveDerivative])
 
     # --- Secret Provider chain ---
     container.define(SecretProvider, Singleton(_build_secret_provider))

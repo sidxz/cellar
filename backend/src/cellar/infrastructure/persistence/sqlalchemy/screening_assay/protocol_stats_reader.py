@@ -103,9 +103,11 @@ class SQLAlchemyProtocolStatsReader:
             if latest_run_row is not None:
                 run_id = latest_run_row.id
 
-                # Plate count for the latest run
+                # Plate count for the latest run (holders of kind plate only)
                 plate_count_stmt = (
-                    select(func.count()).select_from(PlateModel).where(PlateModel.run_id == run_id)
+                    select(func.count())
+                    .select_from(PlateModel)
+                    .where(PlateModel.run_id == run_id, PlateModel.holder_kind == "plate")
                 )
                 plate_count = (await session.execute(plate_count_stmt)).scalar_one()
 

@@ -246,3 +246,10 @@ class PosControlSignal(StrEnum):
 
     HIGH = "high"
     LOW = "low"
+
+
+class HolderKind(StrEnum):
+    """What physically holds the measured positions of a run plate."""
+
+    PLATE = "plate"
+    CASSETTE = "cassette"

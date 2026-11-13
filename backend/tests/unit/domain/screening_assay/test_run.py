@@ -6,6 +6,7 @@ from datetime import date
 import pytest
 
 from cellar.domain.screening_assay.enums import (
+    HolderKind,
     PlateFormat,
     RunRelationshipType,
     RunStatus,
@@ -15,8 +16,10 @@ from cellar.domain.screening_assay.events import (
     RunApproved,
     RunCompleted,
     RunCreated,
+    RunDataReset,
     RunHitCriteriaCleared,
     RunHitCriteriaSet,
+    RunInstrumentFileImported,
     RunLocked,
     RunRejected,
     RunUnlocked,
@@ -759,6 +762,11 @@ class TestWell:
         with pytest.raises(ValidationError, match="column must be >= 1"):
             Well(plate_id=uuid.uuid4(), row="A", column=-1)
 
+    @pytest.mark.parametrize("dose", [float("nan"), float("inf"), float("-inf")])
+    def test_non_finite_dose_raises(self, dose: float) -> None:
+        with pytest.raises(ValidationError, match="finite"):
+            Well(plate_id=uuid.uuid4(), row="A", column=1, dose=dose)
+
     def test_empty_row_raises(self) -> None:
         with pytest.raises(ValidationError, match="1-2 alphabetic"):
             Well(plate_id=uuid.uuid4(), row="", column=1)
@@ -953,3 +961,146 @@ class TestRunPlateLink:
         with pytest.raises(ConflictError, match="locked"):
             run.link_plate(plate.id, uuid.uuid4())
         assert plate.registered_plate_id is None
+
+
+# ---------------------------------------------------------------------------
+# Holder kind, holder size, well label
+# ---------------------------------------------------------------------------
+
+_RUN = uuid.uuid4()
+_P = uuid.uuid4()
+
+
+def test_plate_defaults_to_plate_holder():
+    p = Plate(run_id=uuid.uuid4(), plate_number=1)
+    assert (p.holder_kind, p.holder_rows, p.holder_columns) == (HolderKind.PLATE, None, None)
+
+
+def test_cassette_needs_one_row_and_no_format():
+    Plate(
+        run_id=_RUN,
+        plate_number=1,
+        holder_kind=HolderKind.CASSETTE,
+        holder_rows=1,
+        holder_columns=48,
+    )
+    with pytest.raises(ValidationError):
+        Plate(
+            run_id=_RUN,
+            plate_number=1,
+            holder_kind=HolderKind.CASSETTE,
+            holder_rows=2,
+            holder_columns=12,
+        )
+    with pytest.raises(ValidationError):
+        Plate(
+            run_id=_RUN,
+            plate_number=1,
+            holder_kind=HolderKind.CASSETTE,
+            holder_rows=1,
+            holder_columns=24,
+            format=PlateFormat.F24,
+        )
+
+
+def test_holder_size_is_both_or_neither_and_positive():
+    for rows, cols in ((1, None), (None, 5), (0, 5), (1, 0)):
+        with pytest.raises(ValidationError):
+            Plate(run_id=_RUN, plate_number=1, holder_rows=rows, holder_columns=cols)
+
+
+def test_well_label_is_trimmed_capped_and_blank_is_none():
+    assert Well(plate_id=_P, row="A", column=1, label="  x  ").label == "x"
+    assert Well(plate_id=_P, row="A", column=1, label="   ").label is None
+    assert len(Well(plate_id=_P, row="A", column=1, label="x" * 200).label) == 200
+    with pytest.raises(ValidationError):
+        Well(plate_id=_P, row="A", column=1, label="x" * 201)
+
+
+def test_well_note_is_trimmed_capped_and_blank_is_none():
+    assert Well(plate_id=_P, row="A", column=1, note="  went cloudy  ").note == "went cloudy"
+    assert Well(plate_id=_P, row="A", column=1, note="   ").note is None
+    assert Well(plate_id=_P, row="A", column=1).note is None
+    assert len(Well(plate_id=_P, row="A", column=1, note="x" * 1000).note) == 1000
+    with pytest.raises(ValidationError):
+        Well(plate_id=_P, row="A", column=1, note="x" * 1001)
+
+
+def test_position_above_24_is_a_valid_well():
+    assert Well(plate_id=_P, row="A", column=48).column == 48
+
+
+# ---------------------------------------------------------------------------
+# Instrument import event
+# ---------------------------------------------------------------------------
+
+
+def _fresh_run() -> Run:
+    run = Run.create(
+        workspace_id=uuid.uuid4(),
+        protocol_id=uuid.uuid4(),
+        run_date=date(2025, 6, 15),
+        operator=uuid.uuid4(),
+    )
+    run.clear_events()
+    return run
+
+
+def test_record_instrument_import_registers_event():
+    run = _fresh_run()
+    run.record_instrument_import(
+        reader="r", file_name="f.xlsx", positions=3, curves=6, readout_values=4
+    )
+    (event,) = [e for e in run.collect_events() if isinstance(e, RunInstrumentFileImported)]
+    assert (
+        event.reader,
+        event.file_name,
+        event.positions,
+        event.curves,
+        event.readout_values,
+    ) == (
+        "r",
+        "f.xlsx",
+        3,
+        6,
+        4,
+    )
+    assert event.aggregate_id == run.id
+    assert event.aggregate_type == "Run"
+    assert event.workspace_id == run.workspace_id
+
+
+def test_record_instrument_import_blocked_when_locked():
+    run = _fresh_run()
+    run.start()
+    run.complete(plate_count=1, data_point_count=1)
+    run.lock(locked_by=uuid.uuid4(), reason="final")
+    with pytest.raises(ConflictError):
+        run.record_instrument_import(
+            reader="r", file_name="f.xlsx", positions=1, curves=1, readout_values=1
+        )
+
+
+def test_clear_plate_format():
+    run = _fresh_run()
+    run.plate_format = PlateFormat.F96
+    run.clear_plate_format()
+    assert run.plate_format is None
+
+
+def test_clear_plate_format_blocked_when_locked():
+    run = _fresh_run()
+    run.plate_format = PlateFormat.F96
+    run.start()
+    run.complete(plate_count=0, data_point_count=0)
+    run.lock(locked_by=uuid.uuid4(), reason="final")
+    with pytest.raises(ConflictError):
+        run.clear_plate_format()
+    assert run.plate_format == PlateFormat.F96
+
+
+def test_reset_data_event_carries_measured_curve_count():
+    run = _fresh_run()
+    run.reset_data(readouts_deleted=1, curves_deleted=0, measured_curves_deleted=96)
+    event = next(e for e in run.collect_events() if isinstance(e, RunDataReset))
+    assert event.measured_curves_deleted == 96

@@ -237,3 +237,24 @@ class RunDataReset(DomainEvent):
     wells_deleted: int
     readouts_deleted: int
     curves_deleted: int
+    measured_curves_deleted: int = 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunInstrumentFileImported(DomainEvent):
+    """Emitted when an instrument file's curves and readout values were stored on a run."""
+
+    reader: str
+    file_name: str
+    positions: int
+    curves: int
+    readout_values: int
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [
+            ("file_name", None, self.file_name),
+            ("reader", None, self.reader),
+            ("positions", None, str(self.positions)),
+            ("curves", None, str(self.curves)),
+            ("readout_values", None, str(self.readout_values)),
+        ]

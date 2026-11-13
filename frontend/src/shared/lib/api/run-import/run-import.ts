@@ -24,7 +24,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost,
   BodyImportSummaryFileApiV1RunsRunIdImportSummaryFilePost,
+  BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost,
   BodyPreviewRunFileApiV1RunsRunIdPreviewFilePost,
   BodyPreviewSummaryFileApiV1RunsRunIdPreviewSummaryFilePost,
   BodyResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost,
@@ -32,6 +34,8 @@ import type {
   HTTPValidationError,
   ImportRunFileRequest,
   ImportRunFileResponse,
+  InstrumentImportResponse,
+  InstrumentPreviewResponse,
   PreviewRunFileResponse,
   RepreviewRunFileRequest,
   RunImportTemplateResponse,
@@ -760,6 +764,145 @@ export const useResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost = <TError
       > => {
 
       const mutationOptions = getResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Read an instrument file and propose a labelling of its positions. Writes nothing.
+ * @summary Preview Instrument File
+ */
+export const previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost = (
+    runId: string,
+    bodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost: BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost,
+ signal?: AbortSignal
+) => {
+      
+      const formData = new FormData();
+formData.append(`file`, bodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost.file)
+
+      return customInstance<InstrumentPreviewResponse>(
+      {url: `/api/v1/runs/${runId}/preview-instrument-file`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      );
+    }
+  
+
+
+export const getPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost>>, TError,{runId: string;data: BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost>>, TError,{runId: string;data: BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost}, TContext> => {
+
+const mutationKey = ['previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost>>, {runId: string;data: BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type PreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost>>>
+    export type PreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePostMutationBody = BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost
+    export type PreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Preview Instrument File
+ */
+export const usePreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost>>, TError,{runId: string;data: BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof previewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost>>,
+        TError,
+        {runId: string;data: BodyPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePost},
+        TContext
+      > => {
+
+      const mutationOptions = getPreviewInstrumentFileApiV1RunsRunIdPreviewInstrumentFilePostMutationOptions(options);
+
+      return useMutation(mutationOptions, queryClient);
+    }
+    /**
+ * Store the file's curves and mapped reported values on the run.
+
+The ``labelling`` form field is the ``InstrumentLabellingRequest`` JSON.
+ * @summary Import Instrument File
+ */
+export const importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost = (
+    runId: string,
+    bodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost: BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost,
+ signal?: AbortSignal
+) => {
+      
+      const formData = new FormData();
+formData.append(`file`, bodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost.file)
+formData.append(`labelling`, bodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost.labelling)
+
+      return customInstance<InstrumentImportResponse>(
+      {url: `/api/v1/runs/${runId}/import-instrument-file`, method: 'POST',
+      headers: {'Content-Type': 'multipart/form-data', },
+       data: formData, signal
+    },
+      );
+    }
+  
+
+
+export const getImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost>>, TError,{runId: string;data: BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost}, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost>>, TError,{runId: string;data: BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost}, TContext> => {
+
+const mutationKey = ['importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost'];
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+      
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost>>, {runId: string;data: BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost}> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost(runId,data,)
+        }
+
+        
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePostMutationResult = NonNullable<Awaited<ReturnType<typeof importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost>>>
+    export type ImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePostMutationBody = BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost
+    export type ImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePostMutationError = HTTPValidationError
+
+    /**
+ * @summary Import Instrument File
+ */
+export const useImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost>>, TError,{runId: string;data: BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost}, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof importInstrumentFileApiV1RunsRunIdImportInstrumentFilePost>>,
+        TError,
+        {runId: string;data: BodyImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePost},
+        TContext
+      > => {
+
+      const mutationOptions = getImportInstrumentFileApiV1RunsRunIdImportInstrumentFilePostMutationOptions(options);
 
       return useMutation(mutationOptions, queryClient);
     }

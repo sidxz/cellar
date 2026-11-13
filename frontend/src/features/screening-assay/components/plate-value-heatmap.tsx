@@ -10,7 +10,7 @@ import {
 import { WELL_EMPTY_COLOR, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { Fragment, useMemo } from "react";
-import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
+import { holderDimensions, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
 import type { PlateData, PlateMapWell } from "../types";
 
 // ─── Color palettes ──────────────────────────────────────────────────────────
@@ -140,7 +140,7 @@ function WellTooltipContent({
   return (
     <div className="w-[210px] space-y-1.5">
       <div className="flex items-baseline justify-between gap-2">
-        <span className="font-mono text-xs font-medium">{well.position}</span>
+        <span className="font-mono text-xs font-medium">{well.position_label}</span>
         <span className="text-[10px] capitalize opacity-70">
           {well.well_type.replace(/_/g, " ")}
         </span>
@@ -218,7 +218,7 @@ export function PlateValueHeatmap({
   doseUnit,
   className,
 }: PlateValueHeatmapProps) {
-  const [rows, cols] = plateDimensionsTuple(plate.format);
+  const [rows, cols] = holderDimensions(plate);
   const size = plateCellSizePx(plate.format);
 
   const wellMap = useMemo(() => {

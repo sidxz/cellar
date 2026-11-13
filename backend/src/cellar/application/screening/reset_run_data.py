@@ -7,6 +7,7 @@ under the non-destructive import semantics).
 
 What gets cleared:
     - dose_response_curves
+    - measured_curves
     - readout_data
     - plates (cascades to wells via FK)
     - run.qc_metrics
@@ -39,6 +40,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import RunStatus
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
+    MeasuredCurveRepository,
     ReadoutDataRepository,
     RunRepository,
 )
@@ -61,6 +63,7 @@ class ResetRunDataResult:
     wells_deleted: int
     readouts_deleted: int
     curves_deleted: int
+    measured_curves_deleted: int
 
 
 class ResetRunData:
@@ -70,12 +73,14 @@ class ResetRunData:
         run_repo: RunRepository,
         readout_data_repo: ReadoutDataRepository,
         curve_repo: DoseResponseCurveRepository,
+        measured_curve_repo: MeasuredCurveRepository,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._run_repo = run_repo
         self._readout_data_repo = readout_data_repo
         self._curve_repo = curve_repo
+        self._measured_curve_repo = measured_curve_repo
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -112,9 +117,13 @@ class ResetRunData:
             readouts_deleted = await self._readout_data_repo.delete_for_run(
                 input.workspace_id, input.run_id
             )
+            measured_curves_deleted = await self._measured_curve_repo.delete_by_run(
+                input.workspace_id, input.run_id
+            )
             run.reset_data(
                 readouts_deleted=readouts_deleted,
                 curves_deleted=curves_deleted,
+                measured_curves_deleted=measured_curves_deleted,
             )
             await self._run_repo.save(run)
 
@@ -127,5 +136,6 @@ class ResetRunData:
                 wells_deleted=wells_before,
                 readouts_deleted=readouts_deleted,
                 curves_deleted=curves_deleted,
+                measured_curves_deleted=measured_curves_deleted,
             )
         )

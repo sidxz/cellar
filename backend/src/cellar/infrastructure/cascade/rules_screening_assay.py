@@ -161,6 +161,16 @@ register_rules(
         label_field=None,
         display_label="Dose-response curves",
     ),
+    # MeasuredCurveModel.run_id → runs (ondelete=CASCADE)
+    # Instrument curves owned by the run; well_id carries no FK.
+    CascadeRule(
+        child_table="measured_curves",
+        fk_column="run_id",
+        parent_table="runs",
+        action=A.CASCADE,
+        label_field=None,
+        display_label="Measured curves",
+    ),
     # -------------------------------------------------------------------------
     # Plate children
     # -------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 import { ProtocolName } from "@/shared/components/entity-name";
 import { Card, CardContent } from "@/shared/components/ui/card";
 import { cn } from "@/shared/lib/utils";
+import { usePlateMap } from "../hooks/use-plate-setup";
 import { classifyZPrime, worstZPrime } from "../lib/qc-metrics";
 import { PLATE_FORMAT_LABELS, type PlateFormat, type Protocol, type Run } from "../types";
 import { RunNotesLine } from "./run-notes-line";
@@ -58,6 +59,9 @@ export function RunSummaryCard({ run, protocol, canEditMeta, canEditTags }: RunS
   const plateFormatLabel = run.plate_format
     ? (PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ?? run.plate_format)
     : null;
+  // A holder that is not a plate: say what the API calls it instead of format and count.
+  const { data: plateMap } = usePlateMap(run.id);
+  const holder = plateMap?.plates.find((p) => p.holder_kind !== "plate");
 
   return (
     <Card>
@@ -79,16 +83,25 @@ export function RunSummaryCard({ run, protocol, canEditMeta, canEditTags }: RunS
           </a>
           <Dot />
           <span className="font-mono">{run.run_date}</span>
-          {plateFormatLabel && (
+          {holder ? (
             <>
               <Dot />
-              <span>{plateFormatLabel}</span>
+              <span>{holder.holder_label}</span>
+            </>
+          ) : (
+            <>
+              {plateFormatLabel && (
+                <>
+                  <Dot />
+                  <span>{plateFormatLabel}</span>
+                </>
+              )}
+              <Dot />
+              <span>
+                {run.plate_count} {run.plate_count === 1 ? "plate" : "plates"}
+              </span>
             </>
           )}
-          <Dot />
-          <span>
-            {run.plate_count} {run.plate_count === 1 ? "plate" : "plates"}
-          </span>
           {zPrime !== null && (
             <>
               <Dot />

@@ -10,4 +10,5 @@ export interface ResetRunDataResponse {
   wells_deleted: number;
   readouts_deleted: number;
   curves_deleted: number;
+  measured_curves_deleted: number;
 }
