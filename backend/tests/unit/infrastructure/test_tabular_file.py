@@ -65,6 +65,16 @@ class TestCSV:
         with pytest.raises(TabularParseError):
             parse_tabular(b"   \n  \n", "x.csv")
 
+    def test_leading_apostrophes_are_text_not_quotes(self) -> None:
+        """A spreadsheet-safe file puts ' before = + - @; quoting is always the double
+        quote, so those cells keep their columns."""
+        content = b"Position,Label,Note\n'+P1,'=a,'@n\n'+P2,'=b,'@m\n"
+        table = parse_tabular(content, "x.csv")
+        assert table.rows == [
+            {"Position": "'+P1", "Label": "'=a", "Note": "'@n"},
+            {"Position": "'+P2", "Label": "'=b", "Note": "'@m"},
+        ]
+
     def test_short_row_pads_missing_columns(self) -> None:
         content = b"A,B,C\n1,2\n"
         table = parse_tabular(content, "x.csv")

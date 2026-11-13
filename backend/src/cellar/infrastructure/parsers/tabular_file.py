@@ -86,7 +86,9 @@ def _parse_csv(content: bytes, max_rows: int | None = None) -> ParsedTable:
     except csv.Error:
         dialect = csv.excel  # type: ignore[assignment]
 
-    reader = csv.reader(io.StringIO(text), dialect)
+    # Only the delimiter is sniffed. Quoting is always the double quote: a leading
+    # apostrophe (which keeps a cell from being read as a formula) is text.
+    reader = csv.reader(io.StringIO(text), dialect, quotechar='"', doublequote=True)
     first = next(reader, None)
     if first is None:
         raise TabularParseError("CSV has no rows")

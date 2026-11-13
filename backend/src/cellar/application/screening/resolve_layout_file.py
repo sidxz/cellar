@@ -41,6 +41,10 @@ MAX_LAYOUT_ROWS = 2000
 _MAX_LABEL = 200
 _MAX_NOTE = 1000
 _COLUMNS = ("position", "label", "role", "compound", "batch", "note", "use")
+# The template writes ' before a text cell starting with one of these, so a spreadsheet
+# program keeps it as text instead of running it as a formula; reading drops that one '.
+_FORMULA_START = ("=", "+", "-", "@")
+_TEXT_COLUMNS = ("position", "label", "compound", "batch", "note")
 
 
 @dataclass(frozen=True)
@@ -135,9 +139,16 @@ class ResolveLayoutFile:
             rows = []
             for raw in table.iter_rows():
                 cells = {key: raw.get(header, "").strip() for key, header in columns.items()}
+                for key in _TEXT_COLUMNS:
+                    if key in cells:
+                        cells[key] = _without_formula_guard(cells[key])
                 rows.append(await _row(cells, resolver))
 
         return Success(LayoutFile(rows=tuple(rows), unrecognised_columns=tuple(unrecognised)))
+
+
+def _without_formula_guard(text: str) -> str:
+    return text[1:] if text[:1] == "'" and text[1:2] in _FORMULA_START else text
 
 
 async def _row(cells: dict[str, str], resolver: _Resolver) -> LayoutRow:
@@ -164,7 +175,12 @@ async def _row(cells: dict[str, str], resolver: _Resolver) -> LayoutRow:
     dose = None
     if concentration := cells.get("concentration"):
         try:
-            dose = float(concentration)
+            # float() also reads "1_000" and digits of other scripts; a cell is not that.
+            dose = (
+                float(concentration)
+                if concentration.isascii() and "_" not in concentration
+                else None
+            )
         except ValueError:
             dose = None
         if dose is None or not math.isfinite(dose) or dose < 0:

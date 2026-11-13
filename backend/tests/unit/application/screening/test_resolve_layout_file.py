@@ -221,6 +221,8 @@ async def test_compound_or_batch_not_found_is_a_problem():
         ("Concentration", "-1", "0 or more"),
         ("Concentration", "abc", "0 or more"),
         ("Concentration", "nan", "0 or more"),
+        ("Concentration", "1_000", "0 or more"),
+        ("Concentration", "\u0661\u0662", "0 or more"),
         ("Label", "x" * 201, "200"),
         ("Note", "n" * 1001, "1000"),
         ("Use", "maybe", "Yes or No"),
@@ -342,6 +344,27 @@ async def test_spreadsheet_file_is_read_from_its_active_sheet():
     h = Harness()
     (row,) = (await h.ok(buf.getvalue(), "layout.xlsx")).rows
     assert (row.position, row.label, row.dose) == (P(1), "first", 2.5)
+
+
+async def test_the_apostrophe_a_template_puts_before_a_formula_character_is_dropped():
+    """The downloaded template writes ' before a text cell that starts with = + - or @, so
+    a spreadsheet does not read it as a formula. Read back, the file means the same."""
+    m1 = _molecule("=REG-1")
+    b1 = _batch(m1, "-B-1")
+    h = Harness(by_reg={"=REG-1": m1}, batches=[b1, _batch(m1, "-B-2")])
+    long_label = "=" + "x" * 199
+    out = await h.ok(
+        csv(HEADER, f"'+{P(1)},'{long_label},,'=REG-1,'-B-1,,'@note", f"{P(2)},'plain,,,,,")
+    )
+    first, second = out.rows
+    assert (first.position, first.label, first.note, first.problems) == (
+        f"+{P(1)}",
+        long_label,
+        "@note",
+        (),
+    )
+    assert first.compound is not None and first.compound.batch_id == b1.id
+    assert second.label == "'plain"
 
 
 async def test_missing_position_column_is_validation_error():
