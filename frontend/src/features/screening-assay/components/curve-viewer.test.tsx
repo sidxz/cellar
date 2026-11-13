@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { shortId } from "@/shared/lib/utils";
@@ -154,6 +154,189 @@ function lastTraces() {
 
 beforeEach(() => {
   plotCalls.length = 0;
+});
+
+// Radix Select opens a listbox that calls scrollIntoView and hasPointerCapture;
+// jsdom has neither.
+beforeAll(() => {
+  if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn();
+  if (!Element.prototype.hasPointerCapture) {
+    Element.prototype.hasPointerCapture = vi.fn(() => false);
+  }
+  if (!Element.prototype.releasePointerCapture) {
+    Element.prototype.releasePointerCapture = vi.fn();
+  }
+});
+
+/** One holder of `n` sample positions; position i has compound `compoundOf(i)`. */
+function compoundSet(n: number, compoundOf: (i: number) => number): CurveSet {
+  const ps = Array.from({ length: n }, (_, k) => {
+    const i = k + 1;
+    const c = compoundOf(i);
+    return {
+      ...positions[1],
+      well_id: `c${i}`,
+      position: `A${i}`,
+      column: i,
+      position_label: `Position ${i}`,
+      molecule_id: `m${c}`,
+      molecule_name: `ABC-000000${c}`,
+    };
+  });
+  return {
+    ...curveSetFromRun(runCurves),
+    groups: [
+      {
+        key: "r1",
+        run: null,
+        holder: { kind: "cassette", rows: 1, columns: n, label: `Holder of ${n}` },
+        positions: ps,
+      },
+    ],
+    curves: new Map(
+      ps.map((p) => [p.well_id, { well_id: p.well_id, x: [20, 21], y: [1, 2], reported: [] }]),
+    ),
+  };
+}
+
+function colourOfTrace(id: string) {
+  return lastTraces().find((t) => t.meta === id)?.line.color;
+}
+
+const series = MEASURED_CURVE_COLORS.dark.series;
+
+describe("CurveViewer colour by group", () => {
+  const twoCompounds = compoundSet(3, (i) => (i <= 2 ? 1 : 2));
+
+  it("gives every position of a group the group's colour", () => {
+    render(
+      <Harness
+        callbacks={callbacks()}
+        set={twoCompounds}
+        initialColour={{ mode: "group", groupBy: "compound" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(["c1", "c2", "c3"].map(colourOfTrace)).toEqual([series[0], series[0], series[1]]);
+  });
+
+  it("a group keeps its colour when another group is added or removed", () => {
+    render(
+      <Harness
+        callbacks={callbacks()}
+        set={twoCompounds}
+        initialColour={{ mode: "group", groupBy: "compound" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Position 3" }));
+    expect(colourOfTrace("c3")).toBe(series[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Position 1" }), { metaKey: true });
+    expect(colourOfTrace("c1")).toBe(series[1]);
+    expect(colourOfTrace("c3")).toBe(series[0]);
+    fireEvent.click(screen.getByRole("button", { name: "Position 3" }), { metaKey: true });
+    expect(colourOfTrace("c1")).toBe(series[1]);
+  });
+
+  it("is unavailable above 8 groups and says why", () => {
+    render(
+      <Harness
+        callbacks={callbacks()}
+        set={compoundSet(9, (i) => i)}
+        initialColour={{ mode: "group", groupBy: "compound" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    expect(screen.getByRole("tab", { name: "By group" })).toBeDisabled();
+    expect(screen.getByText("More than 8 groups")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Highlight" })).toHaveAttribute("aria-selected", "true");
+    expect(colourOfTrace("c1")).toBe(MEASURED_CURVE_COLORS.dark.neutral);
+  });
+
+  it("groups by run, compound, batch or role as chosen", async () => {
+    render(<Harness callbacks={callbacks()} set={twoRuns} initialColour={{ mode: "group" }} />);
+    fireEvent.click(slot(0, 1));
+    fireEvent.click(slot(0, 2), { metaKey: true });
+    fireEvent.click(slot(1, 2), { metaKey: true });
+    // By run, the default when the set has runs.
+    expect(screen.getByRole("combobox", { name: "Group by" })).toHaveTextContent("Run");
+    expect(["a1", "a2", "b2"].map(colourOfTrace)).toEqual([series[0], series[0], series[1]]);
+    fireEvent.click(screen.getByRole("combobox", { name: "Group by" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Role" }));
+    const [a1, a2, b2] = ["a1", "a2", "b2"].map(colourOfTrace);
+    expect(a2).toBe(b2);
+    expect(a1).not.toBe(a2);
+    fireEvent.click(screen.getByRole("combobox", { name: "Group by" }));
+    fireEvent.click(await screen.findByRole("option", { name: "Compound" }));
+    // None of these has a compound: one group.
+    expect(new Set(["a1", "a2", "b2"].map(colourOfTrace)).size).toBe(1);
+  });
+
+  it("starts in the colour mode given by initialColour", () => {
+    const { unmount } = render(
+      <Harness callbacks={callbacks()} initialColour={{ mode: "distinct" }} />,
+    );
+    expect(screen.getByRole("tab", { name: /Distinct/ })).toHaveAttribute("aria-selected", "true");
+    unmount();
+    render(
+      <Harness
+        callbacks={callbacks()}
+        set={twoCompounds}
+        initialColour={{ mode: "group", groupBy: "compound" }}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "By group" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("combobox", { name: "Group by" })).toHaveTextContent("Compound");
+  });
+
+  it("lists one legend entry per group", () => {
+    render(
+      <Harness
+        callbacks={callbacks()}
+        set={twoCompounds}
+        initialColour={{ mode: "group", groupBy: "compound" }}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "All" }));
+    const legend = screen.getByTestId("curve-legend");
+    expect(
+      within(legend)
+        .getAllByText(/ABC-/)
+        .map((e) => e.textContent),
+    ).toEqual(["ABC-0000001", "ABC-0000002"]);
+  });
+});
+
+describe("CurveViewer run cell", () => {
+  it("tells two runs on one date apart in the table, and keeps the date alone otherwise", () => {
+    const a = runGroup("a");
+    const b = runGroup("b");
+    const c = { ...runGroup("b"), key: "run-c" };
+    const sameDay: CurveSet = {
+      ...twoRuns,
+      groups: [
+        a,
+        { ...b, run: b.run && { ...b.run, runDate: "2026-11-03", notes: "second attempt" } },
+        {
+          ...c,
+          run: c.run && { ...c.run, runId: "run-c", runDate: "2026-11-05" },
+          positions: c.positions.map((p) => ({ ...p, well_id: `c-${p.well_id}` })),
+        },
+      ],
+    };
+    render(<Harness callbacks={callbacks()} set={sameDay} />);
+    for (const s of screen.getAllByRole("button", { name: "Position 2" })) {
+      fireEvent.click(s, { metaKey: true });
+    }
+    const table = screen.getByRole("table");
+    const heading = `2026-11-03 · ${shortId(UNKNOWN_OPERATOR)} · Completed · second attempt`;
+    // The same text as the selector's heading for that run: the heading and the cell.
+    expect(screen.getAllByRole("link", { name: heading })).toHaveLength(2);
+    expect(within(table).getByRole("link", { name: heading })).toHaveAttribute(
+      "href",
+      `/assays/runs/${RUN_B}`,
+    );
+    expect(within(table).getByRole("link", { name: "2026-11-05" })).toBeInTheDocument();
+  });
 });
 
 describe("CurveViewer", () => {

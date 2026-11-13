@@ -3,6 +3,13 @@
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
 import {
   Table,
@@ -20,16 +27,18 @@ import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn, shortId } from "@/shared/lib/utils";
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { type ReactNode, useCallback, useId, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useId, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import type { CurveView } from "../hooks/use-run-curves";
 import {
   type ColourMode,
   type CurveColouring,
   type CurvePalette,
-  type CurveRunInfo,
   type CurveSet,
+  type GroupBy,
   buildCurveFigure,
+  colourGroupKey,
+  colourGroupLabel,
   currentChannel,
   curveStyle,
   focusIdFromHover,
@@ -116,16 +125,22 @@ function runHref(runId: string): string {
   return `/assays/runs/${runId}`;
 }
 
-/** A run group's heading, linking to the run. Only run groups ask for the
- *  workspace's members, so the run's own Curves tab never does. */
-function RunHeading({ run, sameDate }: { run: CurveRunInfo; sameDate: boolean }) {
-  const { data: members } = useWorkspaceMembers();
-  const scientist = members?.find((m) => m.user_id === run.operator)?.name ?? shortId(run.operator);
-  return (
-    <Link href={runHref(run.runId)} className="font-medium hover:underline">
-      {runHeading(run, { scientist, sameDate })}
-    </Link>
-  );
+const GROUP_BY_LABELS: Record<GroupBy, string> = {
+  run: "Run",
+  compound: "Compound",
+  batch: "Batch",
+  role: "Role",
+};
+
+/** Colour slots that stay with their key while it stays in `keys`; empty
+ *  above COLOUR_SLOT_COUNT keys. `keys` must be memoised. */
+function useColourSlots(keys: readonly string[]): ReadonlyMap<string, number> {
+  const previous = useRef<ReadonlyMap<string, number>>(new Map());
+  return useMemo(() => {
+    const next = assignColourSlots(previous.current, keys);
+    previous.current = next;
+    return next;
+  }, [keys]);
 }
 
 function formatValue(v: number | undefined): string {
@@ -151,12 +166,33 @@ export interface CurveViewerProps {
   exportName: string;
   /** Beside the selector heading. */
   selectorAction?: ReactNode;
+  /** The colour mode to start in; default Highlight. */
+  initialColour?: { mode: ColourMode; groupBy?: GroupBy };
 }
 
 /** Pick positions, overlay their curves for one signal with the instrument's
  *  reported values as lines, read a table of them, export the figure. Fed only
  *  through a CurveSet; the parent loads the curves. */
-export function CurveViewer({
+export function CurveViewer(props: CurveViewerProps) {
+  // Only a set with runs asks for the workspace's members (for the scientist's
+  // name), so the run's own Curves tab never does.
+  return props.set.groups.some((g) => g.run) ? (
+    <CurveViewerWithMembers {...props} />
+  ) : (
+    <CurveViewerBody {...props} scientistOf={shortId} />
+  );
+}
+
+function CurveViewerWithMembers(props: CurveViewerProps) {
+  const { data: members } = useWorkspaceMembers();
+  const scientistOf = useCallback(
+    (userId: string) => members?.find((m) => m.user_id === userId)?.name ?? shortId(userId),
+    [members],
+  );
+  return <CurveViewerBody {...props} scientistOf={scientistOf} />;
+}
+
+function CurveViewerBody({
   set,
   showReferences,
   onShowReferencesChange,
@@ -169,16 +205,17 @@ export function CurveViewer({
   failed = false,
   exportName,
   selectorAction,
-}: CurveViewerProps) {
+  initialColour,
+  scientistOf,
+}: CurveViewerProps & { scientistOf: (userId: string) => string }) {
   // The signal and view last asked for, shown at once while their curves load.
   const [channel, setChannel] = useState<string | undefined>();
   const [view, setView] = useState<CurveView | undefined>();
   // What is being typed in the window field, committed only on blur or Enter.
   const [windowDraft, setWindowDraft] = useState<string | null>(null);
-  const [slots, setSlots] = useState<ReadonlyMap<string, number>>(() => new Map());
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const [showReported, setShowReported] = useState(true);
-  const [colourMode, setColourMode] = useState<ColourMode>("highlight");
+  const [colourMode, setColourMode] = useState<ColourMode>(initialColour?.mode ?? "highlight");
   // Narrows the selector and the table to what is loaded; never asks the server.
   const [filter, setFilter] = useState("");
   const switchId = useId();
@@ -198,6 +235,29 @@ export function CurveViewer({
     [set.groups],
   );
   const hasRuns = set.groups.some((g) => g.run);
+  const [groupBy, setGroupBy] = useState<GroupBy>(
+    initialColour?.groupBy ?? (hasRuns ? "run" : "compound"),
+  );
+  // The heading of each run group, as its selector shows it.
+  const headings = useMemo(
+    () =>
+      new Map(
+        set.groups.flatMap((g) =>
+          g.run
+            ? [
+                [
+                  g.run.runId,
+                  runHeading(g.run, {
+                    scientist: scientistOf(g.run.operator),
+                    sameDate: sameDate.has(g.run.runId),
+                  }),
+                ] as const,
+              ]
+            : [],
+        ),
+      ),
+    [set.groups, scientistOf, sameDate],
+  );
 
   const drawnIds = useMemo(
     () => drawnPositionIds(set.groups, selection.selected, showReferences),
@@ -206,19 +266,43 @@ export function CurveViewer({
   const drawn = useMemo(() => new Set(drawnIds), [drawnIds]);
   const tooMany = drawnIds.length > MAX_DRAWN;
 
-  const changeSelection = (next: SelectionState) => {
-    const selectedIds = ordered.filter((p) => next.selected.has(p.well_id)).map((p) => p.well_id);
-    setSlots((prev) => assignColourSlots(prev, selectedIds));
-    onSelectionChange(next);
-  };
+  // Group then holder order, so a new position or group takes the lowest free colour.
+  const selectedIds = useMemo(
+    () => orderedIds.filter((id) => selection.selected.has(id)),
+    [orderedIds, selection.selected],
+  );
+  const slots = useColourSlots(selectedIds);
+  // Each selected position's colour group, and the groups in first-seen order.
+  const { groupOf, groupKeys } = useMemo(() => {
+    const groupOf = new Map<string, { key: string; label: string }>();
+    for (const g of set.groups) {
+      for (const p of g.positions) {
+        if (!selection.selected.has(p.well_id)) continue;
+        groupOf.set(p.well_id, {
+          key: colourGroupKey(p, g.key, groupBy),
+          label: colourGroupLabel(p, g.run && (headings.get(g.run.runId) ?? null), groupBy),
+        });
+      }
+    }
+    return { groupOf, groupKeys: [...new Set([...groupOf.values()].map((v) => v.key))] };
+  }, [set.groups, selection.selected, groupBy, headings]);
+  const groupSlots = useColourSlots(groupKeys);
 
   const distinctAvailable = selection.selected.size <= COLOUR_SLOT_COUNT;
+  const groupAvailable = groupKeys.length <= COLOUR_SLOT_COUNT;
   const effectiveMode: ColourMode =
-    colourMode === "distinct" && distinctAvailable ? "distinct" : "highlight";
+    colourMode === "distinct" && distinctAvailable
+      ? "distinct"
+      : colourMode === "group" && groupAvailable
+        ? "group"
+        : "highlight";
 
   const colouring = useMemo<CurveColouring>(
-    () => ({ colourMode: effectiveMode, slots, focusedId, palette }),
-    [effectiveMode, slots, focusedId, palette],
+    () =>
+      effectiveMode === "group"
+        ? { colourMode: effectiveMode, slots: groupSlots, groups: groupOf, focusedId, palette }
+        : { colourMode: effectiveMode, slots, focusedId, palette },
+    [effectiveMode, slots, groupSlots, groupOf, focusedId, palette],
   );
 
   // Memoised on its real inputs: a re-render for anything else hands Plotly
@@ -307,7 +391,7 @@ export function CurveViewer({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => changeSelection(EMPTY_SELECTION)}
+            onClick={() => onSelectionChange(EMPTY_SELECTION)}
           >
             Clear
           </Button>
@@ -322,9 +406,15 @@ export function CurveViewer({
               positions={g.positions}
               orderedIds={orderedIds}
               disabledIds={filteredOut}
-              heading={g.run && <RunHeading run={g.run} sameDate={sameDate.has(g.run.runId)} />}
+              heading={
+                g.run && (
+                  <Link href={runHref(g.run.runId)} className="font-medium hover:underline">
+                    {headings.get(g.run.runId)}
+                  </Link>
+                )
+              }
               selection={selection}
-              onChange={changeSelection}
+              onChange={onSelectionChange}
               focusedId={focusedId}
               onFocus={setFocusedId}
               colourOf={colourOf}
@@ -406,12 +496,34 @@ export function CurveViewer({
                   label: `Distinct (${COLOUR_SLOT_COUNT} or fewer)`,
                   disabled: !distinctAvailable,
                 },
+                { value: "group", label: "By group", disabled: !groupAvailable },
               ]}
               onChange={setColourMode}
             />
+            {colourMode === "group" && (
+              <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+                <SelectTrigger size="sm" aria-label="Group by">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
+                    .filter((by) => by !== "run" || hasRuns)
+                    .map((by) => (
+                      <SelectItem key={by} value={by}>
+                        {GROUP_BY_LABELS[by]}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
             {!distinctAvailable && (
               <span className="text-xs text-muted-foreground">
                 More than {COLOUR_SLOT_COUNT} selected
+              </span>
+            )}
+            {!groupAvailable && (
+              <span className="text-xs text-muted-foreground">
+                More than {COLOUR_SLOT_COUNT} groups
               </span>
             )}
           </div>
@@ -473,8 +585,31 @@ export function CurveViewer({
       )}
 
       {hasTraces && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
-          {effectiveMode === "distinct" ? (
+        <div
+          data-testid="curve-legend"
+          className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
+        >
+          {effectiveMode === "group" ? (
+            <>
+              {groupKeys.map((key) => {
+                const first = selectedPositions.find((p) => groupOf.get(p.well_id)?.key === key);
+                return (
+                  first && (
+                    <span key={key}>
+                      <Swatch line colour={colourOf(first.well_id)} />
+                      {groupOf.get(first.well_id)?.label}
+                    </span>
+                  )
+                );
+              })}
+              {addedReferences && (
+                <span>
+                  <Swatch line colour={colours.reference} />
+                  Reference positions
+                </span>
+              )}
+            </>
+          ) : effectiveMode === "distinct" ? (
             <>
               {selectedPositions.map((p) => (
                 <span key={p.well_id}>
@@ -505,6 +640,9 @@ export function CurveViewer({
               </span>
               {colourMode === "distinct" && (
                 <span>More than {COLOUR_SLOT_COUNT} selected: distinct colours are off</span>
+              )}
+              {colourMode === "group" && (
+                <span>More than {COLOUR_SLOT_COUNT} groups: group colours are off</span>
               )}
             </>
           )}
@@ -555,7 +693,8 @@ export function CurveViewer({
                     <TableCell>
                       {r.run && (
                         <Link href={runHref(r.run.runId)} className="hover:underline">
-                          {r.run.runDate}
+                          {/* A run that shares its date reads as its heading does. */}
+                          {sameDate.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
                         </Link>
                       )}
                     </TableCell>

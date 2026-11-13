@@ -87,13 +87,32 @@ export function orderedPositions(set: CurveSet): CurvePosition[] {
   return set.groups.flatMap((g) => g.positions);
 }
 
-export type ColourMode = "highlight" | "distinct";
+export type ColourMode = "highlight" | "distinct" | "group";
+export type GroupBy = "run" | "compound" | "batch" | "role";
 export type CurvePalette = "dark" | "light";
 
+/** The key of a position's colour group; `groupKey` is its CurveGroup's key. */
+export function colourGroupKey(p: CurvePosition, groupKey: string, by: GroupBy): string {
+  if (by === "run") return groupKey;
+  if (by === "compound") return p.molecule_id ?? "none";
+  if (by === "batch") return p.batch_id ?? "none";
+  return p.well_type;
+}
+
+export function colourGroupLabel(p: CurvePosition, runHeading: string | null, by: GroupBy): string {
+  if (by === "run") return runHeading ?? "Run";
+  if (by === "compound") return p.molecule_name ?? "No compound";
+  if (by === "batch") return p.batch_number ?? "No batch";
+  return WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type;
+}
+
 export interface CurveColouring {
-  /** Distinct uses `slots`; a position without a slot gets highlight colours. */
+  /** Distinct and group use `slots`; a position without a slot gets highlight colours. */
   colourMode: ColourMode;
+  /** Distinct: by well id. Group: by group key. */
   slots: ReadonlyMap<string, number>;
+  /** Group mode: the colour group of each selected position, by well id. */
+  groups?: ReadonlyMap<string, { key: string; label: string }>;
   focusedId: string | null;
   palette: CurvePalette;
 }
@@ -114,7 +133,13 @@ export function curveStyle(
 ): CurveStyle {
   const colours = MEASURED_CURVE_COLORS[c.palette];
   const focused = c.focusedId === position.well_id;
-  const slot = c.colourMode === "distinct" ? c.slots.get(position.well_id) : undefined;
+  const slotKey =
+    c.colourMode === "distinct"
+      ? position.well_id
+      : c.colourMode === "group"
+        ? c.groups?.get(position.well_id)?.key
+        : undefined;
+  const slot = slotKey === undefined ? undefined : c.slots.get(slotKey);
   if (slot !== undefined) {
     return { color: colours.series[slot], width: focused ? 3 : 1.6, opacity: 1 };
   }
@@ -156,20 +181,30 @@ export function buildCurveFigure(
 
   const traces: Record<string, unknown>[] = [];
   const shapes: Record<string, unknown>[] = [];
+  const byGroup = colouring.colourMode === "group";
+  const inLegend = new Set<string>();
   for (const p of orderedPositions(set)) {
     const curve = set.curves.get(p.well_id);
     if (!drawn.has(p.well_id) || !curve) continue;
     const style = curveStyle(p, colouring);
+    // By group, the legend has one entry per group; the hover still names the
+    // position. A drawn position with no group is a reference the switch added.
+    const group = byGroup
+      ? (colouring.groups?.get(p.well_id) ?? { key: "", label: "Reference positions" })
+      : null;
+    const firstOfGroup = group !== null && !inLegend.has(group.key);
+    if (group) inLegend.add(group.key);
     traces.push({
       type: "scatter",
       mode: "lines",
       x: curve.x,
       y: curve.y,
-      name: positionName(p),
+      name: group ? group.label : positionName(p),
       meta: p.well_id,
       line: { color: style.color, width: style.width },
       opacity: style.opacity,
-      hovertemplate: `<b>%{fullData.name}</b><br>%{x} ${xUnit} · %{y:.4g}<extra></extra>`,
+      hovertemplate: `<b>${group ? positionName(p) : "%{fullData.name}"}</b><br>%{x} ${xUnit} · %{y:.4g}<extra></extra>`,
+      ...(group && { legendgroup: group.key, showlegend: firstOfGroup }),
     });
     if (!showReported) continue;
     for (const r of curve.reported) {
@@ -214,7 +249,7 @@ export function buildCurveFigure(
       paper_bgcolor: background,
       plot_bgcolor: background,
       // In Highlight mode every entry shares a colour, so a legend could not be read.
-      showlegend: exporting && colouring.colourMode === "distinct",
+      showlegend: exporting && colouring.colourMode !== "highlight",
       hovermode: "closest",
       font: { color: ink, size: 12 },
       shapes,

@@ -5,6 +5,8 @@ import type { RunCurves } from "../types";
 import {
   type CurveSet,
   buildCurveFigure,
+  colourGroupKey,
+  colourGroupLabel,
   curveSetFromRun,
   focusIdFromHover,
   orderedPositions,
@@ -192,6 +194,32 @@ describe("buildCurveFigure", () => {
     expect(buildCurveFigure({ ...base, colourMode: "distinct" }).layout.showlegend).toBe(false);
   });
 
+  it("colours each position by its group's slot in group mode and names the legend by group", () => {
+    const groups = new Map([
+      ["w1", { key: "g1", label: "Group one" }],
+      ["w2", { key: "g2", label: "Group two" }],
+      ["w3", { key: "g1", label: "Group one" }],
+    ]);
+    const args = {
+      ...base,
+      drawn: new Set(["w1", "w2", "w3"]),
+      colourMode: "group" as const,
+      slots: new Map([
+        ["g1", 3],
+        ["g2", 0],
+      ]),
+      groups,
+    };
+    const { data } = buildCurveFigure(args) as unknown as { data: Trace[] };
+    expect(data.map((t) => t.line.color)).toEqual([dark.series[3], dark.series[0], dark.series[3]]);
+    const exported = buildCurveFigure({ ...args, canvas: "export" });
+    expect(exported.layout.showlegend).toBe(true);
+    const inLegend = exported.data.filter((t) => t.showlegend !== false).map((t) => t.name);
+    expect(inLegend).toEqual(["Group one", "Group two"]);
+    // The hover still names the position.
+    expect(String(exported.data[0].hovertemplate)).toContain("Position 1 · Protein alone");
+  });
+
   it("keeps uirevision constant so a redraw keeps the zoom", () => {
     const a = buildCurveFigure(base).layout.uirevision;
     const b = buildCurveFigure({ ...base, focusedId: "w1", drawn: new Set(["w1"]) }).layout
@@ -240,6 +268,37 @@ describe("curve sets", () => {
     const { data } = buildCurveFigure({ ...base, set, drawn: new Set(["w1", "x3"]) });
     expect(data.map((t) => t.meta)).toEqual(["x3", "w1"]);
     expect(tableRows(set, new Set(["w2", "x1"])).map((r) => r.wellId)).toEqual(["x1", "w2"]);
+  });
+});
+
+describe("colour groups", () => {
+  const p = {
+    ...position("w9", 1, "positive_control", null),
+    molecule_id: "m1",
+    molecule_name: "ABC-0000009",
+    batch_id: "b1",
+    batch_number: "ABC-0000009-01",
+  };
+  const bare = position("w8", 2, "sample", null);
+
+  it("keys a position by its run, compound, batch or role", () => {
+    expect(colourGroupKey(p, "r1", "run")).toBe("r1");
+    expect(colourGroupKey(p, "r1", "compound")).toBe("m1");
+    expect(colourGroupKey(p, "r1", "batch")).toBe("b1");
+    expect(colourGroupKey(p, "r1", "role")).toBe("positive_control");
+    expect(colourGroupKey(bare, "r1", "compound")).toBe("none");
+    expect(colourGroupKey(bare, "r1", "batch")).toBe("none");
+  });
+
+  it("labels a group by the run heading, compound, batch or role", () => {
+    expect(colourGroupLabel(p, "2026-11-03 · A. Person · Completed", "run")).toBe(
+      "2026-11-03 · A. Person · Completed",
+    );
+    expect(colourGroupLabel(p, null, "compound")).toBe("ABC-0000009");
+    expect(colourGroupLabel(p, null, "batch")).toBe("ABC-0000009-01");
+    expect(colourGroupLabel(p, null, "role")).toBe("Positive Control");
+    expect(colourGroupLabel(bare, null, "compound")).toBe("No compound");
+    expect(colourGroupLabel(bare, null, "batch")).toBe("No batch");
   });
 });
 
