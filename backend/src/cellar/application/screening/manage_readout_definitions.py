@@ -20,9 +20,10 @@ from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
 )
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
+from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.repository import ProtocolRepository
-from cellar.domain.shared.errors import DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
 # ---------------------------------------------------------------------------
 # Commands
@@ -80,6 +81,19 @@ class UpdateReadoutDefinitionCommand(Command):
     display_order: int | None = None
     pick_list_values: list[dict | str] | object | None = _UNSET
     dose_response_config: dict | object | None = _UNSET
+    # dict -> MeltReadoutConfig.from_dict; None clears; _UNSET leaves unchanged.
+    melt_config: dict | object | None = _UNSET
+
+
+@dataclass(frozen=True, kw_only=True)
+class AddTemperatureWindowCommand(Command):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
+    window: str
+    channel_key: str
+    low: float
+    high: float
+    measures: tuple[MeltMeasure, ...]  # one or both, no repeats
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +265,14 @@ class UpdateReadoutDefinition:
                     kwargs["dose_response_config"] = None
                 else:
                     kwargs["dose_response_config"] = deserialize_dose_response_config(cfg)  # type: ignore[arg-type]
+            if input.melt_config is not _UNSET:
+                mcfg = input.melt_config
+                try:
+                    kwargs["melt_config"] = (
+                        None if mcfg is None else MeltReadoutConfig.from_dict(mcfg)  # type: ignore[arg-type]
+                    )
+                except DomainError as exc:
+                    return Failure(exc)
 
             # Optional formula validation
             formula = kwargs.get("calculation_formula")
@@ -267,6 +289,70 @@ class UpdateReadoutDefinition:
             try:
                 protocol.update_readout_definition(input.definition_id, **kwargs)
             except DomainError as exc:
+                return Failure(exc)
+
+            await self._repo.save(protocol)
+            events = await self._uow.commit()
+
+        await self._dispatcher.dispatch_all(events)
+        return Success(protocol)
+
+
+_MEASURE_PREFIX = {MeltMeasure.TM: "Tm", MeltMeasure.DELTA_TM: "ΔTm"}
+
+
+class AddTemperatureWindow:
+    """Add a temperature window's Tm and/or ΔTm readouts in one change."""
+
+    def __init__(
+        self,
+        uow: UnitOfWork,
+        repo: ProtocolRepository,
+        dispatcher: EventDispatcherProtocol,
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._dispatcher = dispatcher
+
+    async def __call__(
+        self, input: AddTemperatureWindowCommand, auth: AuthContext | None = None
+    ) -> Result[Protocol, DomainError]:
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
+        if not input.measures or len(set(input.measures)) != len(input.measures):
+            return Failure(ValidationError("Choose Tm, ΔTm or both, each at most once"))
+        async with self._uow:
+            protocol = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+
+            before = list(protocol.readout_definitions)
+            try:
+                next_order = max((rd.display_order for rd in before), default=-1) + 1
+                # Tm first, then ΔTm, whatever order the caller listed them in.
+                for i, measure in enumerate(m for m in MeltMeasure if m in input.measures):
+                    cfg = MeltReadoutConfig(
+                        window=input.window,
+                        measure=measure,
+                        channel_key=input.channel_key,
+                        low=input.low,
+                        high=input.high,
+                    )
+                    protocol.add_readout_definition(
+                        ReadoutDefinition(
+                            protocol_id=protocol.id,
+                            name=f"{_MEASURE_PREFIX[measure]} ({cfg.window})",
+                            data_type=ReadoutDataType.NUMERIC,
+                            unit="°C",
+                            aggregation=ReadoutAggregation.MEAN,
+                            display_order=next_order + i,
+                            melt_config=cfg,
+                        )
+                    )
+            except DomainError as exc:
+                protocol.readout_definitions[:] = before  # all or nothing
                 return Failure(exc)
 
             await self._repo.save(protocol)
