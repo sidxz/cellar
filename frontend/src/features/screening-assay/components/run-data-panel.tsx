@@ -26,6 +26,7 @@ import { InstrumentImportWizard } from "./instrument-import-wizard";
 import { PlateHeatmap } from "./plate-heatmap";
 import { PlateMapViewer } from "./plate-map-viewer";
 import { ReadoutDataTable } from "./readout-data-table";
+import { RunCurvesPanel } from "./run-curves-panel";
 import { RunDoseResponseResults } from "./run-dr-results";
 import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
@@ -317,10 +318,10 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
           </TabsContent>
         )}
 
-        {/* Curves — placeholder until the curves view lands. */}
+        {/* Curves */}
         {hasCurves && (
           <TabsContent value="curves">
-            <p className="py-8 text-center text-sm text-muted-foreground">Curves</p>
+            <RunCurvesPanel runId={run.id} />
           </TabsContent>
         )}
 

@@ -18,6 +18,8 @@ export interface PlotProps {
   style?: CSSProperties;
   useResizeHandler?: boolean;
   onClick?: (event: unknown) => void;
+  onHover?: (event: unknown) => void;
+  onUnhover?: (event: unknown) => void;
   className?: string;
 }
 
@@ -32,8 +34,11 @@ export const Plot = dynamic(() => import("react-plotly.js"), {
  * react-plotly.js bundle loads. Used for imperative side-channel calls
  * (downloadImage etc.) that aren't wrapped by react-plotly.js props. */
 interface PlotlyGlobal {
+  /** Takes a drawn graph element, or a figure object to render off-screen. */
   downloadImage?: (
-    el: HTMLElement,
+    el:
+      | HTMLElement
+      | { data: ReadonlyArray<Record<string, unknown>>; layout: Record<string, unknown> },
     opts: {
       format: "png" | "svg" | "jpeg" | "webp";
       width: number;

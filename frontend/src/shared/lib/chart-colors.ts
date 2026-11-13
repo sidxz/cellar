@@ -38,6 +38,42 @@ export const CURVE_QUALITY_COLORS: Record<string, string> = {
 };
 export const CURVE_DEFAULT_COLOR = "#707372";
 
+/* ── Measured curves (run Curves tab) ──────────────────────── */
+/* Validated for colour-blind separation. `dark` is for the dark surface,
+ * `light` for the light surface and for every exported (white) figure. */
+export const MEASURED_CURVE_COLORS = {
+  dark: {
+    series: [
+      "#3987e5",
+      "#d95926",
+      "#199e70",
+      "#c98500",
+      "#d55181",
+      "#008300",
+      "#9085e9",
+      "#e66767",
+    ],
+    neutral: "#8494ab",
+    reference: "#9085e9",
+    focus: "#3987e5",
+  },
+  light: {
+    series: [
+      "#2a78d6",
+      "#eb6834",
+      "#1baf7a",
+      "#eda100",
+      "#e87ba4",
+      "#008300",
+      "#6250d6",
+      "#e34948",
+    ],
+    neutral: "#7c8a9c",
+    reference: "#6250d6",
+    focus: "#2a78d6",
+  },
+} as const;
+
 /* ── Plate well types ──────────────────────────────────────── */
 export const WELL_TYPE_COLORS: Record<string, string> = {
   sample: "#3b6fb6",
