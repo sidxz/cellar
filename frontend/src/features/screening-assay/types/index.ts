@@ -20,6 +20,11 @@ import type {
   LayoutFileResponse,
   LayoutRowModel,
   MeasuredCurvesBatchResponse,
+  MeltWindowModel,
+  MeltWindowPositionModel,
+  MeltingAnalysisResponse,
+  MeltingStepChangeResponse,
+  MeltingStepModel,
   PlateData as PlateDataModel,
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
@@ -36,6 +41,7 @@ import type {
   RunCountsResponse as RunCountsResponseModel,
   RunCurvesResponse,
   RunResponse,
+  StepCheckModel,
   TargetRefResponse,
   TargetResponse,
   TargetSyncReportResponse,
@@ -806,3 +812,9 @@ export type CurvePositions = CurvePositionsResponse;
 export type MeasuredCurvesBatch = MeasuredCurvesBatchResponse;
 export type LayoutFile = LayoutFileResponse;
 export type LayoutFileRow = LayoutRowModel;
+export type MeltingAnalysis = MeltingAnalysisResponse;
+export type MeltingStep = MeltingStepModel;
+export type MeltWindow = MeltWindowModel;
+export type MeltWindowPosition = MeltWindowPositionModel;
+export type StepCheck = StepCheckModel;
+export type MeltingStepChange = MeltingStepChangeResponse;
