@@ -165,7 +165,14 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
   const canEdit = useCanEdit();
 
-  const [activeTab, setActiveTab] = useHashTab("readout");
+  // A cassette has no plate geometry, so the two plate-shaped tabs are hidden.
+  const isCassette = plates.some((p) => p.holder_kind === "cassette");
+  const hasCurves = !!plateMap?.has_measured_curves;
+
+  const [hashTab, setActiveTab] = useHashTab("readout");
+  const hiddenTabs = new Set<string>(isCassette ? ["plate-map", "heat-map"] : []);
+  if (!hasCurves) hiddenTabs.add("curves");
+  const activeTab = hiddenTabs.has(hashTab) ? "readout" : hashTab;
 
   // Plate header (number + physical-plate link) above each plate map.
   const renderPlate = (p: PlateData) => (
@@ -183,8 +190,9 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="readout">Readout Data</TabsTrigger>
-          <TabsTrigger value="plate-map">Plate Map</TabsTrigger>
-          <TabsTrigger value="heat-map">Heat Map</TabsTrigger>
+          {!isCassette && <TabsTrigger value="plate-map">Plate Map</TabsTrigger>}
+          {!isCassette && <TabsTrigger value="heat-map">Heat Map</TabsTrigger>}
+          {hasCurves && <TabsTrigger value="curves">Curves</TabsTrigger>}
           <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
           <TabsTrigger value="qc">QC Metrics</TabsTrigger>
           <TabsTrigger value="files">
@@ -231,70 +239,81 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         </TabsContent>
 
         {/* Plate Map — pure viewer. Ingest lives on the Readout Data tab. */}
-        <TabsContent value="plate-map">
-          <div className="mt-3 space-y-3">
-            {hasPlateMap ? (
-              plates.length > 1 ? (
-                <Tabs defaultValue={plates[0].plate_id}>
-                  <TabsList>
+        {!isCassette && (
+          <TabsContent value="plate-map">
+            <div className="mt-3 space-y-3">
+              {hasPlateMap ? (
+                plates.length > 1 ? (
+                  <Tabs defaultValue={plates[0].plate_id}>
+                    <TabsList>
+                      {plates.map((p) => (
+                        <TabsTrigger key={p.plate_id} value={p.plate_id}>
+                          Plate {p.plate_number}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
                     {plates.map((p) => (
-                      <TabsTrigger key={p.plate_id} value={p.plate_id}>
-                        Plate {p.plate_number}
-                      </TabsTrigger>
+                      <TabsContent key={p.plate_id} value={p.plate_id}>
+                        <div className="mt-3">{renderPlate(p)}</div>
+                      </TabsContent>
                     ))}
-                  </TabsList>
-                  {plates.map((p) => (
-                    <TabsContent key={p.plate_id} value={p.plate_id}>
-                      <div className="mt-3">{renderPlate(p)}</div>
-                    </TabsContent>
-                  ))}
-                </Tabs>
+                  </Tabs>
+                ) : (
+                  renderPlate(plates[0])
+                )
+              ) : run.plate_format ? (
+                <div className="space-y-3">
+                  <PlateHeatmap format={run.plate_format as PlateFormat} />
+                  {!run.is_locked && (
+                    <p className="text-center text-sm text-muted-foreground">
+                      No data imported yet.{" "}
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-4 hover:underline"
+                        onClick={() => setActiveTab("readout")}
+                      >
+                        Import on the Readout Data tab
+                      </button>
+                      .
+                    </p>
+                  )}
+                </div>
               ) : (
-                renderPlate(plates[0])
-              )
-            ) : run.plate_format ? (
-              <div className="space-y-3">
-                <PlateHeatmap format={run.plate_format as PlateFormat} />
-                {!run.is_locked && (
-                  <p className="text-center text-sm text-muted-foreground">
-                    No data imported yet.{" "}
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => setActiveTab("readout")}
-                    >
-                      Import on the Readout Data tab
-                    </button>
-                    .
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-2 py-8">
-                <p className="text-sm text-muted-foreground">
-                  No plate map has been configured for this run.
-                </p>
-                {!run.is_locked && (
+                <div className="flex flex-col items-center gap-2 py-8">
                   <p className="text-sm text-muted-foreground">
-                    <button
-                      type="button"
-                      className="text-primary underline-offset-4 hover:underline"
-                      onClick={() => setActiveTab("readout")}
-                    >
-                      Import on the Readout Data tab
-                    </button>{" "}
-                    to populate it.
+                    No plate map has been configured for this run.
                   </p>
-                )}
-              </div>
-            )}
-          </div>
-        </TabsContent>
+                  {!run.is_locked && (
+                    <p className="text-sm text-muted-foreground">
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-4 hover:underline"
+                        onClick={() => setActiveTab("readout")}
+                      >
+                        Import on the Readout Data tab
+                      </button>{" "}
+                      to populate it.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
 
         {/* Heat Map */}
-        <TabsContent value="heat-map">
-          <RunHeatmapPanel run={run} />
-        </TabsContent>
+        {!isCassette && (
+          <TabsContent value="heat-map">
+            <RunHeatmapPanel run={run} />
+          </TabsContent>
+        )}
+
+        {/* Curves — placeholder until the curves view lands. */}
+        {hasCurves && (
+          <TabsContent value="curves">
+            <p className="py-8 text-center text-sm text-muted-foreground">Curves</p>
+          </TabsContent>
+        )}
 
         {/* Dose-Response */}
         <TabsContent value="dose-response">

@@ -1,4 +1,4 @@
-import type { PlateFormat } from "../types";
+import type { PlateData, PlateFormat } from "../types";
 
 const DIMENSIONS: Record<PlateFormat, { rows: number; cols: number }> = {
   "6": { rows: 2, cols: 3 },
@@ -33,6 +33,16 @@ export function plateDimensions(format: PlateFormat | string): { rows: number; c
 export function plateDimensionsTuple(format: PlateFormat | string): [number, number] {
   const { rows, cols } = plateDimensions(format);
   return [rows, cols];
+}
+
+/** The holder's own size when the API reports one, else the plate format's. */
+export function holderDimensions(
+  plate: Pick<PlateData, "format" | "holder_rows" | "holder_columns">,
+): [rows: number, cols: number] {
+  if (plate.holder_rows != null && plate.holder_columns != null) {
+    return [plate.holder_rows, plate.holder_columns];
+  }
+  return plateDimensionsTuple(plate.format);
 }
 
 export function plateCellSizePx(format: PlateFormat | string): number {
