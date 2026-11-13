@@ -52,7 +52,7 @@ export function PositionSelector({
     return m;
   }, [positions, isCassette]);
 
-  const slot = (p: Position | undefined, key: string) => {
+  const slot = (p: Position | undefined, key: string, columnNumber: number) => {
     if (!p) {
       return (
         <span
@@ -60,10 +60,12 @@ export function PositionSelector({
           data-testid="empty-slot"
           aria-hidden
           className={cn(
-            "shrink-0 border border-dashed opacity-60",
-            isCassette ? "h-12 w-10 rounded-md" : "size-8 rounded-full",
+            "flex shrink-0 items-center justify-center border border-dashed font-mono text-muted-foreground opacity-60",
+            isCassette ? "h-12 w-10 rounded-md text-xs" : "size-8 rounded-full",
           )}
-        />
+        >
+          {isCassette ? columnNumber : null}
+        </span>
       );
     }
     const id = p.well_id;
@@ -148,14 +150,36 @@ export function PositionSelector({
         </span>
       </div>
       <div className={cn("space-y-1", !isCassette && "overflow-x-auto pb-1")}>
+        {!isCassette && (
+          <div aria-hidden className="flex gap-1 font-mono text-[10px] text-muted-foreground">
+            <span className="w-5 shrink-0" />
+            {Array.from({ length: columns }, (_, ci) => (
+              <span key={ci} className="w-8 shrink-0 text-center">
+                {ci + 1}
+              </span>
+            ))}
+          </div>
+        )}
         {Array.from({ length: rows }, (_, ri) => (
           <div
             key={ri}
             data-testid="holder-row"
             className={cn("flex gap-1", isCassette && "flex-wrap")}
           >
+            {!isCassette && (
+              <span
+                aria-hidden
+                className="flex w-5 shrink-0 items-center font-mono text-[10px] text-muted-foreground"
+              >
+                {rowLabel(ri)}
+              </span>
+            )}
             {Array.from({ length: columns }, (_, ci) =>
-              slot(at.get(isCassette ? `${ci + 1}` : `${rowLabel(ri)}:${ci + 1}`), `${ri}:${ci}`),
+              slot(
+                at.get(isCassette ? `${ci + 1}` : `${rowLabel(ri)}:${ci + 1}`),
+                `${ri}:${ci}`,
+                ci + 1,
+              ),
             )}
           </div>
         ))}

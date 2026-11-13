@@ -67,6 +67,22 @@ describe("PositionSelector", () => {
     expect(within(rows[1]).getAllByTestId("empty-slot")).toHaveLength(2);
   });
 
+  it("shows the column number in an empty cassette slot", () => {
+    renderSelector();
+    const empty = screen.getAllByTestId("empty-slot");
+    expect(empty.map((e) => e.textContent)).toEqual(["3", "4"]);
+  });
+
+  it("shows row letters and column numbers around a plate grid", () => {
+    renderSelector({
+      holder: { kind: "plate", rows: 2, columns: 3, label: "Plate of 6" },
+      positions: [position("a1", "A", 1)],
+    });
+    for (const h of ["A", "B", "1", "2", "3"]) {
+      expect(screen.getByText(h)).toBeInTheDocument();
+    }
+  });
+
   it("passes shift and meta keys to onChange as range and toggle", () => {
     const anchored = { selected: new Set(["w1"]), anchor: "w1" };
     const { onChange } = renderSelector({}, anchored);
