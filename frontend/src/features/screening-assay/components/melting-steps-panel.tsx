@@ -1,6 +1,7 @@
 "use client";
 
 import { MemberName } from "@/shared/components/entity-name";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
@@ -11,14 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/shared/components/ui/table";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import type { ReviewMeltingStepRequest } from "@/shared/lib/api/model";
@@ -231,126 +224,113 @@ export function MeltingStepsPanel({
         <p className="text-sm text-muted-foreground">{analysis.edit_refusal}</p>
       )}
 
-      <div className="rounded-md border">
-        <Table aria-label="Melting steps">
-          <TableHeader>
-            <TableRow>
-              <TableHead>Position</TableHead>
-              <TableHead>Label</TableHead>
-              <TableHead>Batch</TableHead>
-              <TableHead className="text-right">Value ({unit})</TableHead>
-              <TableHead className="text-right">Instrument value</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Reason</TableHead>
-              <TableHead>Changed</TableHead>
-              {editable && <TableHead />}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={editable ? 10 : 9} className="text-muted-foreground">
-                  {positions.length === 0
-                    ? "Select positions above to review their melting steps."
-                    : "The selected positions have no melting steps on this signal."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((s) => {
-                const p = byWell.get(s.well_id);
-                const rejected = s.status === "rejected";
-                return (
-                  <TableRow
-                    key={s.id}
-                    className={cn(rejected && "text-muted-foreground line-through")}
+      <ul aria-label="Melting steps" className="divide-y rounded-md border text-sm">
+        {rows.length === 0 ? (
+          <li className="p-2 text-muted-foreground">
+            {positions.length === 0
+              ? "Select positions above to review their melting steps."
+              : "The selected positions have no melting steps on this signal."}
+          </li>
+        ) : (
+          rows.map((s) => {
+            const rejected = s.status === "rejected";
+            const p = byWell.get(s.well_id);
+            return (
+              <li
+                key={s.id}
+                className={cn(
+                  "space-y-0.5 px-2 py-1.5",
+                  rejected && "text-muted-foreground line-through",
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {positions.length > 1 && <span className="font-medium">{p?.position_label}</span>}
+                  <span className="font-mono tabular-nums">{fmt(s.value)}</span>
+                  <span className="text-muted-foreground">{unit}</span>
+                  <Badge
+                    variant="outline"
+                    title={s.instrument_label ?? undefined}
+                    className="no-underline"
                   >
-                    <TableCell>{p?.position_label}</TableCell>
-                    <TableCell>{p?.label}</TableCell>
-                    <TableCell>{p?.batch_number ?? "None"}</TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">
-                      {fmt(s.value)}
-                    </TableCell>
-                    <TableCell className="text-right font-mono tabular-nums">
-                      {s.instrument_value !== null && s.instrument_value !== s.value
-                        ? fmt(s.instrument_value)
-                        : ""}
-                    </TableCell>
-                    <TableCell title={s.instrument_label ?? undefined}>
-                      {s.source === "manual" ? "Manual" : "Instrument"}
-                    </TableCell>
-                    <TableCell>{STATUS_LABELS[s.status]}</TableCell>
-                    <TableCell className="max-w-56 truncate" title={s.reason ?? undefined}>
-                      {s.reason}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {s.changed_by && (
-                        <>
-                          <MemberName id={s.changed_by} />
-                          {s.changed_at && ` · ${formatDateTime(s.changed_at)}`}
-                        </>
+                    {`${s.source === "manual" ? "Manual" : "Instrument"} · ${STATUS_LABELS[s.status]}`}
+                  </Badge>
+                  {s.instrument_value !== null && s.instrument_value !== s.value && (
+                    <span className="text-xs text-muted-foreground">{`was ${fmt(s.instrument_value)}`}</span>
+                  )}
+                  {editable && (
+                    <span className="ml-auto flex flex-wrap gap-x-1 no-underline">
+                      {s.status !== "accepted" && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setStatus(s, "accepted")}
+                        >
+                          Accept
+                        </Button>
                       )}
-                    </TableCell>
-                    {editable && (
-                      <TableCell className="space-x-1 text-right no-underline">
-                        {s.status !== "accepted" && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() => setStatus(s, "accepted")}
-                          >
-                            Accept
-                          </Button>
-                        )}
-                        {s.status !== "unreviewed" && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() => setStatus(s, "unreviewed")}
-                          >
-                            Mark unreviewed
-                          </Button>
-                        )}
-                        {!rejected && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            disabled={busy}
-                            onClick={() =>
-                              open({ kind: "reject", step: s, reason: s.reason ?? "" }, "")
-                            }
-                          >
-                            Reject
-                          </Button>
-                        )}
+                      {s.status !== "unreviewed" && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => setStatus(s, "unreviewed")}
+                        >
+                          Mark unreviewed
+                        </Button>
+                      )}
+                      {!rejected && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           disabled={busy}
                           onClick={() =>
-                            open(
-                              { kind: "correct", step: s, reason: s.reason ?? "" },
-                              stepInput(s.value),
-                            )
+                            open({ kind: "reject", step: s, reason: s.reason ?? "" }, "")
                           }
                         >
-                          Correct
+                          Reject
                         </Button>
-                      </TableCell>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() =>
+                          open(
+                            { kind: "correct", step: s, reason: s.reason ?? "" },
+                            stepInput(s.value),
+                          )
+                        }
+                      >
+                        Correct
+                      </Button>
+                    </span>
+                  )}
+                </div>
+                {(s.reason || s.changed_by) && (
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    {s.reason && (
+                      <span className="min-w-0 truncate" title={s.reason}>
+                        {s.reason}
+                      </span>
                     )}
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
-      </div>
+                    {s.changed_by && (
+                      <span className="ml-auto shrink-0">
+                        <MemberName id={s.changed_by} />
+                        {s.changed_at && ` · ${formatDateTime(s.changed_at)}`}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })
+        )}
+      </ul>
 
       {form && editable && (
         <div className="space-y-3 rounded-md border p-3">

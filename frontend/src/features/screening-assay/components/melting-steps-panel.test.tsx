@@ -157,12 +157,12 @@ async function select(...names: string[]) {
   for (const [i, name] of names.entries()) {
     fireEvent.click(screen.getByRole("button", { name }), { metaKey: i > 0 });
   }
-  return screen.findByRole("table", { name: "Melting steps" });
+  return screen.findByRole("list", { name: "Melting steps" });
 }
 
 function row(table: HTMLElement, text: string) {
   const r = within(table)
-    .getAllByRole("row")
+    .getAllByRole("listitem")
     .find((tr) => tr.textContent?.includes(text));
   if (!r) throw new Error(`no row with ${text}`);
   return r;
@@ -178,25 +178,33 @@ describe("MeltingStepsPanel", () => {
   it("lists steps of the selected positions with instrument value only when corrected", async () => {
     renderPanel();
     const table = await select("Position 1", "Position 2");
-    // Header plus s1, s2, s3; s4 is on another signal and s5's position is not selected.
-    expect(within(table).getAllByRole("row")).toHaveLength(4);
+    // s1, s2, s3; s4 is on another signal and s5's position is not selected.
+    expect(within(table).getAllByRole("listitem")).toHaveLength(3);
     expect(within(table).queryByText("55.5")).not.toBeInTheDocument();
     expect(within(table).queryByText("61.2")).not.toBeInTheDocument();
 
     const s1 = row(table, "36.6");
     expect(within(s1).getAllByText("36.6")).toHaveLength(1);
-    expect(within(s1).getByText("Protein alone")).toBeInTheDocument();
-    expect(within(s1).getByText("B-001")).toBeInTheDocument();
+    expect(within(s1).getByText("Position 1")).toBeInTheDocument();
+    expect(within(s1).getByText("Instrument · Unreviewed")).toBeInTheDocument();
+    expect(within(s1).queryByText("B-001")).not.toBeInTheDocument();
+    expect(within(s1).queryByText(/was/)).not.toBeInTheDocument();
 
     const s2 = row(table, "64");
-    expect(within(s2).getByText("63.5")).toBeInTheDocument();
+    expect(within(s2).getByText("was 63.5")).toBeInTheDocument();
     expect(within(s2).getByText("shoulder peak")).toBeInTheDocument();
     expect(await within(s2).findByText(/Ada Lovelace/)).toBeInTheDocument();
 
     const s3 = row(table, "70.1");
     expect(s3.className).toContain("line-through");
-    expect(within(s3).getByText("Manual")).toBeInTheDocument();
-    expect(within(s3).getByText("Rejected")).toBeInTheDocument();
+    expect(within(s3).getByText("Manual · Rejected")).toBeInTheDocument();
+  });
+
+  it("names the position only when several are selected", async () => {
+    renderPanel();
+    const table = await select("Position 1");
+    expect(within(table).queryByText("Position 1")).not.toBeInTheDocument();
+    expect(within(table).getByText("36.6")).toBeInTheDocument();
   });
 
   it("requires a reason to reject and sends expected_version", async () => {
