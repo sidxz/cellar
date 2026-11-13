@@ -33,7 +33,7 @@ const curves: RunCurves = {
     position("w2", 2, "sample", "ABC-0000001"),
     position("w3", 3, "sample", null),
   ],
-  channels: [{ key: "a", label: "Signal A", x_unit: "°C", y_unit: "u" }],
+  channels: [{ key: "a", label: "Signal A", x_unit: "°C", y_unit: "u", x_label: null }],
   channel: "a",
   curves: [
     {

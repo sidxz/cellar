@@ -536,6 +536,7 @@ export * from './createSynthesisRouteRequestSourceReference';
 export * from './createVocabularyBody';
 export * from './createVocabularyBodyTerms';
 export * from './curveChannelModel';
+export * from './curveChannelModelXLabel';
 export * from './curveChannelModelYUnit';
 export * from './curveDetailResponse';
 export * from './curveDetailResponseConfidenceIntervalHigh';

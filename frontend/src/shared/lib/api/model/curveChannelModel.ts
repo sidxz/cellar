@@ -5,10 +5,12 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { CurveChannelModelYUnit } from './curveChannelModelYUnit';
+import type { CurveChannelModelXLabel } from './curveChannelModelXLabel';
 
 export interface CurveChannelModel {
   key: string;
   label: string;
   x_unit: string;
   y_unit: CurveChannelModelYUnit;
+  x_label: CurveChannelModelXLabel;
 }

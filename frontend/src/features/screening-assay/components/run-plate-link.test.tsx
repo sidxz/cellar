@@ -25,6 +25,7 @@ const unlinked: PlateData = {
   holder_kind: "plate",
   holder_rows: null,
   holder_columns: null,
+  holder_label: "Plate",
   wells: [],
   summary: {
     total_wells: 0,

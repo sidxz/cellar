@@ -40,8 +40,8 @@ const curves: RunCurves = {
   holder: { kind: "cassette", rows: 1, columns: 9, label: "Holder of 9" },
   positions,
   channels: [
-    { key: "a", label: "Signal A", x_unit: "°C", y_unit: null },
-    { key: "b", label: "Signal B", x_unit: "°C", y_unit: null },
+    { key: "a", label: "Signal A", x_unit: "°C", y_unit: null, x_label: null },
+    { key: "b", label: "Signal B", x_unit: "°C", y_unit: null, x_label: null },
   ],
   channel: "a",
   curves: positions.map((p) => ({

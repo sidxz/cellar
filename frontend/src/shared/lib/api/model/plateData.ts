@@ -24,4 +24,5 @@ export interface PlateData {
   holder_kind: string;
   holder_rows: PlateDataHolderRows;
   holder_columns: PlateDataHolderColumns;
+  holder_label: string;
 }

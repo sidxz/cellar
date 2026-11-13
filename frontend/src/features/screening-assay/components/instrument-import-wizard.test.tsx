@@ -54,7 +54,7 @@ const preview: InstrumentPreview = {
     { row: 1, column: 2, position_label: "Position 2", label: "", suggestion: null },
     { row: 1, column: 3, position_label: "Position 3", label: "", suggestion: null },
   ],
-  channels: [{ key: "ratio", label: "Channel A", x_unit: "°C", y_unit: null }],
+  channels: [{ key: "ratio", label: "Channel A", x_unit: "°C", y_unit: null, x_label: null }],
   series: [
     {
       channel: "ratio",
