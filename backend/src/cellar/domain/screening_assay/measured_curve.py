@@ -10,6 +10,8 @@ from datetime import datetime
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
 
+X_LABEL_MAX_LENGTH = 100
+
 
 @dataclass(frozen=True)
 class ReportedPoint:
@@ -83,6 +85,10 @@ class MeasuredCurve(Entity):
             raise ValidationError("Curve points must be finite numbers")
         if not all(math.isfinite(r.value) for r in reported):
             raise ValidationError("Reported values must be finite numbers")
+        if x_label is not None and len(x_label) > X_LABEL_MAX_LENGTH:
+            raise ValidationError(
+                f"The x-axis name must be at most {X_LABEL_MAX_LENGTH} characters"
+            )
 
         self.workspace_id = workspace_id
         self.run_id = run_id

@@ -65,3 +65,9 @@ def test_rejects_blank_channel_key_and_negative_order():
 def test_rejects_blank_reader():
     with pytest.raises(ValidationError):
         _curve(reader=" ")
+
+
+def test_rejects_x_label_over_100_characters():
+    assert _curve(x_label="T" * 100).x_label == "T" * 100
+    with pytest.raises(ValidationError, match="100"):
+        _curve(x_label="T" * 101)
