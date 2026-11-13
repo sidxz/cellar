@@ -82,6 +82,7 @@ from cellar.application.screening.manage_protocol_references import (
 )
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
+    AddTemperatureWindow,
     RemoveReadoutDefinition,
     UpdateReadoutDefinition,
 )
@@ -152,6 +153,7 @@ __all__ = [
     "AddReadoutDefinitionDep",
     "AddRunCollectionDep",
     "AddRunTargetDep",
+    "AddTemperatureWindowDep",
     "ApproveRunDep",
     "BulkCreateReadoutDataDep",
     "ClassifyDoseResponseCurveDep",
@@ -341,6 +343,9 @@ RemoveReadoutDefinitionDep = Annotated[
 ]
 UpdateReadoutDefinitionDep = Annotated[
     UpdateReadoutDefinition, Depends(_get_use_case(UpdateReadoutDefinition))
+]
+AddTemperatureWindowDep = Annotated[
+    AddTemperatureWindow, Depends(_get_use_case(AddTemperatureWindow))
 ]
 AddConditionDefinitionDep = Annotated[
     AddConditionDefinition, Depends(_get_use_case(AddConditionDefinition))

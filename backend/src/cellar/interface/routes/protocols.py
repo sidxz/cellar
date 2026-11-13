@@ -8,7 +8,7 @@ from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Query, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
@@ -65,6 +65,7 @@ from cellar.application.screening.manage_protocol_references import (
 )
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
+    AddTemperatureWindowCommand,
     RemoveReadoutDefinitionCommand,
     UpdateReadoutDefinitionCommand,
 )
@@ -82,6 +83,7 @@ from cellar.application.screening.resolve_target_links import (
 )
 from cellar.application.shared.sentinel import UNSET
 from cellar.domain.screening_assay.enums import ReferenceKind
+from cellar.domain.screening_assay.melt_window import MeltMeasure
 from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import NameSibling
 from cellar.interface.dependencies import (
@@ -91,6 +93,7 @@ from cellar.interface.dependencies import (
     AddProtocolTargetDep,
     AddProtocolToProjectDep,
     AddReadoutDefinitionDep,
+    AddTemperatureWindowDep,
     AuthDep,
     ConditionGroupingServiceDep,
     CorrectProtocolDep,
@@ -186,6 +189,8 @@ class ReadoutDefinitionResponse(BaseModel):
     # variables.
     pick_list_values: list[dict] | None = None
     dose_response_config: dict | None = None
+    # Set on a temperature window's Tm / ΔTm readout: {window, measure, channel_key, low, high}.
+    melt_config: dict | None
 
 
 class FindSimilarProtocolsRequest(BaseModel):
@@ -343,6 +348,7 @@ class ProtocolResponse(BaseModel):
                         if rd.dose_response_config is not None
                         else None
                     ),
+                    melt_config=rd.melt_config.to_dict() if rd.melt_config else None,
                 )
                 for rd in p.readout_definitions
             ],
@@ -516,6 +522,16 @@ class UpdateReadoutDefinitionRequest(BaseModel):
     display_order: int | None = None
     pick_list_values: list[dict | str] | None = None
     dose_response_config: dict | None = None
+    # {window, measure, channel_key, low, high}; null clears it.
+    melt_config: dict | None = None
+
+
+class AddTemperatureWindowRequest(BaseModel):
+    window: str = Field(min_length=1, max_length=60)
+    channel_key: str = Field(min_length=1)
+    low: float
+    high: float
+    measures: list[MeltMeasure] = Field(min_length=1)
 
 
 # ---------------------------------------------------------------------------
@@ -1247,11 +1263,39 @@ async def update_readout_definition(
         "normalizations",
         "pick_list_values",
         "dose_response_config",
+        "melt_config",
     ):
         if key in sent:
             cmd_kwargs[key] = getattr(body, key)
 
     cmd = UpdateReadoutDefinitionCommand(**cmd_kwargs)
+    result = await uc(cmd, auth=auth)
+    return await _protocol_response(targets_uc, auth, result)
+
+
+@router.post(
+    "/protocols/{protocol_id}/temperature-windows",
+    response_model=ProtocolResponse,
+    status_code=201,
+    tags=["protocols"],
+)
+async def add_temperature_window(
+    protocol_id: uuid.UUID,
+    body: AddTemperatureWindowRequest,
+    auth: AuthDep,
+    targets_uc: ResolveProtocolTargetsDep,
+    uc: AddTemperatureWindowDep,
+) -> ProtocolResponse:
+    """Add a temperature window's Tm and/or ΔTm readouts in one change."""
+    cmd = AddTemperatureWindowCommand(
+        workspace_id=auth.workspace_id,
+        protocol_id=protocol_id,
+        window=body.window,
+        channel_key=body.channel_key,
+        low=body.low,
+        high=body.high,
+        measures=tuple(body.measures),
+    )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
 
