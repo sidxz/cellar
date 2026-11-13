@@ -38,6 +38,10 @@ ROLE_NAMES: Mapping[str, WellType] = {
     "negative control": WellType.NEGATIVE_CONTROL,
 }
 MAX_LAYOUT_ROWS = 2000
+# The template has 8 columns; anything wider is not a layout file. A spreadsheet is
+# also refused above this size unpacked, before the spreadsheet library opens it.
+MAX_LAYOUT_COLUMNS = 64
+MAX_LAYOUT_UNPACKED_BYTES = 50 * 1024 * 1024
 _MAX_LABEL = 200
 _MAX_NOTE = 1000
 _COLUMNS = ("position", "label", "role", "compound", "batch", "note", "use")
@@ -118,6 +122,8 @@ class ResolveLayoutFile:
                     input.content,
                     input.filename,
                     max_rows=MAX_LAYOUT_ROWS,
+                    max_columns=MAX_LAYOUT_COLUMNS,
+                    max_uncompressed_bytes=MAX_LAYOUT_UNPACKED_BYTES,
                     # The template's leading apostrophes are text, never quotes.
                     quotechar='"',
                 )

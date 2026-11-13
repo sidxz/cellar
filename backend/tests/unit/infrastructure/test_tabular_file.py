@@ -171,3 +171,33 @@ def test_openpyxl_reads_uploads_through_defusedxml() -> None:
     import openpyxl.xml
 
     assert openpyxl.xml.DEFUSEDXML
+
+
+class TestWidthAndUnpackedSize:
+    """``max_columns`` refuses a wider header before any row is read;
+    ``max_uncompressed_bytes`` refuses a spreadsheet that unpacks larger, before the
+    spreadsheet library opens it. Neither applies unless given."""
+
+    def test_csv_wider_than_the_cap_is_refused(self) -> None:
+        content = ",".join(f"c{i}" for i in range(65)).encode() + b"\nx\n"
+        with pytest.raises(TabularParseError, match="more than 64 columns"):
+            parse_tabular(content, "x.csv", max_columns=64)
+        assert len(parse_tabular(content, "x.csv").headers) == 65
+
+    def test_xlsx_wider_than_the_cap_is_refused(self) -> None:
+        content = _xlsx_bytes([f"c{i}" for i in range(65)], [["x"]])
+        with pytest.raises(TabularParseError, match="more than 64 columns"):
+            parse_tabular(content, "x.xlsx", max_columns=64)
+        assert len(parse_tabular(content, "x.xlsx").headers) == 65
+
+    def test_xlsx_that_unpacks_larger_than_the_limit_is_refused(self) -> None:
+        import zipfile
+
+        buf = io.BytesIO(_xlsx_bytes(["Position"], [["P1"]]))
+        with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("xl/padding.bin", b"\0" * (2 * 1024 * 1024))
+        content = buf.getvalue()
+        assert len(content) < 100_000
+        with pytest.raises(TabularParseError, match="larger than 1 MB when unpacked"):
+            parse_tabular(content, "x.xlsx", max_uncompressed_bytes=1024 * 1024)
+        assert parse_tabular(content, "x.xlsx").rows == [{"Position": "P1"}]

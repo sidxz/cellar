@@ -12,7 +12,9 @@ import pytest
 from openpyxl import Workbook
 
 from cellar.application.screening.resolve_layout_file import (
+    MAX_LAYOUT_COLUMNS,
     MAX_LAYOUT_ROWS,
+    MAX_LAYOUT_UNPACKED_BYTES,
     LayoutFile,
     ResolveLayoutFile,
     ResolveLayoutFileQuery,
@@ -430,6 +432,39 @@ async def test_too_many_rows_is_refused_without_building_every_row():
     failure = (await h(csv("Position", *lines))).failure()
     assert isinstance(failure, ValidationError) and str(MAX_LAYOUT_ROWS) in str(failure)
     assert built == [MAX_LAYOUT_ROWS + 1]
+
+
+async def test_a_header_wider_than_64_columns_is_refused_before_any_row_is_read():
+    """0.34 MB: 50,000 header columns and 2,001 one-cell rows. Padded to every header,
+    the rows alone would take gigabytes."""
+    import tracemalloc
+
+    content = csv("Position," + ",".join(f"c{i}" for i in range(50_000)), *(["x"] * 2001))
+    h = Harness()
+    tracemalloc.start()
+    try:
+        failure = (await h(content)).failure()
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+    assert isinstance(failure, ValidationError)
+    assert str(failure) == f"The file has more than {MAX_LAYOUT_COLUMNS} columns"
+    assert peak < 20 * 1024 * 1024
+
+
+async def test_a_spreadsheet_that_unpacks_larger_than_50_mb_is_refused():
+    import zipfile
+
+    wb = Workbook()
+    wb.active.append(["Position"])  # type: ignore[union-attr]
+    buf = io.BytesIO()
+    wb.save(buf)
+    with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("xl/padding.bin", b"\0" * (MAX_LAYOUT_UNPACKED_BYTES + 1))
+    h = Harness()
+    failure = (await h(buf.getvalue(), "layout.xlsx")).failure()
+    assert isinstance(failure, ValidationError)
+    assert str(failure) == "The spreadsheet is larger than 50 MB when unpacked"
 
 
 async def test_run_not_found():
