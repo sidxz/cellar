@@ -214,15 +214,26 @@ export function currentChannel(set: CurveSet) {
   return set.channels.find((c) => c.key === set.channel);
 }
 
+/** A temperature window, drawn as a shaded band. */
+export interface CurveBand {
+  low: number;
+  high: number;
+  label: string;
+}
+
 export function buildCurveFigure(
   args: {
     set: CurveSet;
     drawn: ReadonlySet<string>;
     showReported: boolean;
     canvas: "screen" | "export";
+    /** By well id, the counted melting steps on this signal; given, they are
+     *  the vertical lines instead of the reported values. */
+    steps?: ReadonlyMap<string, readonly number[]>;
+    windows?: readonly CurveBand[];
   } & CurveColouring,
 ): { data: Record<string, unknown>[]; layout: Record<string, unknown> } {
-  const { set, drawn, showReported, canvas } = args;
+  const { set, drawn, showReported, canvas, steps, windows = [] } = args;
   const exporting = canvas === "export";
   // The exported figure sits on white, so it always takes the light set.
   const colouring: CurveColouring = {
@@ -268,13 +279,15 @@ export function buildCurveFigure(
       ...(group && { legendgroup: group.key, showlegend: firstOfGroup }),
     });
     if (!showReported) continue;
-    for (const r of curve.reported) {
-      if (r.unit !== xUnit) continue;
+    const lines = steps
+      ? (steps.get(p.well_id) ?? [])
+      : curve.reported.filter((r) => r.unit === xUnit).map((r) => r.value);
+    for (const x of lines) {
       shapes.push({
         type: "line",
         xref: "x",
-        x0: r.value,
-        x1: r.value,
+        x0: x,
+        x1: x,
         yref: "paper",
         y0: 0,
         y1: 1,
@@ -292,6 +305,20 @@ export function buildCurveFigure(
   const grid = light ? CHART_CANVAS.gridLight : CHART_AXIS.grid;
   const ink = light ? CHART_CANVAS.label : CHART_AXIS.label;
   const background = exporting ? CHART_CANVAS.background : "rgba(0,0,0,0)";
+  const bands = windows.map((w) => ({
+    type: "rect",
+    xref: "x",
+    x0: w.low,
+    x1: w.high,
+    yref: "paper",
+    y0: 0,
+    y1: 1,
+    // Alpha in the fill, not shape opacity, so the label stays legible.
+    fillcolor: `${ink}1f`,
+    line: { width: 0 },
+    layer: "below",
+    label: { text: w.label, textposition: "top center", font: { color: ink, size: 11 } },
+  }));
   const yTitle = !channel
     ? ""
     : set.view === "derivative"
@@ -313,7 +340,7 @@ export function buildCurveFigure(
       showlegend: exporting && colouring.colourMode !== "highlight",
       hovermode: "closest",
       font: { color: ink, size: 12 },
-      shapes,
+      shapes: [...bands, ...shapes],
       xaxis: { title: { text: xTitle }, gridcolor: grid, linecolor: grid, zeroline: false },
       yaxis: {
         title: { text: yTitle },
@@ -324,6 +351,12 @@ export function buildCurveFigure(
       },
     },
   };
+}
+
+/** The x of the clicked point, from a Plotly click event. */
+export function xFromClick(event: unknown): number | null {
+  const x = (event as { points?: { x?: unknown }[] } | null)?.points?.[0]?.x;
+  return typeof x === "number" ? x : null;
 }
 
 /** The position id of the curve under the pointer, from a Plotly hover event. */

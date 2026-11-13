@@ -20,6 +20,11 @@ vi.mock("../hooks/use-run-curves", () => ({
   useRunCurves: (...args: unknown[]) => useRunCurves(...args),
 }));
 
+// Melting steps are covered in melting-steps-panel.test.tsx; here the run has none loaded.
+vi.mock("../hooks/use-melting-analysis", () => ({
+  useMeltingAnalysis: () => ({ data: undefined, refetch: vi.fn() }),
+}));
+
 const canEdit = { value: true };
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => canEdit.value }));
 vi.mock("./edit-labelling-dialog", () => ({

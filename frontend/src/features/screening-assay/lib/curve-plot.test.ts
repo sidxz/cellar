@@ -147,6 +147,39 @@ describe("buildCurveFigure", () => {
     expect(layout.shapes).toEqual([]);
   });
 
+  it("buildCurveFigure draws steps instead of reported values when steps are given", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      drawn: new Set(["w1", "w3"]),
+      showReported: true,
+      steps: new Map([["w1", [36.6, 71.3]]]),
+    });
+    const shapes = layout.shapes as { type: string; x0: number; line: { color: string } }[];
+    // w1's reported 21.5 and 22.5 give way to its steps; w3 has none.
+    expect(shapes.map((s) => [s.type, s.x0])).toEqual([
+      ["line", 36.6],
+      ["line", 71.3],
+    ]);
+    expect(shapes[0].line.color).toBe(dark.reference);
+  });
+
+  it("buildCurveFigure draws window bands", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      windows: [{ low: 50, high: 85, label: "Main" }],
+    });
+    const shapes = layout.shapes as {
+      type: string;
+      x0: number;
+      x1: number;
+      yref: string;
+      label: { text: string };
+    }[];
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]).toMatchObject({ type: "rect", x0: 50, x1: 85, yref: "paper" });
+    expect(shapes[0].label.text).toBe("Main");
+  });
+
   it("titles the axes from the channel", () => {
     const { layout } = buildCurveFigure(base) as unknown as {
       layout: { xaxis: { title: { text: string } }; yaxis: { title: { text: string } } };

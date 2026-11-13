@@ -32,6 +32,7 @@ import { flushSync } from "react-dom";
 import type { CurveView } from "../hooks/use-run-curves";
 import {
   type ColourMode,
+  type CurveBand,
   type CurveColouring,
   type CurvePalette,
   type CurveSet,
@@ -49,6 +50,7 @@ import {
   runHeading,
   sameDateTags,
   tableRows,
+  xFromClick,
 } from "../lib/curve-plot";
 import {
   COLOUR_SLOT_COUNT,
@@ -168,6 +170,13 @@ export interface CurveViewerProps {
   selectorAction?: ReactNode;
   /** The colour mode to start in; default Highlight. */
   initialColour?: { mode: ColourMode; groupBy?: GroupBy };
+  /** By well id, the counted melting steps on the current signal; given, they
+   *  are drawn instead of the reported values. */
+  steps?: ReadonlyMap<string, readonly number[]>;
+  /** Temperature windows on the current signal, drawn as shaded bands. */
+  windows?: readonly CurveBand[];
+  /** The x of a clicked point on the plot. */
+  onPlotClick?: (x: number) => void;
 }
 
 /** Pick positions, overlay their curves for one signal with the instrument's
@@ -206,6 +215,9 @@ function CurveViewerBody({
   exportName,
   selectorAction,
   initialColour,
+  steps,
+  windows,
+  onPlotClick,
   scientistOf,
 }: CurveViewerProps & { scientistOf: (userId: string) => string }) {
   // The signal and view last asked for, shown at once while their curves load.
@@ -312,8 +324,16 @@ function CurveViewerBody({
     () =>
       tooMany
         ? null
-        : buildCurveFigure({ set, drawn, showReported, canvas: "screen", ...colouring }),
-    [tooMany, set, drawn, showReported, colouring],
+        : buildCurveFigure({
+            set,
+            drawn,
+            showReported,
+            canvas: "screen",
+            steps,
+            windows,
+            ...colouring,
+          }),
+    [tooMany, set, drawn, showReported, colouring, steps, windows],
   );
   const columns = useMemo(() => reportedColumns(set), [set]);
   const rows = useMemo(
@@ -328,6 +348,15 @@ function CurveViewerBody({
     [],
   );
   const onUnhover = useCallback(() => flushSync(() => setFocusedId(null)), []);
+  // ponytail: Plotly fires a click only on a drawn point, so the value is the
+  // nearest measured x; a click on empty plot area does nothing.
+  const onClick = useCallback(
+    (ev: unknown) => {
+      const x = xFromClick(ev);
+      if (x !== null) onPlotClick?.(x);
+    },
+    [onPlotClick],
+  );
 
   const colourOf = (id: string) => {
     const p = byId.get(id);
@@ -340,6 +369,8 @@ function CurveViewerBody({
       drawn,
       showReported,
       canvas: "export",
+      steps,
+      windows,
       ...colouring,
     });
     getPlotlyGlobal()?.downloadImage?.(exported, {
@@ -476,9 +507,9 @@ function CurveViewerBody({
             )}
           </div>
         </Field>
-        <Field label="Reported values">
+        <Field label={steps ? "Melting steps" : "Reported values"}>
           <Segmented
-            label="Reported values"
+            label={steps ? "Melting steps" : "Reported values"}
             value={showReported ? "on" : "off"}
             options={[
               { value: "on", label: "Lines on" },
@@ -561,6 +592,7 @@ function CurveViewerBody({
             useResizeHandler
             onHover={onHover}
             onUnhover={onUnhover}
+            onClick={onClick}
           />
         </div>
       ) : (

@@ -5,19 +5,21 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { cn, shortId } from "@/shared/lib/utils";
 import { useMemo, useRef, useState } from "react";
+import { useMeltingAnalysis } from "../hooks/use-melting-analysis";
 import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
-import { curveSetFromRun } from "../lib/curve-plot";
+import { currentChannel, curveSetFromRun, orderedPositions } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
+import { MeltingStepsPanel } from "./melting-steps-panel";
 
 const PLOT_HEIGHT = "h-[400px]";
 
-/** The Curves tab: pick positions, overlay their curves for one signal with
- *  the instrument's reported values as lines, read a table of them, export
- *  the figure. */
+/** The Traces tab: pick positions, overlay their traces for one signal with
+ *  their melting steps as lines and the temperature windows as bands, read a
+ *  table of them, review the steps, export the figure. */
 export function RunCurvesPanel({
   runId,
   run,
@@ -54,6 +56,28 @@ export function RunCurvesPanel({
   const [showReferences, setShowReferences] = useState(false);
   const set = useMemo(() => (data ? curveSetFromRun(data) : null), [data]);
 
+  const melting = useMeltingAnalysis(runId);
+  const analysis = melting.data;
+  // The value field of the open step form; a plot click fills it.
+  const [stepValue, setStepValue] = useState("");
+  const channelKey = set?.channel ?? null;
+  const steps = useMemo(() => {
+    if (!analysis) return undefined;
+    const byWell = new Map<string, number[]>();
+    for (const s of analysis.steps) {
+      if (s.channel_key !== channelKey || s.status === "rejected") continue;
+      byWell.set(s.well_id, [...(byWell.get(s.well_id) ?? []), s.value]);
+    }
+    return byWell;
+  }, [analysis, channelKey]);
+  const windows = useMemo(
+    () =>
+      analysis?.windows
+        .filter((w) => w.channel_key === channelKey)
+        .map((w) => ({ low: w.low, high: w.high, label: w.window })),
+    [analysis, channelKey],
+  );
+
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
   if (!data || !set) {
     return (
@@ -67,43 +91,60 @@ export function RunCurvesPanel({
   const editRefusal = run ? labellingEditRefusal(run) : null;
 
   return (
-    <CurveViewer
-      set={set}
-      showReferences={showReferences}
-      onShowReferencesChange={setShowReferences}
-      selection={selection}
-      onSelectionChange={setSelection}
-      onChannelChange={setChannel}
-      onViewChange={setView}
-      onWindowChange={setDerivativeWindow}
-      pending={isPlaceholderData}
-      failed={failed}
-      exportName={`traces-run-${shortId(data.run_id)}`}
-      selectorAction={
-        run &&
-        canEdit && (
-          <>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={!!editRefusal}
-              title={editRefusal ?? undefined}
-              onClick={() => setEditOpen(true)}
-            >
-              Edit labeling
-            </Button>
-            <EditLabellingDialog
-              run={run}
-              positions={data.positions}
-              doseUnit={doseUnit}
-              open={editOpen}
-              onOpenChange={setEditOpen}
-              onReload={refetch}
-            />
-          </>
-        )
-      }
-    />
+    <div className="space-y-6">
+      <CurveViewer
+        set={set}
+        steps={steps}
+        windows={windows}
+        onPlotClick={(x) => setStepValue(String(x))}
+        showReferences={showReferences}
+        onShowReferencesChange={setShowReferences}
+        selection={selection}
+        onSelectionChange={setSelection}
+        onChannelChange={setChannel}
+        onViewChange={setView}
+        onWindowChange={setDerivativeWindow}
+        pending={isPlaceholderData}
+        failed={failed}
+        exportName={`traces-run-${shortId(data.run_id)}`}
+        selectorAction={
+          run &&
+          canEdit && (
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={!!editRefusal}
+                title={editRefusal ?? undefined}
+                onClick={() => setEditOpen(true)}
+              >
+                Edit labeling
+              </Button>
+              <EditLabellingDialog
+                run={run}
+                positions={data.positions}
+                doseUnit={doseUnit}
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                onReload={refetch}
+              />
+            </>
+          )
+        }
+      />
+      {analysis && (
+        <MeltingStepsPanel
+          runId={runId}
+          analysis={analysis}
+          positions={orderedPositions(set).filter((p) => selection.selected.has(p.well_id))}
+          channel={set.channel}
+          unit={currentChannel(set)?.x_unit ?? ""}
+          value={stepValue}
+          onValueChange={setStepValue}
+          onReload={melting.refetch}
+        />
+      )}
+    </div>
   );
 }
