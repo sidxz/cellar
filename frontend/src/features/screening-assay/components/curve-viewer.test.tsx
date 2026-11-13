@@ -463,6 +463,16 @@ describe("CurveViewer", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("words the reference switch for one run or for several", () => {
+    const { unmount } = render(<Harness callbacks={callbacks()} />);
+    expect(screen.getByRole("switch", { name: "Show reference positions" })).toBeInTheDocument();
+    unmount();
+    render(<Harness callbacks={callbacks()} set={twoRuns} />);
+    expect(
+      screen.getByRole("switch", { name: "Show each run's reference positions" }),
+    ).toBeInTheDocument();
+  });
+
   it("lists a drawn position without a curve as not shown, once loading has finished", () => {
     const cb = callbacks();
     const { rerender } = render(<Harness callbacks={cb} set={twoRuns} pending />);

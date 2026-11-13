@@ -380,7 +380,9 @@ function CurveViewerBody({
         <div className="flex items-center gap-2">
           <Switch id={switchId} checked={showReferences} onCheckedChange={onShowReferencesChange} />
           <Label htmlFor={switchId} className="text-sm font-normal">
-            Show each run's reference positions
+            {set.groups.length > 1
+              ? "Show each run's reference positions"
+              : "Show reference positions"}
           </Label>
         </div>
       </div>

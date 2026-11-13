@@ -227,6 +227,7 @@ export function CompoundComparison({
                       {/* Once per protocol, on its first row. */}
                       {channels.findIndex((c) => c.protocolId === channel.protocolId) === index && (
                         <CompoundCurvesButton
+                          className="text-foreground"
                           target={curvesTarget(
                             protocols.find((p) => p.id === channel.protocolId),
                             molecules.map(compoundRef),
