@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import uuid
+from typing import Literal
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from cellar.application.screening.get_run_curves import GetRunCurvesQuery, RunCurves
@@ -40,6 +41,9 @@ class RunCurvesResponse(BaseModel):
     # Key of the channel whose curves are returned; null when the run has no curves.
     channel: str | None
     curves: list[CurveSeriesModel]
+    # "measured" or "derivative"; for the derivative, the one smoothing window used (x units).
+    view: str
+    window: float | None
 
     @classmethod
     def from_result(cls, out: RunCurves) -> RunCurvesResponse:
@@ -58,6 +62,8 @@ class RunCurvesResponse(BaseModel):
                 for c in out.channels
             ],
             channel=out.channel.key if out.channel else None,
+            view=out.view,
+            window=out.window,
             curves=[
                 CurveSeriesModel(
                     well_id=c.well_id,
@@ -85,11 +91,21 @@ async def get_run_curves(
     auth: AuthDep,
     uc: GetRunCurvesDep,
     channel: str | None = None,
+    view: Literal["measured", "derivative"] = "measured",
+    window: float | None = Query(None, gt=0),
 ) -> RunCurvesResponse:
     """The run's holder, positions and channels, with the curves of one channel
-    (the one asked for, else the first)."""
+    (the one asked for, else the first). ``view=derivative`` returns the smoothed first
+    derivative instead, calculated on request (``window`` in x units, default 5% of the
+    widest x range) and never stored."""
     result = await uc(
-        GetRunCurvesQuery(workspace_id=auth.workspace_id, run_id=run_id, channel=channel),
+        GetRunCurvesQuery(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            channel=channel,
+            view=view,
+            window=window,
+        ),
         auth=auth,
     )
     return RunCurvesResponse.from_result(result_to_response(result))

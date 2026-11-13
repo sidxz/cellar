@@ -206,6 +206,7 @@ from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.parsers import TabularParser
 from cellar.domain.audit_compliance.repository import AuditRepository
+from cellar.domain.screening_assay.curve_derivative import CurveDerivativeService
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
@@ -1024,6 +1025,7 @@ def register_screening(container: Container) -> None:
             uow=uow,
             curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
             plate_map_reader=c[PlateMapReader],
+            derivative=c[CurveDerivativeService],
         )
 
     container.define(GetRunCurves, _get_run_curves)

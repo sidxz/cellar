@@ -246,6 +246,21 @@ async def test_preview_then_import_then_read_curves(
     )
 
 
+async def test_derivative_view_over_http(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    await _import(client, s)
+    url = f"/api/v1/runs/{s.run_id}/curves"
+    body = (await client.get(url, params={"view": "derivative"})).json()
+    assert body["view"] == "derivative" and body["window"] > 0 and len(body["curves"]) == 3
+    assert (await client.get(url, params={"view": "derivative", "window": 0})).status_code == 422
+    measured = (await client.get(url)).json()
+    assert measured["view"] == "measured" and measured["window"] is None
+
+
 async def test_plate_map_reports_holder_and_position_labels(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

@@ -11,6 +11,7 @@ from cellar.application.auth import AuthContext, require_same_workspace, require
 from cellar.application.screening.plate_map_reader import PlateMapReader, WellMapEntry
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.curve_derivative import CurveDerivativeService, default_window
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import holder_label
 from cellar.domain.screening_assay.measured_curve import CurveChannel, ReportedPoint
@@ -23,6 +24,8 @@ class GetRunCurvesQuery(Query):
     workspace_id: uuid.UUID
     run_id: uuid.UUID
     channel: str | None = None
+    view: str = "measured"  # "measured" | "derivative"
+    window: float | None = None  # derivative smoothing window, in x units
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,8 @@ class RunCurves:
     channels: tuple[CurveChannel, ...]  # ordered by channel order
     channel: CurveChannel | None  # the one whose curves are returned
     curves: tuple[CurveSeries, ...]
+    view: str = "measured"
+    window: float | None = None  # the window used; None for measured
 
 
 class GetRunCurves:
@@ -55,10 +60,12 @@ class GetRunCurves:
         uow: UnitOfWork,
         curve_repo: MeasuredCurveRepository,
         plate_map_reader: PlateMapReader,
+        derivative: CurveDerivativeService,
     ) -> None:
         self._uow = uow
         self._curve_repo = curve_repo
         self._plate_map_reader = plate_map_reader
+        self._derivative = derivative
 
     async def __call__(
         self, input: GetRunCurvesQuery, auth: AuthContext | None = None
@@ -99,6 +106,18 @@ class GetRunCurves:
         rows = holder.holder_rows if holder else None
         columns = holder.holder_columns if holder else None
 
+        series = [
+            CurveSeries(well_id=c.well_id, x=c.x, y=c.y, reported=c.reported)
+            for c in sorted(curves, key=lambda c: order.get(c.well_id, len(order)))
+        ]
+        window: float | None = None
+        if input.view == "derivative" and series:
+            # One window for the whole response; calculated here, never stored.
+            window = input.window or default_window([(min(s.x), max(s.x)) for s in series])
+            series = [self._differentiate(s, window) for s in series]
+        elif input.view == "derivative":
+            window = input.window
+
         return Success(
             RunCurves(
                 run_id=input.run_id,
@@ -110,9 +129,12 @@ class GetRunCurves:
                 positions=positions,
                 channels=channels,
                 channel=channel,
-                curves=tuple(
-                    CurveSeries(well_id=c.well_id, x=c.x, y=c.y, reported=c.reported)
-                    for c in sorted(curves, key=lambda c: order.get(c.well_id, len(order)))
-                ),
+                curves=tuple(series),
+                view=input.view,
+                window=window,
             )
         )
+
+    def _differentiate(self, s: CurveSeries, window: float) -> CurveSeries:
+        d = self._derivative.derivative(s.x, s.y, window=window)
+        return CurveSeries(well_id=s.well_id, x=d.x, y=d.y, reported=s.reported)

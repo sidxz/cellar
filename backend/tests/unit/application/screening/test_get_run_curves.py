@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from types import TracebackType
 from typing import Self
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -15,6 +15,7 @@ from cellar.application.screening.plate_map_reader import (
     PlateMapResult,
     WellMapEntry,
 )
+from cellar.domain.screening_assay.curve_derivative import DerivativeCurve
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.holder import holder_label, position_label
 from cellar.domain.screening_assay.measured_curve import (
@@ -94,8 +95,15 @@ class Harness:
                 self._curve(e, channel_key) for e in reversed(self.entries)
             ]
         )
+        self.derivative = MagicMock()
+        self.derivative.derivative = MagicMock(
+            side_effect=lambda x, y, *, window: DerivativeCurve(x=(0.5, 1.5), y=(9.0, 9.5))
+        )
         self.uc = GetRunCurves(
-            uow=FakeUoW(), curve_repo=self.curve_repo, plate_map_reader=self.reader
+            uow=FakeUoW(),
+            curve_repo=self.curve_repo,
+            plate_map_reader=self.reader,
+            derivative=self.derivative,
         )
 
     def _curve(self, entry: WellMapEntry, key: str) -> MeasuredCurve:
@@ -115,8 +123,12 @@ class Harness:
             reader="stub",
         )
 
-    def query(self, channel: str | None = None) -> GetRunCurvesQuery:
-        return GetRunCurvesQuery(workspace_id=self.ws, run_id=self.run_id, channel=channel)
+    def query(
+        self, channel: str | None = None, *, view: str = "measured", window: float | None = None
+    ) -> GetRunCurvesQuery:
+        return GetRunCurvesQuery(
+            workspace_id=self.ws, run_id=self.run_id, channel=channel, view=view, window=window
+        )
 
 
 async def test_returns_first_channel_by_default():
@@ -185,3 +197,29 @@ async def test_no_role_raises_authorization_error():
     with pytest.raises(AuthorizationError):
         await h.uc(h.query(), auth=FakeAuth(role="guest", workspace_id=h.ws))
     h.reader.get_plate_map.assert_not_awaited()
+
+
+async def test_derivative_view_states_the_window_used():
+    h = Harness()
+    out = (await h.uc(h.query(view="derivative"), auth=h.viewer)).unwrap()
+    x_range = 21.0 - 20.0
+    assert out.view == "derivative" and out.window == pytest.approx(0.05 * x_range)
+    h.derivative.derivative.assert_called()
+    assert out.curves[0].x == (0.5, 1.5) and out.curves[0].y == (9.0, 9.5)
+    assert out.curves[0].reported[0].value == 55.0  # reported values unchanged
+    assert {c.kwargs["window"] for c in h.derivative.derivative.call_args_list} == {out.window}
+
+
+async def test_measured_view_does_not_call_the_derivative_service():
+    h = Harness()
+    out = (await h.uc(h.query(), auth=h.viewer)).unwrap()
+    assert out.view == "measured" and out.window is None
+    assert out.curves[0].x == (20.0, 21.0)
+    h.derivative.derivative.assert_not_called()
+
+
+async def test_explicit_window_is_passed_through():
+    h = Harness()
+    out = (await h.uc(h.query(view="derivative", window=2.5), auth=h.viewer)).unwrap()
+    assert out.window == 2.5
+    assert {c.kwargs["window"] for c in h.derivative.derivative.call_args_list} == {2.5}
