@@ -134,7 +134,9 @@ def test_manual_step_has_no_instrument_value_and_checks_range():
     step = MeltingStep.manual(
         **kwargs, channel_key="ratio", value=58.5, x_range=RANGE, reason=" missed ", by=u
     )
-    assert step.source is MeltingStepSource.MANUAL and step.status is UNREVIEWED
+    # the scientist placed it, so it is reviewed, as a corrected step is
+    assert step.source is MeltingStepSource.MANUAL
+    assert step.status is ACCEPTED
     assert step.instrument_value is None and step.instrument_label is None
     assert step.value == 58.5 and step.reason == "missed" and step.changed_by == u
 

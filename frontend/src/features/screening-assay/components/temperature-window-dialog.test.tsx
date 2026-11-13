@@ -86,11 +86,30 @@ describe("TemperatureWindowDialog", () => {
     renderDialog();
     fill("Main", "85", "50");
     expect(save()).toBeDisabled();
+    expect(screen.getByText("Low must be below High.")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("High (°C)"), { target: { value: "90" } });
     expect(save()).toBeEnabled();
+    expect(screen.queryByText("Low must be below High.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Tm"));
     fireEvent.click(screen.getByLabelText("ΔTm"));
     expect(save()).toBeDisabled();
+  });
+
+  it("starts empty each time it opens", () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+    );
+    const { rerender } = render(
+      <TemperatureWindowDialog open onOpenChange={vi.fn()} protocolId="p1" />,
+      { wrapper },
+    );
+    fill("Low", "25", "50");
+    rerender(<TemperatureWindowDialog open={false} onOpenChange={vi.fn()} protocolId="p1" />);
+    rerender(<TemperatureWindowDialog open onOpenChange={vi.fn()} protocolId="p1" />);
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+    expect(screen.getByLabelText("Low (°C)")).toHaveValue(null);
+    expect(screen.getByLabelText("High (°C)")).toHaveValue(null);
   });
 
   it("tells the user to import a run when the protocol has no traces", () => {

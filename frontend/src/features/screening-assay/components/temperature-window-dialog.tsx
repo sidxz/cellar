@@ -21,7 +21,7 @@ import {
 } from "@/shared/components/ui/select";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useCurvePositions } from "../hooks/use-curve-positions";
 import { useAddTemperatureWindow } from "../hooks/use-protocols";
 
@@ -53,6 +53,19 @@ export function TemperatureWindowDialog({
   const [deltaTm, setDeltaTm] = useState(true);
   const add = useAddTemperatureWindow(protocolId);
   const { data } = useCurvePositions(protocolId, NO_FILTER, open);
+  const { reset } = add;
+
+  // Each opening starts a new window, not the last one's leftovers.
+  useEffect(() => {
+    if (!open) return;
+    setName("");
+    setChannelKey("");
+    setLow("");
+    setHigh("");
+    setTm(true);
+    setDeltaTm(true);
+    reset();
+  }, [open, reset]);
 
   // Runs share channels; list each signal once.
   const channels = useMemo(() => {
@@ -65,6 +78,7 @@ export function TemperatureWindowDialog({
 
   const lowN = low.trim() === "" ? Number.NaN : Number(low);
   const highN = high.trim() === "" ? Number.NaN : Number(high);
+  const boundsInverted = lowN >= highN; // false while either is empty
   const canSave =
     name.trim() !== "" &&
     channelKey !== "" &&
@@ -152,6 +166,9 @@ export function TemperatureWindowDialog({
                   onChange={(e) => setHigh(e.target.value)}
                 />
               </div>
+              {boundsInverted && (
+                <p className="col-span-2 text-destructive text-sm">Low must be below High.</p>
+              )}
             </div>
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">

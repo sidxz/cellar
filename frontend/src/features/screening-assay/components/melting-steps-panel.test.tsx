@@ -240,6 +240,44 @@ describe("MeltingStepsPanel", () => {
     });
   });
 
+  it("shows the value to two decimals; saving it untouched sends the exact value, no reason", async () => {
+    analysis = {
+      ...analysis,
+      steps: [step({ id: "s9", well_id: "w1", value: 36.606635, instrument_value: 36.606635 })],
+    };
+    renderPanel();
+    const table = await select("Position 1");
+    fireEvent.click(within(row(table, "36.61")).getByRole("button", { name: "Correct" }));
+    expect(screen.getByLabelText("Value")).toHaveValue(36.61);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(writes()).toHaveLength(1));
+    expect(writes()[0].data).toEqual({ expected_version: 1, status: "accepted", value: 36.606635 });
+  });
+
+  it("a plot click fills two decimals", async () => {
+    renderPanel();
+    await select("Position 3");
+    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
+    plotProps.at(-1)?.onClick?.({ points: [{ x: 32.646001, y: 2 }] });
+    await waitFor(() => expect(screen.getByLabelText("Value")).toHaveValue(32.65));
+  });
+
+  it("names the line switch Markers, since it covers steps and onsets", async () => {
+    renderPanel();
+    await select("Position 1");
+    expect(screen.getByRole("tablist", { name: "Markers" })).toBeInTheDocument();
+  });
+
+  it("cuts a long reason short and keeps the whole text on hover", async () => {
+    const long = "shoulder at the start of the ramp, not an unfolding step";
+    analysis = { ...analysis, steps: [{ ...steps[1], reason: long }] };
+    renderPanel();
+    const table = await select("Position 2");
+    const cell = within(row(table, "64")).getByText(long);
+    expect(cell).toHaveAttribute("title", long);
+    expect(cell.className).toContain("truncate");
+  });
+
   it("re-sends the current value and reason on Accept", async () => {
     analysis = { ...analysis, steps: [{ ...steps[1], status: "unreviewed" }] };
     renderPanel();

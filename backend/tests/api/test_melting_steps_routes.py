@@ -225,6 +225,7 @@ async def test_add_manual_step_returns_201(
     body = resp.json()
     assert body["recalculated"] is True
     assert body["step"]["source"] == "manual"
+    assert body["step"]["status"] == "accepted"
     assert (body["step"]["instrument_value"], body["step"]["instrument_label"]) == (None, None)
 
     lower = _window(await _analysis(client, s.run_id), "Lower")

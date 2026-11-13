@@ -66,6 +66,14 @@ describe("MeltWindowResults", () => {
     expect(screen.getByText("No reference value in this window")).toBeTruthy();
   });
 
+  it("ticks the concentration axis at the measured concentrations", () => {
+    plots.length = 0;
+    render1(win(), [pos("x", 25), pos("y", 6.25)]);
+    const { xaxis } = plots[0].layout as { xaxis: { tickvals: number[]; ticktext: string[] } };
+    expect(xaxis.tickvals).toEqual([6.25, 25]);
+    expect(xaxis.ticktext).toEqual(["6.25", "25"]);
+  });
+
   it("draws no plot when no batch has two concentrations", () => {
     render1(win(), [pos("x", 1), pos("y", 1)]);
     expect(screen.queryByTestId("plot")).toBeNull();

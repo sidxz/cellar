@@ -46,6 +46,18 @@ type Form =
 
 const baseline = (s: MeltingStep) => s.instrument_value ?? s.value;
 
+/** A temperature as the value field shows it: two decimals, no trailing zeros. */
+export function stepInput(v: number): string {
+  return String(Number(v.toFixed(2)));
+}
+
+/** The value the field stands for: an untouched rounded copy of the step's
+ *  stored or instrument value means that exact value, so it is no change. */
+function entered(step: MeltingStep, parsed: number): number {
+  for (const v of [step.value, baseline(step)]) if (parsed === Number(stepInput(v))) return v;
+  return parsed;
+}
+
 const FORM_TITLES = {
   reject: "Reject",
   correct: "Correct",
@@ -162,7 +174,7 @@ export function MeltingStepsPanel({
         ? reason !== "" || form.step.value === baseline(form.step)
         : form.kind === "add"
           ? validValue && byWell.has(form.wellId)
-          : validValue && (reason !== "" || parsed === baseline(form.step)));
+          : validValue && (reason !== "" || entered(form.step, parsed) === baseline(form.step)));
 
   const save = () => {
     if (!form || !canSave) return;
@@ -182,7 +194,7 @@ export function MeltingStepsPanel({
     } else if (form.kind === "restore") {
       send(form.step, review(form.step, form.status, form.step.value, reason));
     } else {
-      send(form.step, review(form.step, "accepted", parsed, reason));
+      send(form.step, review(form.step, "accepted", entered(form.step, parsed), reason));
     }
   };
 
@@ -268,7 +280,9 @@ export function MeltingStepsPanel({
                       {s.source === "manual" ? "Manual" : "Instrument"}
                     </TableCell>
                     <TableCell>{STATUS_LABELS[s.status]}</TableCell>
-                    <TableCell className="whitespace-normal">{s.reason}</TableCell>
+                    <TableCell className="max-w-56 truncate" title={s.reason ?? undefined}>
+                      {s.reason}
+                    </TableCell>
                     <TableCell className="text-xs">
                       {s.changed_by && (
                         <>
@@ -322,7 +336,7 @@ export function MeltingStepsPanel({
                           onClick={() =>
                             open(
                               { kind: "correct", step: s, reason: s.reason ?? "" },
-                              String(s.value),
+                              stepInput(s.value),
                             )
                           }
                         >
@@ -391,7 +405,7 @@ export function MeltingStepsPanel({
                       variant="outline"
                       size="sm"
                       onClick={() => {
-                        onValueChange(String(form.step.instrument_value));
+                        onValueChange(stepInput(form.step.instrument_value as number));
                         // The reason explained a value that is being given up.
                         setForm({ ...form, reason: "" });
                       }}

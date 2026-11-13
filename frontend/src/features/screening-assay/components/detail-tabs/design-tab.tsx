@@ -191,10 +191,13 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           </div>
           {canAddMetadata && (
             <div className="flex gap-2">
-              <Button size="sm" variant="outline" onClick={() => setAddWindowOpen(true)}>
-                <Plus className="mr-1 h-4 w-4" />
-                Temperature window
-              </Button>
+              {/* A window reads melting steps, which only traced runs have. */}
+              {protocol.has_measured_curves && (
+                <Button size="sm" variant="outline" onClick={() => setAddWindowOpen(true)}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Temperature window
+                </Button>
+              )}
               <Button size="sm" variant="outline" onClick={() => setAddReadoutOpen(true)}>
                 <Plus className="mr-1 h-4 w-4" />
                 Add

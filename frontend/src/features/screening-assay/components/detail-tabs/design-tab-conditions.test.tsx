@@ -145,3 +145,13 @@ describe("DesignTab condition dialog", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("DesignTab temperature window button", () => {
+  it("is offered only on a protocol whose runs have traces", () => {
+    const { unmount } = render(<DesignTab protocol={protocol} protocolId="p1" />);
+    expect(screen.queryByRole("button", { name: /Temperature window/ })).not.toBeInTheDocument();
+    unmount();
+    render(<DesignTab protocol={{ ...protocol, has_measured_curves: true }} protocolId="p1" />);
+    expect(screen.getByRole("button", { name: /Temperature window/ })).toBeInTheDocument();
+  });
+});

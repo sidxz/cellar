@@ -173,7 +173,8 @@ export function StagePopoverForm({
           .find((u) => u && u !== "-");
         return {
           id: ch.id,
-          label: `${protocolName} › ${ch.label}${unit ? ` (${unit})` : ""}`,
+          // Readout first: a narrow picker cut at the protocol name hid which readout it was.
+          label: `${ch.label}${unit ? ` (${unit})` : ""} · ${protocolName}`,
         };
       });
   }, [campaign.channels, campaign.results, protocolNameById]);

@@ -14,6 +14,7 @@ import {
   DOSE_RESPONSE_KEY,
   INSTRUMENT_FILE_FORMATS_KEY,
   MEASURED_CURVES_KEY,
+  MELTING_ANALYSIS_KEY,
   PLATE_MAP_KEY,
   READOUT_DATA_KEY,
   RUNS_KEY,
@@ -89,6 +90,7 @@ export function useImportInstrumentFile(runId: string) {
         DOSE_RESPONSE_KEY,
         PLATE_MAP_KEY,
         MEASURED_CURVES_KEY,
+        [...MELTING_ANALYSIS_KEY, runId],
         RUNS_KEY,
         [...RUN_KEY, runId],
       ]) {

@@ -117,7 +117,7 @@ async def test_add_manual_step_saves_audits_and_recalculates():
     assert kw["reason"] == "visible shoulder"
     assert {(e.field_name, e.action, e.new_value) for e in kw["entries"]} == {
         ("value", AuditAction.CREATE, "60"),
-        ("status", AuditAction.CREATE, "unreviewed"),
+        ("status", AuditAction.CREATE, "accepted"),
     }
     assert h.uow.committed
     h.engine.compute_for_run.assert_awaited_once_with(h.run.id, workspace_id=h.ws)

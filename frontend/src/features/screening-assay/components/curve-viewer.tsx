@@ -507,9 +507,10 @@ function CurveViewerBody({
             )}
           </div>
         </Field>
-        <Field label={steps ? "Melting steps" : "Reported values"}>
+        {/* With steps it governs both step and onset lines, so it names neither. */}
+        <Field label={steps ? "Markers" : "Reported values"}>
           <Segmented
-            label={steps ? "Melting steps" : "Reported values"}
+            label={steps ? "Markers" : "Reported values"}
             value={showReported ? "on" : "off"}
             options={[
               { value: "on", label: "Lines on" },

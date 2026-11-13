@@ -14,7 +14,7 @@ import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
 import { MeltWindowResults } from "./melt-window-results";
-import { MeltingStepsPanel } from "./melting-steps-panel";
+import { MeltingStepsPanel, stepInput } from "./melting-steps-panel";
 
 const PLOT_HEIGHT = "h-[400px]";
 
@@ -97,7 +97,7 @@ export function RunCurvesPanel({
         set={set}
         steps={steps}
         windows={windows}
-        onPlotClick={(x) => setStepValue(String(x))}
+        onPlotClick={(x) => setStepValue(stepInput(x))}
         showReferences={showReferences}
         onShowReferencesChange={setShowReferences}
         selection={selection}

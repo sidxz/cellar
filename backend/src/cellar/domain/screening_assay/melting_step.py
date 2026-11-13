@@ -145,6 +145,8 @@ class MeltingStep(Entity):
             channel_key=channel_key,
             source=MeltingStepSource.MANUAL,
             value=value,
+            # Placed by the scientist, so already reviewed, like a corrected step.
+            status=MeltingStepStatus.ACCEPTED,
             reason=_clean_reason(reason),
             changed_by=by,
             changed_at=datetime.now(UTC),

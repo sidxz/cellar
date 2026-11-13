@@ -74,6 +74,11 @@ function WindowSection({
     () => (w.delta_tm_readout_id ? concentrationSeries(w, positions) : []),
     [w, positions],
   );
+  // Ticks at the measured concentrations: Plotly's default log ticks label 20–50 as "2 3 4 5".
+  const doses = useMemo(
+    () => [...new Set(series.flatMap((s) => s.points.map((p) => p.dose)))].sort((a, b) => a - b),
+    [series],
+  );
   const columns = useMemo(
     () => (w.delta_tm_readout_id ? COLUMNS : COLUMNS.filter((c) => c.field !== "deltaTm")),
     [w.delta_tm_readout_id],
@@ -106,7 +111,12 @@ function WindowSection({
           }))}
           layout={{
             margin: { t: 16, r: 16, b: 48, l: 56 },
-            xaxis: { type: "log", title: { text: `Concentration (${doseUnit})` } },
+            xaxis: {
+              type: "log",
+              title: { text: `Concentration (${doseUnit})` },
+              tickvals: doses,
+              ticktext: doses.map(String),
+            },
             yaxis: { title: { text: "ΔTm (°C)" }, zeroline: false },
             shapes: [
               {

@@ -180,3 +180,18 @@ describe("StagePopoverForm — outside operator", () => {
     ]);
   });
 });
+
+describe("StagePopoverForm — readout picker", () => {
+  it("names the readout before its protocol, so a narrow box still shows it", () => {
+    render(
+      <StagePopoverForm
+        campaignId="c1"
+        campaign={campaign}
+        existing={existing}
+        onClose={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByTitle("% Inhibition · Kinase Panel")).toBeInTheDocument();
+  });
+});
