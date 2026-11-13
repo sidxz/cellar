@@ -11,6 +11,8 @@ import type {
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
   HitCriterionDTO,
+  InstrumentImportResponse,
+  InstrumentPreviewResponse,
   InterceptValueResponse,
   LatestRunResponse as LatestRunResponseModel,
   PlateData as PlateDataModel,
@@ -24,6 +26,7 @@ import type {
   ReadoutDataResponse,
   RefitDoseResponseCurveRequest,
   RunCountsResponse as RunCountsResponseModel,
+  RunCurvesResponse,
   RunResponse,
   TargetRefResponse,
   TargetResponse,
@@ -781,3 +784,7 @@ export interface CompoundFlag {
   note: string | null;
   created_at: string;
 }
+
+export type InstrumentPreview = InstrumentPreviewResponse;
+export type InstrumentImportResult = InstrumentImportResponse;
+export type RunCurves = RunCurvesResponse;

@@ -10,4 +10,5 @@ export interface PlateMapResponse {
   run_id: string;
   dose_unit: string;
   plates: PlateData[];
+  has_measured_curves: boolean;
 }

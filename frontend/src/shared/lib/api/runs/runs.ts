@@ -425,7 +425,7 @@ export const useDeleteRunApiV1RunsRunIdDelete = <TError = HTTPValidationError,
       return useMutation(mutationOptions, queryClient);
     }
     /**
- * Wipe a run's plates, wells, readouts, dose-response curves, and QC.
+ * Wipe a run's plates, wells, readouts, dose-response and measured curves, and QC.
 
 The run row itself, its metadata, and any attached files are kept.
 Only DRAFT and IN_PROGRESS runs may be reset. Locked or terminal

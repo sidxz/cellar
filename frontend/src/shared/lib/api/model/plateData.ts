@@ -9,6 +9,8 @@ import type { PlateMapSummaryModel } from './plateMapSummaryModel';
 import type { PlateDataRegisteredPlateId } from './plateDataRegisteredPlateId';
 import type { PlateDataRegisteredPlateBarcode } from './plateDataRegisteredPlateBarcode';
 import type { PlateDataRegisteredPlateLabel } from './plateDataRegisteredPlateLabel';
+import type { PlateDataHolderRows } from './plateDataHolderRows';
+import type { PlateDataHolderColumns } from './plateDataHolderColumns';
 
 export interface PlateData {
   plate_id: string;
@@ -19,4 +21,7 @@ export interface PlateData {
   registered_plate_id?: PlateDataRegisteredPlateId;
   registered_plate_barcode?: PlateDataRegisteredPlateBarcode;
   registered_plate_label?: PlateDataRegisteredPlateLabel;
+  holder_kind: string;
+  holder_rows: PlateDataHolderRows;
+  holder_columns: PlateDataHolderColumns;
 }
