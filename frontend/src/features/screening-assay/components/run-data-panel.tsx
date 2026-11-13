@@ -161,7 +161,7 @@ interface RunDataPanelProps {
 
 export function RunDataPanel({ run }: RunDataPanelProps) {
   const { data: curves } = useDoseResponseByRun(run.id);
-  const { data: plateMap } = usePlateMap(run.id);
+  const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
 
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
@@ -183,7 +183,9 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
   const [hashTab, setActiveTab] = useHashTab("readout");
   const hiddenTabs = new Set<string>(notPlate ? ["plate-map", "heat-map"] : []);
   if (!hasCurves) hiddenTabs.add("curves");
-  const activeTab = hiddenTabs.has(hashTab) ? "readout" : hashTab;
+  // Which tabs exist is known only once the plate map has loaded; until then keep the
+  // hash's tab rather than falling back, so a link to #curves still opens Curves.
+  const activeTab = !plateMapLoading && hiddenTabs.has(hashTab) ? "readout" : hashTab;
 
   // Plate header (number + physical-plate link) above each plate map.
   const renderPlate = (p: PlateData) => (

@@ -17,7 +17,7 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { Plot, getPlotlyGlobal } from "@/shared/lib/plotly";
 import { cn, shortId } from "@/shared/lib/utils";
 import { useTheme } from "next-themes";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
 import {
@@ -102,7 +102,7 @@ function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
 }
 
 function formatValue(v: number | undefined): string {
-  return v === undefined ? "" : formatMeasurementValue(v);
+  return v === undefined ? "" : formatMeasurementValue(v, 4);
 }
 
 /** The Curves tab: pick positions, overlay their curves for one signal with
@@ -115,11 +115,22 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
   // being typed, sent only on blur or Enter.
   const [derivativeWindow, setDerivativeWindow] = useState<number | undefined>();
   const [windowDraft, setWindowDraft] = useState<string | null>(null);
-  const { data, isLoading, isPlaceholderData, error } = useRunCurves(runId, {
+  const {
+    data: fetched,
+    isLoading,
+    isPlaceholderData,
+    error,
+  } = useRunCurves(runId, {
     channel,
     view,
     window: view === "derivative" ? derivativeWindow : undefined,
   });
+  // A failed request keeps the last curves' toolbar on screen, so the user can
+  // change the window or the view instead of being left with only an error.
+  const lastGood = useRef(fetched);
+  if (fetched) lastGood.current = fetched;
+  const data = fetched ?? lastGood.current;
+  const failed = !!error && !fetched;
 
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
   const [slots, setSlots] = useState<ReadonlyMap<string, number>>(() => new Map());
@@ -177,7 +188,7 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
   const onUnhover = useCallback(() => flushSync(() => setFocusedId(null)), []);
 
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
-  if (error || !data) {
+  if (!data) {
     return (
       <p className="py-8 text-center text-sm text-muted-foreground">Could not load the curves.</p>
     );
@@ -213,7 +224,7 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
     setWindowDraft(null);
   };
 
-  const hasTraces = (figure?.data.length ?? 0) > 0;
+  const hasTraces = !failed && (figure?.data.length ?? 0) > 0;
   const colours = MEASURED_CURVE_COLORS[palette];
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
 
@@ -344,9 +355,11 @@ export function RunCurvesPanel({ runId }: { runId: string }) {
             PLOT_HEIGHT,
           )}
         >
-          {selection.selected.size === 0
-            ? "Select positions above to draw their curves"
-            : "The selected positions have no curves for this signal."}
+          {failed
+            ? "Could not load the curves."
+            : selection.selected.size === 0
+              ? "Select positions above to draw their curves"
+              : "The selected positions have no curves for this signal."}
         </div>
       )}
 

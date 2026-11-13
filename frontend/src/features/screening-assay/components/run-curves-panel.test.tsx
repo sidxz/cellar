@@ -51,8 +51,8 @@ const curves: RunCurves = {
     reported:
       p.well_id === "w1"
         ? [
-            { kind: "k1", ordinal: 1, label: "Point 1", value: 21.25, unit: "°C" },
-            { kind: "k2", ordinal: 1, label: "Point 2", value: 0.004, unit: "°C" },
+            { kind: "k1", ordinal: 1, label: "Point 1", value: 36.61, unit: "°C" },
+            { kind: "k2", ordinal: 1, label: "Point 2", value: 0.004123, unit: "°C" },
           ]
         : [],
   })),
@@ -137,9 +137,9 @@ describe("RunCurvesPanel", () => {
     expect(within(table).getByText("Point 1 (°C)")).toBeInTheDocument();
     expect(within(table).getByText("Protein alone")).toBeInTheDocument();
     expect(within(table).getByText("bubble at start")).toBeInTheDocument();
-    // The application's number format, not a fixed two decimals.
-    expect(within(table).getByText("21.3")).toBeInTheDocument();
-    expect(within(table).getByText("0.004")).toBeInTheDocument();
+    // The application's number format at four significant figures.
+    expect(within(table).getByText("36.61")).toBeInTheDocument();
+    expect(within(table).getByText("0.004123")).toBeInTheDocument();
     expect(lastPlot().data).toHaveLength(1);
   });
 
@@ -227,5 +227,49 @@ describe("RunCurvesPanel", () => {
     expect(lastParams()).toMatchObject({ view: "derivative" });
     expect(lastParams()?.window).toBeUndefined();
     expect(screen.getByLabelText("Window")).toHaveValue(3.5);
+  });
+
+  it("shows the window the API used when it clamps an oversized one", () => {
+    useRunCurves.mockImplementation(
+      (_runId: string, params: { view?: string; window?: number }) => ({
+        data:
+          params.view === "derivative"
+            ? { ...curves, view: "derivative", window: Math.min(params.window ?? 3.5, 2) }
+            : curves,
+        isLoading: false,
+        isPlaceholderData: false,
+      }),
+    );
+    render(<RunCurvesPanel runId="r1" />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    const field = screen.getByLabelText("Window");
+    fireEvent.change(field, { target: { value: "99" } });
+    fireEvent.blur(field);
+    expect(lastParams()).toMatchObject({ window: 99 });
+    expect(screen.getByLabelText("Window")).toHaveValue(2);
+  });
+
+  it("keeps the toolbar on screen when a refetch with a window fails", () => {
+    useRunCurves.mockImplementation((_runId: string, params: { view?: string; window?: number }) =>
+      params.window === 5
+        ? { data: undefined, error: new Error("boom"), isLoading: false, isPlaceholderData: false }
+        : {
+            data:
+              params.view === "derivative"
+                ? { ...curves, view: "derivative", window: params.window ?? 3.5 }
+                : curves,
+            isLoading: false,
+            isPlaceholderData: false,
+          },
+    );
+    render(<RunCurvesPanel runId="r1" />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    fireEvent.change(screen.getByLabelText("Window"), { target: { value: "5" } });
+    fireEvent.keyDown(screen.getByLabelText("Window"), { key: "Enter" });
+    expect(screen.getByText("Could not load the curves.")).toBeInTheDocument();
+    expect(screen.getByLabelText("Window")).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Measured" })).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Measured" }));
+    expect(screen.queryByText("Could not load the curves.")).not.toBeInTheDocument();
   });
 });

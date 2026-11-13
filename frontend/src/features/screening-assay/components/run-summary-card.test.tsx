@@ -60,6 +60,15 @@ describe("RunSummaryCard facts band", () => {
     expect(screen.queryByText("1 plate")).not.toBeInTheDocument();
   });
 
+  it("treats any holder that is not a plate as one, not only a cassette", () => {
+    usePlateMap.mockReturnValueOnce({
+      data: { plates: [{ holder_kind: "rack", holder_label: "Holder of 8 positions" }] },
+    });
+    render(<RunSummaryCard run={run()} protocol={undefined} canEditMeta canEditTags />);
+    expect(screen.getByText("Holder of 8 positions")).toBeInTheDocument();
+    expect(screen.queryByText("1 plate")).not.toBeInTheDocument();
+  });
+
   it("keeps format and count for a run on ordinary plates", () => {
     usePlateMap.mockReturnValueOnce({
       data: { plates: [{ holder_kind: "plate", holder_label: "Plate" }] },

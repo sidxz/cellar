@@ -84,6 +84,7 @@ const result: InstrumentImportResult = {
   file_attached: true,
   attachment_id: "att-1",
   attachment_warning: null,
+  stored_file_name: null,
 };
 
 function baseHook(
@@ -226,12 +227,20 @@ describe("InstrumentImportWizard", () => {
         ...result,
         file_attached: false,
         attachment_id: null,
-        attachment_warning: "storage unavailable",
+        attachment_warning: "The file could not be attached. Upload it on the Files tab.",
       },
     });
     renderWizard();
-    expect(screen.getByText(/the file could not be attached/i)).toBeInTheDocument();
-    expect(screen.getByText(/storage unavailable/)).toBeInTheDocument();
+    expect(screen.getAllByText(/the file could not be attached/i)).toHaveLength(1);
+    expect(screen.getByText(/the data is imported/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /done/i })).toBeInTheDocument();
+  });
+
+  it("the result step names the stored file when it was renamed", () => {
+    hookState.value = withPreview(4, { result: { ...result, stored_file_name: "run (2).xlsx" } });
+    renderWizard();
+    expect(
+      screen.getByText(/the original file is on the files tab as run \(2\)\.xlsx/i),
+    ).toBeInTheDocument();
   });
 });

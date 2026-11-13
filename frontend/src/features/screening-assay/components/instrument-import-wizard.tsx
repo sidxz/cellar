@@ -673,13 +673,16 @@ function ResultView({ result }: { result: InstrumentImportResult }) {
       <Notice tone="ok">
         <b>Imported.</b> {result.positions_created} positions, {result.curves_created} curves,{" "}
         {result.values_inserted} readout values.
-        {result.file_attached && " The original file is on the Files tab."}
+        {result.file_attached &&
+          (result.stored_file_name
+            ? ` The original file is on the Files tab as ${result.stored_file_name}.`
+            : " The original file is on the Files tab.")}
       </Notice>
       {!result.file_attached && (
         <Notice tone="warn">
-          <b>The file could not be attached.</b> The data is imported; upload the file on the Files
-          tab.
-          {result.attachment_warning && ` (${result.attachment_warning})`}
+          <b>The data is imported.</b>{" "}
+          {result.attachment_warning ??
+            "The file could not be attached. Upload it on the Files tab."}
         </Notice>
       )}
       {warnings.map((warning) => (

@@ -36,6 +36,7 @@ const result: InstrumentImportResult = {
   file_attached: true,
   attachment_id: "att-1",
   attachment_warning: null,
+  stored_file_name: null,
 };
 
 const json = (body: unknown, status = 200) =>

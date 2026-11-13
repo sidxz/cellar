@@ -3,7 +3,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 const state: { plateMap: unknown } = { plateMap: undefined };
 
-vi.mock("../hooks/use-plate-setup", () => ({ usePlateMap: () => ({ data: state.plateMap }) }));
+vi.mock("../hooks/use-plate-setup", () => ({
+  usePlateMap: () => ({ data: state.plateMap, isLoading: state.plateMap === undefined }),
+}));
 vi.mock("../hooks/use-dose-response", () => ({ useDoseResponseByRun: () => ({ data: [] }) }));
 vi.mock("@/features/attachment", () => ({
   AttachmentList: () => null,
@@ -20,6 +22,7 @@ vi.mock("./readout-data-table", () => ({
     <div>{toolbarActions}</div>
   ),
 }));
+vi.mock("./run-curves-panel", () => ({ RunCurvesPanel: () => null }));
 vi.mock("./run-dr-results", () => ({ RunDoseResponseResults: () => null }));
 vi.mock("./run-heatmap-panel", () => ({ RunHeatmapPanel: () => null }));
 vi.mock("./run-import-wizard", () => ({ RunImportWizard: () => null }));
@@ -76,6 +79,33 @@ describe("RunDataPanel holder awareness", () => {
     window.location.hash = "#plate-map";
     state.plateMap = plateMap("cassette", true);
     render(<RunDataPanel run={run} />);
+    expect(screen.getByRole("tab", { name: "Readout Data" })).toHaveAttribute(
+      "data-state",
+      "active",
+    );
+  });
+
+  it("opens Curves from #curves once the plate map arrives", () => {
+    window.location.hash = "#curves";
+    state.plateMap = undefined;
+    const { rerender } = render(<RunDataPanel run={run} />);
+    // While the plate map loads, the panel does not fall back to Readout Data.
+    expect(screen.getByRole("tab", { name: "Readout Data" })).toHaveAttribute(
+      "data-state",
+      "inactive",
+    );
+    state.plateMap = plateMap("cassette", true);
+    rerender(<RunDataPanel run={run} />);
+    expect(screen.getByRole("tab", { name: "Curves" })).toHaveAttribute("data-state", "active");
+    expect(window.location.hash).toBe("#curves");
+  });
+
+  it("still falls back to Readout Data for a hidden tab once the plate map has loaded", () => {
+    window.location.hash = "#plate-map";
+    state.plateMap = undefined;
+    const { rerender } = render(<RunDataPanel run={run} />);
+    state.plateMap = plateMap("cassette", true);
+    rerender(<RunDataPanel run={run} />);
     expect(screen.getByRole("tab", { name: "Readout Data" })).toHaveAttribute(
       "data-state",
       "active",

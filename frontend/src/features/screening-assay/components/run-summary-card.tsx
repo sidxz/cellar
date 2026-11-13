@@ -59,9 +59,9 @@ export function RunSummaryCard({ run, protocol, canEditMeta, canEditTags }: RunS
   const plateFormatLabel = run.plate_format
     ? (PLATE_FORMAT_LABELS[run.plate_format as PlateFormat] ?? run.plate_format)
     : null;
-  // A cassette is not a plate: say what the API calls it instead of format and count.
+  // A holder that is not a plate: say what the API calls it instead of format and count.
   const { data: plateMap } = usePlateMap(run.id);
-  const cassette = plateMap?.plates.find((p) => p.holder_kind === "cassette");
+  const holder = plateMap?.plates.find((p) => p.holder_kind !== "plate");
 
   return (
     <Card>
@@ -83,10 +83,10 @@ export function RunSummaryCard({ run, protocol, canEditMeta, canEditTags }: RunS
           </a>
           <Dot />
           <span className="font-mono">{run.run_date}</span>
-          {cassette ? (
+          {holder ? (
             <>
               <Dot />
-              <span>{cassette.holder_label}</span>
+              <span>{holder.holder_label}</span>
             </>
           ) : (
             <>
