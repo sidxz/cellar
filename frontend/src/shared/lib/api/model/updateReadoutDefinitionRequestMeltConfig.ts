@@ -4,6 +4,6 @@
  * Cellar
  * OpenAPI spec version: 1.3.0-153-g5425880a
  */
-import type { UpdateReadoutDefinitionRequestMeltConfigAnyOf } from './updateReadoutDefinitionRequestMeltConfigAnyOf';
+import type { MeltConfigModel } from './meltConfigModel';
 
-export type UpdateReadoutDefinitionRequestMeltConfig = UpdateReadoutDefinitionRequestMeltConfigAnyOf | null;
+export type UpdateReadoutDefinitionRequestMeltConfig = MeltConfigModel | null;

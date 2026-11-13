@@ -20,6 +20,7 @@ import type {
   LayoutFileResponse,
   LayoutRowModel,
   MeasuredCurvesBatchResponse,
+  MeltConfigModel,
   MeltWindowModel,
   MeltWindowPositionModel,
   MeltingAnalysisResponse,
@@ -36,7 +37,6 @@ import type {
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
-  ReadoutDefinitionResponse,
   RefitDoseResponseCurveRequest,
   RelabelPositionsResponse,
   RunCountsResponse as RunCountsResponseModel,
@@ -353,10 +353,13 @@ export interface ReadoutDefinition {
    *  condition variables. */
   pick_list_values: PickListValue[] | null;
   dose_response_config: DoseResponseConfig | null;
-  /** Melting-analysis window (keys window, measure, channel_key, low, high); `measure ===
-   *  "delta_tm"` marks a ΔTm readout. Typed off the DTO, optional for hand-built fixtures. */
-  melt_config?: ReadoutDefinitionResponse["melt_config"];
+  /** Set on a temperature window's Tm / ΔTm readout; `measure === "delta_tm"` marks a ΔTm
+   *  readout. Optional for hand-built fixtures. */
+  melt_config?: MeltConfig | null;
 }
+
+/** A temperature window's Tm or ΔTm readout settings. Aliases the generated type. */
+export type MeltConfig = MeltConfigModel;
 
 export interface PickListValue {
   label: string;
