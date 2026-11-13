@@ -11,6 +11,7 @@ import type {
   DoseResponseCurveResponse,
   EffectiveCollectionCoverageResponse,
   HitCriterionDTO,
+  InstrumentFileFormatsResponse,
   InstrumentImportResponse,
   InstrumentPreviewResponse,
   InterceptValueResponse,
@@ -796,5 +797,6 @@ export type RunCurves = RunCurvesResponse;
 export type PositionValues = PositionValuesModel;
 export type PositionEdit = PositionEditRequest;
 export type RelabelResult = RelabelPositionsResponse;
+export type InstrumentFileFormats = InstrumentFileFormatsResponse;
 export type LayoutFile = LayoutFileResponse;
 export type LayoutFileRow = LayoutRowModel;

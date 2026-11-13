@@ -771,6 +771,8 @@ export * from './importTemplateResponseColumnMappings';
 export * from './importTemplateResponseDefaultProtocolId';
 export * from './importTemplateResponseDescription';
 export * from './instrumentBatchOptionModel';
+export * from './instrumentFileFormatModel';
+export * from './instrumentFileFormatsResponse';
 export * from './instrumentImportResponse';
 export * from './instrumentImportResponseAttachmentId';
 export * from './instrumentImportResponseAttachmentWarning';

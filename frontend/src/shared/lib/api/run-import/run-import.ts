@@ -34,6 +34,7 @@ import type {
   HTTPValidationError,
   ImportRunFileRequest,
   ImportRunFileResponse,
+  InstrumentFileFormatsResponse,
   InstrumentImportResponse,
   InstrumentPreviewResponse,
   PreviewRunFileResponse,
@@ -768,6 +769,99 @@ export const useResolveSummaryFileApiV1RunsRunIdResolveSummaryFilePost = <TError
       return useMutation(mutationOptions, queryClient);
     }
     /**
+ * The instrument files the import reads, in the order it tries them.
+ * @summary List Instrument File Formats
+ */
+export const listInstrumentFileFormatsApiV1InstrumentFileFormatsGet = (
+    
+ signal?: AbortSignal
+) => {
+      
+      
+      return customInstance<InstrumentFileFormatsResponse>(
+      {url: `/api/v1/instrument-file-formats`, method: 'GET', signal
+    },
+      );
+    }
+  
+
+
+
+export const getListInstrumentFileFormatsApiV1InstrumentFileFormatsGetQueryKey = () => {
+    return [
+    `/api/v1/instrument-file-formats`
+    ] as const;
+    }
+
+    
+export const getListInstrumentFileFormatsApiV1InstrumentFileFormatsGetQueryOptions = <TData = Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListInstrumentFileFormatsApiV1InstrumentFileFormatsGetQueryKey();
+
+  
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>> = ({ signal }) => listInstrumentFileFormatsApiV1InstrumentFileFormatsGet(signal);
+
+      
+
+      
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListInstrumentFileFormatsApiV1InstrumentFileFormatsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>>
+export type ListInstrumentFileFormatsApiV1InstrumentFileFormatsGetQueryError = unknown
+
+
+export function useListInstrumentFileFormatsApiV1InstrumentFileFormatsGet<TData = Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInstrumentFileFormatsApiV1InstrumentFileFormatsGet<TData = Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useListInstrumentFileFormatsApiV1InstrumentFileFormatsGet<TData = Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary List Instrument File Formats
+ */
+
+export function useListInstrumentFileFormatsApiV1InstrumentFileFormatsGet<TData = Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listInstrumentFileFormatsApiV1InstrumentFileFormatsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient 
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListInstrumentFileFormatsApiV1InstrumentFileFormatsGetQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  query.queryKey = queryOptions.queryKey ;
+
+  return query;
+}
+
+
+
+
+/**
  * Read an instrument file and propose a labelling of its positions. Writes nothing.
  * @summary Preview Instrument File
  */
