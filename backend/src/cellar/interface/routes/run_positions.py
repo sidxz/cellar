@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
 
+from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
 from cellar.application.screening.relabel_run_positions import (
     RelabelResult,
     RelabelRunPositionsCommand,
@@ -168,7 +169,8 @@ async def resolve_layout_file(
         workspace_id=auth.workspace_id,
         run_id=run_id,
         filename=file.filename or "upload",
-        content=await file.read(),
+        # One byte past the limit is enough for the query to refuse the file.
+        content=await file.read(MAX_INSTRUMENT_FILE_BYTES + 1),
     )
     result = await uc(query, auth=auth)
     return LayoutFileResponse.from_domain(result_to_response(result))

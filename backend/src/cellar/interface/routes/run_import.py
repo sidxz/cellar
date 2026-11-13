@@ -25,6 +25,7 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFileQuery,
 )
 from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
+from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
 from cellar.application.screening.list_instrument_file_formats import (
     InstrumentFileFormat,
     ListInstrumentFileFormatsQuery,
@@ -1094,7 +1095,8 @@ async def preview_instrument_file(
     file: Annotated[UploadFile, File()],
 ) -> InstrumentPreviewResponse:
     """Read an instrument file and propose a labelling of its positions. Writes nothing."""
-    content = await file.read()
+    # One byte past the limit is enough for the use case to refuse the file.
+    content = await file.read(MAX_INSTRUMENT_FILE_BYTES + 1)
     query = PreviewInstrumentFileQuery(
         workspace_id=auth.workspace_id,
         run_id=run_id,
@@ -1121,7 +1123,8 @@ async def import_instrument_file(
 
     The ``labelling`` form field is the ``InstrumentLabellingRequest`` JSON.
     """
-    content = await file.read()
+    # One byte past the limit is enough for the use case to refuse the file.
+    content = await file.read(MAX_INSTRUMENT_FILE_BYTES + 1)
     # Parsed here so malformed JSON surfaces as a domain ValidationError (HTTP 422).
     try:
         parsed = InstrumentLabellingRequest.model_validate_json(labelling)

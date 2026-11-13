@@ -40,7 +40,11 @@ class TabularParser(Protocol):
     """Parses CSV/XLSX bytes into a ``ParsedTable``.
 
     Implementations detect format from filename extension + magic bytes and
-    raise ``TabularParseError`` on unparseable input.
+    raise ``TabularParseError`` on unparseable input. With ``max_rows``, reading
+    stops after ``max_rows + 1`` non-blank rows, so a longer file can be refused
+    without building every row.
     """
 
-    def parse(self, content: bytes, filename: str = "") -> ParsedTable: ...
+    def parse(
+        self, content: bytes, filename: str = "", max_rows: int | None = None
+    ) -> ParsedTable: ...

@@ -125,3 +125,32 @@ class TestXLSX:
         # Pathological: .xlsx extension but CSV bytes. We attempt xlsx and fail.
         with pytest.raises(TabularParseError):
             parse_tabular(b"a,b\n1,2\n", "x.xlsx")
+
+
+class TestMaxRows:
+    """``max_rows`` stops the read one row past the limit, so a caller can refuse a long
+    file without the parser building every row."""
+
+    def test_csv_stops_one_row_past_the_limit(self) -> None:
+        content = ("Well\n" + "\n".join(f"A{n}" for n in range(1000))).encode()
+        table = parse_tabular(content, "x.csv", max_rows=3)
+        assert [r["Well"] for r in table.rows] == ["A0", "A1", "A2", "A3"]
+
+    def test_csv_blank_rows_do_not_count(self) -> None:
+        table = parse_tabular(b"Well\nA1\n\n\nA2\nA3\n", "x.csv", max_rows=2)
+        assert table.row_count == 3
+
+    def test_xlsx_stops_one_row_past_the_limit(self) -> None:
+        content = _xlsx_bytes(["Well"], [[f"A{n}"] for n in range(1000)])
+        table = parse_tabular(content, "x.xlsx", max_rows=3)
+        assert [r["Well"] for r in table.rows] == ["A0", "A1", "A2", "A3"]
+
+    def test_no_limit_by_default(self) -> None:
+        content = ("Well\n" + "\n".join(f"A{n}" for n in range(1000))).encode()
+        assert parse_tabular(content, "x.csv").row_count == 1000
+
+
+def test_openpyxl_reads_uploads_through_defusedxml() -> None:
+    import openpyxl.xml
+
+    assert openpyxl.xml.DEFUSEDXML

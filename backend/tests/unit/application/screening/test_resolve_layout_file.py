@@ -370,6 +370,23 @@ async def test_too_many_rows_is_validation_error():
     assert isinstance(failure, ValidationError) and str(MAX_LAYOUT_ROWS) in str(failure)
 
 
+async def test_too_many_rows_is_refused_without_building_every_row():
+    built: list[int] = []
+
+    class CountingParser(TabularFileParser):
+        def parse(self, content: bytes, filename: str = "", max_rows: int | None = None):  # type: ignore[no-untyped-def]
+            table = super().parse(content, filename, max_rows=max_rows)
+            built.append(table.row_count)
+            return table
+
+    h = Harness()
+    h.uc._parser = CountingParser()
+    lines = [f"P{n}" for n in range(MAX_LAYOUT_ROWS * 5)]
+    failure = (await h(csv("Position", *lines))).failure()
+    assert isinstance(failure, ValidationError) and str(MAX_LAYOUT_ROWS) in str(failure)
+    assert built == [MAX_LAYOUT_ROWS + 1]
+
+
 async def test_run_not_found():
     h = Harness(run_missing=True)
     failure = (await h(csv("Position", P(1)))).failure()

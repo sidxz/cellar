@@ -34,12 +34,17 @@ def _detect_format(content: bytes, filename: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def parse_tabular(content: bytes, filename: str = "") -> ParsedTable:
+def parse_tabular(
+    content: bytes, filename: str = "", *, max_rows: int | None = None
+) -> ParsedTable:
     """Parse a tabular file into a ParsedTable.
 
     Detects xlsx vs csv from extension + magic bytes. xlsx is read with
     openpyxl in read-only mode; csv falls back to delimiter-sniffing
     against `,;\\t|` and tolerates UTF-8 BOM.
+
+    With ``max_rows``, reading stops once ``max_rows + 1`` non-blank rows are
+    read, so a caller can refuse a longer file without every row being built.
 
     Raises TabularParseError on unparseable input.
     """
@@ -48,15 +53,17 @@ def parse_tabular(content: bytes, filename: str = "") -> ParsedTable:
 
     fmt = _detect_format(content, filename)
     if fmt == "xlsx":
-        return _parse_xlsx(content)
-    return _parse_csv(content)
+        return _parse_xlsx(content, max_rows)
+    return _parse_csv(content, max_rows)
 
 
 class TabularFileParser:
     """``TabularParser`` Protocol implementation backed by ``parse_tabular``."""
 
-    def parse(self, content: bytes, filename: str = "") -> ParsedTable:
-        return parse_tabular(content, filename)
+    def parse(
+        self, content: bytes, filename: str = "", max_rows: int | None = None
+    ) -> ParsedTable:
+        return parse_tabular(content, filename, max_rows=max_rows)
 
 
 # ---------------------------------------------------------------------------
@@ -64,7 +71,7 @@ class TabularFileParser:
 # ---------------------------------------------------------------------------
 
 
-def _parse_csv(content: bytes) -> ParsedTable:
+def _parse_csv(content: bytes, max_rows: int | None = None) -> ParsedTable:
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
@@ -80,16 +87,16 @@ def _parse_csv(content: bytes) -> ParsedTable:
         dialect = csv.excel  # type: ignore[assignment]
 
     reader = csv.reader(io.StringIO(text), dialect)
-    all_rows = list(reader)
-    if not all_rows:
+    first = next(reader, None)
+    if first is None:
         raise TabularParseError("CSV has no rows")
 
-    headers = [(h or "").strip() for h in all_rows[0]]
+    headers = [(h or "").strip() for h in first]
     if not any(headers):
         raise TabularParseError("CSV has no header row")
 
     rows: list[dict[str, str]] = []
-    for raw in all_rows[1:]:
+    for raw in reader:
         if not any((c or "").strip() for c in raw):
             continue
         row = {
@@ -97,6 +104,8 @@ def _parse_csv(content: bytes) -> ParsedTable:
             for i in range(len(headers))
         }
         rows.append(row)
+        if max_rows is not None and len(rows) > max_rows:
+            break
 
     return ParsedTable(headers=headers, rows=rows, source_format="csv")
 
@@ -106,7 +115,7 @@ def _parse_csv(content: bytes) -> ParsedTable:
 # ---------------------------------------------------------------------------
 
 
-def _parse_xlsx(content: bytes) -> ParsedTable:
+def _parse_xlsx(content: bytes, max_rows: int | None = None) -> ParsedTable:
     try:
         from openpyxl import load_workbook
     except ImportError as exc:  # pragma: no cover - dep is declared
@@ -145,6 +154,8 @@ def _parse_xlsx(content: bytes) -> ParsedTable:
                 for i in range(len(headers))
             }
             rows.append(row)
+            if max_rows is not None and len(rows) > max_rows:
+                break
     finally:
         wb.close()
 

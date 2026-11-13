@@ -110,7 +110,7 @@ class ResolveLayoutFile:
             if len(input.content) > MAX_INSTRUMENT_FILE_BYTES:
                 return Failure(ValidationError("File is larger than 20 MB"))
             try:
-                table = self._parser.parse(input.content, input.filename)
+                table = self._parser.parse(input.content, input.filename, max_rows=MAX_LAYOUT_ROWS)
             except TabularParseError as exc:
                 return Failure(ValidationError(str(exc)))
 

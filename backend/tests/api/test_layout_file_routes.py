@@ -122,6 +122,20 @@ async def test_missing_position_column_returns_422(
     assert "The file has no Position column" in resp.text
 
 
+async def test_oversized_and_overlong_files_return_422(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    big = await client.post(_url(s.run_id), files=_layout(b"Position\n" + b"x\n" * 11_000_000))
+    assert big.status_code == 422 and "larger than 20 MB" in big.text
+    long = await client.post(
+        _url(s.run_id), files=_layout(csv("Position", *(f"P{n}" for n in range(50_000))))
+    )
+    assert long.status_code == 422 and "more than 2000 rows" in long.text
+
+
 async def test_viewer_cannot_resolve(
     viewer_client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
