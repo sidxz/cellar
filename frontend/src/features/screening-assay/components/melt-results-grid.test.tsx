@@ -64,10 +64,10 @@ describe("MeltResultsGrid columns", () => {
     }
   });
 
-  it("keeps the full sample text in a title", () => {
+  it("keeps the full sample text in a title, with the unregistered tag", () => {
     show(["Main"]);
     const sample = defs.find((c) => c.colId === "sample");
     render(sample.cellRenderer({ data: row }));
-    expect(screen.getByTitle("Long sample")).toBeInTheDocument();
+    expect(screen.getByTitle("Long sample (unregistered)")).toHaveTextContent(/^Long sample$/);
   });
 });

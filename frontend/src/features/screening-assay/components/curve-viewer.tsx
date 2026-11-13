@@ -25,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
@@ -41,6 +40,7 @@ import {
   type CurveBand,
   type CurveColouring,
   type CurvePalette,
+  type CurvePosition,
   type CurveSet,
   type GroupBy,
   type PlotStep,
@@ -68,42 +68,18 @@ import {
   drawnPositionIds,
   matchesFilter,
 } from "../lib/curve-selection";
+import { sampleTextOf } from "../lib/melt-results";
 import { DOSE_UNIT_LABELS, type DoseUnit } from "../types";
 import { PositionSelector } from "./position-selector";
+import { Segmented } from "./segmented";
 
 const PLOT_CONFIG = { displaylogo: false, responsive: true };
 const PLOT_STYLE = { width: "100%", height: 400 };
 const PLOT_HEIGHT = "h-[400px]";
-
-interface SegmentOption<T extends string> {
-  value: T;
-  label: string;
-  disabled?: boolean;
-}
-
-export function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: SegmentOption<T>[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
-      <TabsList aria-label={label}>
-        {options.map((o) => (
-          <TabsTrigger key={o.value} value={o.value} disabled={o.disabled} className="text-xs">
-            {o.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
-  );
-}
+// The run tab's narrow column: shorter, so the steps under it are on the first screen.
+const COMPACT_PLOT_STYLE = { width: "100%", height: 340 };
+const COMPACT_PLOT_HEIGHT = "h-[340px]";
+const NOTHING_SELECTED = "Select a sample in the results to see its trace and steps.";
 
 function Field({
   label,
@@ -120,12 +96,16 @@ function Field({
   );
 }
 
-function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
+function Swatch({
+  colour,
+  line = false,
+  dash = "solid",
+}: { colour: string; line?: boolean; dash?: "solid" | "dashed" | "dotted" }) {
   return line ? (
     <i
       aria-hidden
       className="mr-1.5 inline-block w-[18px] border-t-2 align-middle"
-      style={{ borderColor: colour }}
+      style={{ borderColor: colour, borderTopStyle: dash }}
     />
   ) : (
     <span
@@ -134,6 +114,18 @@ function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
       style={{ background: colour }}
     />
   );
+}
+
+/** `CC-014538 · Capillary 2 · 6.25 µM`; the position once when it is the name. */
+function selectionName(p: CurvePosition, doseUnit: string): string {
+  const name = sampleTextOf(p);
+  return [
+    name,
+    name !== p.position_label && p.position_label,
+    p.dose != null && `${formatValue(p.dose)} ${doseUnit}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function runHref(runId: string): string {
@@ -194,9 +186,12 @@ export interface CurveViewerProps {
   windows?: readonly CurveBand[];
   /** The x of a clicked point on the plot. */
   onPlotClick?: (x: number) => void;
-  /** Narrow layout: Signal and View on one row, Markers, Color and Export
-   *  behind a "Display" button. */
+  /** Narrow layout: Signal, View, the reference switch (with hideSelector) and
+   *  a "Display" button (Markers, Color, Export) on one row; a shorter plot;
+   *  a line naming the selection and a compact key instead of the legend. */
   compactControls?: boolean;
+  /** Between the plot and the per-position table. */
+  belowPlot?: ReactNode;
 }
 
 /** Pick positions, overlay their curves for one signal with the instrument's
@@ -241,6 +236,7 @@ function CurveViewerBody({
   windows,
   onPlotClick,
   compactControls = false,
+  belowPlot,
   scientistOf,
 }: CurveViewerProps & { scientistOf: (userId: string) => string }) {
   // The signal and view last asked for, shown at once while their curves load.
@@ -551,6 +547,89 @@ function CurveViewerBody({
     </Field>
   );
 
+  const reportedTable = (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {hasRuns && <TableHead>Run</TableHead>}
+            <TableHead>Position</TableHead>
+            <TableHead>Label</TableHead>
+            <TableHead>Compound</TableHead>
+            <TableHead>Batch</TableHead>
+            <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Note</TableHead>
+            {columns.map((c) => (
+              <TableHead key={c.key} className="text-right">
+                {c.unit ? `${c.label} (${c.unit})` : c.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={(hasRuns ? 8 : 7) + columns.length}
+                className="text-muted-foreground"
+              >
+                {selectedIds.length > 0 && filter.trim()
+                  ? "No selected position matches the filter."
+                  : "No positions selected."}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((r) => (
+              <TableRow
+                key={r.wellId}
+                data-focused={focusedId === r.wellId || undefined}
+                className={cn(focusedId === r.wellId && "bg-primary/10")}
+                onMouseEnter={() => setFocusedId(r.wellId)}
+                onMouseLeave={() => setFocusedId(null)}
+              >
+                {hasRuns && (
+                  <TableCell>
+                    {r.run && (
+                      <Link href={runHref(r.run.runId)} className="hover:underline">
+                        {/* A run that shares its date reads as its heading does. */}
+                        {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
+                      </Link>
+                    )}
+                  </TableCell>
+                )}
+                <TableCell>
+                  <Swatch colour={colourOf(r.wellId)} />
+                  {r.positionLabel}
+                </TableCell>
+                <TableCell>{r.label}</TableCell>
+                <TableCell className={cn(!r.compound && "text-muted-foreground")}>
+                  {r.compound ?? "No compound"}
+                </TableCell>
+                <TableCell className={cn(!r.batch && "text-muted-foreground")}>
+                  {r.batch ?? "None"}
+                </TableCell>
+                <TableCell
+                  className="text-right font-mono tabular-nums"
+                  title={r.dose == null ? undefined : String(r.dose)}
+                >
+                  {formatValue(r.dose ?? undefined)}
+                </TableCell>
+                <TableCell>{r.role}</TableCell>
+                <TableCell className="whitespace-normal">{r.note}</TableCell>
+                {columns.map((c) => (
+                  <TableCell key={c.key} className="text-right font-mono tabular-nums">
+                    {formatValue(r.reported[c.key])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       {!hideSelector && (
@@ -621,8 +700,20 @@ function CurveViewerBody({
       )}
 
       {compactControls ? (
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">{signalAndView}</div>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {signalAndView}
+          {hideSelector && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id={switchId}
+                checked={showReferences}
+                onCheckedChange={onShowReferencesChange}
+              />
+              <Label htmlFor={switchId} className="text-sm font-normal">
+                Reference traces
+              </Label>
+            </div>
+          )}
           <Popover>
             <PopoverTrigger asChild>
               <Button type="button" variant="outline" size="sm">
@@ -649,7 +740,7 @@ function CurveViewerBody({
             data={figure.data}
             layout={figure.layout}
             config={PLOT_CONFIG}
-            style={PLOT_STYLE}
+            style={compactControls ? COMPACT_PLOT_STYLE : PLOT_STYLE}
             useResizeHandler
             onHover={onHover}
             onUnhover={onUnhover}
@@ -660,7 +751,7 @@ function CurveViewerBody({
         <div
           className={cn(
             "flex items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground",
-            PLOT_HEIGHT,
+            compactControls ? COMPACT_PLOT_HEIGHT : PLOT_HEIGHT,
           )}
         >
           {failed
@@ -669,7 +760,7 @@ function CurveViewerBody({
               ? `More than ${MAX_DRAWN} positions would be plotted. ${showReferences ? "Select fewer positions or turn off reference positions." : "Select fewer positions."}`
               : selectedIds.length === 0
                 ? hideSelector
-                  ? "No sample selected"
+                  ? NOTHING_SELECTED
                   : "Select positions above to draw their traces"
                 : pending
                   ? "Loading traces…"
@@ -687,7 +778,43 @@ function CurveViewerBody({
         </p>
       )}
 
-      {hasTraces && (
+      {compactControls && selectedPositions.length > 0 && !failed && (
+        <div className="space-y-1 text-xs text-muted-foreground">
+          <p className="text-sm text-foreground">
+            {selectedPositions.length === 1
+              ? selectionName(selectedPositions[0], doseUnit)
+              : `${selectedPositions.length} samples selected`}
+          </p>
+          {hasTraces && (
+            <div data-testid="curve-key" className="flex flex-wrap gap-x-4 gap-y-1">
+              <span>
+                <Swatch line colour={colours.reference} />
+                Reference
+              </span>
+              {steps && showReported && (
+                <>
+                  <span>
+                    <Swatch line colour={colours.neutral} />
+                    Reviewed step
+                  </span>
+                  <span>
+                    <Swatch line dash="dashed" colour={colours.neutral} />
+                    Unreviewed step
+                  </span>
+                  <span>
+                    <Swatch line dash="dotted" colour={colours.neutral} />
+                    Onset
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Compact: the key above stands in for the generic legend; the colour
+          legends of Distinct and By group still name what each colour is. */}
+      {hasTraces && (!compactControls || effectiveMode !== "highlight") && (
         <div
           data-testid="curve-legend"
           className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
@@ -752,6 +879,8 @@ function CurveViewerBody({
         </div>
       )}
 
+      {belowPlot}
+
       {collapseReportedTable ? (
         <Collapsible>
           <CollapsibleTrigger asChild>
@@ -759,170 +888,10 @@ function CurveViewerBody({
               Instrument values
             </Button>
           </CollapsibleTrigger>
-          <CollapsibleContent>
-            <div className="rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {hasRuns && <TableHead>Run</TableHead>}
-                    <TableHead>Position</TableHead>
-                    <TableHead>Label</TableHead>
-                    <TableHead>Compound</TableHead>
-                    <TableHead>Batch</TableHead>
-                    <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
-                    <TableHead>Role</TableHead>
-                    <TableHead>Note</TableHead>
-                    {columns.map((c) => (
-                      <TableHead key={c.key} className="text-right">
-                        {c.unit ? `${c.label} (${c.unit})` : c.label}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {rows.length === 0 ? (
-                    <TableRow>
-                      <TableCell
-                        colSpan={(hasRuns ? 8 : 7) + columns.length}
-                        className="text-muted-foreground"
-                      >
-                        {selectedIds.length > 0 && filter.trim()
-                          ? "No selected position matches the filter."
-                          : "No positions selected."}
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    rows.map((r) => (
-                      <TableRow
-                        key={r.wellId}
-                        data-focused={focusedId === r.wellId || undefined}
-                        className={cn(focusedId === r.wellId && "bg-primary/10")}
-                        onMouseEnter={() => setFocusedId(r.wellId)}
-                        onMouseLeave={() => setFocusedId(null)}
-                      >
-                        {hasRuns && (
-                          <TableCell>
-                            {r.run && (
-                              <Link href={runHref(r.run.runId)} className="hover:underline">
-                                {/* A run that shares its date reads as its heading does. */}
-                                {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
-                              </Link>
-                            )}
-                          </TableCell>
-                        )}
-                        <TableCell>
-                          <Swatch colour={colourOf(r.wellId)} />
-                          {r.positionLabel}
-                        </TableCell>
-                        <TableCell>{r.label}</TableCell>
-                        <TableCell className={cn(!r.compound && "text-muted-foreground")}>
-                          {r.compound ?? "No compound"}
-                        </TableCell>
-                        <TableCell className={cn(!r.batch && "text-muted-foreground")}>
-                          {r.batch ?? "None"}
-                        </TableCell>
-                        <TableCell
-                          className="text-right font-mono tabular-nums"
-                          title={r.dose == null ? undefined : String(r.dose)}
-                        >
-                          {formatValue(r.dose ?? undefined)}
-                        </TableCell>
-                        <TableCell>{r.role}</TableCell>
-                        <TableCell className="whitespace-normal">{r.note}</TableCell>
-                        {columns.map((c) => (
-                          <TableCell key={c.key} className="text-right font-mono tabular-nums">
-                            {formatValue(r.reported[c.key])}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </CollapsibleContent>
+          <CollapsibleContent>{reportedTable}</CollapsibleContent>
         </Collapsible>
       ) : (
-        <div className="rounded-md border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                {hasRuns && <TableHead>Run</TableHead>}
-                <TableHead>Position</TableHead>
-                <TableHead>Label</TableHead>
-                <TableHead>Compound</TableHead>
-                <TableHead>Batch</TableHead>
-                <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Note</TableHead>
-                {columns.map((c) => (
-                  <TableHead key={c.key} className="text-right">
-                    {c.unit ? `${c.label} (${c.unit})` : c.label}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={(hasRuns ? 8 : 7) + columns.length}
-                    className="text-muted-foreground"
-                  >
-                    {selectedIds.length > 0 && filter.trim()
-                      ? "No selected position matches the filter."
-                      : "No positions selected."}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((r) => (
-                  <TableRow
-                    key={r.wellId}
-                    data-focused={focusedId === r.wellId || undefined}
-                    className={cn(focusedId === r.wellId && "bg-primary/10")}
-                    onMouseEnter={() => setFocusedId(r.wellId)}
-                    onMouseLeave={() => setFocusedId(null)}
-                  >
-                    {hasRuns && (
-                      <TableCell>
-                        {r.run && (
-                          <Link href={runHref(r.run.runId)} className="hover:underline">
-                            {/* A run that shares its date reads as its heading does. */}
-                            {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
-                          </Link>
-                        )}
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      <Swatch colour={colourOf(r.wellId)} />
-                      {r.positionLabel}
-                    </TableCell>
-                    <TableCell>{r.label}</TableCell>
-                    <TableCell className={cn(!r.compound && "text-muted-foreground")}>
-                      {r.compound ?? "No compound"}
-                    </TableCell>
-                    <TableCell className={cn(!r.batch && "text-muted-foreground")}>
-                      {r.batch ?? "None"}
-                    </TableCell>
-                    <TableCell
-                      className="text-right font-mono tabular-nums"
-                      title={r.dose == null ? undefined : String(r.dose)}
-                    >
-                      {formatValue(r.dose ?? undefined)}
-                    </TableCell>
-                    <TableCell>{r.role}</TableCell>
-                    <TableCell className="whitespace-normal">{r.note}</TableCell>
-                    {columns.map((c) => (
-                      <TableCell key={c.key} className="text-right font-mono tabular-nums">
-                        {formatValue(r.reported[c.key])}
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        reportedTable
       )}
     </div>
   );

@@ -12,8 +12,11 @@ import {
 } from "@/shared/components/ui/tooltip";
 import { cn } from "@/shared/lib/utils";
 import type {
+  CellKeyDownEvent,
   ColDef,
   ColGroupDef,
+  FullWidthCellKeyDownEvent,
+  GridApi,
   ICellRendererParams,
   RowClassParams,
   RowClickedEvent,
@@ -26,6 +29,7 @@ import {
   type ResultRow,
   STATUS_ORDER,
   type WindowCell,
+  shiftDirection,
   worstStatus,
 } from "../lib/melt-results";
 import { WELL_TYPE_LABELS, type WellType } from "../types";
@@ -40,6 +44,9 @@ const DIFFERS_TEXT = "Step count differs from the reference";
 const SELECTED_ROW = "bg-primary/10! shadow-[inset_3px_0_0_var(--primary)]";
 const MUTED_ROW = "text-muted-foreground!";
 const NUMERIC = "text-right tabular-nums";
+const SEARCH = "Find sample, position or batch";
+// Only the identity columns feed the search box; numbers and status do not.
+const NOT_SEARCHED = () => "";
 
 const STATUS: Record<
   CellStatus,
@@ -66,10 +73,11 @@ export function formatDelta(d: number): string {
 }
 
 /** Blue at or above +threshold (stabilising), red at or below −threshold,
- *  muted inside. */
+ *  muted inside; the sign says the same without colour. */
 function deltaTint(d: number, threshold: number): string {
-  if (d >= threshold) return "bg-blue-500/10 font-medium text-blue-700 dark:text-blue-300";
-  if (d <= -threshold) return "bg-red-500/10 font-medium text-red-700 dark:text-red-300";
+  const dir = shiftDirection(d, threshold);
+  if (dir === "up") return "font-semibold text-blue-700 dark:text-blue-300";
+  if (dir === "down") return "font-semibold text-red-700 dark:text-red-300";
   return "text-muted-foreground";
 }
 
@@ -88,7 +96,10 @@ function SampleCell({ row }: { row: ResultRow }) {
       >
         {smiles ? (
           <Tooltip>
-            <TooltipTrigger asChild>{id}</TooltipTrigger>
+            {/* EntityLink takes no trigger props or ref, so a span carries them. */}
+            <TooltipTrigger asChild>
+              <span className="inline-flex">{id}</span>
+            </TooltipTrigger>
             <TooltipContent
               side="right"
               sideOffset={6}
@@ -112,9 +123,8 @@ function SampleCell({ row }: { row: ResultRow }) {
   const text = label ?? row.position;
   if (row.isSample) {
     return (
-      <span className="flex items-baseline gap-1.5 truncate" title={text}>
-        <span className="truncate">{text}</span>
-        <span className="text-xs text-muted-foreground">unregistered</span>
+      <span className="block truncate" title={`${text} (unregistered)`}>
+        {text}
       </span>
     );
   }
@@ -134,14 +144,22 @@ function SampleCell({ row }: { row: ResultRow }) {
   );
 }
 
+/** A reference's own step review in the shown windows: provisional if any is. */
+function referenceReview(row: ResultRow, windowNames: readonly string[]): string | null {
+  const reviews = windowNames.map((n) => row.cells[n]?.review);
+  if (reviews.includes("provisional")) return "Provisional";
+  return reviews.includes("reviewed") ? "Reviewed" : null;
+}
+
 function StatusCell({ row, windowNames }: { row: ResultRow; windowNames: readonly string[] }) {
   const status = worstStatus(row, windowNames);
   const differs = windowNames.some((n) => row.cells[n]?.differs);
+  const review = status === "reference" ? referenceReview(row, windowNames) : null;
   return (
     <span className="flex h-full items-center gap-1.5">
       {status && (
         <Badge variant={STATUS[status].variant} className={STATUS[status].className}>
-          {STATUS[status].label}
+          {review ? `${STATUS[status].label} · ${review}` : STATUS[status].label}
         </Badge>
       )}
       {differs && (
@@ -167,6 +185,7 @@ function windowColumns(name: string, threshold: number, grouped: boolean): ColDe
       width: 80,
       headerClass: "ag-right-aligned-header",
       cellClass: NUMERIC,
+      getQuickFilterText: NOT_SEARCHED,
       valueGetter: (p) => cell(p.data)?.tm ?? null,
       valueFormatter: (p) => fmtTm(p.value),
     },
@@ -175,6 +194,7 @@ function windowColumns(name: string, threshold: number, grouped: boolean): ColDe
       headerName: "ΔTm (°C)",
       width: 90,
       headerClass: "ag-right-aligned-header",
+      getQuickFilterText: NOT_SEARCHED,
       valueGetter: (p) =>
         p.data?.wellType === "reference" ? null : (cell(p.data)?.deltaTm ?? null),
       valueFormatter: (p) =>
@@ -223,6 +243,12 @@ export function MeltResultsGrid({
         flex: 1,
         minWidth: 180,
         valueGetter: (p) => p.data?.sampleText ?? "",
+        getQuickFilterText: (p) =>
+          p.data
+            ? [p.data.sampleText, p.data.identity.label, p.data.identity.batchSuffix]
+                .filter(Boolean)
+                .join(" ")
+            : "",
         cellRenderer: (p: Params) => (p.data ? <SampleCell row={p.data} /> : null),
       },
       {
@@ -237,6 +263,7 @@ export function MeltResultsGrid({
         width: 90,
         headerClass: "ag-right-aligned-header",
         cellClass: NUMERIC,
+        getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => p.data?.concentration ?? null,
         valueFormatter: (p) => (p.value == null ? "" : String(p.value)),
       },
@@ -254,7 +281,8 @@ export function MeltResultsGrid({
       {
         colId: "status",
         headerName: "Status",
-        width: 150,
+        width: 170,
+        getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => (p.data ? statusRank(worstStatus(p.data, windowNames)) : null),
         cellRenderer: (p: Params) =>
           p.data ? <StatusCell row={p.data} windowNames={windowNames} /> : null,
@@ -274,19 +302,35 @@ export function MeltResultsGrid({
     [selection.selected],
   );
 
-  const handleRowClicked = (e: RowClickedEvent<ResultRow>) => {
-    const ev = e.event as MouseEvent | null | undefined;
-    if (!e.data || (ev?.target as HTMLElement | null)?.closest("a, button")) return;
+  const select = (
+    api: GridApi<ResultRow>,
+    data: ResultRow,
+    ev: MouseEvent | KeyboardEvent | null | undefined,
+  ) => {
     // Grid order: pinned references, then the body as sorted and filtered on screen.
     const order = rows.pinned.map((r) => r.wellId);
-    e.api.forEachNodeAfterFilterAndSort((n) => {
+    api.forEachNodeAfterFilterAndSort((n) => {
       if (n.data) order.push(n.data.wellId);
     });
     onRowClick(
-      e.data.wellId,
+      data.wellId,
       { shift: !!ev?.shiftKey, toggle: !!(ev?.ctrlKey || ev?.metaKey) },
       order,
     );
+  };
+  const handleRowClicked = (e: RowClickedEvent<ResultRow>) => {
+    const ev = e.event as MouseEvent | null | undefined;
+    if (!e.data || (ev?.target as HTMLElement | null)?.closest("a, button")) return;
+    select(e.api, e.data, ev);
+  };
+  // The keyboard path: Enter or Space on a focused row selects it as a click would.
+  const handleCellKeyDown = (
+    e: CellKeyDownEvent<ResultRow> | FullWidthCellKeyDownEvent<ResultRow>,
+  ) => {
+    const ev = e.event as KeyboardEvent | null | undefined;
+    if (!e.data || (ev?.key !== "Enter" && ev?.key !== " ")) return;
+    ev?.preventDefault();
+    select(e.api, e.data, ev);
   };
 
   return (
@@ -299,11 +343,13 @@ export function MeltResultsGrid({
         rowClass="cursor-pointer"
         rowClassRules={rowClassRules}
         onRowClicked={handleRowClicked}
+        onCellKeyDown={handleCellKeyDown}
+        suppressCellFocus={false}
         rowHeight={ROW_HEIGHT}
         groupHeaderHeight={GROUP_HEADER_HEIGHT}
         height={gridHeight(rows.pinned.length + rows.body.length, compare)}
         suppressFilters
-        searchPlaceholder={false}
+        searchPlaceholder={SEARCH}
       />
     </TooltipProvider>
   );

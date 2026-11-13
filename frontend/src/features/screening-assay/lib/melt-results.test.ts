@@ -3,11 +3,14 @@ import { describe, expect, it } from "vitest";
 import type { MeltWindow, MeltingStep, StepCheck } from "../types";
 import type { CurvePosition } from "./curve-plot";
 import {
+  batchDoseCount,
   batchSeries,
+  batchSuffix,
   matchesFilter,
   maxAbsDelta,
   orderRows,
   resultRows,
+  shiftDirection,
   shiftRows,
   windowSummary,
   worstStatus,
@@ -79,6 +82,30 @@ describe("melt-results", () => {
     expect(cell(rows, "r")?.status).toBe("reviewed");
     expect(cell(rows, "o")?.status).toBe("reviewed");
     expect(cell(rows, "ref")?.status).toBe("reference");
+    // The counting step's review, references included.
+    expect(cell(rows, "ref")?.review).toBe("provisional");
+    expect(cell(rows, "a")?.review).toBe("reviewed");
+    expect(cell(rows, "s")?.review).toBeNull();
+  });
+
+  it("the threshold is tested on the one-decimal value the grid shows", () => {
+    expect(shiftDirection(1.96, 2)).toBe("up");
+    expect(shiftDirection(1.94, 2)).toBeNull();
+    expect(shiftDirection(-1.96, 2)).toBe("down");
+    const w = win([wp("ref", 70, 0), wp("a", 72, 1.96)]);
+    const positions = [pos("ref", { well_type: "reference" }), pos("a")];
+    const rows = resultRows([w], positions, [], noChecks);
+    expect(matchesFilter(rows[1], ["Main"], "up", 2)).toBe(true);
+    expect(windowSummary(w, rows, positions, [], noChecks, 2).up).toBe(1);
+  });
+
+  it("one batch-suffix rule: the registration prefix dropped, else the batch number", () => {
+    expect(batchSuffix(pos("a", { registration_number: "CC-1", batch_number: "CC-1-001" }))).toBe(
+      "001",
+    );
+    expect(batchSuffix(pos("a", { registration_number: "CC-1", batch_number: "B7" }))).toBe("B7");
+    expect(batchSuffix(pos("a", { registration_number: null, batch_number: "B7" }))).toBe("B7");
+    expect(batchSuffix(pos("a"))).toBeNull();
   });
 
   it("sample text prefers the registration number", () => {
@@ -215,7 +242,7 @@ describe("melt-results", () => {
   it("series groups by batch id and never forms a no-batch series", () => {
     const noBatch = [pos("x", { dose: 5 }), pos("y", { dose: 10 })];
     const w0 = win([wp("x", 1, -1), wp("y", 1, -2)]);
-    expect(batchSeries(w0, noBatch, "any")).toEqual([]);
+    expect(batchSeries(w0, noBatch, "any", [])).toEqual([]);
     const positions = [
       pos("p", { batch_id: "B", batch_number: "B-1", dose: 25 }),
       pos("q", { batch_id: "B", batch_number: "B-1", dose: 6.25 }),
@@ -223,10 +250,19 @@ describe("melt-results", () => {
       pos("r", { batch_id: "B", well_type: "reference", dose: 50 }),
     ];
     const w = win([wp("p", 1, -4), wp("q", 1, -2), wp("z", 1, 0), wp("r", 1, 0)]);
-    expect(batchSeries(w, positions, "B")).toEqual([
-      { wellId: "q", dose: 6.25, deltaTm: -2 },
-      { wellId: "p", dose: 25, deltaTm: -4 },
+    // q's counting step is unreviewed: provisional; p's is accepted.
+    const steps = [step("q", 60), step("p", 60, "accepted")];
+    expect(batchSeries(w, positions, "B", steps)).toEqual([
+      { wellId: "q", dose: 6.25, deltaTm: -2, provisional: true },
+      { wellId: "p", dose: 25, deltaTm: -4, provisional: false },
     ]);
+    expect(batchDoseCount(positions, "B")).toBe(2);
+    expect(
+      batchDoseCount(
+        [pos("x", { batch_id: "C", dose: 5 }), pos("y", { batch_id: "C", dose: 5 })],
+        "C",
+      ),
+    ).toBe(1);
   });
 
   it("every position gets a row, even with no windows", () => {

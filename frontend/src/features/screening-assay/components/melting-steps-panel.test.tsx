@@ -20,7 +20,7 @@ vi.mock("../hooks/use-run-curves", () => ({
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
 vi.mock("./edit-labelling-dialog", () => ({ EditLabellingDialog: () => null }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
-  DataGrid: (await import("./test-data-grid")).TableGrid,
+  DataGrid: (await import("../test/test-data-grid")).TableGrid,
 }));
 
 const api = vi.fn();
@@ -30,8 +30,8 @@ vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
 }));
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
+import { gridRow } from "../test/test-data-grid";
 import { RunCurvesPanel } from "./run-curves-panel";
-import { gridRow } from "./test-data-grid";
 
 function position(id: string, column: number, wellType: string, label: string, batch: string) {
   return {

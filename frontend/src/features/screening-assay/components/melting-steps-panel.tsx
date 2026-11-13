@@ -228,7 +228,7 @@ export function MeltingStepsPanel({
         {rows.length === 0 ? (
           <li className="p-2 text-muted-foreground">
             {positions.length === 0
-              ? "Select positions above to review their melting steps."
+              ? "Select a position to review its melting steps."
               : "The selected positions have no melting steps on this signal."}
           </li>
         ) : (

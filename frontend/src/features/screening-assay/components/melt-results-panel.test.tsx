@@ -20,7 +20,7 @@ vi.mock("@/shared/lib/plotly", () => ({
 }));
 
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
-  DataGrid: (await import("./test-data-grid")).TableGrid,
+  DataGrid: (await import("../test/test-data-grid")).TableGrid,
 }));
 
 import { MeltResultsPanel } from "./melt-results-panel";
@@ -106,15 +106,17 @@ function Harness({
   channel = "a",
   onChange = () => {},
   onLead,
+  data = analysis,
 }: {
   channel?: string;
   onChange?: (s: SelectionState) => void;
   onLead?: (w: string | null) => void;
+  data?: MeltingAnalysis;
 }) {
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
   return (
     <MeltResultsPanel
-      analysis={analysis}
+      analysis={data}
       positions={positions}
       channel={channel}
       doseUnit="µM"
@@ -123,8 +125,6 @@ function Harness({
         onChange(s);
         setSelection(s);
       }}
-      showReferences
-      onShowReferencesChange={() => {}}
       onLeadWindowChange={onLead}
     />
   );
@@ -146,6 +146,10 @@ const tabNames = () =>
     .map((t) => t.textContent);
 
 beforeEach(() => localStorage.clear());
+
+const lastSelected = (fn: ReturnType<typeof vi.fn>) => [
+  ...(fn.mock.lastCall?.[0] as SelectionState).selected,
+];
 
 describe("MeltResultsPanel", () => {
   it("lists only the windows of the current signal and keeps the chosen one across a signal change", () => {
@@ -177,24 +181,28 @@ describe("MeltResultsPanel", () => {
     expect(onLead).toHaveBeenLastCalledWith(null);
   });
 
-  it("shows signed ΔTm with direction tint and the status chip", () => {
+  it("shows signed ΔTm in direction colour without a tint, and the status chip", () => {
     render(<Harness />);
     const delta = (id: string, text: string) => within(row(id)).getByText(text).closest("td");
-    expect(delta("s1", "−8.5")).toHaveClass("text-red-700");
-    expect(delta("s2", "+3.0")).toHaveClass("text-blue-700");
+    expect(delta("s1", "−8.5")).toHaveClass("text-red-700", "font-semibold");
+    expect(delta("s2", "+3.0")).toHaveClass("text-blue-700", "font-semibold");
+    expect(delta("s2", "+3.0")?.className).not.toMatch(/bg-/);
     expect(delta("s3", "−1.0")).toHaveClass("text-muted-foreground");
     expect(within(row("s3")).getByText("Provisional")).toBeInTheDocument();
     expect(within(row("s1")).getByText("Reviewed")).toBeInTheDocument();
     expect(within(row("s4")).getByText("No step")).toBeInTheDocument();
-    expect(within(row("r1")).getByText("Reference")).toBeInTheDocument();
+    // The reference's own counting step in the shown window is accepted.
+    expect(within(row("r1")).getByText("Reference · Reviewed")).toBeInTheDocument();
     expect(within(row("r1")).getByText("—")).toBeInTheDocument();
-    // Identity: registered links to the compound with the batch suffix; unregistered is muted.
+    // Identity: registered links to the compound with the batch suffix; unregistered
+    // reads plain, the tag in its title.
     expect(within(row("s1")).getByRole("link", { name: "CC-014538" })).toHaveAttribute(
       "href",
       "/compounds/m1",
     );
     expect(within(row("s1")).getByText("·001")).toBeInTheDocument();
-    expect(within(row("s2")).getByText("unregistered")).toBeInTheDocument();
+    expect(within(row("s2")).getByTitle("16:0-CoA (unregistered)")).toHaveTextContent(/^16:0-CoA$/);
+    expect(within(row("s2")).queryByText("unregistered")).toBeNull();
     // Samples by |ΔTm|, missing last; references pinned first.
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);
   });
@@ -202,13 +210,16 @@ describe("MeltResultsPanel", () => {
   it("strip counts filter the grid and a second click clears", () => {
     render(<Harness />);
     expect(screen.getByText("Reference MadR 71.3 °C (n=1)")).toBeInTheDocument();
+    expect(screen.getByText("Main", { selector: "span" })).toBeInTheDocument();
+    expect(screen.queryByText(/of 4 samples/)).toBeNull();
     expect(screen.getByRole("button", { name: "Provisional 1" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
-    const needs = screen.getByRole("button", { name: "Needs review 1" });
+    const needs = screen.getByRole("button", { name: "Step issues 1" });
     fireEvent.click(needs);
     expect(needs).toHaveAttribute("aria-pressed", "true");
     expect(bodyIds()).toEqual(["r1", "s4"]);
+    expect(screen.getByText("1 of 4 samples")).toBeInTheDocument();
     fireEvent.click(needs);
     expect(needs).toHaveAttribute("aria-pressed", "false");
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);
@@ -254,6 +265,84 @@ describe("MeltResultsPanel", () => {
     // Worst status across windows: provisional in Main beats reviewed in Low.
     expect(within(row("s3")).getByText("Provisional")).toBeInTheDocument();
     expect(within(row("s3")).getByText("−10.0").closest("td")).toHaveClass("text-red-700");
+    // The strip names what it counts and gives each window's reference.
+    expect(screen.getByText("All windows", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("Reference MadR · Main 71.3 °C · Low 71.3 °C")).toBeInTheDocument();
+  });
+
+  it("compare says which window has no reference", () => {
+    const data = {
+      ...analysis,
+      windows: analysis.windows.map((w) =>
+        w.window === "Low" && w.channel_key === "a" ? { ...w, reference_tm: null } : w,
+      ),
+    } as MeltingAnalysis;
+    render(<Harness data={data} />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
+    const strip = screen.getByText(/^Reference MadR · Main 71\.3 °C · Low/);
+    expect(within(strip).getByText("No reference")).toBeInTheDocument();
+  });
+
+  it("ΔTm is judged as shown: +1.96 at a threshold of 2 reads +2.0 and counts up", () => {
+    const data = {
+      ...analysis,
+      windows: analysis.windows.map((w, i) =>
+        i === 0
+          ? {
+              ...w,
+              positions: w.positions.map((p) => (p.well_id === "s3" ? wp("s3", 73, 1.96) : p)),
+            }
+          : w,
+      ),
+    } as MeltingAnalysis;
+    render(<Harness data={data} />);
+    expect(within(row("s3")).getByText("+2.0").closest("td")).toHaveClass("text-blue-700");
+    expect(screen.getByRole("button", { name: "2 up" })).toBeInTheDocument();
+  });
+
+  it("an unreviewed reference is a button that selects it, and its chip says Provisional", () => {
+    const onChange = vi.fn();
+    const data = {
+      ...analysis,
+      steps: analysis.steps.map((s) => (s.well_id === "r1" ? step("r1", 71.3, "unreviewed") : s)),
+    } as MeltingAnalysis;
+    render(<Harness data={data} onChange={onChange} />);
+    expect(within(row("r1")).getByText("Reference · Provisional")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Reference not reviewed" }));
+    expect(lastSelected(onChange)).toEqual(["r1"]);
+  });
+
+  it("the search box finds a sample by label, position or batch", () => {
+    render(<Harness />);
+    const search = screen.getByPlaceholderText("Find sample, position or batch");
+    fireEvent.change(search, { target: { value: "16:0" } });
+    expect(bodyIds()).toEqual(["r1", "s2"]);
+    fireEvent.change(search, { target: { value: "Capillary s3" } });
+    expect(bodyIds()).toEqual(["r1", "s3"]);
+    fireEvent.change(search, { target: { value: "001" } });
+    expect(bodyIds()).toEqual(["r1", "s1"]);
+    // Numbers in the value columns are not searched.
+    fireEvent.change(search, { target: { value: "8.5" } });
+    expect(bodyIds()).toEqual(["r1"]);
+  });
+
+  it("Enter or Space on a focused row selects it, with Shift for a range", () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    fireEvent.keyDown(row("s2"), { key: "Enter" });
+    expect(lastSelected(onChange)).toEqual(["s2"]);
+    fireEvent.keyDown(row("s3"), { key: " ", shiftKey: true });
+    expect(lastSelected(onChange).sort()).toEqual(["s2", "s3"]);
+    const calls = onChange.mock.calls.length;
+    fireEvent.keyDown(row("s4"), { key: "a" });
+    expect(onChange.mock.calls.length).toBe(calls);
+  });
+
+  it("focusing a registration number shows the structure", () => {
+    render(<Harness />);
+    expect(screen.queryByTestId("structure")).toBeNull();
+    act(() => within(row("s1")).getByRole("link", { name: "CC-014538" }).focus());
+    expect(screen.getAllByTestId("structure").length).toBeGreaterThan(0);
   });
 });
 
@@ -292,6 +381,13 @@ describe("shift plot toggle", () => {
     act(() => p.onClick?.({ points: [{ customdata: "s3" }] }));
     expect(onChange.mock.calls[0][0].anchor).toBe("s3");
     expect([...onChange.mock.calls[0][0].selected]).toEqual(["s3"]);
+  });
+
+  it("follows the strip's filter", () => {
+    render(<Harness />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Shift plot" }));
+    fireEvent.click(screen.getByRole("button", { name: "1 down" }));
+    expect(plots[plots.length - 1].data[0].customdata).toEqual(["s1"]);
   });
 
   it("is disabled in Compare", () => {

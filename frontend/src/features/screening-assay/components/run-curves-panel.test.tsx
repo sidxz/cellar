@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import type { MeltWindowPosition, MeltingAnalysis, RunCurves } from "../types";
 
-const plotCalls: Array<{ data: Array<Record<string, unknown>>; layout: Record<string, unknown> }> =
-  [];
+const plotCalls: Array<{
+  data: Array<Record<string, unknown>>;
+  layout: Record<string, unknown>;
+  style?: { height?: number };
+}> = [];
 const downloadImage = vi.fn();
 vi.mock("@/shared/lib/plotly", () => ({
   Plot: (props: { data: Array<Record<string, unknown>>; layout: Record<string, unknown> }) => {
@@ -29,7 +32,7 @@ vi.mock("../hooks/use-melting-analysis", () => ({
   useReviewMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
-  DataGrid: (await import("./test-data-grid")).TableGrid,
+  DataGrid: (await import("../test/test-data-grid")).TableGrid,
 }));
 
 const canEdit = { value: true };
@@ -39,8 +42,8 @@ vi.mock("./edit-labelling-dialog", () => ({
     open ? <div data-testid="edit-labelling">edit labelling dialog</div> : null,
 }));
 
+import { gridRow } from "../test/test-data-grid";
 import { RunCurvesPanel } from "./run-curves-panel";
-import { gridRow } from "./test-data-grid";
 
 const positions = Array.from({ length: 9 }, (_, i) => ({
   well_id: `w${i + 1}`,
@@ -154,6 +157,10 @@ describe("RunCurvesPanel", () => {
   it("shows an empty state when nothing is selected", () => {
     render(<RunCurvesPanel runId="r1" />);
     expect(screen.getByText("Select positions above to draw their traces")).toBeInTheDocument();
+    // Without an analysis (it failed), the results column says so.
+    expect(
+      screen.getByText("Could not load the analysis. Reload the page and try again."),
+    ).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.getByText("No positions selected.")).toBeInTheDocument();
   });
@@ -402,8 +409,33 @@ describe("RunCurvesPanel", () => {
     it("reference traces are on by default", () => {
       withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
       render(<RunCurvesPanel runId="r1" />);
-      expect(screen.getByRole("switch", { name: "Reference traces" })).toBeChecked();
+      const toggle = screen.getByRole("switch", { name: "Reference traces" });
+      expect(toggle).toBeChecked();
       expect(drawnWells()).toEqual(expect.arrayContaining(["w1", "w2"]));
+      // It sits in the viewer's toolbar, not the results header.
+      const results = screen.getByRole("heading", { name: "Results" }).closest("section");
+      expect(results?.contains(toggle)).toBe(false);
+    });
+
+    it("lays the viewer out for review: short plot, selection line, steps, chart, then values", () => {
+      withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
+      render(<RunCurvesPanel runId="r1" />);
+      expect(lastPlot().style?.height).toBe(340);
+      const line = screen.getByText("ABC-0000002 · Position 2 · 50 µM");
+      const steps = screen.getByRole("heading", { name: "Melting steps" });
+      const values = screen.getByRole("button", { name: "Instrument values" });
+      const follows = (a: Node, b: Node) =>
+        !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(follows(screen.getByTestId("plot"), line)).toBe(true);
+      expect(follows(line, steps)).toBe(true);
+      expect(follows(steps, values)).toBe(true);
+      // A compact key stands in for the generic legend.
+      const key = screen.getByTestId("curve-key");
+      for (const t of ["Reference", "Reviewed step", "Unreviewed step", "Onset"])
+        expect(within(key).getByText(t)).toBeInTheDocument();
+      expect(screen.queryByText("Other positions")).toBeNull();
+      fireEvent.click(gridRow("Position 3"), { metaKey: true });
+      expect(screen.getByText("2 samples selected")).toBeInTheDocument();
     });
 
     it("filtering keeps the selection", () => {
@@ -423,9 +455,12 @@ describe("RunCurvesPanel", () => {
       ).not.toBeInTheDocument();
       fireEvent.click(gridRow("Position 2"), { metaKey: true });
       expect(selectedRows()).toEqual([]);
+      // One message; no steps panel and no chart.
       expect(
-        screen.getByText("Select a sample in the results to see its trace and steps."),
-      ).toBeInTheDocument();
+        screen.getAllByText("Select a sample in the results to see its trace and steps."),
+      ).toHaveLength(1);
+      expect(screen.queryByRole("heading", { name: "Melting steps" })).toBeNull();
+      expect(screen.queryByText(/positions above/)).toBeNull();
     });
 
     it("edit labeling sits in the results header", () => {
@@ -505,6 +540,29 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
     setup();
     fireEvent.click(gridRow("Position 4"));
     expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Only one concentration/)).not.toBeInTheDocument();
+  });
+
+  it("says when the batch was tested at one concentration only", () => {
+    useRunCurves.mockImplementation(() => ({
+      data: {
+        ...dosed,
+        positions: dosed.positions.map((p, i) =>
+          i === 3 ? { ...p, registration_number: "REG-2", batch_id: "b2", dose: 50 } : p,
+        ),
+      },
+      isLoading: false,
+      isPlaceholderData: false,
+    }));
+    withAnalysis({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 }, w4: { delta_tm: 1 } });
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
+    fireEvent.click(gridRow("REG-2"));
+    expect(
+      screen.getByText("Only one concentration of this batch in this run."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
+    fireEvent.click(gridRow("Position 2"));
+    expect(screen.queryByText(/Only one concentration/)).not.toBeInTheDocument();
   });
 
   it("fills only the lead window's band, and all of them in Compare", () => {

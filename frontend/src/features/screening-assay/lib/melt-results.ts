@@ -19,6 +19,8 @@ export interface WindowCell {
   deltaTm: number | null;
   status: CellStatus;
   differs: boolean;
+  /** The counting step's review; null without one. */
+  review: "reviewed" | "provisional" | null;
 }
 
 export interface SampleIdentity {
@@ -42,6 +44,7 @@ export interface ResultRow {
 }
 
 export interface WindowSummary {
+  window: string;
   referenceLabels: string[];
   referenceTm: number | null;
   referenceCount: number;
@@ -64,6 +67,13 @@ export const STATUS_ORDER: readonly CellStatus[] = [
   "reviewed",
 ];
 
+/** Which side of the ±threshold band a ΔTm falls, judged on the one-decimal
+ *  value the grid shows, so `+2.0` counts at a threshold of 2. */
+export function shiftDirection(deltaTm: number, threshold: number): "up" | "down" | null {
+  const shown = Number(deltaTm.toFixed(1));
+  return shown >= threshold ? "up" : shown <= -threshold ? "down" : null;
+}
+
 /** The step that gives a position its Tm in a window: non-rejected, on the
  *  window's channel, inside the window. */
 function countingStep(
@@ -81,13 +91,18 @@ function countingStep(
   );
 }
 
-function batchSuffix(p: CurvePosition): string | null {
+/** The batch number without its registration-number prefix (`001`). */
+export function batchSuffix(p: CurvePosition): string | null {
   if (!p.batch_number) return null;
   const prefix = `${p.registration_number}-`;
   return p.registration_number && p.batch_number.startsWith(prefix)
     ? p.batch_number.slice(prefix.length)
     : p.batch_number;
 }
+
+/** Registration number, else label, else position. */
+export const sampleTextOf = (p: CurvePosition): string =>
+  p.registration_number || p.label || p.position_label;
 
 function cellStatus(
   isReference: boolean,
@@ -118,11 +133,13 @@ export function resultRows(
       const differs = checks.some(
         (c) => c.channel_key === w.channel_key && c.differs.includes(p.well_id),
       );
+      const counting = countingStep(w, p.well_id, steps);
       cells[w.window] = {
         tm: r.tm ?? null,
         deltaTm: r.delta_tm ?? null,
-        status: cellStatus(p.well_type === "reference", r.flags, countingStep(w, p.well_id, steps)),
+        status: cellStatus(p.well_type === "reference", r.flags, counting),
         differs,
+        review: counting ? (counting.status === "unreviewed" ? "provisional" : "reviewed") : null,
       };
     }
     return {
@@ -138,7 +155,7 @@ export function resultRows(
         label: p.label ?? null,
         smiles: p.smiles ?? null,
       },
-      sampleText: p.registration_number || p.label || p.position_label,
+      sampleText: sampleTextOf(p),
       concentration: p.dose ?? null,
       cells,
     };
@@ -209,9 +226,10 @@ export function matchesFilter(
     case "provisional":
       return cells.some((c) => c.status === "provisional");
     case "up":
-      return cells.some((c) => c.deltaTm != null && c.deltaTm >= threshold);
     case "down":
-      return cells.some((c) => c.deltaTm != null && c.deltaTm <= -threshold);
+      return cells.some(
+        (c) => c.deltaTm != null && shiftDirection(c.deltaTm, threshold) === filter,
+      );
   }
 }
 
@@ -228,6 +246,7 @@ export function windowSummary(
   const cells = rows.filter((r) => r.isSample).flatMap((r) => cellsOf(r, [window.window]));
   const n = (f: (c: WindowCell) => boolean) => cells.filter(f).length;
   return {
+    window: window.window,
     referenceLabels: refs.map((p) => p.label ?? p.position_label),
     referenceTm: window.reference_tm ?? null,
     referenceCount: window.reference_count,
@@ -239,8 +258,8 @@ export function windowSummary(
     ),
     needsReview: n((c) => c.status === "several_steps" || c.status === "no_step"),
     provisional: n((c) => c.status === "provisional"),
-    up: n((c) => c.deltaTm != null && c.deltaTm >= threshold),
-    down: n((c) => c.deltaTm != null && c.deltaTm <= -threshold),
+    up: n((c) => c.deltaTm != null && shiftDirection(c.deltaTm, threshold) === "up"),
+    down: n((c) => c.deltaTm != null && shiftDirection(c.deltaTm, threshold) === "down"),
   };
 }
 
@@ -268,6 +287,8 @@ export interface SeriesPoint {
   wellId: string;
   dose: number;
   deltaTm: number;
+  /** The counting step is unreviewed. */
+  provisional: boolean;
 }
 
 /** Sample points of one batch; [] unless at least two distinct doses above zero. */
@@ -275,6 +296,7 @@ export function batchSeries(
   window: MeltWindow,
   positions: readonly CurvePosition[],
   batchId: string,
+  steps: readonly MeltingStep[],
 ): SeriesPoint[] {
   const byId = new Map(positions.map((p) => [p.well_id, p]));
   const pts = window.positions
@@ -282,8 +304,18 @@ export function batchSeries(
       const p = byId.get(r.well_id);
       if (!p || p.well_type !== "sample" || p.batch_id !== batchId) return [];
       if (r.delta_tm == null || p.dose == null || p.dose <= 0) return [];
-      return [{ wellId: r.well_id, dose: p.dose, deltaTm: r.delta_tm }];
+      const provisional = countingStep(window, r.well_id, steps)?.status === "unreviewed";
+      return [{ wellId: r.well_id, dose: p.dose, deltaTm: r.delta_tm, provisional }];
     })
     .sort((a, b) => a.dose - b.dose);
   return new Set(pts.map((x) => x.dose)).size >= 2 ? pts : [];
+}
+
+/** Distinct doses above zero at which the run tests a batch's samples. */
+export function batchDoseCount(positions: readonly CurvePosition[], batchId: string): number {
+  return new Set(
+    positions
+      .filter((p) => p.well_type === "sample" && p.batch_id === batchId && (p.dose ?? 0) > 0)
+      .map((p) => p.dose),
+  ).size;
 }

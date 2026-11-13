@@ -1,4 +1,5 @@
 import { CHART_AXIS, CHART_COLORS } from "@/shared/lib/chart-colors";
+import { shiftDirection } from "./melt-results";
 
 /** Shared look of the ΔTm figures (ranked shift plot, ΔTm by concentration). */
 
@@ -7,8 +8,16 @@ const UP = "#3b82f6";
 const DOWN = "#ef4444";
 export const GRID = "rgba(113,113,122,0.2)";
 
-export const shiftColour = (deltaTm: number, threshold: number) =>
-  deltaTm >= threshold ? UP : deltaTm <= -threshold ? DOWN : CHART_COLORS.neutral;
+export const shiftColour = (deltaTm: number, threshold: number) => {
+  const d = shiftDirection(deltaTm, threshold);
+  return d === "up" ? UP : d === "down" ? DOWN : CHART_COLORS.neutral;
+};
+
+/** The ring round a selected point: dark ink on the light surface, light on the dark. */
+export const selectedOutline = (theme: string | undefined) =>
+  theme === "light" ? "#111827" : "#f1f5f9";
+
+const ZERO_LABEL = "ΔTm = 0 (reference)";
 
 /** The ±threshold band and the 0 line, with their labels. The ΔTm axis is x
  *  (`"x"`) or y (`"y"`); the other axis spans the paper. */
@@ -57,16 +66,18 @@ export function shiftBand(threshold: number, axis: "x" | "y") {
           yanchor: "bottom" as const,
           x: 0,
           xanchor: "left" as const,
-          text: "protein alone",
+          text: ZERO_LABEL,
         },
       ]
-    : [
+    : // At the left end, where the lowest dose sits; the highest dose (most
+      // likely to sit on the line) is at the right.
+      [
         {
           ...note,
           xref: "paper" as const,
           yref: "y" as const,
-          x: 1,
-          xanchor: "right" as const,
+          x: 0,
+          xanchor: "left" as const,
           y: -threshold,
           yanchor: "top" as const,
           text: `within ±${threshold} °C`,
@@ -75,11 +86,11 @@ export function shiftBand(threshold: number, axis: "x" | "y") {
           ...note,
           xref: "paper" as const,
           yref: "y" as const,
-          x: 1,
-          xanchor: "right" as const,
+          x: 0,
+          xanchor: "left" as const,
           y: 0,
           yanchor: "bottom" as const,
-          text: "protein alone",
+          text: ZERO_LABEL,
         },
       ];
   return { shapes, annotations };

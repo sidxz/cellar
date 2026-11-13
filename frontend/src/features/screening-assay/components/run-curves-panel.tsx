@@ -14,7 +14,14 @@ import {
   orderedPositions,
 } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState, applyClick } from "../lib/curve-selection";
-import { batchSeries, firstToSelect, resultRows } from "../lib/melt-results";
+import {
+  batchDoseCount,
+  batchSeries,
+  batchSuffix,
+  firstToSelect,
+  resultRows,
+  sampleTextOf,
+} from "../lib/melt-results";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
 import { ConcentrationChart } from "./concentration-chart";
@@ -28,8 +35,9 @@ const PLOT_HEIGHT = "h-[400px]";
 /** The Traces tab: the results grid beside the trace viewer, one linked
  *  workspace. The grid picks the positions; the viewer overlays their traces
  *  for one signal with their melting steps as lines and the temperature
- *  windows as bands; the steps under it are reviewed there. Without an
- *  analysis (it failed to load) the viewer keeps its own position selector. */
+ *  windows as bands; under the plot, the steps are reviewed and the batch's
+ *  ΔTm is charted by concentration. Without an analysis (it failed to load)
+ *  the viewer keeps its own position selector. */
 export function RunCurvesPanel({
   runId,
   run,
@@ -126,20 +134,49 @@ export function RunCurvesPanel({
   const lead = analysis?.windows.find(
     (w) => w.window === leadWindow && w.channel_key === set.channel,
   );
+  const anchorBatch = anchor?.well_type === "sample" ? anchor.batch_id : null;
   const series =
-    lead && anchor?.well_type === "sample" && anchor.batch_id
-      ? batchSeries(lead, data.positions, anchor.batch_id)
+    lead && analysis && anchorBatch
+      ? batchSeries(lead, data.positions, anchorBatch, analysis.steps)
       : [];
-  const batchSuffix =
-    anchor?.batch_number && anchor.registration_number
-      ? anchor.batch_number.startsWith(anchor.registration_number)
-        ? anchor.batch_number.slice(anchor.registration_number.length).replace(/^[\s\-·]+/, "")
-        : anchor.batch_number
-      : anchor?.batch_number;
+  const oneDose = !!anchorBatch && batchDoseCount(data.positions, anchorBatch) === 1;
+  const selectedPositions = orderedPositions(set).filter((p) => selection.selected.has(p.well_id));
   const editRefusal = run ? labellingEditRefusal(run) : null;
 
   // The grid is the selector; without an analysis (it failed) the viewer's own stays.
   const fallback = !analysis && !melting.isLoading;
+  const underPlot = analysis && selectedPositions.length > 0 && (
+    <>
+      <MeltingStepsPanel
+        runId={runId}
+        analysis={analysis}
+        positions={selectedPositions}
+        channel={set.channel}
+        unit={currentChannel(set)?.x_unit ?? ""}
+        value={stepValue}
+        onValueChange={setStepValue}
+        onReload={melting.refetch}
+      />
+      {lead && anchor && series.length > 0 ? (
+        <ConcentrationChart
+          title={`${[sampleTextOf(anchor), batchSuffix(anchor)].filter(Boolean).join(" · ")} — ΔTm (${lead.window}) by concentration`}
+          points={series}
+          doseUnit={doseUnit}
+          threshold={threshold}
+          selected={selection.selected}
+          onSelect={(id) =>
+            setSelection(applyClick(selection, [id], id, { shift: false, toggle: false }))
+          }
+        />
+      ) : (
+        oneDose && (
+          <p className="text-sm text-muted-foreground">
+            Only one concentration of this batch in this run.
+          </p>
+        )
+      )}
+    </>
+  );
   const editLabelling = run && canEdit && (
     <>
       <Button
@@ -175,21 +212,21 @@ export function RunCurvesPanel({
               doseUnit={doseUnit}
               selection={selection}
               onSelectionChange={setSelection}
-              showReferences={showReferences}
-              onShowReferencesChange={setShowReferences}
               headerAction={editLabelling}
               onLeadWindowChange={setLeadWindow}
               onShownWindowsChange={setShown}
               onThresholdChange={setThreshold}
               designHref={run && `/assays/protocols/${run.protocol_id}#design`}
             />
+          ) : melting.isLoading ? (
+            <Skeleton data-testid="results-loading" className={cn("w-full", PLOT_HEIGHT)} />
           ) : (
-            melting.isLoading && (
-              <Skeleton data-testid="results-loading" className={cn("w-full", PLOT_HEIGHT)} />
-            )
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              Could not load the analysis. Reload the page and try again.
+            </p>
           )}
         </div>
-        <div className="order-1 min-w-0 space-y-6 self-start @[1100px]:sticky @[1100px]:top-4 @[1100px]:order-2 @[1100px]:col-span-5">
+        <div className="order-1 min-w-0 self-start @[1100px]:sticky @[1100px]:top-4 @[1100px]:order-2 @[1100px]:col-span-5">
           <CurveViewer
             set={set}
             steps={steps}
@@ -209,36 +246,8 @@ export function RunCurvesPanel({
             collapseReportedTable={!fallback}
             selectorAction={fallback && editLabelling}
             compactControls
+            belowPlot={underPlot}
           />
-          {analysis && selection.selected.size === 0 && (
-            <p className="text-sm text-muted-foreground">
-              Select a sample in the results to see its trace and steps.
-            </p>
-          )}
-          {analysis && (
-            <MeltingStepsPanel
-              runId={runId}
-              analysis={analysis}
-              positions={orderedPositions(set).filter((p) => selection.selected.has(p.well_id))}
-              channel={set.channel}
-              unit={currentChannel(set)?.x_unit ?? ""}
-              value={stepValue}
-              onValueChange={setStepValue}
-              onReload={melting.refetch}
-            />
-          )}
-          {lead && anchor && series.length > 0 && (
-            <ConcentrationChart
-              title={`${anchor.registration_number} · ${batchSuffix} — ΔTm (${lead.window}) by concentration`}
-              points={series}
-              doseUnit={doseUnit}
-              threshold={threshold}
-              selected={selection.selected}
-              onSelect={(id) =>
-                setSelection(applyClick(selection, [id], id, { shift: false, toggle: false }))
-              }
-            />
-          )}
         </div>
       </div>
     </div>

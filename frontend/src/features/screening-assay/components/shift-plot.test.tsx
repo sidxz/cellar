@@ -21,6 +21,7 @@ vi.mock("@/shared/lib/plotly", () => ({
   },
 }));
 
+import { selectedOutline } from "../lib/shift-figure";
 import { ShiftPlot } from "./shift-plot";
 
 const rows = [
@@ -48,7 +49,7 @@ describe("ShiftPlot", () => {
     expect([band.x0, band.x1]).toEqual([-2, 2]);
     expect(layout.shapes.some((s: any) => s.type === "line" && s.x0 === 0)).toBe(true);
     const text = layout.annotations.map((a: any) => a.text);
-    expect(text).toEqual(["within ±2 °C", "protein alone"]);
+    expect(text).toEqual(["within ±2 °C", "ΔTm = 0 (reference)"]);
     expect(last().config).toMatchObject({ displayModeBar: false });
   });
 
@@ -59,6 +60,28 @@ describe("ShiftPlot", () => {
     expect(m.color[1]).not.toBe(m.color[2]);
     expect(m.color[0]).not.toBe(m.color[2]);
     expect(m.size).toEqual([8, 8, 11]);
+    // The ring is light ink on the (default) dark surface, dark ink on the light one.
+    expect(m.line.color).toBe(selectedOutline(undefined));
+    expect(selectedOutline("dark")).toBe("#f1f5f9");
+    expect(selectedOutline("light")).toBe("#111827");
+  });
+
+  it("colours by the value as shown: +1.96 at a threshold of 2 is up", () => {
+    render(
+      <ShiftPlot
+        rows={[
+          { wellId: "a", label: "A", deltaTm: 1.96 },
+          { wellId: "b", label: "B", deltaTm: 3 },
+          { wellId: "c", label: "C", deltaTm: 1.94 },
+        ]}
+        threshold={2}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    const c = last().data[0].marker.color;
+    expect(c[0]).toBe(c[1]);
+    expect(c[2]).not.toBe(c[1]);
   });
 
   it("click selects the position", () => {

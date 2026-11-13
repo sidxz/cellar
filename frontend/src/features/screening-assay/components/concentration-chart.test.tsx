@@ -21,13 +21,14 @@ vi.mock("@/shared/lib/plotly", () => ({
   },
 }));
 
+import { selectedOutline } from "../lib/shift-figure";
 import { ConcentrationChart } from "./concentration-chart";
 
 const points = [
-  { wellId: "a", dose: 1, deltaTm: 0.5 },
-  { wellId: "b", dose: 10, deltaTm: 3 },
-  { wellId: "c", dose: 10, deltaTm: 5 },
-  { wellId: "d", dose: 100, deltaTm: 6 },
+  { wellId: "a", dose: 1, deltaTm: 0.5, provisional: false },
+  { wellId: "b", dose: 10, deltaTm: 3, provisional: true },
+  { wellId: "c", dose: 10, deltaTm: 5, provisional: false },
+  { wellId: "d", dose: 100, deltaTm: 6, provisional: false },
 ];
 const last = () => plots[plots.length - 1];
 const show = (selected: string[] = [], onSelect = () => {}) =>
@@ -64,10 +65,22 @@ describe("ConcentrationChart", () => {
     expect(last().layout.height).toBe(260);
     expect(last().config).toEqual({ displayModeBar: false, responsive: true });
     expect(last().layout.shapes[0]).toMatchObject({ y0: -2, y1: 2 });
-    expect(last().layout.annotations.map((a: any) => a.text)).toEqual([
-      "within ±2 °C",
-      "protein alone",
+    // Labels at the left end, the band's below it and the zero line's above;
+    // nothing at the right edge, where the highest dose sits.
+    expect(last().layout.annotations).toMatchObject([
+      { text: "within ±2 °C", x: 0, xanchor: "left", y: -2, yanchor: "top" },
+      { text: "ΔTm = 0 (reference)", x: 0, xanchor: "left", y: 0, yanchor: "bottom" },
     ]);
+    expect(pts.marker.line.color).toBe(selectedOutline(undefined));
+  });
+
+  it("draws provisional points hollow and says so on hover", () => {
+    show();
+    const pts = last().data[0];
+    expect(pts.marker.symbol).toEqual(["circle", "circle-open", "circle", "circle"]);
+    expect(pts.marker.line.width).toEqual([0, 2, 0, 0]);
+    expect(pts.text).toEqual(["Reviewed", "Provisional", "Reviewed", "Reviewed"]);
+    expect(pts.hovertemplate).toContain("%{text}");
   });
 
   it("joins means in dose order with a tick where a dose repeats", () => {

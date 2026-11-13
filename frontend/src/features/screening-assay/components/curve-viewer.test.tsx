@@ -627,6 +627,18 @@ describe("CurveViewer compactControls", () => {
     expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
   });
 
+  it("with hideSelector, puts the reference switch in the toolbar", () => {
+    const { rerender } = render(<Harness callbacks={callbacks()} compactControls />);
+    expect(screen.queryByRole("switch", { name: "Reference traces" })).toBeNull();
+    rerender(<Harness callbacks={callbacks()} compactControls hideSelector />);
+    expect(screen.getByRole("switch", { name: "Reference traces" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Reference traces" }));
+    expect(screen.getByRole("switch", { name: "Reference traces" })).toBeChecked();
+    expect(
+      screen.getByText("Select a sample in the results to see its trace and steps."),
+    ).toBeInTheDocument();
+  });
+
   it("renders them in the bar without the prop", () => {
     render(<Harness callbacks={callbacks()} />);
     expect(screen.getByRole("tablist", { name: "Color" })).toBeInTheDocument();

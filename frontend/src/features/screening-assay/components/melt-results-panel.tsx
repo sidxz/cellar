@@ -1,9 +1,7 @@
 "use client";
 
-import { Label } from "@/shared/components/ui/label";
-import { Switch } from "@/shared/components/ui/switch";
 import Link from "next/link";
-import { type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
 import {
@@ -17,9 +15,9 @@ import {
 } from "../lib/melt-results";
 import { useShiftThreshold } from "../lib/use-shift-threshold";
 import type { MeltingAnalysis } from "../types";
-import { Segmented } from "./curve-viewer";
 import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
+import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
 
 const COMPARE = "__compare__";
@@ -33,8 +31,6 @@ export interface MeltResultsPanelProps {
   doseUnit: string;
   selection: SelectionState;
   onSelectionChange: (next: SelectionState) => void;
-  showReferences: boolean;
-  onShowReferencesChange: (next: boolean) => void;
   /** Edit labeling. */
   headerAction?: ReactNode;
   /** The single chosen window (kept while comparing); null when the signal has none. */
@@ -56,8 +52,6 @@ export function MeltResultsPanel({
   doseUnit,
   selection,
   onSelectionChange,
-  showReferences,
-  onShowReferencesChange,
   headerAction,
   onLeadWindowChange,
   onShownWindowsChange,
@@ -70,7 +64,6 @@ export function MeltResultsPanel({
   const [compare, setCompare] = useState(false);
   const [filter, setFilter] = useState<ResultFilter>(null);
   const [view, setView] = useState<"table" | "plot">("table");
-  const switchId = useId();
 
   const windows = useMemo(
     () => analysis.windows.filter((w) => w.channel_key === channel),
@@ -106,25 +99,37 @@ export function MeltResultsPanel({
     };
   }, [rows, windowNames, activeFilter, threshold]);
 
+  const sampleCount = useMemo(() => rows.filter((r) => r.isSample).length, [rows]);
+  const each = useMemo<WindowSummary[]>(
+    () =>
+      (comparing ? windows : lead ? [lead] : []).map((w) =>
+        windowSummary(w, rows, positions, analysis.steps, analysis.step_checks, threshold),
+      ),
+    [comparing, windows, lead, rows, positions, analysis, threshold],
+  );
   const summary = useMemo<WindowSummary | null>(() => {
-    if (!lead) return null;
-    const shown = comparing ? windows : [lead];
-    const each = shown.map((w) =>
-      windowSummary(w, rows, positions, analysis.steps, analysis.step_checks, threshold),
-    );
+    if (each.length === 0) return null;
     // Counted per position across the shown windows (once each), as the filters match.
     const samples = rows.filter((r) => r.isSample);
     const n = (f: ResultFilter) =>
       samples.filter((r) => matchesFilter(r, windowNames, f, threshold)).length;
     return {
       ...each[0],
+      referenceLabels: each.flatMap((s) => s.referenceLabels),
+      referencesDiffer: each.some((s) => s.referencesDiffer),
       referenceUnreviewed: each.some((s) => s.referenceUnreviewed),
       needsReview: n("needs_review"),
       provisional: n("provisional"),
       up: n("up"),
       down: n("down"),
     };
-  }, [lead, comparing, windows, rows, positions, analysis, threshold, windowNames]);
+  }, [each, rows, threshold, windowNames]);
+  // The references with a value in the shown windows (all of them if none has).
+  const selectReferences = () => {
+    const inShown = ordered.pinned.filter((r) => windowNames.some((n) => r.cells[n]));
+    const ids = (inShown.length ? inShown : ordered.pinned).map((r) => r.wellId);
+    if (ids.length) onSelectionChange({ selected: new Set(ids), anchor: ids[0] });
+  };
 
   return (
     <section className="space-y-3">
@@ -158,17 +163,19 @@ export function MeltResultsPanel({
             onChange={setView}
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Switch id={switchId} checked={showReferences} onCheckedChange={onShowReferencesChange} />
-          <Label htmlFor={switchId} className="text-sm font-normal">
-            Reference traces
-          </Label>
-        </div>
         {headerAction && <div className="ml-auto flex items-center gap-2">{headerAction}</div>}
       </div>
       {summary ? (
         <MeltSummaryStrip
           summary={summary}
+          scope={comparing ? "All windows" : (leadName ?? "")}
+          perWindow={comparing ? each : undefined}
+          shown={
+            activeFilter
+              ? { count: ordered.body.filter((r) => r.isSample).length, total: sampleCount }
+              : undefined
+          }
+          onSelectReferences={ordered.pinned.length ? selectReferences : undefined}
           threshold={threshold}
           onThresholdChange={setThreshold}
           filter={activeFilter}
@@ -187,7 +194,10 @@ export function MeltResultsPanel({
       )}
       {view === "plot" && !comparing && lead ? (
         <ShiftPlot
-          rows={shiftRows(rows, lead.window)}
+          rows={shiftRows(
+            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, threshold)),
+            lead.window,
+          )}
           threshold={threshold}
           selected={selection.selected}
           onSelect={(id) =>

@@ -3,11 +3,17 @@
 import { Input } from "@/shared/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import { X } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import type { ResultFilter, WindowSummary } from "../lib/melt-results";
 
-const Note = ({ children }: { children: ReactNode }) => (
-  <span className="font-medium text-amber-700 dark:text-amber-400">{children}</span>
+const NOTE = "font-medium text-amber-700 dark:text-amber-400";
+const Note = ({ children }: { children: ReactNode }) => <span className={NOTE}>{children}</span>;
+const STEP_ISSUES = "Step issues";
+
+const Dot = () => (
+  <span aria-hidden className="text-muted-foreground">
+    ·
+  </span>
 );
 
 /** A count that filters the grid; pressed while it is the active filter, and a
@@ -50,12 +56,24 @@ function CountButton({
 /** The window's reference and counts; each count filters the grid. */
 export function MeltSummaryStrip({
   summary,
+  scope,
+  perWindow,
+  shown,
+  onSelectReferences,
   threshold,
   onThresholdChange,
   filter,
   onFilterChange,
 }: {
   summary: WindowSummary;
+  /** What the counts cover: the window's name, or "All windows" in Compare. */
+  scope: string;
+  /** Compare: each shown window's reference Tm. */
+  perWindow?: readonly Pick<WindowSummary, "window" | "referenceTm">[];
+  /** While a filter is on: the samples it shows, of all of them. */
+  shown?: { count: number; total: number };
+  /** Selects the reference positions, so their steps can be reviewed. */
+  onSelectReferences?: () => void;
   threshold: number;
   onThresholdChange: (t: number) => void;
   filter: ResultFilter;
@@ -69,34 +87,63 @@ export function MeltSummaryStrip({
   };
   const toggle = { active: filter, onToggle: onFilterChange };
   const labels = [...new Set(summary.referenceLabels)].join(", ");
+  const reference = ["Reference", labels].filter(Boolean).join(" ");
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm">
-      {summary.referenceTm == null ? (
+      {perWindow ? (
+        perWindow.every((w) => w.referenceTm == null) ? (
+          <Note>No reference</Note>
+        ) : (
+          <span>
+            {reference}
+            {perWindow.map((w) => (
+              <Fragment key={w.window}>
+                {` · ${w.window} `}
+                {w.referenceTm == null ? (
+                  <Note>No reference</Note>
+                ) : (
+                  `${w.referenceTm.toFixed(1)} °C`
+                )}
+              </Fragment>
+            ))}
+          </span>
+        )
+      ) : summary.referenceTm == null ? (
         <Note>No reference</Note>
       ) : (
         <span>
-          {`Reference ${labels} ${summary.referenceTm.toFixed(1)} °C (n=${summary.referenceCount})`}
+          {`${reference} ${summary.referenceTm.toFixed(1)} °C (n=${summary.referenceCount})`}
         </span>
       )}
       {summary.referencesDiffer && <Note>References disagree in step count</Note>}
-      {summary.referenceUnreviewed && <Note>Reference not reviewed</Note>}
-      <span aria-hidden className="text-muted-foreground">
-        ·
-      </span>
+      {summary.referenceUnreviewed &&
+        (onSelectReferences ? (
+          <button
+            type="button"
+            className={cn(NOTE, "underline-offset-4 hover:underline")}
+            title="Select the reference to review its steps"
+            onClick={onSelectReferences}
+          >
+            Reference not reviewed
+          </button>
+        ) : (
+          <Note>Reference not reviewed</Note>
+        ))}
+      <Dot />
+      <span className="font-medium">{scope}</span>
+      <Dot />
       <CountButton
         value="needs_review"
         count={summary.needsReview}
         tone="font-medium text-amber-700 dark:text-amber-400"
         {...toggle}
       >
-        {`Needs review ${summary.needsReview}`}
+        {`${STEP_ISSUES} ${summary.needsReview}`}
       </CountButton>
       <CountButton value="provisional" count={summary.provisional} {...toggle}>
         {`Provisional ${summary.provisional}`}
       </CountButton>
-      <span aria-hidden className="text-muted-foreground">
-        ·
-      </span>
+      <Dot />
       <span className="inline-flex items-center gap-1.5">
         <span className="text-muted-foreground">|ΔTm| ≥</span>
         <Input
@@ -136,6 +183,9 @@ export function MeltSummaryStrip({
           {`${summary.down} down`}
         </CountButton>
       </span>
+      {shown && (
+        <span className="text-muted-foreground">{`${shown.count} of ${shown.total} samples`}</span>
+      )}
     </div>
   );
 }

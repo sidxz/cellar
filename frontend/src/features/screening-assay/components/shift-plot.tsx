@@ -2,8 +2,9 @@
 
 import { CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
+import { useTheme } from "next-themes";
 import type { ShiftRow } from "../lib/melt-results";
-import { GRID, shiftBand, shiftColour } from "../lib/shift-figure";
+import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
 export function ShiftPlot({
   rows,
@@ -16,6 +17,7 @@ export function ShiftPlot({
   selected: ReadonlySet<string>;
   onSelect: (wellId: string) => void;
 }) {
+  const { resolvedTheme } = useTheme();
   const longest = Math.max(0, ...rows.map((r) => r.label.length));
   const left = Math.min(180, 40 + longest * 7);
   const { shapes, annotations } = shiftBand(threshold, "x");
@@ -34,7 +36,7 @@ export function ShiftPlot({
             size: rows.map((r) => (selected.has(r.wellId) ? 11 : 8)),
             line: {
               width: rows.map((r) => (selected.has(r.wellId) ? 2 : 0)),
-              color: "#111827",
+              color: selectedOutline(resolvedTheme),
             },
           },
           hovertemplate: "%{y}: %{x:.1f} °C<extra></extra>",
