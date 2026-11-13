@@ -1,5 +1,9 @@
 "use client";
 
+import {
+  CompoundCurvesButton,
+  type CompoundCurvesTarget,
+} from "@/features/screening-assay/components/compound-curves-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import type { ReactNode } from "react";
 import {
@@ -14,11 +18,14 @@ export function AssayEvidence({
   av,
   interceptKey = null,
   mode,
+  curves,
   children,
 }: {
   av: ActivityValue;
   interceptKey?: InterceptKey | null;
   mode: AggregationMode;
+  /** The compound's curves in this protocol, offered at the bottom. */
+  curves?: CompoundCurvesTarget | null;
   children: ReactNode;
 }) {
   const count = av.run_count;
@@ -68,6 +75,7 @@ export function AssayEvidence({
           interceptKey={interceptKey}
           unit={av.unit ?? "(unit unavailable)"}
         />
+        <CompoundCurvesButton target={curves} className="mt-3" />
       </PopoverContent>
     </Popover>
   );

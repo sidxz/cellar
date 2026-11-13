@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -34,6 +35,33 @@ const OpenContext = createContext<((target: CompoundCurvesTarget) => void) | nul
 /** Opens the compound curves dialog; null outside a CompoundCurvesProvider. */
 export function useOpenCompoundCurves() {
   return useContext(OpenContext);
+}
+
+/** The "Curves" control: shown only with a target and inside a provider. */
+export function CompoundCurvesButton({
+  target,
+  className,
+}: {
+  target: CompoundCurvesTarget | null | undefined;
+  className?: string;
+}) {
+  const open = useOpenCompoundCurves();
+  if (!target || !open) return null;
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      className={className}
+      onClick={(event) => {
+        // A search row or card around the control must not react too.
+        event.stopPropagation();
+        open(target);
+      }}
+    >
+      Curves
+    </Button>
+  );
 }
 
 /** Holds the open target and renders the one compound curves dialog. */

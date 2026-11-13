@@ -1,8 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { ActivityValue } from "@/features/research-organization/types";
+import { CompoundCurvesProvider } from "@/features/screening-assay/components/compound-curves-dialog";
 import { InterceptCell } from "./intercept-cell";
+
+vi.mock("@/features/screening-assay/components/multi-run-curves", () => ({
+  MultiRunCurves: () => <div data-testid="multi-run-curves" />,
+}));
 
 const baseAv: ActivityValue = {
   value: 0.12,
@@ -264,4 +269,28 @@ it("opens single-run evidence without triggering the compound row", async () => 
     "/assays/runs/run-1",
   );
   expect(rowClick).not.toHaveBeenCalled();
+});
+
+it("offers Curves in its evidence popover when given a target", async () => {
+  render(
+    <CompoundCurvesProvider>
+      <InterceptCell
+        av={baseAv}
+        spec={null}
+        isPrimary
+        mode="latest"
+        curves={{
+          protocol: { id: "p1", name: "Protocol 1" },
+          molecules: [{ id: "m1", name: "ABC-0000001" }],
+        }}
+      />
+    </CompoundCurvesProvider>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: /show run history/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Curves" }));
+  expect(
+    await screen.findByRole("dialog", {
+      name: "All runs of Protocol 1 with curves for ABC-0000001",
+    }),
+  ).toBeInTheDocument();
 });

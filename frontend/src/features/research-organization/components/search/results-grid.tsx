@@ -17,6 +17,7 @@ import { groupBy } from "@/shared/lib/group-by";
 import { detectQueryKind } from "@/shared/lib/rdkit/detect-query-kind";
 import { cn } from "@/shared/lib/utils";
 import { activityEndpoint } from "../../lib/assay-evidence";
+import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import {
   ANY_COLUMN_ID,
   type ResolvedColumn,
@@ -205,6 +206,12 @@ function buildIdentityColumns(
 export type { ResolvedColumn };
 export const resolveColumns = resolveColumnsShared;
 
+/** The row compound's curves in the column's protocol, from the protocol's
+ *  flag only: nothing is fetched per cell. */
+function rowCurves(proto: Protocol | undefined, row: EnrichedMolecule | undefined) {
+  return row ? curvesTarget(proto, [compoundRef(row)]) : null;
+}
+
 function buildReadoutColumn(
   colId: string,
   proto: Protocol | undefined,
@@ -236,7 +243,7 @@ function buildReadoutColumn(
       }
       const q = av.qualifier && av.qualifier !== "=" ? `${av.qualifier} ` : "";
       return (
-        <AssayEvidence av={av} mode={mode}>
+        <AssayEvidence av={av} mode={mode} curves={rowCurves(proto, params.data)}>
           <span className="font-mono text-xs">
             {q}
             {av.value.toPrecision(4)}
@@ -298,6 +305,7 @@ export function buildDrcColumns(
           spec={null}
           isPrimary
           mode={aggregationMode}
+          curves={rowCurves(proto, params.data)}
         />
       ),
     });
@@ -320,6 +328,7 @@ export function buildDrcColumns(
             spec={spec}
             isPrimary={isPrimary}
             mode={aggregationMode}
+            curves={rowCurves(proto, params.data)}
           />
         ),
       });
