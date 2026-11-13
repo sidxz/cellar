@@ -7,10 +7,10 @@ from dataclasses import dataclass
 from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.errors import ValidationError
 
-_VALID_OPERATORS = {"gt", "lt", "gte", "lte", "in", "between"}
+_VALID_OPERATORS = {"gt", "lt", "gte", "lte", "in", "between", "not_between"}
 _VALID_INTERCEPT_KINDS = {"ec", "ic"}
 _MAX_CRITERIA = 3
-_COMPARISON_OPERATORS = {"lt", "lte", "gt", "gte", "between"}
+_COMPARISON_OPERATORS = {"lt", "lte", "gt", "gte", "between", "not_between"}
 
 
 def compare(
@@ -23,8 +23,9 @@ def compare(
     both :meth:`HitCriterion.is_met` and ``StageCriterion.is_met``.
 
     ``operator`` is one of ``lt``/``lte``/``gt``/``gte`` (``target`` a single
-    number) or ``between`` (``target`` a ``[low, high]`` pair, inclusive on
-    both ends). Any other operator — including HitCriterion's string-based
+    number), ``between`` (``target`` a ``[low, high]`` pair, inclusive on
+    both ends) or ``not_between`` (its complement: ``value < low or
+    value > high``). Any other operator — including HitCriterion's string-based
     ``in``, which callers must special-case before calling this — raises
     ``ValidationError``.
 
@@ -36,6 +37,11 @@ def compare(
         raise ValidationError(
             f"compare() operator must be one of {_COMPARISON_OPERATORS}, got '{operator}'"
         )
+    if operator == "not_between" and qualifier != ValueQualifier.EQ:
+        low, high = target  # type: ignore[misc]
+        if qualifier == ValueQualifier.GT:
+            return value >= high
+        return value <= low
     if qualifier == ValueQualifier.GT:
         return operator in ("gt", "gte") and value >= target
     if qualifier == ValueQualifier.LT:
@@ -51,6 +57,9 @@ def compare(
     if operator == "between":
         low, high = target  # type: ignore[misc]
         return low <= value <= high
+    if operator == "not_between":
+        low, high = target  # type: ignore[misc]
+        return value < low or value > high
     raise ValidationError(
         f"compare() operator must be one of {_COMPARISON_OPERATORS}, got '{operator}'"
     )
@@ -95,6 +104,8 @@ class HitCriterion:
       campaign hit-call evaluator skips it.)
     - ``between``: value is a 2-element list of numbers ``[low, high]``;
       hit if ``low <= measurement <= high`` (inclusive on both ends).
+    - ``not_between``: same value shape; hit if ``measurement < low`` or
+      ``measurement > high`` (e.g. a thermal shift in either direction).
 
     ``intercept_key`` (optional) targets a specific dose-response intercept
     (e.g. ``EC90``) on the named readout's fitted curve. ``None`` means
@@ -103,7 +114,7 @@ class HitCriterion:
     """
 
     readout_name: str
-    operator: str  # gt, lt, gte, lte, in, between
+    operator: str  # gt, lt, gte, lte, in, between, not_between
     value: float | list[str] | list[float]
     intercept_key: InterceptKey | None = None
 
@@ -119,19 +130,20 @@ class HitCriterion:
                 raise ValidationError(
                     "HitCriterion with 'in' operator requires a non-empty list value"
                 )
-        elif self.operator == "between":
+        elif self.operator in ("between", "not_between"):
             if (
                 not isinstance(self.value, list)
                 or len(self.value) != 2
                 or not all(isinstance(v, (int, float)) for v in self.value)
             ):
                 raise ValidationError(
-                    "HitCriterion with 'between' operator requires value=[low, high] (two numbers)"
+                    f"HitCriterion with '{self.operator}' operator requires "
+                    "value=[low, high] (two numbers)"
                 )
             low, high = self.value
             if low > high:
                 raise ValidationError(
-                    f"HitCriterion 'between' requires low <= high; got [{low}, {high}]"
+                    f"HitCriterion '{self.operator}' requires low <= high; got [{low}, {high}]"
                 )
         else:
             if not isinstance(self.value, (int, float)):

@@ -33,6 +33,7 @@ from cellar.domain.screening_assay.events import (
     ProtocolUnlocked,
     ProtocolUpdated,
 )
+from cellar.domain.screening_assay.melt_window import MeltReadoutConfig
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
@@ -275,6 +276,7 @@ class ReadoutDefinition(Entity):
         display_order: int = 0,
         pick_list_values: list[PickListValue | str | dict[str, object]] | None = None,
         dose_response_config: DoseResponseConfig | None = None,
+        melt_config: MeltReadoutConfig | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -288,6 +290,32 @@ class ReadoutDefinition(Entity):
         # non-conforming names hydrates cleanly from the database.
         if is_calculated and not calculation_formula:
             raise ValidationError("Calculated readout requires a calculation_formula")
+
+        if melt_config is not None:
+            label = f"Readout '{name.strip()}'"
+            if data_type != ReadoutDataType.NUMERIC:
+                raise ValidationError(
+                    f"{label} computed from a temperature window must be numeric"
+                )
+            if canonical_unit(unit) != "°C":
+                raise ValidationError(f"{label} computed from a temperature window must be in °C")
+            if is_calculated:
+                raise ValidationError(
+                    f"{label} cannot be both calculated and computed from a temperature window"
+                )
+            if normalizations:
+                raise ValidationError(
+                    f"{label} computed from a temperature window cannot have normalizations"
+                )
+            if aggregation == ReadoutAggregation.GEOMETRIC_MEAN:
+                raise ValidationError(
+                    f"{label} computed from a temperature window cannot use a geometric mean"
+                )
+            if dose_response_config is not None:
+                raise ValidationError(
+                    f"{label} computed from a temperature window cannot be fitted to a "
+                    "dose-response curve"
+                )
 
         # pick_list type requires values
         if data_type == ReadoutDataType.PICK_LIST and not pick_list_values:
@@ -333,6 +361,12 @@ class ReadoutDefinition(Entity):
             pick_list_values
         )
         self.dose_response_config = dose_response_config
+        self.melt_config = melt_config
+
+    @property
+    def is_derived(self) -> bool:
+        """True when the value is computed, never entered: calculated or from a window."""
+        return self.is_calculated or self.melt_config is not None
 
 
 class ConditionDefinition(Entity):
@@ -955,9 +989,29 @@ class Protocol(AggregateRoot):
                         f"(emits: {sorted(n.value for n in y_rd.normalizations)})"
                     )
 
+        self._check_window_agreement(definition, self.readout_definitions)
+
         definition.protocol_id = self.id
         self.readout_definitions.append(definition)
         self.updated_at = datetime.now(UTC)
+
+    @staticmethod
+    def _check_window_agreement(
+        definition: ReadoutDefinition, others: list[ReadoutDefinition]
+    ) -> None:
+        """Readouts sharing a temperature window agree on it and differ in measure."""
+        mc = definition.melt_config
+        if mc is None:
+            return
+        for rd in others:
+            oc = rd.melt_config
+            if rd.id == definition.id or oc is None or oc.window != mc.window:
+                continue
+            if not mc.same_window(oc) or mc.measure == oc.measure:
+                raise ValidationError(
+                    f"Temperature window '{mc.window}' is used by more than one readout; "
+                    "they must share channel and limits and differ in measure"
+                )
 
     def remove_readout_definition(self, definition_id: uuid.UUID) -> None:
         """Remove a readout definition by ID.
@@ -1000,6 +1054,7 @@ class Protocol(AggregateRoot):
             list[PickListValue | str | dict[str, object]] | _UnsetT | None
         ) = _UNSET,
         dose_response_config: DoseResponseConfig | _UnsetT | None = _UNSET,
+        melt_config: MeltReadoutConfig | _UnsetT | None = _UNSET,
     ) -> None:
         """Update fields on an existing readout definition.
 
@@ -1075,6 +1130,9 @@ class Protocol(AggregateRoot):
                 if dose_response_config is _UNSET
                 else dose_response_config  # type: ignore[arg-type]
             ),
+            melt_config=(
+                existing.melt_config if melt_config is _UNSET else melt_config  # type: ignore[arg-type]
+            ),
             created_at=existing.created_at,
         )
 
@@ -1113,6 +1171,8 @@ class Protocol(AggregateRoot):
                         f"{sorted(n.value for n in y_def.normalizations)}"
                     )
 
+        self._check_window_agreement(replacement, self.readout_definitions)
+
         # Structural-diff guard for non-DRAFT protocols. Cosmetic fields
         # (display_order, precision, unit text) can be edited on unlocked
         # ACTIVE — they only affect display, not the run-data contract.
@@ -1136,6 +1196,8 @@ class Protocol(AggregateRoot):
                 structural.append("pick_list_values")
             if replacement.dose_response_config != existing.dose_response_config:
                 structural.append("dose_response_config")
+            if replacement.melt_config != existing.melt_config:
+                structural.append("melt_config")
             if structural:
                 raise ConflictError(
                     f"Cannot change {', '.join(structural)} on a non-draft "

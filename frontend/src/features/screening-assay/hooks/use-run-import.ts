@@ -24,6 +24,8 @@ import type {
 import { showWarning } from "@/shared/lib/toast";
 import {
   DOSE_RESPONSE_KEY,
+  MEASURED_CURVES_KEY,
+  MELTING_ANALYSIS_KEY,
   PLATE_MAP_KEY,
   READOUT_DATA_KEY,
   RUNS_KEY,
@@ -188,6 +190,8 @@ export function useResetRunData(runId: string) {
       qc.invalidateQueries({ queryKey: [...PLATE_MAP_KEY, runId] });
       qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
       qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
+      qc.invalidateQueries({ queryKey: MEASURED_CURVES_KEY });
+      qc.invalidateQueries({ queryKey: [...MELTING_ANALYSIS_KEY, runId] });
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: [...RUN_KEY, runId] });
     },

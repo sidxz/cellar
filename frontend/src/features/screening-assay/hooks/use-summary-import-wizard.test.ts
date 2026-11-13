@@ -22,6 +22,9 @@ const protocol = {
   readout_definitions: [
     makeReadoutDef("IC50"),
     makeReadoutDef("Percent Inhibition", { is_calculated: true }),
+    makeReadoutDef("Tm (Main)", {
+      melt_config: { window: "Main", measure: "tm", channel_key: "ratio", low: 50, high: 85 },
+    }),
   ],
 };
 
@@ -39,7 +42,7 @@ vi.mock("./use-summary-import", () => ({
 import { useSummaryImportWizard } from "./use-summary-import-wizard";
 
 describe("useSummaryImportWizard", () => {
-  it("omits calculated readouts from the column-target options", () => {
+  it("omits calculated and temperature-window readouts from the column-target options", () => {
     const { result } = renderHook(() =>
       useSummaryImportWizard({
         runId: "run-1",

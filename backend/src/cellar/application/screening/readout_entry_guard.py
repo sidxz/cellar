@@ -1,4 +1,4 @@
-"""Guard: a calculated readout is derived, never entered by hand.
+"""Guard: a calculated or derived readout is never entered by hand.
 
 Shared by the import paths that let a chemist bind a file column to a readout
 definition (summary import + plate import). A calculated readout's value comes
@@ -27,10 +27,10 @@ def calculated_readout_error(
     """
     for header, rd_id in mapping_pairs:
         definition = defs_by_id.get(rd_id)
-        if definition is not None and definition.is_calculated:
+        if definition is not None and definition.is_derived:
             return ValidationError(
                 f"Column '{header}' is mapped to readout '{definition.name}', "
-                "which is calculated; calculated values are computed from other "
-                "readouts and cannot be imported"
+                "which is calculated or derived; its values are computed from other "
+                "data and cannot be imported"
             )
     return None

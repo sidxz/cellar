@@ -24,6 +24,10 @@ vi.mock("../../hooks/use-plate-templates", () => ({ usePlateTemplates: () => ({ 
 vi.mock("@/shared/hooks/use-units", () => ({ useUnits: () => ({ data: [] }) }));
 vi.mock("./design-tab-protocol-card", () => ({ DesignTabProtocolCard: () => null }));
 vi.mock("../condition-group-table", () => ({ ConditionGroupTable: () => null }));
+vi.mock("../temperature-window-dialog", () => ({ TemperatureWindowDialog: () => null }));
+vi.mock("../../hooks/use-curve-positions", () => ({
+  useCurvePositions: () => ({ data: undefined }),
+}));
 vi.mock("../plate-map-view", () => ({ PlateMapView: () => null }));
 vi.mock("./use-readout-definition-form", () => ({
   useReadoutDefinitionForm: () => ({}),
@@ -139,5 +143,15 @@ describe("DesignTab condition dialog", () => {
     expect(
       screen.getByText("Add the condition, then set its fixed value with Correct details."),
     ).toBeInTheDocument();
+  });
+});
+
+describe("DesignTab temperature window button", () => {
+  it("is offered only on a protocol whose runs have traces", () => {
+    const { unmount } = render(<DesignTab protocol={protocol} protocolId="p1" />);
+    expect(screen.queryByRole("button", { name: /Temperature window/ })).not.toBeInTheDocument();
+    unmount();
+    render(<DesignTab protocol={{ ...protocol, has_measured_curves: true }} protocolId="p1" />);
+    expect(screen.getByRole("button", { name: /Temperature window/ })).toBeInTheDocument();
   });
 });

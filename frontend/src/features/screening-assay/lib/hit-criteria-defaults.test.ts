@@ -217,4 +217,15 @@ describe("deriveChannelHitDefaults", () => {
     expect(d.hit_operator).toBe("lt");
     expect(d.allowed_curve_classes).toEqual(["full", "partial"]);
   });
+
+  it("passes a recommended not_between criterion through as outside", () => {
+    const c: HitCriterion = { readout_name: "ΔTm (Main)", operator: "not_between", value: [-2, 2] };
+    const d = deriveChannelHitDefaults([c], { name: "ΔTm (Main)", data_type: "numeric" });
+    expect(d).toMatchObject({
+      hit_operator: "not_between",
+      hit_value: "",
+      hit_value_low: "-2",
+      hit_value_high: "2",
+    });
+  });
 });

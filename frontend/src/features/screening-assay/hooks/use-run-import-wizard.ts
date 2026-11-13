@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 
 import { showError, showSuccess } from "@/shared/lib/toast";
+import { hasRawLayer } from "../lib/readout-data-pivot";
 import {
   type MappingDraft,
   applyTemplateToDraft,
@@ -104,7 +105,7 @@ export function useRunImportWizard({
   const { data: protocol } = useProtocol(protocolId);
 
   // A calculated readout is computed from its formula — never an import target.
-  const readoutDefs = (protocol?.readout_definitions ?? []).filter((rd) => !rd.is_calculated);
+  const readoutDefs = (protocol?.readout_definitions ?? []).filter(hasRawLayer);
 
   // TanStack Query returns a fresh mutation object on every render, so
   // depending on the mutation in a useCallback would re-create reset every

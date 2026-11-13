@@ -198,10 +198,10 @@ class BulkCreateReadoutData:
                         f"does not belong to the run's protocol"
                     )
                 )
-            if rd.is_calculated:
+            if rd.is_derived:
                 return Failure(
                     ValidationError(
-                        f"Item {idx}: readout '{rd.name}' is calculated; "
+                        f"Item {idx}: readout '{rd.name}' is calculated or derived; "
                         "values cannot be entered directly"
                     )
                 )
@@ -215,10 +215,10 @@ class BulkCreateReadoutData:
                         f"not found in protocol"
                     )
                 )
-            if rd.is_calculated:
+            if rd.is_derived:
                 return Failure(
                     ValidationError(
-                        f"Item {idx}: readout '{rd.name}' is calculated; "
+                        f"Item {idx}: readout '{rd.name}' is calculated or derived; "
                         "values cannot be entered directly"
                     )
                 )

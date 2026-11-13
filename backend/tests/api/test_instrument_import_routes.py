@@ -58,7 +58,7 @@ class Seeded:
 
 
 async def _seed(session_factory: async_sessionmaker[AsyncSession], ws: uuid.UUID) -> Seeded:
-    """Org, protocol with a °C readout named like the file's first transition, draft run,
+    """Org, protocol with a °C readout named like the file's first onset, draft run,
     and a molecule with identifier ``ABC-0000001`` and one batch."""
     s = Seeded(uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4())
     org_id, protocol_id = uuid.uuid4(), uuid.uuid4()
@@ -70,7 +70,7 @@ async def _seed(session_factory: async_sessionmaker[AsyncSession], ws: uuid.UUID
             sa.text(
                 "INSERT INTO readout_definitions "
                 "(id, protocol_id, name, data_type, unit, display_order, is_calculated) "
-                "VALUES (:id, :proto, 'Inflection Point #1 for Ratio', 'numeric', '°C', 0, false)"
+                "VALUES (:id, :proto, 'Onset #1 for Ratio', 'numeric', '°C', 0, false)"
             ),
             {"id": s.tm1_id, "proto": protocol_id},
         )
@@ -197,14 +197,12 @@ async def test_preview_then_import_then_read_curves(
     assert [b["batch_id"] for b in suggestion["batches"]] == [str(s.batch_id)]
     assert preview["positions"][0]["suggestion"] is None
     assert preview["positions"][2]["label"] == ""
-    transition = next(
-        x for x in preview["series"] if (x["kind"], x["ordinal"]) == ("transition", 1)
-    )
-    assert transition["suggested_readout_definition_id"] == str(s.tm1_id)
-    assert (transition["unit"], transition["count"]) == ("°C", 3)
+    onset = next(x for x in preview["series"] if (x["kind"], x["ordinal"]) == ("onset", 1))
+    assert onset["suggested_readout_definition_id"] == str(s.tm1_id)
+    assert (onset["unit"], onset["count"]) == ("°C", 3)
     assert [c["key"] for c in preview["channels"]] == ["ratio", "f330", "f350", "scattering"]
     assert preview["readouts"] == [
-        {"id": str(s.tm1_id), "name": "Inflection Point #1 for Ratio", "unit": "°C"}
+        {"id": str(s.tm1_id), "name": "Onset #1 for Ratio", "unit": "°C"}
     ]
     assert isinstance(preview["settings"], dict) and preview["warnings"] == []
 
@@ -236,7 +234,7 @@ async def test_preview_then_import_then_read_curves(
     unknown = await client.get(f"/api/v1/runs/{s.run_id}/curves", params={"channel": "nope"})
     assert unknown.status_code == 422
 
-    # The transition value landed as an ordinary readout row for the position,
+    # The onset value landed as an ordinary readout row for the position,
     # carrying batch and molecule.
     assert (
         await _count(session_factory, "readout_data", s.run_id, where="is_computed = false") == 3
@@ -598,3 +596,103 @@ async def test_a_viewer_can_list_instrument_file_formats(viewer_client: AsyncCli
     resp = await viewer_client.get("/api/v1/instrument-file-formats")
     assert resp.status_code == 200, resp.text
     assert [f["id"] for f in resp.json()["formats"]] == [r.id for r in default_readers()]
+
+
+async def test_import_keeps_transitions_as_steps_and_does_not_offer_them_for_mapping(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    preview = (await client.post(s.preview_url, files=FILE)).json()
+    assert {x["kind"] for x in preview["series"]} == {"onset"}
+
+    await _import(client, s)
+    # Three positions carry a first transition; two of them also a second.
+    assert await _count(session_factory, "melting_steps", s.run_id) == 5
+    assert (
+        await _count(
+            session_factory,
+            "melting_steps",
+            s.run_id,
+            where="source = 'instrument' AND status = 'unreviewed' AND channel_key = 'ratio'",
+        )
+        == 5
+    )
+
+
+async def test_import_refuses_a_transition_mapping_with_the_step_message(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    preview = (await client.post(s.preview_url, files=FILE)).json()
+    labelling = labelling_from(preview)
+    labelling["series"] = [
+        {
+            "channel": "ratio",
+            "kind": "transition",
+            "ordinal": 1,
+            "readout_definition_id": str(s.tm1_id),
+        }
+    ]
+    resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
+    assert resp.status_code == 422, resp.text
+    assert "is a melting step" in resp.text and "cannot be mapped to a readout" in resp.text
+    for table in ("plates", "measured_curves", "readout_data", "melting_steps"):
+        assert await _count(session_factory, table, s.run_id) == 0
+
+
+async def test_import_then_engine_sees_the_steps(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    window = {"window": "Main", "channel_key": "ratio", "low": 50.0, "high": 60.0}
+    async with session_factory() as session:
+        protocol_id = (
+            await session.execute(
+                sa.text("SELECT protocol_id FROM runs WHERE id = :id"), {"id": s.run_id}
+            )
+        ).scalar_one()
+        for order, (name, measure) in enumerate((("Tm (Main)", "tm"), ("ΔTm (Main)", "delta_tm"))):
+            await session.execute(
+                sa.text(
+                    "INSERT INTO readout_definitions (id, protocol_id, name, data_type, unit, "
+                    "display_order, is_calculated, melt_config) VALUES (:id, :proto, :name, "
+                    "'numeric', '°C', :order, false, CAST(:cfg AS jsonb))"
+                ),
+                {
+                    "id": uuid.uuid4(),
+                    "proto": protocol_id,
+                    "name": name,
+                    "order": order + 1,
+                    "cfg": json.dumps({**window, "measure": measure}),
+                },
+            )
+        await session.commit()
+
+    await _import(client, s)
+    # Tm for the three positions' steps in 50 to 60; the reference position gives delta rows.
+    assert (
+        await _count(
+            session_factory,
+            "readout_data",
+            s.run_id,
+            where="is_computed = true AND readout_definition_id IN "
+            "(SELECT id FROM readout_definitions WHERE name LIKE 'Tm (%')",
+        )
+        == 3
+    )
+    assert (
+        await _count(
+            session_factory,
+            "readout_data",
+            s.run_id,
+            where="is_computed = true AND readout_definition_id IN "
+            "(SELECT id FROM readout_definitions WHERE name LIKE 'ΔTm (%')",
+        )
+        == 2
+    )

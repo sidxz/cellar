@@ -20,6 +20,12 @@ import type {
   LayoutFileResponse,
   LayoutRowModel,
   MeasuredCurvesBatchResponse,
+  MeltConfigModel,
+  MeltWindowModel,
+  MeltWindowPositionModel,
+  MeltingAnalysisResponse,
+  MeltingStepChangeResponse,
+  MeltingStepModel,
   PlateData as PlateDataModel,
   PlateMapResponse as PlateMapResponseModel,
   PlateMapSummaryModel,
@@ -36,6 +42,7 @@ import type {
   RunCountsResponse as RunCountsResponseModel,
   RunCurvesResponse,
   RunResponse,
+  StepCheckModel,
   TargetRefResponse,
   TargetResponse,
   TargetSyncReportResponse,
@@ -346,7 +353,13 @@ export interface ReadoutDefinition {
    *  condition variables. */
   pick_list_values: PickListValue[] | null;
   dose_response_config: DoseResponseConfig | null;
+  /** Set on a temperature window's Tm / ΔTm readout; `measure === "delta_tm"` marks a ΔTm
+   *  readout. Optional for hand-built fixtures. */
+  melt_config?: MeltConfig | null;
 }
+
+/** A temperature window's Tm or ΔTm readout settings. Aliases the generated type. */
+export type MeltConfig = MeltConfigModel;
 
 export interface PickListValue {
   label: string;
@@ -702,7 +715,7 @@ export interface InterceptKey {
  *    generated `InterceptKeyDTO` widens `kind` to `string`.
  */
 export type HitCriterion = Omit<HitCriterionDTO, "operator" | "intercept_key"> & {
-  operator: "gt" | "lt" | "gte" | "lte" | "in";
+  operator: "gt" | "lt" | "gte" | "lte" | "in" | "not_between";
   intercept_key?: InterceptKey | null;
 };
 
@@ -806,3 +819,9 @@ export type CurvePositions = CurvePositionsResponse;
 export type MeasuredCurvesBatch = MeasuredCurvesBatchResponse;
 export type LayoutFile = LayoutFileResponse;
 export type LayoutFileRow = LayoutRowModel;
+export type MeltingAnalysis = MeltingAnalysisResponse;
+export type MeltingStep = MeltingStepModel;
+export type MeltWindow = MeltWindowModel;
+export type MeltWindowPosition = MeltWindowPositionModel;
+export type StepCheck = StepCheckModel;
+export type MeltingStepChange = MeltingStepChangeResponse;

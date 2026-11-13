@@ -62,6 +62,7 @@ class ProtocolVersioningService:
                 display_order=rd.display_order,
                 pick_list_values=list(rd.pick_list_values) if rd.pick_list_values else None,
                 dose_response_config=rd.dose_response_config,  # frozen dataclass — safe to share
+                melt_config=rd.melt_config,  # frozen dataclass — safe to share
             )
             for rd in parent.readout_definitions
         ]

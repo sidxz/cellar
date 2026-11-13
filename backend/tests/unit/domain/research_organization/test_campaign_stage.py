@@ -225,3 +225,14 @@ class TestUnset:
 
     def test_repr(self) -> None:
         assert repr(UNSET) == "UNSET"
+
+
+def test_stage_criterion_accepts_not_between_and_evaluates_it() -> None:
+    cid = uuid.uuid4()
+    c = StageCriterion(cid, "not_between", [-2.0, 2.0])
+    assert c.is_met(-3.0) is True
+    assert c.is_met(0.0) is False
+    with pytest.raises(ValidationError):
+        StageCriterion(cid, "not_between", [3.0, 1.0])
+    with pytest.raises(ValidationError):
+        StageCriterion(cid, "not_between", 1.0)

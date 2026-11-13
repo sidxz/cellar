@@ -1,6 +1,7 @@
 /** The curve viewer's figure and table, built from a set of positions and
  *  their curves that may come from several runs. Pure. It draws what the API
- *  sends and knows nothing about what a reported value means. */
+ *  sends; the one meaning it knows is that a reported transition is a melting
+ *  step, which the reviewed steps replace when they are given. */
 
 import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { shortId } from "@/shared/lib/utils";
@@ -14,6 +15,9 @@ import {
   type WellType,
 } from "../types";
 import { holderOrder } from "./curve-selection";
+
+/** The reported-value kind that is a melting step (the backend's neutral kind). */
+const STEP_KIND = "transition";
 
 export type CurvePosition = RunCurves["positions"][number];
 export type CurveSeriesData = RunCurves["curves"][number];
@@ -214,15 +218,35 @@ export function currentChannel(set: CurveSet) {
   return set.channels.find((c) => c.key === set.channel);
 }
 
+/** A counted melting step; reviewed ones are drawn solid, the rest dashed. */
+export interface PlotStep {
+  value: number;
+  reviewed: boolean;
+}
+
+/** A temperature window, drawn as a shaded band. */
+export interface CurveBand {
+  low: number;
+  high: number;
+  label: string;
+  /** Explicitly false: drawn as dotted boundaries only, for the windows the
+   *  results are not showing. Unset, the band is filled. */
+  active?: boolean;
+}
+
 export function buildCurveFigure(
   args: {
     set: CurveSet;
     drawn: ReadonlySet<string>;
     showReported: boolean;
     canvas: "screen" | "export";
+    /** By well id, the counted melting steps on this signal; given, they are
+     *  drawn instead of the reported transitions. Other reported values stay. */
+    steps?: ReadonlyMap<string, readonly PlotStep[]>;
+    windows?: readonly CurveBand[];
   } & CurveColouring,
 ): { data: Record<string, unknown>[]; layout: Record<string, unknown> } {
-  const { set, drawn, showReported, canvas } = args;
+  const { set, drawn, showReported, canvas, steps, windows = [] } = args;
   const exporting = canvas === "export";
   // The exported figure sits on white, so it always takes the light set.
   const colouring: CurveColouring = {
@@ -268,30 +292,81 @@ export function buildCurveFigure(
       ...(group && { legendgroup: group.key, showlegend: firstOfGroup }),
     });
     if (!showReported) continue;
-    for (const r of curve.reported) {
-      if (r.unit !== xUnit) continue;
+    const reported = curve.reported.filter((r) => r.unit === xUnit);
+    const focused = colouring.focusedId === p.well_id;
+    const line = (
+      x: number,
+      style: { color: string; width: number; dash: string },
+      opacity: number,
+    ) =>
       shapes.push({
         type: "line",
         xref: "x",
-        x0: r.value,
-        x1: r.value,
+        x0: x,
+        x1: x,
         yref: "paper",
         y0: 0,
         y1: 1,
-        line: {
-          color: style.color,
-          width: colouring.focusedId === p.well_id ? 2 : 1,
-          dash: "dot",
-        },
-        opacity: 0.8 * style.opacity,
+        line: style,
+        opacity,
       });
+    if (!steps) {
+      for (const r of reported)
+        line(
+          r.value,
+          { color: style.color, width: focused ? 2 : 1, dash: "dot" },
+          0.8 * style.opacity,
+        );
+      continue;
     }
+    for (const st of steps.get(p.well_id) ?? [])
+      line(
+        st.value,
+        { color: style.color, width: focused ? 2.5 : 1.5, dash: st.reviewed ? "solid" : "dash" },
+        0.9 * style.opacity,
+      );
+    for (const r of reported.filter((r) => r.kind !== STEP_KIND))
+      line(r.value, { color: CHART_AXIS.tick, width: 1, dash: "dot" }, 0.5);
   }
 
   const light = exporting || colouring.palette === "light";
   const grid = light ? CHART_CANVAS.gridLight : CHART_AXIS.grid;
   const ink = light ? CHART_CANVAS.label : CHART_AXIS.label;
   const background = exporting ? CHART_CANVAS.background : "rgba(0,0,0,0)";
+  const bands = windows.flatMap((w) => {
+    const inactive = w.active === false;
+    const rect = {
+      type: "rect",
+      xref: "x",
+      x0: w.low,
+      x1: w.high,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      // Alpha in the fill, not shape opacity, so the label stays legible.
+      fillcolor: inactive ? "rgba(0,0,0,0)" : `${ink}1f`,
+      line: { width: 0 },
+      layer: "below",
+      label: {
+        text: w.label,
+        textposition: "top center",
+        font: { color: ink, size: 11, weight: inactive ? 300 : 400 },
+      },
+    };
+    const edge = (x: number) => ({
+      type: "line",
+      xref: "x",
+      x0: x,
+      x1: x,
+      yref: "paper",
+      y0: 0,
+      y1: 1,
+      line: { color: ink, width: 1, dash: "dot" },
+      opacity: 0.5,
+      layer: "below",
+    });
+    return inactive ? [rect, edge(w.low), edge(w.high)] : [rect];
+  });
   const yTitle = !channel
     ? ""
     : set.view === "derivative"
@@ -313,7 +388,7 @@ export function buildCurveFigure(
       showlegend: exporting && colouring.colourMode !== "highlight",
       hovermode: "closest",
       font: { color: ink, size: 12 },
-      shapes,
+      shapes: [...bands, ...shapes],
       xaxis: { title: { text: xTitle }, gridcolor: grid, linecolor: grid, zeroline: false },
       yaxis: {
         title: { text: yTitle },
@@ -324,6 +399,12 @@ export function buildCurveFigure(
       },
     },
   };
+}
+
+/** The x of the clicked point, from a Plotly click event. */
+export function xFromClick(event: unknown): number | null {
+  const x = (event as { points?: { x?: unknown }[] } | null)?.points?.[0]?.x;
+  return typeof x === "number" ? x : null;
 }
 
 /** The position id of the curve under the pointer, from a Plotly hover event. */

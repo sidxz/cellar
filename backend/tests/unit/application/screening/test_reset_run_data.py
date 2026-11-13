@@ -95,6 +95,7 @@ def _build_uc(
     readouts_deleted: int = 0,
     curves_for_run: list | None = None,
     measured_repo: AsyncMock | None = None,
+    step_repo: AsyncMock | None = None,
 ):
     uow = FakeUoW()
     run_repo = AsyncMock()
@@ -111,6 +112,9 @@ def _build_uc(
     if measured_repo is None:
         measured_repo = AsyncMock()
         measured_repo.delete_by_run = AsyncMock(return_value=0)
+    if step_repo is None:
+        step_repo = AsyncMock()
+        step_repo.delete_by_run = AsyncMock(return_value=0)
 
     dispatcher = AsyncMock()
     dispatcher.dispatch_all = AsyncMock()
@@ -121,6 +125,7 @@ def _build_uc(
         readout_data_repo=readout_repo,
         curve_repo=curve_repo,
         measured_curve_repo=measured_repo,
+        melting_step_repo=step_repo,
         dispatcher=dispatcher,
     )
     return uc, uow, run_repo, readout_repo, curve_repo, dispatcher
@@ -210,6 +215,20 @@ class TestResetRunData:
         assert result.unwrap().measured_curves_deleted == 96
         (event,) = [e for e in run.collect_events() if isinstance(e, RunDataReset)]
         assert event.measured_curves_deleted == 96
+
+    @pytest.mark.asyncio
+    async def test_reset_run_data_deletes_melting_steps(self) -> None:
+        auth = FakeAuth()
+        ws = auth.workspace_id
+        run = _make_run(ws)
+        step_repo = AsyncMock()
+        step_repo.delete_by_run.return_value = 7
+        uc, *_ = _build_uc(run, step_repo=step_repo)
+
+        result = await uc(ResetRunDataCommand(workspace_id=ws, run_id=run.id), auth=auth)
+
+        step_repo.delete_by_run.assert_awaited_once_with(ws, run.id)
+        assert result.unwrap().melting_steps_deleted == 7
 
     # ---------------------------------------------------------------------
     # Guards

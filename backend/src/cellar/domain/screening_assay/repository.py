@@ -16,6 +16,7 @@ from cellar.domain.screening_assay.collection_coverage import (
 )
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.measured_curve import CurveChannel, MeasuredCurve
+from cellar.domain.screening_assay.melting_step import MeltingStep
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
 from cellar.domain.screening_assay.protocol_similarity import ProtocolSimilarityMatch
@@ -637,6 +638,31 @@ class MeasuredCurveRepository(Protocol):
     async def list_channels(
         self, workspace_id: uuid.UUID, run_id: uuid.UUID
     ) -> list[CurveChannel]: ...
+    async def list_traced(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> set[tuple[uuid.UUID, str]]:
+        """The (well id, channel key) pairs of the run that have a trace."""
+        ...
+
+    async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int: ...
+
+
+@runtime_checkable
+class MeltingStepRepository(Protocol):
+    """Repository for MeltingStep entities (versioned; removed with the run's data)."""
+
+    async def save_bulk(self, steps: list[MeltingStep]) -> None: ...
+    async def add(self, step: MeltingStep) -> None: ...
+    async def update(self, step: MeltingStep, *, expected_version: int) -> None:
+        """Write ``step`` if the stored version is ``expected_version``, else ConflictError."""
+        ...
+
+    async def find_by_id(
+        self, workspace_id: uuid.UUID, step_id: uuid.UUID
+    ) -> MeltingStep | None: ...
+    async def find_by_run(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> list[MeltingStep]: ...
     async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int: ...
 
 

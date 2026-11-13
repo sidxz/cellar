@@ -1,8 +1,14 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/shared/components/ui/collapsible";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -19,7 +25,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
@@ -32,10 +37,13 @@ import { flushSync } from "react-dom";
 import type { CurveView } from "../hooks/use-run-curves";
 import {
   type ColourMode,
+  type CurveBand,
   type CurveColouring,
   type CurvePalette,
+  type CurvePosition,
   type CurveSet,
   type GroupBy,
+  type PlotStep,
   buildCurveFigure,
   colourGroupKey,
   colourGroupLabel,
@@ -49,6 +57,7 @@ import {
   runHeading,
   sameDateTags,
   tableRows,
+  xFromClick,
 } from "../lib/curve-plot";
 import {
   COLOUR_SLOT_COUNT,
@@ -59,44 +68,26 @@ import {
   drawnPositionIds,
   matchesFilter,
 } from "../lib/curve-selection";
+import { sampleTextOf } from "../lib/melt-results";
 import { DOSE_UNIT_LABELS, type DoseUnit } from "../types";
 import { PositionSelector } from "./position-selector";
+import { Segmented } from "./segmented";
 
 const PLOT_CONFIG = { displaylogo: false, responsive: true };
 const PLOT_STYLE = { width: "100%", height: 400 };
 const PLOT_HEIGHT = "h-[400px]";
+// The run tab's narrow column: shorter, so the steps under it are on the first screen.
+const COMPACT_PLOT_STYLE = { width: "100%", height: 340 };
+const COMPACT_PLOT_HEIGHT = "h-[340px]";
+const NOTHING_SELECTED = "Select a sample in the results to see its trace and steps.";
 
-interface SegmentOption<T extends string> {
-  value: T;
-  label: string;
-  disabled?: boolean;
-}
-
-function Segmented<T extends string>({
+function Field({
   label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: SegmentOption<T>[];
-  onChange: (value: T) => void;
-}) {
-  return (
-    <Tabs value={value} onValueChange={(v) => onChange(v as T)}>
-      <TabsList aria-label={label}>
-        {options.map((o) => (
-          <TabsTrigger key={o.value} value={o.value} disabled={o.disabled} className="text-xs">
-            {o.label}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
-  );
-}
-
-function Field({ label, children }: { label: string; children: ReactNode }) {
+  children,
+  bare = false,
+}: { label: string; children: ReactNode; bare?: boolean }) {
+  // Bare: the control carries its own aria-label, the caption is dropped.
+  if (bare) return <>{children}</>;
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
@@ -105,12 +96,16 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
+function Swatch({
+  colour,
+  line = false,
+  dash = "solid",
+}: { colour: string; line?: boolean; dash?: "solid" | "dashed" | "dotted" }) {
   return line ? (
     <i
       aria-hidden
       className="mr-1.5 inline-block w-[18px] border-t-2 align-middle"
-      style={{ borderColor: colour }}
+      style={{ borderColor: colour, borderTopStyle: dash }}
     />
   ) : (
     <span
@@ -119,6 +114,18 @@ function Swatch({ colour, line = false }: { colour: string; line?: boolean }) {
       style={{ background: colour }}
     />
   );
+}
+
+/** `CC-014538 · Capillary 2 · 6.25 µM`; the position once when it is the name. */
+function selectionName(p: CurvePosition, doseUnit: string): string {
+  const name = sampleTextOf(p);
+  return [
+    name,
+    name !== p.position_label && p.position_label,
+    p.dose != null && `${formatValue(p.dose)} ${doseUnit}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function runHref(runId: string): string {
@@ -168,6 +175,23 @@ export interface CurveViewerProps {
   selectorAction?: ReactNode;
   /** The colour mode to start in; default Highlight. */
   initialColour?: { mode: ColourMode; groupBy?: GroupBy };
+  /** By well id, the counted melting steps on the current signal; given, they
+   *  are drawn instead of the reported values. */
+  steps?: ReadonlyMap<string, readonly PlotStep[]>;
+  /** Hide the chip grid, filter, All/None, reference switch and selectorAction (the parent is the selector). */
+  hideSelector?: boolean;
+  /** Put the per-position table under a closed "Instrument values" disclosure. */
+  collapseReportedTable?: boolean;
+  /** Temperature windows on the current signal, drawn as shaded bands. */
+  windows?: readonly CurveBand[];
+  /** The x of a clicked point on the plot. */
+  onPlotClick?: (x: number) => void;
+  /** Narrow layout: Signal, View, the reference switch (with hideSelector) and
+   *  a "Display" button (Markers, Color, Export) on one row; a shorter plot;
+   *  a line naming the selection and a compact key instead of the legend. */
+  compactControls?: boolean;
+  /** Between the plot and the per-position table. */
+  belowPlot?: ReactNode;
 }
 
 /** Pick positions, overlay their curves for one signal with the instrument's
@@ -206,6 +230,13 @@ function CurveViewerBody({
   exportName,
   selectorAction,
   initialColour,
+  steps,
+  hideSelector = false,
+  collapseReportedTable = false,
+  windows,
+  onPlotClick,
+  compactControls = false,
+  belowPlot,
   scientistOf,
 }: CurveViewerProps & { scientistOf: (userId: string) => string }) {
   // The signal and view last asked for, shown at once while their curves load.
@@ -312,8 +343,16 @@ function CurveViewerBody({
     () =>
       tooMany
         ? null
-        : buildCurveFigure({ set, drawn, showReported, canvas: "screen", ...colouring }),
-    [tooMany, set, drawn, showReported, colouring],
+        : buildCurveFigure({
+            set,
+            drawn,
+            showReported,
+            canvas: "screen",
+            steps,
+            windows,
+            ...colouring,
+          }),
+    [tooMany, set, drawn, showReported, colouring, steps, windows],
   );
   const columns = useMemo(() => reportedColumns(set), [set]);
   const rows = useMemo(
@@ -328,6 +367,15 @@ function CurveViewerBody({
     [],
   );
   const onUnhover = useCallback(() => flushSync(() => setFocusedId(null)), []);
+  // ponytail: Plotly fires a click only on a drawn point, so the value is the
+  // nearest measured x; a click on empty plot area does nothing.
+  const onClick = useCallback(
+    (ev: unknown) => {
+      const x = xFromClick(ev);
+      if (x !== null) onPlotClick?.(x);
+    },
+    [onPlotClick],
+  );
 
   const colourOf = (id: string) => {
     const p = byId.get(id);
@@ -340,6 +388,8 @@ function CurveViewerBody({
       drawn,
       showReported,
       canvas: "export",
+      steps,
+      windows,
       ...colouring,
     });
     getPlotlyGlobal()?.downloadImage?.(exported, {
@@ -366,190 +416,323 @@ function CurveViewerBody({
   const notShown = pending || tooMany || failed ? [] : positionsNotShown(set, drawnIds);
   const addedReferences = drawnIds.length > selectedIds.length;
 
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        <Input
-          type="search"
-          aria-label="Filter positions"
-          placeholder="Filter by label, compound, batch or note"
-          className="h-8 w-80"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-        <div className="flex items-center gap-2">
-          <Switch id={switchId} checked={showReferences} onCheckedChange={onShowReferencesChange} />
-          <Label htmlFor={switchId} className="text-sm font-normal">
-            {set.groups.length > 1
-              ? "Show each run's reference positions"
-              : "Show reference positions"}
-          </Label>
-        </div>
-      </div>
-
-      {set.groups.length > 1 && (
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{selectedIds.length} selected</span>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => onSelectionChange(EMPTY_SELECTION)}
-          >
-            Clear
-          </Button>
-        </div>
-      )}
-
-      {set.groups.map((g, i) => (
-        <div key={g.key} className="flex items-start gap-3">
-          <div className="min-w-0 flex-1">
-            <PositionSelector
-              holder={g.holder}
-              positions={g.positions}
-              orderedIds={orderedIds}
-              disabledIds={filteredOut}
-              heading={
-                g.run && (
-                  <Link href={runHref(g.run.runId)} className="font-medium hover:underline">
-                    {headings.get(g.run.runId)}
-                  </Link>
-                )
-              }
-              selection={selection}
-              onChange={onSelectionChange}
-              focusedId={focusedId}
-              onFocus={setFocusedId}
-              colourOf={colourOf}
-            />
-          </div>
-          {i === 0 && selectorAction}
-        </div>
-      ))}
-
-      <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
-        {set.channels.length > 0 && (
-          <Field label="Signal">
-            <Segmented
-              label="Signal"
-              value={channel ?? set.channel ?? ""}
-              options={set.channels.map((c) => ({ value: c.key, label: c.label }))}
-              onChange={(key) => {
-                setChannel(key);
-                onChannelChange(key);
-              }}
-            />
-          </Field>
-        )}
-        <Field label="View">
-          <div className="flex items-center gap-2">
-            <Segmented
-              label="View"
-              value={shownView}
-              options={[
-                { value: "measured", label: "Measured" },
-                { value: "derivative", label: "Derivative" },
-              ]}
-              onChange={(v) => {
-                setView(v);
-                onViewChange(v);
-              }}
-            />
-            {shownView === "derivative" && (
-              <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                smoothing window
-                <Input
-                  type="number"
-                  aria-label="Smoothing window"
-                  min={0}
-                  step="any"
-                  className="h-8 w-20"
-                  value={windowDraft ?? set.window ?? ""}
-                  onChange={(e) => setWindowDraft(e.target.value)}
-                  onBlur={commitWindow}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitWindow();
-                  }}
-                />
-                {currentChannel(set)?.x_unit}
-              </span>
-            )}
-          </div>
-        </Field>
-        <Field label="Reported values">
+  const signalAndView = (
+    <>
+      {set.channels.length > 0 && (
+        <Field label="Signal" bare={compactControls}>
           <Segmented
-            label="Reported values"
-            value={showReported ? "on" : "off"}
-            options={[
-              { value: "on", label: "Lines on" },
-              { value: "off", label: "Off" },
-            ]}
-            onChange={(v) => setShowReported(v === "on")}
+            label="Signal"
+            value={channel ?? set.channel ?? ""}
+            options={set.channels.map((c) => ({ value: c.key, label: c.label }))}
+            onChange={(key) => {
+              setChannel(key);
+              onChannelChange(key);
+            }}
           />
         </Field>
-        <Field label="Color">
-          <div className="flex items-center gap-2">
-            <Segmented
-              label="Color"
-              value={effectiveMode}
-              options={[
-                { value: "highlight", label: "Highlight" },
-                {
-                  value: "distinct",
-                  label: `Distinct (${COLOUR_SLOT_COUNT} or fewer)`,
-                  disabled: !distinctAvailable,
-                },
-                { value: "group", label: "By group", disabled: !groupAvailable },
-              ]}
-              onChange={setColourMode}
-            />
-            {/* Always offered beside By group, so the grouping can be changed before
-                or after choosing it, whichever groupings have 8 or fewer groups. */}
-            <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
-              <SelectTrigger size="sm" aria-label="Group by">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
-                  .filter((by) => by !== "run" || hasRuns)
-                  .map((by) => (
-                    <SelectItem key={by} value={by}>
-                      {GROUP_BY_LABELS[by]}
-                    </SelectItem>
-                  ))}
-              </SelectContent>
-            </Select>
-            {!distinctAvailable && (
-              <span className="text-xs text-muted-foreground">
-                More than {COLOUR_SLOT_COUNT} selected
-              </span>
-            )}
-            {!groupAvailable && (
-              <span className="text-xs text-muted-foreground">
-                More than {COLOUR_SLOT_COUNT} groups
-              </span>
-            )}
-          </div>
-        </Field>
-        <div className="ml-auto">
-          <Field label="Export, white background">
-            <div className="flex gap-2">
-              {(["png", "svg"] as const).map((format) => (
-                <Button
-                  key={format}
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!hasTraces}
-                  onClick={() => exportImage(format)}
-                >
-                  {format.toUpperCase()}
-                </Button>
-              ))}
-            </div>
-          </Field>
+      )}
+      <Field label="View" bare={compactControls}>
+        <div className="flex items-center gap-2">
+          <Segmented
+            label="View"
+            value={shownView}
+            options={[
+              { value: "measured", label: "Measured" },
+              { value: "derivative", label: "Derivative" },
+            ]}
+            onChange={(v) => {
+              setView(v);
+              onViewChange(v);
+            }}
+          />
+          {shownView === "derivative" && (
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              smoothing window
+              <Input
+                type="number"
+                aria-label="Smoothing window"
+                min={0}
+                step="any"
+                className="h-8 w-20"
+                value={windowDraft ?? set.window ?? ""}
+                onChange={(e) => setWindowDraft(e.target.value)}
+                onBlur={commitWindow}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") commitWindow();
+                }}
+              />
+              {currentChannel(set)?.x_unit}
+            </span>
+          )}
         </div>
+      </Field>
+    </>
+  );
+  const markersAndColour = (
+    <>
+      {/* With steps it governs both step and onset lines, so it names neither. */}
+      <Field label={steps ? "Markers" : "Reported values"}>
+        <Segmented
+          label={steps ? "Markers" : "Reported values"}
+          value={showReported ? "on" : "off"}
+          options={[
+            { value: "on", label: "Lines on" },
+            { value: "off", label: "Off" },
+          ]}
+          onChange={(v) => setShowReported(v === "on")}
+        />
+      </Field>
+      <Field label="Color">
+        <div className="flex items-center gap-2">
+          <Segmented
+            label="Color"
+            value={effectiveMode}
+            options={[
+              { value: "highlight", label: "Highlight" },
+              {
+                value: "distinct",
+                label: `Distinct (${COLOUR_SLOT_COUNT} or fewer)`,
+                disabled: !distinctAvailable,
+              },
+              { value: "group", label: "By group", disabled: !groupAvailable },
+            ]}
+            onChange={setColourMode}
+          />
+          {/* Always offered beside By group, so the grouping can be changed before
+                or after choosing it, whichever groupings have 8 or fewer groups. */}
+          <Select value={groupBy} onValueChange={(v) => setGroupBy(v as GroupBy)}>
+            <SelectTrigger size="sm" aria-label="Group by">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(GROUP_BY_LABELS) as GroupBy[])
+                .filter((by) => by !== "run" || hasRuns)
+                .map((by) => (
+                  <SelectItem key={by} value={by}>
+                    {GROUP_BY_LABELS[by]}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          {!distinctAvailable && (
+            <span className="text-xs text-muted-foreground">
+              More than {COLOUR_SLOT_COUNT} selected
+            </span>
+          )}
+          {!groupAvailable && (
+            <span className="text-xs text-muted-foreground">
+              More than {COLOUR_SLOT_COUNT} groups
+            </span>
+          )}
+        </div>
+      </Field>
+    </>
+  );
+  const exportField = (
+    <Field label="Export, white background">
+      <div className="flex gap-2">
+        {(["png", "svg"] as const).map((format) => (
+          <Button
+            key={format}
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!hasTraces}
+            onClick={() => exportImage(format)}
+          >
+            {format.toUpperCase()}
+          </Button>
+        ))}
       </div>
+    </Field>
+  );
+
+  const reportedTable = (
+    <div className="rounded-md border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            {hasRuns && <TableHead>Run</TableHead>}
+            <TableHead>Position</TableHead>
+            <TableHead>Label</TableHead>
+            <TableHead>Compound</TableHead>
+            <TableHead>Batch</TableHead>
+            <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
+            <TableHead>Role</TableHead>
+            <TableHead>Note</TableHead>
+            {columns.map((c) => (
+              <TableHead key={c.key} className="text-right">
+                {c.unit ? `${c.label} (${c.unit})` : c.label}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.length === 0 ? (
+            <TableRow>
+              <TableCell
+                colSpan={(hasRuns ? 8 : 7) + columns.length}
+                className="text-muted-foreground"
+              >
+                {selectedIds.length > 0 && filter.trim()
+                  ? "No selected position matches the filter."
+                  : "No positions selected."}
+              </TableCell>
+            </TableRow>
+          ) : (
+            rows.map((r) => (
+              <TableRow
+                key={r.wellId}
+                data-focused={focusedId === r.wellId || undefined}
+                className={cn(focusedId === r.wellId && "bg-primary/10")}
+                onMouseEnter={() => setFocusedId(r.wellId)}
+                onMouseLeave={() => setFocusedId(null)}
+              >
+                {hasRuns && (
+                  <TableCell>
+                    {r.run && (
+                      <Link href={runHref(r.run.runId)} className="hover:underline">
+                        {/* A run that shares its date reads as its heading does. */}
+                        {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
+                      </Link>
+                    )}
+                  </TableCell>
+                )}
+                <TableCell>
+                  <Swatch colour={colourOf(r.wellId)} />
+                  {r.positionLabel}
+                </TableCell>
+                <TableCell>{r.label}</TableCell>
+                <TableCell className={cn(!r.compound && "text-muted-foreground")}>
+                  {r.compound ?? "No compound"}
+                </TableCell>
+                <TableCell className={cn(!r.batch && "text-muted-foreground")}>
+                  {r.batch ?? "None"}
+                </TableCell>
+                <TableCell
+                  className="text-right font-mono tabular-nums"
+                  title={r.dose == null ? undefined : String(r.dose)}
+                >
+                  {formatValue(r.dose ?? undefined)}
+                </TableCell>
+                <TableCell>{r.role}</TableCell>
+                <TableCell className="whitespace-normal">{r.note}</TableCell>
+                {columns.map((c) => (
+                  <TableCell key={c.key} className="text-right font-mono tabular-nums">
+                    {formatValue(r.reported[c.key])}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          )}
+        </TableBody>
+      </Table>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      {!hideSelector && (
+        <>
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <Input
+              type="search"
+              aria-label="Filter positions"
+              placeholder="Filter by label, compound, batch or note"
+              className="h-8 w-80"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+            />
+            <div className="flex items-center gap-2">
+              <Switch
+                id={switchId}
+                checked={showReferences}
+                onCheckedChange={onShowReferencesChange}
+              />
+              <Label htmlFor={switchId} className="text-sm font-normal">
+                {set.groups.length > 1
+                  ? "Show each run's reference positions"
+                  : "Show reference positions"}
+              </Label>
+            </div>
+          </div>
+
+          {set.groups.length > 1 && (
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium">{selectedIds.length} selected</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onSelectionChange(EMPTY_SELECTION)}
+              >
+                Clear
+              </Button>
+            </div>
+          )}
+
+          {set.groups.map((g, i) => (
+            <div key={g.key} className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <PositionSelector
+                  holder={g.holder}
+                  positions={g.positions}
+                  orderedIds={orderedIds}
+                  disabledIds={filteredOut}
+                  heading={
+                    g.run && (
+                      <Link href={runHref(g.run.runId)} className="font-medium hover:underline">
+                        {headings.get(g.run.runId)}
+                      </Link>
+                    )
+                  }
+                  selection={selection}
+                  onChange={onSelectionChange}
+                  focusedId={focusedId}
+                  onFocus={setFocusedId}
+                  colourOf={colourOf}
+                />
+              </div>
+              {i === 0 && selectorAction}
+            </div>
+          ))}
+        </>
+      )}
+
+      {compactControls ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {signalAndView}
+          {hideSelector && (
+            <div className="flex items-center gap-2">
+              <Switch
+                id={switchId}
+                checked={showReferences}
+                onCheckedChange={onShowReferencesChange}
+              />
+              <Label htmlFor={switchId} className="text-sm font-normal">
+                Reference traces
+              </Label>
+            </div>
+          )}
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button type="button" variant="outline" size="sm">
+                Display
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto max-w-[min(32rem,90vw)] space-y-3">
+              {markersAndColour}
+              {exportField}
+            </PopoverContent>
+          </Popover>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
+          {signalAndView}
+          {markersAndColour}
+          <div className="ml-auto">{exportField}</div>
+        </div>
+      )}
 
       {hasTraces && figure ? (
         <div className={cn("transition-opacity", pending && "opacity-60")}>
@@ -557,17 +740,18 @@ function CurveViewerBody({
             data={figure.data}
             layout={figure.layout}
             config={PLOT_CONFIG}
-            style={PLOT_STYLE}
+            style={compactControls ? COMPACT_PLOT_STYLE : PLOT_STYLE}
             useResizeHandler
             onHover={onHover}
             onUnhover={onUnhover}
+            onClick={onClick}
           />
         </div>
       ) : (
         <div
           className={cn(
             "flex items-center justify-center rounded-lg border border-dashed text-sm text-muted-foreground",
-            PLOT_HEIGHT,
+            compactControls ? COMPACT_PLOT_HEIGHT : PLOT_HEIGHT,
           )}
         >
           {failed
@@ -575,7 +759,9 @@ function CurveViewerBody({
             : tooMany
               ? `More than ${MAX_DRAWN} positions would be plotted. ${showReferences ? "Select fewer positions or turn off reference positions." : "Select fewer positions."}`
               : selectedIds.length === 0
-                ? "Select positions above to draw their traces"
+                ? hideSelector
+                  ? NOTHING_SELECTED
+                  : "Select positions above to draw their traces"
                 : pending
                   ? "Loading traces…"
                   : set.view === "derivative"
@@ -592,7 +778,43 @@ function CurveViewerBody({
         </p>
       )}
 
-      {hasTraces && (
+      {compactControls && selectedPositions.length > 0 && !failed && (
+        <div className="space-y-1 text-xs text-muted-foreground">
+          <p className="text-sm text-foreground">
+            {selectedPositions.length === 1
+              ? selectionName(selectedPositions[0], doseUnit)
+              : `${selectedPositions.length} samples selected`}
+          </p>
+          {hasTraces && (
+            <div data-testid="curve-key" className="flex flex-wrap gap-x-4 gap-y-1">
+              <span>
+                <Swatch line colour={colours.reference} />
+                Reference
+              </span>
+              {steps && showReported && (
+                <>
+                  <span>
+                    <Swatch line colour={colours.neutral} />
+                    Reviewed step
+                  </span>
+                  <span>
+                    <Swatch line dash="dashed" colour={colours.neutral} />
+                    Unreviewed step
+                  </span>
+                  <span>
+                    <Swatch line dash="dotted" colour={colours.neutral} />
+                    Onset
+                  </span>
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Compact: the key above stands in for the generic legend; the colour
+          legends of Distinct and By group still name what each colour is. */}
+      {hasTraces && (!compactControls || effectiveMode !== "highlight") && (
         <div
           data-testid="curve-legend"
           className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground"
@@ -657,86 +879,20 @@ function CurveViewerBody({
         </div>
       )}
 
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              {hasRuns && <TableHead>Run</TableHead>}
-              <TableHead>Position</TableHead>
-              <TableHead>Label</TableHead>
-              <TableHead>Compound</TableHead>
-              <TableHead>Batch</TableHead>
-              <TableHead className="text-right">Conc. ({doseUnit})</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Note</TableHead>
-              {columns.map((c) => (
-                <TableHead key={c.key} className="text-right">
-                  {c.unit ? `${c.label} (${c.unit})` : c.label}
-                </TableHead>
-              ))}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell
-                  colSpan={(hasRuns ? 8 : 7) + columns.length}
-                  className="text-muted-foreground"
-                >
-                  {selectedIds.length > 0 && filter.trim()
-                    ? "No selected position matches the filter."
-                    : "No positions selected."}
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow
-                  key={r.wellId}
-                  data-focused={focusedId === r.wellId || undefined}
-                  className={cn(focusedId === r.wellId && "bg-primary/10")}
-                  onMouseEnter={() => setFocusedId(r.wellId)}
-                  onMouseLeave={() => setFocusedId(null)}
-                >
-                  {hasRuns && (
-                    <TableCell>
-                      {r.run && (
-                        <Link href={runHref(r.run.runId)} className="hover:underline">
-                          {/* A run that shares its date reads as its heading does. */}
-                          {tags.has(r.run.runId) ? headings.get(r.run.runId) : r.run.runDate}
-                        </Link>
-                      )}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    <Swatch colour={colourOf(r.wellId)} />
-                    {r.positionLabel}
-                  </TableCell>
-                  <TableCell>{r.label}</TableCell>
-                  <TableCell className={cn(!r.compound && "text-muted-foreground")}>
-                    {r.compound ?? "No compound"}
-                  </TableCell>
-                  <TableCell className={cn(!r.batch && "text-muted-foreground")}>
-                    {r.batch ?? "None"}
-                  </TableCell>
-                  <TableCell
-                    className="text-right font-mono tabular-nums"
-                    title={r.dose == null ? undefined : String(r.dose)}
-                  >
-                    {formatValue(r.dose ?? undefined)}
-                  </TableCell>
-                  <TableCell>{r.role}</TableCell>
-                  <TableCell className="whitespace-normal">{r.note}</TableCell>
-                  {columns.map((c) => (
-                    <TableCell key={c.key} className="text-right font-mono tabular-nums">
-                      {formatValue(r.reported[c.key])}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      {belowPlot}
+
+      {collapseReportedTable ? (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm">
+              Instrument values
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>{reportedTable}</CollapsibleContent>
+        </Collapsible>
+      ) : (
+        reportedTable
+      )}
     </div>
   );
 }

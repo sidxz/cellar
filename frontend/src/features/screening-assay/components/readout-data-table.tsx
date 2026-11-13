@@ -19,7 +19,13 @@ import {
   interceptOptionLabel,
   maxDoseFromRawData,
 } from "../lib/intercept-label";
-import { type PivotRow, pivotReadoutData, valueKey } from "../lib/readout-data-pivot";
+import {
+  type PivotRow,
+  hasComputedLayer,
+  hasRawLayer,
+  pivotReadoutData,
+  valueKey,
+} from "../lib/readout-data-pivot";
 import {
   type DoseResponseCurve,
   type InterceptSpec,
@@ -48,17 +54,13 @@ function primaryNormalization(rd: ReadoutDefinition): ReadoutNormalization | nul
 /** Display label for the post-normalization layer of a readout def.
  * E.g. "raw AU" + PERCENT_INHIBITION → "raw AU — % Inhibition". */
 function computedLayerHeader(rd: ReadoutDefinition): string {
-  if (rd.is_calculated) return rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
+  if (!hasRawLayer(rd)) return rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
   const norm = primaryNormalization(rd);
   if (norm) {
     const label = READOUT_NORMALIZATION_LABELS[norm] ?? norm;
     return `${rd.name} — ${label}`;
   }
   return rd.name;
-}
-
-function hasComputedLayer(rd: ReadoutDefinition): boolean {
-  return rd.is_calculated || primaryNormalization(rd) !== null;
 }
 
 /** Format a value with qualifier prefix: "85.2", "<12.7", ">1000" */
@@ -315,9 +317,9 @@ export function ReadoutDataTable({
         continue;
       }
 
-      // Raw column — present unless the readout is purely calculated (in
-      // which case there is no raw layer; only the formula output).
-      if (!rd.is_calculated) {
+      // Raw column — absent for calculated and temperature-window readouts,
+      // whose only layer is the computed one.
+      if (hasRawLayer(rd)) {
         const rawHeader = rd.unit ? `${rd.name} (${rd.unit})` : rd.name;
         const isPickList = rd.data_type === "pick_list";
         cols.push({
@@ -370,6 +372,10 @@ export function ReadoutDataTable({
           headerTooltip: (() => {
             if (rd.is_calculated && rd.calculation_formula) {
               return `Calculated: ${rd.calculation_formula}`;
+            }
+            if (rd.melt_config) {
+              const { window, low, high } = rd.melt_config;
+              return `From melting steps in temperature window ${window} (${low}–${high} °C)`;
             }
             const norm = primaryNormalization(rd);
             if (norm) {

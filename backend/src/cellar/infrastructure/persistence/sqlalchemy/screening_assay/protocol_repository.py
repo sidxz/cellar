@@ -25,6 +25,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
+from cellar.domain.screening_assay.melt_window import MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import (
     ConditionDefinition,
     Protocol,
@@ -920,6 +921,9 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 dose_response_config=self._reconstruct_dose_response_config(
                     rd.dose_response_config
                 ),
+                melt_config=(
+                    MeltReadoutConfig.from_dict(rd.melt_config) if rd.melt_config else None
+                ),
                 created_at=rd.created_at,
                 updated_at=rd.updated_at,
             )
@@ -1147,6 +1151,7 @@ class SQLAlchemyProtocolRepository(SQLAlchemyRepository[Protocol, ProtocolModel]
                 [v.to_dict() for v in rd.pick_list_values] if rd.pick_list_values else None
             ),
             dose_response_config=dose_response_dict,
+            melt_config=rd.melt_config.to_dict() if rd.melt_config is not None else None,
         )
 
     @staticmethod

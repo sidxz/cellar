@@ -30,6 +30,7 @@ import { cn } from "@/shared/lib/utils";
 import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { useCurvePositions } from "../../hooks/use-curve-positions";
 import { usePlateTemplates } from "../../hooks/use-plate-templates";
 import {
   useAddConditionDefinition,
@@ -46,6 +47,7 @@ import { PLATE_FORMAT_LABELS } from "../../types";
 import {
   CURVE_TYPE_LABELS,
   type CurveType,
+  type MeltConfig,
   type PickListValue,
   type PlateFormat,
   type Protocol,
@@ -60,10 +62,18 @@ import {
 import { ConditionGroupTable } from "../condition-group-table";
 import { PlateMapView } from "../plate-map-view";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
+import { TemperatureWindowDialog } from "../temperature-window-dialog";
 import { ConditionDefinitionDialog } from "./condition-definition-dialog";
 import { DesignTabProtocolCard } from "./design-tab-protocol-card";
 import { ReadoutDefinitionDialog } from "./readout-definition-dialog";
 import { useReadoutDefinitionForm } from "./use-readout-definition-form";
+
+const NO_FILTER = {};
+
+/** "Window Main: 50–85 °C, Ratio 350/330" from a readout's melt_config. */
+function windowText(cfg: MeltConfig, label: (key: string) => string) {
+  return `Window ${cfg.window}: ${cfg.low}–${cfg.high} °C, ${label(cfg.channel_key)}`;
+}
 
 // ---------------------------------------------------------------------------
 // DesignTab
@@ -111,10 +121,17 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
   // --- Dialog state ---
   const [addReadoutOpen, setAddReadoutOpen] = useState(false);
+  const [addWindowOpen, setAddWindowOpen] = useState(false);
   const [addConditionOpen, setAddConditionOpen] = useState(false);
   const [editingReadoutId, setEditingReadoutId] = useState<string | null>(null);
   const [viewingReadoutId, setViewingReadoutId] = useState<string | null>(null);
   const [editingConditionId, setEditingConditionId] = useState<string | null>(null);
+
+  // Signal labels for the window readouts (only needed when there are some).
+  const hasWindows = protocol.readout_definitions.some((rd) => rd.melt_config);
+  const { data: traceRuns } = useCurvePositions(protocolId, NO_FILTER, hasWindows);
+  const channelLabel = (key: string) =>
+    traceRuns?.runs.flatMap((r) => r.channels).find((c) => c.key === key)?.label ?? key;
 
   // --- Readout form state (shared between add and edit dialogs) ---
   const rdForm = useReadoutDefinitionForm();
@@ -173,10 +190,19 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
             <CardDescription>Measured values captured for each compound in a run.</CardDescription>
           </div>
           {canAddMetadata && (
-            <Button size="sm" variant="outline" onClick={() => setAddReadoutOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add
-            </Button>
+            <div className="flex gap-2">
+              {/* A window reads melting steps, which only traced runs have. */}
+              {protocol.has_measured_curves && (
+                <Button size="sm" variant="outline" onClick={() => setAddWindowOpen(true)}>
+                  <Plus className="mr-1 h-4 w-4" />
+                  Temperature window
+                </Button>
+              )}
+              <Button size="sm" variant="outline" onClick={() => setAddReadoutOpen(true)}>
+                <Plus className="mr-1 h-4 w-4" />
+                Add
+              </Button>
+            </div>
           )}
         </CardHeader>
         <CardContent>
@@ -213,6 +239,11 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                           ({CURVE_TYPE_LABELS[rd.dose_response_config.curve_type as CurveType]}:{" "}
                           {rd.dose_response_config.x_readout_name ?? "well concentration"} vs{" "}
                           {rd.dose_response_config.y_readout_name})
+                        </span>
+                      )}
+                      {rd.melt_config && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          {windowText(rd.melt_config, channelLabel)}
                         </span>
                       )}
                       {rd.is_calculated && rd.calculation_formula && (
@@ -278,7 +309,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        {canAddMetadata && (
+                        {canAddMetadata && !rd.melt_config && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -561,6 +592,12 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           </CardContent>
         </Card>
       )}
+
+      <TemperatureWindowDialog
+        open={addWindowOpen}
+        onOpenChange={setAddWindowOpen}
+        protocolId={protocolId}
+      />
 
       {/* ── Add Readout Definition Dialog ───────────────────────────────── */}
       <ReadoutDefinitionDialog

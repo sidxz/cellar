@@ -9,6 +9,7 @@ import type { CreateRunInput, HitCriterion, Run } from "../types";
 import {
   COMPOUND_CURVES_KEY,
   DOSE_RESPONSE_KEY,
+  MELTING_ANALYSIS_KEY,
   PLATE_MAP_KEY,
   PROTOCOL_ACTIVITY_KEY,
   READOUT_DATA_KEY,
@@ -260,6 +261,7 @@ export function useRecomputeRun() {
       qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
       qc.invalidateQueries({ queryKey: COMPOUND_CURVES_KEY });
       qc.invalidateQueries({ queryKey: PROTOCOL_ACTIVITY_KEY });
+      qc.invalidateQueries({ queryKey: MELTING_ANALYSIS_KEY });
       showSuccess(`Recomputed ${data.computed_readouts} readouts and refit curves`);
       const warnings = data.fit_warnings ?? [];
       if (warnings.length > 0) {

@@ -61,6 +61,7 @@ from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatch,
 )
 from cellar.application.screening.get_measured_curves_batch import GetMeasuredCurvesBatch
+from cellar.application.screening.get_melting_analysis import GetMeltingAnalysis
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
@@ -105,6 +106,7 @@ from cellar.application.screening.manage_control_layouts import (
     RemoveControlLayout,
     SetControlLayout,
 )
+from cellar.application.screening.manage_melting_steps import AddMeltingStep, ReviewMeltingStep
 from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
@@ -132,6 +134,7 @@ from cellar.application.screening.manage_protocol_references import (
 )
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
+    AddTemperatureWindow,
     RemoveReadoutDefinition,
     UpdateReadoutDefinition,
 )
@@ -269,6 +272,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.measured_curve_repository import (  # noqa: E501
     SQLAlchemyMeasuredCurveRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.melting_step_repository import (
+    SQLAlchemyMeltingStepRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.plate_map_reader import (
     SQLAlchemyPlateMapReader,
@@ -499,6 +505,7 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(UpdateReadoutDefinition, _update_readout_def)
+    container.define(AddTemperatureWindow, _protocol_cmd(AddTemperatureWindow))
 
     container.define(AddConditionDefinition, _protocol_cmd(AddConditionDefinition))
     container.define(RemoveConditionDefinition, _protocol_cmd(RemoveConditionDefinition))
@@ -612,6 +619,7 @@ def register_screening(container: Container) -> None:
             readout_data_repo=SQLAlchemyReadoutDataRepository(uow),
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
             dispatcher=c[EventDispatcher],
         )
 
@@ -680,7 +688,12 @@ def register_screening(container: Container) -> None:
         run_repo = SQLAlchemyRunRepository(uow)
         guard = DataLockGuard(run_repo)
         return CreateReadoutData(
-            uow, SQLAlchemyReadoutDataRepository(uow), guard, c[EventDispatcher], run_repo=run_repo
+            uow,
+            SQLAlchemyReadoutDataRepository(uow),
+            guard,
+            c[EventDispatcher],
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            run_repo=run_repo,
         )
 
     def _readout_query(uc_cls: type):
@@ -862,6 +875,9 @@ def register_screening(container: Container) -> None:
             dispatcher=c[EventDispatcher],
             fit_dose_response=c[FitDoseResponseCurves],
             plate_quality=c[PlateQualityCalculator],
+            melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
+            measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
     container.define(ReadoutCalculationEngine, _readout_calc_engine)
@@ -1029,6 +1045,7 @@ def register_screening(container: Container) -> None:
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             readout_repo=SQLAlchemyReadoutDataRepository(uow),
             curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            step_repo=SQLAlchemyMeltingStepRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             readers=c[InstrumentReaders],
             attachment_repo=SQLAlchemyAttachmentRepository(uow),
@@ -1053,6 +1070,35 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(RelabelRunPositions, _relabel_run_positions)
+
+    def _melting_step_uc(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow=uow,
+                run_repo=SQLAlchemyRunRepository(uow),
+                curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+                step_repo=SQLAlchemyMeltingStepRepository(uow),
+                audit=c[AuditRecordingService],
+                calculation_engine=c[ReadoutCalculationEngine],
+            )
+
+        return _f
+
+    container.define(AddMeltingStep, _melting_step_uc(AddMeltingStep))
+    container.define(ReviewMeltingStep, _melting_step_uc(ReviewMeltingStep))
+
+    def _get_melting_analysis(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetMeltingAnalysis(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            step_repo=SQLAlchemyMeltingStepRepository(uow),
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+        )
+
+    container.define(GetMeltingAnalysis, _get_melting_analysis)
     container.define(
         ListInstrumentFileFormats,
         lambda c: ListInstrumentFileFormats(readers=c[InstrumentReaders]),

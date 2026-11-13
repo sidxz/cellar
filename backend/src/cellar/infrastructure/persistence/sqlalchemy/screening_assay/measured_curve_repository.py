@@ -89,6 +89,16 @@ class SQLAlchemyMeasuredCurveRepository:
             for key, label, x_unit, y_unit, order, x_label in result.all()
         ]
 
+    async def list_traced(
+        self, workspace_id: uuid.UUID, run_id: uuid.UUID
+    ) -> set[tuple[uuid.UUID, str]]:
+        stmt = select(MeasuredCurveModel.well_id, MeasuredCurveModel.channel_key).where(
+            MeasuredCurveModel.workspace_id == workspace_id,
+            MeasuredCurveModel.run_id == run_id,
+        )
+        result = await self._uow.session.execute(stmt)
+        return {(well_id, key) for well_id, key in result.all()}
+
     async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int:
         stmt = delete(MeasuredCurveModel).where(
             MeasuredCurveModel.workspace_id == workspace_id,

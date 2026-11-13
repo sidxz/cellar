@@ -350,6 +350,25 @@ describe("CurveViewer run cell", () => {
   });
 });
 
+describe("CurveViewer opt-in layout", () => {
+  it("hideSelector hides the chips and the reference switch", () => {
+    const { rerender } = render(<Harness callbacks={callbacks()} />);
+    expect(screen.getByRole("button", { name: "Position 2" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Show reference positions")).toBeInTheDocument();
+    rerender(<Harness callbacks={callbacks()} hideSelector />);
+    expect(screen.queryByRole("button", { name: "Position 2" })).toBeNull();
+    expect(screen.queryByLabelText("Show reference positions")).toBeNull();
+    expect(screen.queryByLabelText("Filter positions")).toBeNull();
+  });
+
+  it('collapseReportedTable hides the table until "Instrument values" is opened', () => {
+    render(<Harness callbacks={callbacks()} collapseReportedTable />);
+    expect(screen.queryByRole("table")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Instrument values" }));
+    expect(screen.getByRole("table")).toBeInTheDocument();
+  });
+});
+
 describe("CurveViewer", () => {
   it("reports a signal, view and window change to its parent and keeps the selection", () => {
     const cb = callbacks();
@@ -591,5 +610,39 @@ describe("CurveViewer", () => {
     fireEvent.click(slot(0, 2));
     const cell = within(screen.getByRole("table")).getByText("0.3");
     expect(cell).toHaveAttribute("title", String(0.1 + 0.2));
+  });
+});
+
+describe("CurveViewer compactControls", () => {
+  it("keeps Markers, Colour and Export behind a Display popover", async () => {
+    render(<Harness callbacks={callbacks()} compactControls />);
+    expect(screen.getByRole("tablist", { name: "Signal" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "View" })).toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Reported values" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Color" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "PNG" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Display" }));
+    expect(await screen.findByRole("tablist", { name: "Reported values" })).toBeInTheDocument();
+    expect(screen.getByRole("tablist", { name: "Color" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
+  });
+
+  it("with hideSelector, puts the reference switch in the toolbar", () => {
+    const { rerender } = render(<Harness callbacks={callbacks()} compactControls />);
+    expect(screen.queryByRole("switch", { name: "Reference traces" })).toBeNull();
+    rerender(<Harness callbacks={callbacks()} compactControls hideSelector />);
+    expect(screen.getByRole("switch", { name: "Reference traces" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("switch", { name: "Reference traces" }));
+    expect(screen.getByRole("switch", { name: "Reference traces" })).toBeChecked();
+    expect(
+      screen.getByText("Select a sample in the results to see its trace and steps."),
+    ).toBeInTheDocument();
+  });
+
+  it("renders them in the bar without the prop", () => {
+    render(<Harness callbacks={callbacks()} />);
+    expect(screen.getByRole("tablist", { name: "Color" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "PNG" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Display" })).not.toBeInTheDocument();
   });
 });

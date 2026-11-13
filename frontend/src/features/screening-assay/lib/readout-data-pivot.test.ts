@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { DoseResponseCurve, ReadoutData } from "../types";
-import { pivotReadoutData, valueKey } from "./readout-data-pivot";
+import type { DoseResponseCurve, ReadoutData, ReadoutDefinition } from "../types";
+import { hasComputedLayer, hasRawLayer, pivotReadoutData, valueKey } from "./readout-data-pivot";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -263,5 +263,27 @@ describe("pivotReadoutData — optional API fields", () => {
     const result = pivotReadoutData(rows, NO_CURVES);
     expect(result[0].values.get(valueKey("def-1", false))?.value_numeric).toBe(10);
     expect(result[0].values.get(valueKey("def-1", true))).toBeUndefined();
+  });
+});
+
+describe("readout layers", () => {
+  const def = (over: Partial<ReadoutDefinition>) =>
+    ({ is_calculated: false, normalizations: [], melt_config: null, ...over }) as ReadoutDefinition;
+
+  it("a temperature window readout has only the computed layer", () => {
+    const tm = def({
+      melt_config: { window: "Main", measure: "tm", channel_key: "ratio", low: 50, high: 85 },
+    });
+    expect(hasComputedLayer(tm)).toBe(true);
+    expect(hasRawLayer(tm)).toBe(false);
+  });
+
+  it("plain, normalized and calculated readouts keep their layers", () => {
+    const plain = def({});
+    expect([hasRawLayer(plain), hasComputedLayer(plain)]).toEqual([true, false]);
+    const norm = def({ normalizations: ["percent_inhibition"] });
+    expect([hasRawLayer(norm), hasComputedLayer(norm)]).toEqual([true, true]);
+    const calc = def({ is_calculated: true });
+    expect([hasRawLayer(calc), hasComputedLayer(calc)]).toEqual([false, true]);
   });
 });

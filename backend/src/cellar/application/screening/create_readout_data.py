@@ -13,7 +13,11 @@ from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.readout_data import ReadoutData
-from cellar.domain.screening_assay.repository import ReadoutDataRepository, RunRepository
+from cellar.domain.screening_assay.repository import (
+    ProtocolRepository,
+    ReadoutDataRepository,
+    RunRepository,
+)
 from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
@@ -40,12 +44,14 @@ class CreateReadoutData:
         repo: ReadoutDataRepository,
         guard: DataLockGuard,
         dispatcher: EventDispatcherProtocol,
+        protocol_repo: ProtocolRepository,
         run_repo: RunRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._guard = guard
         self._dispatcher = dispatcher
+        self._protocol_repo = protocol_repo
         self._run_repo = run_repo
 
     async def __call__(
@@ -69,6 +75,33 @@ class CreateReadoutData:
                     return Failure(ValidationError("run has plates; well_id is required"))
                 if not run.wells and input.well_id is not None:
                     return Failure(ValidationError("run has no plates; well_id must be omitted"))
+
+                # Values are entered only for plain readouts on the run's own protocol.
+                protocol = await self._protocol_repo.find_by_id_in_workspace(
+                    input.workspace_id, run.protocol_id
+                )
+                definition = next(
+                    (
+                        rd
+                        for rd in (protocol.readout_definitions if protocol else [])
+                        if rd.id == input.readout_definition_id
+                    ),
+                    None,
+                )
+                if definition is None:
+                    return Failure(
+                        ValidationError(
+                            f"Readout '{input.readout_definition_id}' "
+                            "is not on this run's protocol"
+                        )
+                    )
+                if definition.is_derived:
+                    return Failure(
+                        ValidationError(
+                            f"Readout '{definition.name}' is calculated or derived; "
+                            "values cannot be entered directly"
+                        )
+                    )
 
             # Guard against locked runs
             try:

@@ -71,19 +71,22 @@ export const MANUAL_STAGE_HELP =
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
+/** Operators that take a low and a high bound. */
+const TWO_BOUND = new Set(["between", "not_between"]);
+
 const criterionRowSchema = z
   .object({
     channel_id: z.string().min(1, "Select a readout"),
     operator: z.string().min(1),
     value: z.string().min(1, "Required"),
-    /** Only meaningful when operator === "between"; low bound lives in `value`. */
+    /** Only meaningful for the two-bound operators; low bound lives in `value`. */
     high: z.string(),
   })
   .superRefine((row, ctx) => {
     if (Number.isNaN(Number(row.value))) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["value"], message: "Enter a number" });
     }
-    if (row.operator === "between") {
+    if (TWO_BOUND.has(row.operator)) {
       if (row.high.trim() === "" || Number.isNaN(Number(row.high))) {
         ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["high"], message: "Enter a number" });
       } else if (Number(row.value) > Number(row.high)) {
@@ -170,7 +173,8 @@ export function StagePopoverForm({
           .find((u) => u && u !== "-");
         return {
           id: ch.id,
-          label: `${protocolName} › ${ch.label}${unit ? ` (${unit})` : ""}`,
+          // Readout first: a narrow picker cut at the protocol name hid which readout it was.
+          label: `${ch.label}${unit ? ` (${unit})` : ""} · ${protocolName}`,
         };
       });
   }, [campaign.channels, campaign.results, protocolNameById]);
@@ -261,10 +265,9 @@ export function StagePopoverForm({
         : values.criteria.map((row) => ({
             channel_id: row.channel_id,
             operator: row.operator,
-            value:
-              row.operator === "between"
-                ? [Number(row.value), Number(row.high)]
-                : Number(row.value),
+            value: TWO_BOUND.has(row.operator)
+              ? [Number(row.value), Number(row.high)]
+              : Number(row.value),
           }));
     const parent_stage_id =
       values.parent_stage_id === ROOT_SENTINEL ? null : values.parent_stage_id;
@@ -409,13 +412,14 @@ export function StagePopoverForm({
                             <SelectItem value="gt">{">"}</SelectItem>
                             <SelectItem value="gte">{">="}</SelectItem>
                             <SelectItem value="between">between</SelectItem>
+                            <SelectItem value="not_between">outside</SelectItem>
                           </SelectContent>
                         </Select>
                       )}
                     />
                   </div>
 
-                  {operator === "between" ? (
+                  {TWO_BOUND.has(operator) ? (
                     <>
                       <div className="w-[72px] space-y-1 shrink-0">
                         <Label className="text-xs">Low</Label>

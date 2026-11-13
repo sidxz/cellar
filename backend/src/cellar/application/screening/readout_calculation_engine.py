@@ -6,6 +6,7 @@ Pipeline steps (in order):
 2. Idempotent cleanup of previous computed data
 3. Load raw data
 4. Normalize per-plate values
+4.6. Tm and ΔTm per temperature window, from the run's melting steps
 5. Aggregate replicates
 6. Evaluate intra-protocol calculated readout formulas (topologically sorted)
 7. Persist computed results
@@ -27,21 +28,31 @@ from cellar.application.screening.fit_dose_response import (
 )
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.screening_assay.enums import (
     ReadoutAggregation,
     WellType,
 )
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
+from cellar.domain.screening_assay.melt_window import (
+    MeltMeasure,
+    WindowResult,
+    evaluate_window,
+    window_positions,
+)
 from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer
 from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
-from cellar.domain.screening_assay.protocol import ReadoutDefinition
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.screening_assay.repository import (
+    MeasuredCurveRepository,
+    MeltingStepRepository,
     ProtocolRepository,
     ReadoutDataRepository,
     RunRepository,
 )
+from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
 
@@ -84,6 +95,9 @@ class ReadoutCalculationEngine:
         dispatcher: EventDispatcherProtocol,
         fit_dose_response: FitDoseResponseCurves | None = None,
         plate_quality: PlateQualityCalculator | None = None,
+        melting_step_repo: MeltingStepRepository | None = None,
+        measured_curve_repo: MeasuredCurveRepository | None = None,
+        batch_repo: BatchRepository | None = None,
     ) -> None:
         self._uow = uow
         self._formula_evaluator = formula_evaluator
@@ -95,6 +109,9 @@ class ReadoutCalculationEngine:
         self._dispatcher = dispatcher
         self._fit_dose_response = fit_dose_response
         self._plate_quality = plate_quality
+        self._melting_step_repo = melting_step_repo
+        self._measured_curve_repo = measured_curve_repo
+        self._batch_repo = batch_repo
 
     async def compute_for_run(
         self,
@@ -156,8 +173,6 @@ class ReadoutCalculationEngine:
         # 3. Load raw data
         # ------------------------------------------------------------------
         raw_data = await self._readout_data_repo.find_by_run(run.workspace_id, run_id)
-        if not raw_data:
-            return Success(ComputeRunResult(computed_readouts=[]))
 
         computed: list[ReadoutData] = []
 
@@ -277,6 +292,16 @@ class ReadoutCalculationEngine:
                 await self._run_repo.save(run)
 
         # ------------------------------------------------------------------
+        # 4.6. Tm and ΔTm per temperature window
+        # ------------------------------------------------------------------
+        window_rows = await self._window_rows(run, protocol, workspace_id)
+        if not raw_data and not window_rows:
+            return Success(ComputeRunResult(computed_readouts=[]))
+        computed.extend(window_rows)
+        # Window rows aggregate like raw rows, so formulas can name them.
+        source_rows = raw_data + window_rows
+
+        # ------------------------------------------------------------------
         # 5. Aggregate replicates (in-memory)
         # ------------------------------------------------------------------
         aggregated_values: dict[uuid.UUID, dict[str, float]] = defaultdict(dict)
@@ -290,7 +315,7 @@ class ReadoutCalculationEngine:
             # don't pollute aggregated_values with a None key.
             rd_readouts = [
                 r
-                for r in raw_data
+                for r in source_rows
                 if r.readout_definition_id == rd.id and r.molecule_id is not None
             ]
 
@@ -332,7 +357,7 @@ class ReadoutCalculationEngine:
             # One pass to find a representative readout per molecule, used
             # below for batch_id attribution.
             representative_by_mol: dict[uuid.UUID, ReadoutData] = {}
-            for r in raw_data:
+            for r in source_rows:
                 if r.molecule_id is not None and r.molecule_id not in representative_by_mol:
                     representative_by_mol[r.molecule_id] = r
 
@@ -385,6 +410,65 @@ class ReadoutCalculationEngine:
             await self._readout_data_repo.save_bulk(computed)
 
         return Success(ComputeRunResult(computed_readouts=computed, fit_warnings=fit_warnings))
+
+    async def _window_rows(
+        self, run: Run, protocol: Protocol, workspace_id: uuid.UUID
+    ) -> list[ReadoutData]:
+        """One computed row per position with a Tm (or ΔTm) in each window readout."""
+        melt_defs = [
+            (rd, rd.melt_config)
+            for rd in protocol.readout_definitions
+            if rd.melt_config is not None
+        ]
+        if not melt_defs or self._melting_step_repo is None or self._measured_curve_repo is None:
+            return []
+        steps = [
+            (s.well_id, s.channel_key, s.value, s.counts)
+            for s in await self._melting_step_repo.find_by_run(workspace_id, run.id)
+        ]
+        traced = await self._measured_curve_repo.list_traced(workspace_id, run.id)
+        wells = [(w.id, w.well_type) for w in run.wells]
+
+        # Readouts of one window share its channel and limits (Protocol enforces it).
+        by_window: dict[str, WindowResult] = {}
+        values: list[tuple[ReadoutDefinition, uuid.UUID, float]] = []
+        for rd, mc in melt_defs:
+            result = by_window.get(mc.window)
+            if result is None:
+                result = by_window[mc.window] = evaluate_window(
+                    mc.low, mc.high, window_positions(wells, steps, mc.channel_key, traced)
+                )
+            for p in result.positions:
+                v = p.tm if mc.measure is MeltMeasure.TM else p.delta_tm
+                if v is not None:
+                    values.append((rd, p.well_id, v))
+        if not values:
+            return []
+
+        batch_by_well = {w.id: w.batch_id for w in run.wells}
+        batch_ids = list(dict.fromkeys(b for _, w, _ in values if (b := batch_by_well[w])))
+        molecule_by_batch: dict[uuid.UUID, uuid.UUID] = {}
+        if batch_ids and self._batch_repo is not None:
+            molecule_by_batch = {
+                b.id: b.molecule_id
+                for b in await self._batch_repo.find_by_ids(workspace_id, batch_ids)
+            }
+        rows: list[ReadoutData] = []
+        for rd, well_id, v in values:
+            batch_id = batch_by_well[well_id]
+            rows.append(
+                ReadoutData(
+                    workspace_id=run.workspace_id,
+                    run_id=run.id,
+                    well_id=well_id,
+                    molecule_id=molecule_by_batch.get(batch_id) if batch_id else None,
+                    batch_id=batch_id,
+                    readout_definition_id=rd.id,
+                    value=QualifiedValue(value=v),
+                    is_computed=True,
+                )
+            )
+        return rows
 
     # ------------------------------------------------------------------
     # Topological sort

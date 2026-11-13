@@ -8,6 +8,7 @@ import type { RelabelResult } from "../types";
 import {
   DOSE_RESPONSE_KEY,
   MEASURED_CURVES_KEY,
+  MELTING_ANALYSIS_KEY,
   PLATE_MAP_KEY,
   READOUT_DATA_KEY,
   RUN_KEY,
@@ -31,6 +32,7 @@ export function useRelabelPositions(runId: string) {
         DOSE_RESPONSE_KEY,
         PLATE_MAP_KEY,
         MEASURED_CURVES_KEY,
+        [...MELTING_ANALYSIS_KEY, runId],
         [...RUN_KEY, runId],
       ]) {
         qc.invalidateQueries({ queryKey });

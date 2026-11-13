@@ -1,7 +1,7 @@
 import { shortId } from "@/shared/lib/utils";
 import { describe, expect, it } from "vitest";
 
-import { CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import type { CurvePositions, RunCurves } from "../types";
 import {
   type CurveSet,
@@ -145,6 +145,157 @@ describe("buildCurveFigure", () => {
   it("draws no lines when the switch is off", () => {
     const { layout } = buildCurveFigure({ ...base, drawn: new Set(["w1"]) });
     expect(layout.shapes).toEqual([]);
+  });
+
+  it("buildCurveFigure draws steps in place of reported transitions, keeping other reported values", () => {
+    const withTransitions: RunCurves = {
+      ...curves,
+      curves: curves.curves.map((c) =>
+        c.well_id === "w1"
+          ? {
+              ...c,
+              reported: [
+                { kind: "transition", ordinal: 1, label: "Step 1", value: 36.0, unit: "°C" },
+                { kind: "onset", ordinal: 1, label: "Onset 1", value: 30.0, unit: "°C" },
+                { kind: "k2", ordinal: 1, label: "Share", value: 40, unit: "%" },
+              ],
+            }
+          : c,
+      ),
+    };
+    const { layout } = buildCurveFigure({
+      ...base,
+      set: curveSetFromRun(withTransitions),
+      drawn: new Set(["w1", "w3"]),
+      showReported: true,
+      steps: new Map([
+        [
+          "w1",
+          [
+            { value: 36.6, reviewed: true },
+            { value: 71.3, reviewed: false },
+          ],
+        ],
+      ]),
+    });
+    const shapes = layout.shapes as { type: string; x0: number; line: { color: string } }[];
+    // w1's reported transition gives way to its steps; its onset stays; w3 has none.
+    expect(shapes.map((s) => [s.type, s.x0])).toEqual([
+      ["line", 36.6],
+      ["line", 71.3],
+      ["line", 30.0],
+    ]);
+    expect(shapes[0].line.color).toBe(dark.reference);
+  });
+
+  describe("step line styles", () => {
+    const withReported: RunCurves = {
+      ...curves,
+      curves: curves.curves.map((c) =>
+        c.well_id === "w1"
+          ? {
+              ...c,
+              reported: [
+                { kind: "onset", ordinal: 1, label: "Onset 1", value: 30.0, unit: "°C" },
+                { kind: "k1", ordinal: 1, label: "Point 1", value: 21.5, unit: "°C" },
+              ],
+            }
+          : c,
+      ),
+    };
+    type Shape = {
+      x0: number;
+      opacity: number;
+      line: { color: string; width: number; dash: string };
+    };
+    const draw = (extra: object, focusedId: string | null = null) =>
+      buildCurveFigure({
+        ...base,
+        set: curveSetFromRun(withReported),
+        drawn: new Set(["w1"]),
+        showReported: true,
+        focusedId,
+        ...extra,
+      }).layout.shapes as Shape[];
+    const steps = new Map([
+      [
+        "w1",
+        [
+          { value: 36.6, reviewed: true },
+          { value: 71.3, reviewed: false },
+        ],
+      ],
+    ]);
+
+    it("buildCurveFigure draws reviewed steps solid and unreviewed dashed", () => {
+      const [rev, unrev] = draw({ steps });
+      expect(rev.line).toMatchObject({ dash: "solid", width: 1.5, color: dark.reference });
+      expect(unrev.line).toMatchObject({ dash: "dash", width: 1.5, color: dark.reference });
+      expect(rev.opacity).toBeCloseTo(0.9 * 1);
+      expect(draw({ steps }, "w1")[0].line.width).toBe(2.5);
+    });
+
+    it("other reported values are thin grey dots when steps are given", () => {
+      const rest = draw({ steps }).slice(2);
+      expect(rest.map((s) => s.x0)).toEqual([30, 21.5]);
+      for (const s of rest) {
+        expect(s.line).toEqual({ color: CHART_AXIS.tick, width: 1, dash: "dot" });
+        expect(s.opacity).toBe(0.5);
+      }
+    });
+
+    it("without steps every reported value keeps today's style", () => {
+      for (const s of draw({})) {
+        expect(s.line).toEqual({ color: dark.reference, width: 1, dash: "dot" });
+        expect(s.opacity).toBeCloseTo(0.8);
+      }
+    });
+  });
+
+  it("buildCurveFigure draws window bands", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      windows: [{ low: 50, high: 85, label: "Main" }],
+    });
+    const shapes = layout.shapes as {
+      type: string;
+      x0: number;
+      x1: number;
+      yref: string;
+      label: { text: string };
+    }[];
+    expect(shapes).toHaveLength(1);
+    expect(shapes[0]).toMatchObject({ type: "rect", x0: 50, x1: 85, yref: "paper" });
+    expect(shapes[0].label.text).toBe("Main");
+  });
+
+  it("an inactive band is unfilled, with dotted boundary lines", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      windows: [
+        { low: 25, high: 50, label: "Low", active: false },
+        { low: 50, high: 85, label: "Main", active: true },
+      ],
+    });
+    const shapes = layout.shapes as any[];
+    const rects = shapes.filter((s) => s.type === "rect");
+    expect(rects).toHaveLength(2);
+    const [low, main] = rects;
+    expect(low.fillcolor).toBe("rgba(0,0,0,0)");
+    expect(low.label.text).toBe("Low");
+    expect(main.fillcolor).not.toBe("rgba(0,0,0,0)");
+    const lines = shapes.filter(
+      (s) => s.type === "line" && s.line.dash === "dot" && s.opacity === 0.5,
+    );
+    expect(lines.map((l) => l.x0).sort((a, b) => a - b)).toEqual([25, 50]);
+  });
+
+  it("bands with no active flag keep today's shapes", () => {
+    const { layout } = buildCurveFigure({
+      ...base,
+      windows: [{ low: 50, high: 85, label: "Main" }],
+    });
+    expect(layout.shapes as any[]).toHaveLength(1);
   });
 
   it("titles the axes from the channel", () => {

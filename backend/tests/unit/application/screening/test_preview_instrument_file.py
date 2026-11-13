@@ -26,6 +26,7 @@ from cellar.application.screening.preview_instrument_file import (
 )
 from cellar.domain.screening_assay.enums import HolderKind, ReadoutDataType, RunStatus
 from cellar.domain.screening_assay.holder import holder_label, position_label
+from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.run import Plate, Run
 from cellar.domain.shared.enums import ConcentrationUnit
@@ -68,7 +69,7 @@ CHANNELS = (
 )
 
 
-def _reported(column: int, channel: str = "ratio", kind: str = "transition") -> ReportedValue:
+def _reported(column: int, channel: str = "ratio", kind: str = "onset") -> ReportedValue:
     label = f"{kind.title()} #1 for {channel.title()}"
     return ReportedValue(
         row=1,
@@ -247,7 +248,7 @@ async def test_success_lists_positions_channels_series_and_readouts():
         (1, 3, "ABC-0000002"),
     ]
     assert preview.channels == CHANNELS
-    assert [s.series.key for s in preview.series] == [("ratio", "transition", 1)]
+    assert [s.series.key for s in preview.series] == [("ratio", "onset", 1)]
     assert preview.series[0].series.count == 3
     assert [(r.id, r.name, r.unit) for r in preview.readouts] == [
         (numeric.id, "Melting point", "°C")
@@ -257,6 +258,27 @@ async def test_success_lists_positions_channels_series_and_readouts():
     assert preview.dose_unit == "uM" and h.uow.committed is False
     h.run_repo.find_by_id_in_workspace.assert_awaited_once_with(h.ws, h.run.id)
     h.protocol_repo.find_by_id_in_workspace.assert_awaited_once_with(h.ws, h.run.protocol_id)
+
+
+async def test_window_readouts_are_not_offered_for_mapping():
+    numeric = _definition("Melting point")
+    window = ReadoutDefinition(
+        protocol_id=uuid.uuid4(),
+        name="Tm (Main)",
+        data_type=ReadoutDataType.NUMERIC,
+        unit="°C",
+        melt_config=MeltReadoutConfig(
+            window="Main", measure=MeltMeasure.TM, channel_key="ratio", low=50.0, high=85.0
+        ),
+    )
+    preview = (await Harness(definitions=[numeric, window])()).unwrap()
+    assert [r.id for r in preview.readouts] == [numeric.id]
+
+
+async def test_preview_does_not_offer_transitions_for_mapping():
+    h = Harness(export=_export(("",), reported=(_reported(1), _reported(1, kind="transition"))))
+    preview = (await h()).unwrap()
+    assert [s.series.kind for s in preview.series] == ["onset"]
 
 
 async def test_exact_identifier_match_with_one_batch_is_preselected():
@@ -336,8 +358,8 @@ async def test_blank_label_gets_no_suggestion_and_no_lookup():
 
 
 async def test_series_is_prefilled_only_on_name_match():
-    matching = _definition("transition #1 for ratio")
-    reported = (_reported(1), _reported(1, kind="onset"))
+    matching = _definition("onset #1 for ratio")
+    reported = (_reported(1), _reported(1, channel="signal"))
     h = Harness(
         export=_export(("",), reported=reported),
         definitions=[matching, _definition("Onset")],
@@ -345,8 +367,8 @@ async def test_series_is_prefilled_only_on_name_match():
     preview = (await h()).unwrap()
 
     assert [(s.series.key, s.suggested_readout_definition_id) for s in preview.series] == [
-        (("ratio", "transition", 1), matching.id),
-        (("ratio", "onset", 1), None),
+        (("ratio", "onset", 1), matching.id),
+        (("signal", "onset", 1), None),
     ]
 
 
@@ -357,7 +379,7 @@ async def test_reported_value_for_undeclared_channel_warns_and_is_not_a_series()
 
     assert [s.series.channel for s in preview.series] == ["ratio"]
     assert preview.warnings == (
-        "Reported value 'Transition #1 for Ghost' belongs to a signal the file has no "
+        "Reported value 'Onset #1 for Ghost' belongs to a signal the file has no "
         "traces for. It is skipped.",
     )
 

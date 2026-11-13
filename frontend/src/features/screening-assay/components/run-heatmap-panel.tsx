@@ -16,6 +16,7 @@ import { usePlateMap } from "../hooks/use-plate-setup";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
 import { classifyZPrime, readPerPlateQc } from "../lib/qc-metrics";
+import { hasComputedLayer } from "../lib/readout-data-pivot";
 import {
   type PlateData,
   READOUT_NORMALIZATION_LABELS,
@@ -39,14 +40,6 @@ type ValueLayer = "raw" | "normalized";
  *  `well.dose`, not in `readout_data` — branched everywhere the panel
  *  reads a value. */
 const DOSE_OPTION_ID = "__well_dose__";
-
-/** A readout def is "normalizable" iff the calc engine produces a separate
- *  is_computed=true layer for it. That happens when the def declares a
- *  normalization OR is itself a calculated field. Matches the canonical
- *  layer-selection logic in `fit_dose_response.py` (Bug 1 fix). */
-function hasComputedLayer(def: ReadoutDefinition): boolean {
-  return def.is_calculated || (def.normalizations?.some((n) => n !== "none") ?? false);
-}
 
 function computedUnitLabel(normalization: ReadoutNormalization): string {
   if (normalization === "none") return "Computed";

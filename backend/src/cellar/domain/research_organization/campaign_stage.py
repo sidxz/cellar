@@ -22,7 +22,7 @@ from cellar.domain.shared.hit_criterion import compare
 MAX_STAGE_NAME_LEN = 120
 MAX_STAGE_CRITERIA = 10
 
-_VALID_STAGE_OPERATORS = {"lt", "lte", "gt", "gte", "between"}
+_VALID_STAGE_OPERATORS = {"lt", "lte", "gt", "gte", "between", "not_between"}
 
 
 class _Unset:
@@ -65,7 +65,7 @@ class StageCriterion:
     HitCriterion, the string-based `in` operator is not accepted here."""
 
     channel_id: uuid.UUID
-    operator: str  # lt, lte, gt, gte, between
+    operator: str  # lt, lte, gt, gte, between, not_between
     value: float | list[float]
 
     def __post_init__(self) -> None:
@@ -74,7 +74,7 @@ class StageCriterion:
                 f"StageCriterion operator must be one of {_VALID_STAGE_OPERATORS}, "
                 f"got '{self.operator}'"
             )
-        if self.operator == "between":
+        if self.operator in ("between", "not_between"):
             if (
                 not isinstance(self.value, list)
                 or len(self.value) != 2
@@ -83,13 +83,13 @@ class StageCriterion:
                 )
             ):
                 raise ValidationError(
-                    "StageCriterion with 'between' operator requires value=[low, high] "
+                    f"StageCriterion with '{self.operator}' operator requires value=[low, high] "
                     "(two numbers)"
                 )
             low, high = self.value
             if low > high:
                 raise ValidationError(
-                    f"StageCriterion 'between' requires low <= high; got [{low}, {high}]"
+                    f"StageCriterion '{self.operator}' requires low <= high; got [{low}, {high}]"
                 )
         else:
             if not isinstance(self.value, (int, float)) or isinstance(self.value, bool):

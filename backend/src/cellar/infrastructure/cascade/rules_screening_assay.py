@@ -171,6 +171,16 @@ register_rules(
         label_field=None,
         display_label="Measured curves",
     ),
+    # MeltingStepModel.run_id → runs (ondelete=CASCADE)
+    # Reviewable melting steps on the run's traces; well_id carries no FK.
+    CascadeRule(
+        child_table="melting_steps",
+        fk_column="run_id",
+        parent_table="runs",
+        action=A.CASCADE,
+        label_field=None,
+        display_label="Melting steps",
+    ),
     # -------------------------------------------------------------------------
     # Plate children
     # -------------------------------------------------------------------------
