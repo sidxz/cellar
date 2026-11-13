@@ -41,11 +41,13 @@ from cellar.application.screening.create_protocol import CreateProtocol
 from cellar.application.screening.create_readout_data import CreateReadoutData
 from cellar.application.screening.create_run import CreateRun
 from cellar.application.screening.cross_protocol_resolver import CrossProtocolResolver
+from cellar.application.screening.curve_position_reader import CurvePositionReader
 from cellar.application.screening.delete_compound_flag import DeleteCompoundFlag
 from cellar.application.screening.delete_run import DeleteRun
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
+from cellar.application.screening.find_curve_positions import FindCurvePositions
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.application.screening.get_collection_gap import (
@@ -58,6 +60,7 @@ from cellar.application.screening.get_dose_response import ListDoseResponseByRun
 from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatch,
 )
+from cellar.application.screening.get_measured_curves_batch import GetMeasuredCurvesBatch
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
 from cellar.application.screening.get_plate_map import GetPlateMap
@@ -254,6 +257,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.compound_flag_
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.coverage_query import (
     SQLAlchemyCollectionCoverageQuery,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.curve_position_reader import (
+    SQLAlchemyCurvePositionReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
     SQLAlchemyDoseResponseCurveRepository,
@@ -811,6 +817,10 @@ def register_screening(container: Container) -> None:
         PlateMapReader,
         lambda c: SQLAlchemyPlateMapReader(c[async_sessionmaker]),
     )
+    container.define(
+        CurvePositionReader,
+        lambda c: SQLAlchemyCurvePositionReader(c[async_sessionmaker]),
+    )
 
     def _get_plate_map(c: Container):
         return GetPlateMap(reader=c[PlateMapReader])
@@ -1070,6 +1080,21 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(GetRunCurves, _get_run_curves)
+
+    def _find_curve_positions(c: Container):
+        return FindCurvePositions(reader=c[CurvePositionReader])
+
+    container.define(FindCurvePositions, _find_curve_positions)
+
+    def _get_measured_curves_batch(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetMeasuredCurvesBatch(
+            uow=uow,
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            derivative=c[CurveDerivativeService],
+        )
+
+    container.define(GetMeasuredCurvesBatch, _get_measured_curves_batch)
 
     def _preview_summary_import(c: Container):
         # Dry-run forecast: owns + enters its own read UoW (no bulk_uc, no
