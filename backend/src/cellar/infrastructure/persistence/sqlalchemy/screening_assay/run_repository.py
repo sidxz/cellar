@@ -307,6 +307,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
                     batch_id=wm.batch_id,
                     dose=wm.dose,
                     label=wm.label,
+                    note=wm.note,
                     created_at=wm.created_at,
                     updated_at=wm.updated_at,
                 )
@@ -465,4 +466,5 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             batch_id=well.batch_id,
             dose=well.dose,
             label=well.label,
+            note=well.note,
         )

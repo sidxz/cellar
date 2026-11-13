@@ -227,6 +227,26 @@ async def test_run_round_trips_holder_fields_and_well_label(session_factory, wor
     assert loaded.wells[0].label == "protein alone"
 
 
+async def test_run_round_trips_well_note(session_factory, workspace_id):
+    protocol_id = await _seed_protocol(session_factory, workspace_id)
+    run = Run.create(
+        workspace_id=workspace_id,
+        protocol_id=protocol_id,
+        run_date=date.today(),
+        operator=_USER_ID,
+    )
+    plate = Plate(run_id=run.id, plate_number=1)
+    run.add_plate(plate)
+    run.wells.append(Well(plate_id=plate.id, row="A", column=1, note="went cloudy"))
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        await SQLAlchemyRunRepository(uow).save(run)
+        await uow.commit()
+
+    loaded = await _load_run(session_factory, workspace_id, run.id)
+    assert loaded.wells[0].note == "went cloudy"
+
+
 async def test_existing_plate_rows_read_as_plate_holders(session_factory, workspace_id):
     run_id = await _seed_run(session_factory, workspace_id)
     async with session_factory() as session:

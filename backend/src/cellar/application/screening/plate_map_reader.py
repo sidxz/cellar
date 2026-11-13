@@ -33,6 +33,8 @@ class WellMapEntry:
     label: str | None = None
     # Display label for the position, from the holder kind (see domain ``holder``).
     position_label: str = ""
+    # Free-text bench observation about the position.
+    note: str | None = None
 
 
 @dataclass(frozen=True)

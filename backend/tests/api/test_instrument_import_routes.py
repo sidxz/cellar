@@ -286,6 +286,39 @@ async def test_plate_map_reports_holder_and_position_labels(
     assert first["wells"][2]["label"] is None
 
 
+async def test_note_is_returned_by_plate_map_and_curves(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    preview = (await client.post(s.preview_url, files=FILE)).json()
+    labelling = labelling_from(preview)
+    labelling["positions"][1]["note"] = "strongly coloured"
+    resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
+    assert resp.status_code == 201, resp.text
+
+    run_id = s.run_id
+    wells = (await client.get(f"/api/v1/runs/{run_id}/plate-map")).json()["plates"][0]["wells"]
+    assert [w["note"] for w in wells] == [None, "strongly coloured", None]
+    positions = (await client.get(f"/api/v1/runs/{run_id}/curves")).json()["positions"]
+    assert positions[1]["note"] == "strongly coloured"
+
+
+async def test_note_over_1000_characters_returns_422(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s = await _seed(session_factory, fake_auth.workspace_id)
+    preview = (await client.post(s.preview_url, files=FILE)).json()
+    labelling = labelling_from(preview)
+    labelling["positions"][0]["note"] = "x" * 1001
+    resp = await client.post(s.import_url, files=FILE, data={"labelling": json.dumps(labelling)})
+    assert resp.status_code == 422 and "Invalid labelling" in resp.text
+    assert await _count(session_factory, "plates", s.run_id) == 0
+
+
 async def test_second_import_is_refused_until_reset(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],

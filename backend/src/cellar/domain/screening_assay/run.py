@@ -45,6 +45,7 @@ _RUN_TRANSITIONS: dict[RunStatus, set[RunStatus]] = {
 _LOCKABLE_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
 
 _WELL_LABEL_MAX = 200
+_WELL_NOTE_MAX = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -124,6 +125,7 @@ class Well(Entity):
         - column >= 1
         - dose, when given, is finite and >= 0
         - label, when given, is trimmed and at most 200 characters
+        - note, when given, is trimmed and at most 1000 characters
     """
 
     def __init__(
@@ -137,6 +139,7 @@ class Well(Entity):
         batch_id: uuid.UUID | None = None,
         dose: float | None = None,
         label: str | None = None,
+        note: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -145,6 +148,10 @@ class Well(Entity):
         label = (label or "").strip() or None
         if label is not None and len(label) > _WELL_LABEL_MAX:
             raise ValidationError(f"Well label must be at most {_WELL_LABEL_MAX} characters")
+
+        note = (note or "").strip() or None
+        if note is not None and len(note) > _WELL_NOTE_MAX:
+            raise ValidationError(f"Well note must be at most {_WELL_NOTE_MAX} characters")
 
         # Normalize row to uppercase
         row = row.upper()
@@ -167,6 +174,8 @@ class Well(Entity):
         self.dose = dose
         # Free-text identifier of what was measured here (e.g. a sample name).
         self.label = label
+        # Free-text observation made at the bench about this sample in this run.
+        self.note = note
 
 
 # ---------------------------------------------------------------------------

@@ -179,6 +179,7 @@ class SQLAlchemyPlateMapReader:
                             smiles=(mol_smiles.get(molecule_id) if molecule_id else None),
                             dose=well.dose,
                             label=well.label,
+                            note=well.note,
                             position_label=position_label(holder_kind, well.row, well.column),
                         )
                     )

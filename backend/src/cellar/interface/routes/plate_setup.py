@@ -94,6 +94,8 @@ class PlateMapWellModel(BaseModel):
     position_label: str
     # Free-text sample name recorded for the position.
     label: str | None
+    # Free-text bench observation about the position.
+    note: str | None
 
     @classmethod
     def from_entry(cls, w: WellMapEntry) -> PlateMapWellModel:
@@ -112,6 +114,7 @@ class PlateMapWellModel(BaseModel):
             dose=w.dose,
             position_label=w.position_label,
             label=w.label,
+            note=w.note,
         )
 
 

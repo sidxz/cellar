@@ -964,6 +964,7 @@ class InstrumentPositionLabellingRequest(BaseModel):
     column: int
     used: bool = True
     label: str = Field("", max_length=200)
+    note: str = Field("", max_length=1000)
     well_type: WellType = WellType.SAMPLE
     batch_id: uuid.UUID | None = None
     # In the protocol's dose unit.
@@ -991,6 +992,7 @@ class InstrumentLabellingRequest(BaseModel):
                     column=p.column,
                     used=p.used,
                     label=p.label,
+                    note=p.note,
                     well_type=p.well_type,
                     batch_id=p.batch_id,
                     dose=p.dose,

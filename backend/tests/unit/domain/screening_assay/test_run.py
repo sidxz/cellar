@@ -1017,6 +1017,15 @@ def test_well_label_is_trimmed_capped_and_blank_is_none():
         Well(plate_id=_P, row="A", column=1, label="x" * 201)
 
 
+def test_well_note_is_trimmed_capped_and_blank_is_none():
+    assert Well(plate_id=_P, row="A", column=1, note="  went cloudy  ").note == "went cloudy"
+    assert Well(plate_id=_P, row="A", column=1, note="   ").note is None
+    assert Well(plate_id=_P, row="A", column=1).note is None
+    assert len(Well(plate_id=_P, row="A", column=1, note="x" * 1000).note) == 1000
+    with pytest.raises(ValidationError):
+        Well(plate_id=_P, row="A", column=1, note="x" * 1001)
+
+
 def test_position_above_24_is_a_valid_well():
     assert Well(plate_id=_P, row="A", column=48).column == 48
 

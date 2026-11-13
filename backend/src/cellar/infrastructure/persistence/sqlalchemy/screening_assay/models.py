@@ -436,6 +436,7 @@ class WellModel(Base, EntityModelMixin):
     # Dose value in the owning protocol's dose_unit. Unit not denormalized.
     dose: Mapped[float | None] = mapped_column(Float)
     label: Mapped[str | None] = mapped_column(String(200))
+    note: Mapped[str | None] = mapped_column(Text)
 
     plate: Mapped[PlateModel] = relationship("PlateModel", back_populates="wells")
 

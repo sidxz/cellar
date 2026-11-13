@@ -68,6 +68,7 @@ class PositionLabelling:
     well_type: WellType = WellType.SAMPLE
     batch_id: uuid.UUID | None = None
     dose: float | None = None
+    note: str = ""
 
 
 @dataclass(frozen=True)
@@ -309,6 +310,7 @@ class ImportInstrumentFile:
                     batch_id=p.batch_id,
                     dose=p.dose,
                     label=p.label,
+                    note=p.note,
                 )
                 for key in file_keys
                 if (p := used.get(key)) is not None

@@ -526,6 +526,20 @@ async def test_label_too_long_is_refused_and_nothing_written():
     h.assert_nothing_written()
 
 
+async def test_note_is_stored_on_the_position():
+    h = Harness()
+    positions = (h.positions[0], replace(h.positions[1], note="strongly coloured"), h.positions[2])
+    (await h(h.command(positions=positions))).unwrap()
+    assert [w.note for w in h.run.wells] == [None, "strongly coloured", None]
+
+
+async def test_note_over_1000_characters_is_refused_and_nothing_written():
+    h = Harness()
+    positions = (replace(h.positions[0], note="x" * 1001), *h.positions[1:])
+    assert isinstance((await h(h.command(positions=positions))).failure(), ValidationError)
+    h.assert_nothing_written()
+
+
 async def test_reported_value_for_undeclared_channel_is_a_warning():
     reported = (*(_reported(c) for c in (1, 2, 3)), _reported(1, channel="ghost"))
     h = Harness(export=_export(reported=reported))
