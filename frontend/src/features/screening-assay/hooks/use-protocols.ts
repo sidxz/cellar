@@ -4,6 +4,7 @@ import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   AddConditionDefinitionRequest,
+  AddTemperatureWindowRequest,
   CorrectProtocolRequest,
   ProtocolSummaryResponse,
   SetDiscriminatorRequest,
@@ -160,6 +161,23 @@ export function useAddReadoutDefinition(protocolId: string) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       showSuccess("Readout definition added");
+    },
+  });
+}
+
+/** POST /protocols/{id}/temperature-windows: adds Tm and/or ΔTm readouts computed from melting steps. */
+export function useAddTemperatureWindow(protocolId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: AddTemperatureWindowRequest) =>
+      customInstance<Protocol>({
+        url: `${API_V1}/protocols/${protocolId}/temperature-windows`,
+        method: "POST",
+        data,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      showSuccess("Temperature window added");
     },
   });
 }

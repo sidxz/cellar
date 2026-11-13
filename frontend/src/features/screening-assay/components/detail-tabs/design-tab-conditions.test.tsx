@@ -24,6 +24,10 @@ vi.mock("../../hooks/use-plate-templates", () => ({ usePlateTemplates: () => ({ 
 vi.mock("@/shared/hooks/use-units", () => ({ useUnits: () => ({ data: [] }) }));
 vi.mock("./design-tab-protocol-card", () => ({ DesignTabProtocolCard: () => null }));
 vi.mock("../condition-group-table", () => ({ ConditionGroupTable: () => null }));
+vi.mock("../temperature-window-dialog", () => ({ TemperatureWindowDialog: () => null }));
+vi.mock("../../hooks/use-curve-positions", () => ({
+  useCurvePositions: () => ({ data: undefined }),
+}));
 vi.mock("../plate-map-view", () => ({ PlateMapView: () => null }));
 vi.mock("./use-readout-definition-form", () => ({
   useReadoutDefinitionForm: () => ({}),
