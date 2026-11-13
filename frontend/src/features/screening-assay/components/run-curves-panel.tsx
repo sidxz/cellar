@@ -13,6 +13,7 @@ import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
+import { MeltWindowResults } from "./melt-window-results";
 import { MeltingStepsPanel } from "./melting-steps-panel";
 
 const PLOT_HEIGHT = "h-[400px]";
@@ -143,6 +144,14 @@ export function RunCurvesPanel({
           value={stepValue}
           onValueChange={setStepValue}
           onReload={melting.refetch}
+        />
+      )}
+      {analysis && analysis.windows.length > 0 && (
+        <MeltWindowResults
+          windows={analysis.windows}
+          positions={data.positions}
+          checks={analysis.step_checks}
+          doseUnit={doseUnit}
         />
       )}
     </div>
