@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime
 from typing import Annotated, Any
 
+import structlog
 from fastapi import APIRouter, File, Form, UploadFile
 from pydantic import BaseModel, Field
 from pydantic import ValidationError as PydanticValidationError
@@ -74,6 +75,11 @@ from cellar.interface.dependencies import (
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["run-import"])
+
+LABELING_INVALID = (
+    "The position labeling sent with the file is not valid. "
+    "Reload the page and import the file again."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -1129,7 +1135,14 @@ async def import_instrument_file(
     try:
         parsed = InstrumentLabellingRequest.model_validate_json(labelling)
     except PydanticValidationError as exc:
-        raise ValidationError(f"Invalid labeling: {exc}") from exc
+        # The wizard checks every field before sending; the details are for the log only.
+        structlog.get_logger(__name__).warning(
+            "instrument_import.labeling_invalid",
+            run_id=str(run_id),
+            workspace_id=str(auth.workspace_id),
+            errors=exc.errors(include_url=False, include_context=False, include_input=False),
+        )
+        raise ValidationError(LABELING_INVALID) from exc
     cmd = ImportInstrumentFileCommand(
         workspace_id=auth.workspace_id,
         run_id=run_id,

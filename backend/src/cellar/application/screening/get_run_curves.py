@@ -86,7 +86,11 @@ class GetRunCurves:
             if input.channel is not None:
                 channel = next((c for c in channels if c.key == input.channel), None)
                 if channel is None:
-                    return Failure(ValidationError(f"Unknown channel '{input.channel}'"))
+                    return Failure(
+                        ValidationError(
+                            "The selected signal is unavailable. Choose another signal."
+                        )
+                    )
             elif channels:
                 channel = channels[0]
 
@@ -157,7 +161,7 @@ def apply_view(
     ranges = [(min(s.x), max(s.x)) for s in series]
     widest = max(hi - lo for lo, hi in ranges)
     if window is not None and not (math.isfinite(window) and window > 0):
-        return Failure(ValidationError("The derivative window must be a finite number above 0"))
+        return Failure(ValidationError("Enter a smoothing window greater than 0."))
     used = min(window, widest) if window else default_window(ranges)
     out = []
     for s in series:

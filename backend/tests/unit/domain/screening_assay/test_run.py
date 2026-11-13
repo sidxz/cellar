@@ -773,7 +773,7 @@ class TestWell:
 
     @pytest.mark.parametrize("dose", [float("nan"), float("inf"), float("-inf")])
     def test_non_finite_dose_raises(self, dose: float) -> None:
-        with pytest.raises(ValidationError, match="finite"):
+        with pytest.raises(ValidationError, match=r"^Concentration must be a finite number$"):
             Well(plate_id=uuid.uuid4(), row="A", column=1, dose=dose)
 
     def test_empty_row_raises(self) -> None:
@@ -1022,7 +1022,7 @@ def test_well_label_is_trimmed_capped_and_blank_is_none():
     assert Well(plate_id=_P, row="A", column=1, label="  x  ").label == "x"
     assert Well(plate_id=_P, row="A", column=1, label="   ").label is None
     assert len(Well(plate_id=_P, row="A", column=1, label="x" * 200).label) == 200
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match=r"^Position label must be at most 200 characters$"):
         Well(plate_id=_P, row="A", column=1, label="x" * 201)
 
 
@@ -1031,7 +1031,7 @@ def test_well_note_is_trimmed_capped_and_blank_is_none():
     assert Well(plate_id=_P, row="A", column=1, note="   ").note is None
     assert Well(plate_id=_P, row="A", column=1).note is None
     assert len(Well(plate_id=_P, row="A", column=1, note="x" * 1000).note) == 1000
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match=r"^Position note must be at most 1000 characters$"):
         Well(plate_id=_P, row="A", column=1, note="x" * 1001)
 
 
@@ -1242,7 +1242,11 @@ def test_relabel_stale_expected_is_conflict_naming_positions_and_changes_nothing
     with pytest.raises(ConflictError, match=P(2)) as exc:
         run.relabel_positions([E(w3, note="n"), stale])
     assert P(3) not in str(exc.value)
-    assert "Reload and try again" in str(exc.value)
+    # Says what reloading costs: the edits not yet saved.
+    assert exc.value.message == (
+        f"Changed by someone else since you opened them: {P(2)}. "
+        "Reloading shows their current values and discards your unsaved edits."
+    )
     assert (w2.label, w3.note) == ("x", None) and run.collect_events() == []
 
 
@@ -1318,7 +1322,8 @@ def test_relabel_unknown_or_repeated_position_is_validation_error():
     unknown = PositionEdit(uuid.uuid4(), w2.values, replace(w2.values, label="y"))
     with pytest.raises(ValidationError):
         run.relabel_positions([unknown])
-    with pytest.raises(ValidationError):
+    # A repeated position is named by its label, not its identifier.
+    with pytest.raises(ValidationError, match=f"^{P(2)} is given more than once$"):
         run.relabel_positions([E(w2, label="y"), E(w2, label="z")])
     assert w2.label == "x" and run.collect_events() == []
 

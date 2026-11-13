@@ -356,7 +356,10 @@ async def test_reported_value_for_undeclared_channel_warns_and_is_not_a_series()
     preview = (await h()).unwrap()
 
     assert [s.series.channel for s in preview.series] == ["ratio"]
-    assert len(preview.warnings) == 1 and "ghost" in preview.warnings[0]
+    assert preview.warnings == (
+        "Reported value 'Transition #1 for Ghost' belongs to a signal the file has no "
+        "traces for. It is skipped.",
+    )
 
 
 async def test_run_not_found():
@@ -426,5 +429,5 @@ async def test_position_without_a_curve_on_a_channel_is_a_warning():
 
     label = position_label(HolderKind.CASSETTE, "A", 3)
     assert preview.warnings == (
-        f"{label} has no Ratio trace in the file; nothing is stored for it on that channel",
+        f"{label} has no Ratio trace in the file. Mapped reported values can still be imported.",
     )

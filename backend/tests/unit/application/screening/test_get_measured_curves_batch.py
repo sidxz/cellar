@@ -138,7 +138,8 @@ async def test_explicit_window_is_passed_through_and_stated(uc, derivative):
 
 async def test_window_not_above_0_is_a_validation_error(uc, derivative):
     failure = (await uc(query([w1], view="derivative", window=-1.0), auth=viewer)).failure()
-    assert isinstance(failure, ValidationError) and "above 0" in str(failure)
+    assert isinstance(failure, ValidationError)
+    assert failure.message == "Enter a smoothing window greater than 0."
     derivative.derivative.assert_not_called()
 
 

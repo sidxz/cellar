@@ -67,20 +67,20 @@ _REASON_REQUIRED_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
 def _clean_label(label: str | None) -> str | None:
     label = (label or "").strip() or None
     if label is not None and len(label) > _WELL_LABEL_MAX:
-        raise ValidationError(f"Well label must be at most {_WELL_LABEL_MAX} characters")
+        raise ValidationError(f"Position label must be at most {_WELL_LABEL_MAX} characters")
     return label
 
 
 def _clean_note(note: str | None) -> str | None:
     note = (note or "").strip() or None
     if note is not None and len(note) > _WELL_NOTE_MAX:
-        raise ValidationError(f"Well note must be at most {_WELL_NOTE_MAX} characters")
+        raise ValidationError(f"Position note must be at most {_WELL_NOTE_MAX} characters")
     return note
 
 
 def _check_dose(dose: float | None) -> None:
     if dose is not None and not math.isfinite(dose):
-        raise ValidationError("Well dose must be a finite number")
+        raise ValidationError("Concentration must be a finite number")
     if dose is not None and dose < 0:
         raise ValidationError("Well dose must be >= 0")
 
@@ -646,11 +646,11 @@ class Run(AggregateRoot):
             well = wells.get(edit.well_id)
             if well is None:
                 raise ValidationError(f"Position '{edit.well_id}' is not on this run")
-            if edit.well_id in seen:
-                raise ValidationError(f"Position '{edit.well_id}' is given more than once")
-            seen.add(edit.well_id)
             plate = plates[well.plate_id]
             label = position_label(plate.holder_kind, well.row, well.column)
+            if edit.well_id in seen:
+                raise ValidationError(f"{label} is given more than once")
+            seen.add(edit.well_id)
             try:
                 expected, new = _cleaned(edit.expected), _cleaned(edit.new)
             except ValidationError as exc:
@@ -661,7 +661,7 @@ class Run(AggregateRoot):
         if stale:
             raise StaleEditError(
                 f"Changed by someone else since you opened them: {', '.join(stale)}. "
-                "Reload and try again."
+                "Reloading shows their current values and discards your unsaved edits."
             )
         return checked
 

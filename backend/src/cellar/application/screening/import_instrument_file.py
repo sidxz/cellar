@@ -63,6 +63,10 @@ from cellar.domain.shared.value_objects import QualifiedValue
 _log = structlog.get_logger(__name__)
 
 ATTACHMENT_FAILED = "The file could not be attached. Upload it on the Files tab."
+COMPUTE_FAILED = (
+    "The data was imported, but the calculations could not be updated. "
+    "Select Recompute on the run to update them."
+)
 
 
 @dataclass(frozen=True)
@@ -217,7 +221,13 @@ class ImportInstrumentFile:
         if result.values_inserted:
             computed = await self._calculation_engine.compute_for_run(run.id, workspace_id=ws)
             if isinstance(computed, Failure):
-                result = replace(result, compute_warning=str(computed.failure()))
+                _log.warning(
+                    "instrument_import.compute_failed",
+                    run_id=str(run.id),
+                    workspace_id=str(ws),
+                    reason=str(computed.failure()),
+                )
+                result = replace(result, compute_warning=COMPUTE_FAILED)
         return Success(await self._attach_raw_file(input, result, auth))
 
     async def _plan(
@@ -277,8 +287,8 @@ class ImportInstrumentFile:
             if (m.channel, m.kind, m.ordinal) not in series_by_key:
                 return Failure(
                     ValidationError(
-                        f"The file has no reported series '{m.kind} #{m.ordinal}' "
-                        f"on channel '{m.channel}'"
+                        "A reported value chosen for a readout is not in this file. "
+                        "Choose the file again."
                     )
                 )
         definitions_by_id = {d.id: d for d in definitions}
@@ -289,10 +299,11 @@ class ImportInstrumentFile:
         ]
         if twice:
             readout = definitions_by_id.get(twice[0])
+            subject = f"Readout '{readout.name}'" if readout else "A readout"
             return Failure(
                 ValidationError(
-                    f"Readout '{readout.name if readout else twice[0]}' is chosen for more than "
-                    "one reported series"
+                    f"{subject} is chosen for more than one reported value. "
+                    "Choose a different readout for each reported value."
                 )
             )
         for m in labelling.series:

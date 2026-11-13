@@ -148,8 +148,9 @@ class PrometheusRawXlsxReader:
                 f"The Overview sheet numbers a capillary {bad[0]}; capillary numbers start at 1."
             )
         if twice := sorted(n for n, k in counts.items() if k > 1):
+            noun = "capillary" if len(twice) == 1 else "capillaries"
             raise InstrumentFileError(
-                f"The Overview sheet lists capillary {', '.join(map(str, twice))} more than once."
+                f"The Overview sheet lists {noun} {', '.join(map(str, twice))} more than once."
             )
         positions = tuple(
             ExportPosition(

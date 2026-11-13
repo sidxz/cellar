@@ -11,6 +11,7 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.screening.relabel_run_positions import (
+    COMPUTE_FAILED,
     RelabelResult,
     RelabelRunPositions,
     RelabelRunPositionsCommand,
@@ -223,6 +224,11 @@ async def test_batch_change_refused_when_a_campaign_may_hold_the_compounds_value
     failure = (await h([E(h.w2, batch_id=h.batch2.id)])).failure()
     assert isinstance(failure, ConflictError) and "Campaign A" in str(failure)
     assert P(2) in str(failure)
+    assert failure.message == (
+        f"Cannot change the batch for {P(2)}: campaign 'Campaign A' contains results for "
+        "this compound that may use this run. Review those campaign results before "
+        "changing the batch."
+    )
     h.readout_repo.find_by_run.assert_awaited_once_with(h.ws, h.run.id)
     h.assert_nothing_written()
 
@@ -252,11 +258,14 @@ async def test_label_change_on_a_position_a_campaign_uses_is_allowed():
     h.readout_repo.find_by_run.assert_not_awaited()
 
 
-async def test_engine_failure_becomes_compute_warning():
+async def test_engine_failure_becomes_compute_warning(capsys):
     h = Harness()
     h.engine.compute_for_run.return_value = Failure(ValidationError("engine broke"))
     out = (await h([E(h.w2, dose=25.0)])).unwrap()
-    assert out.compute_warning == "engine broke" and out.recalculated is False
+    # The user gets a plain sentence; the engine's reason goes to the log only.
+    assert out.compute_warning == COMPUTE_FAILED and out.recalculated is False
+    logged = capsys.readouterr()
+    assert "engine broke" in logged.out + logged.err
     assert h.uow.committed
 
 

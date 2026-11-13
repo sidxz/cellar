@@ -13,6 +13,7 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.screening.import_instrument_file import (
+    COMPUTE_FAILED,
     ImportInstrumentFile,
     ImportInstrumentFileCommand,
     InstrumentLabelling,
@@ -351,11 +352,15 @@ async def test_engine_runs_only_when_values_were_written():
     h.engine.compute_for_run.assert_not_awaited()
 
 
-async def test_engine_failure_becomes_compute_warning():
+async def test_engine_failure_becomes_compute_warning(capsys):
     h = Harness()
     h.engine.compute_for_run.return_value = Failure(ValidationError("formula broke"))
     result = (await h()).unwrap()
-    assert result.compute_warning is not None and "formula broke" in result.compute_warning
+    # The user gets a plain sentence; the engine's reason goes to the log only.
+    assert result.compute_warning == COMPUTE_FAILED
+    assert "Recompute" in result.compute_warning
+    logged = capsys.readouterr()
+    assert "formula broke" in logged.out + logged.err
 
 
 ATTACH_FAILED = "The file could not be attached. Upload it on the Files tab."
@@ -492,14 +497,37 @@ async def test_two_series_on_one_readout_is_refused():
         SeriesMapping("ratio", "onset", 1, h.tm1.id),
     )
     failure = (await h(h.command(series=series))).failure()
-    assert isinstance(failure, ValidationError) and h.tm1.name in str(failure)
+    assert isinstance(failure, ValidationError)
+    assert failure.message == (
+        f"Readout '{h.tm1.name}' is chosen for more than one reported value. "
+        "Choose a different readout for each reported value."
+    )
+    h.assert_nothing_written()
+
+
+async def test_two_series_on_one_unknown_readout_name_no_identifier():
+    reported = tuple(_reported(c, kind=k) for c in (1, 2, 3) for k in ("transition", "onset"))
+    h = Harness(export=_export(reported=reported))
+    foreign = uuid.uuid4()
+    series = (
+        SeriesMapping("ratio", "transition", 1, foreign),
+        SeriesMapping("ratio", "onset", 1, foreign),
+    )
+    failure = (await h(h.command(series=series))).failure()
+    assert isinstance(failure, ValidationError) and str(foreign) not in failure.message
+    assert failure.message.startswith("A readout is chosen for more than one reported value.")
     h.assert_nothing_written()
 
 
 async def test_series_not_in_file_is_refused():
     h = Harness()
     series = (SeriesMapping("ratio", "onset", 2, h.tm1.id),)
-    assert isinstance((await h(h.command(series=series))).failure(), ValidationError)
+    failure = (await h(h.command(series=series))).failure()
+    assert isinstance(failure, ValidationError)
+    # No internal signal key or grouping in the sentence.
+    assert failure.message == (
+        "A reported value chosen for a readout is not in this file. Choose the file again."
+    )
     h.assert_nothing_written()
 
 
@@ -552,7 +580,9 @@ async def test_non_finite_reported_value_without_curve_is_refused(value):
 async def test_label_too_long_is_refused_and_nothing_written():
     h = Harness()
     positions = (replace(h.positions[0], label="x" * 201), *h.positions[1:])
-    assert isinstance((await h(h.command(positions=positions))).failure(), ValidationError)
+    failure = (await h(h.command(positions=positions))).failure()
+    assert isinstance(failure, ValidationError)
+    assert failure.message == "Position label must be at most 200 characters"
     h.assert_nothing_written()
 
 
@@ -566,7 +596,9 @@ async def test_note_is_stored_on_the_position():
 async def test_note_over_1000_characters_is_refused_and_nothing_written():
     h = Harness()
     positions = (replace(h.positions[0], note="x" * 1001), *h.positions[1:])
-    assert isinstance((await h(h.command(positions=positions))).failure(), ValidationError)
+    failure = (await h(h.command(positions=positions))).failure()
+    assert isinstance(failure, ValidationError)
+    assert failure.message == "Position note must be at most 1000 characters"
     h.assert_nothing_written()
 
 
@@ -574,7 +606,10 @@ async def test_reported_value_for_undeclared_channel_is_a_warning():
     reported = (*(_reported(c) for c in (1, 2, 3)), _reported(1, channel="ghost"))
     h = Harness(export=_export(reported=reported))
     result = (await h()).unwrap()
-    assert len(result.warnings) == 1 and "ghost" in result.warnings[0]
+    assert result.warnings == (
+        "Reported value 'Transition #1 for Ghost' belongs to a signal the file has no "
+        "traces for. It is skipped.",
+    )
     assert result.values_inserted == 3
 
 
@@ -590,7 +625,7 @@ async def test_used_position_without_a_curve_on_a_channel_is_a_warning():
 
     label = position_label(HolderKind.CASSETTE, "A", 2)
     assert result.warnings == (
-        f"{label} has no Signal trace in the file; nothing is stored for it on that channel",
+        f"{label} has no Signal trace in the file. Mapped reported values can still be imported.",
     )
     assert (result.positions_created, result.curves_created) == (2, 3)
 
