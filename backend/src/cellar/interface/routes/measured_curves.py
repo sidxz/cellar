@@ -58,7 +58,9 @@ class RunCurvesResponse(BaseModel):
             ),
             positions=[PlateMapWellModel.from_entry(w) for w in out.positions],
             channels=[
-                CurveChannelModel(key=c.key, label=c.label, x_unit=c.x_unit, y_unit=c.y_unit)
+                CurveChannelModel(
+                    key=c.key, label=c.label, x_unit=c.x_unit, y_unit=c.y_unit, x_label=c.x_label
+                )
                 for c in out.channels
             ],
             channel=out.channel.key if out.channel else None,

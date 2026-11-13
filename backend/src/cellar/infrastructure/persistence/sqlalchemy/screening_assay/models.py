@@ -566,6 +566,7 @@ class MeasuredCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     channel_label: Mapped[str] = mapped_column(String(200), nullable=False)
     x_unit: Mapped[str] = mapped_column(String(40), nullable=False)
     y_unit: Mapped[str | None] = mapped_column(String(40))
+    x_label: Mapped[str | None] = mapped_column(String(100))
     channel_order: Mapped[int] = mapped_column(Integer, nullable=False)
     x: Mapped[list[float]] = mapped_column(ARRAY(DOUBLE_PRECISION), nullable=False)
     y: Mapped[list[float]] = mapped_column(ARRAY(DOUBLE_PRECISION), nullable=False)

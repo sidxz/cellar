@@ -22,6 +22,7 @@ from cellar.application.screening.instrument_export import (
     ReportedValue,
 )
 from cellar.domain.screening_assay.enums import HolderKind
+from cellar.domain.screening_assay.holder import holder_label
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.interface.dependencies import get_container
 from tests.fakes.fake_auth import FakeAuth
@@ -126,6 +127,7 @@ async def test_fake_plate_reader_flows_through_preview_commit_and_curves(
         await client.get(f"/api/v1/runs/{run_id}/curves", params={"channel": "signal_b"})
     ).json()
     assert [c["key"] for c in curves["channels"]] == ["signal_a", "signal_b"]
+    assert curves["channels"][0]["x_label"] is None
     assert curves["channel"] == "signal_b" and len(curves["curves"]) == 2
     assert [p["position_label"] for p in curves["positions"]] == ["A1", "B3"]
     assert (curves["holder"]["kind"], curves["holder"]["rows"], curves["holder"]["columns"]) == (
@@ -140,9 +142,11 @@ async def test_fake_plate_reader_flows_through_preview_commit_and_curves(
         plate["holder_rows"],
         plate["holder_columns"],
         plate["format"],
+        plate["holder_label"],
     ) == (
         "plate",
         2,
         3,
         "",
+        holder_label(HolderKind.PLATE, 2, 3),
     )

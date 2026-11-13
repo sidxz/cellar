@@ -58,6 +58,7 @@ class SQLAlchemyMeasuredCurveRepository:
                 MeasuredCurveModel.x_unit,
                 MeasuredCurveModel.y_unit,
                 MeasuredCurveModel.channel_order,
+                MeasuredCurveModel.x_label,
             )
             .distinct()
             .where(
@@ -68,8 +69,10 @@ class SQLAlchemyMeasuredCurveRepository:
         )
         result = await self._uow.session.execute(stmt)
         return [
-            CurveChannel(key=key, label=label, x_unit=x_unit, y_unit=y_unit, order=order)
-            for key, label, x_unit, y_unit, order in result.all()
+            CurveChannel(
+                key=key, label=label, x_unit=x_unit, y_unit=y_unit, order=order, x_label=x_label
+            )
+            for key, label, x_unit, y_unit, order, x_label in result.all()
         ]
 
     async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> int:
@@ -95,6 +98,7 @@ class SQLAlchemyMeasuredCurveRepository:
             channel_label=model.channel_label,
             x_unit=model.x_unit,
             y_unit=model.y_unit,
+            x_label=model.x_label,
             channel_order=model.channel_order,
             x=tuple(model.x),
             y=tuple(model.y),
@@ -115,6 +119,7 @@ class SQLAlchemyMeasuredCurveRepository:
             channel_label=entity.channel_label,
             x_unit=entity.x_unit,
             y_unit=entity.y_unit,
+            x_label=entity.x_label,
             channel_order=entity.channel_order,
             x=list(entity.x),
             y=list(entity.y),

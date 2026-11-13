@@ -15,7 +15,7 @@ from cellar.application.screening.plate_map_reader import (
     WellMapEntry,
 )
 from cellar.domain.screening_assay.enums import HolderKind
-from cellar.domain.screening_assay.holder import position_label
+from cellar.domain.screening_assay.holder import holder_label, position_label
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeIdentifierModel,
     MoleculeModel,
@@ -197,6 +197,9 @@ class SQLAlchemyPlateMapReader:
                         holder_kind=holder_kind.value,
                         holder_rows=plate.holder_rows,
                         holder_columns=plate.holder_columns,
+                        holder_label=holder_label(
+                            holder_kind, plate.holder_rows, plate.holder_columns
+                        ),
                     )
                 )
 

@@ -70,7 +70,7 @@ class FakeUoW:
 
 
 CHANNELS = (
-    ExportChannel("ratio", "Ratio", "°C", None),
+    ExportChannel("ratio", "Ratio", "°C", None, "Temperature"),
     ExportChannel("signal", "Signal", "°C", "a.u."),
 )
 
@@ -274,6 +274,7 @@ async def test_success_writes_holder_wells_readouts_curves_and_event():
     assert {c.well_id for c in saved} == {w.id for w in h.run.wells}
     assert saved[0].x == h.reader._export.curves[0].x
     assert [(c.channel_key, c.channel_order) for c in saved[:2]] == [("ratio", 0), ("signal", 1)]
+    assert [c.x_label for c in saved[:2]] == ["Temperature", None]
     assert all(c.workspace_id == h.ws and c.run_id == h.run.id for c in saved)
     assert [len(c.reported) for c in saved[:2]] == [1, 0]
 

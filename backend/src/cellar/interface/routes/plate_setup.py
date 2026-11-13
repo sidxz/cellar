@@ -142,6 +142,8 @@ class PlateData(BaseModel):
     holder_kind: str
     holder_rows: int | None
     holder_columns: int | None
+    # How the holder is named for display, e.g. a plate's size.
+    holder_label: str
 
 
 class PlateMapResponse(BaseModel):
@@ -292,6 +294,7 @@ async def get_plate_map(
                 holder_kind=plate.holder_kind,
                 holder_rows=plate.holder_rows,
                 holder_columns=plate.holder_columns,
+                holder_label=plate.holder_label,
                 wells=well_entries,
                 summary=PlateMapSummaryModel(
                     total_wells=summary.total_wells if summary else 0,

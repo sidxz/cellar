@@ -46,6 +46,7 @@ def test_reads_synthetic_raw_workbook():
         ("°C", "counts*mm"),
         ("°C", "mAU"),
     ]
+    assert all(c.x_label == "Temperature" for c in export.channels)
     assert len(export.curves) == 96 and all(len(c.x) == len(c.y) == 50 for c in export.curves)
     first = next(c for c in export.curves if (c.column, c.channel) == (1, "ratio"))
     assert first.x == tuple(temperature(i) for i in range(50))  # as measured, not resampled

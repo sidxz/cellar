@@ -38,6 +38,7 @@ class ExportChannel:
     label: str  # for display, e.g. "Ratio 350/330"
     x_unit: str  # e.g. "°C"
     y_unit: str | None
+    x_label: str | None = None  # name of the x quantity, e.g. "Temperature"
 
 
 @dataclass(frozen=True)

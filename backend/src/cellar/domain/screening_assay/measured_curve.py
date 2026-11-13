@@ -31,6 +31,7 @@ class CurveChannel:
     x_unit: str
     y_unit: str | None
     order: int
+    x_label: str | None = None
 
 
 class MeasuredCurve(Entity):
@@ -62,6 +63,7 @@ class MeasuredCurve(Entity):
         y: tuple[float, ...],
         reported: tuple[ReportedPoint, ...] = (),
         reader: str,
+        x_label: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -89,6 +91,7 @@ class MeasuredCurve(Entity):
         self.channel_label = channel_label
         self.x_unit = x_unit
         self.y_unit = y_unit
+        self.x_label = x_label
         self.channel_order = channel_order
         self.x = tuple(x)
         self.y = tuple(y)
@@ -103,4 +106,5 @@ class MeasuredCurve(Entity):
             x_unit=self.x_unit,
             y_unit=self.y_unit,
             order=self.channel_order,
+            x_label=self.x_label,
         )

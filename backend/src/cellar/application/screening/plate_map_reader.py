@@ -62,6 +62,8 @@ class PlateMapData:
     holder_kind: str = "plate"
     holder_rows: int | None = None
     holder_columns: int | None = None
+    # How the holder is named for display (see domain ``holder.holder_label``).
+    holder_label: str = ""
 
 
 @dataclass(frozen=True)

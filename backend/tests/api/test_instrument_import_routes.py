@@ -218,6 +218,7 @@ async def test_preview_then_import_then_read_curves(
     assert resp.status_code == 200, resp.text
     curves = resp.json()
     assert [c["key"] for c in curves["channels"]] == ["ratio", "f330", "f350", "scattering"]
+    assert curves["channels"][0]["x_label"] == "Temperature"
     assert curves["channel"] == "ratio"
     assert curves["holder"]["label"] == holder_label(HolderKind.CASSETTE, 1, 3)
     assert [p["position_label"] for p in curves["positions"]] == [LABEL(1), LABEL(2), LABEL(3)]
@@ -281,6 +282,7 @@ async def test_plate_map_reports_holder_and_position_labels(
         3,
     )
     assert first["format"] == ""
+    assert first["holder_label"] == holder_label(HolderKind.CASSETTE, 1, 3)
     assert first["wells"][0]["position_label"] == LABEL(1)
     assert first["wells"][0]["label"] == "protein alone"
     assert first["wells"][2]["label"] is None

@@ -58,6 +58,7 @@ def _curve(  # type: ignore[no-untyped-def]
         channel_label=key.upper(),
         x_unit="°C",
         y_unit=None,
+        x_label="Temperature",
         channel_order=order,
         x=x,
         y=y,
@@ -87,6 +88,7 @@ async def test_array_columns_round_trip(session_factory, workspace_id):
         repo = SQLAlchemyMeasuredCurveRepository(uow)
         (got,) = await repo.find_by_run(workspace_id, run_id)
     assert got.x == x and got.y == y and isinstance(got.x, tuple)
+    assert got.x_label == "Temperature"
     assert got.reported == (ReportedPoint("transition", 1, "T1", 61.5, "°C"),)
 
 
@@ -157,9 +159,9 @@ async def test_list_channels_is_ordered_by_channel_order(session_factory, worksp
     uow = AsyncUnitOfWork(session_factory)
     async with uow:
         repo = SQLAlchemyMeasuredCurveRepository(uow)
-        assert [(c.key, c.order) for c in await repo.list_channels(ws, run_id)] == [
-            ("ratio", 0),
-            ("f330", 1),
+        assert [(c.key, c.order, c.x_label) for c in await repo.list_channels(ws, run_id)] == [
+            ("ratio", 0, "Temperature"),
+            ("f330", 1, "Temperature"),
         ]
 
 

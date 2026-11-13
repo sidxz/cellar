@@ -850,6 +850,8 @@ class CurveChannelModel(BaseModel):
     label: str
     x_unit: str
     y_unit: str | None
+    # Name of the x quantity (for example "Temperature"); null when the file gives none.
+    x_label: str | None
 
 
 class InstrumentBatchOptionModel(BaseModel):
@@ -938,7 +940,9 @@ class InstrumentPreviewResponse(BaseModel):
                 for pos in p.positions
             ],
             channels=[
-                CurveChannelModel(key=c.key, label=c.label, x_unit=c.x_unit, y_unit=c.y_unit)
+                CurveChannelModel(
+                    key=c.key, label=c.label, x_unit=c.x_unit, y_unit=c.y_unit, x_label=c.x_label
+                )
                 for c in p.channels
             ],
             series=[

@@ -360,6 +360,7 @@ class ImportInstrumentFile:
                         channel_label=channel.label,
                         x_unit=channel.x_unit,
                         y_unit=channel.y_unit,
+                        x_label=channel.x_label,
                         channel_order=order,
                         x=c.x,
                         y=c.y,

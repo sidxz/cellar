@@ -77,6 +77,13 @@ def _unit(header: Any) -> str | None:
     return units[-1].strip() if units else None
 
 
+def _name(header: Any) -> str | None:
+    """The quantity's name: the header text before its last ``[unit]``."""
+    text = str(header or "")
+    name = text[: text.rfind("[")] if "[" in text else text
+    return name.strip() or None
+
+
 def _load(content: bytes) -> tuple[Rows, list[tuple[str, Rows]]]:
     """The ``Overview`` rows, and (title, rows) of every other sheet, in workbook order."""
     wb = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
@@ -151,6 +158,7 @@ class PrometheusRawXlsxReader:
                 label=_CHANNEL_LABELS.get(key, title.strip()),
                 x_unit=_unit(_cell(units, 1)) or "",
                 y_unit=None if y_unit == "-" else y_unit,
+                x_label=_name(_cell(units, 1)),
             )
             channels.append(channel)
             curves += _curves(key, rows, numbers)
