@@ -22,8 +22,15 @@ const card = (conditions: ConditionDefinition[], onOpenDesign = vi.fn()) =>
   );
 
 describe("ProtocolConditionsCard", () => {
-  it("lists every condition: a fixed value with its unit, or what each run enters", () => {
+  it("lists what each run records, and marks the rare fixed value", () => {
     card([
+      cond({ name: "Incubation time", data_type: "numeric", unit: "h" }),
+      cond({
+        name: "Atmosphere",
+        data_type: "pick_list",
+        pick_list_values: ["aerobic", "hypoxic"],
+      }),
+      cond({ name: "Medium" }),
       cond({
         name: "Hypoxia",
         data_type: "pick_list",
@@ -36,26 +43,23 @@ describe("ProtocolConditionsCard", () => {
         unit: "µM",
         fixed_value: "25",
       }),
-      cond({ name: "Incubation time", data_type: "numeric", unit: "h" }),
-      cond({
-        name: "Atmosphere",
-        data_type: "pick_list",
-        pick_list_values: ["aerobic", "hypoxic"],
-      }),
-      cond({ name: "Medium" }),
     ]);
-    expect(screen.getByText("Hypoxia").nextSibling).toHaveTextContent("yes");
-    expect(screen.getByText("Substrate concentration").nextSibling).toHaveTextContent("25 µM");
-    expect(screen.getByText("Incubation time").nextSibling).toHaveTextContent("varies per run (h)");
-    expect(screen.getByText("Atmosphere").nextSibling).toHaveTextContent(
-      "varies per run (one of aerobic, hypoxic)",
+    expect(
+      screen.getByText("Recorded with every run; they tell its runs apart."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Incubation time").nextSibling).toHaveTextContent(/^h$/);
+    expect(screen.getByText("Atmosphere").nextSibling).toHaveTextContent(/^aerobic, hypoxic$/);
+    expect(screen.getByText("Medium").nextSibling).toHaveTextContent(/^$/);
+    expect(screen.getByText("Hypoxia").nextSibling).toHaveTextContent("Fixed: yes");
+    expect(screen.getByText("Substrate concentration").nextSibling).toHaveTextContent(
+      "Fixed: 25 µM",
     );
-    expect(screen.getByText("Medium").nextSibling).toHaveTextContent(/^varies per run$/);
+    expect(screen.queryByText(/varies per run/i)).not.toBeInTheDocument();
   });
 
   it("says when none are recorded", () => {
     card([]);
-    expect(screen.getByText(/No conditions recorded/)).toBeInTheDocument();
+    expect(screen.getByText(/None yet. Add what each run records/)).toBeInTheDocument();
   });
 
   it("opens the Design tab, where conditions are edited", () => {

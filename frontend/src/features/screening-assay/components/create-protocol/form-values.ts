@@ -43,7 +43,8 @@ export const conditionSchema = z.object({
   data_type: z.string(),
   unit: z.string(),
   pick_list_values: z.array(z.string()),
-  /** The value that defines the protocol (Hypoxia: yes); "" when it varies per run. */
+  /** Set only when every run uses the same value (Hypoxia: yes); "" for the usual case, a
+   *  condition each run records. */
   fixed_value: z.string(),
 });
 

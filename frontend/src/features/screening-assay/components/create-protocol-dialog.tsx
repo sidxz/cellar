@@ -551,8 +551,8 @@ export function CreateProtocolDialog({
               </Button>
             </div>
             <p className="text-xs text-muted-foreground">
-              Concentrations, times, temperatures: fix a value for this protocol, or leave it to
-              vary per run.
+              What each run records, so its runs can be told apart: concentrations, times,
+              temperatures. Together they define the protocol.
             </p>
             {conditionFields.map((field, index) => (
               <div key={field.id} className="grid gap-2">

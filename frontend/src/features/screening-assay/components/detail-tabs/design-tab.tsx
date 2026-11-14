@@ -352,7 +352,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
           <div>
             <CardTitle>Condition Definitions</CardTitle>
             <CardDescription>
-              A fixed value defines the protocol; the rest vary between runs.
+              What each run records, so its runs can be told apart; together they define the
+              protocol. Fix a value only when every run uses the same one.
               {status === "active" && " Change a fixed value with Correct details."}
             </CardDescription>
           </div>
