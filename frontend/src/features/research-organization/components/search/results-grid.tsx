@@ -24,12 +24,14 @@ import {
   drcColId,
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
+import { serverSortToken } from "../../lib/search-sort";
 import type { AggregationMode } from "../../lib/use-aggregation-mode";
 import {
   type ActivityValue,
   type ColumnGroup,
   type ProtocolColumnGroups,
   type ReportConfig,
+  type SortDir,
   type StructureCriterion,
   anyProtocolActivity,
 } from "../../types";
@@ -49,6 +51,10 @@ interface ResultsGridProps {
   protocolColumns: string[];
   /** Split protocols' column groups from the search response. */
   columnGroups?: Record<string, ProtocolColumnGroups> | null;
+  /** A header click asks the server to rank the whole result set by that
+   *  column (undefined = back to the default order). The grid never
+   *  re-sorts the loaded rows itself. */
+  onSortChange?: (sortBy: string | undefined, sortDir: SortDir) => void;
   protocols: Protocol[];
   reportConfig: ReportConfig;
   loading: boolean;
@@ -93,6 +99,7 @@ function formatSimilarityPercent(score: number): string {
 function buildSimilarityColumn(criterion?: StructureCriterion): ColDef<EnrichedMolecule> {
   return {
     headerName: "Similarity",
+    colId: "similarity",
     width: 130,
     headerTooltip: `${criterion?.mode === "scaffold_hop" ? "Tanimoto similarity over feature-class (FCFP4) fingerprints" : criterion?.mode === "fragment_in_target" ? "Asymmetric Tversky similarity (α=1, β=0) over query features" : "Tanimoto similarity over Morgan/ECFP4 fingerprints"}. A 100% score does not establish chemical identity.`,
     valueGetter: (p) => p.data?.similarity_score ?? null,
@@ -214,6 +221,18 @@ export const resolveColumns = resolveColumnsShared;
  *  flag only: nothing is fetched per cell. */
 function rowCurves(proto: Protocol | undefined, row: EnrichedMolecule | undefined) {
   return row ? curvesTarget(proto, [compoundRef(row)]) : null;
+}
+
+/** Sorting is the server's: a column with a sort token keeps the rows in the
+ *  order they arrived (the comparator never reorders), any other column is
+ *  not sortable. */
+function serverSorted(
+  column: ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>,
+): ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule> {
+  if ("children" in column) return { ...column, children: column.children.map(serverSorted) };
+  return serverSortToken(column.colId)
+    ? { ...column, sortable: true, comparator: () => 0 }
+    : { ...column, sortable: false };
 }
 
 /** A Plot column, split or not (``drc:<rd>:plot`` / ``drc:<rd>:plot@<group>``). */
@@ -512,10 +531,10 @@ function buildMoleculeColumn(
   const imageWidth = imageSize === "large" ? 290 : imageSize === "medium" ? 200 : 240;
   return {
     headerName: "Molecule",
+    colId: "molecule",
     width: showImage ? imageWidth : 150,
     suppressSizeToFit: true,
     pinned: pinIdentity ? "left" : null,
-    sortable: false,
     filter: false,
     cellStyle: { display: "flex", justifyContent: "center" },
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
@@ -609,6 +628,7 @@ export function ResultsGrid({
   results,
   protocolColumns,
   columnGroups = null,
+  onSortChange,
   protocols,
   reportConfig,
   structureCriterion,
@@ -745,7 +765,9 @@ export function ResultsGrid({
             },
           ]
         : [];
-    return [molecule, ...identity, ...sim, ...activeIn, ...protoGroups, ...properties];
+    return [molecule, ...identity, ...sim, ...activeIn, ...protoGroups, ...properties].map(
+      serverSorted,
+    );
   }, [
     reportConfig.imageSize,
     reportConfig.displayPreset,
@@ -867,6 +889,13 @@ export function ResultsGrid({
           // (without them AG Grid treats every row as new and drops selection).
           getRowId={(p) => p.data.id}
           columnDefs={columnDefs}
+          onSortChanged={(event) => {
+            const sorted = event.api.getColumnState().find((c) => c.sort);
+            onSortChange?.(
+              serverSortToken(sorted?.colId) ?? undefined,
+              sorted?.sort === "desc" ? "desc" : "asc",
+            );
+          }}
           loading={loading}
           emptyState={
             <p className="py-12 text-center text-sm text-muted-foreground">

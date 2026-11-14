@@ -350,6 +350,16 @@ function SearchPageInner() {
         })
         .catch((error: unknown) => {
           if (version !== requestVersion.current) return;
+          // A ranked page's cursor row vanished (data changed since page 1):
+          // the ranking is stale, so start the search over.
+          if (
+            options.cursor &&
+            error instanceof Error &&
+            error.message.includes("run the search again")
+          ) {
+            run(query, columns, mode, {});
+            return;
+          }
           setSearchError(
             error instanceof Error
               ? error.message.replace(/^API error: \d+ — /, "")
@@ -384,6 +394,18 @@ function SearchPageInner() {
   const handleSetProtocolColumns = useCallback((next: string[]) => {
     setReportColumns(next);
   }, []);
+
+  // A header click sorts the WHOLE result set on the server: re-run from page 1.
+  const handleSortChange = useCallback((next: SortField | undefined, dir: SortDir) => {
+    dispatch({ type: "setSort", sortBy: next, sortDir: dir });
+  }, []);
+  const previousSortRef = useRef({ sortBy, sortDir });
+  useEffect(() => {
+    const previous = previousSortRef.current;
+    if (previous.sortBy === sortBy && previous.sortDir === sortDir) return;
+    previousSortRef.current = { sortBy, sortDir };
+    if (currentQuery) executeRequest(currentQuery, protocolColumns, executedAggregation);
+  }, [sortBy, sortDir, currentQuery, protocolColumns, executedAggregation, executeRequest]);
 
   const previousAggregationModeRef = useRef(aggregationMode);
   useEffect(() => {
@@ -640,6 +662,7 @@ function SearchPageInner() {
             results={results}
             protocolColumns={protocolColumns}
             columnGroups={columnGroups}
+            onSortChange={handleSortChange}
             protocols={protocols ?? []}
             reportConfig={reportConfig}
             loading={searchPending && !currentQuery}

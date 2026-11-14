@@ -445,15 +445,10 @@ export interface SearchQuery {
   logic?: "and" | "or";
 }
 
-export type SortField =
-  | "name"
-  | "registration_number"
-  | "molecular_weight"
-  | "logp"
-  | "tpsa"
-  | "hbd"
-  | "hba"
-  | "created_at";
+/** A backend sort token: a molecule column, `similarity`, or an activity
+ *  column (`drc:…`, `rd:…`, `any`, optionally `@<group>`). See
+ *  `lib/search-sort.ts`. */
+export type SortField = string;
 export type SortDir = "asc" | "desc";
 
 export interface ExecuteSearchInput {
