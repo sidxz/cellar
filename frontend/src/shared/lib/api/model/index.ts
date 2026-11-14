@@ -1296,6 +1296,7 @@ export * from './readoutDataResponseValueQualifier';
 export * from './readoutDataResponseValueText';
 export * from './readoutDataResponseWellId';
 export * from './readoutDefInfoResponse';
+export * from './readoutDefInfoResponseMeltConfig';
 export * from './readoutDefInfoResponseUnit';
 export * from './readoutDefinitionResponse';
 export * from './readoutDefinitionResponseCalculationFormula';

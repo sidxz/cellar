@@ -4,6 +4,7 @@ import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compo
 import { useCompoundFlags, useCreateFlag, useDeleteFlag } from "../../hooks/use-compound-flags";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
 import { interceptLabel } from "../../lib/intercept-label";
+import { meetsRule } from "../../lib/melt-hits";
 import type {
   CompoundActivity,
   CompoundFlag as CompoundFlagType,
@@ -12,8 +13,7 @@ import type {
 } from "../../types";
 
 // ---------------------------------------------------------------------------
-// applyFilters — the component uses the filtered list from the hook; exported
-// for tests.
+// Hit rule evaluation — the protocol's recommended rule applied per compound.
 // ---------------------------------------------------------------------------
 
 const OPERATOR_LABELS: Record<string, string> = {
@@ -25,58 +25,50 @@ const OPERATOR_LABELS: Record<string, string> = {
   not_between: "outside",
 };
 
-export function applyFilters(
-  items: CompoundActivity[],
-  criteria: HitCriterion[],
-): CompoundActivity[] {
-  if (criteria.length === 0) return items;
-  return items.filter((item) =>
-    criteria.every((rule) => {
-      if (rule.readout_name === "Curve Class") {
-        if (rule.operator === "in" && Array.isArray(rule.value)) {
-          return Object.values(item.readouts).some(
-            (rv) => rv.curve_class != null && (rule.value as string[]).includes(rv.curve_class),
-          );
-        }
-        return true;
-      }
-      const readout = item.readouts[rule.readout_name];
-      if (!readout) return false;
-      // Intercept-keyed criteria read from the curve's per-spec intercepts;
-      // legacy (unkeyed) criteria stay on the headline best/primary value.
-      let measured: number | null;
-      if (rule.intercept_key) {
-        const ivs = readout.curve_params?.intercept_values;
-        const match = ivs?.find(
-          (iv) =>
-            iv.spec.kind === rule.intercept_key!.kind &&
-            iv.spec.level === rule.intercept_key!.level,
-        );
-        measured = match?.value ?? null;
-      } else {
-        measured = readout.best;
-      }
-      if (measured == null) return false;
-      if (rule.operator === "not_between") {
-        if (!Array.isArray(rule.value)) return false;
-        const [lo, hi] = rule.value as number[];
-        return measured < lo || measured > hi;
-      }
-      const threshold = typeof rule.value === "number" ? rule.value : 0;
-      switch (rule.operator) {
-        case "gt":
-          return measured > threshold;
-        case "lt":
-          return measured < threshold;
-        case "gte":
-          return measured >= threshold;
-        case "lte":
-          return measured <= threshold;
-        default:
-          return true;
-      }
-    }),
-  );
+/** One rule against one compound: met, not met, or null when the compound has
+ *  no value to test (missing readout, no curve class). The value is the
+ *  compound's best across completed runs. */
+export function ruleOutcome(item: CompoundActivity, rule: HitCriterion): boolean | null {
+  if (rule.readout_name === "Curve Class") {
+    const classes = Object.values(item.readouts)
+      .map((rv) => rv.curve_class)
+      .filter((c): c is NonNullable<typeof c> => c != null);
+    if (classes.length === 0) return null;
+    return (
+      rule.operator === "in" &&
+      Array.isArray(rule.value) &&
+      classes.some((c) => (rule.value as string[]).includes(c))
+    );
+  }
+  const readout = item.readouts[rule.readout_name];
+  if (!readout) return null;
+  // Intercept-keyed criteria read from the curve's per-spec intercepts;
+  // legacy (unkeyed) criteria stay on the headline best/primary value.
+  let measured: number | null;
+  if (rule.intercept_key) {
+    const ivs = readout.curve_params?.intercept_values;
+    const match = ivs?.find(
+      (iv) =>
+        iv.spec.kind === rule.intercept_key?.kind && iv.spec.level === rule.intercept_key?.level,
+    );
+    measured = match?.value ?? null;
+  } else {
+    measured = readout.best;
+  }
+  if (measured == null) return null;
+  return meetsRule(measured, rule);
+}
+
+export type HitStatus = "meets" | "fails" | "no_data";
+export type StatusFilter = "all" | HitStatus;
+
+/** The protocol's rule applied to a compound; null without a rule. A rule that
+ *  fails decides; otherwise a rule with nothing to test leaves it undecided. */
+export function hitStatus(item: CompoundActivity, criteria: HitCriterion[]): HitStatus | null {
+  if (criteria.length === 0) return null;
+  const outcomes = criteria.map((rule) => ruleOutcome(item, rule));
+  if (outcomes.includes(false)) return "fails";
+  return outcomes.includes(null) ? "no_data" : "meets";
 }
 
 export function criterionLabel(rule: HitCriterion): string {
@@ -123,11 +115,13 @@ export interface UseActivityTabReturn {
   setShowFlaggedOnly: React.Dispatch<React.SetStateAction<boolean>>;
   handleToggleFlag: (moleculeId: string, existingFlagId: string | null) => void;
 
-  // Hit criteria
+  // Hit criteria: the protocol's recommended rule, applied to every compound
   savedCriteria: HitCriterion[];
-  activeCriteria: HitCriterion[];
-  setActiveCriteria: React.Dispatch<React.SetStateAction<HitCriterion[]>>;
-  isModified: boolean;
+  /** Hit status per molecule; null when the protocol has no rule. */
+  hits: Map<string, HitStatus> | null;
+  statusCounts: Record<HitStatus, number>;
+  statusFilter: StatusFilter;
+  setStatusFilter: React.Dispatch<React.SetStateAction<StatusFilter>>;
 
   // Dialog state
   criteriaDialogOpen: boolean;
@@ -188,17 +182,12 @@ export function useActivityTab(protocol: Protocol, protocolId: string): UseActiv
   );
 
   // ----- Hit criteria state -----
-  const savedCriteria: HitCriterion[] = protocol.recommended_hit_criteria ?? [];
-  const [activeCriteria, setActiveCriteria] = useState<HitCriterion[]>(savedCriteria);
-  const isModified = JSON.stringify(activeCriteria) !== JSON.stringify(savedCriteria);
-
-  // Sync savedCriteria when protocol updates (e.g. after dialog save)
-  const prevSavedRef = JSON.stringify(protocol.recommended_hit_criteria ?? []);
-  const [lastSynced, setLastSynced] = useState(prevSavedRef);
-  if (prevSavedRef !== lastSynced) {
-    setActiveCriteria(protocol.recommended_hit_criteria ?? []);
-    setLastSynced(prevSavedRef);
-  }
+  const savedCriteria: HitCriterion[] = useMemo(
+    () => protocol.recommended_hit_criteria ?? [],
+    [protocol.recommended_hit_criteria],
+  );
+  // Every compound is listed; the status filter narrows by hit status.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 
   // ----- Dialog state -----
   const [criteriaDialogOpen, setCriteriaDialogOpen] = useState(false);
@@ -216,13 +205,31 @@ export function useActivityTab(protocol: Protocol, protocolId: string): UseActiv
   // ----- Derived data -----
   const readoutDefs = activity?.readout_definitions ?? [];
 
+  const hits = useMemo(() => {
+    if (savedCriteria.length === 0) return null;
+    const map = new Map<string, HitStatus>();
+    for (const item of activity?.items ?? []) {
+      map.set(item.molecule_id, hitStatus(item, savedCriteria) as HitStatus);
+    }
+    return map;
+  }, [activity?.items, savedCriteria]);
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<HitStatus, number> = { meets: 0, fails: 0, no_data: 0 };
+    for (const s of hits?.values() ?? []) counts[s] += 1;
+    return counts;
+  }, [hits]);
+
   const filteredItems = useMemo(() => {
-    let items = applyFilters(activity?.items ?? [], activeCriteria);
+    let items = activity?.items ?? [];
+    if (hits && statusFilter !== "all") {
+      items = items.filter((item) => hits.get(item.molecule_id) === statusFilter);
+    }
     if (showFlaggedOnly) {
       items = items.filter((item) => flagsByMolecule.has(item.molecule_id));
     }
     return items;
-  }, [activity?.items, activeCriteria, showFlaggedOnly, flagsByMolecule]);
+  }, [activity?.items, hits, statusFilter, showFlaggedOnly, flagsByMolecule]);
 
   // ----- Navigation (prev/next of the currently viewed compound) -----
   const viewing = useMemo(
@@ -284,9 +291,10 @@ export function useActivityTab(protocol: Protocol, protocolId: string): UseActiv
     setShowFlaggedOnly,
     handleToggleFlag,
     savedCriteria,
-    activeCriteria,
-    setActiveCriteria,
-    isModified,
+    hits,
+    statusCounts,
+    statusFilter,
+    setStatusFilter,
     criteriaDialogOpen,
     setCriteriaDialogOpen,
     collectionDialogOpen,

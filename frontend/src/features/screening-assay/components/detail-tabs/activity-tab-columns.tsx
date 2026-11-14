@@ -1,286 +1,316 @@
+import { StructureThumbnail } from "@/shared/components/chemistry/structure-thumbnail";
+import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import { formatDate } from "@/shared/lib/format-date";
-import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
 import { Star } from "lucide-react";
+import { type CatalogColumn, compareForDirection } from "../../lib/activity-columns";
 import {
   findInterceptValue,
   formatInterceptDisplay,
-  interceptLabel,
   maxDoseFromRawData,
 } from "../../lib/intercept-label";
 import type {
   CompoundActivity,
   CompoundFlag as CompoundFlagType,
   CurveClass,
-  InterceptSpec,
   ReadoutDefInfo,
 } from "../../types";
 import { CurveClassBadge } from "../curve-class-badge";
 import { DoseResponseSparkline } from "../dose-response-sparkline";
 import { structureColumn } from "../grid-columns";
+import type { HitStatus } from "./use-activity-tab";
 
-// ---------------------------------------------------------------------------
-// Curve class badge helper
-// ---------------------------------------------------------------------------
+export type Statistic = "best" | "mean";
 
-function curveClassBadge(cc: CurveClass | null) {
-  return <CurveClassBadge curveClass={cc} />;
+export interface ActivityColumnOptions {
+  catalog: readonly CatalogColumn[];
+  visible: ReadonlySet<string>;
+  readoutDefs: readonly ReadoutDefInfo[];
+  statistic: Statistic;
+  showStructures: boolean;
+  /** Hit status per molecule; null when the protocol has no hit rule. */
+  hits: ReadonlyMap<string, HitStatus> | null;
+  sort: { colId: string; sort: "asc" | "desc" } | null;
+  flagsByMolecule: Map<string, CompoundFlagType>;
+  onToggleFlag: (moleculeId: string, existingFlagId: string | null) => void;
 }
 
-// ---------------------------------------------------------------------------
-// Dynamic column factory
-// ---------------------------------------------------------------------------
+type Col = ColDef<CompoundActivity> | ColGroupDef<CompoundActivity>;
 
-export function buildColumnDefs(
-  readoutDefs: ReadoutDefInfo[],
-  flagsByMolecule: Map<string, CompoundFlagType>,
-  onToggleFlag: (moleculeId: string, existingFlagId: string | null) => void,
-): ColDef<CompoundActivity>[] {
-  const cols: ColDef<CompoundActivity>[] = [];
+const NUMERIC = "text-right tabular-nums";
+const SIGNED = new Set(["delta_tm", "max_delta_tm", "delta_tm_at_concentration"]);
 
-  // Fixed left: Compound — also hosts the multi-select checkbox AND the
-  // star/flag toggle. Three left-anchored columns collapsed into one to
-  // reclaim ~90px of horizontal space.
-  cols.push({
-    headerName: "Compound",
-    field: "registration_number",
-    pinned: "left",
-    flex: 1,
-    minWidth: 230,
-    checkboxSelection: true,
-    headerCheckboxSelection: true,
-    cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-      if (!params.data) return null;
-      const flag = flagsByMolecule.get(params.data.molecule_id);
-      return (
-        <div className="flex items-start gap-2 leading-tight">
-          <button
-            type="button"
-            className="mt-0.5 flex-shrink-0"
-            onClick={(e) => {
-              e.stopPropagation();
-              // biome-ignore lint/style/noNonNullAssertion: null-guard above guarantees params.data is set
-              onToggleFlag(params.data!.molecule_id, flag?.id ?? null);
-            }}
-            aria-label={flag ? "Unflag compound" : "Flag compound"}
+/** Four significant figures, true minus; shifts carry their sign. */
+function fmtValue(v: number, signed: boolean): string {
+  const size = String(Number(Math.abs(v).toPrecision(4)));
+  return `${v < 0 ? "−" : signed && v > 0 ? "+" : ""}${size}`;
+}
+
+const HIT_LABEL: Record<HitStatus, string> = {
+  meets: "Meets",
+  fails: "Doesn't meet",
+  no_data: "No data",
+};
+const HIT_RANK: Record<HitStatus, number> = { meets: 0, no_data: 1, fails: 2 };
+
+function CompoundCell({
+  row,
+  flag,
+  onToggleFlag,
+}: {
+  row: CompoundActivity;
+  flag: CompoundFlagType | undefined;
+  onToggleFlag: ActivityColumnOptions["onToggleFlag"];
+}) {
+  const link = <EntityLink type="compound" id={row.molecule_id} label={row.registration_number} />;
+  return (
+    <div className="flex h-full items-center gap-2 leading-tight">
+      <button
+        type="button"
+        className="flex-shrink-0"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFlag(row.molecule_id, flag?.id ?? null);
+        }}
+        aria-label={flag ? "Unflag compound" : "Flag compound"}
+      >
+        <Star
+          className={`h-4 w-4 transition-colors ${
+            flag
+              ? "fill-yellow-400 text-yellow-400"
+              : "text-muted-foreground/30 hover:text-yellow-400/50"
+          }`}
+        />
+      </button>
+      {row.smiles ? (
+        <Tooltip>
+          {/* EntityLink takes no trigger props or ref, so a span carries them. */}
+          <TooltipTrigger asChild>
+            <span className="inline-flex font-medium">{link}</span>
+          </TooltipTrigger>
+          <TooltipContent
+            side="right"
+            sideOffset={6}
+            collisionPadding={12}
+            className="border bg-popover p-1.5 text-popover-foreground shadow-lg"
           >
-            <Star
-              className={`h-4 w-4 transition-colors ${
-                flag
-                  ? "fill-yellow-400 text-yellow-400"
-                  : "text-muted-foreground/30 hover:text-yellow-400/50"
-              }`}
-            />
-          </button>
-          <div className="min-w-0">
-            <span className="font-medium">{params.data.registration_number}</span>
-            {params.data.molecule_name && (
-              <span className="ml-2 text-xs text-muted-foreground">
-                {params.data.molecule_name}
-              </span>
-            )}
-            {params.data.batch_number && (
-              <div className="text-[10px] text-muted-foreground">
-                Batch: {params.data.batch_number}
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    },
-  });
-
-  // Structure column
-  cols.push(structureColumn<CompoundActivity>((row) => row.smiles));
-
-  // Per readout definition
-  let isFirstReadout = true;
-  for (const rd of readoutDefs) {
-    const isDR = rd.data_type === "dose_response";
-    const unitSuffix = rd.unit ? ` (${rd.unit})` : "";
-
-    if (isDR) {
-      // Dose-response readouts get one column per protocol-declared
-      // intercept (EC50, EC90, ...). Each cell reads the value from the
-      // best curve's `intercept_values`, matched by (kind, level) so a
-      // protocol relabel doesn't break the column→cell wiring.
-      const specs = rd.intercepts ?? [];
-      if (specs.length === 0) {
-        // No declared intercepts (legacy / single-intercept protocols)
-        // — fall back to one "Best" column reading the headline value.
-        cols.push(buildPrimaryFitColumn(rd, unitSuffix, /* defaultSort */ isFirstReadout));
-      } else {
-        specs.forEach((spec, idx) => {
-          cols.push(buildInterceptColumn(rd, spec, idx === 0, isFirstReadout && idx === 0));
-        });
-      }
-      cols.push({
-        headerName: "Mean",
-        colId: `${rd.name}_mean`,
-        width: 120,
-        valueGetter: (p) => p.data?.readouts?.[rd.name]?.mean ?? null,
-        valueFormatter: (p) => (p.value != null ? Number(p.value).toPrecision(4) : "--"),
-      });
-      cols.push({
-        headerName: "Class",
-        colId: `${rd.name}_class`,
-        width: 90,
-        valueGetter: (p) => p.data?.readouts?.[rd.name]?.curve_class ?? null,
-        cellRenderer: (params: ICellRendererParams<CompoundActivity>) =>
-          curveClassBadge(params.value ?? null),
-      });
-      cols.push({
-        headerName: "Curve",
-        colId: `${rd.name}_curve`,
-        width: 150,
-        cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-          if (!params.data) return null;
-          const rv = params.data.readouts?.[rd.name];
-          const cp = rv?.curve_params;
-          const cc = rv?.curve_class;
-          const dp = rv?.data_points;
-          if (!cp) return <span className="text-muted-foreground">--</span>;
-          return <DoseResponseSparkline params={cp} dataPoints={dp} curveClass={cc} />;
-        },
-      });
-    } else {
-      // Numeric readout — single Best + Mean pair as before.
-      cols.push({
-        headerName: `${rd.name} Best${unitSuffix}`,
-        colId: `${rd.name}_best`,
-        width: 120,
-        valueGetter: (p) => p.data?.readouts?.[rd.name]?.best ?? null,
-        cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-          if (params.value == null) return "--";
-          const rv = params.data?.readouts?.[rd.name];
-          return (
-            <div className="leading-tight">
-              <span>{Number(params.value).toPrecision(4)}</span>
-              {rv?.n != null && rv.n > 1 && (
-                <div className="text-[10px] text-muted-foreground">
-                  n={rv.n}
-                  {rv.sd != null ? `, SD=${rv.sd.toPrecision(2)}` : ""}
-                </div>
-              )}
+            <div className="rounded-sm bg-white p-1">
+              <StructureThumbnail smiles={row.smiles} size={160} />
             </div>
-          );
-        },
-        ...(isFirstReadout ? { sort: "desc" as const } : {}),
-      });
-      cols.push({
-        headerName: `${rd.name} Mean${unitSuffix}`,
-        colId: `${rd.name}_mean`,
-        width: 120,
-        valueGetter: (p) => p.data?.readouts?.[rd.name]?.mean ?? null,
-        valueFormatter: (p) => (p.value != null ? Number(p.value).toPrecision(4) : "--"),
-      });
-    }
-
-    isFirstReadout = false;
-  }
-
-  // Fixed right: Runs + Last Tested
-  cols.push({
-    headerName: "Runs",
-    field: "run_count",
-    width: 70,
-  });
-
-  cols.push({
-    headerName: "Last Tested",
-    field: "last_tested",
-    width: 110,
-    cellClass: "font-mono",
-    valueFormatter: (p) => {
-      if (!p.value) return "--";
-      return formatDate(p.value as string);
-    },
-  });
-
-  return cols;
+          </TooltipContent>
+        </Tooltip>
+      ) : (
+        <span className="font-medium">{link}</span>
+      )}
+      {row.synonyms?.[0] && (
+        <span className="truncate text-xs text-muted-foreground">{row.synonyms[0]}</span>
+      )}
+    </div>
+  );
 }
 
-// ---------------------------------------------------------------------------
-// Per-intercept column builders for DR readouts
-// ---------------------------------------------------------------------------
-
-/** Fallback "Best" column when a DR readout declares no explicit intercept
- *  list (legacy protocol or single-intercept curve). Reads the headline
- *  fitted value off `ReadoutValue.best`. */
-function buildPrimaryFitColumn(
-  rd: ReadoutDefInfo,
-  unitSuffix: string,
-  defaultSort: boolean,
+function valueColumn(
+  c: CatalogColumn,
+  rd: ReadoutDefInfo | undefined,
+  o: ActivityColumnOptions,
 ): ColDef<CompoundActivity> {
+  const signed = SIGNED.has(rd?.melt_config?.measure ?? "");
   return {
-    headerName: `${rd.name} Best${unitSuffix}`,
-    colId: `${rd.name}_best`,
-    width: 120,
-    valueGetter: (p) => p.data?.readouts?.[rd.name]?.best ?? null,
-    valueFormatter: (p) => (p.value != null ? Number(p.value).toPrecision(4) : "--"),
-    ...(defaultSort ? { sort: "asc" as const } : {}),
+    headerName: c.label,
+    headerTooltip: c.readout,
+    colId: c.colId,
+    hide: !o.visible.has(c.colId),
+    width: 130,
+    wrapHeaderText: true,
+    autoHeaderHeight: true,
+    headerClass: "ag-right-aligned-header",
+    cellClass: NUMERIC,
+    comparator: compareForDirection(rd?.best_direction ?? "high"),
+    ...(o.sort?.colId === c.colId ? { sort: o.sort.sort } : {}),
+    valueGetter: (p) => p.data?.readouts?.[c.readout]?.[o.statistic] ?? null,
+    cellRenderer: (p: ICellRendererParams<CompoundActivity>) => {
+      if (p.value == null) return <span className="text-muted-foreground">—</span>;
+      const rv = p.data?.readouts?.[c.readout];
+      const parts = [
+        rv?.n != null ? `n=${rv.n}` : null,
+        rv?.best != null ? `best ${fmtValue(rv.best, signed)}` : null,
+        rv?.mean != null ? `mean ${fmtValue(rv.mean, signed)}` : null,
+        rv?.sd != null ? `SD ${rv.sd.toPrecision(2)}` : null,
+      ].filter(Boolean);
+      return <span title={parts.join(" · ")}>{fmtValue(p.value as number, signed)}</span>;
+    },
   };
 }
 
-/** One column per protocol intercept spec. Primary intercept reads
- *  `ReadoutValue.best` (back-compat with legacy fits that lack a
- *  persisted `intercept_values[0]`); secondaries read via
- *  `findInterceptValue` and surface "—" with a Recompute hint when the
- *  curve wasn't fit under this spec. */
-function buildInterceptColumn(
-  rd: ReadoutDefInfo,
-  spec: InterceptSpec,
-  isPrimary: boolean,
-  defaultSort: boolean,
+function interceptColumn(
+  c: CatalogColumn,
+  rd: ReadoutDefInfo | undefined,
+  o: ActivityColumnOptions,
 ): ColDef<CompoundActivity> {
-  const unitSuffix = rd.unit ? ` (${rd.unit})` : "";
-  const headerLabel = interceptLabel(spec);
+  // The table-wide Mean shows the geometric mean of the primary fits;
+  // secondary intercepts always read the best curve.
+  const useMean = o.statistic === "mean" && c.primary;
+  const readValue = (data: CompoundActivity | undefined) => {
+    const rv = data?.readouts?.[c.readout];
+    if (!rv) return { rv, iv: undefined, value: null };
+    if (useMean) return { rv, iv: undefined, value: rv.mean ?? null };
+    const iv = c.intercept
+      ? findInterceptValue(rv.curve_params?.intercept_values, c.intercept)
+      : undefined;
+    return { rv, iv, value: iv?.value ?? (c.primary ? (rv.best ?? null) : null) };
+  };
+  const display = (data: CompoundActivity | undefined) => {
+    const { rv, iv, value } = readValue(data);
+    return formatInterceptDisplay({
+      value,
+      at_bound: iv?.at_bound,
+      curve_class: rv?.curve_class,
+      max_dose: maxDoseFromRawData(rv?.data_points),
+    });
+  };
   return {
-    headerName: `${rd.name} ${headerLabel}${unitSuffix}`,
-    colId: `${rd.name}_${spec.kind}_${spec.level}`,
+    headerName: useMean ? `${c.label} · geo. mean` : c.label,
+    headerTooltip: c.readout,
+    colId: c.colId,
+    hide: !o.visible.has(c.colId),
     width: 130,
-    ...(defaultSort ? { sort: "asc" as const } : {}),
-    valueGetter: (params) => {
-      const rv = params.data?.readouts?.[rd.name];
-      if (!rv) return null;
-      const iv = findInterceptValue(rv.curve_params?.intercept_values, spec);
-      // Same display rule the cellRenderer applies — keeps sort and
-      // display in lockstep (inactive → null, qualifier → +Infinity).
-      const value = iv?.value ?? (isPrimary ? (rv.best ?? null) : null);
-      return formatInterceptDisplay({
-        value,
-        at_bound: iv?.at_bound,
-        curve_class: rv.curve_class,
-        max_dose: maxDoseFromRawData(rv.data_points),
-      }).sortValue;
-    },
-    cellRenderer: (params: ICellRendererParams<CompoundActivity>) => {
-      const rv = params.data?.readouts?.[rd.name];
-      const iv = findInterceptValue(rv?.curve_params?.intercept_values, spec);
-      const value = iv?.value ?? (isPrimary ? (rv?.best ?? null) : null);
-      const display = formatInterceptDisplay({
-        value,
-        at_bound: iv?.at_bound,
-        curve_class: rv?.curve_class,
-        max_dose: maxDoseFromRawData(rv?.data_points),
-      });
-      if (display.warning) {
+    wrapHeaderText: true,
+    autoHeaderHeight: true,
+    comparator: compareForDirection(rd?.best_direction ?? "low"),
+    ...(o.sort?.colId === c.colId ? { sort: o.sort.sort } : {}),
+    // Same rule as the cell, so sorting and display agree (inactive → null).
+    valueGetter: (p) => display(p.data).sortValue,
+    cellRenderer: (p: ICellRendererParams<CompoundActivity>) => {
+      const d = display(p.data);
+      if (d.warning) {
         return (
           <Badge
             variant="outline"
-            className="text-xs border-amber-500 text-amber-700"
-            title={display.tooltip}
+            className="border-amber-500 text-xs text-amber-700"
+            title={d.tooltip}
           >
-            <span className="font-mono">{display.text}</span>
+            <span className="font-mono">{d.text}</span>
           </Badge>
         );
       }
-      const className = display.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground";
       return (
-        <span className={className} title={display.tooltip || undefined}>
-          {display.text}
+        <span
+          className={d.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground"}
+          title={d.tooltip || undefined}
+        >
+          {d.text}
         </span>
       );
     },
   };
+}
+
+function curveColumn(c: CatalogColumn, o: ActivityColumnOptions): ColDef<CompoundActivity> {
+  const base = { headerName: c.label, colId: c.colId, hide: !o.visible.has(c.colId) };
+  if (c.kind === "class") {
+    return {
+      ...base,
+      width: 90,
+      valueGetter: (p) => p.data?.readouts?.[c.readout]?.curve_class ?? null,
+      cellRenderer: (p: ICellRendererParams<CompoundActivity>) => (
+        <CurveClassBadge curveClass={(p.value as CurveClass | null) ?? null} />
+      ),
+    };
+  }
+  return {
+    ...base,
+    width: 150,
+    sortable: false,
+    cellRenderer: (p: ICellRendererParams<CompoundActivity>) => {
+      const rv = p.data?.readouts?.[c.readout];
+      if (!rv?.curve_params) return <span className="text-muted-foreground">—</span>;
+      return (
+        <DoseResponseSparkline
+          params={rv.curve_params}
+          dataPoints={rv.data_points}
+          curveClass={rv.curve_class}
+        />
+      );
+    },
+  };
+}
+
+/** The Activity grid's columns: compound, hit status, then one column per
+ *  result from the catalog, grouped by window or dose-response readout. */
+export function buildColumnDefs(o: ActivityColumnOptions): Col[] {
+  const cols: Col[] = [
+    {
+      headerName: "Compound",
+      colId: "compound",
+      field: "registration_number",
+      pinned: "left",
+      minWidth: 200,
+      width: 220,
+      checkboxSelection: true,
+      headerCheckboxSelection: true,
+      cellRenderer: (p: ICellRendererParams<CompoundActivity>) =>
+        p.data ? (
+          <CompoundCell
+            row={p.data}
+            flag={o.flagsByMolecule.get(p.data.molecule_id)}
+            onToggleFlag={o.onToggleFlag}
+          />
+        ) : null,
+    },
+  ];
+  const hits = o.hits;
+  if (hits) {
+    cols.push({
+      headerName: "Hit",
+      colId: "hit",
+      pinned: "left",
+      width: 130,
+      headerTooltip: "The protocol's recommended hit rule, on each compound's best values",
+      valueGetter: (p) => {
+        const s = p.data ? hits.get(p.data.molecule_id) : undefined;
+        return s ? HIT_RANK[s] : null;
+      },
+      cellRenderer: (p: ICellRendererParams<CompoundActivity>) => {
+        const s = p.data ? hits.get(p.data.molecule_id) : undefined;
+        if (!s) return null;
+        return (
+          <Badge
+            variant={s === "meets" ? "default" : "outline"}
+            className={s === "meets" ? undefined : "text-muted-foreground"}
+          >
+            {HIT_LABEL[s]}
+          </Badge>
+        );
+      },
+    });
+  }
+  if (o.showStructures) cols.push(structureColumn<CompoundActivity>((row) => row.smiles));
+
+  const rdByName = new Map(o.readoutDefs.map((rd) => [rd.name, rd]));
+  for (const c of o.catalog) {
+    const rd = rdByName.get(c.readout);
+    const leaf =
+      c.kind === "value"
+        ? valueColumn(c, rd, o)
+        : c.kind === "intercept"
+          ? interceptColumn(c, rd, o)
+          : curveColumn(c, o);
+    const last = cols.at(-1);
+    if (c.group == null) cols.push(leaf);
+    else if (last && "children" in last && last.groupId === c.group) last.children.push(leaf);
+    else cols.push({ headerName: c.group, groupId: c.group, children: [leaf] });
+  }
+
+  cols.push(
+    { headerName: "Runs", field: "run_count", width: 80, cellClass: NUMERIC },
+    {
+      headerName: "Last tested",
+      field: "last_tested",
+      width: 120,
+      valueFormatter: (p) => (p.value ? formatDate(p.value as string) : "—"),
+    },
+  );
+  return cols;
 }
