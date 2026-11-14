@@ -58,6 +58,8 @@ async def test_add_window_route_adds_two_readouts_with_melt_config(
             "channel_key": "ratio",
             "low": 50.0,
             "high": 85.0,
+            "threshold": None,
+            "concentration": None,
         }
     assert {rd["name"] for rd in resp.json()["readout_definitions"]} == set(by_name)
 
@@ -140,3 +142,55 @@ async def test_update_readout_with_malformed_melt_config_returns_422(
     for bad in (missing_low, good | {"measure": "tmax"}, good | {"high": "hot"}):
         resp = await client.put(url, json={"melt_config": bad})
         assert resp.status_code == 422, resp.text
+
+
+async def test_add_window_series_values_201(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    protocol_id = await _protocol_id(session_factory, fake_auth.workspace_id)
+    url = f"/api/v1/protocols/{protocol_id}/temperature-windows"
+    body = _window(
+        measures=["max_delta_tm", "lowest_shift_concentration", "delta_tm_at_concentration"],
+        lowest_shift_threshold=2.0,
+        delta_tm_at_concentration=50.0,
+    )
+    resp = await client.post(url, json=body)
+    assert resp.status_code == 201, resp.text
+    by_name = {rd["name"]: rd for rd in resp.json()["readout_definitions"]}
+    low = by_name["Lowest shifting conc. (Main, ±2 °C)"]
+    assert low["melt_config"]["threshold"] == 2.0 and low["melt_config"]["concentration"] is None
+    assert by_name["ΔTm at 50 µM (Main)"]["melt_config"]["concentration"] == 50.0
+    assert by_name["Max ΔTm (Main)"]["melt_config"]["measure"] == "max_delta_tm"
+
+
+async def test_series_parameter_must_match_its_measure_422(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    protocol_id = await _protocol_id(session_factory, fake_auth.workspace_id)
+    url = f"/api/v1/protocols/{protocol_id}/temperature-windows"
+    for body in (
+        _window(measures=["lowest_shift_concentration"]),
+        _window(measures=["tm"], lowest_shift_threshold=2.0),
+        _window(measures=["delta_tm_at_concentration"]),
+        _window(measures=["tm"], delta_tm_at_concentration=50.0),
+    ):
+        resp = await client.post(url, json=body)
+        assert resp.status_code == 422, resp.text
+    got = (await client.get(f"/api/v1/protocols/{protocol_id}")).json()
+    assert [rd["name"] for rd in got["readout_definitions"]] == ["Onset #1 for Ratio"]
+
+
+async def test_add_window_in_other_workspace_is_404(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    protocol_id = await _protocol_id(session_factory, uuid.uuid4())
+    resp = await client.post(
+        f"/api/v1/protocols/{protocol_id}/temperature-windows",
+        json=_window(measures=["max_delta_tm"]),
+    )
+    assert resp.status_code == 404, resp.text
