@@ -433,3 +433,68 @@ describe("an overlaid protocol in the drawer", () => {
     expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
   });
 });
+
+describe("a split protocol opened from one of its columns", () => {
+  function renderFrom(focusColumn: string | null) {
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
+          {
+            protocol_id: "proto",
+            protocol_name: "Target assay",
+            curves: [
+              { ...curve, curve_id: "low", run_id: "r1", run_date: "2026-01-01" },
+              { ...curve, curve_id: "high", run_id: "r2", run_date: "2026-02-01" },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{
+          ...molecule,
+          activity: {
+            "drc:rd@cond:10 µM": { ...av, run_ids: ["r1"], representative_curve_id: "low" },
+            "drc:rd@cond:1 mM": { ...av, run_ids: ["r2"], representative_curve_id: "high" },
+          },
+        }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        columnGroups={{
+          proto: {
+            split: { by: "condition", condition: "ATP" },
+            groups: [
+              { key: "cond:10 µM", label: "10 µM", run_ids: ["r1"], run_count: 1, flags: [] },
+              { key: "cond:1 mM", label: "1 mM", run_ids: ["r2"], run_count: 1, flags: [] },
+            ],
+          },
+        }}
+        focusColumn={focusColumn}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="latest"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+    return (screen.getByRole("combobox", { name: "Source curve · Potency" }) as HTMLSelectElement)
+      .value;
+  }
+
+  it("shows the curve of the group whose column was clicked", () => {
+    expect(renderFrom("drc:rd:plot@cond:10 µM")).toBe("low");
+  });
+
+  it("shows the other group's curve from the other group's column", () => {
+    expect(renderFrom("drc:rd:ic:50@cond:1 mM")).toBe("high");
+  });
+
+  it("opens on the first group in header order from any other column", () => {
+    expect(renderFrom("molecule")).toBe("low");
+  });
+});

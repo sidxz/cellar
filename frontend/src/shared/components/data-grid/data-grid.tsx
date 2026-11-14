@@ -36,7 +36,8 @@ export interface DataGridProps<TData = unknown>
   /** Rendered when rowData is empty (not loading) */
   emptyState?: ReactNode;
   /** Navigate on row click — receives the row data */
-  onRowClick?: (data: TData) => void;
+  /** `colId` is the clicked cell's column, when the click landed on one. */
+  onRowClick?: (data: TData, colId?: string) => void;
   /** Fixed grid height. Default: "400px" */
   height?: string | number;
   /** Suppress built-in column filters. Default: false */
@@ -205,7 +206,7 @@ export function DataGrid<TData = unknown>({
       // selection checkbox — picking rows must not open each one.
       const target = event.event?.target as HTMLElement | null;
       if (target?.closest("button, a, [role='button'], [col-id='__select__']")) return;
-      onRowClick(event.data);
+      onRowClick(event.data, target?.closest("[col-id]")?.getAttribute("col-id") ?? undefined);
     },
     [onRowClick],
   );

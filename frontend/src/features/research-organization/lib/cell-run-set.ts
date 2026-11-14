@@ -46,3 +46,23 @@ export function protocolRunSets(
   }
   return out;
 }
+
+/** The split group of a clicked grid column, when the column is one of this
+ *  protocol's: `drc:<readout>…@<group>` or `rd:<protocol>:<readout>…@<group>`.
+ *  Null for any other column and for the overlay plot, which holds every
+ *  group. */
+export function focusedGroupKey(
+  colId: string | null | undefined,
+  protocol: { id: string; readout_definitions?: readonly { id: string }[] | null },
+): string | null {
+  if (!colId) return null;
+  const [base, ...rest] = colId.split("@");
+  const key = rest.join("@");
+  if (!key || key === "overlay") return null;
+  const parts = base.split(":");
+  const owns =
+    parts[0] === "rd"
+      ? parts[1] === protocol.id
+      : parts[0] === "drc" && !!protocol.readout_definitions?.some((r) => r.id === parts[1]);
+  return owns ? key : null;
+}

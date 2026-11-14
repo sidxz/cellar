@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
 import { shownPlotLayout, useReportConfig } from "../../hooks/use-report-config";
-import { type ProtocolRunSet, protocolRunSets } from "../../lib/cell-run-set";
+import { type ProtocolRunSet, focusedGroupKey, protocolRunSets } from "../../lib/cell-run-set";
 import { type ComparisonChannel, comparisonChannels } from "../../lib/comparison-channels";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import { canOverlaySplit, drcColId } from "../../lib/protocol-column-id";
@@ -64,6 +64,9 @@ interface CompoundDetailSheetProps {
    *  the runs the search cells drew on — the cells' `run_ids` — so the chart
    *  and the cell value always describe the same runs. */
   columnGroups?: Record<string, ProtocolColumnGroups> | null;
+  /** The grid column the drawer was opened from: a split protocol opens on
+   *  that column's group. */
+  focusColumn?: string | null;
   aggregationMode?: AggregationMode;
 }
 
@@ -123,6 +126,10 @@ interface ProtocolCardProps {
   loading?: boolean;
   /** The grid overlays this split protocol's groups; the drawer does too. */
   overlayGroups?: ColumnGroup[] | null;
+  /** A split protocol's groups, in header order. */
+  splitGroups?: ColumnGroup[] | null;
+  /** The group of the column the drawer was opened from. */
+  focusKey?: string | null;
 }
 
 function ReportedEndpoints({
@@ -176,6 +183,7 @@ function SourceCurveCard({
   mode,
   groupLabel,
   overlay,
+  cell,
 }: {
   curves: CurveDetail[];
   protocolId: string;
@@ -187,6 +195,9 @@ function SourceCurveCard({
   /** The grid overlays this split protocol: every group's cell, drawn in one
    *  plot as the grid does. The picker still opens each fit's details. */
   overlay?: { label: string; value?: ActivityValue }[] | null;
+  /** A split protocol's cell for this readout in the group being looked at;
+   *  its representative curve is the one shown first. */
+  cell?: ActivityValue;
 }) {
   const [curveId, setCurveId] = useState("");
   const [inspecting, setInspecting] = useState(false);
@@ -194,7 +205,7 @@ function SourceCurveCard({
     () => [...curves].sort((a, b) => (b.run_date ?? "").localeCompare(a.run_date ?? "")),
     [curves],
   );
-  const av = channels.length ? molecule.activity?.[channels[0].activityKey] : undefined;
+  const av = cell ?? (channels.length ? molecule.activity?.[channels[0].activityKey] : undefined);
   // The backend names the curve behind the cell's value; otherwise the newest.
   const representative = sorted.find((c) => c.curve_id === av?.representative_curve_id);
   const curve = sorted.find((c) => c.curve_id === curveId) ?? representative ?? sorted[0];
@@ -341,8 +352,17 @@ function ProtocolCard({
   defaultExpanded = true,
   loading = false,
   overlayGroups = null,
+  splitGroups = null,
+  focusKey = null,
 }: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
+  // A split protocol's cell for a readout: the clicked column's group, else
+  // the first group (header order) the compound has a cell in.
+  const groupCell = (readoutId: string): ActivityValue | undefined => {
+    if (!splitGroups) return undefined;
+    const at = (key: string) => molecule.activity?.[`${drcColId(readoutId)}@${key}`];
+    return (focusKey ? at(focusKey) : undefined) ?? splitGroups.map((g) => at(g.key)).find(Boolean);
+  };
   const inScopeCurves = useMemo(
     () => (runSet ? group.curves.filter((c) => runSet.runIds.has(c.run_id)) : group.curves),
     [group.curves, runSet],
@@ -421,6 +441,7 @@ function ProtocolCard({
                   value: molecule.activity?.[`${drcColId(readoutId)}@${g.key}`],
                 })) ?? null
               }
+              cell={groupCell(readoutId)}
             />
           ))}
         </div>
@@ -441,6 +462,7 @@ export function CompoundDetailSheet({
   onNavigate,
   onOpenChange,
   columnGroups = null,
+  focusColumn = null,
   aggregationMode = "latest",
 }: CompoundDetailSheetProps) {
   const [othersExpanded, setOthersExpanded] = useState(false);
@@ -671,6 +693,11 @@ export function CompoundDetailSheet({
                         ? (columnGroups?.[group.protocol_id]?.groups ?? null)
                         : null
                     }
+                    splitGroups={columnGroups?.[group.protocol_id]?.groups ?? null}
+                    focusKey={(() => {
+                      const protocol = protocols.find((p) => p.id === group.protocol_id);
+                      return protocol ? focusedGroupKey(focusColumn, protocol) : null;
+                    })()}
                   />
                 ))}
                 {isError && (

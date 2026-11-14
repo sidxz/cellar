@@ -71,6 +71,9 @@ interface SearchState {
   hasSearched: boolean;
   selectedMolecule: EnrichedMolecule | null;
   selectedIndex: number;
+  /** The grid column the drawer was opened from; it opens a split protocol on
+   *  that column's group and keeps it while stepping through compounds. */
+  focusColumn: string | null;
   sortBy: SortField | undefined;
   sortDir: SortDir;
   gridSelectedIds: Set<string>;
@@ -99,7 +102,7 @@ type SearchAction =
     }
   | { type: "setSort"; sortBy: SortField | undefined; sortDir: SortDir }
   | { type: "setGridSelection"; ids: Set<string> }
-  | { type: "select"; molecule: EnrichedMolecule; index: number }
+  | { type: "select"; molecule: EnrichedMolecule; index: number; column: string | null }
   | { type: "navigate"; index: number; molecule: EnrichedMolecule | null }
   | { type: "clearSelection" };
 
@@ -114,6 +117,7 @@ const initialSearchState: SearchState = {
   hasSearched: false,
   selectedMolecule: null,
   selectedIndex: 0,
+  focusColumn: null,
   sortBy: undefined,
   sortDir: "asc",
   gridSelectedIds: new Set(),
@@ -153,7 +157,12 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
     case "setGridSelection":
       return { ...state, gridSelectedIds: action.ids };
     case "select":
-      return { ...state, selectedMolecule: action.molecule, selectedIndex: action.index };
+      return {
+        ...state,
+        selectedMolecule: action.molecule,
+        selectedIndex: action.index,
+        focusColumn: action.column,
+      };
     case "navigate":
       return {
         ...state,
@@ -202,6 +211,7 @@ function SearchPageInner() {
       hasSearched,
       selectedMolecule,
       selectedIndex,
+      focusColumn,
       sortBy,
       sortDir,
       gridSelectedIds,
@@ -598,9 +608,9 @@ function SearchPageInner() {
 
   // ── Row click -> detail panel ──────────────────────────────────────────
   const handleRowClick = useCallback(
-    (molecule: EnrichedMolecule) => {
+    (molecule: EnrichedMolecule, colId?: string) => {
       const idx = results.findIndex((m) => m.id === molecule.id);
-      dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0 });
+      dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0, column: colId ?? null });
     },
     [results],
   );
@@ -807,6 +817,7 @@ function SearchPageInner() {
         onNavigate={handleDetailNavigate}
         onOpenChange={(open) => !open && dispatch({ type: "clearSelection" })}
         columnGroups={columnGroups}
+        focusColumn={focusColumn}
         aggregationMode={executedAggregation}
       />
 

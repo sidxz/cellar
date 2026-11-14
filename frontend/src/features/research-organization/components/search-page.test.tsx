@@ -73,7 +73,9 @@ vi.mock("./search/results-grid", () => ({
     footer,
     onSortChange,
     buildExportRequest,
+    onRowClick,
   }: {
+    onRowClick?: (row: { id: string; name: string }, colId?: string) => void;
     results: { id: string; name: string }[];
     aggregationMode: string;
     toolbarLeft: ReactNode;
@@ -91,6 +93,9 @@ vi.mock("./search/results-grid", () => ({
       {footer}
       <button type="button" onClick={() => onSortChange?.("drc:rd-1", "desc")}>
         Sort IC50
+      </button>
+      <button type="button" onClick={() => onRowClick?.(results[0], "drc:rd-1:plot@cond:1 mM")}>
+        Open 1 mM plot
       </button>
       <button
         type="button"
@@ -111,7 +116,13 @@ vi.mock("./search/results-toolbar", () => ({
   ResultsViewControls: () => null,
   ResultsSelectionActions: () => null,
 }));
-vi.mock("./search/compound-detail-sheet", () => ({ CompoundDetailSheet: () => null }));
+const sheetProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+vi.mock("./search/compound-detail-sheet", () => ({
+  CompoundDetailSheet: (props: Record<string, unknown>) => {
+    sheetProps.push(props);
+    return null;
+  },
+}));
 vi.mock("./search/report-customizer", () => ({ ReportCustomizer: () => null }));
 vi.mock("./search/save-search-dialog", () => ({ SaveSearchDialog: () => null }));
 vi.mock("./search/search-structure-reference", () => ({ SearchStructureReference: () => null }));
@@ -233,6 +244,15 @@ describe("server-side sort", () => {
     const call = mocks.mutateAsync.mock.calls.at(-1)?.[0];
     expect(call.cursor).toBeUndefined();
     expect([call.sort_by, call.sort_dir]).toEqual(["drc:rd-1", "desc"]);
+  });
+
+  it("opens the drawer on the column that was clicked", async () => {
+    mocks.mutateAsync.mockResolvedValueOnce(response("Compound A"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Open 1 mM plot"));
+    expect(sheetProps.at(-1)?.focusColumn).toBe("drc:rd-1:plot@cond:1 mM");
   });
 
   it("keeps the sort when loading more", async () => {

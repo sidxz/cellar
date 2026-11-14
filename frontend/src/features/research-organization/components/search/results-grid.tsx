@@ -67,7 +67,8 @@ interface ResultsGridProps {
   protocols: Protocol[];
   reportConfig: ReportConfig;
   loading: boolean;
-  onRowClick: (molecule: EnrichedMolecule) => void;
+  /** `colId`: the clicked column, so the drawer can open on its split group. */
+  onRowClick: (molecule: EnrichedMolecule, colId?: string) => void;
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
   /** When provided, renders the shared ExportToolbar in the grid toolbar
