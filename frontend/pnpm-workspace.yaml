@@ -11,3 +11,11 @@ allowBuilds:
 minimumReleaseAgeExclude:
   - "@duar-auth/*"
   - "@structflo/*"
+
+# Security floors for transitive deps whose parents have no fixed release.
+# Drop each entry once its parent ships a release on the fixed line.
+overrides:
+  # exceljs 4.4.0 (latest, unmaintained) pins uuid ^8; it only calls v4(), and uuid 11 still ships CommonJS.
+  exceljs>uuid: ^11.1.1
+  # ketcher-core lists the dpdm CLI as a runtime dep; dpdm 4.3.0 (latest) pins glob ^13. dpdm never runs in the app.
+  dpdm>glob: ^14.0.2
