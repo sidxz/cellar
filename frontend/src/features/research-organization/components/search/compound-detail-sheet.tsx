@@ -25,19 +25,23 @@ import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
+import { shownPlotLayout, useReportConfig } from "../../hooks/use-report-config";
 import { type ProtocolRunSet, protocolRunSets } from "../../lib/cell-run-set";
 import { type ComparisonChannel, comparisonChannels } from "../../lib/comparison-channels";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
+import { canOverlaySplit, drcColId } from "../../lib/protocol-column-id";
 import { AGGREGATION_LABELS, type AggregationMode } from "../../lib/use-aggregation-mode";
 import { anyProtocolActivity } from "../../types";
 import type {
   ActivityValue,
+  ColumnGroup,
   CurveDetail,
   ProtocolColumnGroups,
   ProtocolCurveGroup,
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayResult } from "./assay-result";
+import { DoseResponseOverlay } from "./dose-response-cell";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
@@ -117,6 +121,8 @@ interface ProtocolCardProps {
   mode?: AggregationMode;
   defaultExpanded?: boolean;
   loading?: boolean;
+  /** The grid overlays this split protocol's groups; the drawer does too. */
+  overlayGroups?: ColumnGroup[] | null;
 }
 
 function ReportedEndpoints({
@@ -169,6 +175,7 @@ function SourceCurveCard({
   channels,
   mode,
   groupLabel,
+  overlay,
 }: {
   curves: CurveDetail[];
   protocolId: string;
@@ -177,6 +184,9 @@ function SourceCurveCard({
   channels: ComparisonChannel[];
   mode: AggregationMode;
   groupLabel?: Map<string, string>;
+  /** The grid overlays this split protocol: every group's cell, drawn in one
+   *  plot as the grid does. The picker still opens each fit's details. */
+  overlay?: { label: string; value?: ActivityValue }[] | null;
 }) {
   const [curveId, setCurveId] = useState("");
   const [inspecting, setInspecting] = useState(false);
@@ -246,6 +256,12 @@ function SourceCurveCard({
                 : "Source fit shown for reference; the reported source could not be uniquely identified."}
         </p>
       )}
+      {overlay && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Every group’s curve, coloured like its column header. The source curve above opens one
+          fit’s details.
+        </p>
+      )}
       {curve.fit_quality_warnings && curve.fit_quality_warnings.length > 0 && (
         <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
           Fit quality:{" "}
@@ -263,21 +279,29 @@ function SourceCurveCard({
           </div>
         )}
         <figure
-          aria-label={`Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`}
+          aria-label={
+            overlay
+              ? `Dose–response curves for ${readoutName}, every group overlaid`
+              : `Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`
+          }
           className="min-w-0 overflow-hidden rounded-lg border bg-background"
         >
-          <Plot
-            data={figure.traces}
-            layout={{
-              ...figure.layout,
-              height: 300,
-              autosize: true,
-              margin: { l: 55, r: 15, t: 25, b: 50 },
-            }}
-            config={{ ...figure.config, responsive: true }}
-            style={{ width: "100%", height: 300 }}
-            useResizeHandler
-          />
+          {overlay ? (
+            <DoseResponseOverlay entries={overlay} size="full" />
+          ) : (
+            <Plot
+              data={figure.traces}
+              layout={{
+                ...figure.layout,
+                height: 300,
+                autosize: true,
+                margin: { l: 55, r: 15, t: 25, b: 50 },
+              }}
+              config={{ ...figure.config, responsive: true }}
+              style={{ width: "100%", height: 300 }}
+              useResizeHandler
+            />
+          )}
         </figure>
       </div>
       <details
@@ -316,6 +340,7 @@ function ProtocolCard({
   mode = "latest",
   defaultExpanded = true,
   loading = false,
+  overlayGroups = null,
 }: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const inScopeCurves = useMemo(
@@ -390,6 +415,12 @@ function ProtocolCard({
               )}
               mode={mode}
               groupLabel={runSet?.groupLabel}
+              overlay={
+                overlayGroups?.map((g) => ({
+                  label: g.label,
+                  value: molecule.activity?.[`${drcColId(readoutId)}@${g.key}`],
+                })) ?? null
+              }
             />
           ))}
         </div>
@@ -413,6 +444,8 @@ export function CompoundDetailSheet({
   aggregationMode = "latest",
 }: CompoundDetailSheetProps) {
   const [othersExpanded, setOthersExpanded] = useState(false);
+  // The drawer draws a split protocol the way the grid does.
+  const overlaid = shownPlotLayout(useReportConfig().config) === "overlay";
 
   const {
     data: activityDetail,
@@ -633,6 +666,11 @@ export function CompoundDetailSheet({
                     channels={groupChannels}
                     mode={aggregationMode}
                     loading={isLoading}
+                    overlayGroups={
+                      overlaid && canOverlaySplit(columnGroups?.[group.protocol_id])
+                        ? (columnGroups?.[group.protocol_id]?.groups ?? null)
+                        : null
+                    }
                   />
                 ))}
                 {isError && (

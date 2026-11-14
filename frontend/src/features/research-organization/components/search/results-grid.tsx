@@ -46,7 +46,7 @@ import {
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayEvidence } from "./assay-evidence";
-import { DoseResponseCell, DoseResponseOverlayCell } from "./dose-response-cell";
+import { DoseResponseCell, DoseResponseOverlay } from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -508,7 +508,7 @@ function buildOverlayPlotColumns(
       sortable: false,
       filter: false,
       cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => (
-        <DoseResponseOverlayCell
+        <DoseResponseOverlay
           entries={split.groups.map((group) => ({
             value: params.data?.activity?.[withGroup(drcColId(rdId), group.key)],
             label: group.label,

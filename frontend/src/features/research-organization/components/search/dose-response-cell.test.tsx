@@ -14,7 +14,7 @@ vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
 
 import { render } from "@testing-library/react";
 import type { ActivityValue } from "../../types";
-import { DoseResponseCell, DoseResponseOverlayCell } from "./dose-response-cell";
+import { DoseResponseCell, DoseResponseOverlay } from "./dose-response-cell";
 
 function reset() {
   figureCalls.length = 0;
@@ -99,11 +99,11 @@ describe("<DoseResponseCell /> — aggregate overlay passthrough", () => {
   });
 });
 
-describe("DoseResponseOverlayCell", () => {
+describe("DoseResponseOverlay", () => {
   it("hands the figure one entry per group, keeping a slot for a missing cell", () => {
     reset();
     render(
-      <DoseResponseOverlayCell
+      <DoseResponseOverlay
         entries={[
           { value: BASE_AV, label: "10 µM" },
           { value: undefined, label: "1 mM" },
@@ -120,7 +120,7 @@ describe("DoseResponseOverlayCell", () => {
   it("shows the no-data dash when no group has a curve", () => {
     reset();
     const { container } = render(
-      <DoseResponseOverlayCell entries={[{ value: undefined, label: "10 µM" }]} />,
+      <DoseResponseOverlay entries={[{ value: undefined, label: "10 µM" }]} />,
     );
     expect(figureCalls).toHaveLength(0);
     expect(container.textContent).toBe("—");

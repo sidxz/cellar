@@ -2,7 +2,8 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { CompoundCurvesProvider } from "@/features/screening-assay/components/compound-curves-dialog";
 import type { Protocol } from "@/features/screening-assay/types";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useReportConfig } from "../../hooks/use-report-config";
 import type { ActivityValue, CurveDetail } from "../../types";
 import { CompoundDetailSheet } from "./compound-detail-sheet";
 
@@ -23,7 +24,16 @@ vi.mock("@/shared/components/status-badge", () => ({ StatusBadge: () => null }))
 vi.mock("@/shared/lib/plotly", () => ({
   Plot: () => <div data-testid="visible-curve">Dose–response plot</div>,
 }));
+const figureProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
+  DoseResponseFigure: (props: Record<string, unknown>) => {
+    figureProps.push(props);
+    return <div data-testid="overlay-figure" />;
+  },
+}));
 vi.mock("@structflo/components/dose-response", () => ({
+  MAX_OVERLAY_CURVES: 8,
+  overlayColor: (i: number) => `colour-${i}`,
   buildDoseResponsePlot: () => ({ traces: [], layout: {}, config: {} }),
   DoseResponseSummaryCard: ({
     curve,
@@ -320,5 +330,106 @@ describe("the drawer trusts the search's run set", () => {
       />,
     );
     expect(options("Source curve · Potency")[0]).toMatch(/^2026-05-13 · IC50/);
+  });
+});
+
+describe("an overlaid protocol in the drawer", () => {
+  const drawable: ActivityValue = {
+    ...av,
+    value: 1.3,
+    qualifier: null,
+    raw_data: [
+      { x: 0.1, y: 5 },
+      { x: 1, y: 50 },
+      { x: 10, y: 95 },
+    ],
+    curve_params: {
+      hill_slope: 1,
+      top: 100,
+      bottom: 0,
+      num_points: 3,
+      curve_class: "full",
+      confidence_interval_low: null,
+      confidence_interval_high: null,
+      fit_quality_warnings: null,
+    },
+  } as ActivityValue;
+
+  function renderSplit() {
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
+          {
+            protocol_id: "proto",
+            protocol_name: "Target assay",
+            curves: [
+              { ...curve, curve_id: "low", run_id: "r1", run_date: "2026-01-01" },
+              { ...curve, curve_id: "high", run_id: "r2", run_date: "2026-02-01" },
+            ],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{
+          ...molecule,
+          activity: {
+            "drc:rd@cond:10 µM": { ...drawable, run_ids: ["r1"] },
+            "drc:rd@cond:1 mM": { ...drawable, value: 9.1, run_ids: ["r2"] },
+          },
+        }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        columnGroups={{
+          proto: {
+            split: { by: "condition", condition: "ATP" },
+            groups: [
+              { key: "cond:10 µM", label: "10 µM", run_ids: ["r1"], run_count: 1, flags: [] },
+              { key: "cond:1 mM", label: "1 mM", run_ids: ["r2"], run_count: 1, flags: [] },
+            ],
+          },
+        }}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="latest"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    figureProps.length = 0;
+  });
+  afterEach(() => useReportConfig.getState().loadFromSavedSearch(null));
+
+  it("draws every group's curve in one large plot when the grid overlays them", () => {
+    useReportConfig
+      .getState()
+      .loadFromSavedSearch({ reportConfig: { displayPreset: "detailed", plotLayout: "overlay" } });
+    renderSplit();
+    const props = figureProps[figureProps.length - 1];
+    expect(props.size).toBe("full");
+    const curves = props.curves as { label: string; curve: { fitted_value: number } | null }[];
+    expect(curves.map((c) => [c.label, c.curve?.fitted_value])).toEqual([
+      ["10 µM", 1.3],
+      ["1 mM", 9.1],
+    ]);
+    expect(screen.queryByTestId("visible-curve")).toBeNull();
+    // Each fit stays inspectable.
+    expect(
+      within(screen.getByLabelText("Source curve · Potency")).getAllByRole("option"),
+    ).toHaveLength(2);
+  });
+
+  it("keeps one source curve when the grid's plots are separate", () => {
+    renderSplit();
+    expect(figureProps).toHaveLength(0);
+    expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
   });
 });

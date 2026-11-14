@@ -1,6 +1,9 @@
 "use client";
 
-import { DoseResponseFigure } from "@/features/screening-assay/components/dose-response-figure";
+import {
+  DoseResponseFigure,
+  type FigureSize,
+} from "@/features/screening-assay/components/dose-response-figure";
 import { memo } from "react";
 import { activityValueToCurveSnapshot } from "../../lib/activity-curve-snapshot";
 import type { ActivityValue } from "../../types";
@@ -27,15 +30,17 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
 
 export const DoseResponseCell = memo(DoseResponseCellInner);
 
-interface DoseResponseOverlayCellProps {
+interface DoseResponseOverlayProps {
   /** One entry per split group, in header order; `value` absent when the
    *  compound has no cell in that group. */
   entries: { value?: ActivityValue; label: string }[];
+  /** "cell" in the grid; "full" (legend, hover) in the drawer. */
+  size?: FigureSize;
 }
 
 /** Every split group's curve in one plot. Entry `i` takes `overlayColor(i)`,
  *  the colour on its group's header, so a missing cell keeps its slot. */
-function DoseResponseOverlayCellInner({ entries }: DoseResponseOverlayCellProps) {
+export function DoseResponseOverlay({ entries, size = "cell" }: DoseResponseOverlayProps) {
   const curves = entries.map((e) => ({
     curve: activityValueToCurveSnapshot(e.value),
     label: e.label,
@@ -44,7 +49,5 @@ function DoseResponseOverlayCellInner({ entries }: DoseResponseOverlayCellProps)
     return <span className="text-muted-foreground">&mdash;</span>;
   }
   const unit = entries.find((e) => e.value?.unit)?.value?.unit ?? null;
-  return <DoseResponseFigure curves={curves} size="cell" unit={unit} />;
+  return <DoseResponseFigure curves={curves} size={size} unit={unit} />;
 }
-
-export const DoseResponseOverlayCell = memo(DoseResponseOverlayCellInner);
