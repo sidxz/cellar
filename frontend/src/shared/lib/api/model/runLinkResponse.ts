@@ -4,9 +4,11 @@
  * Cellar
  * OpenAPI spec version: 1.3.0-153-g5425880a
  */
+import type { RunLinkResponseNotes } from './runLinkResponseNotes';
 
 export interface RunLinkResponse {
   run_id: string;
   run_date: string;
   status: string;
+  notes?: RunLinkResponseNotes;
 }

@@ -204,3 +204,49 @@ describe("ActivityTab card links and provenance", () => {
     expect(screen.getByText("9")).toHaveAttribute("title", "From 1 value in 1 run");
   });
 });
+
+describe("ActivityTab runs on the same day", () => {
+  it("names same-day runs by their notes, and keeps the notes on hover", () => {
+    renderTab({
+      plain_readouts: [plain()],
+      results_tab: "curves",
+      runs: [
+        {
+          run_id: "r2",
+          run_date: "2026-11-13",
+          status: "draft",
+          notes: "Second walk-through run, same file, for comparing runs",
+        },
+        { run_id: "r1", run_date: "2026-11-13", status: "draft", notes: "Walk-through test" },
+        { run_id: "r0", run_date: "2026-11-01", status: "approved", notes: "Pilot" },
+      ],
+    });
+    const second = screen.getByRole("link", {
+      name: "Nov 13, 2026 · Draft · Second walk-through run, same file, f…",
+    });
+    expect(second).toHaveAttribute(
+      "title",
+      "Second walk-through run, same file, for comparing runs",
+    );
+    expect(
+      screen.getByRole("link", { name: "Nov 13, 2026 · Draft · Walk-through test" }),
+    ).toBeInTheDocument();
+    // A run alone on its date keeps the short label; its notes show on hover.
+    expect(screen.getByRole("link", { name: "Nov 1, 2026 · Approved" })).toHaveAttribute(
+      "title",
+      "Pilot",
+    );
+  });
+
+  it("numbers same-day runs that have no notes", () => {
+    renderTab({
+      plain_readouts: [plain()],
+      runs: [
+        { run_id: "r2", run_date: "2026-11-13", status: "draft", notes: null },
+        { run_id: "r1", run_date: "2026-11-13", status: "draft", notes: null },
+      ],
+    });
+    expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft (2)" })).toBeInTheDocument();
+  });
+});

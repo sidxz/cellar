@@ -1465,6 +1465,7 @@ export * from './runImportTemplateResponseColumnMapping';
 export * from './runImportTemplateResponseDescription';
 export * from './runImportTemplateResponseUpdatedAt';
 export * from './runLinkResponse';
+export * from './runLinkResponseNotes';
 export * from './runPlateLinkResponse';
 export * from './runPlateLinkResponseBarcode';
 export * from './runPlateLinkResponsePlateLabel';

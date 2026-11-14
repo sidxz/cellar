@@ -214,11 +214,27 @@ function howChosen(r: ReadoutSummaryResponse): string {
   return `Highest of ${of}`;
 }
 
+/** How much of a run's notes a same-day run link shows. */
+const NOTE_CHARS = 37;
+
 /** The runs holding the compound's data, each opening the tab that shows it. */
 function RunLinks({ protocol }: { protocol: ProtocolActivityResponse }) {
   const runs = protocol.runs ?? [];
   if (runs.length === 0) return null;
   const hash = protocol.results_tab ? `#${protocol.results_tab}` : "";
+  // Runs on one date read alike; name them by their notes, else number them.
+  const sameDay = new Map<string, number>();
+  for (const r of runs) sameDay.set(r.run_date, (sameDay.get(r.run_date) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  const label = (run: (typeof runs)[number]) => {
+    const base = `${formatDate(run.run_date)} · ${RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status}`;
+    if ((sameDay.get(run.run_date) ?? 0) < 2) return base;
+    const nth = (seen.get(run.run_date) ?? 0) + 1;
+    seen.set(run.run_date, nth);
+    const notes = run.notes?.trim();
+    if (!notes) return `${base} (${nth})`;
+    return `${base} · ${notes.length > NOTE_CHARS ? `${notes.slice(0, NOTE_CHARS)}…` : notes}`;
+  };
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
       <span className="text-muted-foreground">Runs</span>
@@ -226,9 +242,10 @@ function RunLinks({ protocol }: { protocol: ProtocolActivityResponse }) {
         <Link
           key={run.run_id}
           href={`/assays/runs/${run.run_id}${hash}`}
+          title={run.notes ?? undefined}
           className="underline-offset-4 hover:underline"
         >
-          {`${formatDate(run.run_date)} · ${RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status}`}
+          {label(run)}
         </Link>
       ))}
     </div>

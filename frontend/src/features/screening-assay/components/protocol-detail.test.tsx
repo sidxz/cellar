@@ -140,13 +140,13 @@ describe("ProtocolDetail Curves tab", () => {
     for (const has_measured_curves of [false, null, undefined]) {
       state.protocol = protocol({ has_measured_curves } as Partial<Protocol>);
       const { unmount } = render();
-      expect(screen.queryByRole("tab", { name: "Traces" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("tab", { name: "Compare traces" })).not.toBeInTheDocument();
       unmount();
     }
     state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
     render();
     const names = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(names.indexOf("Traces")).toBe(names.indexOf("Runs") + 1);
+    expect(names.indexOf("Compare traces")).toBe(names.indexOf("Runs") + 1);
   });
 
   it("shows the overview when the hash names curves on a protocol without curves", () => {
@@ -168,7 +168,7 @@ describe("ProtocolDetail Curves tab", () => {
     state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
     render();
     fireEvent.click(screen.getByRole("button", { name: "Compare traces" }));
-    expect(screen.getByRole("tab", { name: "Traces" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Compare traces" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("Curves for r1,r3")).toBeInTheDocument();
   });
 });
