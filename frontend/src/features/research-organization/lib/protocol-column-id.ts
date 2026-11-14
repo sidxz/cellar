@@ -240,7 +240,7 @@ export function canOverlaySplit(split: ProtocolColumnGroups | null | undefined):
 }
 
 /** True when a split protocol in these results has a dose-response column
- *  and few enough groups to overlay, so the Overlaid switch would change
+ *  and few enough groups to overlay, so the Overlay switch would change
  *  something. */
 export function hasOverlayablePlots(
   protocolColumns: string[],

@@ -730,7 +730,6 @@ function SearchPageInner() {
                 scopeForcesSingleRun={scopeForcesSingleRun}
                 busy={searchPending}
                 hasAssays={protocolColumns.length > 0}
-                hasCurves={protocolColumns.some((column) => column.startsWith("drc:"))}
                 canOverlay={hasOverlayablePlots(protocolColumns, protocols ?? [], columnGroups)}
               />
             }

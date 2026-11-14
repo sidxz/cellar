@@ -2,16 +2,7 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
-import {
-  BookmarkPlus,
-  ChartNoAxesCombined,
-  Columns2,
-  FlaskConical,
-  Layers,
-  ListPlus,
-  Rows3,
-  Settings2,
-} from "lucide-react";
+import { BookmarkPlus, Columns2, Layers, ListPlus, Rows2, Rows3, Settings2 } from "lucide-react";
 import { useReportConfig } from "../../hooks/use-report-config";
 import { useAggregationMode } from "../../lib/use-aggregation-mode";
 import type { PlotLayout, SearchDisplayPreset } from "../../types";
@@ -57,14 +48,12 @@ export function ResultsViewControls({
   onCustomizeReport,
   scopeForcesSingleRun,
   busy,
-  hasCurves,
   hasAssays,
   canOverlay,
 }: {
   onCustomizeReport: () => void;
   scopeForcesSingleRun?: boolean;
   busy?: boolean;
-  hasCurves?: boolean;
   hasAssays: boolean;
   /** A split protocol has curves: offer drawing its groups overlaid. */
   canOverlay?: boolean;
@@ -77,14 +66,9 @@ export function ResultsViewControls({
         aria-label="Results display"
         className="inline-flex shrink-0 rounded-lg bg-muted/70 p-1"
       >
-        {(["compact", "structure", "curves"] as SearchDisplayPreset[]).map((preset) => {
-          const active = (config.displayPreset ?? "curves") === preset;
-          const Icon =
-            preset === "compact"
-              ? Rows3
-              : preset === "structure"
-                ? FlaskConical
-                : ChartNoAxesCombined;
+        {(["compact", "detailed"] as SearchDisplayPreset[]).map((preset) => {
+          const active = (config.displayPreset ?? "detailed") === preset;
+          const Icon = preset === "compact" ? Rows3 : Rows2;
           return (
             <Button
               key={preset}
@@ -95,11 +79,10 @@ export function ResultsViewControls({
                 active && "bg-background text-foreground shadow-sm hover:bg-background",
               )}
               aria-pressed={active}
-              disabled={preset === "curves" && !hasCurves}
               title={
-                preset === "curves" && !hasCurves
-                  ? "Add a dose-response assay to show curves"
-                  : undefined
+                preset === "compact"
+                  ? "Dense rows: small structures, values only"
+                  : "Larger structures, curve plots and run dates"
               }
               onClick={() =>
                 updateConfig({
@@ -109,12 +92,12 @@ export function ResultsViewControls({
               }
             >
               <Icon className="size-3.5" />
-              {preset === "compact" ? "Compact" : preset === "structure" ? "Structure" : "Curves"}
+              {preset === "compact" ? "Compact" : "Detailed"}
             </Button>
           );
         })}
       </fieldset>
-      {canOverlay && (config.displayPreset ?? "curves") === "curves" && (
+      {canOverlay && (config.displayPreset ?? "detailed") === "detailed" && (
         <fieldset
           aria-label="Plot layout"
           className="inline-flex shrink-0 rounded-lg bg-muted/70 p-1"
@@ -140,7 +123,7 @@ export function ResultsViewControls({
                 onClick={() => updateConfig({ plotLayout: layout })}
               >
                 <Icon className="size-3.5" />
-                {layout === "overlay" ? "Overlaid" : "Side by side"}
+                {layout === "overlay" ? "Overlay" : "Separate"}
               </Button>
             );
           })}

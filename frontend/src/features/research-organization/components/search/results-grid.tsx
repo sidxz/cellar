@@ -811,7 +811,7 @@ export function ResultsGrid({
     const sim = hasSimilarityScores ? [buildSimilarityColumn(structureCriterion)] : [];
     const props = buildPropertyColumns(reportConfig.visibleFields.properties);
     const activeIn = protocolColumns.includes(ANY_COLUMN_ID) ? [buildActiveInColumn()] : [];
-    const showPlots = (reportConfig.displayPreset ?? "curves") === "curves";
+    const showPlots = (reportConfig.displayPreset ?? "detailed") === "detailed";
     const styleLeaves = (
       column: ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>,
     ): ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule> =>

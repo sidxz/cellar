@@ -4,15 +4,16 @@ import { shownPlotLayout, useReportConfig } from "./use-report-config";
 const load = (columns: Record<string, unknown> | null) =>
   useReportConfig.getState().loadFromSavedSearch(columns);
 const layout = () => useReportConfig.getState().config.plotLayout;
+const preset = () => useReportConfig.getState().config.displayPreset;
 
 describe("plot layout", () => {
   beforeEach(() => load(null));
 
-  it("defaults to side by side", () => {
+  it("defaults to separate plots", () => {
     expect(layout()).toBe("side_by_side");
   });
 
-  it("opens a saved search from before the option side by side", () => {
+  it("opens a saved search from before the option with separate plots", () => {
     load({ reportConfig: { displayPreset: "curves" } });
     expect(layout()).toBe("side_by_side");
   });
@@ -22,25 +23,44 @@ describe("plot layout", () => {
     expect(layout()).toBe("overlay");
   });
 
-  it("treats an unknown value as side by side", () => {
+  it("treats an unknown value as separate plots", () => {
     load({ reportConfig: { plotLayout: "stacked" } });
     expect(layout()).toBe("side_by_side");
   });
 });
 
+describe("display preset", () => {
+  it("starts in the Detailed display with medium structures", () => {
+    load(null);
+    expect(preset()).toBe("detailed");
+    expect(useReportConfig.getState().config.imageSize).toBe("medium");
+  });
+
+  it("opens searches saved in the old Structure and Curves displays as Detailed", () => {
+    load({ reportConfig: { displayPreset: "structure" } });
+    expect(preset()).toBe("detailed");
+    load({ reportConfig: { displayPreset: "curves" } });
+    expect(preset()).toBe("detailed");
+    load({ reportConfig: {} });
+    expect(preset()).toBe("detailed");
+  });
+
+  it("keeps a search saved as Compact compact", () => {
+    load({ reportConfig: { displayPreset: "compact" } });
+    expect(preset()).toBe("compact");
+  });
+});
+
 describe("shownPlotLayout", () => {
-  it("overlays only in the Curves display, where plots show", () => {
+  it("overlays only in the Detailed display, where plots show", () => {
     const base = {
       imageSize: "small" as const,
       visibleFields: { structure: [], properties: [], molecule: [] },
     };
-    expect(shownPlotLayout({ ...base, displayPreset: "curves", plotLayout: "overlay" })).toBe(
+    expect(shownPlotLayout({ ...base, displayPreset: "detailed", plotLayout: "overlay" })).toBe(
       "overlay",
     );
     expect(shownPlotLayout({ ...base, displayPreset: "compact", plotLayout: "overlay" })).toBe(
-      "side_by_side",
-    );
-    expect(shownPlotLayout({ ...base, displayPreset: "structure", plotLayout: "overlay" })).toBe(
       "side_by_side",
     );
   });

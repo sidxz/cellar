@@ -602,7 +602,9 @@ export type ImageSize = "small" | "medium" | "large";
 /** What the results grid + exports show. Every key here is honored by both
  *  the on-screen grid and the export column builder — options that only one
  *  side understood used to sit in the customizer doing nothing. */
-export type SearchDisplayPreset = "compact" | "structure" | "curves";
+/** Compact: dense rows, values only. Detailed: larger structures, curve
+ *  plots and run dates. */
+export type SearchDisplayPreset = "compact" | "detailed";
 
 /** How a split protocol's curves are drawn: one plot per group, or every
  *  group's curve overlaid in one plot. */
