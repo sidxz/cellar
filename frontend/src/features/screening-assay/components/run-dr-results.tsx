@@ -31,10 +31,10 @@ import { worstZPrime } from "../lib/qc-metrics";
 import type { DoseResponseCurve, HitCriterion, Run } from "../types";
 import { ComparisonTable } from "./comparison-table";
 import { CurveNavigator } from "./curve-navigator";
+import { criterionLabel } from "./detail-tabs/use-activity-tab";
 import { DoseResponseChart } from "./dose-response-chart";
 import { RunHitCriteriaDialog } from "./hit-criteria-dialog";
 import { buildColumnDefs } from "./run-dr-results-columns";
-import { criterionLabel } from "./detail-tabs/use-activity-tab";
 import { applyHitFilter, buildCompoundRows } from "./run-dr-results-transforms";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
 
