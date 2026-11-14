@@ -23,8 +23,11 @@ from cellar.application.screening.set_run_hit_criteria import (
     SetRunHitCriteria,
     SetRunHitCriteriaCommand,
 )
+from cellar.domain.screening_assay.enums import ProtocolType, ReadoutAggregation, ReadoutDataType
+from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.run import Run
-from cellar.domain.shared.errors import ConflictError, NotFoundError
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.domain.shared.hit_criterion import HitCriterion
 
@@ -75,13 +78,48 @@ def _make_run(workspace_id: uuid.UUID, **kwargs) -> Run:
     return Run.create(**defaults)
 
 
-def _build_set(run: Run | None) -> tuple[SetRunHitCriteria, AsyncMock, AsyncMock]:
+def _melt_rd(name: str, measure: MeltMeasure) -> ReadoutDefinition:
+    return ReadoutDefinition(
+        protocol_id=uuid.uuid4(),
+        name=name,
+        data_type=ReadoutDataType.NUMERIC,
+        unit="°C",
+        aggregation=ReadoutAggregation.MEAN,
+        melt_config=MeltReadoutConfig(
+            window="Main", measure=measure, channel_key="ratio", low=50.0, high=85.0
+        ),
+    )
+
+
+def _thermal_protocol(workspace_id: uuid.UUID) -> Protocol:
+    return Protocol.create(
+        workspace_id=workspace_id,
+        name="Thermal shift",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=uuid.uuid4(),
+        readout_definitions=[
+            _melt_rd("ΔTm (Main)", MeltMeasure.DELTA_TM),
+            _melt_rd("Max ΔTm (Main)", MeltMeasure.MAX_DELTA_TM),
+        ],
+    )
+
+
+def _build_set(
+    run: Run | None, protocol: Protocol | None = None
+) -> tuple[SetRunHitCriteria, AsyncMock, AsyncMock]:
     repo = AsyncMock()
     repo.find_by_id_in_workspace = AsyncMock(return_value=run)
     repo.save = AsyncMock()
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(
+        return_value=protocol or (_thermal_protocol(run.workspace_id) if run else None)
+    )
     dispatcher = AsyncMock()
     dispatcher.dispatch_all = AsyncMock()
-    return SetRunHitCriteria(uow=FakeUoW(), repo=repo, dispatcher=dispatcher), repo, dispatcher
+    uc = SetRunHitCriteria(
+        uow=FakeUoW(), repo=repo, dispatcher=dispatcher, protocol_repo=protocol_repo
+    )
+    return uc, repo, dispatcher
 
 
 def _build_reset(run: Run | None) -> tuple[ResetRunHitCriteria, AsyncMock, AsyncMock]:
@@ -94,6 +132,43 @@ def _build_reset(run: Run | None) -> tuple[ResetRunHitCriteria, AsyncMock, Async
 
 
 class TestSetRunHitCriteria:
+    @pytest.mark.asyncio
+    async def test_accepts_outside_on_delta_tm(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        uc, _, _ = _build_set(run)
+        rule = HitCriterion(readout_name="ΔTm (Main)", operator="not_between", value=[-2.0, 2.0])
+
+        result = await uc(
+            SetRunHitCriteriaCommand(
+                workspace_id=auth.workspace_id, run_id=run.id, criteria=[rule]
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Success), result
+        assert run.hit_criteria == [rule] and run.hit_criteria_set_by == auth.user_id
+
+    @pytest.mark.asyncio
+    async def test_refuses_a_series_value(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        uc, repo, _ = _build_set(run)
+        rule = HitCriterion(readout_name="Max ΔTm (Main)", operator="lt", value=-2.0)
+
+        result = await uc(
+            SetRunHitCriteriaCommand(
+                workspace_id=auth.workspace_id, run_id=run.id, criteria=[rule]
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        assert "Max ΔTm (Main)" in str(result.failure())
+        assert run.hit_criteria is None
+        repo.save.assert_not_awaited()
+
     @pytest.mark.asyncio
     async def test_records_criteria_and_actor(self) -> None:
         auth = FakeAuth()
