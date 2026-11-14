@@ -24,6 +24,7 @@ import { CoverageBar } from "../coverage-bar";
 import { CoverageGapDialog } from "../coverage-gap-dialog";
 import { ProtocolAliasesCard } from "../protocol-aliases-card";
 import { ProtocolReferencesCard } from "../protocol-references";
+import { ProtocolMethodCard } from "./protocol-method-card";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -149,6 +150,7 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
   return (
     <div className="space-y-6">
       <NameFlagNotice protocol={protocol} onTabChange={onTabChange} onEditName={onEditName} />
+      <ProtocolMethodCard protocol={protocol} onOpenFiles={() => onTabChange("files")} />
       {/* Stats Cards */}
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -267,16 +269,13 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
           <CardTitle>Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {protocol.description && (
-            <p className="text-sm text-muted-foreground">{protocol.description}</p>
-          )}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">Code</p>
               <p className="font-mono font-medium">{protocol.code ?? "\u2014"}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Discriminator</p>
+              <p className="text-sm text-muted-foreground">Distinguished by</p>
               <p className="font-medium">{protocol.discriminator ?? "\u2014"}</p>
             </div>
             <div>

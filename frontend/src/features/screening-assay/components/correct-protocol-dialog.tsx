@@ -206,7 +206,7 @@ export function CorrectProtocolDialog({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="correct-discriminator">
-                Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+                Distinguished by{needs.has("discriminator") ? "" : " (optional)"}
               </Label>
               <DiscriminatorInput
                 id="correct-discriminator"

@@ -98,7 +98,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const [createRunOpen, setCreateRunOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [editDescription, setEditDescription] = useState("");
   const [editCategory, setEditCategory] = useState("");
   const [editDiscriminator, setEditDiscriminator] = useState("");
   const [lockOpen, setLockOpen] = useState(false);
@@ -111,7 +110,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const query = { data: protocol, isLoading };
 
   const openEditDetails = (p: Protocol) => {
-    setEditDescription(p.description ?? "");
     setEditCategory(p.category ?? "");
     setEditDiscriminator(p.discriminator ?? "");
     setEditOpen(true);
@@ -479,24 +477,17 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit Protocol</DialogTitle>
-            <DialogDescription>Update this draft protocol&apos;s metadata.</DialogDescription>
+            <DialogDescription>
+              The facts its name comes from. The method is edited on the Overview.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-4">
-            <div className="grid gap-2">
-              <Label>Description</Label>
-              <Textarea
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
-                placeholder="Optional — describe the assay procedure, controls, and acceptance criteria"
-                rows={4}
-              />
-            </div>
             <div className="grid gap-2">
               <Label>Category</Label>
               <ProtocolCategoryInput value={editCategory} onChange={setEditCategory} />
             </div>
             <div className="grid gap-2">
-              <Label>Discriminator{editNeeds.has("discriminator") ? "" : " (optional)"}</Label>
+              <Label>Distinguished by{editNeeds.has("discriminator") ? "" : " (optional)"}</Label>
               <DiscriminatorInput
                 value={editDiscriminator}
                 onChange={setEditDiscriminator}
@@ -514,7 +505,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
               onClick={() => {
                 updateMutation.mutate(
                   {
-                    description: editDescription || null,
                     category: editCategory || null,
                     discriminator: editDiscriminator.trim() || null,
                   },

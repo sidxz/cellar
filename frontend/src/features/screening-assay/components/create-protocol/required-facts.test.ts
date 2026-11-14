@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { nameSlots } from "../protocol-name-preview";
-import { factSlots } from "./required-facts";
+import { factSlots, settledSlots } from "./required-facts";
 
 const required = (pattern: string, followsTarget = false) =>
   factSlots(nameSlots(pattern).required, followsTarget);
@@ -42,4 +42,25 @@ describe("factSlots", () => {
   it("offers an optional {subject?} as the target when the form follows it", () => {
     expect(optional("{subject?} combination", true)).toEqual(["target"]);
   });
+});
+
+describe("settledSlots", () => {
+  it("drops the organism once a target is linked: the target implies it", () => {
+    expect(settledSlots("whole_cell", true)).toEqual(new Set(["organism"]));
+    expect(settledSlots("whole_cell", false)).toEqual(new Set());
+  });
+
+  it.each(["biochemical", "physicochemical", "analytical", "in_silico"])(
+    "%s has no cells, so no cell line or strain",
+    (type) => {
+      expect(settledSlots(type, false)).toEqual(new Set(["cell_line", "strain"]));
+    },
+  );
+
+  it.each(["cell_based", "whole_cell", "admet", "in_vivo"])(
+    "%s keeps cell line and strain",
+    (type) => {
+      expect(settledSlots(type, false)).toEqual(new Set());
+    },
+  );
 });

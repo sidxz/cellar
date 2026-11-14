@@ -17,6 +17,27 @@ export function factSlots(slots: Set<string>, followsTarget: boolean): string[] 
   return out;
 }
 
+/** Types with no cells in them: a cell line or strain never applies. */
+const CELL_FREE_TYPES: ReadonlySet<string> = new Set([
+  "biochemical",
+  "physicochemical",
+  "analytical",
+  "in_silico",
+]);
+
+/** Facet slots the protocol's other facts already settle, so asking for them invites double entry:
+ *  a linked target implies its organism (registry proteins are organism-specific), and a cell-free
+ *  type has no cell line or strain. */
+export function settledSlots(protocolType: string, hasTarget: boolean): Set<string> {
+  const out = new Set<string>();
+  if (hasTarget) out.add("organism");
+  if (CELL_FREE_TYPES.has(protocolType)) {
+    out.add("cell_line");
+    out.add("strain");
+  }
+  return out;
+}
+
 /** "Search NCBITAXON..." or, for a slot with no ontology, "Type a strain or pick one used here". */
 export const facetPlaceholder = (slot: Pick<ProtocolFacetSlot, "label" | "ontology_sources">) =>
   slot.ontology_sources.length

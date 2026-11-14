@@ -135,6 +135,6 @@ describe("CorrectProtocolDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.change(screen.getByLabelText("Incubation time (h)"), { target: { value: "48" } });
     fireEvent.click(screen.getByRole("button", { name: "48 h" }));
-    expect(screen.getByLabelText(/^Discriminator/)).toHaveValue("48 h");
+    expect(screen.getByLabelText(/^Distinguished by/)).toHaveValue("48 h");
   });
 });

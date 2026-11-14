@@ -46,6 +46,7 @@ import { Textarea } from "@/shared/components/ui/textarea";
 import { UnitPicker } from "@/shared/components/unit-picker";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
 import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
@@ -65,6 +66,7 @@ import {
   pickFormForCategory,
   readoutsFromForm,
 } from "../lib/protocol-form-apply";
+import { METHOD_PLACEHOLDER } from "../lib/protocol-method";
 import { prefillFromProtocol } from "../lib/protocol-prefill";
 import { isReservedReadoutName } from "../lib/readout-constants";
 import {
@@ -84,7 +86,7 @@ import {
 } from "./create-protocol/form-values";
 import { NicknameInput } from "./create-protocol/nickname-input";
 import { ReadoutRow } from "./create-protocol/readout-row";
-import { FacetField, NameFacts, factSlots } from "./create-protocol/required-facts";
+import { FacetField, NameFacts, factSlots, settledSlots } from "./create-protocol/required-facts";
 import {
   SiblingDiscriminators,
   type SiblingValues,
@@ -125,6 +127,7 @@ export function CreateProtocolDialog({
   onLogRun,
   prefill,
 }: CreateProtocolDialogProps) {
+  const router = useRouter();
   const createMutation = useCreateProtocol();
   const assignToProject = useAssignProtocolToProject();
   const { data: projects } = useProjects();
@@ -326,9 +329,12 @@ export function CreateProtocolDialog({
     focused.current = !!el;
   });
 
-  // Facts the pattern does not place, assay format first.
+  // Facts the pattern does not place, assay format first. Ones the target or a cell-free type
+  // already settle are left out unless they already hold a value (a prefill).
+  const settled = settledSlots(form.watch("protocol_type"), targetIds.length > 0);
   const moreSlots = facetSlots
     .filter((s) => !nameFactSlots.includes(s.name))
+    .filter((s) => !settled.has(s.name) || (ontologyAnnotations[s.name]?.length ?? 0) > 0)
     .sort((a, b) => Number(b.name === "assay_format") - Number(a.name === "assay_format"));
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
@@ -391,6 +397,8 @@ export function CreateProtocolDialog({
           }
           onOpenChange(false);
           resetForm();
+          // Straight on to the draft: its remaining setup and Publish live there.
+          if (protocol?.id) router.push(`/assays/protocols/${protocol.id}`);
         },
       },
     );
@@ -409,7 +417,8 @@ export function CreateProtocolDialog({
             {prefill ? `New protocol from ${prefill.code ?? prefill.name}` : "New Protocol"}
           </DialogTitle>
           <DialogDescription>
-            Pick a category; the name, its facts and the readouts follow from it.
+            Say what you measure, on what, and how; the name and readouts follow. The rest can be
+            set on the draft.
           </DialogDescription>
         </DialogHeader>
 
@@ -448,7 +457,7 @@ export function CreateProtocolDialog({
           {showDiscriminatorField ? (
             <div className="grid gap-2">
               <Label htmlFor="protocol-discriminator">
-                Discriminator{discriminatorInName ? "" : " (optional)"}
+                Distinguished by{discriminatorInName ? "" : " (optional)"}
               </Label>
               <Controller
                 control={form.control}
@@ -489,6 +498,38 @@ export function CreateProtocolDialog({
             newName={preview.data?.name ?? ""}
             onChange={setSiblingValues}
           />
+
+          {/* Before any more effort: maybe this is a run of an existing protocol. */}
+          <SimilarProtocolsPanel
+            draft={{
+              name: preview.data?.name ?? "",
+              protocol_type: form.watch("protocol_type") || null,
+              target_ids: targetIds,
+              readout_names: readoutValues
+                .map((r) => r.name)
+                .filter((n): n is string => Boolean(n)),
+              facet_ids: Object.values(ontologyAnnotations)
+                .flat()
+                .map((t) => t.term_id),
+            }}
+            onLogRun={(protocolId) => {
+              onOpenChange(false);
+              onLogRun?.(protocolId);
+            }}
+          />
+
+          <div className="grid gap-2">
+            <Label htmlFor="protocol-method">Method</Label>
+            <Textarea
+              id="protocol-method"
+              className="min-h-40"
+              placeholder={METHOD_PLACEHOLDER}
+              {...form.register("description")}
+            />
+            <p className="text-xs text-muted-foreground">
+              How the assay is run, so a colleague can repeat it. You can refine it on the draft.
+            </p>
+          </div>
 
           <StartsFrom
             forms={ownForms.length > 0 ? ownForms : genericForms}
@@ -587,11 +628,6 @@ export function CreateProtocolDialog({
               )}
 
               <div className="grid gap-2">
-                <Label>Description</Label>
-                <Textarea placeholder="Optional description..." {...form.register("description")} />
-              </div>
-
-              <div className="grid gap-2">
                 <Label>Project</Label>
                 <SearchableSelect
                   options={projects?.map((p) => ({ value: p.id, label: p.name })) ?? []}
@@ -605,7 +641,7 @@ export function CreateProtocolDialog({
 
               <div className="grid gap-2">
                 <div className="flex items-center justify-between">
-                  <Label>Conditions</Label>
+                  <Label>Assay conditions</Label>
                   <Button
                     type="button"
                     variant="outline"
@@ -616,6 +652,10 @@ export function CreateProtocolDialog({
                     Add Condition
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Concentrations, times, temperatures: fix a value for this protocol, or leave it to
+                  vary per run.
+                </p>
                 {conditionFields.map((field, index) => (
                   <div key={field.id} className="grid gap-2">
                     <div className="flex items-end gap-2">
@@ -730,24 +770,6 @@ export function CreateProtocolDialog({
               )}
             </CollapsibleContent>
           </Collapsible>
-
-          <SimilarProtocolsPanel
-            draft={{
-              name: preview.data?.name ?? "",
-              protocol_type: form.watch("protocol_type") || null,
-              target_ids: targetIds,
-              readout_names: readoutValues
-                .map((r) => r.name)
-                .filter((n): n is string => Boolean(n)),
-              facet_ids: Object.values(ontologyAnnotations)
-                .flat()
-                .map((t) => t.term_id),
-            }}
-            onLogRun={(protocolId) => {
-              onOpenChange(false);
-              onLogRun?.(protocolId);
-            }}
-          />
         </div>
 
         <DialogFooter className="sm:items-center">
