@@ -2,7 +2,13 @@
 
 import { ExportToolbar as SharedExportToolbar } from "@/shared/components/export/export-toolbar";
 import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
-import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
+import { MAX_OVERLAY_CURVES, overlayColor } from "@structflo/components/dose-response";
+import type {
+  ColDef,
+  ColGroupDef,
+  ICellRendererParams,
+  IHeaderGroupParams,
+} from "ag-grid-community";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -16,11 +22,13 @@ import { Button } from "@/shared/components/ui/button";
 import { groupBy } from "@/shared/lib/group-by";
 import { detectQueryKind } from "@/shared/lib/rdkit/detect-query-kind";
 import { cn } from "@/shared/lib/utils";
+import { shownPlotLayout } from "../../hooks/use-report-config";
 import { activityEndpoint } from "../../lib/assay-evidence";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import {
   ANY_COLUMN_ID,
   type ResolvedColumn,
+  canOverlaySplit,
   drcColId,
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
@@ -29,6 +37,7 @@ import type { AggregationMode } from "../../lib/use-aggregation-mode";
 import {
   type ActivityValue,
   type ColumnGroup,
+  type PlotLayout,
   type ProtocolColumnGroups,
   type ReportConfig,
   type SortDir,
@@ -37,7 +46,7 @@ import {
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayEvidence } from "./assay-evidence";
-import { DoseResponseCell } from "./dose-response-cell";
+import { DoseResponseCell, DoseResponseOverlayCell } from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -465,11 +474,57 @@ function groupTooltip(group: ColumnGroup, split: ProtocolColumnGroups["split"]):
   return `${split.condition} = ${group.label} · ${group.run_count} run${group.run_count === 1 ? "" : "s"}`;
 }
 
+/** A split group's header with the colour its curve takes in an overlay. */
+function OverlayGroupHeader({ displayName, color }: IHeaderGroupParams & { color: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      <span
+        aria-hidden
+        className="size-2.5 shrink-0 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+      <span className="truncate">{displayName}</span>
+    </span>
+  );
+}
+
+/** One plot per dose-response readout holding every group's curve, each in
+ *  the colour of its group's header. */
+function buildOverlayPlotColumns(
+  entries: ResolvedColumn[],
+  proto: Protocol | undefined,
+  split: ProtocolColumnGroups,
+): ColDef<EnrichedMolecule>[] {
+  const rdIds = [
+    ...new Set(entries.filter((e) => e.prefix === "drc").map((e) => e.readoutDefId ?? "")),
+  ];
+  return rdIds.map((rdId) => {
+    const name = proto?.readout_definitions?.find((r) => r.id === rdId)?.name;
+    return {
+      headerName: rdIds.length > 1 && name ? `Plot · ${name}` : "Plot",
+      headerTooltip: "Every group's curve on one axis, coloured like its group's header",
+      colId: `${drcColId(rdId)}:plot@overlay`,
+      width: 240,
+      sortable: false,
+      filter: false,
+      cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => (
+        <DoseResponseOverlayCell
+          entries={split.groups.map((group) => ({
+            value: params.data?.activity?.[withGroup(drcColId(rdId), group.key)],
+            label: group.label,
+          }))}
+        />
+      ),
+    };
+  });
+}
+
 export function buildProtocolColumnGroups(
   protocolColumns: string[],
   protocols: Protocol[],
   aggregationMode: AggregationMode = "latest",
   columnGroups?: Record<string, ProtocolColumnGroups> | null,
+  plotLayout: PlotLayout = "side_by_side",
 ): ColGroupDef[] {
   const resolved = resolveColumns(protocolColumns, protocols);
   const grouped = groupBy(resolved, (r) => r.protocolId);
@@ -489,6 +544,8 @@ export function buildProtocolColumnGroups(
       continue;
     }
     const headerName = `${name} · by ${split.split.by === "run" ? "run" : split.split.condition}`;
+    const wantsOverlay = plotLayout === "overlay" && entries.some((e) => e.prefix === "drc");
+    const overlay = wantsOverlay && canOverlaySplit(split);
     const children: (ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[] =
       split.groups.length === 0
         ? [
@@ -502,15 +559,27 @@ export function buildProtocolColumnGroups(
               cellRenderer: () => <span className="text-muted-foreground">&mdash;</span>,
             },
           ]
-        : split.groups.map((group) => ({
+        : split.groups.map((group, i) => ({
             headerName: groupHeader(group, split.split),
             headerTooltip: groupTooltip(group, split.split),
             headerClass: "ag-protocol-split-header",
-            children: buildProtocolChildren(entries, proto, aggregationMode, group.key),
+            ...(overlay
+              ? {
+                  headerGroupComponent: OverlayGroupHeader,
+                  headerGroupComponentParams: { color: overlayColor(i) },
+                }
+              : {}),
+            children: buildProtocolChildren(entries, proto, aggregationMode, group.key).filter(
+              (c) => !overlay || !isPlotColumn(c.colId),
+            ),
           }));
+    if (overlay) children.push(...buildOverlayPlotColumns(entries, proto, split));
     groups.push({
       headerName,
-      headerTooltip: headerName,
+      headerTooltip:
+        wantsOverlay && !overlay && split.groups.length > 0
+          ? `${headerName} — more than ${MAX_OVERLAY_CURVES} groups, so their plots stay side by side`
+          : headerName,
       headerClass: "ag-protocol-group-header",
       children,
     });
@@ -758,6 +827,7 @@ export function ResultsGrid({
       protocols,
       aggregationMode,
       columnGroups,
+      shownPlotLayout(reportConfig),
     ).map((group) => styleLeaves(group) as ColGroupDef<EnrichedMolecule>);
     const properties: ColGroupDef<EnrichedMolecule>[] =
       props.length > 0
@@ -775,6 +845,7 @@ export function ResultsGrid({
   }, [
     reportConfig.imageSize,
     reportConfig.displayPreset,
+    reportConfig.plotLayout,
     structureCriterion,
     pinIdentity,
     structureFields,

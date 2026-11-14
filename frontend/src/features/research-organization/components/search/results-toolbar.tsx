@@ -7,13 +7,14 @@ import {
   ChartNoAxesCombined,
   Columns2,
   FlaskConical,
+  Layers,
   ListPlus,
   Rows3,
   Settings2,
 } from "lucide-react";
 import { useReportConfig } from "../../hooks/use-report-config";
 import { useAggregationMode } from "../../lib/use-aggregation-mode";
-import type { SearchDisplayPreset } from "../../types";
+import type { PlotLayout, SearchDisplayPreset } from "../../types";
 import { AggregationControl } from "./aggregation-control";
 
 export function ResultsToolbarLeft({
@@ -58,12 +59,15 @@ export function ResultsViewControls({
   busy,
   hasCurves,
   hasAssays,
+  canOverlay,
 }: {
   onCustomizeReport: () => void;
   scopeForcesSingleRun?: boolean;
   busy?: boolean;
   hasCurves?: boolean;
   hasAssays: boolean;
+  /** A split protocol has curves: offer drawing its groups overlaid. */
+  canOverlay?: boolean;
 }) {
   const { mode, setMode } = useAggregationMode();
   const { config, updateConfig } = useReportConfig();
@@ -110,6 +114,38 @@ export function ResultsViewControls({
           );
         })}
       </fieldset>
+      {canOverlay && (config.displayPreset ?? "curves") === "curves" && (
+        <fieldset
+          aria-label="Plot layout"
+          className="inline-flex shrink-0 rounded-lg bg-muted/70 p-1"
+        >
+          {(["side_by_side", "overlay"] as PlotLayout[]).map((layout) => {
+            const active = (config.plotLayout ?? "side_by_side") === layout;
+            const Icon = layout === "overlay" ? Layers : Columns2;
+            return (
+              <Button
+                key={layout}
+                size="sm"
+                variant="ghost"
+                className={cn(
+                  "h-7 gap-1.5 px-2 text-xs font-medium text-foreground/70",
+                  active && "bg-background text-foreground shadow-sm hover:bg-background",
+                )}
+                aria-pressed={active}
+                title={
+                  layout === "overlay"
+                    ? "Every group's curve in one plot, coloured like its column header"
+                    : "One plot per group"
+                }
+                onClick={() => updateConfig({ plotLayout: layout })}
+              >
+                <Icon className="size-3.5" />
+                {layout === "overlay" ? "Overlaid" : "Side by side"}
+              </Button>
+            );
+          })}
+        </fieldset>
+      )}
       {hasAssays && (
         <AggregationControl
           mode={mode}

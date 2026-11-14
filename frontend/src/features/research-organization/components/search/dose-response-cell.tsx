@@ -26,3 +26,25 @@ function DoseResponseCellInner({ value }: DoseResponseCellProps) {
 }
 
 export const DoseResponseCell = memo(DoseResponseCellInner);
+
+interface DoseResponseOverlayCellProps {
+  /** One entry per split group, in header order; `value` absent when the
+   *  compound has no cell in that group. */
+  entries: { value?: ActivityValue; label: string }[];
+}
+
+/** Every split group's curve in one plot. Entry `i` takes `overlayColor(i)`,
+ *  the colour on its group's header, so a missing cell keeps its slot. */
+function DoseResponseOverlayCellInner({ entries }: DoseResponseOverlayCellProps) {
+  const curves = entries.map((e) => ({
+    curve: activityValueToCurveSnapshot(e.value),
+    label: e.label,
+  }));
+  if (curves.every((c) => !c.curve)) {
+    return <span className="text-muted-foreground">&mdash;</span>;
+  }
+  const unit = entries.find((e) => e.value?.unit)?.value?.unit ?? null;
+  return <DoseResponseFigure curves={curves} size="cell" unit={unit} />;
+}
+
+export const DoseResponseOverlayCell = memo(DoseResponseOverlayCellInner);

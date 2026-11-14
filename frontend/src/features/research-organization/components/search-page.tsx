@@ -16,7 +16,11 @@ import { useProjects } from "../hooks/use-projects";
 import { useReportConfig } from "../hooks/use-report-config";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { type EnrichedSearchResponse, useExecuteSearch } from "../hooks/use-search";
-import { toBackendProtocolColumns, uniqueProtocolIds } from "../lib/protocol-column-id";
+import {
+  hasOverlayablePlots,
+  toBackendProtocolColumns,
+  uniqueProtocolIds,
+} from "../lib/protocol-column-id";
 import {
   AGGREGATION_LABELS,
   aggregationModeToWire,
@@ -727,6 +731,7 @@ function SearchPageInner() {
                 busy={searchPending}
                 hasAssays={protocolColumns.length > 0}
                 hasCurves={protocolColumns.some((column) => column.startsWith("drc:"))}
+                canOverlay={hasOverlayablePlots(protocolColumns, protocols ?? [], columnGroups)}
               />
             }
             selectionActions={

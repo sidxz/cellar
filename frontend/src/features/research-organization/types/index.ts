@@ -604,8 +604,13 @@ export type ImageSize = "small" | "medium" | "large";
  *  side understood used to sit in the customizer doing nothing. */
 export type SearchDisplayPreset = "compact" | "structure" | "curves";
 
+/** How a split protocol's curves are drawn: one plot per group, or every
+ *  group's curve overlaid in one plot. */
+export type PlotLayout = "side_by_side" | "overlay";
+
 export interface ReportConfig {
   displayPreset?: SearchDisplayPreset;
+  plotLayout?: PlotLayout;
   imageSize: ImageSize;
   visibleFields: VisibleFields;
 }
