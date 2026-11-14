@@ -15,7 +15,6 @@ export type {
   BulkAddBatchIdentifiersRequest,
   BulkAddBatchIdentifiersResponse,
   BulkIdentifierRowBody,
-  RowOutcomeResponse,
 } from "@/shared/lib/api/model";
 
 // ---------------------------------------------------------------------------

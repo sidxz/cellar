@@ -23,7 +23,6 @@ export type {
   OverrideCellRequest,
   AddFromCollectionRequest,
   AddFromCampaignRequest,
-  AddFromRunRequest,
   AddResultsOutcomeResponse,
   CampaignStageResponse,
   CampaignCollectionCoverageResponse,
