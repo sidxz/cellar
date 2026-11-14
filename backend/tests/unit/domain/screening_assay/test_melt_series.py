@@ -53,6 +53,11 @@ def test_max_delta_tm_groups_missing_concentration():
     assert series_values(MAX, pts) == [SeriesValue(A, 2.0, Qualifier.EQUAL, None)]
 
 
+def test_max_delta_tm_treats_dose_zero_as_no_concentration():
+    pts = _pts(A, {None: [1.0], 0.0: [3.0], 10.0: [1.5]})
+    assert series_values(MAX, pts) == [SeriesValue(A, 2.0, Qualifier.EQUAL, None)]
+
+
 LOWEST = _cfg(MeltMeasure.LOWEST_SHIFT_CONCENTRATION, threshold=2.0)
 
 

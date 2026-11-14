@@ -63,7 +63,10 @@ def _means_by_dose(points: Sequence[SeriesPoint]) -> dict[float | None, float]:
 
 
 def _max_delta_tm(batch: uuid.UUID, points: Sequence[SeriesPoint]) -> SeriesValue:
-    means = _means_by_dose(points)
+    # Dose 0 is no concentration: it joins the positions without one.
+    means = _means_by_dose(
+        [SeriesPoint(p.batch_id, None, p.delta_tm) if p.concentration == 0 else p for p in points]
+    )
     # Largest magnitude; on a tie the higher concentration (no concentration ranks lowest).
     dose, mean = max(
         means.items(), key=lambda kv: (abs(kv[1]), -math.inf if kv[0] is None else kv[0])

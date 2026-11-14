@@ -993,6 +993,14 @@ class Protocol(AggregateRoot):
                     )
 
         self._check_window_agreement(definition, self.readout_definitions)
+        self._check_dose_unit(definition)
+
+        definition.protocol_id = self.id
+        self.readout_definitions.append(definition)
+        self.updated_at = datetime.now(UTC)
+
+    def _check_dose_unit(self, definition: ReadoutDefinition) -> None:
+        """A lowest shifting concentration is in the protocol's dose unit."""
         mc = definition.melt_config
         if (
             mc is not None
@@ -1003,10 +1011,6 @@ class Protocol(AggregateRoot):
                 f"Readout '{definition.name}' must be in the protocol's dose unit "
                 f"({self.dose_unit.value})"
             )
-
-        definition.protocol_id = self.id
-        self.readout_definitions.append(definition)
-        self.updated_at = datetime.now(UTC)
 
     @staticmethod
     def _check_window_agreement(
@@ -1193,6 +1197,7 @@ class Protocol(AggregateRoot):
                     )
 
         self._check_window_agreement(replacement, self.readout_definitions)
+        self._check_dose_unit(replacement)
 
         # Structural-diff guard for non-DRAFT protocols. Cosmetic fields
         # (display_order, precision, unit text) can be edited on unlocked

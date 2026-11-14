@@ -227,3 +227,11 @@ def test_series_readout_names():
     )
     p.add_readout_definition(_at(50.0))
     assert p.series_readout_names() == frozenset({"Max ΔTm (Main)", "ΔTm at 50 µM (Main)"})
+
+
+def test_lowest_shift_concentration_unit_cannot_be_edited_away_from_dose_unit():
+    p = _protocol()
+    rd = _lowest(p.dose_unit.value)
+    p.add_readout_definition(rd)
+    with pytest.raises(ValidationError, match="dose unit"):
+        p.update_readout_definition(rd.id, unit="nM")
