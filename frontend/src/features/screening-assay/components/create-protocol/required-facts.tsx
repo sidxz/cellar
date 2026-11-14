@@ -25,18 +25,20 @@ const CELL_FREE_TYPES: ReadonlySet<string> = new Set([
   "in_silico",
 ]);
 
-/** Facet slots the protocol's other facts already settle, so asking for them invites double entry:
- *  a linked target implies its organism (registry proteins are organism-specific), and a cell-free
- *  type has no cell line or strain. */
-export function settledSlots(protocolType: string, hasTarget: boolean): Set<string> {
-  const out = new Set<string>();
-  if (hasTarget) out.add("organism");
-  if (CELL_FREE_TYPES.has(protocolType)) {
-    out.add("cell_line");
-    out.add("strain");
-  }
-  return out;
+/** Facet slots the protocol's type already settles, so asking for them is noise: a cell-free type
+ *  has no cell line or strain. (Organism stays even with a target: the library's Organism filter
+ *  reads only the annotation.) */
+export function settledSlots(protocolType: string): Set<string> {
+  return CELL_FREE_TYPES.has(protocolType) ? new Set(["cell_line", "strain"]) : new Set();
 }
+
+/** Leave a facet out only when it is settled, the workspace does not require it, and it is still
+ *  empty: a value already recorded always shows. */
+export const hidesFacet = (
+  slot: Pick<ProtocolFacetSlot, "name" | "is_required">,
+  settled: Set<string>,
+  terms: readonly unknown[] | null | undefined,
+) => settled.has(slot.name) && !slot.is_required && !terms?.length;
 
 /** "Search NCBITAXON..." or, for a slot with no ontology, "Type a strain or pick one used here". */
 export const facetPlaceholder = (slot: Pick<ProtocolFacetSlot, "label" | "ontology_sources">) =>

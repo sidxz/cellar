@@ -86,7 +86,13 @@ import {
 } from "./create-protocol/form-values";
 import { NicknameInput } from "./create-protocol/nickname-input";
 import { ReadoutRow } from "./create-protocol/readout-row";
-import { FacetField, NameFacts, factSlots, settledSlots } from "./create-protocol/required-facts";
+import {
+  FacetField,
+  NameFacts,
+  factSlots,
+  hidesFacet,
+  settledSlots,
+} from "./create-protocol/required-facts";
 import {
   SiblingDiscriminators,
   type SiblingValues,
@@ -329,12 +335,12 @@ export function CreateProtocolDialog({
     focused.current = !!el;
   });
 
-  // Facts the pattern does not place, assay format first. Ones the target or a cell-free type
-  // already settle are left out unless they already hold a value (a prefill).
-  const settled = settledSlots(form.watch("protocol_type"), targetIds.length > 0);
+  // Facts the pattern does not place, assay format first. Ones a cell-free type settles are left
+  // out unless required or already holding a value (a prefill).
+  const settled = settledSlots(form.watch("protocol_type"));
   const moreSlots = facetSlots
     .filter((s) => !nameFactSlots.includes(s.name))
-    .filter((s) => !settled.has(s.name) || (ontologyAnnotations[s.name]?.length ?? 0) > 0)
+    .filter((s) => !hidesFacet(s, settled, ontologyAnnotations[s.name]))
     .sort((a, b) => Number(b.name === "assay_format") - Number(a.name === "assay_format"));
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());

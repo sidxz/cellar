@@ -31,7 +31,13 @@ export function ProtocolMethodCard({
     !protocol.is_locked &&
     (protocol.status === "draft" || protocol.status === "active");
   const needsReason = protocol.status === "active";
-  const saved = protocol.description ?? "";
+  // What was just saved, until the refetched protocol replaces the text it was saved over: a quick
+  // reopen must start from the new method, or a second save would quietly put the old one back.
+  const [justSaved, setJustSaved] = useState<{ over: string | null; text: string | null } | null>(
+    null,
+  );
+  const fromServer = protocol.description ?? null;
+  const saved = (justSaved?.over === fromServer ? justSaved.text : fromServer) ?? "";
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(saved);
@@ -54,10 +60,14 @@ export function ProtocolMethodCard({
   const save = () => {
     if (!canSave) return;
     const description = draft.trim() || null;
+    const onSuccess = () => {
+      setJustSaved({ over: fromServer, text: description });
+      close();
+    };
     if (needsReason) {
-      correct.mutate({ reason: reason.trim(), description }, { onSuccess: close });
+      correct.mutate({ reason: reason.trim(), description }, { onSuccess });
     } else {
-      update.mutate({ description }, { onSuccess: close });
+      update.mutate({ description }, { onSuccess });
     }
   };
 

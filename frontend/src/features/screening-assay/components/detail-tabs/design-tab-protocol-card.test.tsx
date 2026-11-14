@@ -161,16 +161,16 @@ describe("DesignTabProtocolCard ontology annotations", () => {
     expect(screen.getByText("biochemical format")).toBeInTheDocument();
   });
 
-  it("read-only, leaves out empty facets the target or a cell-free type settle", () => {
+  it("read-only, leaves out empty facets a cell-free type settles", () => {
     const protocol = makeProtocol({
       ontology_annotations: {
         strain: [{ term_id: "H37Rv", label: "H37Rv", ontology_source: "local", uri: null }],
       },
     });
     render(<DesignTabProtocolCard protocol={protocol} protocolId="p-1" />);
-    // Active, biochemical, with a direct target: organism and cell line add nothing.
-    expect(screen.queryByText("Organism")).not.toBeInTheDocument();
+    // Active and biochemical: a cell line adds nothing; the organism still filters the library.
     expect(screen.queryByText("Cell line")).not.toBeInTheDocument();
+    expect(screen.getByText("Organism")).toBeInTheDocument();
     // A value already recorded still shows.
     expect(screen.getByText("H37Rv")).toBeInTheDocument();
     expect(screen.getByText("Detection method")).toBeInTheDocument();

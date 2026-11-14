@@ -75,6 +75,24 @@ describe("ProtocolMethodCard", () => {
     expect(state.update).not.toHaveBeenCalled();
   });
 
+  it("reopens on the saved method before the refetch lands, then follows the server", () => {
+    state.update.mockImplementation((_body, opts) => opts.onSuccess());
+    const { rerender } = card(protocol());
+    fireEvent.click(screen.getByRole("button", { name: "Edit method" }));
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "New method" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // The protocol prop still carries the old text: the saved one shows and seeds the editor.
+    expect(screen.getByText("New method")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit method" }));
+    expect(screen.getByLabelText("Method")).toHaveValue("New method");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    // Someone else's later change wins once it arrives.
+    rerender(
+      <ProtocolMethodCard protocol={protocol({ description: "Later" })} onOpenFiles={vi.fn()} />,
+    );
+    expect(screen.getByText("Later")).toBeInTheDocument();
+  });
+
   it("cancel discards the edit", () => {
     card(protocol());
     fireEvent.click(screen.getByRole("button", { name: "Edit method" }));

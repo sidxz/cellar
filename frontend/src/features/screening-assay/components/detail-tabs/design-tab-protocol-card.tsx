@@ -36,7 +36,7 @@ import {
   type Protocol,
   type ProtocolStatus,
 } from "../../types";
-import { settledSlots } from "../create-protocol/required-facts";
+import { hidesFacet, settledSlots } from "../create-protocol/required-facts";
 import { TargetMultiSelect } from "../target-multi-select";
 
 // ---------------------------------------------------------------------------
@@ -78,13 +78,11 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   // lightweight effective list without it.
   const { data: richTargets } = useProtocolTargets(protocolId);
   const directTargets = (richTargets ?? []).filter((t) => t.is_direct);
-  // Read-only, an empty slot the target or a cell-free type already settles is only noise.
-  const settled = settledSlots(protocol.protocol_type, directTargets.length > 0);
+  // Read-only, an empty slot a cell-free type settles is only noise.
+  const settled = settledSlots(protocol.protocol_type);
   const shownSlots = canStructurallyEdit
     ? ontologySlots
-    : ontologySlots.filter(
-        (s) => !settled.has(s.name) || (protocol.ontology_annotations?.[s.name]?.length ?? 0) > 0,
-      );
+    : ontologySlots.filter((s) => !hidesFacet(s, settled, protocol.ontology_annotations?.[s.name]));
   const inheritedTargets = (richTargets ?? []).filter((t) => !t.is_direct);
   const directTargetIds = directTargets.map((t) => t.id);
   const targetMutationPending = addProtocolTarget.isPending || removeProtocolTarget.isPending;
