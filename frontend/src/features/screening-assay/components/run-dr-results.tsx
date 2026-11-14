@@ -27,6 +27,7 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
+import { runRulesOf } from "../lib/melt-hits";
 import { worstZPrime } from "../lib/qc-metrics";
 import type { DoseResponseCurve, HitCriterion, Run } from "../types";
 import { ComparisonTable } from "./comparison-table";
@@ -241,7 +242,11 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                   <Button
                     size="sm"
                     onClick={() =>
-                      setHitCriteria.mutate({ runId: run.id, criteria: recommendation })
+                      setHitCriteria.mutate({
+                        runId: run.id,
+                        criteria: runRulesOf(recommendation, protocol?.readout_definitions ?? [])
+                          .kept,
+                      })
                     }
                     disabled={setHitCriteria.isPending || run.is_locked}
                   >

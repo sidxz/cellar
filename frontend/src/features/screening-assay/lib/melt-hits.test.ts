@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import type { HitCriterion, MeltingAnalysis, ReadoutDefinition } from "../types";
 import type { CurvePosition } from "./curve-plot";
-import { bandFor, hitWells, isSeriesReadout, meetsRule, splitRunRules } from "./melt-hits";
+import {
+  bandFor,
+  hitWells,
+  isSeriesReadout,
+  meetsRule,
+  runRulesOf,
+  splitRunRules,
+} from "./melt-hits";
 
 const rule = (
   readout_name: string,
@@ -160,5 +167,16 @@ describe("bandFor", () => {
   it("has no band for another window or a rule on Tm", () => {
     expect(bandFor(split(outside("ΔTm (Main)")), "Low")).toBeNull();
     expect(bandFor(split(rule("Tm (Main)", "gt", 60)), "Main")).toBeNull();
+  });
+});
+
+describe("runRulesOf", () => {
+  it("keeps what a run may record and sets series values aside", () => {
+    const series = rule("Max ΔTm (Main)", "lt", -5);
+    const plain = rule("Inhibition", "gt", 50);
+    expect(runRulesOf([outside("ΔTm (Main)"), series, plain], READOUTS)).toEqual({
+      kept: [outside("ΔTm (Main)"), plain],
+      dropped: [series],
+    });
   });
 });

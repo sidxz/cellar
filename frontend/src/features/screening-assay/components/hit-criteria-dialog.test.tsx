@@ -265,4 +265,50 @@ describe("outside operator", () => {
     fireEvent.click(screen.getByRole("button", { name: /save for this run/i }));
     expect(setMutate.mock.calls[0][0]).toMatchObject({ criteria: [{ value: -3 }] });
   });
+
+  it("leaves a series value out of the run's seed and says so", () => {
+    const max = {
+      id: "rd2",
+      name: "Max ΔTm (Main)",
+      data_type: "numeric",
+      normalizations: [],
+      melt_config: { measure: "max_delta_tm" },
+    } as unknown as ReadoutDefinition;
+    const series: HitCriterion = { readout_name: "Max ΔTm (Main)", operator: "lt", value: -5 };
+    render(
+      <RunHitCriteriaDialog
+        runId="r1"
+        readoutDefinitions={[dtm, max]}
+        currentCriteria={null}
+        recommendation={[outside, series]}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(screen.getByText(/Left out \(a series value is not a run rule\)/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /save for this run/i }));
+    expect(setMutate.mock.calls[0][0]).toMatchObject({ criteria: [outside] });
+  });
+
+  it("a cleared or unfinished number cannot be saved", () => {
+    render(
+      <RunHitCriteriaDialog
+        runId="r1"
+        readoutDefinitions={[dtm]}
+        currentCriteria={[outside]}
+        recommendation={null}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const save = screen.getByRole("button", { name: /save for this run/i });
+    const [low] = screen.getAllByRole("spinbutton");
+    fireEvent.change(low, { target: { value: "" } });
+    expect(low).toHaveValue(null);
+    expect(save).toBeDisabled();
+    fireEvent.change(low, { target: { value: "-" } });
+    expect(save).toBeDisabled();
+    fireEvent.change(low, { target: { value: "-3" } });
+    expect(save).toBeEnabled();
+  });
 });

@@ -50,6 +50,20 @@ export function isSeriesReadout(rd: Pick<ReadoutDefinition, "melt_config">): boo
   return m != null && m !== "tm" && m !== "delta_tm";
 }
 
+/** A run may not record a rule on a series value (one number per batch; the
+ *  server refuses it). Splits a rule set, such as a protocol recommendation,
+ *  into what a run can take and what it cannot. */
+export function runRulesOf(
+  criteria: readonly HitCriterion[],
+  readouts: readonly ReadoutDefinition[],
+): { kept: HitCriterion[]; dropped: HitCriterion[] } {
+  const series = new Set(readouts.filter(isSeriesReadout).map((rd) => rd.name));
+  return {
+    kept: criteria.filter((r) => !series.has(r.readout_name)),
+    dropped: criteria.filter((r) => series.has(r.readout_name)),
+  };
+}
+
 export function splitRunRules(
   criteria: readonly HitCriterion[],
   readouts: readonly ReadoutDefinition[],

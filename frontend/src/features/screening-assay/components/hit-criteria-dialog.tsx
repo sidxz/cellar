@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUpdateProtocol } from "../hooks/use-protocols";
 import { useResetRunHitCriteria, useSetRunHitCriteria } from "../hooks/use-runs";
 import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
-import { isSeriesReadout } from "../lib/melt-hits";
+import { isSeriesReadout, runRulesOf } from "../lib/melt-hits";
 import type { HitCriterion, ReadoutDefinition } from "../types";
 import { DeltaTmHint } from "./delta-tm-hint";
 
@@ -160,15 +160,14 @@ function useHitCriteriaRules(
         .filter(Boolean);
       updateRule(index, { value: parts });
     } else {
-      const num = Number.parseFloat(raw);
-      updateRule(index, { value: Number.isNaN(num) ? 0 : num });
+      // Left unparsable ("", "-") so the rule is invalid until it is a number.
+      updateRule(index, { value: Number.parseFloat(raw) });
     }
   };
 
   const handleBoundChange = (index: number, which: 0 | 1, raw: string) => {
     const next = boundsOf(rules[index].value);
-    const num = Number.parseFloat(raw);
-    next[which] = Number.isNaN(num) ? 0 : num;
+    next[which] = Number.parseFloat(raw); // NaN while unfinished: the rule is invalid
     updateRule(index, { value: next });
   };
 
@@ -176,7 +175,11 @@ function useHitCriteriaRules(
     (r) =>
       r.readout_name !== "" &&
       (r.operator !== "in" || (Array.isArray(r.value) && r.value.length > 0)) &&
-      (r.operator !== "not_between" || boundsOf(r.value)[0] < boundsOf(r.value)[1]),
+      (r.operator !== "not_between" || boundsOf(r.value)[0] < boundsOf(r.value)[1]) &&
+      (r.operator === "in" ||
+        r.operator === "not_between" ||
+        r.readout_name === "Curve Class" ||
+        (typeof r.value === "number" && Number.isFinite(r.value))),
   );
 
   return {
@@ -198,17 +201,18 @@ function useHitCriteriaRules(
  *  so a negative or decimal value can be entered one keystroke at a time. */
 function NumberField({
   value,
-  onValue,
+  onText,
   className,
 }: {
   value: number;
-  onValue: (n: number) => void;
+  /** Every edit; the rule holds NaN (and cannot be saved) until it is a number. */
+  onText: (text: string) => void;
   className?: string;
 }) {
-  const [text, setText] = useState(String(value));
+  const [text, setText] = useState(Number.isNaN(value) ? "" : String(value));
   // Follow a value set from elsewhere (seeding, a reset), not one being typed.
   useEffect(() => {
-    setText((t) => (Number.parseFloat(t) === value ? t : String(value)));
+    setText((t) => (Object.is(Number.parseFloat(t), value) ? t : String(value)));
   }, [value]);
   return (
     <Input
@@ -217,8 +221,7 @@ function NumberField({
       value={text}
       onChange={(e) => {
         setText(e.target.value);
-        const n = Number.parseFloat(e.target.value);
-        if (Number.isFinite(n)) onValue(n);
+        onText(e.target.value);
       }}
     />
   );
@@ -296,7 +299,7 @@ function HitCriteriaRulesEditor({
                     <NumberField
                       className="h-9"
                       value={low}
-                      onValue={(n) => state.handleBoundChange(index, 0, String(n))}
+                      onText={(t) => state.handleBoundChange(index, 0, t)}
                     />
                   </div>
                   <div className="w-24 space-y-1">
@@ -304,7 +307,7 @@ function HitCriteriaRulesEditor({
                     <NumberField
                       className="h-9"
                       value={high}
-                      onValue={(n) => state.handleBoundChange(index, 1, String(n))}
+                      onText={(t) => state.handleBoundChange(index, 1, t)}
                     />
                   </div>
                 </>
@@ -323,7 +326,7 @@ function HitCriteriaRulesEditor({
                     <NumberField
                       className="h-9"
                       value={typeof rule.value === "number" ? rule.value : 0}
-                      onValue={(n) => state.handleValueChange(index, String(n))}
+                      onText={(t) => state.handleValueChange(index, t)}
                     />
                   )}
                 </div>
@@ -463,9 +466,12 @@ export function RunHitCriteriaDialog({
 }: RunHitCriteriaDialogProps) {
   const setHitCriteria = useSetRunHitCriteria();
   const resetHitCriteria = useResetRunHitCriteria();
-  const seed = currentCriteria ?? recommendation ?? [];
   // A series value is one number per batch; no run view evaluates it (the
-  // server refuses it), so it is not offered here.
+  // server refuses it), so it is neither offered nor carried in.
+  const { kept: seed, dropped } = runRulesOf(
+    currentCriteria ?? recommendation ?? [],
+    readoutDefinitions,
+  );
   const readouts = useMemo(
     () => readoutDefinitions.filter((rd) => !isSeriesReadout(rd)),
     [readoutDefinitions],
@@ -497,6 +503,13 @@ export function RunHitCriteriaDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {dropped.length > 0 && (
+          <p className="text-sm text-muted-foreground">
+            {`Left out (a series value is not a run rule): ${dropped
+              .map((r) => r.readout_name)
+              .join(", ")}`}
+          </p>
+        )}
         <HitCriteriaRulesEditor state={state} readoutDefinitions={readouts} operators={OPERATORS} />
 
         <DialogFooter>

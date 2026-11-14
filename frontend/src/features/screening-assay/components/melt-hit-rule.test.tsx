@@ -108,4 +108,17 @@ describe("MeltHitRule", () => {
     expect(screen.getByText(/Protocol recommends/)).toBeInTheDocument();
     expect(screen.queryByRole("button")).toBeNull();
   });
+
+  it("applies only what a run may record and says what it left out", () => {
+    const series: HitCriterion = { readout_name: "Max ΔTm (Main)", operator: "lt", value: -5 };
+    const readouts = [
+      { name: "Max ΔTm (Main)", melt_config: { measure: "max_delta_tm" } },
+    ] as unknown as ReadoutDefinition[];
+    show({ recommendation: [outside, series], readoutDefinitions: readouts });
+    expect(
+      screen.getByText("Left out (a series value is not a run rule): Max ΔTm (Main) < -5"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Apply to this run" }));
+    expect(setMutate.mock.calls[0][0]).toEqual({ runId: "r1", criteria: [outside] });
+  });
 });

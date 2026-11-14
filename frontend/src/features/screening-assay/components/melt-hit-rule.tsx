@@ -5,7 +5,7 @@ import { Button } from "@/shared/components/ui/button";
 import { formatDate } from "@/shared/lib/format-date";
 import { useState } from "react";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
-import type { ApplicableRule } from "../lib/melt-hits";
+import { type ApplicableRule, runRulesOf } from "../lib/melt-hits";
 import type { HitCriterion, ReadoutDefinition, Run } from "../types";
 import { criterionLabel } from "./detail-tabs/use-activity-tab";
 import { RunHitCriteriaDialog } from "./hit-criteria-dialog";
@@ -38,7 +38,7 @@ export function MeltHitRule({
   const [open, setOpen] = useState(false);
   const setHitCriteria = useSetRunHitCriteria();
   const recorded = run.hit_criteria ?? null;
-  const recommended = recommendation ?? [];
+  const { kept: recommended, dropped } = runRulesOf(recommendation ?? [], readoutDefinitions);
 
   const setBy = run.hit_criteria_set_by && (
     <span className="text-xs text-muted-foreground">
@@ -62,6 +62,11 @@ export function MeltHitRule({
   const edit = button("Edit", () => setOpen(true));
 
   let line: React.ReactNode;
+  const leftOut = recorded === null && dropped.length > 0 && (
+    <p className="text-xs text-muted-foreground">
+      {`Left out (a series value is not a run rule): ${labels(dropped)}`}
+    </p>
+  );
   if (recorded === null && recommended.length > 0) {
     line = (
       <>
@@ -111,6 +116,7 @@ export function MeltHitRule({
   return (
     <div className="space-y-1 text-sm">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">{line}</div>
+      {leftOut}
       {other.length > 0 && (
         <p className="text-xs text-muted-foreground">{`Not evaluated here: ${labels(other)}`}</p>
       )}
