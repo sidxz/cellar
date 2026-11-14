@@ -388,7 +388,7 @@ class MoleculeActivityService:
                     protocol_code=getattr(proto, "code", None),
                     runs=sorted(
                         (
-                            RunLink(run.id, run.run_date, run.status.value)
+                            RunLink(run.id, run.run_date, run.status.value, run.notes)
                             for run in runs_by_id.values()
                             if run.protocol_id == pid
                         ),

@@ -278,6 +278,8 @@ class RunLinkResponse(BaseModel):
     run_id: uuid.UUID
     run_date: date
     status: str
+    # The run's notes (its description); tells runs on the same day apart.
+    notes: str | None = None
 
 
 class ProtocolActivityResponse(BaseModel):
@@ -346,7 +348,9 @@ class ActivitySummaryResponse(BaseModel):
                     hit_criteria=[HitCriterionDTO.model_validate(c) for c in p.hit_criteria],
                     protocol_code=p.protocol_code,
                     runs=[
-                        RunLinkResponse(run_id=r.run_id, run_date=r.run_date, status=r.status)
+                        RunLinkResponse(
+                            run_id=r.run_id, run_date=r.run_date, status=r.status, notes=r.notes
+                        )
                         for r in p.runs
                     ],
                     results_tab=p.results_tab,

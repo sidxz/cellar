@@ -106,6 +106,7 @@ def _make_run(
     run_date: date,
     status: RunStatus = RunStatus.APPROVED,
     protocol_id: uuid.UUID = PROTO_ID,
+    notes: str | None = None,
 ) -> Run:
     """Build a Run aggregate suitable as a `find_by_ids` payload row.
 
@@ -121,6 +122,7 @@ def _make_run(
         run_date=run_date,
         operator=uuid.uuid4(),
         status=status,
+        notes=notes,
     )
 
 
@@ -1233,7 +1235,10 @@ class TestGetActivitySummaryPlainReadouts:
             run_repo=_run_repo_for(
                 {
                     self.DRAFT_RUN: _make_run(
-                        run_id=self.DRAFT_RUN, run_date=date(2026, 11, 13), status=RunStatus.DRAFT
+                        run_id=self.DRAFT_RUN,
+                        run_date=date(2026, 11, 13),
+                        status=RunStatus.DRAFT,
+                        notes="Second walk-through run",
                     ),
                     self.DONE_RUN: _make_run(run_id=self.DONE_RUN, run_date=date(2026, 11, 1)),
                 }
@@ -1297,9 +1302,9 @@ class TestGetActivitySummaryPlainReadouts:
 
         assert card.protocol_code == "PRT-00219"
         # Newest first, with status, so the page can link each and mark drafts.
-        assert [(r.run_id, r.run_date, r.status) for r in card.runs] == [
-            (self.DRAFT_RUN, date(2026, 11, 13), "draft"),
-            (self.DONE_RUN, date(2026, 11, 1), "approved"),
+        assert [(r.run_id, r.run_date, r.status, r.notes) for r in card.runs] == [
+            (self.DRAFT_RUN, date(2026, 11, 13), "draft", "Second walk-through run"),
+            (self.DONE_RUN, date(2026, 11, 1), "approved", None),
         ]
         # Thermal-shift readouts: the results live on the run's Traces tab.
         assert card.results_tab == "curves"

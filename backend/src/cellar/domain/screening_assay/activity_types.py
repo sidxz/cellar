@@ -170,6 +170,7 @@ class RunLink:
     run_id: uuid.UUID
     run_date: date
     status: str
+    notes: str | None = None  # the run's own description; tells same-day runs apart
 
 
 @dataclass(frozen=True)
