@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { RunScope } from "../../types";
@@ -55,5 +55,22 @@ describe("RunScopePicker — trigger contract", () => {
       expect(text.trim().length).toBeLessThan(30);
       unmount();
     }
+  });
+});
+
+describe("RunScopePicker — Latest run under a condition split", () => {
+  it("disables Latest run and says why", () => {
+    render(
+      <RunScopePicker
+        protocolId="p1"
+        value={undefined}
+        onChange={vi.fn()}
+        latestDisabledReason="Latest run picks a single run."
+      />,
+    );
+    fireEvent.click(screen.getByRole("combobox"));
+    const latest = screen.getByRole("option", { name: /Latest run/ });
+    expect(latest).toHaveAttribute("data-disabled");
+    expect(latest).toHaveTextContent("Latest run picks a single run.");
   });
 });

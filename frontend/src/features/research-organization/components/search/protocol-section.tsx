@@ -49,6 +49,7 @@ import type {
   RunScope,
 } from "../../types";
 import { RunScopePicker } from "./run-scope-picker";
+import { LATEST_UNDER_CONDITION_SPLIT, SplitPicker, withRunScope } from "./split-picker";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -567,6 +568,33 @@ interface ActivityRowProps {
   onRemove: () => void;
 }
 
+/** The criterion after choosing protocol ``next`` (null = any protocol).
+ *
+ *  The where-option vocabulary differs between a specific protocol and "any",
+ *  so crossing that line resets the where-list. Run scope is per-protocol and
+ *  drops on "any"; hand-picked runs and the split belong to the old protocol
+ *  and always drop. */
+export function pickProtocolCriterion(
+  criterion: ActivityCriterion,
+  next: string | null,
+): ActivityCriterion {
+  const crossed = (criterion.protocol_id === null) !== (next === null);
+  const changed = criterion.protocol_id !== next;
+  const runScope =
+    next === null || (changed && criterion.run_scope?.mode === "specific")
+      ? undefined
+      : criterion.run_scope;
+  return {
+    ...criterion,
+    protocol_id: next,
+    where: crossed ? [] : criterion.where,
+    run_scope: runScope,
+    split: changed ? undefined : criterion.split,
+    readout_definition_id: undefined,
+    source: undefined,
+  };
+}
+
 function ActivityRow({
   index,
   criterion,
@@ -627,18 +655,7 @@ function ActivityRow({
   const hasProtocol = criterion.protocol_id !== "";
 
   function pickProtocol(next: string | null) {
-    // The where-option vocabulary differs between a specific protocol and
-    // "any", so crossing that line resets the where-list; run scope is
-    // per-protocol and always drops on "any".
-    const crossed = (criterion.protocol_id === null) !== (next === null);
-    onChange({
-      ...criterion,
-      protocol_id: next,
-      where: crossed ? [] : criterion.where,
-      run_scope: next === null ? undefined : criterion.run_scope,
-      readout_definition_id: undefined,
-      source: undefined,
-    });
+    onChange(pickProtocolCriterion(criterion, next));
     setProtocolOpen(false);
   }
   // Pristine rows don't surface validation — the row is a passive
@@ -821,11 +838,25 @@ function ActivityRow({
         <div className="space-y-3">
           {/* runs — per-protocol only; "Any protocol" has no run scope */}
           {criterion.protocol_id !== null && (
-            <RunScopePicker
-              protocolId={criterion.protocol_id}
-              value={criterion.run_scope}
-              onChange={(next: RunScope | undefined) => onChange({ ...criterion, run_scope: next })}
-            />
+            <>
+              <RunScopePicker
+                protocolId={criterion.protocol_id}
+                value={criterion.run_scope}
+                onChange={(next: RunScope | undefined) =>
+                  onChange({ ...criterion, ...withRunScope(criterion.split, next) })
+                }
+                latestDisabledReason={
+                  criterion.split?.by === "condition" ? LATEST_UNDER_CONDITION_SPLIT : undefined
+                }
+              />
+              {/* split — optional side-by-side columns per run or condition */}
+              <SplitPicker
+                conditions={protocol?.condition_definitions ?? []}
+                split={criterion.split}
+                runScope={criterion.run_scope}
+                onChange={(next) => onChange({ ...criterion, ...next })}
+              />
+            </>
           )}
 
           {/* where — optional, multiple. Empty list ⇒ presence filter

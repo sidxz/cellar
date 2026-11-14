@@ -7,6 +7,7 @@ import {
 } from "../../lib/activity-where-options";
 import type {
   ActivityWhereCondition,
+  ColumnSplitWire,
   RunScope,
   SearchCriterion,
   SearchQuery,
@@ -63,6 +64,12 @@ function bounds(
     return "any value";
   }
   return `${OPS[c.operator ?? "eq"] ?? c.operator} ${c.value ?? "…"}${suffix}`;
+}
+
+function splitText(split?: ColumnSplitWire): string {
+  if (split?.by === "run") return ", split by run";
+  if (split?.by === "condition" && split.condition) return `, split by ${split.condition}`;
+  return "";
 }
 
 function runScopeText(scope?: RunScope): string {
@@ -140,7 +147,7 @@ function criterionText(c: SearchCriterion, context: SummaryContext): string {
               },
             ]
           : [];
-      text = `Tested in ${name} (${runScopeText(c.run_scope)})${conditions.length ? ` where ${conditions.map((w) => activityCondition(w, protocol)).join(" AND ")}` : ""}`;
+      text = `Tested in ${name} (${runScopeText(c.run_scope)}${splitText(c.split)})${conditions.length ? ` where ${conditions.map((w) => activityCondition(w, protocol)).join(" AND ")}` : ""}`;
       if (conditions.length > 1) text = `(${text})`;
       break;
     }

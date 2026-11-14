@@ -83,12 +83,16 @@ const MODE_OPTIONS: {
  */
 function ScopeOption({
   option,
+  disabledReason,
 }: {
   option: (typeof MODE_OPTIONS)[number];
+  /** Set to disable the option; shown in place of its description. */
+  disabledReason?: string;
 }) {
   return (
     <SelectPrimitive.Item
       value={option.value}
+      disabled={!!disabledReason}
       className={cn(
         "relative flex w-full cursor-default select-none items-start gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-none",
         "focus:bg-accent focus:text-accent-foreground",
@@ -102,7 +106,9 @@ function ScopeOption({
       </span>
       <div className="flex flex-col gap-0.5">
         <SelectPrimitive.ItemText>{option.label}</SelectPrimitive.ItemText>
-        <span className="text-xs text-muted-foreground">{option.description}</span>
+        <span className="text-xs text-muted-foreground">
+          {disabledReason ?? option.description}
+        </span>
       </div>
     </SelectPrimitive.Item>
   );
@@ -153,9 +159,16 @@ interface RunScopePickerProps {
   protocolId: string;
   value: RunScope | undefined;
   onChange: (next: RunScope | undefined) => void;
+  /** Disables "Latest run" (e.g. while the protocol is split by condition). */
+  latestDisabledReason?: string;
 }
 
-export function RunScopePicker({ protocolId, value, onChange }: RunScopePickerProps) {
+export function RunScopePicker({
+  protocolId,
+  value,
+  onChange,
+  latestDisabledReason,
+}: RunScopePickerProps) {
   const mode: RunScopeMode = value?.mode ?? "any";
 
   function setMode(next: RunScopeMode) {
@@ -180,7 +193,11 @@ export function RunScopePicker({ protocolId, value, onChange }: RunScopePickerPr
         </SelectTrigger>
         <SelectContent className="min-w-[20rem]">
           {MODE_OPTIONS.map((opt) => (
-            <ScopeOption key={opt.value} option={opt} />
+            <ScopeOption
+              key={opt.value}
+              option={opt}
+              disabledReason={opt.value === "latest" ? latestDisabledReason : undefined}
+            />
           ))}
         </SelectContent>
       </Select>

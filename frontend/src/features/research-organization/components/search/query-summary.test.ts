@@ -84,3 +84,27 @@ describe("scientific query summaries", () => {
     expect(searchQueryKey({ criteria })).not.toBe(searchQueryKey({ logic: "or", criteria }));
   });
 });
+
+describe("querySummaryText — split columns", () => {
+  it("says how a protocol's columns are split", () => {
+    const protocol = { id: "A", name: "Kinase", readout_definitions: [] } as unknown as Protocol;
+    const byCondition: SearchQuery = {
+      criteria: [{ ...assay("A"), split: { by: "condition", condition: "ATP" } }],
+    };
+    const byRun: SearchQuery = {
+      criteria: [
+        {
+          ...assay("A"),
+          run_scope: { mode: "specific", run_ids: ["r1", "r2"] },
+          split: { by: "run" },
+        },
+      ],
+    };
+    expect(querySummaryText(byCondition, { protocols: [protocol] })).toBe(
+      "All projects · Tested in Kinase (any run, split by ATP)",
+    );
+    expect(querySummaryText(byRun, { protocols: [protocol] })).toBe(
+      "All projects · Tested in Kinase (2 selected run(s), split by run)",
+    );
+  });
+});

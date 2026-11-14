@@ -474,26 +474,7 @@ export function SearchForm({
     // Activity — respect per-row conjunctions
     // Prune incomplete where[] rows (field missing, value missing for non-between, etc.)
     // so the backend never sees a half-filled condition.
-    const cleanedActivity = activityCriteria.map((c) => {
-      if (!Array.isArray(c.where)) return c;
-      const cleaned = c.where.filter((w) => {
-        if (w.source === "curve_class") {
-          return Array.isArray(w.curve_classes) && w.curve_classes.length > 0;
-        }
-        // Any-protocol rows: potency (dr_curve, no rd) and readout-by-name are
-        // readout-def-less by design.
-        if (!w.readout_definition_id) {
-          const anyDr = c.protocol_id === null && w.source === "dr_curve";
-          const anyRd = c.protocol_id === null && w.source === "readout_data" && !!w.readout_name;
-          if (!anyDr && !anyRd) return false;
-        }
-        if (w.operator === "between") {
-          return w.min !== undefined && w.max !== undefined;
-        }
-        return w.value !== undefined && !Number.isNaN(w.value);
-      });
-      return { ...c, where: cleaned };
-    });
+    const cleanedActivity = activityCriteria.map(cleanActivityCriterion);
     // Filter to valid criteria and their matching conjunctions
     const validIndices = cleanedActivity
       .map((c, i) => (c.protocol_id === null || !!c.protocol_id ? i : -1)) // null = any protocol, valid
@@ -1032,4 +1013,29 @@ export function SearchForm({
       )}
     </div>
   );
+}
+
+/** An activity criterion as the backend should see it: half-filled where
+ *  rows pruned (field missing, value missing for non-between, …) and a
+ *  condition split with no condition chosen dropped. */
+export function cleanActivityCriterion(c: ActivityCriterion): ActivityCriterion {
+  const split = c.split?.by === "condition" && !c.split.condition ? undefined : c.split;
+  if (!Array.isArray(c.where)) return { ...c, split };
+  const cleaned = c.where.filter((w) => {
+    if (w.source === "curve_class") {
+      return Array.isArray(w.curve_classes) && w.curve_classes.length > 0;
+    }
+    // Any-protocol rows: potency (dr_curve, no rd) and readout-by-name are
+    // readout-def-less by design.
+    if (!w.readout_definition_id) {
+      const anyDr = c.protocol_id === null && w.source === "dr_curve";
+      const anyRd = c.protocol_id === null && w.source === "readout_data" && !!w.readout_name;
+      if (!anyDr && !anyRd) return false;
+    }
+    if (w.operator === "between") {
+      return w.min !== undefined && w.max !== undefined;
+    }
+    return w.value !== undefined && !Number.isNaN(w.value);
+  });
+  return { ...c, where: cleaned, split };
 }
