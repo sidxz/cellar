@@ -23,6 +23,7 @@ import { useMemo, useState } from "react";
 import { useUpdateProtocol } from "../hooks/use-protocols";
 import { useResetRunHitCriteria, useSetRunHitCriteria } from "../hooks/use-runs";
 import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
+import { isSeriesReadout } from "../lib/melt-hits";
 import type { HitCriterion, ReadoutDefinition } from "../types";
 import { DeltaTmHint } from "./delta-tm-hint";
 
@@ -40,9 +41,7 @@ const OPERATOR_LABELS: Record<string, string> = {
 };
 
 type Operator = HitCriterion["operator"];
-const RUN_OPERATORS: readonly Operator[] = ["gt", "lt", "gte", "lte", "in"];
-// Only the protocol dialog offers "outside": the run's Dose-Response filter cannot evaluate it.
-const PROTOCOL_OPERATORS: readonly Operator[] = [...RUN_OPERATORS, "not_between"];
+const OPERATORS: readonly Operator[] = ["gt", "lt", "gte", "lte", "in", "not_between"];
 
 const boundsOf = (v: HitCriterion["value"]): [number, number] =>
   Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === "number")
@@ -379,7 +378,7 @@ export function HitCriteriaDialog({
         <HitCriteriaRulesEditor
           state={state}
           readoutDefinitions={readoutDefinitions}
-          operators={PROTOCOL_OPERATORS}
+          operators={OPERATORS}
         />
 
         <DialogFooter>
@@ -428,11 +427,14 @@ export function RunHitCriteriaDialog({
 }: RunHitCriteriaDialogProps) {
   const setHitCriteria = useSetRunHitCriteria();
   const resetHitCriteria = useResetRunHitCriteria();
-  // The run's filter cannot evaluate "outside", so such a rule is not carried in.
-  const source = currentCriteria ?? recommendation ?? [];
-  const seed = source.filter((r) => RUN_OPERATORS.includes(r.operator));
-  const droppedOutside = seed.length < source.length;
-  const state = useHitCriteriaRules(readoutDefinitions, seed);
+  const seed = currentCriteria ?? recommendation ?? [];
+  // A series value is one number per batch; no run view evaluates it (the
+  // server refuses it), so it is not offered here.
+  const readouts = useMemo(
+    () => readoutDefinitions.filter((rd) => !isSeriesReadout(rd)),
+    [readoutDefinitions],
+  );
+  const state = useHitCriteriaRules(readouts, seed);
 
   const handleOpenChange = (next: boolean) => {
     if (next) state.reset(seed);
@@ -458,17 +460,8 @@ export function RunHitCriteriaDialog({
             Saving with no rules records "show all compounds".
           </DialogDescription>
         </DialogHeader>
-        {droppedOutside && (
-          <p className="text-sm text-muted-foreground">
-            The “outside” rule is left out: this run's filter cannot evaluate it.
-          </p>
-        )}
 
-        <HitCriteriaRulesEditor
-          state={state}
-          readoutDefinitions={readoutDefinitions}
-          operators={RUN_OPERATORS}
-        />
+        <HitCriteriaRulesEditor state={state} readoutDefinitions={readouts} operators={OPERATORS} />
 
         <DialogFooter>
           {/* Reset clears the run's recorded decision so it reverts to "unset"

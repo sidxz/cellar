@@ -35,13 +35,16 @@ function makeRow(overrides: Partial<CompoundCurveRow> = {}): CompoundCurveRow {
 // applyHitFilter
 // ---------------------------------------------------------------------------
 
+/** The protocol's dose-response readouts: the only rules this tab evaluates. */
+const DR: ReadonlySet<string> = new Set(["IC50", "Resazurin"]);
+
 describe("applyHitFilter", () => {
   it("returns all rows when criteria is empty", () => {
     const rows = [
       makeRow({ fitted_value: 5 }),
       makeRow({ molecule_id: "mol-2", fitted_value: 50 }),
     ];
-    expect(applyHitFilter(rows, [])).toHaveLength(2);
+    expect(applyHitFilter(rows, [], DR)).toHaveLength(2);
   });
 
   it("filters rows below an IC50 threshold (lt operator)", () => {
@@ -51,7 +54,7 @@ describe("applyHitFilter", () => {
       makeRow({ molecule_id: "mol-3", fitted_value: 19 }), // passes: 19 < 20
     ];
     const criteria: HitCriterion[] = [{ readout_name: "IC50", operator: "lt", value: 20 }];
-    const result = applyHitFilter(rows, criteria);
+    const result = applyHitFilter(rows, criteria, DR);
     expect(result).toHaveLength(2);
     expect(result.map((r) => r.molecule_id)).toEqual(["mol-1", "mol-3"]);
   });
@@ -65,7 +68,7 @@ describe("applyHitFilter", () => {
     const criteria: HitCriterion[] = [
       { readout_name: "Curve Class", operator: "in", value: ["full", "partial"] },
     ];
-    const result = applyHitFilter(rows, criteria);
+    const result = applyHitFilter(rows, criteria, DR);
     expect(result).toHaveLength(2);
     expect(result.map((r) => r.molecule_id)).toEqual(["mol-1", "mol-2"]);
   });
@@ -100,7 +103,7 @@ describe("applyHitFilter", () => {
         intercept_key: { kind: "ec", level: 90 },
       },
     ];
-    const result = applyHitFilter(rows, criteria);
+    const result = applyHitFilter(rows, criteria, DR);
     expect(result.map((r) => r.molecule_id)).toEqual(["mol-2"]);
   });
 
@@ -128,7 +131,7 @@ describe("applyHitFilter", () => {
         intercept_key: { kind: "ec", level: 90 },
       },
     ];
-    const result = applyHitFilter(rows, criteria);
+    const result = applyHitFilter(rows, criteria, DR);
     expect(result).toHaveLength(0);
   });
 
@@ -142,8 +145,26 @@ describe("applyHitFilter", () => {
       { readout_name: "IC50", operator: "lt", value: 20 },
       { readout_name: "Curve Class", operator: "in", value: ["full", "partial"] },
     ];
-    const result = applyHitFilter(rows, criteria);
+    const result = applyHitFilter(rows, criteria, DR);
     expect(result).toHaveLength(1);
     expect(result[0].molecule_id).toBe("mol-1");
+  });
+
+  it("skips a rule on a readout that is not a dose-response readout (e.g. ΔTm)", () => {
+    const rows = [makeRow({ molecule_id: "mol-1", fitted_value: 0.5 })];
+    // Would wrongly drop the row if applied to its fitted value (0.5 is not > 2).
+    const criteria: HitCriterion[] = [{ readout_name: "ΔTm (Main)", operator: "gt", value: 2 }];
+    expect(applyHitFilter(rows, criteria, DR)).toHaveLength(1);
+  });
+
+  it("evaluates outside on a dose-response readout", () => {
+    const rows = [
+      makeRow({ molecule_id: "mol-1", fitted_value: 0.5 }), // outside [1, 10]
+      makeRow({ molecule_id: "mol-2", fitted_value: 5 }), // inside
+    ];
+    const criteria: HitCriterion[] = [
+      { readout_name: "IC50", operator: "not_between", value: [1, 10] },
+    ];
+    expect(applyHitFilter(rows, criteria, DR).map((r) => r.molecule_id)).toEqual(["mol-1"]);
   });
 });

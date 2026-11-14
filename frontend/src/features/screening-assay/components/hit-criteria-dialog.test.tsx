@@ -117,7 +117,7 @@ describe("outside operator", () => {
     melt_config: { measure: "delta_tm" },
   } as unknown as ReadoutDefinition;
 
-  it("protocol dialog offers outside with two inputs and a hint; the run dialog does not", () => {
+  it("protocol dialog offers outside with two inputs and a hint", () => {
     render(
       <HitCriteriaDialog
         protocolId="p1"
@@ -134,7 +134,7 @@ describe("outside operator", () => {
     expect(within(screen.getByRole("listbox")).getByText("outside")).toBeInTheDocument();
   });
 
-  it("run dialog keeps today's operator list", () => {
+  it("run dialog offers outside too", () => {
     render(
       <RunHitCriteriaDialog
         runId="r1"
@@ -146,7 +146,31 @@ describe("outside operator", () => {
       />,
     );
     fireEvent.click(screen.getAllByRole("combobox")[1]);
-    expect(within(screen.getByRole("listbox")).queryByText("outside")).not.toBeInTheDocument();
+    expect(within(screen.getByRole("listbox")).getByText("outside")).toBeInTheDocument();
+  });
+
+  it("run dialog leaves series values out of its readouts", () => {
+    const max = {
+      id: "rd2",
+      name: "Max ΔTm (Main)",
+      data_type: "numeric",
+      normalizations: [],
+      melt_config: { measure: "max_delta_tm" },
+    } as unknown as ReadoutDefinition;
+    render(
+      <RunHitCriteriaDialog
+        runId="r1"
+        readoutDefinitions={[dtm, max]}
+        currentCriteria={[{ readout_name: "ΔTm (Main)", operator: "gt", value: 1 }]}
+        recommendation={null}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getAllByRole("combobox")[0]);
+    const list = within(screen.getByRole("listbox"));
+    expect(list.getByText("ΔTm (Main)")).toBeInTheDocument();
+    expect(list.queryByText("Max ΔTm (Main)")).not.toBeInTheDocument();
   });
 
   it("protocol dialog saves outside as [low, high]", () => {
@@ -168,7 +192,7 @@ describe("outside operator", () => {
     });
   });
 
-  it("run dialog drops an outside rule from the recommendation and says so", () => {
+  it("run dialog keeps an outside rule from the recommendation", () => {
     render(
       <RunHitCriteriaDialog
         runId="r1"
@@ -179,9 +203,9 @@ describe("outside operator", () => {
         onOpenChange={() => {}}
       />,
     );
-    expect(screen.getByText(/“outside” rule is left out/)).toBeInTheDocument();
+    expect(screen.queryByText(/left out/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /save for this run/i }));
-    expect(setMutate.mock.calls[0][0]).toMatchObject({ runId: "r1", criteria: [rule] });
+    expect(setMutate.mock.calls[0][0]).toMatchObject({ runId: "r1", criteria: [rule, outside] });
   });
 
   it("protocol dialog cannot save outside with low not below high", () => {
