@@ -9,12 +9,23 @@ const mocks = vi.hoisted(() => ({
   mode: "latest",
   setMode: vi.fn(),
   load: vi.fn(),
+  record: vi.fn(),
+  recent: null as unknown,
 }));
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 vi.mock("../hooks/use-search", () => ({
   useExecuteSearch: () => ({ mutateAsync: mocks.mutateAsync }),
 }));
 vi.mock("../hooks/use-saved-searches", () => ({ useSavedSearches: () => ({ data: [] }) }));
+vi.mock("../hooks/use-recent-searches", () => ({ useRecordRecentSearch: () => mocks.record }));
+vi.mock("./search/recent-searches-menu", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./search/recent-searches-menu")>()),
+  RecentSearchesMenu: ({ onPick }: { onPick: (search: unknown) => void }) => (
+    <button type="button" onClick={() => onPick(mocks.recent)}>
+      Run recent
+    </button>
+  ),
+}));
 vi.mock("../hooks/use-projects", () => ({ useProjects: () => ({ data: [] }) }));
 vi.mock("../hooks/use-collections", () => ({ useCollections: () => ({ data: [] }) }));
 vi.mock("@/features/tagging/hooks/use-tags", () => ({ useTags: () => ({ data: [] }) }));
@@ -37,12 +48,15 @@ vi.mock("./search/search-form", () => ({
     onSearch,
     onReset,
     collapsed,
+    headerActions,
   }: {
     onSearch: (q: SearchQuery, c: string[]) => void;
     onReset: () => void;
     collapsed: boolean;
+    headerActions?: ReactNode;
   }) => (
     <div>
+      {headerActions}
       <span>{collapsed ? "Filters collapsed" : "Filters expanded"}</span>
       {["A", "B"].map((value) => (
         <button
@@ -318,5 +332,59 @@ describe("sort across searches", () => {
     expect(retried.sort_by).toBeUndefined();
     expect(screen.queryByText("Search could not be completed")).not.toBeInTheDocument();
     expect(mocks.mutateAsync).toHaveBeenCalledTimes(4);
+  });
+});
+
+describe("recent searches", () => {
+  it("records a search once it completes — with its rule, columns and count — not a next page", async () => {
+    mocks.mutateAsync.mockResolvedValueOnce({ ...response("Compound A"), next_cursor: "p2" });
+    mocks.mutateAsync.mockResolvedValueOnce(response("Compound B"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    expect(mocks.record).toHaveBeenCalledTimes(1);
+    expect(mocks.record).toHaveBeenCalledWith({
+      query: {
+        criteria: [{ type: "text", field: "name", operator: "contains", value: "A" }],
+        aggregation: "latest_run",
+      },
+      columns: expect.objectContaining({ protocolColumns: [] }),
+      result_count: 1,
+    });
+    fireEvent.click(screen.getByText("Load More"));
+    await screen.findByText("Compound B");
+    expect(mocks.record).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs a picked search with its own rule and table set-up", async () => {
+    const columns = { protocolColumns: ["drc:abc"], reportConfig: { imageSize: "large" } };
+    mocks.recent = {
+      id: "r1",
+      query: {
+        logic: "and",
+        criteria: [{ type: "text", field: "name", operator: "contains", value: "C" }],
+        aggregation: "geometric_mean",
+      },
+      columns,
+      result_count: 3,
+      ran_at: new Date().toISOString(),
+    };
+    mocks.mutateAsync.mockResolvedValueOnce(response("Compound C"));
+    // Like the real URL-backed mode: the rule set on load is the one read back.
+    mocks.setMode.mockImplementationOnce((mode: string) => {
+      mocks.mode = mode;
+    });
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Run recent"));
+    await screen.findByText("Compound C");
+    const { input } = mocks.mutateAsync.mock.calls[0][0];
+    expect(input.query).toEqual({
+      logic: "and",
+      criteria: [{ type: "text", field: "name", operator: "contains", value: "C" }],
+    });
+    expect(input.aggregation).toBe("geometric_mean");
+    expect(input.protocol_columns).toEqual(["drc:abc"]);
+    expect(mocks.load).toHaveBeenCalledWith(columns);
+    expect(mocks.setMode).toHaveBeenCalledWith("gmean");
   });
 });

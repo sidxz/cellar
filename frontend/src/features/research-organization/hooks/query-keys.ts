@@ -11,6 +11,7 @@ export const COLLECTION_KEY = ["collection"];
 export const COLLECTION_SEARCH_KEY = ["collection-search"];
 export const PROJECTS_KEY = ["projects"];
 export const SAVED_SEARCHES_KEY = ["saved-searches"];
+export const RECENT_SEARCHES_KEY = ["recent-searches"];
 
 /** Per-project member list (nested under PROJECTS_KEY). */
 export const projectMembersKey = (projectId: string) => [...PROJECTS_KEY, projectId, "members"];
