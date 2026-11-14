@@ -582,6 +582,29 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
     expect(screen.getByText("REG-1 · B2 — ΔTm (Alt) by concentration")).toBeInTheDocument();
   });
 
+  it("shows the batch's stored series values under the chart title", () => {
+    useRunCurves.mockImplementation(() => ({
+      data: dosed,
+      isLoading: false,
+      isPlaceholderData: false,
+    }));
+    withAnalysis({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 } });
+    const main = (melting.data as MeltingAnalysis).windows[0];
+    main.series = [
+      {
+        readout_id: "rd-max",
+        readout_name: "Max ΔTm (Main)",
+        measure: "max_delta_tm",
+        threshold: null,
+        concentration: null,
+        values: [{ batch_id: "b1", value: 4, qualifier: "=", concentration: 50 }],
+      },
+    ];
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
+    fireEvent.click(gridRow("Position 2"));
+    expect(screen.getByText("Max ΔTm +4.0 °C at 50 µM")).toBeInTheDocument();
+  });
+
   it("shows no chart for a sample without a batch", () => {
     setup();
     fireEvent.click(gridRow("Position 4"));

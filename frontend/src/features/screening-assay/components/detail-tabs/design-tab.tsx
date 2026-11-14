@@ -43,7 +43,7 @@ import {
   useUpdateConditionDefinition,
   useUpdateReadoutDefinition,
 } from "../../hooks/use-protocols";
-import { PLATE_FORMAT_LABELS } from "../../types";
+import { DOSE_UNIT_LABELS, type DoseUnit, PLATE_FORMAT_LABELS } from "../../types";
 import {
   CURVE_TYPE_LABELS,
   type CurveType,
@@ -597,6 +597,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         open={addWindowOpen}
         onOpenChange={setAddWindowOpen}
         protocolId={protocolId}
+        readoutDefinitions={protocol.readout_definitions}
+        doseUnit={DOSE_UNIT_LABELS[protocol.dose_unit as DoseUnit] ?? protocol.dose_unit}
       />
 
       {/* ── Add Readout Definition Dialog ───────────────────────────────── */}

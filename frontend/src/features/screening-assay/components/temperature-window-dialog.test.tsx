@@ -2,7 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ReadoutDefinition } from "../types";
 import { TemperatureWindowDialog } from "./temperature-window-dialog";
+
+const melt = (name: string, measure: string, extra: Record<string, unknown> = {}) =>
+  ({
+    name,
+    melt_config: { window: "Main", measure, channel_key: "ch1", low: 50, high: 85, ...extra },
+  }) as unknown as ReadoutDefinition;
+const MAIN = [melt("Tm (Main)", "tm"), melt("ΔTm (Main)", "delta_tm")];
+let readouts: ReadoutDefinition[] = [];
 
 const customInstance = vi.fn();
 vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
@@ -44,7 +53,16 @@ function renderDialog() {
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={qc}>{children}</QueryClientProvider>
   );
-  render(<TemperatureWindowDialog open onOpenChange={vi.fn()} protocolId="p1" />, { wrapper });
+  render(
+    <TemperatureWindowDialog
+      open
+      onOpenChange={vi.fn()}
+      protocolId="p1"
+      readoutDefinitions={readouts}
+      doseUnit="µM"
+    />,
+    { wrapper },
+  );
 }
 
 function fill(name = "Main", low = "50", high = "85") {
@@ -54,12 +72,13 @@ function fill(name = "Main", low = "50", high = "85") {
   fireEvent.change(screen.getByLabelText("High (°C)"), { target: { value: high } });
 }
 
-const save = () => screen.getByRole("button", { name: /add window/i });
+const save = () => screen.getByRole("button", { name: /^add (window|values)$/i });
 
 describe("TemperatureWindowDialog", () => {
   beforeEach(() => {
     customInstance.mockReset();
     channels = [{ key: "ch1", label: "Ratio 350/330" }];
+    readouts = [];
   });
 
   it("sends name, channel key, bounds and both measures", async () => {
@@ -101,12 +120,27 @@ describe("TemperatureWindowDialog", () => {
       <QueryClientProvider client={qc}>{children}</QueryClientProvider>
     );
     const { rerender } = render(
-      <TemperatureWindowDialog open onOpenChange={vi.fn()} protocolId="p1" />,
+      <TemperatureWindowDialog
+        open
+        onOpenChange={vi.fn()}
+        protocolId="p1"
+        readoutDefinitions={[]}
+        doseUnit="µM"
+      />,
       { wrapper },
     );
     fill("Low", "25", "50");
-    rerender(<TemperatureWindowDialog open={false} onOpenChange={vi.fn()} protocolId="p1" />);
-    rerender(<TemperatureWindowDialog open onOpenChange={vi.fn()} protocolId="p1" />);
+    const again = (open: boolean) => (
+      <TemperatureWindowDialog
+        open={open}
+        onOpenChange={vi.fn()}
+        protocolId="p1"
+        readoutDefinitions={[]}
+        doseUnit="µM"
+      />
+    );
+    rerender(again(false));
+    rerender(again(true));
     expect(screen.getByLabelText("Name")).toHaveValue("");
     expect(screen.getByLabelText("Low (°C)")).toHaveValue(null);
     expect(screen.getByLabelText("High (°C)")).toHaveValue(null);
@@ -136,5 +170,65 @@ describe("TemperatureWindowDialog", () => {
     expect(
       await screen.findByText("A readout named 'Tm (Main)' already exists"),
     ).toBeInTheDocument();
+  });
+
+  const posted = () => customInstance.mock.calls[0][0].data;
+  const pickWindow = (name: string) => fireEvent.mouseDown(screen.getByRole("tab", { name }));
+
+  it("adds series values to a new window, nothing ticked by default", async () => {
+    customInstance.mockResolvedValue({});
+    renderDialog();
+    fill();
+    expect(screen.getByLabelText("Max ΔTm")).not.toBeChecked();
+    expect(screen.getByLabelText("Lowest shifting concentration")).not.toBeChecked();
+    expect(screen.getByLabelText("ΔTm at a stated concentration")).not.toBeChecked();
+    fireEvent.click(screen.getByLabelText("Max ΔTm"));
+    fireEvent.click(save());
+    await waitFor(() => expect(customInstance).toHaveBeenCalled());
+    expect(posted().measures).toEqual(["tm", "delta_tm", "max_delta_tm"]);
+    expect(posted()).not.toHaveProperty("lowest_shift_threshold");
+  });
+
+  it("adds series values to an existing window, with its signal and limits", async () => {
+    customInstance.mockResolvedValue({});
+    readouts = MAIN;
+    renderDialog();
+    pickWindow("Main");
+    expect(screen.getByLabelText("Low (°C)")).toHaveValue(50);
+    expect(screen.getByLabelText("Low (°C)")).toBeDisabled();
+    expect(screen.getByLabelText("Tm")).toBeChecked();
+    expect(screen.getByLabelText("Tm")).toBeDisabled();
+    expect(save()).toBeDisabled(); // nothing new chosen yet
+    fireEvent.click(screen.getByLabelText("Lowest shifting concentration"));
+    fireEvent.click(screen.getByLabelText("ΔTm at a stated concentration"));
+    expect(save()).toBeDisabled(); // the concentration is still empty
+    fireEvent.change(screen.getByLabelText("Concentration (µM)"), { target: { value: "50" } });
+    fireEvent.click(save());
+    await waitFor(() => expect(customInstance).toHaveBeenCalled());
+    expect(posted()).toEqual({
+      window: "Main",
+      channel_key: "ch1",
+      low: 50,
+      high: 85,
+      measures: ["lowest_shift_concentration", "delta_tm_at_concentration"],
+      lowest_shift_threshold: 2,
+      delta_tm_at_concentration: 50,
+    });
+  });
+
+  it("a value the window already has is shown ticked and disabled", () => {
+    readouts = [
+      ...MAIN,
+      melt("Max ΔTm (Main)", "max_delta_tm"),
+      melt("ΔTm at 50 µM (Main)", "delta_tm_at_concentration", { concentration: 50 }),
+    ];
+    renderDialog();
+    pickWindow("Main");
+    expect(screen.getByLabelText("Max ΔTm")).toBeChecked();
+    expect(screen.getByLabelText("Max ΔTm")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("ΔTm at a stated concentration"));
+    fireEvent.change(screen.getByLabelText("Concentration (µM)"), { target: { value: "50" } });
+    expect(screen.getByText("This window already has it.")).toBeInTheDocument();
+    expect(save()).toBeDisabled();
   });
 });

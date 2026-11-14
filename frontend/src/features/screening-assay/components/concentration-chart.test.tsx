@@ -103,6 +103,22 @@ describe("ConcentrationChart", () => {
     expect(c[0]).toBe(c[1]);
   });
 
+  it("shows the batch's series values under the title when given", () => {
+    render(
+      <ConcentrationChart
+        title="T"
+        caption="Max ΔTm −8.6 °C at 25 µM"
+        points={points}
+        doseUnit="µM"
+        hits={new Set()}
+        band={null}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText("Max ΔTm −8.6 °C at 25 µM")).toBeInTheDocument();
+  });
+
   it("click selects", () => {
     const onSelect = vi.fn();
     show([], onSelect);

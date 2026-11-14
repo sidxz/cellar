@@ -6,6 +6,12 @@ import type { CurvePosition } from "./curve-plot";
 
 // ---- Results table derivations (Traces tab) ----
 
+/** `+1.4`, `−8.5` (true minus), `0.0`. */
+export function formatDelta(d: number): string {
+  const r = Number(d.toFixed(1));
+  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)}`;
+}
+
 export type CellStatus =
   | "reference"
   | "several_steps"
@@ -323,4 +329,25 @@ export function batchDoseCount(positions: readonly CurvePosition[], batchId: str
       .filter((p) => p.well_type === "sample" && p.batch_id === batchId && (p.dose ?? 0) > 0)
       .map((p) => p.dose),
   ).size;
+}
+
+/** One batch's stored series values for a window, as a line under its
+ *  concentration chart: `Max ΔTm −8.6 °C at 25 µM · Lowest shifting conc.
+ *  6.25 µM · ΔTm at 50 µM −8.1 °C`. Values the batch lacks are left out. */
+export function seriesCaption(window: MeltWindow, batchId: string, doseUnit: string): string {
+  const parts: string[] = [];
+  for (const s of window.series ?? []) {
+    const v = s.values.find((x) => x.batch_id === batchId);
+    if (!v) continue;
+    if (s.measure === "max_delta_tm") {
+      const at = v.concentration != null ? ` at ${v.concentration} ${doseUnit}` : "";
+      parts.push(`Max ΔTm ${formatDelta(v.value)} °C${at}`);
+    } else if (s.measure === "lowest_shift_concentration") {
+      const notReached = v.qualifier === ">" ? "> " : "";
+      parts.push(`Lowest shifting conc. ${notReached}${v.value} ${doseUnit}`);
+    } else if (s.measure === "delta_tm_at_concentration") {
+      parts.push(`ΔTm at ${s.concentration} ${doseUnit} ${formatDelta(v.value)} °C`);
+    }
+  }
+  return parts.join(" · ");
 }

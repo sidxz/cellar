@@ -11,6 +11,7 @@ import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figu
  *  Points whose step is not reviewed yet are drawn hollow. */
 export function ConcentrationChart({
   title,
+  caption,
   points,
   doseUnit,
   hits,
@@ -19,6 +20,8 @@ export function ConcentrationChart({
   onSelect,
 }: {
   title: string;
+  /** The batch's stored series values (descriptive, no fit). */
+  caption?: string;
   points: readonly SeriesPoint[];
   doseUnit: string;
   /** The positions the run's hit rule calls hits. */
@@ -41,6 +44,7 @@ export function ConcentrationChart({
   return (
     <div>
       <p className="mb-1 text-sm font-medium">{title}</p>
+      {caption && <p className="mb-1 text-xs text-muted-foreground">{caption}</p>}
       <Plot
         data={[
           {

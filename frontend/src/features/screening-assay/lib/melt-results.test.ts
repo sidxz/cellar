@@ -10,6 +10,7 @@ import {
   maxAbsDelta,
   orderRows,
   resultRows,
+  seriesCaption,
   shiftRows,
   windowSummary,
   worstStatus,
@@ -302,5 +303,47 @@ describe("melt-results", () => {
       "16:0-CoA · Capillary 3",
       "Unique",
     ]);
+  });
+});
+
+describe("seriesCaption", () => {
+  const series = (measure: string, values: unknown[], extra: Record<string, unknown> = {}) => ({
+    readout_id: measure,
+    readout_name: measure,
+    measure,
+    threshold: null,
+    concentration: null,
+    values,
+    ...extra,
+  });
+  const v = (batch_id: string, value: number, concentration: number | null, qualifier = "=") => ({
+    batch_id,
+    value,
+    qualifier,
+    concentration,
+  });
+  const w = (s: unknown[]) => win([], { series: s } as Partial<MeltWindow>);
+
+  it("names the batch's stored values, in the window's order", () => {
+    const window = w([
+      series("max_delta_tm", [v("b1", -8.64, 25), v("b2", 1, 10)]),
+      series("lowest_shift_concentration", [v("b1", 6.25, 6.25)], { threshold: 2 }),
+      series("delta_tm_at_concentration", [v("b1", -8.1, 50)], { concentration: 50 }),
+    ]);
+    expect(seriesCaption(window, "b1", "µM")).toBe(
+      "Max ΔTm −8.6 °C at 25 µM · Lowest shifting conc. 6.25 µM · ΔTm at 50 µM −8.1 °C",
+    );
+  });
+
+  it("says a censored lowest concentration was not reached, and skips what the batch lacks", () => {
+    const window = w([
+      series("max_delta_tm", [v("b1", 1.2, null)]),
+      series("lowest_shift_concentration", [v("b1", 50, 50, ">")], { threshold: 2 }),
+      series("delta_tm_at_concentration", [], { concentration: 100 }),
+    ]);
+    expect(seriesCaption(window, "b1", "µM")).toBe(
+      "Max ΔTm +1.2 °C · Lowest shifting conc. > 50 µM",
+    );
+    expect(seriesCaption(window, "other", "µM")).toBe("");
   });
 });

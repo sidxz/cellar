@@ -23,6 +23,7 @@ import {
   firstToSelect,
   resultRows,
   sampleTextOf,
+  seriesCaption,
 } from "../lib/melt-results";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
@@ -182,6 +183,7 @@ export function RunCurvesPanel({
       {lead && anchor && series.length > 0 ? (
         <ConcentrationChart
           title={`${[sampleTextOf(anchor), batchSuffix(anchor)].filter(Boolean).join(" · ")} — ΔTm (${lead.window}) by concentration`}
+          caption={anchorBatch ? seriesCaption(lead, anchorBatch, doseUnit) : undefined}
           points={series}
           doseUnit={doseUnit}
           hits={hits}

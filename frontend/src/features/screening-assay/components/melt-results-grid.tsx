@@ -29,6 +29,7 @@ import {
   type ResultRow,
   STATUS_ORDER,
   type WindowCell,
+  formatDelta,
   worstStatus,
 } from "../lib/melt-results";
 import { WELL_TYPE_LABELS, type WellType } from "../types";
@@ -64,12 +65,6 @@ const STATUS: Record<
 };
 
 const fmtTm = (v: number | null | undefined) => (v == null ? "" : v.toFixed(1));
-
-/** `+1.4`, `−8.5` (true minus), `0.0`. */
-export function formatDelta(d: number): string {
-  const r = Number(d.toFixed(1));
-  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)}`;
-}
 
 /** A hit is blue up (stabilising) or red down; everything else is muted. The
  *  sign says the same without colour. */
