@@ -248,6 +248,8 @@ export function buildColumnDefs(o: ActivityColumnOptions): Col[] {
       pinned: "left",
       minWidth: 200,
       width: 220,
+      // The grid fills its width; extra space goes to the results, not here.
+      maxWidth: 300,
       checkboxSelection: true,
       headerCheckboxSelection: true,
       cellRenderer: (p: ICellRendererParams<CompoundActivity>) =>
