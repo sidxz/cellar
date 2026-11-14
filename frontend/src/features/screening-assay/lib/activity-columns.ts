@@ -35,6 +35,13 @@ export interface ColumnChoices {
   hidden: readonly string[];
 }
 
+/** What the catalog reads off a readout definition. The search grid passes a
+ *  protocol's definitions, which carry no best direction. */
+export type CatalogReadout = Pick<
+  ReadoutDefInfo,
+  "name" | "data_type" | "unit" | "melt_config" | "intercepts"
+>;
+
 const SERIES = ["max_delta_tm", "lowest_shift_concentration", "delta_tm_at_concentration"];
 // Within a window: series values first, then the per-position values.
 const MELT_ORDER = [...SERIES, "delta_tm", "tm"];
@@ -43,7 +50,7 @@ const OTHER = "Other readouts";
 const withUnit = (label: string, unit: string | null | undefined) =>
   unit ? `${label} (${unit})` : label;
 
-function meltLabel(rd: ReadoutDefInfo): string {
+function meltLabel(rd: CatalogReadout): string {
   const mc = rd.melt_config;
   switch (mc?.measure) {
     case "tm":
@@ -62,13 +69,13 @@ function meltLabel(rd: ReadoutDefInfo): string {
   }
 }
 
-const windowHeader = (rd: ReadoutDefInfo) => {
+const windowHeader = (rd: CatalogReadout) => {
   const mc = rd.melt_config;
   return mc ? `${mc.window} window · ${mc.low}–${mc.high} °C` : "";
 };
 
 export function activityCatalog(
-  readoutDefs: readonly ReadoutDefInfo[],
+  readoutDefs: readonly CatalogReadout[],
   items: readonly CompoundActivity[],
   criteria: readonly HitCriterion[],
 ): CatalogColumn[] {

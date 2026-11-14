@@ -376,3 +376,96 @@ describe("single-point cells", () => {
     expect(screen.getByText("ND")).toBeInTheDocument();
   });
 });
+
+describe("wide tables", () => {
+  const A = "44444444-4444-4444-4444-444444444444";
+  const B = "55555555-5555-5555-5555-555555555555";
+  const C = "66666666-6666-6666-6666-666666666666";
+  const main = { window: "Main", channel_key: "ratio", low: 50, high: 85 };
+  const thermal = proto([
+    rd({ id: A, name: "Inflection Point #1 for Ratio", unit: "°C", display_order: 1 }),
+    rd({
+      id: B,
+      name: "Tm (Main)",
+      unit: "°C",
+      display_order: 2,
+      melt_config: { ...main, measure: "tm" },
+    }),
+    rd({
+      id: C,
+      name: "Max ΔTm (Main)",
+      unit: "°C",
+      display_order: 3,
+      melt_config: { ...main, measure: "max_delta_tm" },
+    }),
+  ]);
+  const thermalCols = [A, B, C].map((id) => `rd:${PROTO_ID}:${id}`);
+  const build = (cols: string[], p: Protocol) =>
+    buildProtocolColumnGroups(cols, [p], "latest", null) as ColGroupDef[];
+  // biome-ignore lint/suspicious/noExplicitAny: AG Grid renderer params
+  const renderCell = (column: ColDef, row: unknown) => (column.cellRenderer as any)({ data: row });
+
+  it("groups a thermal protocol by window with the Activity tab's labels, every readout shown", () => {
+    const [group] = build(thermalCols, thermal);
+    const sub = group.children as ColGroupDef[];
+    expect(sub.map((g) => g.headerName)).toEqual(["Main window · 50–85 °C", "Other readouts"]);
+    expect((sub[0].children as ColDef[]).map((c) => c.headerName)).toEqual([
+      "Max ΔTm (°C)",
+      "Tm (°C)",
+    ]);
+    expect(sub.flatMap((g) => g.children)).toHaveLength(3);
+  });
+
+  it("opens every group, and folds a group to its headline only on request", () => {
+    const [group] = build(thermalCols, thermal);
+    const window = (group.children as ColGroupDef[])[0];
+    expect([group.openByDefault, window.openByDefault]).toEqual([true, true]);
+    expect((window.children as ColDef[]).map((c) => c.columnGroupShow)).toEqual([
+      undefined,
+      "open",
+    ]);
+  });
+
+  it("folds a dose-response block to its primary intercept and its plot", () => {
+    const dr = rd({
+      id: RD_DR_ID,
+      name: "EC50",
+      data_type: "dose_response",
+      dose_response_config: drConfig([spec(), spec({ level: 90 })]),
+    });
+    const [group] = build([`drc:${RD_DR_ID}`], proto([dr]));
+    expect((group.children as ColDef[]).map((c) => c.columnGroupShow)).toEqual([
+      undefined,
+      "open",
+      undefined,
+    ]);
+  });
+
+  it("says 'no result' once for an assay the compound has nothing in", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const [group] = build(thermalCols, thermal);
+    const [first, second] = (group.children as ColGroupDef[])[0].children as ColDef[];
+    expect(renderCell(second, { activity: {} })).toBeNull();
+    render(renderCell(first, { activity: {} }));
+    expect(screen.getByText("no result")).toBeInTheDocument();
+  });
+
+  it("leaves the header's unit out of the cell, but keeps a different one", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const [group] = build(
+      [`rd:${PROTO_ID}:${RD_RAW_ID}`],
+      proto([rd({ id: RD_RAW_ID, name: "MIC", unit: "µg/mL" })]),
+    );
+    const column = (group.children as ColDef[])[0];
+    const cell = (unit: string) => ({
+      activity: {
+        [`rd:${PROTO_ID}:${RD_RAW_ID}`]: { value: 1.5, qualifier: "=", unit, source: "readout" },
+      },
+    });
+    const { unmount } = render(renderCell(column, cell("ug/mL")));
+    expect(screen.getByText("1.500")).toBeInTheDocument();
+    unmount();
+    render(renderCell(column, cell("mg/L")));
+    expect(screen.getByText("1.500 mg/L")).toBeInTheDocument();
+  });
+});

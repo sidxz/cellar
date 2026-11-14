@@ -13,7 +13,7 @@ import { cn } from "@/shared/lib/utils";
 import type { AggregationMode } from "../../lib/use-aggregation-mode";
 import type { ActivityValue, InterceptKey } from "../../types";
 
-import { activityEndpoint, molarFactor } from "../../lib/assay-evidence";
+import { activityEndpoint, molarFactor, sameUnit } from "../../lib/assay-evidence";
 import { AssayEvidence } from "./assay-evidence";
 
 export interface InterceptCellProps {
@@ -27,6 +27,8 @@ export interface InterceptCellProps {
   mode: AggregationMode;
   /** The compound's curves in this protocol, offered in the evidence popover. */
   curves?: CompoundCurvesTarget | null;
+  /** The unit the column header states; a value in that unit omits it. */
+  headerUnit?: string | null;
 }
 
 function specToKey(spec: InterceptKey | InterceptSpec | null): InterceptKey | null {
@@ -58,7 +60,14 @@ function formatFoldRange(foldRange: number): string {
   return foldRange >= 10 ? `×${Math.round(foldRange)}` : `×${foldRange.toFixed(1)}`;
 }
 
-export function InterceptCell({ av, spec, isPrimary, mode, curves }: InterceptCellProps) {
+export function InterceptCell({
+  av,
+  spec,
+  isPrimary,
+  mode,
+  curves,
+  headerUnit,
+}: InterceptCellProps) {
   if (!av) return <span className="text-muted-foreground">&mdash;</span>;
 
   const ik = specToKey(spec);
@@ -73,7 +82,7 @@ export function InterceptCell({ av, spec, isPrimary, mode, curves }: InterceptCe
   const q =
     wireQualifier && wireQualifier !== "=" && display.kind === "scalar" ? `${wireQualifier} ` : "";
   const showUnit = display.kind === "scalar" || display.kind === "qualifier";
-  const unitSuffix = showUnit && av.unit ? ` ${av.unit}` : "";
+  const unitSuffix = showUnit && av.unit && !sameUnit(av.unit, headerUnit) ? ` ${av.unit}` : "";
 
   // Shared disagreement glyph — rendered in BOTH the Badge and span paths
   // so a scalar amber-warning cell still surfaces the per-run conflict

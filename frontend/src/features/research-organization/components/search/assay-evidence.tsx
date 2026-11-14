@@ -43,11 +43,11 @@ export function AssayEvidence({
           onClick={(event) => event.stopPropagation()}
         >
           {children}
+          {/* The rule (Latest / Best R² / …) is table-wide and named in the
+              toolbar; repeating it in every cell only costs width. The
+              popover below still states it. */}
           <span className="text-[10px] leading-tight text-muted-foreground underline decoration-dotted underline-offset-2">
-            {date ||
-              (count
-                ? `${count} run${count === 1 ? "" : "s"} · ${rule ?? "Evidence"}`
-                : "Assay evidence")}
+            {date || (count ? `${count} run${count === 1 ? "" : "s"}` : "Assay evidence")}
           </span>
         </button>
       </PopoverTrigger>
