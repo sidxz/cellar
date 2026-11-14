@@ -62,7 +62,7 @@ def test_lowest_shift_concentration_strict_outside():
 
 
 def test_lowest_shift_concentration_uses_the_mean_at_each_concentration():
-    # 6.25 has one point outside but its mean (−1.5) is inside.
+    # 6.25 has one point outside but its mean (-1.5) is inside.
     pts = _pts(A, {6.25: [-2.5, -0.5], 12.5: [2.5]})
     assert series_values(LOWEST, pts) == [SeriesValue(A, 12.5, Qualifier.EQUAL, 12.5)]
 

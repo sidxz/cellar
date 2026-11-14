@@ -57,7 +57,9 @@ def _rd(window: str, measure: MeltMeasure) -> ReadoutDefinition:
 class Harness:
     def __init__(self, status: RunStatus = RunStatus.DRAFT, locked: bool = False) -> None:
         # Declared high window first: results must still come back ordered by low.
-        self.defs = [_rd(w, m) for w in ("Main", "Low") for m in MeltMeasure]
+        self.defs = [
+            _rd(w, m) for w in ("Main", "Low") for m in (MeltMeasure.TM, MeltMeasure.DELTA_TM)
+        ]
         self.protocol = Protocol.create(
             workspace_id=WS,
             name="Thermal shift",
