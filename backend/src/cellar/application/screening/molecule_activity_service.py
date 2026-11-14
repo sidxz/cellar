@@ -7,7 +7,7 @@ by protocol.
 DR enrichment uses the shared aggregator (``run_aggregation``) — same code
 path the campaign grid uses — so the search grid stops cherry-picking the
 best-R² curve and instead applies a chemist-correct selection rule (default
-``LATEST_APPROVED_RUN`` with ``EXCLUDE_QUALIFIED`` handling) over every
+``LATEST_RUN`` with ``EXCLUDE_QUALIFIED`` handling) over every
 in-scope run of the (compound, readout-def) cell.
 """
 
@@ -413,7 +413,7 @@ class MoleculeActivityService:
         molecule_ids: list[uuid.UUID],
         protocol_columns: list[str],
         *,
-        selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule: SelectionRule = SelectionRule.LATEST_RUN,
         qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
         run_scopes: dict[str, RunScope] | None = None,
         any_readout_groups: list[tuple[str, str | None]] | None = None,
@@ -437,7 +437,7 @@ class MoleculeActivityService:
         DR columns flow through the shared run-aggregator (``run_aggregation``):
         every in-scope run contributes a ``ResolvedRun``, and ``selection_rule``
         collapses them into a single per-cell value. Default rule
-        ``LATEST_APPROVED_RUN`` + ``EXCLUDE_QUALIFIED`` matches the campaign
+        ``LATEST_RUN`` + ``EXCLUDE_QUALIFIED`` matches the campaign
         default + chemist mental model. ``run_scopes`` is a per-column override
         (key = ``"drc:<rd_id>"``); any column without an entry uses
         ``RunScope.all()``.
@@ -472,7 +472,7 @@ class MoleculeActivityService:
         molecule_ids: list[uuid.UUID],
         protocol_columns: list[str],
         *,
-        selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule: SelectionRule = SelectionRule.LATEST_RUN,
         qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
         run_scopes: dict[str, RunScope] | None = None,
         any_readout_groups: list[tuple[str, str | None]] | None = None,

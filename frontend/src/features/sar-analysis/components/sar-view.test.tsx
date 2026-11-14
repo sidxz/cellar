@@ -61,7 +61,7 @@ vi.mock("../hooks/use-decomposition-run", () => ({
 }));
 vi.mock("../hooks/use-activity-projection", () => ({
   useActivityProjection: () => projReturn,
-  channelFromColorSpec: () => ({ column: "drc:rd1", selection_rule: "latest_approved_run" }),
+  channelFromColorSpec: () => ({ column: "drc:rd1", selection_rule: "latest_run" }),
 }));
 
 vi.mock("../lib/sar-handoff", () => ({ readSarHandoff: () => null }));

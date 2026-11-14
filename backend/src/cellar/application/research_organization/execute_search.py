@@ -36,7 +36,7 @@ class ExecuteSearchQuery(Query):
     saved_search_id: uuid.UUID | None = None
     query: dict[str, Any] | None = None
     protocol_columns: list[str] | None = None
-    aggregation: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
+    aggregation: SelectionRule = SelectionRule.LATEST_RUN
     cursor_id: uuid.UUID | None = None
     limit: int = 50
     project_ids: list[uuid.UUID] | None = None

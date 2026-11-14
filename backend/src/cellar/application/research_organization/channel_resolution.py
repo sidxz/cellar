@@ -7,7 +7,7 @@ infrastructure-layer SQL implementation of the port lives in
 ``cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query``.
 
 Selection rules:
-- LATEST_APPROVED_RUN: pick the candidate with the largest run_date and
+- LATEST_RUN: pick the candidate with the largest run_date and
   carry its value/qualifier/source FKs into the measurement.
 - MEAN_ACROSS_RUNS: arithmetic mean of candidate values; qualifier=EQ.
 - GEOMETRIC_MEAN: log-space mean over strictly positive candidate values.

@@ -145,9 +145,9 @@ class ExecuteSearchBody(BaseModel):
     protocol_columns: list[str] | None = None
     # Selection rule the activity-enrichment aggregator applies when
     # multiple in-scope runs exist for the same (compound, intercept) cell.
-    # Default is ``LATEST_APPROVED_RUN`` — matches the campaign default and
+    # Default is ``LATEST_RUN`` — matches the campaign default and
     # the chemist mental model of "what would I see right now".
-    aggregation: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
+    aggregation: SelectionRule = SelectionRule.LATEST_RUN
 
     @model_validator(mode="after")
     def _validate_structure_clauses(self) -> ExecuteSearchBody:

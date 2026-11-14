@@ -63,12 +63,7 @@ const channelSchema = z.object({
   protocol_id: z.string().min(1, "Protocol is required"),
   readout_definition_id: z.string().min(1, "Readout is required"),
   source_kind: z.enum(["readout_data", "dose_response_curve"]),
-  selection_rule: z.enum([
-    "latest_approved_run",
-    "mean_across_runs",
-    "geometric_mean",
-    "manual_pick",
-  ]),
+  selection_rule: z.enum(["latest_run", "mean_across_runs", "geometric_mean", "manual_pick"]),
   qualifier_handling: z.enum(["include_qualified", "exclude_qualified", "treat_as_limit"]),
   require_approved: z.boolean(),
   min_z_prime: z.number().min(0).max(1),
@@ -163,10 +158,10 @@ export function ChannelPopoverForm({
         (existing?.source_kind as "readout_data" | "dose_response_curve") ?? "readout_data",
       selection_rule:
         (existing?.selection_rule as
-          | "latest_approved_run"
+          | "latest_run"
           | "mean_across_runs"
           | "geometric_mean"
-          | "manual_pick") ?? "latest_approved_run",
+          | "manual_pick") ?? "latest_run",
       qualifier_handling:
         (existing?.qualifier_handling as
           | "include_qualified"
@@ -448,7 +443,12 @@ export function ChannelPopoverForm({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="latest_approved_run">Latest approved run</SelectItem>
+                <SelectItem
+                  value="latest_run"
+                  description="Newest run that passes this channel's QC filter."
+                >
+                  Latest run
+                </SelectItem>
                 <SelectItem value="mean_across_runs">Mean across runs</SelectItem>
                 <SelectItem value="geometric_mean">Geometric mean</SelectItem>
                 <SelectItem value="manual_pick">Manual pick</SelectItem>

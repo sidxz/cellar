@@ -33,6 +33,13 @@ describe("AggregationControl", () => {
     expect(onChange).toHaveBeenCalledWith("best_r2");
   });
 
+  it("explains Latest run in the menu without putting it in the trigger", () => {
+    render(<AggregationControl mode="latest" onChange={vi.fn()} />);
+    expect(screen.getByRole("combobox").textContent).toBe("Latest run");
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.getByText("Newest run that isn't rejected.")).toBeInTheDocument();
+  });
+
   // The `disabled` prop swaps the dropdown for a static label (used when
   // every activity criterion narrows scope to one run and any aggregation
   // rule is a no-op). The behavior contract: no interactive combobox is

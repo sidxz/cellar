@@ -110,7 +110,7 @@ def _make_run(
 ) -> Run:
     """Build a Run aggregate suitable as a `find_by_ids` payload row.
 
-    Defaults to APPROVED so the aggregator's LATEST_APPROVED_RUN treats
+    Defaults to APPROVED so the aggregator's LATEST_RUN treats
     every seeded run as approved (matches the "all runs approved" common
     case in test scenarios). Override per-test when exercising mixed-status
     behavior.
@@ -296,7 +296,7 @@ class TestEnrichMoleculesWithCurveParams:
 
         # New multi-run context fields on a single-run cell
         assert av.run_count == 1
-        assert av.selection_rule == SelectionRule.LATEST_APPROVED_RUN.value
+        assert av.selection_rule == SelectionRule.LATEST_RUN.value
         assert av.runs is not None and len(av.runs) == 1
         assert av.disagreement_flag is False
 
@@ -611,7 +611,7 @@ class TestEnrichMoleculesMultiRunAggregation:
     """The new aggregator-driven path replaces best-R² cherry-picking."""
 
     @pytest.mark.asyncio
-    async def test_default_uses_latest_approved_run(self) -> None:
+    async def test_default_uses_latest_run(self) -> None:
         """3 runs: latest fitted IC50 = 0.20 wins under the default rule."""
         # Order matches what the SQL repo returns: newest first.
         curves, runs = _seed_runs(
@@ -632,7 +632,7 @@ class TestEnrichMoleculesMultiRunAggregation:
         av = out[MOL_ID][col_spec]
         assert av.value == 0.20
         assert av.run_count == 3
-        assert av.selection_rule == SelectionRule.LATEST_APPROVED_RUN.value
+        assert av.selection_rule == SelectionRule.LATEST_RUN.value
         assert av.runs is not None and len(av.runs) == 3
         # Tooltip rows are also sorted latest-first.
         assert av.runs[0].run_date == date(2026, 4, 1)
@@ -832,8 +832,8 @@ class TestEnrichMoleculesMultiRunAggregation:
         assert len(av.additional_curves) == 1
 
     @pytest.mark.asyncio
-    async def test_latest_approved_run_omits_aggregate_overlay(self) -> None:
-        """LATEST_APPROVED_RUN doesn't aggregate → no overlay fields on the wire.
+    async def test_latest_run_omits_aggregate_overlay(self) -> None:
+        """LATEST_RUN doesn't aggregate → no overlay fields on the wire.
 
         The per-curve intercept dashed line correctly represents the cell
         value in this mode (because the cell IS the rep curve), so the
@@ -855,7 +855,7 @@ class TestEnrichMoleculesMultiRunAggregation:
             WS,
             [MOL_ID],
             [col_spec],
-            # Default rule is LATEST_APPROVED_RUN.
+            # Default rule is LATEST_RUN.
         )
 
         av = out[MOL_ID][col_spec]

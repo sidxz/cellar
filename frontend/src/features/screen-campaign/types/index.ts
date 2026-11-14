@@ -53,11 +53,7 @@ export type StageKind = CampaignStageResponseKind;
 
 export type CheckVerdict = "pass" | "fail" | "untested";
 
-export type SelectionRule =
-  | "latest_approved_run"
-  | "mean_across_runs"
-  | "geometric_mean"
-  | "manual_pick";
+export type SelectionRule = "latest_run" | "mean_across_runs" | "geometric_mean" | "manual_pick";
 
 export type ChannelSourceKind = "readout_data" | "dose_response_curve";
 

@@ -64,7 +64,7 @@ def _make_channel(
         protocol_id=protocol_id or uuid.uuid4(),
         readout_definition_id=readout_definition_id or uuid.uuid4(),
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=display_order,
     )

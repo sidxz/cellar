@@ -50,7 +50,7 @@ function makeChannel(overrides: Partial<CampaignChannelResponse>): CampaignChann
     protocol_id: "proto-1",
     readout_definition_id: "rd-1",
     source_kind: "readout_data",
-    selection_rule: "latest_approved_run",
+    selection_rule: "latest_run",
     qualifier_handling: "include_qualified",
     display_order: 0,
     ...overrides,
@@ -66,7 +66,7 @@ const campaign = {
       label: "IC50",
       protocol_id: "proto-1",
       source_kind: "dose_response_curve",
-      selection_rule: "latest_approved_run",
+      selection_rule: "latest_run",
       display_order: 0,
     }),
     makeChannel({
@@ -100,8 +100,8 @@ describe("ChannelsSection", () => {
 
     const ic50 = screen.getByText("IC50").closest("[title]");
     expect(ic50).toHaveTextContent("DR");
-    expect(ic50).toHaveAttribute("title", "Dose-response curve · latest approved run");
-    expect(screen.queryByText("latest approved run")).not.toBeInTheDocument();
+    expect(ic50).toHaveAttribute("title", "Dose-response curve · latest run");
+    expect(screen.queryByText("latest run")).not.toBeInTheDocument();
 
     const viability = screen.getByText("% Viability").closest("[title]");
     expect(viability).toHaveTextContent("mean across runs");

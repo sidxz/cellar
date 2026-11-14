@@ -30,7 +30,7 @@ def _channel(intercept_key=None) -> ActivityChannelSpec:
     return ActivityChannelSpec(
         column=_COLUMN,
         source="dr_curve",
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.EXCLUDE_QUALIFIED,
         intercept_key=intercept_key,
     )

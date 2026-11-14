@@ -161,9 +161,9 @@ class RenderExport:
 
 
 # Keyed by the lowercase enum *value* on the wire (matches
-# ``SelectionRule.LATEST_APPROVED_RUN.value == "latest_approved_run"``).
+# ``SelectionRule.LATEST_RUN.value == "latest_run"``).
 _AGGREGATION_LABELS = {
-    "latest_approved_run": "Latest run",
+    "latest_run": "Latest run",
     "best_r_squared": "Best R²",
     "mean_across_runs": "Arithmetic mean",
     "geometric_mean": "Geometric mean",
@@ -186,7 +186,7 @@ def _image_size_for(job: ExportJob) -> str:
 
 def _extras_for(job: ExportJob) -> dict:
     payload = job.query_snapshot or {}
-    agg_raw = (payload.get("aggregation") or "latest_approved_run").lower()
+    agg_raw = (payload.get("aggregation") or "latest_run").lower()
     extras: dict = {
         "aggregation_label": _AGGREGATION_LABELS.get(agg_raw, agg_raw.replace("_", " ").title()),
         "exported_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),

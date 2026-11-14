@@ -8,7 +8,7 @@
  * value stay consistent end-to-end.
  *
  * - ``latest``  → newest ``run_date`` wins (matches the BE default
- *                 ``LATEST_APPROVED_RUN``).
+ *                 ``LATEST_RUN``).
  * - ``best_r2`` → highest R² wins (legacy drawer default; kept as an
  *                 explicit mode).
  * - ``gmean`` / ``mean`` → representative = newest run_date (chart

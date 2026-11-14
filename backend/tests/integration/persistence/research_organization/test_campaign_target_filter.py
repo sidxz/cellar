@@ -75,7 +75,7 @@ async def _campaign_with_run_targets(session, ws, project_id, name, target_ids):
             protocol_id=protocol_id,
             readout_definition_id=uuid.uuid4(),
             source_kind="readout_data",
-            selection_rule="latest_approved_run",
+            selection_rule="latest_run",
             qualifier_handling="include_qualified",
         )
     )

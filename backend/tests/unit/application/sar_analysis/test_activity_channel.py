@@ -17,7 +17,7 @@ def _spec(**over) -> ActivityChannelSpec:
     base = dict(
         column="drc:" + str(uuid.uuid4()),
         source="dr_curve",
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.EXCLUDE_QUALIFIED,
         intercept_key=None,
         run_scopes=None,
@@ -73,7 +73,7 @@ def test_channel_hash_changes_on_intercept_key():
 
 
 def test_channel_hash_changes_on_selection_rule():
-    a = _spec(selection_rule=SelectionRule.LATEST_APPROVED_RUN)
+    a = _spec(selection_rule=SelectionRule.LATEST_RUN)
     b = _spec(column=a.column, selection_rule=SelectionRule.GEOMETRIC_MEAN)
     assert channel_hash(a) != channel_hash(b)
 

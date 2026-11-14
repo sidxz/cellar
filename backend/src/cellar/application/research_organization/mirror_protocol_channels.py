@@ -289,7 +289,7 @@ class MirrorProtocolChannels:
                             protocol_id=protocol.id,
                             readout_definition_id=rd.id,
                             source_kind=source_kind,
-                            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                            selection_rule=SelectionRule.LATEST_RUN,
                             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
                             display_order=next_order,
                             normalization_applied=normalization,

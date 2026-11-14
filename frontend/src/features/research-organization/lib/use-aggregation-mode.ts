@@ -22,6 +22,11 @@ export const AGGREGATION_LABELS: Record<AggregationMode, string> = {
   best_r2: "Best fit (R²)",
 };
 
+/** What each rule picks, shown under its label in the menu. */
+export const AGGREGATION_DESCRIPTIONS: Partial<Record<AggregationMode, string>> = {
+  latest: "Newest run that isn't rejected.",
+};
+
 const URL_TO_MODE: Record<string, AggregationMode> = {
   latest: "latest",
   gmean: "gmean",
@@ -30,14 +35,14 @@ const URL_TO_MODE: Record<string, AggregationMode> = {
 };
 
 const WIRE_TO_MODE: Record<string, AggregationMode> = {
-  latest_approved_run: "latest",
+  latest_run: "latest",
   geometric_mean: "gmean",
   mean_across_runs: "mean",
   best_r_squared: "best_r2",
 };
 
 const MODE_TO_WIRE: Record<AggregationMode, SelectionRule> = {
-  latest: "latest_approved_run" as SelectionRule,
+  latest: "latest_run" as SelectionRule,
   gmean: "geometric_mean" as SelectionRule,
   mean: "mean_across_runs" as SelectionRule,
   best_r2: "best_r_squared" as SelectionRule,

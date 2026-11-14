@@ -20,7 +20,7 @@ const baseAv: ActivityValue = {
   raw_data: null,
   curve_params: null,
   run_count: 1,
-  selection_rule: "latest_approved_run",
+  selection_rule: "latest_run",
   runs: null,
   intercept_aggregates: null,
   disagreement_flag: false,

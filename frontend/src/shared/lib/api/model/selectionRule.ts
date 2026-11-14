@@ -12,7 +12,7 @@ export type SelectionRule = typeof SelectionRule[keyof typeof SelectionRule];
 
 
 export const SelectionRule = {
-  latest_approved_run: 'latest_approved_run',
+  latest_run: 'latest_run',
   mean_across_runs: 'mean_across_runs',
   geometric_mean: 'geometric_mean',
   manual_pick: 'manual_pick',

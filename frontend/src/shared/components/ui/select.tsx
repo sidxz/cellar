@@ -94,8 +94,12 @@ function SelectLabel({ className, ...props }: React.ComponentProps<typeof Select
 function SelectItem({
   className,
   children,
+  description,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
+}: React.ComponentProps<typeof SelectPrimitive.Item> & {
+  /** Muted sub-line shown in the open menu only; never copied into the trigger. */
+  description?: React.ReactNode;
+}) {
   return (
     <SelectPrimitive.Item
       data-slot="select-item"
@@ -113,7 +117,14 @@ function SelectItem({
           <CheckIcon className="size-4" />
         </SelectPrimitive.ItemIndicator>
       </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      {description ? (
+        <div className="flex flex-col gap-0.5">
+          <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+          <span className="text-xs text-muted-foreground">{description}</span>
+        </div>
+      ) : (
+        <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
+      )}
     </SelectPrimitive.Item>
   );
 }

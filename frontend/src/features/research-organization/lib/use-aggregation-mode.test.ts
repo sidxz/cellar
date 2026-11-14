@@ -25,12 +25,12 @@ describe("AggregationMode helpers", () => {
   });
 
   it("wire <-> mode round-trip", () => {
-    expect(wireToAggregationMode("latest_approved_run")).toBe("latest");
+    expect(wireToAggregationMode("latest_run")).toBe("latest");
     expect(wireToAggregationMode("geometric_mean")).toBe("gmean");
     expect(wireToAggregationMode("mean_across_runs")).toBe("mean");
     expect(wireToAggregationMode("best_r_squared")).toBe("best_r2");
 
-    expect(aggregationModeToWire("latest")).toBe("latest_approved_run");
+    expect(aggregationModeToWire("latest")).toBe("latest_run");
     expect(aggregationModeToWire("gmean")).toBe("geometric_mean");
     expect(aggregationModeToWire("mean")).toBe("mean_across_runs");
     expect(aggregationModeToWire("best_r2")).toBe("best_r_squared");

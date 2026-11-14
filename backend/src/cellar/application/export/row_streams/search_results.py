@@ -79,7 +79,7 @@ class SearchResultsRowStream:
             saved_search_id=_parse_uuid(self.payload.get("saved_search_id")),
             protocol_columns=self.payload.get("protocol_columns"),
             aggregation=SelectionRule(
-                self.payload.get("aggregation", SelectionRule.LATEST_APPROVED_RUN.value)
+                self.payload.get("aggregation", SelectionRule.LATEST_RUN.value)
             ),
             cursor_id=_parse_uuid(cursor) if cursor else None,
             limit=limit,

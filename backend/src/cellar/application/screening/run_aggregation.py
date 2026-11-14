@@ -78,7 +78,7 @@ class AggregateResult:
     - ``MANUAL_PICK`` was the rule (campaign-only path).
 
     For every other ND case (e.g. all runs Inactive under
-    LATEST_APPROVED_RUN), ``representative_run`` is the latest-by-date
+    LATEST_RUN), ``representative_run`` is the latest-by-date
     run from the (non-empty) filtered input — so callers always have
     *something* to render as a curve thumbnail on the ND cell.
     """
@@ -215,7 +215,7 @@ def _resolvable_runs(
     Includes both EQ (healthy fit) and GT (at_bound → >max_dose) outcomes;
     excludes ND (inactive, missing intercept, at_bound with no max_dose).
 
-    Used by the "pick one" rules (LATEST_APPROVED_RUN, BEST_R_SQUARED)
+    Used by the "pick one" rules (LATEST_RUN, BEST_R_SQUARED)
     where an at_bound row IS a real measurement and should surface as a
     GT-qualified cell. The aggregating rules (MEAN, GEOMETRIC_MEAN) use
     ``intercept_scalar`` instead, which keeps only EQ rows — non-scalar
@@ -236,7 +236,7 @@ def _pick_one_resolvable(
 ) -> AggregateResult:
     """Pick the single resolvable run that maximizes ``key_fn``; ND otherwise.
 
-    Used by LATEST_APPROVED_RUN (key_fn = run_date) and BEST_R_SQUARED
+    Used by LATEST_RUN (key_fn = run_date) and BEST_R_SQUARED
     (key_fn = curve_r_squared). Both EQ and GT-from-at_bound runs are
     eligible (hence the "resolvable" — not "eq" — name) — an at_bound run
     carries a real upper-bound measurement and should win on date / r²
@@ -326,7 +326,7 @@ def apply_selection_rule(
             representative_run=None,
         )
 
-    if rule == SelectionRule.LATEST_APPROVED_RUN:
+    if rule == SelectionRule.LATEST_RUN:
         return _pick_one_resolvable(
             filtered, intercept_key, key_fn=lambda r: r.run_date or date.min
         )

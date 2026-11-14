@@ -209,7 +209,7 @@ async def _seed_and_close_campaign(
         protocol_id=protocol_id,
         readout_definition_id=readout_id,
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )
@@ -500,7 +500,7 @@ def _readout_channel(
     *,
     protocol_id: uuid.UUID,
     readout_id: uuid.UUID,
-    rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
+    rule: SelectionRule = SelectionRule.LATEST_RUN,
     display_order: int = 0,
 ) -> CampaignChannel:
     return CampaignChannel(

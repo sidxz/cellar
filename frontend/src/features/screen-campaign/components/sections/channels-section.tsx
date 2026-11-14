@@ -9,7 +9,7 @@
  * which, matching the grid's protocol-grouped columns). Each protocol is one
  * wrapping line of chips — one chip per channel. Dose-response chips carry a
  * "DR" mark; the selection rule is shown only when it differs from the
- * default (latest approved run), the full description lives in the chip's
+ * default (latest run), the full description lives in the chip's
  * title. Non-read-only mode shows a "+ Readout" pill (add) and makes each
  * chip a button (edit) — both open ChannelPopoverForm in a Popover.
  */
@@ -207,7 +207,7 @@ const CHIP =
 const CHIP_EDITABLE =
   "cursor-pointer transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary";
 
-const DEFAULT_RULE = "latest_approved_run";
+const DEFAULT_RULE = "latest_run";
 
 function ChannelChip({
   channel,

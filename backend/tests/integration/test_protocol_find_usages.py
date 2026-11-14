@@ -96,7 +96,7 @@ async def test_every_blocking_reference_is_named(uow: AsyncUnitOfWork) -> None:
                     "INSERT INTO campaign_channel (id, campaign_id, label, protocol_id, "
                     "readout_definition_id, source_kind, selection_rule, qualifier_handling) "
                     "VALUES (:id, :cid, :label, :proto, :rd, 'readout_data', "
-                    "'latest_approved_run', 'include_qualified')"
+                    "'latest_run', 'include_qualified')"
                 ),
                 {"id": uuid.uuid4(), "cid": cid, "label": label, "proto": p.id, "rd": rd_id},
             )

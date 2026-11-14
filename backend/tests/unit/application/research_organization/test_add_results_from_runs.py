@@ -145,7 +145,7 @@ def _run_repo(run_ids, protocol_id=None):
     return repo
 
 
-def _readout_config(proto, readout, rule=SelectionRule.LATEST_APPROVED_RUN, **kw):
+def _readout_config(proto, readout, rule=SelectionRule.LATEST_RUN, **kw):
     return ChannelImportConfig(
         protocol_id=proto,
         readout_definition_id=readout,
@@ -202,7 +202,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=uuid.uuid4(),
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -242,7 +242,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -287,7 +287,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
             scope="all",
@@ -309,7 +309,7 @@ class TestAddResultsFromRuns:
             protocol_id=proto,
             readout_definition_id=readout,
             source_kind=ChannelSourceKind.READOUT_DATA,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(existing)
@@ -379,7 +379,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -409,7 +409,7 @@ class TestAddResultsFromRuns:
             protocol_id=proto,
             readout_definition_id=readout,
             source_kind=ChannelSourceKind.READOUT_DATA,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(channel)
@@ -445,7 +445,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
             scope="all",
@@ -471,7 +471,7 @@ class TestAddResultsFromRuns:
             protocol_id=proto,
             readout_definition_id=readout,
             source_kind=ChannelSourceKind.READOUT_DATA,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(channel)
@@ -508,7 +508,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
             scope="all",
@@ -546,7 +546,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -689,7 +689,7 @@ class TestAddResultsFromRuns:
             protocol_id=proto,
             readout_definition_id=readout,
             source_kind=ChannelSourceKind.READOUT_DATA,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(channel)
@@ -783,7 +783,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout1,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -793,7 +793,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout2,
                     label="CC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="CC50", operator="gt", value=5.0
                     ),
@@ -849,7 +849,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     # no hit_threshold -> nothing qualifies for the stage
                 )
             ],
@@ -893,7 +893,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout1,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
                 ),
                 ChannelImportConfig(
@@ -901,7 +901,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout2,
                     label="Curve Class",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="Curve Class", operator="in", value=["full"]
                     ),
@@ -935,7 +935,7 @@ class TestAddResultsFromRuns:
             protocol_id=uuid.uuid4(),
             readout_definition_id=uuid.uuid4(),
             source_kind=ChannelSourceKind.READOUT_DATA,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(other_channel)
@@ -965,7 +965,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -1018,7 +1018,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
                 )
             ],
@@ -1058,7 +1058,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(readout_name="IC50", operator="lt", value=1000.0),
                 )
             ],
@@ -1116,7 +1116,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
             scope="all",
@@ -1163,7 +1163,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
             scope="all",
@@ -1207,7 +1207,7 @@ class TestAddResultsFromRuns:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     allowed_curve_classes={"active"},
                 )
             ],

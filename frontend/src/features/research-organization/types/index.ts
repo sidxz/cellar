@@ -448,7 +448,7 @@ export interface ExecuteSearchInput {
   saved_search_id?: string;
   protocol_columns?: string[];
   /** Multi-run aggregation rule. Omitted -> BE default
-   *  (`latest_approved_run`). Drives how `_intercept_scalar` collapses
+   *  (`latest_run`). Drives how `_intercept_scalar` collapses
    *  per-(compound, intercept) rows across all in-scope runs. */
   aggregation?: SelectionRule;
 }
@@ -529,7 +529,7 @@ export interface ActivityValue {
   /** Non-representative contributing curves in aggregate modes
    *  (MEAN_ACROSS_RUNS / GEOMETRIC_MEAN). The cell's chart overlays them
    *  muted underneath the representative curve. Absent on
-   *  LATEST_APPROVED_RUN / BEST_R_SQUARED. Mirrors CurveSnapshot's field. */
+   *  LATEST_RUN / BEST_R_SQUARED. Mirrors CurveSnapshot's field. */
   additional_curves?: AdditionalCurve[] | null;
   /** Aggregate marker — present only on MEAN_ACROSS_RUNS / GEOMETRIC_MEAN
    *  cells. The chart draws a single vertical line at marker_x and
