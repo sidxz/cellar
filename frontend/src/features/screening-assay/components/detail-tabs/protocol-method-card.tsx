@@ -7,7 +7,7 @@ import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { Paperclip, Pencil } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useCorrectProtocol, useUpdateProtocol } from "../../hooks/use-protocols";
 import { METHOD_PLACEHOLDER } from "../../lib/protocol-method";
 import type { Protocol } from "../../types";
@@ -43,6 +43,15 @@ export function ProtocolMethodCard({
   const [draft, setDraft] = useState(saved);
   const [reason, setReason] = useState("");
   const [expanded, setExpanded] = useState(false);
+
+  // Opening the editor puts the caret at the end: a method is usually added to, not rewritten.
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    const ta = textRef.current;
+    if (!editing || !ta) return;
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  }, [editing]);
 
   const update = useUpdateProtocol(protocol.id);
   const correct = useCorrectProtocol(protocol.id);
@@ -86,6 +95,7 @@ export function ProtocolMethodCard({
         {editing ? (
           <div className="grid gap-3">
             <Textarea
+              ref={textRef}
               aria-label="Method"
               className="min-h-60"
               value={draft}
@@ -101,7 +111,6 @@ export function ProtocolMethodCard({
               }}
               placeholder={METHOD_PLACEHOLDER}
               disabled={pending}
-              autoFocus
             />
             {needsReason && (
               <div className="grid gap-1.5">

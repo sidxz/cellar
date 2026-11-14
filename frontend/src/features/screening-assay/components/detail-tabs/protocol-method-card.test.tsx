@@ -58,6 +58,14 @@ describe("ProtocolMethodCard", () => {
     expect(state.correct).not.toHaveBeenCalled();
   });
 
+  it("opens the editor focused with the caret at the end", () => {
+    card(protocol());
+    fireEvent.click(screen.getByRole("button", { name: "Edit method" }));
+    const box = screen.getByLabelText("Method") as HTMLTextAreaElement;
+    expect(box).toHaveFocus();
+    expect(box.selectionStart).toBe(METHOD.length);
+  });
+
   it("corrects a published method only with a reason", () => {
     card(protocol({ status: "active" }));
     fireEvent.click(screen.getByRole("button", { name: "Edit method" }));
