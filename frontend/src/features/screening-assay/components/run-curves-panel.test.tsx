@@ -99,6 +99,7 @@ function withAnalysis(cells: Record<string, Cell>, windows = 1) {
     reference_tm: 60,
     reference_count: 1,
     flags: [],
+    series: [],
     positions: positions.map((p) => ({
       well_id: p.well_id,
       tm: null,
