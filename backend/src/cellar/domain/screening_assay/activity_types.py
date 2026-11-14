@@ -158,6 +158,18 @@ class ReadoutSummary:
     data_point_count: int
     run_count: int
     draft_run_count: int  # runs not yet completed or approved
+    # How ``value`` was chosen from the runs' values: "high", "low" or
+    # "magnitude" (the largest shift in either direction).
+    best_direction: str = "high"
+
+
+@dataclass(frozen=True)
+class RunLink:
+    """A run of the protocol that holds data for the molecule."""
+
+    run_id: uuid.UUID
+    run_date: date
+    status: str
 
 
 @dataclass(frozen=True)
@@ -181,6 +193,11 @@ class ProtocolActivitySummary:
     # The protocol's recommended hit rule applied to this molecule; None without one.
     hit: bool | None = None
     hit_criteria: list[dict[str, Any]] = field(default_factory=list)
+    protocol_code: str | None = None
+    # Newest first: where a chemist checks the values (traces, curves).
+    runs: list[RunLink] = field(default_factory=list)
+    # The run tab that shows these results: "curves" (traces) or "dose-response".
+    results_tab: str | None = None
 
 
 @dataclass(frozen=True)

@@ -270,6 +270,14 @@ class ReadoutSummaryResponse(BaseModel):
     run_count: int
     # Runs not yet completed or approved; the page marks values that rest on them.
     draft_run_count: int
+    # How the value was chosen: "high", "low" or "magnitude" (largest shift either way).
+    best_direction: str
+
+
+class RunLinkResponse(BaseModel):
+    run_id: uuid.UUID
+    run_date: date
+    status: str
 
 
 class ProtocolActivityResponse(BaseModel):
@@ -286,6 +294,11 @@ class ProtocolActivityResponse(BaseModel):
     # The protocol's recommended hit rule applied to the molecule; null without one.
     hit: bool | None = None
     hit_criteria: list[HitCriterionDTO] = []
+    protocol_code: str | None = None
+    # Runs of the protocol holding the molecule's data, newest first.
+    runs: list[RunLinkResponse] = []
+    # The run tab that shows these results ("curves" = Traces, "dose-response").
+    results_tab: str | None = None
 
 
 class ActivitySummaryResponse(BaseModel):
@@ -325,11 +338,18 @@ class ActivitySummaryResponse(BaseModel):
                             data_point_count=r.data_point_count,
                             run_count=r.run_count,
                             draft_run_count=r.draft_run_count,
+                            best_direction=r.best_direction,
                         )
                         for r in p.plain_readouts
                     ],
                     hit=p.hit,
                     hit_criteria=[HitCriterionDTO.model_validate(c) for c in p.hit_criteria],
+                    protocol_code=p.protocol_code,
+                    runs=[
+                        RunLinkResponse(run_id=r.run_id, run_date=r.run_date, status=r.status)
+                        for r in p.runs
+                    ],
+                    results_tab=p.results_tab,
                 )
                 for p in summary.protocols
             ],

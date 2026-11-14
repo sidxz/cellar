@@ -1133,6 +1133,8 @@ class TestGetActivitySummaryReportedEndpoints:
         assert len(proto.best_curves) == 1
         assert proto.best_curves[0]["fitted_value"] == 5.2
         assert proto.readouts == []
+        # Curves: the results live on the run's Dose-Response tab.
+        assert proto.results_tab == "dose-response"
         readout_repo.find_aggregated_by_molecules.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -1284,3 +1286,26 @@ class TestGetActivitySummaryPlainReadouts:
         missing = HitCriterion(readout_name="Not measured", operator="gt", value=0.0)
         [card] = (await self._setup([missing]).get_activity_summary(WS, MOL_ID)).protocols
         assert card.hit is False
+
+    @pytest.mark.asyncio
+    async def test_card_names_the_protocol_its_runs_and_where_to_look(self) -> None:
+        service = self._setup()
+        [proto] = service._protocol_repo.find_by_ids.return_value
+        proto.code = "PRT-00219"
+
+        [card] = (await service.get_activity_summary(WS, MOL_ID)).protocols
+
+        assert card.protocol_code == "PRT-00219"
+        # Newest first, with status, so the page can link each and mark drafts.
+        assert [(r.run_id, r.run_date, r.status) for r in card.runs] == [
+            (self.DRAFT_RUN, date(2026, 11, 13), "draft"),
+            (self.DONE_RUN, date(2026, 11, 1), "approved"),
+        ]
+        # Thermal-shift readouts: the results live on the run's Traces tab.
+        assert card.results_tab == "curves"
+        directions = {r.readout_name: r.best_direction for r in card.plain_readouts}
+        assert directions == {
+            "ΔTm (Main)": "magnitude",
+            "Max ΔTm (Main)": "magnitude",
+            "Lowest shifting conc. (Main, ±2 °C)": "low",
+        }

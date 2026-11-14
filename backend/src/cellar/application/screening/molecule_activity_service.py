@@ -36,6 +36,7 @@ from cellar.domain.screening_assay.activity_types import (
     InterceptAggregate,
     ProtocolActivitySummary,
     ReadoutSummary,
+    RunLink,
     RunSummary,
 )
 from cellar.domain.screening_assay.aggregation_types import (
@@ -138,9 +139,19 @@ def _plain_readouts(
                     for rid in run_ids
                     if (run := runs_by_id.get(rid)) is not None and run.status not in _FINISHED
                 ),
+                best_direction=direction.value,
             )
         )
     return out
+
+
+def _has_melt_readout(proto: Any, plain: list[ReadoutSummary]) -> bool:
+    """A thermal-shift readout among the shown ones: its results live on the Traces tab."""
+    shown = {p.readout_definition_id for p in plain}
+    return any(
+        rd.id in shown and getattr(rd, "melt_config", None) is not None
+        for rd in getattr(proto, "readout_definitions", [])
+    )
 
 
 def _protocol_hit(
@@ -241,10 +252,11 @@ class MoleculeActivityService:
         raw_rd_ids = {row.readout_definition_id for row in endpoint_rows}
         # Every run behind a readout row: endpoints and plain readouts name
         # their protocol through it, and plain readouts mark draft runs.
+        run_ids = {r.run_id for r in readout_rows} | {
+            c.run_id for c in curves if getattr(c, "run_id", None) is not None
+        }
         runs_by_id = (
-            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in readout_rows}))
-            if readout_rows
-            else {}
+            await self._run_repo.find_by_ids(workspace_id, list(run_ids)) if run_ids else {}
         )
         curve_proto_ids = {curve.protocol_id for curve in curves}
         proto_ids |= {run.protocol_id for run in runs_by_id.values()}
@@ -373,6 +385,23 @@ class MoleculeActivityService:
                         else None
                     ),
                     hit_criteria=[r.to_dict() for r in rules],
+                    protocol_code=getattr(proto, "code", None),
+                    runs=sorted(
+                        (
+                            RunLink(run.id, run.run_date, run.status.value)
+                            for run in runs_by_id.values()
+                            if run.protocol_id == pid
+                        ),
+                        key=lambda r: (r.run_date, str(r.run_id)),
+                        reverse=True,
+                    ),
+                    results_tab=(
+                        "curves"
+                        if _has_melt_readout(proto, plain)
+                        else "dose-response"
+                        if pid in curve_proto_ids
+                        else None
+                    ),
                 )
             )
 

@@ -29,6 +29,9 @@ async def test_thermal_shift_values_and_hit_reach_the_compound_page(
     assert by_name["ΔTm (Main)"]["value"] == pytest.approx(-7.3)
     assert (by_name["ΔTm (Main)"]["run_count"], by_name["ΔTm (Main)"]["draft_run_count"]) == (1, 1)
     assert card["hit"] is None and card["hit_criteria"] == []
+    assert by_name["ΔTm (Main)"]["best_direction"] == "magnitude"
+    assert [r["run_id"] for r in card["runs"]] == [str(s.run_id)]
+    assert card["results_tab"] == "curves"
 
     rule = {"readout_name": "Max ΔTm (Main)", "operator": "not_between", "value": [-2.0, 2.0]}
     await _sql(
