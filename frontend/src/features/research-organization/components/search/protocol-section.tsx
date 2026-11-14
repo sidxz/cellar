@@ -562,10 +562,28 @@ interface ActivityRowProps {
    * `onChange` and pristine no longer applies.
    */
   isPristine?: boolean;
+  /** An earlier row names the same protocol with a different run filter or
+   *  split — the search can't tell which runs feed this protocol's columns. */
+  conflictsWithEarlierRow?: boolean;
   onShowAllProjectsChange: (next: boolean) => void;
   onConjunctionChange: (conj: ProtocolConjunction) => void;
   onChange: (c: ActivityCriterion) => void;
   onRemove: () => void;
+}
+
+/** True when an earlier row names the same protocol with a different run
+ *  filter or split (the backend can't plan that protocol's columns). */
+export function conflictsWithEarlierRow(criteria: ActivityCriterion[], index: number): boolean {
+  const row = criteria[index];
+  if (!row.protocol_id) return false;
+  const settings = (c: ActivityCriterion) =>
+    JSON.stringify([
+      c.run_scope?.mode === "any" ? undefined : (c.run_scope ?? undefined),
+      c.split ?? undefined,
+    ]);
+  return criteria
+    .slice(0, index)
+    .some((c) => c.protocol_id === row.protocol_id && settings(c) !== settings(row));
 }
 
 /** The criterion after choosing protocol ``next`` (null = any protocol).
@@ -606,6 +624,7 @@ function ActivityRow({
   hasProjectScope,
   showAllProjects,
   isPristine = false,
+  conflictsWithEarlierRow = false,
   onShowAllProjectsChange,
   onConjunctionChange,
   onChange,
@@ -856,6 +875,11 @@ function ActivityRow({
                 runScope={criterion.run_scope}
                 onChange={(next) => onChange({ ...criterion, ...next })}
               />
+              {conflictsWithEarlierRow && (
+                <p className="text-xs text-destructive">
+                  This protocol already has a different run filter or split above.
+                </p>
+              )}
             </>
           )}
 
@@ -1080,6 +1104,7 @@ export function ProtocolSection({
             key={`activity-${i}`}
             index={i}
             criterion={c}
+            conflictsWithEarlierRow={conflictsWithEarlierRow(criteria, i)}
             conjunction={conjunctions[i] ?? "or"}
             protocols={protocolSummaries ?? []}
             fullProtocols={protocols}

@@ -274,6 +274,10 @@ function buildReadoutColumn(
     valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
+      if (av?.qualifier === "nd") {
+        // Runs exist but none gave a reportable value — not "no data".
+        return <span className="font-mono text-xs text-muted-foreground">ND</span>;
+      }
       if (av?.value == null) {
         return <span className="text-muted-foreground">&mdash;</span>;
       }

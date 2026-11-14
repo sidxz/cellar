@@ -246,3 +246,24 @@ describe("buildProtocolColumnGroups — split protocols", () => {
     ]);
   });
 });
+
+describe("single-point cells", () => {
+  it("show ND, not the no-data dash, when no run gave a reportable value", async () => {
+    const { render, screen } = await import("@testing-library/react");
+    const [group] = buildProtocolColumnGroups(
+      [`rd:${PROTO_ID}:${RD_RAW_ID}`],
+      [proto([rd({ id: RD_RAW_ID, name: "MIC" })])],
+      "latest",
+      null,
+    ) as ColGroupDef[];
+    const column = (group.children as ColDef[])[0];
+    const row = {
+      activity: {
+        [`rd:${PROTO_ID}:${RD_RAW_ID}`]: { value: null, qualifier: "nd", source: "readout" },
+      },
+    };
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid renderer params
+    render((column.cellRenderer as any)({ data: row }));
+    expect(screen.getByText("ND")).toBeInTheDocument();
+  });
+});

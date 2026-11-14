@@ -106,3 +106,41 @@ describe("pickProtocolCriterion", () => {
     expect(pickProtocolCriterion(before, "p2").run_scope).toEqual({ mode: "latest" });
   });
 });
+
+describe("two rows on one protocol", () => {
+  it("flags a second row whose run filter disagrees with the first", () => {
+    render(
+      <ProtocolSection
+        criteria={[
+          { type: "activity", protocol_id: "p1", where: [], run_scope: { mode: "latest" } },
+          { type: "activity", protocol_id: "p1", where: [] },
+        ]}
+        conjunctions={["or", "or"]}
+        protocols={[]}
+        projectIds={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getAllByText("This protocol already has a different run filter or split above."),
+    ).toHaveLength(1);
+  });
+
+  it("doesn't flag rows that agree", () => {
+    render(
+      <ProtocolSection
+        criteria={[
+          { type: "activity", protocol_id: "p1", where: [] },
+          { type: "activity", protocol_id: "p1", where: [] },
+        ]}
+        conjunctions={["or", "or"]}
+        protocols={[]}
+        projectIds={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.queryByText("This protocol already has a different run filter or split above."),
+    ).toBeNull();
+  });
+});
