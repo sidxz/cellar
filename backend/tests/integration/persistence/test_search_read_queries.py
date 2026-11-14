@@ -308,3 +308,27 @@ async def test_ranked_ids_reject_unknown_sort_field(session_factory, workspace_i
         await reader.ranked_ids_by_query(
             workspace_id, {"logic": "and", "criteria": []}, sort_by="smiles"
         )
+
+
+# --- readout definition → protocol ---------------------------------------------------
+
+
+async def test_protocol_ids_by_readout_definition_are_workspace_scoped(uow, workspace_id):
+    other_ws = uuid.uuid4()
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, workspace_id)
+        rd = await seed.readout_def(s, p)
+        foreign_p = await seed.protocol(s, other_ws)
+        foreign_rd = await seed.readout_def(s, foreign_p)
+        await uow.commit()
+
+    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
+        SQLAlchemyProtocolRepository,
+    )
+
+    async with uow:
+        found = await SQLAlchemyProtocolRepository(uow).find_ids_by_readout_definition_ids(
+            workspace_id, [rd, foreign_rd, uuid.uuid4()]
+        )
+    assert found == {rd: p}

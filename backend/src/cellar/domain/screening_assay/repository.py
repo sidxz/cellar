@@ -103,6 +103,12 @@ class ProtocolRepository(Protocol):
     async def find_by_ids(
         self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
     ) -> list[AssayProtocol]: ...
+    async def find_ids_by_readout_definition_ids(
+        self, workspace_id: uuid.UUID, readout_definition_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, uuid.UUID]:
+        """``{readout_definition_id: protocol_id}``, workspace-scoped."""
+        ...
+
     async def find_active_by_lineage(
         self, workspace_id: uuid.UUID, parent_protocol_id: uuid.UUID
     ) -> AssayProtocol | None: ...
