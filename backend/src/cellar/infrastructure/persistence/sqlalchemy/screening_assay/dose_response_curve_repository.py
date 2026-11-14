@@ -8,6 +8,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import delete, func, select
+from sqlalchemy.orm import aliased
 
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_config import InterceptSpec
@@ -17,6 +18,7 @@ from cellar.domain.screening_assay.enums import (
     CurveType,
     InterceptBasis,
     InterceptKind,
+    RunStatus,
 )
 from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.run_scope import RunScope
@@ -328,9 +330,9 @@ class SQLAlchemyDoseResponseCurveRepository:
         decides which to keep (LATEST / GEOMETRIC_MEAN / etc.); this
         method only narrows the wire payload to in-scope runs.
 
-        ``last_n`` is applied per-(mol, rd) AFTER grouping (not as a
-        global SQL LIMIT) so a chemist asking "last 3 runs" gets the
-        latest 3 PER COMPOUND, not the latest 3 globally.
+        ``protocol_latest`` keeps only each protocol's single newest
+        non-rejected run (run date, then creation) — the same run for every
+        compound.
         """
         if not molecule_ids:
             return {}
@@ -349,6 +351,21 @@ class SQLAlchemyDoseResponseCurveRepository:
             )
 
         if run_scope is not None and not run_scope.is_all():
+            if run_scope.protocol_latest:
+                newest = aliased(RunModel)
+                stmt = stmt.where(
+                    RunModel.id
+                    == select(newest.id)
+                    .where(
+                        newest.workspace_id == workspace_id,
+                        newest.protocol_id == RunModel.protocol_id,
+                        newest.status != RunStatus.REJECTED.value,
+                    )
+                    .order_by(newest.run_date.desc(), newest.created_at.desc())
+                    .limit(1)
+                    .correlate(RunModel)
+                    .scalar_subquery()
+                )
             if run_scope.explicit_run_ids:
                 stmt = stmt.where(RunModel.id.in_(run_scope.explicit_run_ids))
             if run_scope.since_date is not None:
@@ -368,13 +385,6 @@ class SQLAlchemyDoseResponseCurveRepository:
             out.setdefault(curve.molecule_id, {}).setdefault(
                 curve.readout_definition_id, []
             ).append(curve)
-
-        # last_n is per-(mol, rd), applied after grouping.
-        if run_scope is not None and run_scope.last_n_count is not None:
-            n = run_scope.last_n_count
-            for mol_id in out:
-                for rd_id in out[mol_id]:
-                    out[mol_id][rd_id] = out[mol_id][rd_id][:n]
 
         return out
 

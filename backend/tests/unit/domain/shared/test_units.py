@@ -6,7 +6,7 @@ import pytest
 
 from cellar.domain.screening_assay.enums import ConditionDataType, ReadoutDataType
 from cellar.domain.screening_assay.protocol import ConditionDefinition, ReadoutDefinition
-from cellar.domain.shared.units import COMMON_UNITS, canonical_unit
+from cellar.domain.shared.units import COMMON_UNITS, canonical_unit, is_concentration_unit
 from cellar.domain.workspace_config.protocol_form import (
     ProtocolFormCondition,
     ProtocolFormReadout,
@@ -112,3 +112,13 @@ def test_form_templates_store_the_canonical_spelling():
         ProtocolFormReadout(name="MIC", data_type="numeric", unit="ug/ml").unit == f"{MICRO}g/mL"
     )
     assert ProtocolFormCondition(name="Time", data_type="numeric", unit="hrs").unit == "h"
+
+
+@pytest.mark.parametrize("unit", ["µM", "uM", "nM", "mM", "pM", "M", "µg/mL", "ng/mL", "mg/mL"])
+def test_concentration_units(unit):
+    assert is_concentration_unit(unit) is True
+
+
+@pytest.mark.parametrize("unit", [None, "", "%", "RFU", "fold", "h", "z"])
+def test_non_concentration_units(unit):
+    assert is_concentration_unit(unit) is False

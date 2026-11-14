@@ -13,10 +13,15 @@ def test_all_runs_is_default():
     assert s.is_all() is True
 
 
-def test_last_n_carries_count():
-    s = RunScope.last_n(3)
-    assert s.last_n_count == 3
+def test_latest_of_protocol_is_a_narrowing_scope():
+    s = RunScope.latest_of_protocol()
+    assert s.protocol_latest is True
     assert s.is_all() is False
+
+
+def test_latest_wire_is_protocol_latest():
+    """The picker says "this protocol's most recent run" — not each compound's."""
+    assert RunScope.from_wire({"mode": "latest"}) == RunScope.latest_of_protocol()
 
 
 def test_since_carries_lower_bound():
@@ -35,13 +40,6 @@ def test_run_ids_carries_explicit_set():
     a, b = uuid.uuid4(), uuid.uuid4()
     s = RunScope.run_ids([a, b])
     assert set(s.explicit_run_ids) == {a, b}
-
-
-def test_invalid_last_n_rejected():
-    with pytest.raises(ValueError):
-        RunScope.last_n(0)
-    with pytest.raises(ValueError):
-        RunScope.last_n(-1)
 
 
 def test_invalid_between_rejected():

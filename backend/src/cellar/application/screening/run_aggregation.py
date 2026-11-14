@@ -21,6 +21,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 
+from cellar.domain.screening_assay.activity_types import ReplicateStats
 from cellar.domain.screening_assay.aggregation_types import (
     AggregateStats,
     QualifierHandling,
@@ -28,6 +29,7 @@ from cellar.domain.screening_assay.aggregation_types import (
     ValueQualifier,
 )
 from cellar.domain.shared.hit_criterion import InterceptKey
+from cellar.domain.shared.units import is_concentration_unit
 
 
 @dataclass(frozen=True)
@@ -362,6 +364,51 @@ def apply_selection_rule(
         )
 
     raise NotImplementedError(f"Unknown SelectionRule: {rule!r}")
+
+
+def effective_rule(rule: SelectionRule, *, unit: str | None, single_point: bool) -> SelectionRule:
+    """The rule a search column really applies — decided once per column.
+
+    A geometric mean is only meaningful for positive, ratio-scale values, so a
+    single-point column in % / z-score / signal units uses the arithmetic mean
+    instead (rather than silently dropping its zero and negative runs). "Best
+    fit (R²)" has no fit to rank on a single-point column, so it falls back to
+    the latest run. Dose-response columns (always concentrations) keep every rule.
+    """
+    if not single_point:
+        return rule
+    if rule == SelectionRule.BEST_R_SQUARED:
+        return SelectionRule.LATEST_RUN
+    if rule == SelectionRule.GEOMETRIC_MEAN and not is_concentration_unit(unit):
+        return SelectionRule.MEAN_ACROSS_RUNS
+    return rule
+
+
+def combine_replicates(
+    stats: ReplicateStats, aggregation: str, *, unit: str | None
+) -> tuple[float | None, ValueQualifier]:
+    """One run's replicate wells → that run's (value, qualifier).
+
+    Unqualified replicates win: when any exist, the ``>``/``<`` ones are set
+    aside and the readout definition's aggregation applies (``none`` = mean;
+    ``geometric_mean`` only for concentration units, else mean). With only
+    qualified replicates the run keeps the tightest bound still true for all
+    of them (``>``: the largest; ``<``: the smallest); a mix of ``>`` and ``<``
+    says nothing and is ND.
+    """
+    if stats.eq_count > 0:
+        by_aggregation = {
+            "median": stats.eq_median,
+            "min": stats.eq_min,
+            "max": stats.eq_max,
+            "geometric_mean": stats.eq_geomean if is_concentration_unit(unit) else stats.eq_mean,
+        }
+        return by_aggregation.get(aggregation, stats.eq_mean), ValueQualifier.EQ
+    if stats.gt_count > 0 and stats.lt_count == 0:
+        return stats.gt_max_bound, ValueQualifier.GT
+    if stats.lt_count > 0 and stats.gt_count == 0:
+        return stats.lt_min_bound, ValueQualifier.LT
+    return None, ValueQualifier.ND
 
 
 # ---------------------------------------------------------------------------

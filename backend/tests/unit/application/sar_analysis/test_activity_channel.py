@@ -93,7 +93,7 @@ def test_resolved_run_scopes_parses_wire_to_runscope():
     a = _spec(run_scopes={"drc:x": {"mode": "latest"}})
     rs = a.resolved_run_scopes()
     assert rs is not None
-    assert rs["drc:x"].last_n_count == 1
+    assert rs["drc:x"].protocol_latest is True
 
 
 def test_snapshot_is_json_safe_even_with_uuid_and_date_fields():

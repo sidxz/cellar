@@ -119,3 +119,14 @@ COMMON_UNITS: tuple[UnitSuggestion, ...] = (
     *_group("Temperature", "°C"),
     *_group("Mass", "Da"),
 )
+
+
+_CONCENTRATION_GROUPS = ("Concentration", "Mass concentration")
+_CONCENTRATION_UNITS = frozenset(u.unit for u in COMMON_UNITS if u.group in _CONCENTRATION_GROUPS)
+
+
+def is_concentration_unit(unit: str | None) -> bool:
+    """True for molar and mass/volume concentrations (µM, nM, µg/mL, ×MIC …):
+    positive, ratio-scale values where a geometric mean is meaningful."""
+    canonical = canonical_unit(unit)
+    return canonical is not None and canonical in _CONCENTRATION_UNITS

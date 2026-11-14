@@ -16,6 +16,28 @@ from cellar.domain.screening_assay.aggregation_types import AggregateStats
 
 
 @dataclass(frozen=True)
+class ReplicateStats:
+    """One run's replicate wells for one (molecule, readout, normalization).
+
+    ``eq_*`` summarise the unqualified values; ``gt_*`` / ``lt_*`` the values
+    reported as ``>``/``>=`` and ``<``/``<=`` (their bounds). The SQL layer
+    only counts and summarises; ``run_aggregation.combine_replicates`` holds
+    the rule that turns these into the run's value.
+    """
+
+    eq_count: int
+    eq_mean: float | None
+    eq_median: float | None
+    eq_min: float | None
+    eq_max: float | None
+    eq_geomean: float | None  # over unqualified values > 0
+    gt_count: int
+    gt_max_bound: float | None
+    lt_count: int
+    lt_min_bound: float | None
+
+
+@dataclass(frozen=True)
 class AggregatedReadout:
     """Aggregated readout value for a molecule x readout definition."""
 

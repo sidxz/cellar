@@ -562,7 +562,7 @@ class TestEnrichMoleculesReportedEndpointFallback:
             WS,
             [MOL_ID],
             [col_spec],
-            run_scopes={col_spec: RunScope.last_n(3)},
+            run_scopes={col_spec: RunScope.latest_of_protocol()},
         )
 
         assert result == {}
@@ -672,8 +672,8 @@ class TestEnrichMoleculesMultiRunAggregation:
 
     @pytest.mark.asyncio
     async def test_run_scope_caps_input(self) -> None:
-        """last_n=2 → only 2 curves are passed to the aggregator."""
-        # The SQL repo applies last_n itself; the service trusts what the
+        """A narrowing scope → only the repo's in-scope curves reach the aggregator."""
+        # The SQL repo applies the scope itself; the service trusts what the
         # repo returns. Mock returns only 2 curves to mirror that contract.
         curves, runs = _seed_runs(
             [
@@ -693,7 +693,7 @@ class TestEnrichMoleculesMultiRunAggregation:
             WS,
             [MOL_ID],
             [col_spec],
-            run_scopes={col_spec: RunScope.last_n(2)},
+            run_scopes={col_spec: RunScope.since(date(2026, 3, 1))},
         )
 
         av = out[MOL_ID][col_spec]
@@ -702,7 +702,7 @@ class TestEnrichMoleculesMultiRunAggregation:
         # Verify the scope was passed through to the repo call.
         service._curve_repo.find_all_curves_for_molecules.assert_awaited_once()
         kwargs = service._curve_repo.find_all_curves_for_molecules.await_args.kwargs
-        assert kwargs["run_scope"] == RunScope.last_n(2)
+        assert kwargs["run_scope"] == RunScope.since(date(2026, 3, 1))
 
     @pytest.mark.asyncio
     async def test_inactive_runs_trigger_disagreement(self) -> None:
