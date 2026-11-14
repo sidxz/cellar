@@ -463,11 +463,11 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     av = (raw.get("activity") or {}).get(parent_token)
     if not av:
         return None
-    iv = _intercept_for(av, col_token) if col_token.startswith("drc:") else None
+    value, qualifier = _endpoint(av, col_token)
     if suffix == "value":
-        return _display_value(av, iv)
+        return _display(value, qualifier)
     if suffix == "qualifier":
-        return _qualifier_of(av, iv)
+        return _qualifier_text(value, qualifier)
     if suffix == "unit":
         return av.get("unit")
     if suffix == "run_count":
@@ -499,65 +499,43 @@ def _format_any_entries(entries: list[dict]) -> str:
     return "; ".join(parts)
 
 
-def _display_value(av: dict, iv: dict | None) -> Any:
-    """Return the cell value the chemist sees on the FE grid.
+def _endpoint(av: dict[str, Any], col_token: str) -> tuple[Any, str | None]:
+    """The value and qualifier the grid shows for this column.
 
-    Mirrors ``formatInterceptDisplay``:
-      - Inactive curve  → string "ND"
-      - At-bound curve  → string ">{value}" (numeric in a text wrapper so
-        chemists doing Excel filters still see "compound > X")
-      - Active scalar   → numeric (preserved as a number so XLSX cells
-        right-align and the column sorts numerically)
-      - No data         → None (Excel empty cell, PDF em-dash)
-
-    Run-count subscripts (₂, ₃…) are NOT folded into this cell — that info
-    lives in the chart thumbnail. Keeping the cell single-value preserves
-    Excel sort + filter behaviour.
-    """
-    if iv is not None:
-        if iv.get("at_bound") and iv.get("value") is not None:
-            return f">{iv['value']}"
-        if iv.get("value") is None:
-            return "ND"
-        return iv["value"]
-    # No intercept entry — single-curve / non-DR fallback.
-    curve_class = (av.get("curve_params") or {}).get("curve_class")
-    if curve_class == "inactive":
-        return "ND"
-    return av.get("value")
-
-
-def _intercept_for(av: dict, col_token: str) -> dict | None:
-    """Find the intercept entry in ``av["intercept_values"]`` matching the token.
-
-    Token format: ``drc:<rd_id>:<kind>:<level>``
+    An intercept column (``drc:<rd>:<kind>:<level>``) reads the cell's selected
+    aggregate for that intercept — what the grid renders under every selection
+    rule — never the representative curve's own intercept. Any other column
+    reads the cell value.
     """
     parts = col_token.split(":")
-    if len(parts) < 4:
-        return None
-    target = (parts[2], float(parts[3]))
-    for iv in av.get("intercept_values") or []:
-        spec = iv.get("spec") or {}
-        if (spec.get("kind"), spec.get("level")) == target:
-            return iv
-    return None
+    if col_token.startswith("drc:") and len(parts) >= 4:
+        target = (parts[2], float(parts[3]))
+        for agg in av.get("intercept_aggregates") or []:
+            spec = agg.get("spec") or {}
+            if (spec.get("kind"), spec.get("level")) == target:
+                return agg.get("selected_value"), agg.get("selected_qualifier")
+        return None, None
+    return av.get("value"), av.get("qualifier")
 
 
-def _qualifier_of(av: dict, iv: dict | None) -> str:
-    """Derive the display qualifier string from an activity value dict.
-
-    Inactive curves → ``"ND"``; at-bound curves → ``">"``; healthy → ``"="``.
-    """
-    if iv is not None:
-        if iv.get("at_bound"):
-            return ">"
-        if iv.get("value") is None:
-            return "ND"
-        return "="
-    cc = (av.get("curve_params") or {}).get("curve_class")
-    if cc == "inactive":
+def _display(value: Any, qualifier: str | None) -> Any:
+    """ND for no reportable value, ``>100`` / ``<0.1`` for a bound (numeric in a
+    text wrapper so Excel filters still read "compound > X"), the number
+    otherwise, None for no data. Run counts are not folded in, so Excel sorts
+    and filters the column as numbers."""
+    if qualifier == "nd":
         return "ND"
-    return av.get("qualifier") or "="
+    if value is None:
+        return None
+    if qualifier in (">", "<"):
+        return f"{qualifier}{value}"
+    return value
+
+
+def _qualifier_text(value: Any, qualifier: str | None) -> str:
+    if qualifier == "nd" or (value is None and qualifier):
+        return "ND"
+    return qualifier if qualifier in (">", "<") else "="
 
 
 # ---------------------------------------------------------------------------

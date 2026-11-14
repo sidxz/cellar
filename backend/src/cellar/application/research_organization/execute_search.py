@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import uuid
 from dataclasses import asdict, dataclass, replace
 from typing import Any
@@ -80,6 +81,10 @@ class ExecuteSearch:
         self._ss_repo = saved_search_repo
         self._activity_service = activity_service
         self._reference_resolver = reference_resolver
+        # Ranked orders by request (everything but cursor and page size). One
+        # instance serves one HTTP request, or one export walking its pages —
+        # which then ranks once instead of once per batch.
+        self._orders: dict[str, list[tuple[uuid.UUID, float | None]]] = {}
 
     async def __call__(
         self, input: ExecuteSearchQuery, auth: AuthContext | None = None
@@ -172,22 +177,26 @@ class ExecuteSearch:
                         ws, query_dict, project_ids=input.project_ids
                     )
         else:
-            if sort_target is not None:
-                if plan is None:
-                    raise ValidationError(f"Unknown sort column: {input.sort_by!r}")
-                order = await self._activity_order(
-                    input, plan, sort_target, await all_matches(), any_groups
-                )
-            elif input.sort_by is None:
-                order = await all_matches()
-            else:
-                order = await self._mol_reader.ranked_ids_by_query(
-                    ws,
-                    query_dict,
-                    project_ids=input.project_ids,
-                    sort_by=input.sort_by,
-                    sort_dir=input.sort_dir,
-                )
+            key = _order_key(input, query_dict)
+            order = self._orders.get(key)
+            if order is None:
+                if sort_target is not None:
+                    if plan is None:
+                        raise ValidationError(f"Unknown sort column: {input.sort_by!r}")
+                    order = await self._activity_order(
+                        input, plan, sort_target, await all_matches(), any_groups
+                    )
+                elif input.sort_by is None:
+                    order = await all_matches()
+                else:
+                    order = await self._mol_reader.ranked_ids_by_query(
+                        ws,
+                        query_dict,
+                        project_ids=input.project_ids,
+                        sort_by=input.sort_by,
+                        sort_dir=input.sort_dir,
+                    )
+                self._orders[key] = order
             start = _resume(order, input.cursor)
             page = order[start : start + input.limit]
             more = start + input.limit < len(order)
@@ -350,6 +359,22 @@ def _cell_value(
             return None, None
         return agg.selected_value, agg.selected_qualifier
     return cell.value, cell.qualifier
+
+
+def _order_key(input: ExecuteSearchQuery, query_dict: dict[str, Any]) -> str:
+    """Everything that decides a ranked order — not the cursor or page size."""
+    return json.dumps(
+        {
+            "ws": str(input.workspace_id),
+            "query": query_dict,
+            "columns": input.protocol_columns,
+            "aggregation": input.aggregation.value,
+            "projects": sorted(str(p) for p in input.project_ids or []),
+            "sort": [input.sort_by, input.sort_dir],
+        },
+        sort_keys=True,
+        default=str,
+    )
 
 
 def _id_cursor(cursor: str | None) -> uuid.UUID | None:

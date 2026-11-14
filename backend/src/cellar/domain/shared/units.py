@@ -121,6 +121,9 @@ COMMON_UNITS: tuple[UnitSuggestion, ...] = (
 )
 
 
+# Every unit the app suggests, by canonical spelling.
+KNOWN_UNITS = frozenset(u.unit for u in COMMON_UNITS)
+
 _CONCENTRATION_GROUPS = ("Concentration", "Mass concentration")
 _CONCENTRATION_UNITS = frozenset(u.unit for u in COMMON_UNITS if u.group in _CONCENTRATION_GROUPS)
 

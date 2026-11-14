@@ -17,6 +17,7 @@ import re
 import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any, Literal
 
 from cellar.domain.research_organization.criteria_walker import walk_criteria
@@ -25,7 +26,7 @@ from cellar.domain.screening_assay.column_split import ColumnSplit
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.errors import ValidationError
-from cellar.domain.shared.units import canonical_unit, comparable_magnitude
+from cellar.domain.shared.units import KNOWN_UNITS, canonical_unit, comparable_magnitude
 
 NOT_RECORDED = "Not recorded"
 ANY_COLUMN = "any"  # the cross-protocol "Active in" column
@@ -103,7 +104,11 @@ class SearchColumnPlanner:
         Raises ``ValidationError`` for a split the criterion can't support.
         """
         parsed, want_any = await self._parse(workspace_id, tokens)
-        settings = _criterion_settings(criteria)
+        settings, conflicts = _criterion_settings(criteria)
+        if conflicts & {t.protocol_id for t in parsed}:
+            raise ValidationError(
+                "This protocol already has a different run filter or split in this search"
+            )
 
         cached: list[uuid.UUID] | None = None
 
@@ -283,13 +288,13 @@ def _column(t: _Token, scope: RunScope, groups: tuple[ColumnGroup, ...]) -> Plan
 
 def _criterion_settings(
     criteria: list[dict[str, Any]],
-) -> dict[uuid.UUID, tuple[RunScope, ColumnSplit]]:
-    """Each protocol's run scope and split, from its activity criteria.
-
-    Two criteria on one protocol must agree — otherwise there is no single
-    answer to "which runs feed this protocol's columns".
+) -> tuple[dict[uuid.UUID, tuple[RunScope, ColumnSplit]], set[uuid.UUID]]:
+    """Each protocol's run scope and split, from its activity criteria, and the
+    protocols whose criteria disagree. Disagreement only matters for a protocol
+    with columns: there is then no single answer to "which runs feed them".
     """
     seen: dict[uuid.UUID, tuple[Any, Any, RunScope, ColumnSplit]] = {}
+    conflicts: set[uuid.UUID] = set()
 
     def visit(c: dict[str, Any]) -> None:
         if c.get("type") != "activity" or not c.get("protocol_id"):
@@ -301,9 +306,7 @@ def _criterion_settings(
         if pid in seen:
             _, _, prev_scope, prev_split = seen[pid]
             if (prev_scope, prev_split) != (scope, split):
-                raise ValidationError(
-                    "This protocol already has a different run filter or split in this search"
-                )
+                conflicts.add(pid)
             return
         if split.by == "run" and not scope.explicit_run_ids:
             raise ValidationError("Splitting by run needs the runs you pick (Specific run)")
@@ -314,7 +317,7 @@ def _criterion_settings(
         seen[pid] = (raw_scope, raw_split, scope, split)
 
     walk_criteria(criteria, visit)
-    return {pid: (scope, split) for pid, (_, _, scope, split) in seen.items()}
+    return {pid: (scope, split) for pid, (_, _, scope, split) in seen.items()}, conflicts
 
 
 def _run_label(h: RunHeader, *, shared_date: bool) -> str:
@@ -338,9 +341,28 @@ def _condition_value(raw: Any, definition: Any) -> tuple[tuple[Any, ...], str]:
     picks = list(definition.pick_list_values or [])
     if text in picks:
         return (1, picks.index(text)), text
-    if m := _NUMBER_AND_UNIT.match(text):
+    if (m := _NUMBER_AND_UNIT.match(text)) and _is_unit(m.group(2), definition.unit):
         number = float(m.group(1))
         unit = canonical_unit(m.group(2)) or canonical_unit(definition.unit) or ""
-        label = f"{number:g} {unit}".strip()
+        label = f"{_plain_number(m.group(1))} {unit}".strip()
         return (0, *comparable_magnitude(number, unit)), label
     return (2, text.casefold()), text
+
+
+def _is_unit(text: str, definition_unit: str | None) -> bool:
+    """Empty (a bare number), a unit the app knows, or the condition's own unit.
+    "1:100", "10-15 min" and dates are text, not a number with a unit."""
+    if not text:
+        return True
+    canonical = canonical_unit(text)
+    return canonical in KNOWN_UNITS or (
+        canonical is not None and canonical == canonical_unit(definition_unit)
+    )
+
+
+def _plain_number(text: str) -> str:
+    """The number as written, without trailing zeros: "10.0" → "10", "1234567" kept whole."""
+    value = Decimal(text)
+    if value == value.to_integral_value():
+        return str(value.quantize(Decimal(1)))
+    return format(value.normalize(), "f")

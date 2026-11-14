@@ -222,7 +222,18 @@ def test_cell_value_narrowed_drc_resolves_intercept():
         "run_count": 1,
         "selection_rule": None,
         "runs": None,
-        "intercept_aggregates": None,
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ec", "level": 50.0},
+                "selected_value": 1.23,
+                "selected_qualifier": "=",
+            },
+            {
+                "spec": {"kind": "ec", "level": 90.0},
+                "selected_value": 4.56,
+                "selected_qualifier": "=",
+            },
+        ],
         "disagreement_flag": False,
         "additional_curves": None,
         "aggregate": None,
@@ -232,7 +243,7 @@ def test_cell_value_narrowed_drc_resolves_intercept():
 
     spec = ColumnSpec(key=narrowed_key, header="Mtb::EC50", kind="number", unit="uM")
     assert _cell_value(spec, raw) == 1.23, (
-        "Bug #1: _cell_value should have found the EC50 intercept_values entry "
+        "Bug #1: _cell_value should have found the EC50 intercept aggregate "
         "via the parent token 'drc:<rd_id>', not the narrowed 'drc:<rd_id>:ec:50.0'"
     )
 
@@ -268,7 +279,13 @@ def test_cell_value_narrowed_drc_qualifier_column():
         "run_count": 1,
         "selection_rule": None,
         "runs": None,
-        "intercept_aggregates": None,
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ic", "level": 50.0},
+                "selected_value": None,
+                "selected_qualifier": "nd",
+            }
+        ],
         "disagreement_flag": False,
         "additional_curves": None,
         "aggregate": None,
@@ -424,37 +441,20 @@ async def test_intercepts_collapse_to_one_column_per_label():
 
 
 # ---------------------------------------------------------------------------
-# _display_value chemist-mirror — inactive → "ND", at_bound → ">value",
+# _display chemist-mirror — inactive → "ND", at_bound → ">value",
 # scalar → number.
 # ---------------------------------------------------------------------------
 
 
-def test_cell_value_inactive_shows_nd_text():
-    from cellar.application.export.row_streams.search_results import _display_value
+def test_display_shows_nd_bounds_and_numbers():
+    from cellar.application.export.row_streams.search_results import _display
 
-    iv_inactive = {"value": None, "at_bound": False, "spec": {"kind": "ec", "level": 50.0}}
-    assert _display_value({}, iv_inactive) == "ND"
-
-
-def test_cell_value_at_bound_shows_gt_value():
-    from cellar.application.export.row_streams.search_results import _display_value
-
-    iv_at_bound = {"value": 100.0, "at_bound": True, "spec": {"kind": "ec", "level": 50.0}}
-    assert _display_value({}, iv_at_bound) == ">100.0"
-
-
-def test_cell_value_active_returns_scalar():
-    from cellar.application.export.row_streams.search_results import _display_value
-
-    iv_eq = {"value": 67.4, "at_bound": False, "spec": {"kind": "ec", "level": 50.0}}
-    assert _display_value({}, iv_eq) == 67.4
-
-
-def test_cell_value_legacy_inactive_fallback():
-    from cellar.application.export.row_streams.search_results import _display_value
-
-    av = {"value": None, "curve_params": {"curve_class": "inactive"}}
-    assert _display_value(av, None) == "ND"
+    assert _display(None, "nd") == "ND"
+    assert _display(100.0, ">") == ">100.0"
+    assert _display(0.1, "<") == "<0.1"
+    assert _display(67.4, "=") == 67.4
+    assert _display(67.4, None) == 67.4
+    assert _display(None, None) is None
 
 
 # ---------------------------------------------------------------------------
@@ -674,3 +674,42 @@ async def test_split_protocol_exports_one_column_set_per_group():
     assert _cell_value(split[0], raw) is None
     cmd = stream.execute_search.await_args.args[0]
     assert (cmd.sort_by, cmd.sort_dir) == (token, "desc")
+
+
+def test_single_point_cell_exports_its_qualifier_and_nd():
+    spec = ColumnSpec(key="rd:p:rd::value", header="MIC", kind="number")
+    assert (
+        _cell_value(spec, {"activity": {"rd:p:rd": {"value": 50.0, "qualifier": ">"}}}) == ">50.0"
+    )
+    assert _cell_value(spec, {"activity": {"rd:p:rd": {"value": None, "qualifier": "nd"}}}) == "ND"
+    assert _cell_value(spec, {"activity": {"rd:p:rd": {"value": 12.5, "qualifier": None}}}) == 12.5
+
+
+def test_intercept_cell_exports_the_value_the_grid_shows():
+    spec = ColumnSpec(key="drc:rd:ic:50.0::value", header="IC50", kind="number")
+    av = {
+        "value": 30.0,
+        "qualifier": None,
+        # The representative curve's own intercept…
+        "intercept_values": [{"spec": {"kind": "ic", "level": 50.0}, "value": 5.0}],
+        # …is not what a mean cell shows: the selected aggregate is.
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ic", "level": 50.0},
+                "selected_value": 30.0,
+                "selected_qualifier": "=",
+            }
+        ],
+    }
+    assert _cell_value(spec, {"activity": {"drc:rd": av}}) == 30.0
+    gt = {
+        **av,
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ic", "level": 50.0},
+                "selected_value": 100.0,
+                "selected_qualifier": ">",
+            }
+        ],
+    }
+    assert _cell_value(spec, {"activity": {"drc:rd": gt}}) == ">100.0"

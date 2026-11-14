@@ -45,3 +45,10 @@ def test_run_ids_carries_explicit_set():
 def test_invalid_between_rejected():
     with pytest.raises(ValueError):
         RunScope.between(date(2026, 5, 1), date(2026, 1, 1))
+
+
+def test_date_range_with_only_an_end_date_narrows():
+    s = RunScope.from_wire({"mode": "date_range", "date_to": "2026-03-01"})
+    assert s.to_date == date(2026, 3, 1)
+    assert s.from_date is None
+    assert s.is_all() is False

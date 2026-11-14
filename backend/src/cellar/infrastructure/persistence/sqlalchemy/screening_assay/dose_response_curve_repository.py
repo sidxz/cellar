@@ -337,7 +337,7 @@ class SQLAlchemyDoseResponseCurveRepository:
         Joins to RunModel for run filtering (``run_scope_filters``). The shared
         aggregator decides which to keep (LATEST / GEOMETRIC_MEAN / etc.); this
         method only narrows to in-scope runs. ``exclude_rejected`` drops curves
-        of rejected runs; ``lean`` skips loading the point arrays.
+        of rejected runs; ``lean`` skips loading the excluded points.
         """
         if not molecule_ids:
             return {}
@@ -357,10 +357,9 @@ class SQLAlchemyDoseResponseCurveRepository:
                 any_id(DoseResponseCurveModel.readout_definition_id, readout_definition_ids)
             )
         if lean:
-            stmt = stmt.options(
-                defer(DoseResponseCurveModel.raw_data),
-                defer(DoseResponseCurveModel.excluded_points),
-            )
+            # raw_data stays: an at-bound fit resolves to "> max tested dose",
+            # and a lean (sorting) cell must show what the grid cell shows.
+            stmt = stmt.options(defer(DoseResponseCurveModel.excluded_points))
 
         stmt = stmt.order_by(RunModel.run_date.desc())
 

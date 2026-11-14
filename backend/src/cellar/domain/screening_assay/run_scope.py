@@ -121,5 +121,7 @@ class RunScope:
                 return cls.between(d_from, d_to)
             if d_from is not None:
                 return cls.since(d_from)
+            if d_to is not None:
+                return cls(to_date=d_to)
             return cls.all()
         return cls.all()

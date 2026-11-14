@@ -205,7 +205,7 @@ class SQLAlchemyReadoutDataRepository:
         """One replicate summary per (molecule, readout, normalization, run).
 
         The SQL only counts and summarises; ``run_aggregation.combine_replicates``
-        decides what a run's value is. Unqualified = no qualifier or ``=``;
+        decides what a run's value is. Unqualified = no qualifier, ``=`` or ``~``;
         ``>``/``>=`` and ``<``/``<=`` contribute their bounds. Rejected runs,
         outlier wells and non-numeric rows never appear.
         """
@@ -213,7 +213,8 @@ class SQLAlchemyReadoutDataRepository:
             return []
         rd = ReadoutDataModel
         v = rd.value_numeric
-        eq = sa.or_(rd.value_qualifier.is_(None), rd.value_qualifier.in_(("=", "")))
+        # "~" (approximate) is a value, as search matching treats it.
+        eq = sa.or_(rd.value_qualifier.is_(None), rd.value_qualifier.in_(("=", "", "~")))
         gt = rd.value_qualifier.in_((">", ">="))
         lt = rd.value_qualifier.in_(("<", "<="))
         eq_v = sa.case((eq, v))

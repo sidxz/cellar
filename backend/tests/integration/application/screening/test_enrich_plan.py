@@ -258,3 +258,123 @@ async def test_any_column_ignores_rejected_runs(uow, workspace_id, dr):
         await seed.curve(s, workspace_id, dr["p"], apr, MOL, dr["rd"], fitted_value=0.1)
         await uow.commit()
     assert "any" not in await _enrich(uow, workspace_id, ["any"])
+
+
+# --- final-review fixes ----------------------------------------------------------------
+
+
+def _ic50(value, *, at_bound=False):
+    spec = {"kind": "ic", "level": 50.0, "basis": "relative_percent", "label": None}
+    return [{"spec": spec, "value": value, "at_bound": at_bound}]
+
+
+async def test_lean_cells_resolve_an_at_bound_run_like_full_cells(uow, workspace_id, dr):
+    """Sorting uses lean cells; they must show the same >max-dose bound as the grid."""
+    async with uow:
+        s = uow.session
+        jan = await seed.run(s, workspace_id, dr["p"], JAN)
+        apr = await seed.run(s, workspace_id, dr["p"], APR)
+        await seed.curve(
+            s,
+            workspace_id,
+            dr["p"],
+            jan,
+            MOL,
+            dr["rd"],
+            fitted_value=5.0,
+            intercept_values=_ic50(5.0),
+        )
+        await seed.curve(
+            s,
+            workspace_id,
+            dr["p"],
+            apr,
+            MOL,
+            dr["rd"],
+            fitted_value=150.0,
+            intercept_values=_ic50(150.0, at_bound=True),
+            max_dose=100.0,
+        )
+        await uow.commit()
+
+    service = _service(uow)
+    async with uow:
+        plan = await service.planner.plan_from_scopes(workspace_id, [dr["token"]], {})
+        full = await service.enrich_plan(workspace_id, [MOL], plan)
+        lean = await service.enrich_plan(workspace_id, [MOL], plan, lean=True)
+    for cells in (full, lean):
+        av = cells[MOL][dr["token"]]
+        assert (av.value, av.qualifier) == (pytest.approx(100.0), ">")
+
+
+async def test_reported_endpoint_cell_stands_for_the_primary_intercept(uow, workspace_id, dr):
+    async with uow:
+        s = uow.session
+        jan = await seed.run(s, workspace_id, dr["p"], JAN)
+        await seed.readout(s, workspace_id, jan, dr["rd"], MOL, 3.4, wellless=True)
+        await uow.commit()
+    av = (await _enrich(uow, workspace_id, [dr["token"]]))[dr["token"]]
+    (agg,) = av.intercept_aggregates
+    assert (agg.spec["kind"], agg.spec["level"]) == ("ic", 50.0)
+    assert (agg.selected_value, agg.selected_qualifier) == (pytest.approx(3.4), "=")
+
+
+async def test_approximate_readouts_count_as_values(uow, workspace_id, percent_runs):
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, workspace_id)
+        rd = await seed.readout_def(s, p, unit="%")
+        r = await seed.run(s, workspace_id, p, JAN)
+        await seed.readout(s, workspace_id, r, rd, MOL, 42.0, qualifier="~")
+        await uow.commit()
+    token = f"rd:{p}:{rd}"
+    av = (await _enrich(uow, workspace_id, [token]))[token]
+    assert (av.value, av.qualifier) == (pytest.approx(42.0), None)
+
+
+async def test_latest_run_tie_is_broken_the_same_way_everywhere(uow, workspace_id, dr):
+    """Two runs with the same date and creation time: values and matching agree."""
+    from datetime import datetime
+
+    from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.molecule_reader import (
+        SQLAlchemyMoleculeReader,
+    )
+
+    created = datetime(2026, 1, 1, 12, 0)
+    async with uow:
+        s = uow.session
+        o = await seed.org(s, workspace_id)
+        a = await seed.molecule(s, workspace_id, o, "a", **seed.descriptors(300.0))
+        b = await seed.molecule(s, workspace_id, o, "b", **seed.descriptors(300.0))
+        r1 = await seed.run(s, workspace_id, dr["p"], JAN, created_at=created)
+        r2 = await seed.run(s, workspace_id, dr["p"], JAN, created_at=created)
+        await seed.curve(s, workspace_id, dr["p"], r1, a, dr["rd"], fitted_value=1.0)
+        await seed.curve(s, workspace_id, dr["p"], r2, b, dr["rd"], fitted_value=2.0)
+        await uow.commit()
+    winner = b if str(r2) > str(r1) else a
+
+    cells = {}
+    service = _service(uow)
+    async with uow:
+        plan = await service.planner.plan_from_scopes(
+            workspace_id, [dr["token"]], {dr["token"]: RunScope.latest_of_protocol()}
+        )
+        cells = await service.enrich_plan(workspace_id, [a, b], plan)
+    reader = SQLAlchemyMoleculeReader(uow._session_factory)
+    query = {
+        "logic": "and",
+        "criteria": [
+            {"type": "activity", "protocol_id": str(dr["p"]), "run_scope": {"mode": "latest"}}
+        ],
+    }
+    matched = {m.id for m in await reader.search_by_query(workspace_id, query)}
+    assert set(cells) == {winner}
+    assert matched == {winner}
+
+
+async def test_an_end_date_alone_narrows_values_like_matching(uow, workspace_id, percent_runs):
+    scope = RunScope.from_wire({"mode": "date_range", "date_to": "2026-01-15"})
+    cells = await _enrich(
+        uow, workspace_id, [percent_runs["token"]], scopes={percent_runs["token"]: scope}
+    )
+    assert cells[percent_runs["token"]].run_ids == [percent_runs["jan"]]

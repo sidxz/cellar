@@ -286,3 +286,22 @@ async def test_a_saved_search_from_before_splits_still_runs(
     data = await _execute(client, {"saved_search_id": str(sid), "protocol_columns": [token]})
     assert data["activity_data"][ic50s["mols"]["a"]][token]["value"] == pytest.approx(30.0)
     assert data["column_groups"] is None
+
+
+async def test_sort_by_an_intercept_ranks_reported_endpoints_by_their_value(
+    client, session_factory, workspace_id
+):
+    async with session_factory() as s:
+        o = await seed.org(s, workspace_id)
+        fitted = await seed.molecule(s, workspace_id, o, "fitted", **seed.descriptors(300.0))
+        reported = await seed.molecule(s, workspace_id, o, "reported", **seed.descriptors(300.0))
+        p = await seed.protocol(s, workspace_id)
+        rd = await seed.readout_def(s, p, data_type="dose_response")
+        r = await seed.run(s, workspace_id, p, JAN)
+        await seed.curve(s, workspace_id, p, r, fitted, rd, fitted_value=50.0)
+        await seed.readout(s, workspace_id, r, rd, reported, 2.0, wellless=True)
+        await s.commit()
+    token = f"drc:{rd}"
+    body = {"query": _protocol_query(p), "protocol_columns": [token]}
+    ids, _ = await _pages(client, body, sort_by=f"{token}:ic:50.0", sort_dir="asc")
+    assert ids == [str(reported), str(fitted)]

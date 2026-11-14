@@ -325,3 +325,39 @@ async def test_condition_groups_compare_values_across_units_of_one_family():
         protocols=FakeProtocols({P_A: ATP}),
     )
     assert [g.label for g in plan.protocol_groups[P_A].groups] == ["10 µM", "1 mM"]
+
+
+async def test_conflicting_criteria_on_a_protocol_without_columns_are_fine():
+    plan = await _plan(
+        [f"drc:{RD_A}"],
+        [_criterion(P_B, run_scope={"mode": "latest"}), _criterion(P_B)],
+    )
+    assert [c.protocol_id for c in plan.columns] == [P_A]
+
+
+@pytest.mark.parametrize("value", ["1:100", "2026-05-13", "10-15 min", "Human"])
+async def test_condition_values_that_are_not_a_number_and_unit_keep_their_text(value):
+    runs = FakeRuns([_header(date(2026, 1, 1), conditions={"Dilution": value})])
+    plan = await _plan(
+        [f"drc:{RD_A}"],
+        [_criterion(P_A, split={"by": "condition", "condition": "Dilution"})],
+        runs=runs,
+        protocols=FakeProtocols({P_A: [_cond("Dilution")]}),
+    )
+    assert [g.label for g in plan.protocol_groups[P_A].groups] == [value]
+
+
+async def test_condition_values_keep_full_precision():
+    runs = FakeRuns(
+        [
+            _header(date(2026, 1, 1), conditions={"ATP Concentration": "1234567 nM"}),
+            _header(date(2026, 1, 2), conditions={"ATP Concentration": "1234568 nM"}),
+        ]
+    )
+    plan = await _plan(
+        [f"drc:{RD_A}"],
+        [_criterion(P_A, split={"by": "condition", "condition": "ATP Concentration"})],
+        runs=runs,
+        protocols=FakeProtocols({P_A: ATP}),
+    )
+    assert [g.label for g in plan.protocol_groups[P_A].groups] == ["1234567 nM", "1234568 nM"]

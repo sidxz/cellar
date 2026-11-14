@@ -22,7 +22,8 @@ def run_scope_filters(
     """WHERE clauses on ``RunModel`` (which must be in the FROM) for ``run_scope``.
 
     ``protocol_latest`` is correlated on ``RunModel.protocol_id``: each row's
-    own protocol's newest non-rejected run, by run date then creation.
+    own protocol's newest non-rejected run, by run date, then creation, then id
+    (deterministic — matching uses the same order).
     """
     if run_scope is None or run_scope.is_all():
         return []
@@ -37,7 +38,7 @@ def run_scope_filters(
                 newest.protocol_id == RunModel.protocol_id,
                 newest.status != RunStatus.REJECTED.value,
             )
-            .order_by(newest.run_date.desc(), newest.created_at.desc())
+            .order_by(newest.run_date.desc(), newest.created_at.desc(), newest.id.desc())
             .limit(1)
             .correlate(RunModel)
             .scalar_subquery()
@@ -48,6 +49,8 @@ def run_scope_filters(
         out.append(RunModel.run_date >= run_scope.since_date)
     if run_scope.from_date is not None and run_scope.to_date is not None:
         out.append(RunModel.run_date.between(run_scope.from_date, run_scope.to_date))
+    elif run_scope.to_date is not None:
+        out.append(RunModel.run_date <= run_scope.to_date)
     return out
 
 

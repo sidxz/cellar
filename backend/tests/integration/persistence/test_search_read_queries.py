@@ -182,7 +182,9 @@ async def test_run_stats_wellless_only_and_normalization(uow, workspace_id):
 # --- curves --------------------------------------------------------------------
 
 
-async def test_curves_exclude_rejected_when_asked_and_lean_drops_raw_data(uow, workspace_id):
+async def test_curves_exclude_rejected_when_asked_and_lean_keeps_the_tested_range(
+    uow, workspace_id
+):
     mol = uuid.uuid4()
     async with uow:
         s = uow.session
@@ -203,7 +205,9 @@ async def test_curves_exclude_rejected_when_asked_and_lean_drops_raw_data(uow, w
 
     assert len(everything[mol][rd]) == 2
     assert [c.id for c in filtered[mol][rd]] == [kept]
-    assert not filtered[mol][rd][0].raw_data
+    # An at-bound fit resolves to "> max tested dose": lean cells need the points.
+    assert filtered[mol][rd][0].raw_data
+    assert filtered[mol][rd][0].excluded_points is None
 
 
 async def test_curves_accept_more_ids_than_the_bind_parameter_limit(uow, workspace_id):

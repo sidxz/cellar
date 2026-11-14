@@ -37,7 +37,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
 # "Latest run" = the experiment run most recently (run date), the same order
 # the results grid uses to pick a compound's latest value. created_at only
 # breaks ties — an old run imported today is not the latest experiment.
-_LATEST_RUN_ORDER = (RunModel.run_date.desc(), RunModel.created_at.desc())
+# Same order as RunScope.protocol_latest (_run_scope_sql): a tie never picks differently.
+_LATEST_RUN_ORDER = (RunModel.run_date.desc(), RunModel.created_at.desc(), RunModel.id.desc())
 
 _ACTIVITY_OP_MAP: dict[str, str] = {
     "eq": "__eq__",

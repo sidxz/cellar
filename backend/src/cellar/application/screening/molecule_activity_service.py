@@ -555,13 +555,18 @@ class MoleculeActivityService:
         run_ids = list({c.run_id for found in curves.values() for c in found})
         headers = await self._run_repo.find_headers(workspace_id, run_ids) if run_ids else {}
         dr_protocols = list({c.protocol_id for c in plan.columns if c.kind == "drc"})
-        dose_unit = {
-            p.id: p.dose_unit.value
-            for p in (
-                await self._protocol_repo.find_by_ids(workspace_id, dr_protocols)
-                if dr_protocols
-                else []
-            )
+        dr_protos = (
+            await self._protocol_repo.find_by_ids(workspace_id, dr_protocols)
+            if dr_protocols
+            else []
+        )
+        dose_unit = {p.id: p.dose_unit.value for p in dr_protos}
+        # A reported endpoint stands for its readout's primary intercept.
+        primary_spec = {
+            rd.id: _spec_dict(rd.dose_response_config.intercepts[0])
+            for p in dr_protos
+            for rd in p.readout_definitions
+            if rd.dose_response_config and rd.dose_response_config.intercepts
         }
 
         any_block = (
@@ -571,6 +576,7 @@ class MoleculeActivityService:
                 any_readout_groups=any_readout_groups,
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
+                lean=lean,
             )
             if plan.want_any
             else {}
@@ -592,6 +598,7 @@ class MoleculeActivityService:
                             ],
                             headers=headers,
                             unit=dose_unit.get(col.protocol_id, "uM"),
+                            intercept_spec=primary_spec.get(rd_id),
                             selection_rule=selection_rule,
                             qualifier_handling=qualifier_handling,
                             lean=lean,
@@ -622,12 +629,15 @@ class MoleculeActivityService:
         *,
         headers: dict[uuid.UUID, RunHeader],
         unit: str,
+        intercept_spec: dict[str, Any] | None,
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
         lean: bool,
     ) -> ActivityValue | None:
         """Fitted curves win (any class); reported endpoints only when the
-        group has none — the campaign channel resolver's rule D1."""
+        group has none — the campaign channel resolver's rule D1. An endpoint
+        cell carries its readout's primary intercept (``intercept_spec``) so
+        the grid, sorting and export read it like a fitted cell."""
         resolved = self._build_resolved_runs(curves, headers)
         if resolved:
             return self._build_dr_activity(
@@ -642,6 +652,7 @@ class MoleculeActivityService:
             selection_rule=selection_rule,
             qualifier_handling=qualifier_handling,
             lean=lean,
+            intercept_spec=intercept_spec,
         )
 
     async def _any_column(
@@ -652,14 +663,16 @@ class MoleculeActivityService:
         any_readout_groups: list[tuple[str, str | None]] | None,
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
+        lean: bool = False,
     ) -> dict[uuid.UUID, AnyProtocolActivity]:
         """The "Active in" column: every protocol the molecule has curves in
         (plus readout groups the search names), each collapsed like a column."""
-        # ponytail: loads every curve incl. raw_data for the page (100 rows ×
-        # protocols × runs); if it bites, pass lean=True — entries need only
-        # fitted_value/curve_class/intercept_values/protocol_id/run_id.
         any_curves = await self._curve_repo.find_all_curves_for_molecules(
-            workspace_id, molecule_ids, readout_definition_ids=None, exclude_rejected=True
+            workspace_id,
+            molecule_ids,
+            readout_definition_ids=None,
+            exclude_rejected=True,
+            lean=True,  # entries are values only; no point drawing here
         )
         run_ids = list(
             {c.run_id for by_rd in any_curves.values() for cs in by_rd.values() for c in cs}
@@ -716,6 +729,7 @@ class MoleculeActivityService:
                 targets=targets,
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
+                lean=lean,
             )
             if block is not None:
                 out[mol_id] = block
@@ -925,6 +939,7 @@ class MoleculeActivityService:
         targets: dict[uuid.UUID, list[str]],
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
+        lean: bool = True,
     ) -> AnyProtocolActivity | None:
         """One entry per (protocol, DR readout-def) the molecule has curves in,
         collapsed per readout-def by the same run aggregation as the DR
@@ -943,6 +958,7 @@ class MoleculeActivityService:
                 unit=unit,
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
+                lean=lean,
             )
             if av is None:
                 continue
@@ -1036,6 +1052,16 @@ def _intercept_key_spec(key: InterceptKey, runs: list[ResolvedRun]) -> dict[str,
     return {"kind": key.kind, "level": key.level}
 
 
+def _spec_dict(spec: Any) -> dict[str, Any]:
+    """An ``InterceptSpec`` in the wire shape intercept values carry."""
+    return {
+        "kind": spec.kind.value,
+        "level": spec.level,
+        "basis": spec.basis.value,
+        "label": spec.label,
+    }
+
+
 def _in(group: ColumnGroup, run_id: uuid.UUID) -> bool:
     return group.run_ids is None or run_id in group.run_ids
 
@@ -1046,6 +1072,7 @@ def _single_point_cell(
     selection_rule: SelectionRule,
     qualifier_handling: QualifierHandling,
     lean: bool,
+    intercept_spec: dict[str, Any] | None = None,
 ) -> ActivityValue | None:
     """A cell from per-run replicate summaries (single-point readouts and
     reported dose-response endpoints): each run's replicates become one value
@@ -1053,7 +1080,7 @@ def _single_point_cell(
     if not rows:
         return None
     unit = rows[0].unit
-    label = rows[0].readout_name
+    spec = intercept_spec or {"kind": "value", "label": rows[0].readout_name}
     runs: list[ResolvedRun] = []
     for row in rows:
         value, qualifier = combine_replicates(row.stats, row.aggregation, unit=unit)
@@ -1070,13 +1097,7 @@ def _single_point_cell(
                 protocol_name="",
                 protocol_version=0,
                 readout_id=row.readout_definition_id,
-                intercept_values=[
-                    {
-                        "spec": {"kind": "value", "label": label},
-                        "value": value,
-                        "qualifier": qualifier.value,
-                    }
-                ],
+                intercept_values=[{"spec": spec, "value": value, "qualifier": qualifier.value}],
             )
         )
     rule = effective_rule(selection_rule, unit=unit, single_point=True)
@@ -1084,6 +1105,8 @@ def _single_point_cell(
     if picked.representative_run is None:
         return None
     newest_first = sorted(runs, key=lambda r: (r.run_date is not None, r.run_date), reverse=True)
+    log_scale = is_concentration_unit(unit)
+    disagree = detect_disagreement(runs, None, log_scale=log_scale)
     return ActivityValue(
         value=picked.value,
         qualifier=picked.qualifier.value if picked.qualifier != ValueQualifier.EQ else None,
@@ -1093,7 +1116,22 @@ def _single_point_cell(
         run_count=len(runs),
         selection_rule=rule.value,
         runs=None if lean else [_to_run_summary(r) for r in newest_first[:_MAX_RUNS_PAYLOAD]],
-        disagreement_flag=detect_disagreement(runs, None, log_scale=is_concentration_unit(unit)),
+        disagreement_flag=disagree,
+        # An endpoint cell stands for its readout's primary intercept: the same
+        # field a fitted cell's intercept columns, sorting and export read.
+        intercept_aggregates=(
+            [
+                InterceptAggregate(
+                    spec=dict(intercept_spec),
+                    selected_value=picked.value,
+                    selected_qualifier=picked.qualifier.value,
+                    aggregate_stats=compute_aggregate_stats(runs, None) if log_scale else None,
+                    disagreement_flag=disagree,
+                )
+            ]
+            if intercept_spec
+            else None
+        ),
         run_ids=[r.run_id for r in newest_first],
     )
 
