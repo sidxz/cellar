@@ -20,6 +20,23 @@ WINDOW_NAME_MAX = 60
 class MeltMeasure(StrEnum):
     TM = "tm"
     DELTA_TM = "delta_tm"
+    # Descriptive values per batch over a concentration series (no fit).
+    MAX_DELTA_TM = "max_delta_tm"
+    LOWEST_SHIFT_CONCENTRATION = "lowest_shift_concentration"
+    DELTA_TM_AT_CONCENTRATION = "delta_tm_at_concentration"
+
+    @property
+    def is_series(self) -> bool:
+        """One value per batch, not per position."""
+        return self not in PER_POSITION_MEASURES
+
+
+PER_POSITION_MEASURES: frozenset[MeltMeasure] = frozenset({MeltMeasure.TM, MeltMeasure.DELTA_TM})
+
+
+def _positive(value: float | None, what: str) -> None:
+    if value is not None and not (math.isfinite(value) and value > 0):
+        raise ValidationError(f"{what} must be a number above zero")
 
 
 @dataclass(frozen=True)
@@ -31,6 +48,10 @@ class MeltReadoutConfig:
     channel_key: str
     low: float
     high: float
+    # Lowest shifting concentration: |ΔTm| above this (°C) counts as a shift.
+    threshold: float | None = None
+    # ΔTm at a stated concentration, in the protocol's dose unit.
+    concentration: float | None = None
 
     def __post_init__(self) -> None:
         window = self.window.strip()
@@ -48,6 +69,18 @@ class MeltReadoutConfig:
         object.__setattr__(self, "window", window)
         object.__setattr__(self, "channel_key", channel_key)
         object.__setattr__(self, "measure", MeltMeasure(self.measure))
+        wants_threshold = self.measure is MeltMeasure.LOWEST_SHIFT_CONCENTRATION
+        wants_concentration = self.measure is MeltMeasure.DELTA_TM_AT_CONCENTRATION
+        if (self.threshold is not None) != wants_threshold:
+            raise ValidationError(
+                "A shift threshold is set on, and only on, a lowest shifting concentration"
+            )
+        if (self.concentration is not None) != wants_concentration:
+            raise ValidationError(
+                "A concentration is set on, and only on, a ΔTm at a stated concentration"
+            )
+        _positive(self.threshold, "The shift threshold")
+        _positive(self.concentration, "The concentration")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -56,6 +89,8 @@ class MeltReadoutConfig:
             "channel_key": self.channel_key,
             "low": self.low,
             "high": self.high,
+            **({"threshold": self.threshold} if self.threshold is not None else {}),
+            **({"concentration": self.concentration} if self.concentration is not None else {}),
         }
 
     @classmethod
@@ -66,7 +101,14 @@ class MeltReadoutConfig:
             channel_key=d["channel_key"],
             low=float(d["low"]),
             high=float(d["high"]),
+            threshold=None if d.get("threshold") is None else float(d["threshold"]),
+            concentration=None if d.get("concentration") is None else float(d["concentration"]),
         )
+
+    @property
+    def key(self) -> tuple[MeltMeasure, float | None, float | None]:
+        """What must differ between two readouts of one window."""
+        return (self.measure, self.threshold, self.concentration)
 
     def same_window(self, other: MeltReadoutConfig) -> bool:
         return (self.window, self.channel_key, self.low, self.high) == (

@@ -33,7 +33,7 @@ from cellar.domain.screening_assay.events import (
     ProtocolUnlocked,
     ProtocolUpdated,
 )
-from cellar.domain.screening_assay.melt_window import MeltReadoutConfig
+from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
@@ -297,7 +297,10 @@ class ReadoutDefinition(Entity):
                 raise ValidationError(
                     f"{label} computed from a temperature window must be numeric"
                 )
-            if canonical_unit(unit) != "°C":
+            # A lowest shifting concentration is in the protocol's dose unit,
+            # which only the protocol knows (checked in add_readout_definition).
+            concentration_valued = melt_config.measure is MeltMeasure.LOWEST_SHIFT_CONCENTRATION
+            if not concentration_valued and canonical_unit(unit) != "°C":
                 raise ValidationError(f"{label} computed from a temperature window must be in °C")
             if is_calculated:
                 raise ValidationError(
@@ -307,7 +310,7 @@ class ReadoutDefinition(Entity):
                 raise ValidationError(
                     f"{label} computed from a temperature window cannot have normalizations"
                 )
-            if aggregation == ReadoutAggregation.GEOMETRIC_MEAN:
+            if aggregation == ReadoutAggregation.GEOMETRIC_MEAN and not concentration_valued:
                 raise ValidationError(
                     f"{label} computed from a temperature window cannot use a geometric mean"
                 )
@@ -990,6 +993,16 @@ class Protocol(AggregateRoot):
                     )
 
         self._check_window_agreement(definition, self.readout_definitions)
+        mc = definition.melt_config
+        if (
+            mc is not None
+            and mc.measure is MeltMeasure.LOWEST_SHIFT_CONCENTRATION
+            and canonical_unit(definition.unit) != canonical_unit(self.dose_unit.value)
+        ):
+            raise ValidationError(
+                f"Readout '{definition.name}' must be in the protocol's dose unit "
+                f"({self.dose_unit.value})"
+            )
 
         definition.protocol_id = self.id
         self.readout_definitions.append(definition)
@@ -1007,11 +1020,19 @@ class Protocol(AggregateRoot):
             oc = rd.melt_config
             if rd.id == definition.id or oc is None or oc.window != mc.window:
                 continue
-            if not mc.same_window(oc) or mc.measure == oc.measure:
+            if not mc.same_window(oc) or mc.key == oc.key:
                 raise ValidationError(
                     f"Temperature window '{mc.window}' is used by more than one readout; "
-                    "they must share channel and limits and differ in measure"
+                    "they must share channel and limits and differ in what they measure"
                 )
+
+    def series_readout_names(self) -> frozenset[str]:
+        """Readouts holding one descriptive value per batch (not per position)."""
+        return frozenset(
+            rd.name
+            for rd in self.readout_definitions
+            if rd.melt_config is not None and rd.melt_config.measure.is_series
+        )
 
     def remove_readout_definition(self, definition_id: uuid.UUID) -> None:
         """Remove a readout definition by ID.
