@@ -48,3 +48,15 @@ def run_scope_filters(
     if run_scope.from_date is not None and run_scope.to_date is not None:
         out.append(RunModel.run_date.between(run_scope.from_date, run_scope.to_date))
     return out
+
+
+def not_in_rejected_run(
+    run_id_col: ColumnElement[uuid.UUID], workspace_id: uuid.UUID
+) -> ColumnElement[bool]:
+    """The row's run is not rejected — for queries that don't join ``RunModel``."""
+    return ~run_id_col.in_(
+        select(RunModel.id).where(
+            RunModel.workspace_id == workspace_id,
+            RunModel.status == RunStatus.REJECTED.value,
+        )
+    )

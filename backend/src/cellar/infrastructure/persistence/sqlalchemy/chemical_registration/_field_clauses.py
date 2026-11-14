@@ -27,6 +27,9 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     ProjectModel,
     molecule_projects,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
+    NOT_REJECTED,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ReadoutDataModel,
     RunModel,
@@ -270,6 +273,7 @@ def _run_date_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
         # Control wells (molecule_id NULL) would poison a negated NOT IN.
         ReadoutDataModel.molecule_id.is_not(None),
         RunModel.workspace_id == workspace_id,
+        NOT_REJECTED,
     ]
     if date_from:
         conditions.append(RunModel.run_date >= date.fromisoformat(date_from))
