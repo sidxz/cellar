@@ -90,7 +90,7 @@ export function WorkspaceSettingsForm() {
     reset,
     setValue,
     formState: { isSubmitting },
-  } = useForm<FormValues>({
+  } = useForm<z.input<typeof schema>, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       defaultMolType: "",

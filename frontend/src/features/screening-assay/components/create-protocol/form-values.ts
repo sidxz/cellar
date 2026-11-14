@@ -11,13 +11,15 @@ export const readoutSchema = z.object({
   data_type: z.string(),
   unit: z.string(),
   aggregation: z.string(),
-  normalizations: z.array(z.string()) as z.ZodArray<z.ZodType<ReadoutNormalization>>,
+  normalizations: z.array(z.string()) as z.ZodArray<
+    z.ZodType<ReadoutNormalization, ReadoutNormalization>
+  >,
   is_calculated: z.boolean(),
   calculation_formula: z.string(),
   display_order: z.number(),
   pick_list_values: z.array(
     z.object({ label: z.string(), color: z.string().nullable().optional() }),
-  ) as z.ZodArray<z.ZodType<PickListValue>>,
+  ) as z.ZodArray<z.ZodType<PickListValue, PickListValue>>,
   dr_curve_type: z.string(),
   dr_x_readout: z.string(),
   dr_y_readout: z.string(),
@@ -33,7 +35,7 @@ export const readoutSchema = z.object({
       basis: z.enum(["relative_percent", "absolute"]),
       label: z.string().nullable().optional(),
     }),
-  ) as z.ZodArray<z.ZodType<InterceptSpec>>,
+  ) as z.ZodArray<z.ZodType<InterceptSpec, InterceptSpec>>,
 });
 
 export const conditionSchema = z.object({
@@ -51,7 +53,7 @@ export const protocolSchema = z.object({
   target_ids: z.array(z.string()),
   category: z.string(),
   description: z.string(),
-  dose_unit: z.string() as z.ZodType<DoseUnit>,
+  dose_unit: z.string() as z.ZodType<DoseUnit, DoseUnit>,
   readouts: z.array(readoutSchema),
   conditions: z.array(conditionSchema),
 });
