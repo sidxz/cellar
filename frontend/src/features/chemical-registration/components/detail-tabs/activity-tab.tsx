@@ -4,11 +4,13 @@ import { criterionLabel } from "@/features/screening-assay/components/detail-tab
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { findInterceptValue, interceptLabel } from "@/features/screening-assay/lib/intercept-label";
-import type {
-  CurveClass,
-  HitCriterion,
-  InterceptSpec,
-  InterceptValue,
+import {
+  type CurveClass,
+  type HitCriterion,
+  type InterceptSpec,
+  type InterceptValue,
+  RUN_STATUS_LABELS,
+  type RunStatus,
 } from "@/features/screening-assay/types";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
@@ -28,7 +30,9 @@ import type {
   ProtocolActivityResponseInterceptsItem,
   ReadoutSummaryResponse,
 } from "@/shared/lib/api/model";
+import { formatDate } from "@/shared/lib/format-date";
 import { FlaskConical } from "lucide-react";
+import Link from "next/link";
 import { useMoleculeActivity } from "../../hooks/use-molecule-activity";
 
 // ---------------------------------------------------------------------------
@@ -110,7 +114,19 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
           <Card key={protocol.protocol_id}>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <CardTitle className="text-base">{protocol.protocol_name}</CardTitle>
+                <CardTitle className="text-base">
+                  <Link
+                    href={`/assays/protocols/${protocol.protocol_id}`}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {protocol.protocol_name}
+                  </Link>
+                </CardTitle>
+                {protocol.protocol_code && (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {protocol.protocol_code}
+                  </span>
+                )}
                 <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
                 <HitMarker protocol={protocol} />
               </div>
@@ -160,6 +176,7 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                 </div>
               )}
               {plain.length > 0 && <PlainReadoutTable readouts={plain} />}
+              <RunLinks protocol={protocol} />
               {curves.length === 0 && readouts.length === 0 && plain.length === 0 && (
                 <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
               )}
@@ -186,6 +203,38 @@ function runsText(r: ReadoutSummaryResponse): string {
     : `${runs} (${r.draft_run_count} draft)`;
 }
 
+/** How the shown value was picked from the compound's values on this protocol. */
+function howChosen(r: ReadoutSummaryResponse): string {
+  const of = `${r.data_point_count} value${r.data_point_count === 1 ? "" : "s"} in ${
+    r.run_count
+  } run${r.run_count === 1 ? "" : "s"}`;
+  if (r.data_point_count === 1) return `From ${of}`;
+  if (r.best_direction === "magnitude") return `Largest shift in either direction of ${of}`;
+  if (r.best_direction === "low") return `Lowest of ${of}`;
+  return `Highest of ${of}`;
+}
+
+/** The runs holding the compound's data, each opening the tab that shows it. */
+function RunLinks({ protocol }: { protocol: ProtocolActivityResponse }) {
+  const runs = protocol.runs ?? [];
+  if (runs.length === 0) return null;
+  const hash = protocol.results_tab ? `#${protocol.results_tab}` : "";
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <span className="text-muted-foreground">Runs</span>
+      {runs.map((run) => (
+        <Link
+          key={run.run_id}
+          href={`/assays/runs/${run.run_id}${hash}`}
+          className="underline-offset-4 hover:underline"
+        >
+          {`${formatDate(run.run_date)} · ${RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status}`}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
 function PlainReadoutTable({ readouts }: { readouts: ReadoutSummaryResponse[] }) {
   return (
     <div className="rounded-lg border">
@@ -202,7 +251,7 @@ function PlainReadoutTable({ readouts }: { readouts: ReadoutSummaryResponse[] })
           {readouts.map((r) => (
             <TableRow key={r.readout_definition_id}>
               <TableCell>{r.readout_name}</TableCell>
-              <TableCell className="font-mono">
+              <TableCell className="font-mono" title={howChosen(r)}>
                 {`${r.qualifier !== "=" ? `${r.qualifier} ` : ""}${fmt(r.value)}`}
               </TableCell>
               <TableCell className="text-muted-foreground">{r.unit ?? "—"}</TableCell>

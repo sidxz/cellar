@@ -10,6 +10,9 @@ import type { ProtocolActivityResponseInterceptsItem } from './protocolActivityR
 import type { ReadoutSummaryResponse } from './readoutSummaryResponse';
 import type { ProtocolActivityResponseHit } from './protocolActivityResponseHit';
 import type { HitCriterionDTO } from './hitCriterionDTO';
+import type { ProtocolActivityResponseProtocolCode } from './protocolActivityResponseProtocolCode';
+import type { RunLinkResponse } from './runLinkResponse';
+import type { ProtocolActivityResponseResultsTab } from './protocolActivityResponseResultsTab';
 
 export interface ProtocolActivityResponse {
   protocol_id: string;
@@ -21,4 +24,7 @@ export interface ProtocolActivityResponse {
   plain_readouts?: ReadoutSummaryResponse[];
   hit?: ProtocolActivityResponseHit;
   hit_criteria?: HitCriterionDTO[];
+  protocol_code?: ProtocolActivityResponseProtocolCode;
+  runs?: RunLinkResponse[];
+  results_tab?: ProtocolActivityResponseResultsTab;
 }

@@ -136,3 +136,71 @@ describe("ActivityTab plain readouts and hit marker", () => {
     expect(screen.queryByText("Not a hit")).toBeNull();
   });
 });
+
+describe("ActivityTab card links and provenance", () => {
+  const runs = [
+    { run_id: "r2", run_date: "2026-11-13", status: "draft" },
+    { run_id: "r1", run_date: "2026-11-01", status: "approved" },
+  ];
+
+  it("links the protocol, shows its code, and links each run to its results tab", () => {
+    renderTab({
+      plain_readouts: [plain()],
+      protocol_code: "PRT-00219",
+      runs,
+      results_tab: "curves",
+    });
+    expect(screen.getByRole("link", { name: "NadD Dose Response" })).toHaveAttribute(
+      "href",
+      "/assays/protocols/p1",
+    );
+    expect(screen.getByText("PRT-00219")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft" })).toHaveAttribute(
+      "href",
+      "/assays/runs/r2#curves",
+    );
+    expect(screen.getByRole("link", { name: "Nov 1, 2026 · Approved" })).toHaveAttribute(
+      "href",
+      "/assays/runs/r1#curves",
+    );
+  });
+
+  it("a run link without a results tab opens the run page", () => {
+    renderTab({ plain_readouts: [plain()], runs: [runs[1]], results_tab: null });
+    expect(screen.getByRole("link", { name: "Nov 1, 2026 · Approved" })).toHaveAttribute(
+      "href",
+      "/assays/runs/r1",
+    );
+  });
+
+  it("says how each value was chosen", () => {
+    renderTab({
+      plain_readouts: [
+        plain({ best_direction: "magnitude", data_point_count: 6, run_count: 2 }),
+        plain({
+          readout_definition_id: "rd2",
+          readout_name: "Lowest shifting conc.",
+          value: 6.25,
+          best_direction: "low",
+          data_point_count: 2,
+          run_count: 2,
+        }),
+        plain({
+          readout_definition_id: "rd3",
+          readout_name: "Signal",
+          value: 9,
+          best_direction: "high",
+          data_point_count: 1,
+          run_count: 1,
+          draft_run_count: 0,
+        }),
+      ],
+    });
+    expect(screen.getByText("-8.483")).toHaveAttribute(
+      "title",
+      "Largest shift in either direction of 6 values in 2 runs",
+    );
+    expect(screen.getByText("6.25")).toHaveAttribute("title", "Lowest of 2 values in 2 runs");
+    expect(screen.getByText("9")).toHaveAttribute("title", "From 1 value in 1 run");
+  });
+});

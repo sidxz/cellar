@@ -18,4 +18,5 @@ export interface ReadoutSummaryResponse {
   data_point_count: number;
   run_count: number;
   draft_run_count: number;
+  best_direction: string;
 }
