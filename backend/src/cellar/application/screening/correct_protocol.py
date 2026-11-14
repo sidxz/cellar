@@ -33,6 +33,21 @@ class CorrectProtocolCommand(Command):
     target_ids: list[uuid.UUID] | object = UNSET  # the full set of direct targets
     # condition definition id -> its fixed value (None clears it)
     condition_fixed_values: dict[uuid.UUID, str | None] | object = UNSET
+    description: str | object | None = UNSET  # the method; never feeds the name
+
+    @property
+    def touches_name(self) -> bool:
+        """Anything but the method: the name is re-derived and must stay complete."""
+        return any(
+            v is not UNSET
+            for v in (
+                self.category,
+                self.discriminator,
+                self.ontology_annotations,
+                self.target_ids,
+                self.condition_fixed_values,
+            )
+        )
 
 
 class CorrectProtocol:
@@ -145,16 +160,19 @@ class CorrectProtocol:
                             reason=reason,
                         )
                     )
-            # A published name must stay complete: no allow_incomplete here.
-            renamed = await self._names.apply(
-                protocol,
-                reason=f"Correction: {reason}",
-                person=True,
-                allow_incomplete=False,
-                user_id=user_id,
-            )
-            if isinstance(renamed, Failure):
-                return renamed
+            if input.description is not UNSET:
+                protocol.set_description(input.description, reason=reason)  # type: ignore[arg-type]
+            if input.touches_name:
+                # A published name must stay complete: no allow_incomplete here.
+                renamed = await self._names.apply(
+                    protocol,
+                    reason=f"Correction: {reason}",
+                    person=True,
+                    allow_incomplete=False,
+                    user_id=user_id,
+                )
+                if isinstance(renamed, Failure):
+                    return renamed
             await self._repo.save(protocol)
             events = await self._uow.commit()
         await self._dispatcher.dispatch_all([*events, *link_events])

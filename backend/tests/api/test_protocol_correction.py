@@ -1,5 +1,8 @@
 """Correcting a published protocol: one reason, one rename, same code."""
 
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import async_sessionmaker
+
 MTB = {"term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1773", "label": "Mycobacterium tuberculosis", "ontology_source": "NCBITAXON"}
 SMEG = {"term_id": "http://purl.bioontology.org/ontology/NCBITAXON/1772", "label": "Mycolicibacterium smegmatis", "ontology_source": "NCBITAXON"}
 
@@ -68,3 +71,41 @@ async def test_a_published_name_cannot_be_left_incomplete_by_a_single_field_edit
     assert r.status_code == 422
     after = (await client.get(f"/api/v1/protocols/{p['id']}")).json()
     assert after["name"] == p["name"] and after["ontology_annotations"]["organism"]
+
+
+async def test_a_published_method_is_corrected_with_a_reason(client):
+    p = await _published(client, description="Old method")
+    method = "Materials: InhA 50 nM\n\nProcedure:\n1. Preincubate 10 min\n2. Read A340"
+    r = await client.post(
+        f"/api/v1/protocols/{p['id']}/correct",
+        json={"reason": "Added the read wavelength", "description": method},
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["description"] == method
+    assert body["name"] == p["name"] and body["code"] == p["code"]
+
+
+async def test_a_method_correction_does_not_revalidate_the_name(client, api_app):
+    """A legacy published protocol whose name no longer derives still takes a method fix."""
+    p = await _published(client)
+    factory = api_app.state.container[async_sessionmaker]
+    async with factory() as session, session.begin():
+        await session.execute(
+            text("UPDATE protocols SET category = NULL WHERE id = :id"), {"id": p["id"]}
+        )
+    r = await client.post(
+        f"/api/v1/protocols/{p['id']}/correct",
+        json={"reason": "typo", "description": "Fixed method"},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["description"] == "Fixed method"
+    assert r.json()["name"] == p["name"]
+
+
+async def test_a_method_correction_needs_a_reason(client):
+    p = await _published(client)
+    r = await client.post(
+        f"/api/v1/protocols/{p['id']}/correct", json={"reason": " ", "description": "x"}
+    )
+    assert r.status_code == 422
