@@ -9,7 +9,11 @@ from datetime import date
 from enum import Enum
 from typing import Protocol, runtime_checkable
 
-from cellar.domain.screening_assay.activity_types import AggregatedReadout
+from cellar.domain.screening_assay.activity_types import (
+    AggregatedReadout,
+    RunHeader,
+    RunReadoutStats,
+)
 from cellar.domain.screening_assay.collection_coverage import (
     CollectionCoverage,
     EffectiveCollectionCoverage,
@@ -337,6 +341,24 @@ class RunRepository(Protocol):
     async def aggregate_stats_by_protocol(
         self, workspace_id: uuid.UUID
     ) -> dict[uuid.UUID, tuple[int, date | None]]: ...
+    async def find_headers(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, RunHeader]:
+        """Runs by id without plates and wells. Missing ids are dropped."""
+        ...
+
+    async def find_runs_measuring(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        *,
+        run_scope: RunScope,
+    ) -> list[RunHeader]:
+        """Non-rejected runs of the protocol, in ``run_scope``, holding a curve
+        or a readout for at least one of the molecules."""
+        ...
+
     async def find_children(
         self, workspace_id: uuid.UUID, parent_run_id: uuid.UUID
     ) -> list[Run]: ...
@@ -405,6 +427,22 @@ class ReadoutDataRepository(Protocol):
         """``wellless_only`` restricts to ``well_id IS NULL`` — the
         reported-endpoint fallback's guard, so per-well response readings on a
         dose-response definition can't be averaged into a fake endpoint."""
+        ...
+
+    async def find_run_stats(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        specs: list[tuple[uuid.UUID, str | None]],
+        *,
+        run_scope: RunScope,
+        wellless_only: bool = False,
+    ) -> list[RunReadoutStats]:
+        """One replicate summary per (molecule, readout, normalization, run) in
+        ``run_scope``. Rejected runs and outlier wells are always left out.
+        ``specs`` pairs a readout definition with a normalization layer (None =
+        raw). ``wellless_only`` keeps only rows with no plate position (reported
+        endpoints)."""
         ...
 
     async def find_aggregated_by_molecules_and_names(
@@ -586,8 +624,14 @@ class DoseResponseCurveRepository(Protocol):
         molecule_ids: list[uuid.UUID],
         readout_definition_ids: list[uuid.UUID] | None = None,
         run_scope: RunScope | None = None,
+        *,
+        exclude_rejected: bool = False,
+        lean: bool = False,
     ) -> dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]]:
         """Return ALL curves keyed by (molecule_id, readout_definition_id).
+
+        ``exclude_rejected`` drops curves from rejected runs; ``lean`` skips
+        loading ``raw_data`` / ``excluded_points`` (ranking needs neither).
 
         Returns ``{molecule_id: {readout_definition_id: [curves sorted by run_date desc]}}``.
         Used by the search aggregator and Activity tabs to feed multi-run

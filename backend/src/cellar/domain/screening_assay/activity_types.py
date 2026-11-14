@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from cellar.domain.screening_assay.aggregation_types import AggregateStats
@@ -35,6 +35,41 @@ class ReplicateStats:
     gt_max_bound: float | None
     lt_count: int
     lt_min_bound: float | None
+
+
+@dataclass(frozen=True)
+class RunReadoutStats:
+    """Replicate summary for one (molecule, readout, normalization, run).
+
+    Rejected runs and outlier wells never appear. ``unit``, ``aggregation``
+    and ``readout_name`` are the readout definition's.
+    """
+
+    molecule_id: uuid.UUID
+    readout_definition_id: uuid.UUID
+    normalization: str | None
+    run_id: uuid.UUID
+    run_date: date | None
+    protocol_id: uuid.UUID
+    unit: str | None
+    aggregation: str
+    readout_name: str
+    stats: ReplicateStats
+
+
+@dataclass(frozen=True)
+class RunHeader:
+    """A run's identity and labels without its plates and wells."""
+
+    id: uuid.UUID
+    protocol_id: uuid.UUID
+    run_date: date | None
+    created_at: datetime | None
+    status: str
+    operator: uuid.UUID | None
+    notes: str | None
+    conditions: dict[str, Any] | None
+    plate_barcodes: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

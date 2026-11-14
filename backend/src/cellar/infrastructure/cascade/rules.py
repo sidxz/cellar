@@ -16,35 +16,20 @@ from typing import Any
 
 from sqlalchemy import (
     ARRAY,
-    BindParameter,
     ColumnElement,
     String,
     Table,
-    Uuid,
     any_,
     bindparam,
     func,
 )
 
 from cellar.domain.shared.cascade.actions import CascadeAction  # re-export for convenience
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id, uuid_array
 
 __all__ = ["CascadeAction", "CascadeRule", "Match", "any_id", "any_id_text", "uuid_array"]
 
 Match = Callable[[Table, Sequence[uuid.UUID]], ColumnElement[bool]]
-
-
-def uuid_array(ids: Sequence[uuid.UUID]) -> BindParameter[Any]:
-    """The ids as one ``uuid[]`` bind parameter.
-
-    ``IN (...)`` binds one parameter per id, and asyncpg refuses a statement
-    with more than 32,767 of them. A single HTS protocol has more wells than that.
-    """
-    return bindparam(None, list(ids), type_=ARRAY(Uuid(as_uuid=True)))
-
-
-def any_id(column: ColumnElement[Any], ids: Sequence[uuid.UUID]) -> ColumnElement[bool]:
-    """``column = ANY(:ids)``, with the ids bound as one array parameter."""
-    return column == any_(uuid_array(ids))
 
 
 def any_id_text(expr: ColumnElement[Any], ids: Sequence[uuid.UUID]) -> ColumnElement[bool]:

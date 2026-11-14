@@ -10,16 +10,28 @@ import uuid
 import sqlalchemy as sa
 from sqlalchemy import delete, func, select
 
-from cellar.domain.screening_assay.activity_types import AggregatedReadout
+from cellar.domain.screening_assay.activity_types import (
+    AggregatedReadout,
+    ReplicateStats,
+    RunReadoutStats,
+)
 from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
     unit_for_normalization,
 )
 from cellar.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.value_objects import QualifiedValue
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
+    NOT_REJECTED,
+    run_scope_filters,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ReadoutDataModel,
+    ReadoutDefinitionModel,
+    RunModel,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
@@ -179,6 +191,109 @@ class SQLAlchemyReadoutDataRepository:
             )
             out.setdefault(row.molecule_id, {})[key] = entry
 
+        return out
+
+    async def find_run_stats(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        specs: list[tuple[uuid.UUID, str | None]],
+        *,
+        run_scope: RunScope,
+        wellless_only: bool = False,
+    ) -> list[RunReadoutStats]:
+        """One replicate summary per (molecule, readout, normalization, run).
+
+        The SQL only counts and summarises; ``run_aggregation.combine_replicates``
+        decides what a run's value is. Unqualified = no qualifier or ``=``;
+        ``>``/``>=`` and ``<``/``<=`` contribute their bounds. Rejected runs,
+        outlier wells and non-numeric rows never appear.
+        """
+        if not molecule_ids or not specs:
+            return []
+        rd = ReadoutDataModel
+        v = rd.value_numeric
+        eq = sa.or_(rd.value_qualifier.is_(None), rd.value_qualifier.in_(("=", "")))
+        gt = rd.value_qualifier.in_((">", ">="))
+        lt = rd.value_qualifier.in_(("<", "<="))
+        eq_v = sa.case((eq, v))
+        stmt = (
+            select(
+                rd.molecule_id,
+                rd.readout_definition_id,
+                rd.normalization_applied,
+                rd.run_id,
+                RunModel.run_date,
+                RunModel.protocol_id,
+                ReadoutDefinitionModel.unit,
+                ReadoutDefinitionModel.aggregation,
+                ReadoutDefinitionModel.name,
+                func.count(eq_v).label("eq_count"),
+                func.avg(eq_v).label("eq_mean"),
+                func.percentile_cont(0.5).within_group(eq_v).label("eq_median"),
+                func.min(eq_v).label("eq_min"),
+                func.max(eq_v).label("eq_max"),
+                func.exp(func.avg(func.ln(sa.case((sa.and_(eq, v > 0), v))))).label("eq_geomean"),
+                func.count(v).filter(gt).label("gt_count"),
+                func.max(v).filter(gt).label("gt_max"),
+                func.count(v).filter(lt).label("lt_count"),
+                func.min(v).filter(lt).label("lt_min"),
+            )
+            .join(RunModel, RunModel.id == rd.run_id)
+            .join(ReadoutDefinitionModel, ReadoutDefinitionModel.id == rd.readout_definition_id)
+            .where(
+                rd.workspace_id == workspace_id,
+                RunModel.workspace_id == workspace_id,
+                any_id(rd.molecule_id, molecule_ids),
+                any_id(rd.readout_definition_id, list({rd_id for rd_id, _ in specs})),
+                rd.is_outlier.is_(False),
+                v.is_not(None),
+                NOT_REJECTED,
+                *run_scope_filters(run_scope, workspace_id),
+                *([rd.well_id.is_(None)] if wellless_only else []),
+            )
+            .group_by(
+                rd.molecule_id,
+                rd.readout_definition_id,
+                rd.normalization_applied,
+                rd.run_id,
+                RunModel.run_date,
+                RunModel.protocol_id,
+                ReadoutDefinitionModel.unit,
+                ReadoutDefinitionModel.aggregation,
+                ReadoutDefinitionModel.name,
+            )
+        )
+        wanted = set(specs)
+        out: list[RunReadoutStats] = []
+        for row in (await self._uow.session.execute(stmt)).all():
+            if (row.readout_definition_id, row.normalization_applied) not in wanted:
+                continue
+            out.append(
+                RunReadoutStats(
+                    molecule_id=row.molecule_id,
+                    readout_definition_id=row.readout_definition_id,
+                    normalization=row.normalization_applied,
+                    run_id=row.run_id,
+                    run_date=row.run_date,
+                    protocol_id=row.protocol_id,
+                    unit=unit_for_normalization(row.normalization_applied, row.unit),
+                    aggregation=row.aggregation or "none",
+                    readout_name=row.name,
+                    stats=ReplicateStats(
+                        eq_count=row.eq_count,
+                        eq_mean=row.eq_mean,
+                        eq_median=row.eq_median,
+                        eq_min=row.eq_min,
+                        eq_max=row.eq_max,
+                        eq_geomean=row.eq_geomean,
+                        gt_count=row.gt_count,
+                        gt_max_bound=row.gt_max,
+                        lt_count=row.lt_count,
+                        lt_min_bound=row.lt_min,
+                    ),
+                )
+            )
         return out
 
     async def find_aggregated_by_molecules_and_names(

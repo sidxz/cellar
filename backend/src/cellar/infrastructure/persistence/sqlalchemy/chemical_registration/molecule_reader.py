@@ -24,6 +24,7 @@ from cellar.domain.sar_analysis.similarity_metric import (
     Tversky,
     serialize_metric,
 )
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
@@ -42,13 +43,25 @@ log = structlog.get_logger(__name__)
 _SORT_FIELDS: dict[str, Any] = {
     "name": MoleculeModel.name,
     "registration_number": MoleculeModel.registration_number,
+    "created_at": MoleculeModel.created_at,
+    "lifecycle_stage": MoleculeModel.lifecycle_stage,
+    "molecular_formula": MoleculeModel.molecular_formula,
     "molecular_weight": MoleculeModel.molecular_weight,
+    "exact_mass": MoleculeModel.exact_mass,
     "logp": MoleculeModel.logp,
     "tpsa": MoleculeModel.tpsa,
     "hbd": MoleculeModel.hbd,
     "hba": MoleculeModel.hba,
-    "created_at": MoleculeModel.created_at,
+    "rotatable_bonds": MoleculeModel.rotatable_bonds,
+    "aromatic_rings": MoleculeModel.aromatic_rings,
+    "ring_count": MoleculeModel.ring_count,
+    "heavy_atom_count": MoleculeModel.heavy_atom_count,
+    "ro5_violations": MoleculeModel.ro5_violations,
+    "logd": MoleculeModel.logd,
+    "pka": MoleculeModel.pka,
+    "logs": MoleculeModel.logs,
 }
+SQL_SORT_FIELDS = frozenset(_SORT_FIELDS) | {"similarity"}
 
 
 class SQLAlchemyMoleculeReader:
@@ -301,6 +314,74 @@ class SQLAlchemyMoleculeReader:
 
             return [model_to_molecule(m) for m in result.scalars()]
 
+    async def ranked_ids_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        project_ids: list[uuid.UUID] | None = None,
+        sort_by: str | None = None,
+        sort_dir: str | None = None,
+    ) -> list[tuple[uuid.UUID, float | None]]:
+        """Every matching id in result order, with its similarity score.
+
+        ``sort_by`` is a molecule column (``_SORT_FIELDS``) or ``similarity``;
+        None orders by similarity (most similar first) when the query has a
+        similarity criterion, else by id. Nulls sort last; ties break on id.
+        Ids only — callers page through the list and fetch the page's rows.
+        """
+        if sort_by is not None and sort_by not in SQL_SORT_FIELDS:
+            raise ValueError(f"Unknown sort field: {sort_by!r}")
+        sim = _find_first_similarity_criterion(query.get("criteria", []))
+        if sort_by == "similarity" and sim is None:
+            raise ValueError("sort by similarity needs a similarity criterion")
+        async with self._session_factory() as session:
+            await _set_similarity_threshold(session, query)
+            if sim is not None:
+                stmt = _build_base_stmt_with_score(
+                    workspace_id, query, sim, project_ids=project_ids, columns=(MoleculeModel.id,)
+                )
+                score = text("similarity")
+            else:
+                stmt = _build_base_stmt(
+                    workspace_id, query, project_ids=project_ids, columns=(MoleculeModel.id,)
+                )
+                score = None
+            descending = sort_dir == "desc"
+            if sort_by in _SORT_FIELDS:
+                col = _SORT_FIELDS[sort_by]
+                stmt = stmt.order_by(
+                    col.desc().nulls_last() if descending else col.asc().nulls_last(),
+                    MoleculeModel.id,
+                )
+            elif score is not None and (sort_by == "similarity" or sort_by is None):
+                most_similar_first = sort_by is None or sort_dir != "asc"
+                stmt = stmt.order_by(
+                    text("similarity DESC" if most_similar_first else "similarity ASC"),
+                    MoleculeModel.id,
+                )
+            else:
+                stmt = stmt.order_by(MoleculeModel.id)
+            rows = (await session.execute(stmt)).all()
+        if score is None:
+            return [(row[0], None) for row in rows]
+        return [(row[0], float(row[1])) for row in rows]
+
+    async def find_by_ids_ordered(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[Molecule]:
+        """The molecules in ``ids`` order; ids not in the workspace are dropped."""
+        if not ids:
+            return []
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(MoleculeModel).where(
+                    MoleculeModel.workspace_id == workspace_id, any_id(MoleculeModel.id, ids)
+                )
+            )
+            by_id = {m.id: model_to_molecule(m) for m in result.scalars()}
+        return [by_id[i] for i in ids if i in by_id]
+
     async def count_by_query(
         self,
         workspace_id: uuid.UUID,
@@ -327,6 +408,7 @@ def _build_base_stmt(
     query: dict[str, Any],
     *,
     project_ids: list[uuid.UUID] | None = None,
+    columns: tuple[Any, ...] = (MoleculeModel,),
 ):
     """Build the base SELECT/WHERE for search_by_query and count_by_query."""
     from .search_query_composer import (
@@ -336,7 +418,7 @@ def _build_base_stmt(
 
     where_clause = compose_criteria(query, workspace_id=workspace_id)
 
-    stmt = select(MoleculeModel).where(
+    stmt = select(*columns).where(
         MoleculeModel.workspace_id == workspace_id,
         MoleculeModel.merged_into_id.is_(None),
     )
@@ -495,6 +577,7 @@ def _build_base_stmt_with_score(
     sim_criterion: dict[str, Any],
     *,
     project_ids: list[uuid.UUID] | None = None,
+    columns: tuple[Any, ...] = (MoleculeModel,),
 ):
     """Like ``_build_base_stmt`` but adds a similarity score projection column."""
     from .search_query_composer import (
@@ -505,7 +588,7 @@ def _build_base_stmt_with_score(
     score_clause = _build_score_clause(sim_criterion)
     where_clause = compose_criteria(query, workspace_id=workspace_id)
 
-    stmt = select(MoleculeModel, score_clause).where(
+    stmt = select(*columns, score_clause).where(
         MoleculeModel.workspace_id == workspace_id,
         MoleculeModel.merged_into_id.is_(None),
     )

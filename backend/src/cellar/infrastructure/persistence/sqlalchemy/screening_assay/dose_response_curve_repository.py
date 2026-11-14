@@ -8,7 +8,8 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import delete, func, select
-from sqlalchemy.orm import aliased
+from sqlalchemy import inspect as sa_inspect
+from sqlalchemy.orm import defer
 
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_config import InterceptSpec
@@ -18,10 +19,14 @@ from cellar.domain.screening_assay.enums import (
     CurveType,
     InterceptBasis,
     InterceptKind,
-    RunStatus,
 )
 from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.run_scope import RunScope
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
+    NOT_REJECTED,
+    run_scope_filters,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ProtocolModel,
@@ -323,16 +328,16 @@ class SQLAlchemyDoseResponseCurveRepository:
         molecule_ids: list[uuid.UUID],
         readout_definition_ids: list[uuid.UUID] | None = None,
         run_scope: RunScope | None = None,
+        *,
+        exclude_rejected: bool = False,
+        lean: bool = False,
     ) -> dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]]:
         """Return ALL curves keyed by (mol, rd), sorted run_date desc.
 
-        Joins to RunModel for run_date filtering. The shared aggregator
-        decides which to keep (LATEST / GEOMETRIC_MEAN / etc.); this
-        method only narrows the wire payload to in-scope runs.
-
-        ``protocol_latest`` keeps only each protocol's single newest
-        non-rejected run (run date, then creation) — the same run for every
-        compound.
+        Joins to RunModel for run filtering (``run_scope_filters``). The shared
+        aggregator decides which to keep (LATEST / GEOMETRIC_MEAN / etc.); this
+        method only narrows to in-scope runs. ``exclude_rejected`` drops curves
+        of rejected runs; ``lean`` skips loading the point arrays.
         """
         if not molecule_ids:
             return {}
@@ -342,38 +347,20 @@ class SQLAlchemyDoseResponseCurveRepository:
             .join(RunModel, RunModel.id == DoseResponseCurveModel.run_id)
             .where(
                 DoseResponseCurveModel.workspace_id == workspace_id,
-                DoseResponseCurveModel.molecule_id.in_(molecule_ids),
+                any_id(DoseResponseCurveModel.molecule_id, molecule_ids),
+                *run_scope_filters(run_scope, workspace_id),
+                *([NOT_REJECTED] if exclude_rejected else []),
             )
         )
         if readout_definition_ids:
             stmt = stmt.where(
-                DoseResponseCurveModel.readout_definition_id.in_(readout_definition_ids)
+                any_id(DoseResponseCurveModel.readout_definition_id, readout_definition_ids)
             )
-
-        if run_scope is not None and not run_scope.is_all():
-            if run_scope.protocol_latest:
-                newest = aliased(RunModel)
-                stmt = stmt.where(
-                    RunModel.id
-                    == select(newest.id)
-                    .where(
-                        newest.workspace_id == workspace_id,
-                        newest.protocol_id == RunModel.protocol_id,
-                        newest.status != RunStatus.REJECTED.value,
-                    )
-                    .order_by(newest.run_date.desc(), newest.created_at.desc())
-                    .limit(1)
-                    .correlate(RunModel)
-                    .scalar_subquery()
-                )
-            if run_scope.explicit_run_ids:
-                stmt = stmt.where(RunModel.id.in_(run_scope.explicit_run_ids))
-            if run_scope.since_date is not None:
-                stmt = stmt.where(RunModel.run_date >= run_scope.since_date)
-            if run_scope.from_date is not None and run_scope.to_date is not None:
-                stmt = stmt.where(
-                    RunModel.run_date.between(run_scope.from_date, run_scope.to_date)
-                )
+        if lean:
+            stmt = stmt.options(
+                defer(DoseResponseCurveModel.raw_data),
+                defer(DoseResponseCurveModel.excluded_points),
+            )
 
         stmt = stmt.order_by(RunModel.run_date.desc())
 
@@ -445,6 +432,7 @@ class SQLAlchemyDoseResponseCurveRepository:
 
     @staticmethod
     def _to_domain(model: DoseResponseCurveModel) -> DoseResponseCurve:
+        unloaded = sa_inspect(model).unloaded
         curve_type = CurveType(model.curve_type)
         return DoseResponseCurve(
             id=model.id,
@@ -464,8 +452,13 @@ class SQLAlchemyDoseResponseCurveRepository:
             confidence_interval_high=model.confidence_interval_high,
             num_points=model.num_points,
             curve_class=CurveClass(model.curve_class) if model.curve_class else None,
-            raw_data=model.raw_data,
-            excluded_points=_hydrate_excluded_points(model.excluded_points),
+            # A lean fetch defers the point arrays; reading them would lazy-load.
+            raw_data=None if "raw_data" in unloaded else model.raw_data,
+            excluded_points=(
+                None
+                if "excluded_points" in unloaded
+                else _hydrate_excluded_points(model.excluded_points)
+            ),
             fit_quality_warnings=model.fit_quality_warnings or [],
             intercept_values=_hydrate_intercept_values(
                 model.intercept_values,
