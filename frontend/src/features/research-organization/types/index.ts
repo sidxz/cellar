@@ -6,11 +6,13 @@ import type { CurveClass, TargetRef } from "@/features/screening-assay/types";
 import type {
   CollectionResponse,
   CollectionType,
+  ColumnGroupResponse,
   MembershipResultResponse,
   MoleculeReferenceBody,
   ProjectMemberResponse,
   ProjectResponse,
   ProjectStatus,
+  ProtocolColumnGroupsResponse,
   SavedSearchResponse,
   SearchVisibility,
   SelectionRule,
@@ -270,6 +272,13 @@ export type RunScope =
 
 export type RunScopeMode = RunScope["mode"];
 
+/** Wire shape of `ActivityCriterion.split` (BE `ColumnSplit.from_wire`). */
+export type ColumnSplitWire = { by: "run" } | { by: "condition"; condition: string };
+
+/** A split protocol's side-by-side column groups (BE response `column_groups`). */
+export type ProtocolColumnGroups = ProtocolColumnGroupsResponse;
+export type ColumnGroup = ColumnGroupResponse;
+
 /** Bare `InterceptKey` mirror — see ``CurveInterceptSpec`` below for the
  *  full spec. The where-condition only needs (kind, level) to disambiguate
  *  which intercept on a multi-intercept DR readout it's filtering on. */
@@ -329,6 +338,10 @@ export interface ActivityCriterion {
   where?: ActivityWhereCondition[];
   /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
   run_scope?: RunScope;
+  /** Optional side-by-side split of this protocol's result columns. Omit for
+   *  today's one-value-per-readout columns. "run" uses the hand-picked runs of
+   *  a `specific` run scope; "condition" groups runs by one run condition. */
+  split?: ColumnSplitWire;
   /** Single-where shape. The composer normalizes it to a single-element
    *  where list — useful for saved searches stored from the old UI. */
   source?: ActivityWhereSource;
@@ -465,13 +478,16 @@ export interface AggregateStats {
 export interface RunSummary {
   run_id: string;
   run_date: string;
-  curve_id: string;
+  /** Null for single-point readouts and reported endpoints (no fit). */
+  curve_id: string | null;
   curve_class: string | null;
   r_squared: number | null;
   intercept_values: Array<{
-    spec: { kind: string; level: number };
+    spec: { kind: string; level?: number; label?: string };
     value: number | null;
     at_bound?: boolean;
+    /** Single-point runs: "=" | "<" | ">" | "nd". */
+    qualifier?: string;
   }>;
 }
 
@@ -536,6 +552,11 @@ export interface ActivityValue {
    *  suppresses the per-curve intercept dashed lines (per-run fitted_values
    *  don't equal the cell value in aggregate modes). Mirrors CurveSnapshot. */
   aggregate?: AggregateMarker | null;
+  /** The curve the cell's value comes from (null for single-point and
+   *  reported values) — surfaces that draw the cell's curve mark it by id. */
+  representative_curve_id?: string | null;
+  /** Every in-scope run that was a candidate for this cell, newest first. */
+  run_ids?: string[] | null;
 }
 
 // ─── "any" column — CLIENT-SIDE narrowing, NOT a DTO alias ─────────────────
