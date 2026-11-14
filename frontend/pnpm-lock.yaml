@@ -13,14 +13,14 @@ importers:
   .:
     dependencies:
       '@duar-auth/js':
-        specifier: ^1.4.1
-        version: 1.4.1
+        specifier: ^2.0.0
+        version: 2.0.0
       '@duar-auth/nextjs':
-        specifier: ^1.4.1
-        version: 1.4.1(@duar-auth/js@1.4.1)(@duar-auth/react@1.4.1(@duar-auth/js@1.4.1)(react@19.2.8))(next@16.4.6(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
+        specifier: ^2.0.0
+        version: 2.0.0(@duar-auth/js@2.0.0)(@duar-auth/react@2.0.0(@duar-auth/js@2.0.0)(react@19.2.8))(next@16.4.6(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)
       '@duar-auth/react':
-        specifier: ^1.4.1
-        version: 1.4.1(@duar-auth/js@1.4.1)(react@19.2.8)
+        specifier: ^2.0.0
+        version: 2.0.0(@duar-auth/js@2.0.0)(react@19.2.8)
       '@hookform/resolvers':
         specifier: ^5.0.0
         version: 5.9.1(@standard-schema/spec@1.1.0)(ajv@8.20.0)(react-hook-form@7.86.0(react@19.2.8))(zod@4.6.7)
@@ -366,21 +366,21 @@ packages:
     resolution: {integrity: sha512-Vd/9EVDiu6PPJt9yAh6roZP6El1xHrdvIVGjyBsHR0RYwNHgL7FJPyIIW4fANJNG6FtyZfvlRPpFI4ZM/lubvw==}
     engines: {node: '>=18'}
 
-  '@duar-auth/js@1.4.1':
-    resolution: {integrity: sha512-Dg5Ll4u0+P5gNRRTvCOSiO15TTIABybS7gaYfR2po69qxb9KkC8YYOsf9Wxdtsd6KYaHl5IdxqwPWagH9xe6dQ==}
+  '@duar-auth/js@2.0.0':
+    resolution: {integrity: sha512-u9Ne9MP3psQEegS7z9KoAAwrfTa52o7jCpapT6KmV1FL3qi5dvjzPQ3GNNrcz/rNaCcRX9hiozCxA99abQoY1Q==}
 
-  '@duar-auth/nextjs@1.4.1':
-    resolution: {integrity: sha512-hE315rimbTVEG9kZ20p1F7Q/aEjaoBHfuyeXF5uNbNWeargbf8kteT3uO77Jy6IhfjpMPbQsOFE4J7uNiLd0XA==}
+  '@duar-auth/nextjs@2.0.0':
+    resolution: {integrity: sha512-leEdk9FTmdBtyCZ1oLUbunCceIfp1zGNzxOqguBwzacYL0HSpwY7f+wM6HKQbAzU9+WbznAAAPKinLpTtAZf1A==}
     peerDependencies:
-      '@duar-auth/js': ^1.4.1
-      '@duar-auth/react': ^1.4.1
+      '@duar-auth/js': ^2.0.0
+      '@duar-auth/react': ^2.0.0
       next: ^14.2.25 || ^15.5.18 || ^16.2.11
       react: ^18.0.0 || ^19.0.0
 
-  '@duar-auth/react@1.4.1':
-    resolution: {integrity: sha512-0NRSdIHK9ayeVmeZAa36vT+7fEFQ3+goN//WYXmvcnVu5w83GkLKR9iC6K0qqngpaH4pUXHJZjtZ3iLCwSpz/w==}
+  '@duar-auth/react@2.0.0':
+    resolution: {integrity: sha512-HwShMj3he3tkN2nJoKXEV/JLUQ2LLrN8uyhPdiYeG97YlWimGEpfKG595B0+bud91CTygtEGXk6qVZGN50m6ZA==}
     peerDependencies:
-      '@duar-auth/js': ^1.4.1
+      '@duar-auth/js': ^2.0.0
       react: ^18.0.0 || ^19.0.0
 
   '@emnapi/runtime@1.11.3':
@@ -3615,8 +3615,8 @@ packages:
     resolution: {integrity: sha512-AC/7JofJvZGrrneWNaEnJeOLUx+JlGt7tNa0wZiRPT4MY1wmfKjt2+6O2p2uz2+skll8OZZmJMNqeke7kKbNgQ==}
     hasBin: true
 
-  jose@5.10.0:
-    resolution: {integrity: sha512-s+3Al/p9g32Iq+oqXxkW//7jk2Vig6FF1CFqzVXoTUXt2qz89YWbL+OwS17NFYEvxC35n0FKeGO2LGYSxeM2Gg==}
+  jose@6.2.17:
+    resolution: {integrity: sha512-wOuK9V1yujQFH5S0ZWmLcDZN7+IKh9bUCC2ZPCf2HDlol3WWHy+PPyNjEI75FXRLMp3vDKQcupP59xhVU95hcg==}
 
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
@@ -5339,21 +5339,21 @@ snapshots:
 
   '@csstools/css-tokenizer@3.0.4': {}
 
-  '@duar-auth/js@1.4.1':
+  '@duar-auth/js@2.0.0':
     dependencies:
-      jose: 5.10.0
+      jose: 6.2.17
 
-  '@duar-auth/nextjs@1.4.1(@duar-auth/js@1.4.1)(@duar-auth/react@1.4.1(@duar-auth/js@1.4.1)(react@19.2.8))(next@16.4.6(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
+  '@duar-auth/nextjs@2.0.0(@duar-auth/js@2.0.0)(@duar-auth/react@2.0.0(@duar-auth/js@2.0.0)(react@19.2.8))(next@16.4.6(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@duar-auth/js': 1.4.1
-      '@duar-auth/react': 1.4.1(@duar-auth/js@1.4.1)(react@19.2.8)
-      jose: 5.10.0
+      '@duar-auth/js': 2.0.0
+      '@duar-auth/react': 2.0.0(@duar-auth/js@2.0.0)(react@19.2.8)
+      jose: 6.2.17
       next: 16.4.6(@babel/core@7.29.7)(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
 
-  '@duar-auth/react@1.4.1(@duar-auth/js@1.4.1)(react@19.2.8)':
+  '@duar-auth/react@2.0.0(@duar-auth/js@2.0.0)(react@19.2.8)':
     dependencies:
-      '@duar-auth/js': 1.4.1
+      '@duar-auth/js': 2.0.0
       react: 19.2.8
 
   '@emnapi/runtime@1.11.3':
@@ -8622,7 +8622,7 @@ snapshots:
 
   jiti@2.7.0: {}
 
-  jose@5.10.0: {}
+  jose@6.2.17: {}
 
   js-tokens@4.0.0: {}
 

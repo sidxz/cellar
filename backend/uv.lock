@@ -300,7 +300,7 @@ requires-dist = [
     { name = "asyncpg", specifier = ">=0.30.0" },
     { name = "chembl-structure-pipeline", specifier = ">=1.2.4" },
     { name = "defusedxml", specifier = ">=0.7.1" },
-    { name = "duar-auth", specifier = ">=1.4.1" },
+    { name = "duar-auth", specifier = ">=2.0.0" },
     { name = "fastapi", specifier = ">=0.115.0" },
     { name = "fsspec", specifier = ">=2024.10.0" },
     { name = "httpx", specifier = ">=0.28.0" },
@@ -835,7 +835,7 @@ wheels = [
 
 [[package]]
 name = "duar-auth"
-version = "1.4.1"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -845,9 +845,9 @@ dependencies = [
     { name = "pyjwt", extra = ["crypto"] },
     { name = "starlette" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/a0/6faa6a8906a06876ea06202e70a78365ed8a56b2ae8da9fa9b6903ee4f93/duar_auth-1.4.1.tar.gz", hash = "sha256:ff05e8c168488091eb95a90475766e34c6233797b510f14eceef44a73bd3f78f", size = 41586, upload-time = "2026-10-04T16:25:18.051Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/02/af/a8eae866aca4e1bf6172d9745a9c07c3ea57da97d259b01a498821b04273/duar_auth-2.0.0.tar.gz", hash = "sha256:0ab9b8df394363cb73f364936c6078bbf4217a3558b66c69f19c9c6078720f60", size = 51338, upload-time = "2026-11-13T22:02:49.711Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/b9/d9/8f4ab2a50a5920a733a7fb8eccfd512824ad04ff66c34cc4eaf06bb135d2/duar_auth-1.4.1-py3-none-any.whl", hash = "sha256:1f78b76d3c773087d9b6474ad57d65a50f46d923883a55a27b99f0f484317950", size = 29782, upload-time = "2026-10-04T16:25:16.436Z" },
+    { url = "https://files.pythonhosted.org/packages/7d/19/05e052187a551c8c306508d078514ea44a8e554a591a42cec725031dc066/duar_auth-2.0.0-py3-none-any.whl", hash = "sha256:905248224cc74a42a608eb4a06d97d6dcf314e1ea3264453280896dbb5853465", size = 33948, upload-time = "2026-11-13T22:02:48.304Z" },
 ]
 
 [[package]]
