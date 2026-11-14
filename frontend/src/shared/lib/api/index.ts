@@ -47,6 +47,7 @@ export * from './protocol-hub/protocol-hub';
 export * from './protocol-names/protocol-names';
 export * from './protocols/protocols';
 export * from './readout-data/readout-data';
+export * from './recent-searches/recent-searches';
 export * from './registration-forms/registration-forms';
 export * from './run-import/run-import';
 export * from './run-positions/run-positions';

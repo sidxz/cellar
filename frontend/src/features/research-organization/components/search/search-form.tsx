@@ -75,6 +75,9 @@ interface SearchFormProps {
   onCollapsedChange?: (collapsed: boolean) => void;
   onDraftChange?: (query: SearchQuery) => void;
   summaryContext?: SummaryContext;
+  /** Controls on the right of the header, before Collapse / Edit filters —
+   *  in sight whether the filters are open or folded under the results. */
+  headerActions?: React.ReactNode;
   projectIds: string[];
   onProjectsChange: (ids: string[]) => void;
   onSearch: (query: SearchQuery, protocolColumns: string[]) => void;
@@ -393,6 +396,7 @@ export function SearchForm({
   onCollapsedChange,
   onDraftChange,
   summaryContext,
+  headerActions,
   projectIds,
   onProjectsChange,
   onSearch,
@@ -773,23 +777,26 @@ export function SearchForm({
             </output>
           )}
         </div>
-        {executedQuery && (
-          <Button
-            ref={filterToggleRef}
-            variant="ghost"
-            size="sm"
-            aria-expanded={!collapsed}
-            aria-controls="search-filter-fields"
-            onClick={() => onCollapsedChange?.(!collapsed)}
-          >
-            {collapsed ? (
-              <ChevronDown className="mr-1.5 h-4 w-4" />
-            ) : (
-              <ChevronUp className="mr-1.5 h-4 w-4" />
-            )}
-            {collapsed ? "Edit filters" : "Collapse filters"}
-          </Button>
-        )}
+        <div className="flex items-center gap-1">
+          {headerActions}
+          {executedQuery && (
+            <Button
+              ref={filterToggleRef}
+              variant="ghost"
+              size="sm"
+              aria-expanded={!collapsed}
+              aria-controls="search-filter-fields"
+              onClick={() => onCollapsedChange?.(!collapsed)}
+            >
+              {collapsed ? (
+                <ChevronDown className="mr-1.5 h-4 w-4" />
+              ) : (
+                <ChevronUp className="mr-1.5 h-4 w-4" />
+              )}
+              {collapsed ? "Edit filters" : "Collapse filters"}
+            </Button>
+          )}
+        </div>
       </div>
       <div id="search-filter-fields" hidden={collapsed}>
         <div className="space-y-4 border-t p-4">

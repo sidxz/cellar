@@ -13,6 +13,7 @@ import { useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useCollections } from "../hooks/use-collections";
 import { useProjects } from "../hooks/use-projects";
+import { type RecentSearch, useRecordRecentSearch } from "../hooks/use-recent-searches";
 import { useReportConfig } from "../hooks/use-report-config";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { type EnrichedSearchResponse, useExecuteSearch } from "../hooks/use-search";
@@ -41,6 +42,7 @@ import {
 import { CompoundComparison } from "./search/compound-comparison";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
 import { QuerySummary, searchQueryKey, structureQuery } from "./search/query-summary";
+import { RecentSearchesMenu, storedCriteria } from "./search/recent-searches-menu";
 import { ReportCustomizer } from "./search/report-customizer";
 import { ResultsGrid } from "./search/results-grid";
 import {
@@ -178,6 +180,35 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
 
 // ─── Inner component (uses useSearchParams, needs Suspense boundary) ───────
 
+/** A stored search (saved or recent), staged to reload into the page. */
+type PendingSavedSearchLoad = {
+  query: SearchQuery;
+  aggregationMode: AggregationMode;
+  protocolColumns: string[];
+  columnsBlob: Record<string, unknown> | null;
+};
+
+/** Decode a stored search's `query` + `columns` (the shape the Save dialog and
+ *  recent searches both write). The aggregation rule rides inside the stored
+ *  query (Task 14); older saved searches lack it and fall back to "latest",
+ *  the FE default. It is stripped before the query goes to the BE, where it
+ *  travels as a top-level `input.aggregation`. */
+function decodeStoredSearch(
+  rawQuery: Record<string, unknown>,
+  columns: Record<string, unknown> | null | undefined,
+): PendingSavedSearchLoad | null {
+  const storedAggregation = rawQuery?.aggregation;
+  const query = storedCriteria(rawQuery);
+  if (!query?.criteria) return null;
+  return {
+    query,
+    aggregationMode:
+      typeof storedAggregation === "string" ? wireToAggregationMode(storedAggregation) : "latest",
+    protocolColumns: (columns as { protocolColumns?: string[] } | null)?.protocolColumns ?? [],
+    columnsBlob: columns ?? null,
+  };
+}
+
 function SearchPageInner() {
   const searchParams = useSearchParams();
   const savedSearchId = searchParams.get("saved");
@@ -248,6 +279,11 @@ function SearchPageInner() {
     draftQuery.current = query;
   }, []);
   const { config: reportConfig, loadFromSavedSearch } = useReportConfig();
+  // Read at completion, so a search records the table set-up it ran with
+  // without re-creating executeRequest on every customizer change.
+  const reportConfigRef = useRef(reportConfig);
+  reportConfigRef.current = reportConfig;
+  const recordRecentSearch = useRecordRecentSearch();
   // URL-synced aggregation mode. The toolbar's <AggregationControl /> owns
   // the writer; the page reads + injects into the request body, and also
   // calls `setMode` on the saved-search load path so the URL chip and the
@@ -352,7 +388,7 @@ function SearchPageInner() {
             totalCount: data.total_count ?? null,
           };
           if (options.cursor) dispatch({ type: "loadMoreComplete", ...payload });
-          else
+          else {
             dispatch({
               type: "searchComplete",
               query,
@@ -361,6 +397,19 @@ function SearchPageInner() {
               columnGroups: data.column_groups ?? null,
               ...payload,
             });
+            // Into the user's recent searches, in the shape a saved search
+            // stores (so either reloads the same way). Running it again —
+            // re-sorted, re-summarised — moves it to the top, not a new row.
+            if (query.criteria.length > 0)
+              recordRecentSearch({
+                query: {
+                  ...(query as unknown as Record<string, unknown>),
+                  aggregation: aggregationModeToWire(mode),
+                },
+                columns: { reportConfig: reportConfigRef.current, protocolColumns: columns },
+                result_count: data.total_count ?? null,
+              });
+          }
           if (
             options.collapse &&
             (!draftQuery.current ||
@@ -405,7 +454,7 @@ function SearchPageInner() {
           if (version === requestVersion.current) setSearchPending(false);
         });
     },
-    [mutateAsync, sortBy, sortDir, enrichItems],
+    [mutateAsync, sortBy, sortDir, enrichItems, recordRecentSearch],
   );
 
   const handleSearch = useCallback(
@@ -459,13 +508,6 @@ function SearchPageInner() {
   // mutation from a clean re-render cycle. The mutation goes through
   // `handleSearch` (the same path the chemist's Search button uses) so
   // the deps are always fresh.
-  type PendingSavedSearchLoad = {
-    query: SearchQuery;
-    aggregationMode: AggregationMode;
-    protocolColumns: string[];
-    columnsBlob: Record<string, unknown> | null;
-  };
-
   const [pendingSavedSearchLoad, setPendingSavedSearchLoad] =
     useState<PendingSavedSearchLoad | null>(null);
   const [loadedSavedSearchId, setLoadedSavedSearchId] = useState<string | null>(null);
@@ -483,31 +525,18 @@ function SearchPageInner() {
 
     const saved = savedSearches.find((s: SavedSearch) => s.id === savedSearchId);
     if (!saved) return;
-
-    const rawQuery = saved.query as Record<string, unknown>;
-    // The aggregation rule is co-located inside the saved `query` blob
-    // (Task 14). Old saved searches (pre-Task 14) won't have this key
-    // and fall back to "latest" — matching the FE default.
-    const savedAggregation = rawQuery?.aggregation;
-    const nextAggregationMode =
-      typeof savedAggregation === "string" ? wireToAggregationMode(savedAggregation) : "latest";
-    // Strip the aggregation field out before handing the query to the BE
-    // — the search query schema doesn't include it as a criterion (it
-    // travels as a top-level `input.aggregation` instead).
-    const { aggregation: _aggregation, ...queryWithoutAggregation } = rawQuery;
-    const query = queryWithoutAggregation as unknown as SearchQuery;
-    if (!query?.criteria) return;
-
-    const cols = saved.columns as { protocolColumns?: string[] } | null;
-    const restoredColumns = cols?.protocolColumns ?? [];
-
-    setPendingSavedSearchLoad({
-      query,
-      aggregationMode: nextAggregationMode,
-      protocolColumns: restoredColumns,
-      columnsBlob: saved.columns as Record<string, unknown> | null,
-    });
+    const load = decodeStoredSearch(
+      saved.query as Record<string, unknown>,
+      saved.columns as Record<string, unknown> | null,
+    );
+    if (load) setPendingSavedSearchLoad(load);
   }, [savedSearchId, savedSearches, loadedSavedSearchId, pendingSavedSearchLoad]);
+
+  // A picked recent search reloads through the same staged path as a saved one.
+  const handlePickRecent = useCallback((search: RecentSearch) => {
+    const load = decodeStoredSearch(search.query, search.columns);
+    if (load) setPendingSavedSearchLoad(load);
+  }, []);
 
   // FIRE: saved-search load — execute the staged search. Uses executeRequest
   // directly because saved searches carry their OWN
@@ -655,6 +684,13 @@ function SearchPageInner() {
           onCollapsedChange={setFiltersCollapsed}
           onDraftChange={onDraftChange}
           summaryContext={summaryContext}
+          headerActions={
+            <RecentSearchesMenu
+              currentQuery={currentQuery}
+              summaryContext={summaryContext}
+              onPick={handlePickRecent}
+            />
+          }
           protocols={protocols ?? []}
         />
 

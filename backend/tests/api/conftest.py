@@ -104,6 +104,7 @@ def _create_test_app(
     from cellar.interface.routes.plate_templates import router as plate_template_router
     from cellar.interface.routes.projects import router as project_router
     from cellar.interface.routes.favorites import router as favorites_router
+    from cellar.interface.routes.recent_searches import router as recent_searches_router
     from cellar.interface.routes.collections import router as collection_router
     from cellar.interface.routes.collection_import_previews import (
         router as collection_import_previews_router,
@@ -191,6 +192,7 @@ def _create_test_app(
     app.include_router(kiosk_router)
     app.include_router(project_router)
     app.include_router(favorites_router)
+    app.include_router(recent_searches_router)
     app.include_router(collection_router)
     app.include_router(collection_import_previews_router)
     app.include_router(collection_import_templates_router)
