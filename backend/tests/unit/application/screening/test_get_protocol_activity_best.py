@@ -32,7 +32,15 @@ def _rd(name: str, measure: str | None = None):
         data_type="numeric",
         unit="°C",
         dose_response_config=None,
-        melt_config=None if measure is None else {"measure": measure},
+        melt_config=None
+        if measure is None
+        else {
+            "window": "Main",
+            "measure": measure,
+            "channel_key": "ratio",
+            "low": 50.0,
+            "high": 85.0,
+        },
     )
 
 
@@ -74,6 +82,15 @@ async def test_shift_best_is_the_largest_in_either_direction_and_plain_stays_hig
     assert readouts["Lowest shifting conc."].best == 6.25
     assert readouts["Signal"].best == 9.0
     directions = {d.name: d.best_direction for d in out.readout_definitions}
+    melts = {d.name: d.melt_config for d in out.readout_definitions}
+    assert melts["Signal"] is None
+    assert melts["ΔTm (Main)"] == {
+        "window": "Main",
+        "measure": "delta_tm",
+        "channel_key": "ratio",
+        "low": 50.0,
+        "high": 85.0,
+    }
     assert directions == {
         "ΔTm (Main)": "magnitude",
         "Lowest shifting conc.": "low",

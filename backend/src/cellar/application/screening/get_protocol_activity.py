@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -126,6 +127,10 @@ class ReadoutDefInfo:
     # specs (one per column on the activity grid). Empty for numeric
     # readouts. Drives dynamic column headers — never hardcode "EC50".
     intercepts: list[InterceptSpecPayload] = field(default_factory=list)
+    # A thermal-shift readout's temperature window settings (window, measure,
+    # channel_key, low, high, threshold, concentration); None otherwise.
+    # Lets the grid group a window's readouts under one header.
+    melt_config: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +231,7 @@ class GetProtocolActivitySummary:
                     data_type=rd.data_type,
                     unit=rd.unit,
                     best_direction=direction.value,
+                    melt_config=melt if isinstance(melt, dict) else None,
                     intercepts=intercept_specs,
                 )
             )
