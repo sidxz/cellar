@@ -58,6 +58,13 @@ export function activityEndpoint(
   return { aggregate, value, qualifier, display, mode };
 }
 
+/** Whether a value's unit is the one its column header already states, so the
+ *  cell can leave it out. "uM", "μM" (Greek mu) and "µM" (micro sign) match. */
+export function sameUnit(a: string | null | undefined, b: string | null | undefined): boolean {
+  const canonical = (u: string | null | undefined) => u?.trim().replace(/^[uμ]/, "µ") ?? "";
+  return !!a && canonical(a) === canonical(b);
+}
+
 export function molarFactor(unit: string | null): number | null {
   const factors: Record<string, number> = {
     m: 1,

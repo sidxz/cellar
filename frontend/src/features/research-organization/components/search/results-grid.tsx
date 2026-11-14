@@ -10,9 +10,10 @@ import type {
   IHeaderGroupParams,
 } from "ag-grid-community";
 import { Maximize2, Minimize2 } from "lucide-react";
-import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { Molecule } from "@/features/chemical-registration/types";
+import { activityCatalog } from "@/features/screening-assay/lib/activity-columns";
 import { interceptLabel } from "@/features/screening-assay/lib/intercept-label";
 import { type Protocol, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
@@ -23,7 +24,7 @@ import { groupBy } from "@/shared/lib/group-by";
 import { detectQueryKind } from "@/shared/lib/rdkit/detect-query-kind";
 import { cn } from "@/shared/lib/utils";
 import { shownPlotLayout } from "../../hooks/use-report-config";
-import { activityEndpoint } from "../../lib/assay-evidence";
+import { activityEndpoint, sameUnit } from "../../lib/assay-evidence";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import {
   ANY_COLUMN_ID,
@@ -245,6 +246,19 @@ function serverSorted(
     : { ...column, sortable: false };
 }
 
+/** Never squeezed below its own width (the grid's fit-to-width would shrink
+ *  a wide table's columns to the 80px floor and cut every header); a long
+ *  header wraps to a second line; a nested header still gets its tooltip. */
+function readable(column: ColDef<EnrichedMolecule>): ColDef<EnrichedMolecule> {
+  return {
+    ...column,
+    minWidth: column.width,
+    wrapHeaderText: true,
+    autoHeaderHeight: true,
+    headerTooltip: column.headerTooltip ?? column.headerName,
+  };
+}
+
 /** A Plot column, split or not (``drc:<rd>:plot`` / ``drc:<rd>:plot@<group>``). */
 function isPlotColumn(colId: string | undefined): boolean {
   return !!colId && colId.split("@")[0].endsWith(":plot");
@@ -262,6 +276,8 @@ function buildReadoutColumn(
   normalization: string | null,
   mode: AggregationMode,
   groupKey = "",
+  /** Short header from the protocol's activity catalog (unit included). */
+  catalogLabel?: string,
 ): ColDef<EnrichedMolecule> {
   const colId = withGroup(token, groupKey);
   // Header resolves from the protocol's readout definitions. 4-segment IDs
@@ -276,11 +292,16 @@ function buildReadoutColumn(
       normalization)
     : null;
   const headerSuffix = normLabel ? ` (${normLabel})` : rd?.unit ? ` (${rd.unit})` : "";
+  // The header states the unit, so a value in it leaves it out of the cell.
+  const headerUnit = normLabel ? null : (rd?.unit ?? null);
 
   return {
-    headerName: `${rdName}${headerSuffix}`,
+    headerName: normLabel
+      ? `${rdName}${headerSuffix}`
+      : (catalogLabel ?? `${rdName}${headerSuffix}`),
+    headerTooltip: `${rdName}${headerSuffix} · ${proto?.name ?? "Assay"}`,
     colId,
-    width: 130,
+    width: 112,
     valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
@@ -297,7 +318,7 @@ function buildReadoutColumn(
           <span className="font-mono text-xs">
             {q}
             {av.value.toPrecision(4)}
-            {av.unit ? ` ${av.unit}` : ""}
+            {av.unit && !sameUnit(av.unit, headerUnit) ? ` ${av.unit}` : ""}
           </span>
         </AssayEvidence>
       );
@@ -360,6 +381,7 @@ export function buildDrcColumns(
           isPrimary
           mode={aggregationMode}
           curves={rowCurves(proto, params.data)}
+          headerUnit={proto?.dose_unit}
         />
       ),
     });
@@ -370,7 +392,7 @@ export function buildDrcColumns(
         headerName: `${interceptLabel(spec)}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
         headerTooltip: `${rd?.name ?? "Endpoint"} · ${proto?.name ?? "Assay"}`,
         colId: columnId(`${spec.kind}:${spec.level}`),
-        width: 180,
+        width: 150,
         valueGetter: (p) => {
           const av = p.data?.activity?.[colId];
           if (!av) return null;
@@ -383,6 +405,7 @@ export function buildDrcColumns(
             isPrimary={isPrimary}
             mode={aggregationMode}
             curves={rowCurves(proto, params.data)}
+            headerUnit={proto?.dose_unit}
           />
         ),
       });
@@ -405,14 +428,77 @@ export function buildDrcColumns(
   return cols;
 }
 
-/** One protocol's columns for one split group (or the unsplit columns). */
+/** A group folds to its headline: its first `keep` columns (and any plot)
+ *  stay, the rest show only while the group is open. Every group starts
+ *  open — folding is the chemist's choice, never the default. */
+function foldable<T extends ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>>(
+  children: T[],
+  keep = 1,
+): T[] {
+  let kept = 0;
+  return children.map((c) =>
+    "children" in c || isPlotColumn(c.colId) || kept++ < keep
+      ? c
+      : { ...c, columnGroupShow: "open" },
+  );
+}
+
+/** Not measured in this assay (within the search's run filter): one muted
+ *  note in the assay's first column instead of a dash in every column. */
+function NoResult() {
+  return (
+    <span
+      className="text-xs italic text-muted-foreground/70"
+      title="No result for this compound in this assay within the search's run filter."
+    >
+      no result
+    </span>
+  );
+}
+
+function quietWhenUntested(
+  leaves: ColDef<EnrichedMolecule>[],
+  activityKeys: string[],
+): ColDef<EnrichedMolecule>[] {
+  const tested = (row: EnrichedMolecule | undefined) =>
+    activityKeys.some((k) => row?.activity?.[k] != null);
+  return leaves.map((col, i) => {
+    const render = col.cellRenderer as (p: ICellRendererParams<EnrichedMolecule>) => ReactNode;
+    return {
+      ...col,
+      cellRenderer: (p: ICellRendererParams<EnrichedMolecule>) =>
+        tested(p.data) ? render(p) : i === 0 ? <NoResult /> : null,
+    };
+  });
+}
+
+/** One protocol's columns for one split group (or the unsplit columns).
+ *  Plain readouts take the protocol Activity tab's short labels, order and
+ *  groups (a thermal-shift window per group), so a protocol reads the same
+ *  on both pages; every readout still shows. */
 function buildProtocolChildren(
   entries: ResolvedColumn[],
   proto: Protocol | undefined,
   aggregationMode: AggregationMode,
   groupKey: string,
-): ColDef<EnrichedMolecule>[] {
-  const children: ColDef<EnrichedMolecule>[] = [];
+  groupId: string,
+): (ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[] {
+  const catalog = new Map(
+    activityCatalog(
+      (proto?.readout_definitions ?? []).map((rd) => ({
+        name: rd.name,
+        data_type: rd.data_type,
+        unit: rd.unit ?? null,
+        melt_config: rd.melt_config,
+      })),
+      [],
+      [],
+    )
+      .filter((c) => c.kind === "value")
+      .map((c, order) => [c.readout, { label: c.label, group: c.group, order }]),
+  );
+  const readouts: { col: ColDef<EnrichedMolecule>; name: string }[] = [];
+  const activityKeys: string[] = [];
   // DR tokens for the same readout-def may arrive as either a parent
   // `drc:<rd_id>` (= render all intercepts) or as one or more narrowed
   // `drc:<rd_id>:<kind>:<level>` (= render only this intercept). Collapse
@@ -427,16 +513,20 @@ function buildProtocolChildren(
     if (entry.prefix === "rd") {
       const parts = entry.colId.split(":");
       const normalization = parts.length >= 4 ? parts[3] || null : null;
-      children.push(
-        buildReadoutColumn(
+      const name = proto?.readout_definitions?.find((r) => r.id === entry.readoutDefId)?.name ?? "";
+      activityKeys.push(withGroup(entry.colId, groupKey));
+      readouts.push({
+        name,
+        col: buildReadoutColumn(
           entry.colId,
           proto,
           entry.readoutDefId ?? "",
           normalization,
           aggregationMode,
           groupKey,
+          catalog.get(name)?.label,
         ),
-      );
+      });
     } else {
       const rdId = entry.readoutDefId ?? "";
       const parentColId = drcColId(rdId);
@@ -453,11 +543,39 @@ function buildProtocolChildren(
     }
   }
 
+  const order = (name: string) => catalog.get(name)?.order ?? Number.MAX_SAFE_INTEGER;
+  readouts.sort((a, b) => order(a.name) - order(b.name));
+  const curves: ColDef<EnrichedMolecule>[] = [];
   for (const { parentColId, visible } of drcByRdId.values()) {
     const rdId = parentColId.split(":")[1];
-    children.push(...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey));
+    activityKeys.push(withGroup(parentColId, groupKey));
+    curves.push(...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey));
   }
-  return children;
+
+  const leaves = quietWhenUntested([...readouts.map((r) => r.col), ...curves], activityKeys);
+  // Consecutive readouts sharing a catalog group (a thermal window, "Other
+  // readouts") sit under that group's header.
+  const children: (ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[] = [];
+  readouts.forEach(({ name }, i) => {
+    const header = catalog.get(name)?.group;
+    const last = children.at(-1);
+    if (!header) children.push(leaves[i]);
+    else if (last && "children" in last && last.headerName === header)
+      last.children.push(leaves[i]);
+    else
+      children.push({
+        headerName: header,
+        headerTooltip: header,
+        groupId: `${groupId}:${header}`,
+        openByDefault: true,
+        headerClass: "ag-protocol-split-header",
+        children: [leaves[i]],
+      });
+  });
+  return foldable([
+    ...children.map((c) => ("children" in c ? { ...c, children: foldable(c.children) } : c)),
+    ...leaves.slice(readouts.length),
+  ]);
 }
 
 function groupHeader(group: ColumnGroup, split: ProtocolColumnGroups["split"]): string {
@@ -539,8 +657,10 @@ export function buildProtocolColumnGroups(
       groups.push({
         headerName: name,
         headerTooltip: name,
+        groupId: `p:${protoId}`,
+        openByDefault: true,
         headerClass: "ag-protocol-group-header",
-        children: buildProtocolChildren(entries, proto, aggregationMode, ""),
+        children: buildProtocolChildren(entries, proto, aggregationMode, "", `p:${protoId}`),
       });
       continue;
     }
@@ -563,6 +683,8 @@ export function buildProtocolColumnGroups(
         : split.groups.map((group, i) => ({
             headerName: groupHeader(group, split.split),
             headerTooltip: groupTooltip(group, split.split),
+            groupId: `p:${protoId}@${group.key}`,
+            openByDefault: true,
             headerClass: "ag-protocol-split-header",
             ...(overlay
               ? {
@@ -570,13 +692,19 @@ export function buildProtocolColumnGroups(
                   headerGroupComponentParams: { color: overlayColor(i) },
                 }
               : {}),
-            children: buildProtocolChildren(entries, proto, aggregationMode, group.key).filter(
-              (c) => !overlay || !isPlotColumn(c.colId),
-            ),
+            children: buildProtocolChildren(
+              entries,
+              proto,
+              aggregationMode,
+              group.key,
+              `p:${protoId}@${group.key}`,
+            ).filter((c) => !overlay || "children" in c || !isPlotColumn(c.colId)),
           }));
     if (overlay) children.push(...buildOverlayPlotColumns(entries, proto, split));
     groups.push({
       headerName,
+      groupId: `p:${protoId}`,
+      openByDefault: true,
       headerTooltip:
         wantsOverlay && !overlay && split.groups.length > 0
           ? `${headerName} — more than ${MAX_OVERLAY_CURVES} groups, so their plots stay side by side`
@@ -819,7 +947,7 @@ export function ResultsGrid({
       "children" in column
         ? { ...column, children: column.children.map(styleLeaves) }
         : {
-            ...column,
+            ...readable(column),
             headerClass: "search-assay-header",
             ...(isPlotColumn(column.colId) ? { hide: !showPlots } : {}),
           };
@@ -835,8 +963,11 @@ export function ResultsGrid({
         ? [
             {
               headerName: "Properties",
+              groupId: "properties",
+              openByDefault: true,
               headerClass: "search-properties-group-header",
-              children: props,
+              // Folded, MW and LogP stay: what potency is weighed against.
+              children: foldable(props.map(readable), 2),
             },
           ]
         : [];

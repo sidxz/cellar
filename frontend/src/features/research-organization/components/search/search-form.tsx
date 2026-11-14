@@ -374,6 +374,7 @@ function FilterCard({
         size="icon-sm"
         className="absolute right-2 top-2 text-muted-foreground hover:text-destructive"
         aria-label={`Remove ${label.toLowerCase()} filters`}
+        title={`Remove all ${label.toLowerCase()} filters`}
         onClick={onRemove}
       >
         <X className="size-3.5" />
@@ -616,6 +617,7 @@ export function SearchForm({
   ]);
 
   function handleSearch() {
+    if (draftIssue) return;
     const criteria = composeCriteria();
     const query: SearchQuery = { criteria, logic: "and" };
     const protocolColumns = deriveProtocolColumns(activityCriteria, protocols);
@@ -718,7 +720,12 @@ export function SearchForm({
 
   // Skip the count when there are no criteria — the badge is hidden in that
   // case and we don't want to fire a workspace-wide COUNT(*) on every render.
-  const countQuery = useSearchCount(composedQuery, criteriaCount > 0);
+  // A half-made choice the backend would reject: hold the count and Search
+  // and say what's missing, instead of surfacing the backend's 422 text.
+  const unpickedAssay = activityCriteria.findIndex(hasUnpickedRuns);
+  const draftIssue =
+    unpickedAssay >= 0 ? `Pick at least one run for assay ${unpickedAssay + 1}` : null;
+  const countQuery = useSearchCount(composedQuery, criteriaCount > 0 && !draftIssue);
   const totalCount = countQuery.data?.total_count;
   const countIsFetching = countQuery.isFetching;
   // A 422 from the count (bad SMILES, unknown field…) is the earliest place
@@ -965,7 +972,11 @@ export function SearchForm({
                   }`}
                   aria-live="polite"
                 >
-                  {countError ? (
+                  {draftIssue ? (
+                    <span className="font-medium text-amber-700 dark:text-amber-400">
+                      {draftIssue}
+                    </span>
+                  ) : countError ? (
                     <span className="font-medium text-destructive" title={countError}>
                       {countError}
                     </span>
@@ -999,7 +1010,7 @@ export function SearchForm({
               <span className="hidden text-[10px] uppercase tracking-wider text-muted-foreground/60 sm:inline">
                 ⌘ ↵
               </span>
-              <Button onClick={handleSearch} disabled={isLoading} className="px-5">
+              <Button onClick={handleSearch} disabled={isLoading || !!draftIssue} className="px-5">
                 {isLoading ? (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 ) : (
@@ -1013,6 +1024,13 @@ export function SearchForm({
       )}
     </div>
   );
+}
+
+/** "Specific runs" chosen on a protocol but no run picked yet — unfinished,
+ *  and the backend rejects it. */
+export function hasUnpickedRuns(c: ActivityCriterion): boolean {
+  const scope = c.run_scope;
+  return !!c.protocol_id && scope?.mode === "specific" && !scope.run_ids?.length && !scope.run_id;
 }
 
 /** An activity criterion as the backend should see it: half-filled where

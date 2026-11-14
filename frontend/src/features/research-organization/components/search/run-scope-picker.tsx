@@ -1,7 +1,9 @@
 "use client";
 
+import { ConditionChips } from "@/features/screening-assay/components/condition-chips";
 import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
-import type { Run, RunStatus } from "@/features/screening-assay/types";
+import { formatConditionEntries } from "@/features/screening-assay/lib/conditions";
+import { RUN_STATUS_LABELS, type Run, type RunStatus } from "@/features/screening-assay/types";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Command,
@@ -14,17 +16,11 @@ import {
 import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { Select, SelectContent, SelectTrigger, SelectValue } from "@/shared/components/ui/select";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/shared/components/ui/tooltip";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { cn } from "@/shared/lib/utils";
 import { CheckIcon, ChevronsUpDown, X } from "lucide-react";
 import { Select as SelectPrimitive } from "radix-ui";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { RunScope, RunScopeMode } from "../../types";
 
 // Ordered broad → narrow so the menu reads as a continuum of run-set
@@ -66,7 +62,7 @@ const MODE_OPTIONS: {
   },
   {
     value: "specific",
-    label: "Specific run",
+    label: "Specific runs",
     description: "Restrict to a hand-picked list of runs.",
   },
 ];
@@ -122,37 +118,24 @@ function statusColor(status: RunStatus, isLocked: boolean): string {
   return "bg-muted-foreground/40";
 }
 
-// inline: custom date format — produces "2026-05-12 14:30" (ISO date + 24-h time),
-// which is more compact than the shared formatDateTime "May 12, 2026, 2:30 PM".
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const date = d.toISOString().slice(0, 10);
-  const time = d.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  return `${date} ${time}`;
+/** Closed-trigger label for one picked run: the experiment date, then its
+ *  first plate barcode or its notes (CSS truncates the rest). */
+function runLabel(run: Run): string {
+  const id = run.plate_barcodes?.[0] ?? run.notes?.trim();
+  return id ? `${run.run_date} · ${id}` : run.run_date;
 }
 
-function runIdentifier(run: Run): string {
-  if (run.plate_barcodes?.length) return run.plate_barcodes[0];
-  if (run.notes && run.notes.trim().length > 0) {
-    const trimmed = run.notes.trim();
-    return trimmed.length > 32 ? `${trimmed.slice(0, 32)}…` : trimmed;
-  }
-  return `Run ${run.run_date}`;
+/** Condition names whose value is not the same on every run — the ones that
+ *  tell runs apart (e.g. ATP 1 mM vs 10 mM), so they lead each row. */
+export function differingConditionKeys(runs: Run[]): Set<string> {
+  const keys = new Set(runs.flatMap((r) => formatConditionEntries(r.conditions).map((e) => e.key)));
+  return new Set(
+    [...keys].filter((k) => new Set(runs.map((r) => String(r.conditions?.[k] ?? ""))).size > 1),
+  );
 }
 
-function conditionsSummary(conditions: Record<string, unknown> | null): string | null {
-  if (!conditions) return null;
-  const entries = Object.entries(conditions).filter(([, v]) => v !== null && v !== "");
-  if (entries.length === 0) return null;
-  return entries
-    .slice(0, 4)
-    .map(([k, v]) => `${k}: ${String(v)}`)
-    .join(" · ");
+function plural(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
 }
 
 interface RunScopePickerProps {
@@ -170,8 +153,12 @@ export function RunScopePicker({
   latestDisabledReason,
 }: RunScopePickerProps) {
   const mode: RunScopeMode = value?.mode ?? "any";
+  const keepFocus = useRef(false);
 
   function setMode(next: RunScopeMode) {
+    // The run list opens itself next (see SpecificRunPicker); stop this menu
+    // from handing focus back to its trigger, which would close that list.
+    keepFocus.current = next === "specific";
     if (next === "any") {
       onChange(undefined);
       return;
@@ -185,13 +172,19 @@ export function RunScopePicker({
 
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-sm text-muted-foreground shrink-0 w-16">runs</span>
+      <span className="text-sm text-muted-foreground shrink-0 w-24">Runs</span>
 
       <Select value={mode} onValueChange={(v) => setMode(v as RunScopeMode)}>
-        <SelectTrigger className="h-8 w-32 text-sm shrink-0">
+        <SelectTrigger className="h-8 w-36 text-sm shrink-0">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="min-w-[20rem]">
+        <SelectContent
+          className="min-w-[20rem]"
+          onCloseAutoFocus={(e) => {
+            if (keepFocus.current) e.preventDefault();
+            keepFocus.current = false;
+          }}
+        >
           {MODE_OPTIONS.map((opt) => (
             <ScopeOption
               key={opt.value}
@@ -286,7 +279,12 @@ function SpecificRunPicker({
   runIds: string[];
   onChange: (ids: string[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  // Opens on arrival: choosing "Specific runs" (or splitting by run) always
+  // means picking runs next.
+  const [open, setOpen] = useState(runIds.length === 0);
+  // Flag an empty pick only once the list was closed without one, not the
+  // moment the mode is chosen.
+  const [touched, setTouched] = useState(false);
   const { data: runs, isLoading } = useRunsByProtocol(protocolId);
   const { data: members } = useWorkspaceMembers();
 
@@ -296,12 +294,16 @@ function SpecificRunPicker({
     return map;
   }, [members]);
 
-  const sortedRuns = useMemo(() => {
-    if (!runs) return [];
-    return [...runs].sort((a, b) =>
-      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
-    );
-  }, [runs]);
+  // Newest experiment first — by run date, the same date "Latest run" uses;
+  // upload time only breaks ties between runs from the same day.
+  const sortedRuns = useMemo(
+    () =>
+      [...(runs ?? [])].sort(
+        (a, b) => b.run_date.localeCompare(a.run_date) || b.created_at.localeCompare(a.created_at),
+      ),
+    [runs],
+  );
+  const differing = useMemo(() => differingConditionKeys(sortedRuns), [sortedRuns]);
 
   const selectedSet = useMemo(() => new Set(runIds), [runIds]);
   const selectedRuns = useMemo(
@@ -317,137 +319,75 @@ function SpecificRunPicker({
     }
   }
 
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) setTouched(true);
+  }
+
   const triggerLabel = (() => {
-    if (selectedRuns.length === 0) return "Choose runs…";
-    if (selectedRuns.length === 1) return runIdentifier(selectedRuns[0]);
+    if (selectedRuns.length === 0) return "Choose one or more runs…";
+    if (selectedRuns.length === 1) return runLabel(selectedRuns[0]);
     return `${selectedRuns.length} runs selected`;
   })();
-  const invalid = runIds.length === 0;
+  const invalid = touched && runIds.length === 0;
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            "flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
-            invalid && "border-destructive text-muted-foreground",
-          )}
-          aria-invalid={invalid}
-        >
-          {selectedRuns.length === 1 ? (
-            <span className="flex min-w-0 items-center gap-1.5">
-              <span
-                className={cn(
-                  "h-2 w-2 rounded-full shrink-0",
-                  statusColor(selectedRuns[0].status, selectedRuns[0].is_locked),
-                )}
-                aria-hidden
-              />
+    <>
+      <Popover open={open} onOpenChange={handleOpenChange}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              "flex h-8 min-w-0 flex-1 items-center justify-between gap-1.5 rounded-md border border-input bg-transparent px-2 text-sm shadow-xs",
+              selectedRuns.length === 0 && "text-muted-foreground",
+              invalid && "border-destructive",
+            )}
+            aria-invalid={invalid}
+          >
+            {selectedRuns.length === 1 ? (
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span
+                  className={cn(
+                    "h-2 w-2 rounded-full shrink-0",
+                    statusColor(selectedRuns[0].status, selectedRuns[0].is_locked),
+                  )}
+                  aria-hidden
+                />
+                <span className="truncate">{triggerLabel}</span>
+              </span>
+            ) : (
               <span className="truncate">{triggerLabel}</span>
-            </span>
-          ) : (
-            <span className="truncate">{triggerLabel}</span>
-          )}
-          <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="p-0 w-[28rem] max-w-[calc(100vw-2rem)]" align="start">
-        <TooltipProvider delayDuration={250}>
-          <Command>
+            )}
+            <ChevronsUpDown className="h-3 w-3 shrink-0 opacity-50" />
+          </button>
+        </PopoverTrigger>
+        {/* As wide as the field and as tall as the screen allows: runs are
+            told apart by their conditions and notes, which need the room. */}
+        <PopoverContent
+          className="flex max-h-(--radix-popover-content-available-height) w-[max(28rem,var(--radix-popover-trigger-width))] max-w-[calc(100vw-2rem)] flex-col p-0"
+          align="start"
+          collisionPadding={16}
+        >
+          <Command className="min-h-0">
             <CommandInput
-              placeholder="Search by date, scientist, barcode, notes…"
+              placeholder="Search by date, condition, scientist, barcode, notes…"
               className="h-8 text-sm"
             />
-            <CommandList className="max-h-80">
+            <CommandList className="max-h-none min-h-0 flex-1">
               <CommandEmpty>
                 {isLoading ? "Loading runs…" : "No runs for this protocol."}
               </CommandEmpty>
               <CommandGroup>
-                {sortedRuns.map((run) => {
-                  const operatorName = memberById.get(run.operator) ?? "Unknown user";
-                  const identifier = runIdentifier(run);
-                  const conditions = conditionsSummary(run.conditions);
-                  const checked = selectedSet.has(run.id);
-                  const haystack = [
-                    run.run_date,
-                    operatorName,
-                    identifier,
-                    run.notes ?? "",
-                    ...(run.plate_barcodes ?? []),
-                    conditions ?? "",
-                  ]
-                    .join(" ")
-                    .toLowerCase();
-                  return (
-                    <CommandItem
-                      key={run.id}
-                      value={`${run.id} ${haystack}`}
-                      // Keep the popover open so the chemist can pick
-                      // multiple runs without re-opening it each time.
-                      onSelect={() => toggle(run.id)}
-                      className="text-sm py-1.5"
-                    >
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <div className="flex w-full min-w-0 items-center gap-2">
-                            <Checkbox
-                              checked={checked}
-                              tabIndex={-1}
-                              className="h-3.5 w-3.5 shrink-0 pointer-events-none"
-                              aria-hidden
-                            />
-                            <span
-                              className={cn(
-                                "h-2 w-2 rounded-full shrink-0",
-                                statusColor(run.status, run.is_locked),
-                              )}
-                              aria-hidden
-                            />
-                            <span className="font-mono text-xs text-muted-foreground shrink-0 whitespace-nowrap">
-                              {formatDateTime(run.created_at)}
-                            </span>
-                            <span className="min-w-0 flex-1 truncate">{operatorName}</span>
-                            <span className="min-w-0 flex-1 truncate font-mono text-xs">
-                              {identifier}
-                            </span>
-                            <span className="shrink-0 whitespace-nowrap text-xs text-muted-foreground tabular-nums">
-                              {run.molecule_count} cpd
-                              {run.molecule_count === 1 ? "" : "s"}
-                            </span>
-                          </div>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom" align="start" className="max-w-sm">
-                          <div className="space-y-1 text-xs">
-                            <div>
-                              <strong>Status:</strong> {run.status}
-                              {run.is_locked ? " · locked" : ""}
-                            </div>
-                            {run.notes && (
-                              <div>
-                                <strong>Notes:</strong> {run.notes}
-                              </div>
-                            )}
-                            {conditions && (
-                              <div>
-                                <strong>Conditions:</strong> {conditions}
-                              </div>
-                            )}
-                            {run.plate_barcodes && run.plate_barcodes.length > 1 && (
-                              <div>
-                                <strong>Plates:</strong> {run.plate_barcodes.join(", ")}
-                              </div>
-                            )}
-                            <div>
-                              <strong>Plates:</strong> {run.plate_count} ·{" "}
-                              <strong>Compounds:</strong> {run.molecule_count}
-                            </div>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                    </CommandItem>
-                  );
-                })}
+                {sortedRuns.map((run) => (
+                  <RunOption
+                    key={run.id}
+                    run={run}
+                    operatorName={memberById.get(run.operator) ?? "Unknown user"}
+                    differing={differing}
+                    checked={selectedSet.has(run.id)}
+                    onToggle={() => toggle(run.id)}
+                  />
+                ))}
               </CommandGroup>
             </CommandList>
             {/* Footer — quick selection clears + count */}
@@ -467,8 +407,83 @@ function SpecificRunPicker({
               )}
             </div>
           </Command>
-        </TooltipProvider>
-      </PopoverContent>
-    </Popover>
+        </PopoverContent>
+      </Popover>
+      {invalid && (
+        <p className="basis-full pl-[6.375rem] text-xs text-destructive">Pick at least one run.</p>
+      )}
+    </>
+  );
+}
+
+/** One run in the picker. Line 1 carries what sets the run apart (date and
+ *  the conditions that differ between runs, then size); line 2 the who and
+ *  what (status when not approved, scientist, notes, plates). */
+function RunOption({
+  run,
+  operatorName,
+  differing,
+  checked,
+  onToggle,
+}: {
+  run: Run;
+  operatorName: string;
+  differing: Set<string>;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const conditions = formatConditionEntries(run.conditions);
+  // Conditions that differ between runs lead, so the chip cap never hides them.
+  const leading = Object.fromEntries(
+    [...conditions]
+      .sort((a, b) => Number(differing.has(b.key)) - Number(differing.has(a.key)))
+      .map((e) => [e.key, e.value]),
+  );
+  const approved = run.is_locked || run.status === "approved";
+  const statusLabel = RUN_STATUS_LABELS[run.status] ?? run.status;
+  const barcodes = run.plate_barcodes?.join(", ");
+  const details = [approved ? null : statusLabel, operatorName, run.notes?.trim(), barcodes]
+    .filter(Boolean)
+    .join(" · ");
+  const haystack = [
+    run.run_date,
+    statusLabel,
+    details,
+    ...conditions.map((e) => `${e.key} ${e.value}`),
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return (
+    <CommandItem
+      value={`${run.id} ${haystack}`}
+      // Keep the popover open so the chemist can pick
+      // multiple runs without re-opening it each time.
+      onSelect={onToggle}
+      className="items-start py-2 text-sm"
+    >
+      <Checkbox
+        checked={checked}
+        tabIndex={-1}
+        className="mt-0.5 h-3.5 w-3.5 shrink-0 pointer-events-none"
+        aria-hidden
+      />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <div className="flex min-w-0 items-center gap-2">
+          <span
+            className={cn("h-2 w-2 shrink-0 rounded-full", statusColor(run.status, run.is_locked))}
+            aria-hidden
+          />
+          <span className="shrink-0 font-mono text-xs">{run.run_date}</span>
+          <ConditionChips conditions={leading} emptyFallback={null} className="min-w-0" />
+          <span className="ml-auto shrink-0 whitespace-nowrap text-xs text-muted-foreground tabular-nums">
+            {plural(run.molecule_count ?? 0, "cpd")}
+            {/* Summary-imported runs have no plates — "0 plates" is noise. */}
+            {run.plate_count > 0 && ` · ${plural(run.plate_count, "plate")}`}
+          </span>
+        </div>
+        <p className="line-clamp-2 break-words text-xs text-muted-foreground">{details}</p>
+      </div>
+    </CommandItem>
   );
 }
