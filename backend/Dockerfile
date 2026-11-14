@@ -2,8 +2,10 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# RDKit's drawing extension (rdMolDraw2D) links against these system libs;
-# the slim base omits them, so the app fails to import at runtime without them.
+# RDKit's drawing extension (rdMolDraw2D) links against the X11/expat libs, and
+# WeasyPrint (PDF export) dlopens Pango/HarfBuzz at import time. The slim base
+# ships none of them and no fonts. Liberation gives the template's Arial/Helvetica/
+# Courier their metric clones; DejaVu covers the symbols Liberation lacks.
 RUN apt-get update \
   && apt-get upgrade -y --no-install-recommends \
   && apt-get install -y --no-install-recommends \
@@ -11,6 +13,11 @@ RUN apt-get update \
     libxext6 \
     libx11-6 \
     libexpat1 \
+    libpango-1.0-0 \
+    libpangoft2-1.0-0 \
+    libharfbuzz-subset0 \
+    fonts-liberation2 \
+    fonts-dejavu-core \
   && rm -rf /var/lib/apt/lists/*
 
 # uv owns the venv; the base image's pip (and the wheels ensurepip carries)
