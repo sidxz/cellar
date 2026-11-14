@@ -225,4 +225,44 @@ describe("outside operator", () => {
     fireEvent.change(high, { target: { value: "2" } });
     expect(save).toBeEnabled();
   });
+
+  it("a negative bound can be typed one keystroke at a time", () => {
+    render(
+      <RunHitCriteriaDialog
+        runId="r1"
+        readoutDefinitions={[dtm]}
+        currentCriteria={[{ ...outside, value: [0, 2] }]}
+        recommendation={null}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const [low] = screen.getAllByRole("spinbutton");
+    fireEvent.change(low, { target: { value: "-" } });
+    expect(low).toHaveValue(null); // the lone minus is kept, not reset to 0
+    fireEvent.change(low, { target: { value: "-2" } });
+    fireEvent.click(screen.getByRole("button", { name: /save for this run/i }));
+    expect(setMutate.mock.calls[0][0]).toMatchObject({
+      criteria: [{ operator: "not_between", value: [-2, 2] }],
+    });
+  });
+
+  it("a negative single value can be typed one keystroke at a time", () => {
+    render(
+      <RunHitCriteriaDialog
+        runId="r1"
+        readoutDefinitions={[dtm]}
+        currentCriteria={[{ readout_name: "ΔTm (Main)", operator: "lt", value: 0 }]}
+        recommendation={null}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    const value = screen.getByRole("spinbutton");
+    fireEvent.change(value, { target: { value: "-" } });
+    expect(value).toHaveValue(null);
+    fireEvent.change(value, { target: { value: "-3" } });
+    fireEvent.click(screen.getByRole("button", { name: /save for this run/i }));
+    expect(setMutate.mock.calls[0][0]).toMatchObject({ criteria: [{ value: -3 }] });
+  });
 });

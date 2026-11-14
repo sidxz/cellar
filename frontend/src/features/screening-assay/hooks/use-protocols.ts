@@ -177,7 +177,7 @@ export function useAddTemperatureWindow(protocolId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
-      showSuccess("Temperature window added");
+      showSuccess("Temperature window readouts added");
     },
   });
 }

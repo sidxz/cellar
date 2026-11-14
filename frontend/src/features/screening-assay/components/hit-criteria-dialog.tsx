@@ -19,7 +19,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUpdateProtocol } from "../hooks/use-protocols";
 import { useResetRunHitCriteria, useSetRunHitCriteria } from "../hooks/use-runs";
 import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
@@ -194,6 +194,36 @@ function useHitCriteriaRules(
   };
 }
 
+/** A number input that keeps what is typed ("-", "1.") until it is a number,
+ *  so a negative or decimal value can be entered one keystroke at a time. */
+function NumberField({
+  value,
+  onValue,
+  className,
+}: {
+  value: number;
+  onValue: (n: number) => void;
+  className?: string;
+}) {
+  const [text, setText] = useState(String(value));
+  // Follow a value set from elsewhere (seeding, a reset), not one being typed.
+  useEffect(() => {
+    setText((t) => (Number.parseFloat(t) === value ? t : String(value)));
+  }, [value]);
+  return (
+    <Input
+      className={className}
+      type="number"
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const n = Number.parseFloat(e.target.value);
+        if (Number.isFinite(n)) onValue(n);
+      }}
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Shared presentational editor — the rule rows + add button
 // ---------------------------------------------------------------------------
@@ -263,33 +293,39 @@ function HitCriteriaRulesEditor({
                 <>
                   <div className="w-24 space-y-1">
                     <Label className="text-xs">Low</Label>
-                    <Input
+                    <NumberField
                       className="h-9"
-                      type="number"
                       value={low}
-                      onChange={(e) => state.handleBoundChange(index, 0, e.target.value)}
+                      onValue={(n) => state.handleBoundChange(index, 0, String(n))}
                     />
                   </div>
                   <div className="w-24 space-y-1">
                     <Label className="text-xs">High</Label>
-                    <Input
+                    <NumberField
                       className="h-9"
-                      type="number"
                       value={high}
-                      onChange={(e) => state.handleBoundChange(index, 1, e.target.value)}
+                      onValue={(n) => state.handleBoundChange(index, 1, String(n))}
                     />
                   </div>
                 </>
               ) : (
                 <div className="w-32 space-y-1">
                   <Label className="text-xs">Value</Label>
-                  <Input
-                    className="h-9"
-                    type={rule.operator === "in" ? "text" : "number"}
-                    placeholder={rule.operator === "in" ? "full, partial" : "0"}
-                    value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
-                    onChange={(e) => state.handleValueChange(index, e.target.value)}
-                  />
+                  {rule.operator === "in" ? (
+                    <Input
+                      className="h-9"
+                      type="text"
+                      placeholder="full, partial"
+                      value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
+                      onChange={(e) => state.handleValueChange(index, e.target.value)}
+                    />
+                  ) : (
+                    <NumberField
+                      className="h-9"
+                      value={typeof rule.value === "number" ? rule.value : 0}
+                      onValue={(n) => state.handleValueChange(index, String(n))}
+                    />
+                  )}
                 </div>
               )}
 
