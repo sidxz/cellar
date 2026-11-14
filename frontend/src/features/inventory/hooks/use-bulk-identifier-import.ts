@@ -7,7 +7,6 @@ import {
 import type {
   BulkAddBatchIdentifiersRequest,
   BulkAddBatchIdentifiersResponse,
-  RowOutcomeResponse,
 } from "@/shared/lib/api/model";
 import { useQueryClient } from "@tanstack/react-query";
 import { BATCHES_KEY } from "./query-keys";
@@ -38,4 +37,4 @@ export function useCommitBulkIdentifiers() {
 }
 
 // Re-export types for convenience
-export type { BulkAddBatchIdentifiersRequest, BulkAddBatchIdentifiersResponse, RowOutcomeResponse };
+export type { BulkAddBatchIdentifiersRequest, BulkAddBatchIdentifiersResponse };
