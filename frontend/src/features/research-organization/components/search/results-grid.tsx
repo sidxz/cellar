@@ -27,6 +27,8 @@ import {
 import type { AggregationMode } from "../../lib/use-aggregation-mode";
 import {
   type ActivityValue,
+  type ColumnGroup,
+  type ProtocolColumnGroups,
   type ReportConfig,
   type StructureCriterion,
   anyProtocolActivity,
@@ -45,6 +47,8 @@ interface ResultsGridProps {
   structureCriterion?: StructureCriterion;
   aggregationMode?: AggregationMode;
   protocolColumns: string[];
+  /** Split protocols' column groups from the search response. */
+  columnGroups?: Record<string, ProtocolColumnGroups> | null;
   protocols: Protocol[];
   reportConfig: ReportConfig;
   loading: boolean;
@@ -212,13 +216,25 @@ function rowCurves(proto: Protocol | undefined, row: EnrichedMolecule | undefine
   return row ? curvesTarget(proto, [compoundRef(row)]) : null;
 }
 
+/** A Plot column, split or not (``drc:<rd>:plot`` / ``drc:<rd>:plot@<group>``). */
+function isPlotColumn(colId: string | undefined): boolean {
+  return !!colId && colId.split("@")[0].endsWith(":plot");
+}
+
+/** ``<column>@<group>`` — a split group's activity key and grid column id. */
+function withGroup(id: string, groupKey: string): string {
+  return groupKey ? `${id}@${groupKey}` : id;
+}
+
 function buildReadoutColumn(
-  colId: string,
+  token: string,
   proto: Protocol | undefined,
   readoutDefId: string,
   normalization: string | null,
   mode: AggregationMode,
+  groupKey = "",
 ): ColDef<EnrichedMolecule> {
+  const colId = withGroup(token, groupKey);
   // Header resolves from the protocol's readout definitions. 4-segment IDs
   // (`rd:<p>:<id>:<norm>`) view a specific normalization (e.g.
   // percent_inhibition). The backend hands us the formula-appropriate unit
@@ -234,6 +250,7 @@ function buildReadoutColumn(
 
   return {
     headerName: `${rdName}${headerSuffix}`,
+    colId,
     width: 130,
     valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
@@ -268,12 +285,16 @@ function buildReadoutColumn(
  *  is treated as "render all" here as a defensive fallback).
  */
 export function buildDrcColumns(
-  colId: string,
+  token: string,
   proto: Protocol | undefined,
   readoutDefId: string,
   visibleIntercepts?: ReadonlyArray<{ kind: string; level: number }> | null,
   aggregationMode: AggregationMode = "latest",
+  groupKey = "",
 ): ColDef<EnrichedMolecule>[] {
+  // Cells read the group's activity key; grid column ids carry the group last.
+  const colId = withGroup(token, groupKey);
+  const columnId = (suffix: string) => withGroup(`${token}:${suffix}`, groupKey);
   const rd = proto?.readout_definitions?.find((r) => r.id === readoutDefId);
   const allIntercepts = rd?.dose_response_config?.intercepts ?? [];
   const intercepts =
@@ -292,7 +313,7 @@ export function buildDrcColumns(
     // headline fitted_value.
     cols.push({
       headerName: `${rd?.name ?? "Curve"}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
-      colId: `${colId}:value`,
+      colId: columnId("value"),
       width: 130,
       valueGetter: (p) => {
         const av = p.data?.activity?.[colId];
@@ -315,7 +336,7 @@ export function buildDrcColumns(
       cols.push({
         headerName: `${interceptLabel(spec)}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
         headerTooltip: `${rd?.name ?? "Endpoint"} · ${proto?.name ?? "Assay"}`,
-        colId: `${colId}:${spec.kind}:${spec.level}`,
+        colId: columnId(`${spec.kind}:${spec.level}`),
         width: 180,
         valueGetter: (p) => {
           const av = p.data?.activity?.[colId];
@@ -338,7 +359,7 @@ export function buildDrcColumns(
   // Single Plot column per DR readout — one curve serves every intercept.
   cols.push({
     headerName: "Plot",
-    colId: `${colId}:plot`,
+    colId: columnId("plot"),
     width: 240,
     sortable: false,
     filter: false,
@@ -351,10 +372,81 @@ export function buildDrcColumns(
   return cols;
 }
 
-function buildProtocolColumnGroups(
+/** One protocol's columns for one split group (or the unsplit columns). */
+function buildProtocolChildren(
+  entries: ResolvedColumn[],
+  proto: Protocol | undefined,
+  aggregationMode: AggregationMode,
+  groupKey: string,
+): ColDef<EnrichedMolecule>[] {
+  const children: ColDef<EnrichedMolecule>[] = [];
+  // DR tokens for the same readout-def may arrive as either a parent
+  // `drc:<rd_id>` (= render all intercepts) or as one or more narrowed
+  // `drc:<rd_id>:<kind>:<level>` (= render only this intercept). Collapse
+  // per rd-id so we emit ONE column block per readout-def with the
+  // combined intercept-visibility set.
+  const drcByRdId = new Map<
+    string,
+    { parentColId: string; visible: Array<{ kind: string; level: number }> | null }
+  >();
+
+  for (const entry of entries) {
+    if (entry.prefix === "rd") {
+      const parts = entry.colId.split(":");
+      const normalization = parts.length >= 4 ? parts[3] || null : null;
+      children.push(
+        buildReadoutColumn(
+          entry.colId,
+          proto,
+          entry.readoutDefId ?? "",
+          normalization,
+          aggregationMode,
+          groupKey,
+        ),
+      );
+    } else {
+      const rdId = entry.readoutDefId ?? "";
+      const parentColId = drcColId(rdId);
+      const existing = drcByRdId.get(rdId);
+      if (entry.interceptKey === null) {
+        // Parent token short-circuits to "render all" — clear any
+        // previously-accumulated narrowing.
+        drcByRdId.set(rdId, { parentColId, visible: null });
+      } else if (!existing) {
+        drcByRdId.set(rdId, { parentColId, visible: [entry.interceptKey] });
+      } else if (existing.visible !== null) {
+        existing.visible.push(entry.interceptKey);
+      }
+    }
+  }
+
+  for (const { parentColId, visible } of drcByRdId.values()) {
+    const rdId = parentColId.split(":")[1];
+    children.push(...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey));
+  }
+  return children;
+}
+
+function groupHeader(group: ColumnGroup, split: ProtocolColumnGroups["split"]): string {
+  if (group.flags?.includes("rejected")) return `${group.label} (rejected)`;
+  if (group.flags?.includes("deleted")) return group.label;
+  if (split.by === "run") return group.label;
+  return `${group.label} · ${group.run_count} run${group.run_count === 1 ? "" : "s"}`;
+}
+
+function groupTooltip(group: ColumnGroup, split: ProtocolColumnGroups["split"]): string {
+  if (group.flags?.includes("deleted")) return "This run is no longer available.";
+  if (group.flags?.includes("rejected"))
+    return `Run ${group.label} was rejected; it contributes no values.`;
+  if (split.by === "run") return `Run ${group.label}`;
+  return `${split.condition} = ${group.label} · ${group.run_count} run${group.run_count === 1 ? "" : "s"}`;
+}
+
+export function buildProtocolColumnGroups(
   protocolColumns: string[],
   protocols: Protocol[],
   aggregationMode: AggregationMode = "latest",
+  columnGroups?: Record<string, ProtocolColumnGroups> | null,
 ): ColGroupDef[] {
   const resolved = resolveColumns(protocolColumns, protocols);
   const grouped = groupBy(resolved, (r) => r.protocolId);
@@ -362,54 +454,37 @@ function buildProtocolColumnGroups(
   const groups: ColGroupDef[] = [];
   for (const [protoId, entries] of grouped) {
     const proto = protocols.find((p) => p.id === protoId);
-    const headerName = proto?.name ?? "Protocol";
-
-    const children: ColDef<EnrichedMolecule>[] = [];
-    // DR tokens for the same readout-def may arrive as either a parent
-    // `drc:<rd_id>` (= render all intercepts) or as one or more narrowed
-    // `drc:<rd_id>:<kind>:<level>` (= render only this intercept). Collapse
-    // per rd-id so we emit ONE column block per readout-def with the
-    // combined intercept-visibility set.
-    const drcByRdId = new Map<
-      string,
-      { parentColId: string; visible: Array<{ kind: string; level: number }> | null }
-    >();
-
-    for (const entry of entries) {
-      if (entry.prefix === "rd") {
-        const parts = entry.colId.split(":");
-        const normalization = parts.length >= 4 ? parts[3] || null : null;
-        children.push(
-          buildReadoutColumn(
-            entry.colId,
-            proto,
-            entry.readoutDefId ?? "",
-            normalization,
-            aggregationMode,
-          ),
-        );
-      } else {
-        const rdId = entry.readoutDefId ?? "";
-        const parentColId = drcColId(rdId);
-        const existing = drcByRdId.get(rdId);
-        if (entry.interceptKey === null) {
-          // Parent token short-circuits to "render all" — clear any
-          // previously-accumulated narrowing.
-          drcByRdId.set(rdId, { parentColId, visible: null });
-        } else if (!existing) {
-          drcByRdId.set(rdId, { parentColId, visible: [entry.interceptKey] });
-        } else if (existing.visible !== null) {
-          existing.visible.push(entry.interceptKey);
-        }
-      }
+    const name = proto?.name ?? "Protocol";
+    const split = columnGroups?.[protoId];
+    if (!split) {
+      groups.push({
+        headerName: name,
+        headerTooltip: name,
+        headerClass: "ag-protocol-group-header",
+        children: buildProtocolChildren(entries, proto, aggregationMode, ""),
+      });
+      continue;
     }
-
-    for (const { parentColId, visible } of drcByRdId.values()) {
-      const rdId = parentColId.split(":")[1];
-      const proto2 = protocols.find((p) => p.id === protoId);
-      children.push(...buildDrcColumns(parentColId, proto2, rdId, visible, aggregationMode));
-    }
-
+    const headerName = `${name} · by ${split.split.by === "run" ? "run" : split.split.condition}`;
+    const children: (ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[] =
+      split.groups.length === 0
+        ? [
+            {
+              headerName: "No runs match",
+              headerTooltip: "No run in this search's run filter measured these compounds.",
+              colId: `${protoId}:no-runs`,
+              width: 140,
+              sortable: false,
+              valueGetter: () => null,
+              cellRenderer: () => <span className="text-muted-foreground">&mdash;</span>,
+            },
+          ]
+        : split.groups.map((group) => ({
+            headerName: groupHeader(group, split.split),
+            headerTooltip: groupTooltip(group, split.split),
+            headerClass: "ag-protocol-split-header",
+            children: buildProtocolChildren(entries, proto, aggregationMode, group.key),
+          }));
     groups.push({
       headerName,
       headerTooltip: headerName,
@@ -533,6 +608,7 @@ export function buildActiveInColumn(): ColDef<EnrichedMolecule> {
 export function ResultsGrid({
   results,
   protocolColumns,
+  columnGroups = null,
   protocols,
   reportConfig,
   structureCriterion,
@@ -642,18 +718,23 @@ export function ResultsGrid({
     const sim = hasSimilarityScores ? [buildSimilarityColumn(structureCriterion)] : [];
     const props = buildPropertyColumns(reportConfig.visibleFields.properties);
     const activeIn = protocolColumns.includes(ANY_COLUMN_ID) ? [buildActiveInColumn()] : [];
-    const protoGroups = buildProtocolColumnGroups(protocolColumns, protocols, aggregationMode).map(
-      (group) => ({
-        ...group,
-        children: group.children.map((column) => ({
-          ...column,
-          headerClass: "search-assay-header",
-          ...("colId" in column && column.colId?.endsWith(":plot")
-            ? { hide: (reportConfig.displayPreset ?? "curves") !== "curves" }
-            : {}),
-        })),
-      }),
-    );
+    const showPlots = (reportConfig.displayPreset ?? "curves") === "curves";
+    const styleLeaves = (
+      column: ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>,
+    ): ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule> =>
+      "children" in column
+        ? { ...column, children: column.children.map(styleLeaves) }
+        : {
+            ...column,
+            headerClass: "search-assay-header",
+            ...(isPlotColumn(column.colId) ? { hide: !showPlots } : {}),
+          };
+    const protoGroups = buildProtocolColumnGroups(
+      protocolColumns,
+      protocols,
+      aggregationMode,
+      columnGroups,
+    ).map((group) => styleLeaves(group) as ColGroupDef<EnrichedMolecule>);
     const properties: ColGroupDef<EnrichedMolecule>[] =
       props.length > 0
         ? [
@@ -674,6 +755,7 @@ export function ResultsGrid({
     moleculeFields,
     reportConfig.visibleFields.properties,
     protocolColumns,
+    columnGroups,
     protocols,
     hasSimilarityScores,
     aggregationMode,

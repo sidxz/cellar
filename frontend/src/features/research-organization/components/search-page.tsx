@@ -27,6 +27,7 @@ import {
 import type { AggregationMode } from "../lib/use-aggregation-mode";
 import {
   type ActivityValue,
+  type ProtocolColumnGroups,
   type SavedSearch,
   type SearchQuery,
   type SortDir,
@@ -61,6 +62,8 @@ interface SearchState {
   results: EnrichedMolecule[];
   nextCursor: string | null;
   totalCount: number | null;
+  /** Split protocols' column groups — the same on every page of a search. */
+  columnGroups: Record<string, ProtocolColumnGroups> | null;
   hasSearched: boolean;
   selectedMolecule: EnrichedMolecule | null;
   selectedIndex: number;
@@ -82,6 +85,7 @@ type SearchAction =
       results: EnrichedMolecule[];
       nextCursor: string | null;
       totalCount: number | null;
+      columnGroups: Record<string, ProtocolColumnGroups> | null;
     }
   | {
       type: "loadMoreComplete";
@@ -102,6 +106,7 @@ const initialSearchState: SearchState = {
   results: [],
   nextCursor: null,
   totalCount: null,
+  columnGroups: null,
   hasSearched: false,
   selectedMolecule: null,
   selectedIndex: 0,
@@ -130,6 +135,7 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         results: action.results,
         nextCursor: action.nextCursor,
         totalCount: action.totalCount,
+        columnGroups: action.columnGroups,
       };
     case "loadMoreComplete":
       return {
@@ -188,6 +194,7 @@ function SearchPageInner() {
       results,
       nextCursor,
       totalCount,
+      columnGroups,
       hasSearched,
       selectedMolecule,
       selectedIndex,
@@ -329,6 +336,7 @@ function SearchPageInner() {
               query,
               protocolColumns: columns,
               aggregation: mode,
+              columnGroups: data.column_groups ?? null,
               ...payload,
             });
           if (
@@ -631,6 +639,7 @@ function SearchPageInner() {
           <ResultsGrid
             results={results}
             protocolColumns={protocolColumns}
+            columnGroups={columnGroups}
             protocols={protocols ?? []}
             reportConfig={reportConfig}
             loading={searchPending && !currentQuery}

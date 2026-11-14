@@ -4,8 +4,9 @@ import type {
   Protocol,
   ReadoutDefinition,
 } from "@/features/screening-assay/types";
+import type { ColDef, ColGroupDef } from "ag-grid-community";
 import { describe, expect, it } from "vitest";
-import { buildDrcColumns, resolveColumns } from "./results-grid";
+import { buildDrcColumns, buildProtocolColumnGroups, resolveColumns } from "./results-grid";
 
 const PROTO_ID = "11111111-1111-1111-1111-111111111111";
 const RD_DR_ID = "22222222-2222-2222-2222-222222222222";
@@ -150,5 +151,98 @@ describe("buildDrcColumns", () => {
     expect(cols[0].headerName).toBe("Resazurin");
     expect(cols[0].colId).toBe(`drc:${RD_DR_ID}:value`);
     expect(cols[1].headerName).toBe("Plot");
+  });
+});
+
+describe("buildProtocolColumnGroups — split protocols", () => {
+  const drRd = rd({
+    id: RD_DR_ID,
+    name: "IC50",
+    data_type: "dose_response",
+    dose_response_config: drConfig([spec({ kind: "ic", level: 50 })]),
+  });
+  const protocol = proto([drRd, rd({ id: RD_RAW_ID, name: "Signal" })]);
+  const groups = {
+    [PROTO_ID]: {
+      split: { by: "condition" as const, condition: "ATP" },
+      groups: [
+        { key: "cond:10 µM", label: "10 µM", run_ids: [], run_count: 2, flags: [] },
+        { key: "cond:1 mM", label: "1 mM", run_ids: [], run_count: 1, flags: [] },
+      ],
+    },
+  };
+  const leaves = (g: ColGroupDef) =>
+    (g.children as (ColDef | ColGroupDef)[]).flatMap((c) =>
+      "children" in c ? (c.children as ColDef[]) : [c as ColDef],
+    );
+
+  it("nests one header group per split group, in the backend's order", () => {
+    const [group] = buildProtocolColumnGroups(
+      [`drc:${RD_DR_ID}`],
+      [protocol],
+      "latest",
+      groups,
+    ) as ColGroupDef[];
+    expect(group.headerName).toBe("Mtb_WCA · by ATP");
+    const sub = group.children as ColGroupDef[];
+    expect(sub.map((g) => g.headerName)).toEqual(["10 µM · 2 runs", "1 mM · 1 run"]);
+  });
+
+  it("reads each group's cells from its own activity key", () => {
+    const [group] = buildProtocolColumnGroups(
+      [`drc:${RD_DR_ID}`, `rd:${PROTO_ID}:${RD_RAW_ID}`],
+      [protocol],
+      "latest",
+      groups,
+    ) as ColGroupDef[];
+    const ids = leaves(group).map((c) => c.colId);
+    expect(ids).toContain(`drc:${RD_DR_ID}:ic:50@cond:10 µM`);
+    expect(ids).toContain(`drc:${RD_DR_ID}:plot@cond:1 mM`);
+    expect(ids).toContain(`rd:${PROTO_ID}:${RD_RAW_ID}@cond:1 mM`);
+    const readout = leaves(group).find((c) => c.colId === `rd:${PROTO_ID}:${RD_RAW_ID}@cond:1 mM`);
+    const row = { activity: { [`rd:${PROTO_ID}:${RD_RAW_ID}@cond:1 mM`]: { value: 7 } } };
+    // biome-ignore lint/suspicious/noExplicitAny: AG Grid valueGetter params
+    expect((readout?.valueGetter as any)({ data: row })).toBe(7);
+  });
+
+  it("marks a rejected hand-picked run in its header", () => {
+    const [group] = buildProtocolColumnGroups([`drc:${RD_DR_ID}`], [protocol], "latest", {
+      [PROTO_ID]: {
+        split: { by: "run" as const, condition: null },
+        groups: [
+          {
+            key: "run:r1",
+            label: "2026-03-01",
+            run_ids: ["r1"],
+            run_count: 1,
+            flags: ["rejected"],
+          },
+        ],
+      },
+    }) as ColGroupDef[];
+    expect((group.children as ColGroupDef[])[0].headerName).toBe("2026-03-01 (rejected)");
+  });
+
+  it("shows one muted column when no runs match the split", () => {
+    const [group] = buildProtocolColumnGroups([`drc:${RD_DR_ID}`], [protocol], "latest", {
+      [PROTO_ID]: { split: { by: "condition" as const, condition: "ATP" }, groups: [] },
+    }) as ColGroupDef[];
+    const children = group.children as ColDef[];
+    expect(children).toHaveLength(1);
+    expect(children[0].headerName).toBe("No runs match");
+  });
+
+  it("leaves unsplit protocols as they are", () => {
+    const [group] = buildProtocolColumnGroups(
+      [`drc:${RD_DR_ID}`],
+      [protocol],
+      "latest",
+      null,
+    ) as ColGroupDef[];
+    expect(group.headerName).toBe("Mtb_WCA");
+    expect((group.children as ColDef[]).map((c) => c.colId)).toEqual([
+      `drc:${RD_DR_ID}:ic:50`,
+      `drc:${RD_DR_ID}:plot`,
+    ]);
   });
 });
