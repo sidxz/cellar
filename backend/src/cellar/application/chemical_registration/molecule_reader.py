@@ -49,10 +49,28 @@ class MoleculeReader(Protocol):
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
         project_ids: list[uuid.UUID] | None = None,
+    ) -> list[Molecule]:
+        """One page of matches in id order, after ``cursor_id``."""
+        ...
+
+    async def ranked_ids_by_query(
+        self,
+        workspace_id: uuid.UUID,
+        query: dict[str, Any],
+        *,
+        project_ids: list[uuid.UUID] | None = None,
         sort_by: str | None = None,
         sort_dir: str | None = None,
-        include_similarity_score: bool = False,
-    ) -> list[Molecule] | list[tuple[Molecule, float | None]]: ...
+    ) -> list[tuple[uuid.UUID, float | None]]:
+        """Every matching id in result order (molecule column or similarity
+        sort; default similarity-desc when the query has a similarity
+        criterion, else id), with its similarity score. Raises ``ValueError``
+        on an unknown sort field."""
+        ...
+
+    async def find_by_ids_ordered(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> list[Molecule]: ...
 
     async def count_by_query(
         self,

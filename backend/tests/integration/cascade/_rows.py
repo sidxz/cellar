@@ -222,7 +222,7 @@ async def channel(
         session,
         "INSERT INTO campaign_channel (id, campaign_id, label, protocol_id, "
         "readout_definition_id, source_kind, selection_rule, qualifier_handling) "
-        "VALUES (:id, :cid, 'IC50', :proto, :rd, 'readout_data', 'latest_approved_run', "
+        "VALUES (:id, :cid, 'IC50', :proto, :rd, 'readout_data', 'latest_run', "
         "'include_qualified')",
         cid=campaign_id,
         proto=protocol_id,

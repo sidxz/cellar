@@ -508,7 +508,7 @@ def _qc_reason(c: ResolvedCandidate) -> str | None:
 def _aggregate_qc_reason(candidates: list[ResolvedCandidate]) -> str | None:
     """Aggregate per-candidate QC reasons into one short summary.
 
-    Single-candidate (LATEST_APPROVED_RUN): the candidate's reason directly.
+    Single-candidate (LATEST_RUN): the candidate's reason directly.
     Multi-candidate (MEAN_ACROSS_RUNS, GEOMETRIC_MEAN): summarize as
     ``"{N}/{M} runs failed QC: {first reason}"`` so the chemist sees the
     scope without a wall of text.

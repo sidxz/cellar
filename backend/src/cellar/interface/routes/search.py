@@ -20,7 +20,6 @@ from cellar.interface.pagination import (
     COLLECTION_FETCH_MAX_PAGE_SIZE,
     MAX_PAGE_SIZE,
     clamp_limit,
-    parse_cursor,
 )
 from cellar.interface.routes.molecules import MoleculeResponse
 
@@ -145,9 +144,9 @@ class ExecuteSearchBody(BaseModel):
     protocol_columns: list[str] | None = None
     # Selection rule the activity-enrichment aggregator applies when
     # multiple in-scope runs exist for the same (compound, intercept) cell.
-    # Default is ``LATEST_APPROVED_RUN`` — matches the campaign default and
+    # Default is ``LATEST_RUN`` — matches the campaign default and
     # the chemist mental model of "what would I see right now".
-    aggregation: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
+    aggregation: SelectionRule = SelectionRule.LATEST_RUN
 
     @model_validator(mode="after")
     def _validate_structure_clauses(self) -> ExecuteSearchBody:
@@ -157,6 +156,30 @@ class ExecuteSearchBody(BaseModel):
         return self
 
 
+class ColumnSplitResponse(BaseModel):
+    by: Literal["none", "run", "condition"]
+    condition: str | None = None
+
+
+class ColumnGroupResponse(BaseModel):
+    """One side-by-side group of a split protocol's columns.
+
+    ``key`` suffixes the group's activity-data keys: ``<column>@<key>``.
+    ``flags``: ``rejected`` / ``deleted`` for hand-picked runs.
+    """
+
+    key: str
+    label: str
+    run_ids: list[uuid.UUID]
+    run_count: int
+    flags: list[str] = []
+
+
+class ProtocolColumnGroupsResponse(BaseModel):
+    split: ColumnSplitResponse
+    groups: list[ColumnGroupResponse]
+
+
 class ExecuteSearchResponse(BaseModel):
     """Response for compound search execution with optional activity enrichment."""
 
@@ -164,6 +187,8 @@ class ExecuteSearchResponse(BaseModel):
     next_cursor: str | None = None
     activity_data: dict[str, dict[str, Any]] | None = None
     total_count: int | None = None
+    # Split protocols only, keyed by protocol id; identical on every page.
+    column_groups: dict[str, ProtocolColumnGroupsResponse] | None = None
 
 
 def _attach_score(m: Molecule, scores: dict[uuid.UUID, float] | None) -> MoleculeResponse:
@@ -219,7 +244,7 @@ async def execute_search(
         query=body.query,
         protocol_columns=body.protocol_columns,
         aggregation=body.aggregation,
-        cursor_id=parse_cursor(cursor),
+        cursor=cursor,
         limit=clamp_limit(limit, max_size=cap),
         sort_by=sort_by,
         sort_dir=sort_dir if sort_dir in ("asc", "desc") else None,
@@ -230,6 +255,7 @@ async def execute_search(
         next_cursor=page.next_cursor,
         activity_data=page.activity_data,
         total_count=page.total_count,
+        column_groups=page.column_groups,
     )
 
 

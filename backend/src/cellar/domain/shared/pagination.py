@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -33,3 +33,6 @@ class EnrichedPageResult[T]:
     activity_data: dict | None = None
     total_count: int | None = None
     similarity_scores: dict[uuid.UUID, float] | None = None  # NEW: keyed by molecule id
+    # Split protocols' column groups, keyed by protocol id — the same on every
+    # page of a search. None when no protocol is split.
+    column_groups: dict[str, Any] | None = None

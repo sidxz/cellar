@@ -266,7 +266,7 @@ class InterceptKeyModel(BaseModel):
 class ActivityChannelRequest(BaseModel):
     column: str
     source: Literal["dr_curve", "readout_data"]
-    selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN
+    selection_rule: SelectionRule = SelectionRule.LATEST_RUN
     qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED
     intercept_key: InterceptKeyModel | None = None
     run_scopes: dict[str, Any] | None = None

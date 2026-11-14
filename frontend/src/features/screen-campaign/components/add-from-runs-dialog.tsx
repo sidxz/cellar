@@ -92,7 +92,7 @@ interface ChannelConfigUI {
   readout_definition_id: string;
   label: string;
   source_kind: "readout_data" | "dose_response_curve";
-  selection_rule: "latest_approved_run" | "mean_across_runs" | "geometric_mean";
+  selection_rule: "latest_run" | "mean_across_runs" | "geometric_mean";
   /** "lt" | "lte" | "gt" | "gte" | "between" | "not_between" | "" (no threshold) */
   hit_operator: string;
   /** For lt/gt/etc: a single number string. For "between": empty (use hit_value_low/high). */
@@ -272,7 +272,7 @@ export function AddFromRunsDialog({
         readout_definition_id: rd.id,
         label: channelLabel,
         source_kind: isDoseResponse ? "dose_response_curve" : "readout_data",
-        selection_rule: "latest_approved_run" as const,
+        selection_rule: "latest_run" as const,
         hit_operator: defaults.hit_operator,
         hit_value: defaults.hit_value,
         hit_value_low: defaults.hit_value_low,
@@ -757,7 +757,12 @@ function ConfigureStep(p: ConfigureStepProps) {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="latest_approved_run">Latest approved run</SelectItem>
+                            <SelectItem
+                              value="latest_run"
+                              description="Newest run that passes this channel's QC filter."
+                            >
+                              Latest run
+                            </SelectItem>
                             <SelectItem value="mean_across_runs">Mean across runs</SelectItem>
                             <SelectItem value="geometric_mean">Geometric mean</SelectItem>
                           </SelectContent>

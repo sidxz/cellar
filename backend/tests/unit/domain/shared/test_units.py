@@ -6,7 +6,12 @@ import pytest
 
 from cellar.domain.screening_assay.enums import ConditionDataType, ReadoutDataType
 from cellar.domain.screening_assay.protocol import ConditionDefinition, ReadoutDefinition
-from cellar.domain.shared.units import COMMON_UNITS, canonical_unit
+from cellar.domain.shared.units import (
+    COMMON_UNITS,
+    canonical_unit,
+    comparable_magnitude,
+    is_concentration_unit,
+)
 from cellar.domain.workspace_config.protocol_form import (
     ProtocolFormCondition,
     ProtocolFormReadout,
@@ -112,3 +117,25 @@ def test_form_templates_store_the_canonical_spelling():
         ProtocolFormReadout(name="MIC", data_type="numeric", unit="ug/ml").unit == f"{MICRO}g/mL"
     )
     assert ProtocolFormCondition(name="Time", data_type="numeric", unit="hrs").unit == "h"
+
+
+@pytest.mark.parametrize("unit", ["µM", "uM", "nM", "mM", "pM", "M", "µg/mL", "ng/mL", "mg/mL"])
+def test_concentration_units(unit):
+    assert is_concentration_unit(unit) is True
+
+
+@pytest.mark.parametrize("unit", [None, "", "%", "RFU", "fold", "h", "z"])
+def test_non_concentration_units(unit):
+    assert is_concentration_unit(unit) is False
+
+
+def test_comparable_magnitude_orders_within_a_unit_family():
+    assert comparable_magnitude(10, "µM") < comparable_magnitude(1, "mM")
+    assert comparable_magnitude(500, "ng/mL") < comparable_magnitude(1, "µg/mL")
+    assert comparable_magnitude(90, "min") < comparable_magnitude(2, "h")
+    assert comparable_magnitude(10, "uM")[0] == comparable_magnitude(1, "nM")[0]
+
+
+def test_comparable_magnitude_keeps_unknown_units_apart():
+    assert comparable_magnitude(5, "RFU") == ("RFU", 5.0)
+    assert comparable_magnitude(5, None) == ("", 5.0)

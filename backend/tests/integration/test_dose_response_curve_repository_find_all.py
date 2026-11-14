@@ -1,6 +1,6 @@
 """Integration tests for DoseResponseCurveRepository.find_all_curves_for_molecules.
 
-Verifies SQL filtering by run_scope (all / last_n / since / between),
+Verifies SQL filtering by run_scope (all / protocol latest / since / between),
 correct grouping by (mol, rd), and run_date desc ordering.
 """
 
@@ -35,9 +35,7 @@ async def _insert_org(uow: AsyncUnitOfWork, org_id: uuid.UUID, ws_id: uuid.UUID)
     )
 
 
-async def _insert_protocol(
-    uow: AsyncUnitOfWork, protocol_id: uuid.UUID, ws_id: uuid.UUID
-) -> None:
+async def _insert_protocol(uow: AsyncUnitOfWork, protocol_id: uuid.UUID, ws_id: uuid.UUID) -> None:
     await uow.session.execute(
         sa.text(
             "INSERT INTO protocols "
@@ -78,6 +76,7 @@ async def _insert_run(
     protocol_id: uuid.UUID,
     ws_id: uuid.UUID,
     run_date: date,
+    status: str = "draft",
 ) -> None:
     await uow.session.execute(
         sa.text(
@@ -85,10 +84,11 @@ async def _insert_run(
             "(id, workspace_id, protocol_id, run_date, operator, "
             "status, is_locked, version, notes) "
             "VALUES (:id, :ws, :proto, :run_date, :user, "
-            "'draft', false, 1, :notes)"
+            ":status, false, 1, :notes)"
         ),
         {
             "id": run_id,
+            "status": status,
             "ws": ws_id,
             "proto": protocol_id,
             "run_date": run_date,
@@ -172,9 +172,7 @@ class TestFindAllCurves:
 
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
-            grouped = await repo.find_all_curves_for_molecules(
-                workspace_id, [mol_id]
-            )
+            grouped = await repo.find_all_curves_for_molecules(workspace_id, [mol_id])
 
         assert mol_id in grouped
         assert rd_id in grouped[mol_id]
@@ -185,23 +183,57 @@ class TestFindAllCurves:
         actual_dates = [date_by_id[c.id] for c in curves]
         assert actual_dates == [date(2026, 4, 1), date(2026, 2, 1), date(2026, 1, 1)]
 
-    async def test_honors_last_n(self, uow, workspace_id):
-        """RunScope.last_n(2) caps to the 2 most recent runs PER (mol, rd)."""
+    async def test_protocol_latest_is_the_same_run_for_every_compound(self, uow, workspace_id):
+        """Latest = the protocol's newest run; a compound not in it gets nothing."""
+        protocol_id, rd_id = uuid.uuid4(), uuid.uuid4()
+        mol_a, mol_b = uuid.uuid4(), uuid.uuid4()
+        jan, apr = uuid.uuid4(), uuid.uuid4()
         async with uow:
-            mol_id, rd_id, seeded = await _seed_three_runs(uow, workspace_id)
+            await _insert_org(uow, uuid.uuid4(), workspace_id)
+            await _insert_protocol(uow, protocol_id, workspace_id)
+            await _insert_readout_def(uow, rd_id, protocol_id)
+            await _insert_run(uow, jan, protocol_id, workspace_id, date(2026, 1, 1))
+            await _insert_run(uow, apr, protocol_id, workspace_id, date(2026, 4, 1))
+            common = dict(
+                workspace_id=workspace_id, protocol_id=protocol_id, readout_definition_id=rd_id
+            )
+            await _save_curve(uow, run_id=jan, molecule_id=mol_a, **common)
+            newest_a = await _save_curve(uow, run_id=apr, molecule_id=mol_a, **common)
+            await _save_curve(uow, run_id=jan, molecule_id=mol_b, **common)
             await uow.commit()
 
         repo = SQLAlchemyDoseResponseCurveRepository(uow)
         async with uow:
             grouped = await repo.find_all_curves_for_molecules(
-                workspace_id, [mol_id], run_scope=RunScope.last_n(2)
+                workspace_id, [mol_a, mol_b], run_scope=RunScope.latest_of_protocol()
             )
 
-        curves = grouped[mol_id][rd_id]
-        assert len(curves) == 2
-        date_by_id = {c.id: d for d, c in seeded}
-        actual_dates = [date_by_id[c.id] for c in curves]
-        assert actual_dates == [date(2026, 4, 1), date(2026, 2, 1)]
+        assert [c.id for c in grouped[mol_a][rd_id]] == [newest_a.id]
+        assert mol_b not in grouped
+
+    async def test_protocol_latest_skips_rejected_runs(self, uow, workspace_id):
+        protocol_id, rd_id, mol = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        feb, apr = uuid.uuid4(), uuid.uuid4()
+        async with uow:
+            await _insert_org(uow, uuid.uuid4(), workspace_id)
+            await _insert_protocol(uow, protocol_id, workspace_id)
+            await _insert_readout_def(uow, rd_id, protocol_id)
+            await _insert_run(uow, feb, protocol_id, workspace_id, date(2026, 2, 1))
+            await _insert_run(uow, apr, protocol_id, workspace_id, date(2026, 4, 1), "rejected")
+            common = dict(
+                workspace_id=workspace_id, protocol_id=protocol_id, readout_definition_id=rd_id
+            )
+            kept = await _save_curve(uow, run_id=feb, molecule_id=mol, **common)
+            await _save_curve(uow, run_id=apr, molecule_id=mol, **common)
+            await uow.commit()
+
+        repo = SQLAlchemyDoseResponseCurveRepository(uow)
+        async with uow:
+            grouped = await repo.find_all_curves_for_molecules(
+                workspace_id, [mol], run_scope=RunScope.latest_of_protocol()
+            )
+
+        assert [c.id for c in grouped[mol][rd_id]] == [kept.id]
 
     async def test_honors_since(self, uow, workspace_id):
         """RunScope.since(2026-03-01) drops the Jan and Feb curves."""

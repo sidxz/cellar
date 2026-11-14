@@ -7,13 +7,14 @@ by protocol.
 DR enrichment uses the shared aggregator (``run_aggregation``) — same code
 path the campaign grid uses — so the search grid stops cherry-picking the
 best-R² curve and instead applies a chemist-correct selection rule (default
-``LATEST_APPROVED_RUN`` with ``EXCLUDE_QUALIFIED`` handling) over every
+``LATEST_RUN`` with ``EXCLUDE_QUALIFIED`` handling) over every
 in-scope run of the (compound, readout-def) cell.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from cellar.application.screening import _condense_raw_data
@@ -22,21 +23,30 @@ from cellar.application.screening.run_aggregation import (
     AggregateResult,
     ResolvedRun,
     apply_selection_rule,
+    combine_replicates,
     compute_aggregate_stats,
     detect_disagreement,
+    effective_rule,
+)
+from cellar.application.screening.search_column_plan import (
+    ANY_COLUMN,
+    ColumnGroup,
+    ColumnPlan,
+    SearchColumnPlanner,
 )
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.activity_types import (
     ActivitySummary,
     ActivityValue,
-    AggregatedReadout,
     AnyProtocolActivity,
     AnyProtocolEntry,
     CurveParams,
     InterceptAggregate,
     ProtocolActivitySummary,
     ReadoutSummary,
+    RunHeader,
     RunLink,
+    RunReadoutStats,
     RunSummary,
 )
 from cellar.domain.screening_assay.aggregation_types import (
@@ -58,6 +68,7 @@ from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
+from cellar.domain.shared.units import is_concentration_unit
 
 # Cap the per-cell wire payload of per-run summaries. Multi-year programs
 # can accumulate dozens of runs on a single compound; the tooltip needs
@@ -407,347 +418,326 @@ class MoleculeActivityService:
 
         return ActivitySummary(molecule_id=molecule_id, protocols=summaries)
 
+    @property
+    def planner(self) -> SearchColumnPlanner:
+        """Plans search columns over this service's protocol and run repositories."""
+        return SearchColumnPlanner(self._protocol_repo, self._run_repo)
+
     async def enrich_molecules(
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
         protocol_columns: list[str],
         *,
-        selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
-        qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
+        selection_rule: SelectionRule = SelectionRule.LATEST_RUN,
+        qualifier_handling: QualifierHandling = QualifierHandling.INCLUDE_QUALIFIED,
         run_scopes: dict[str, RunScope] | None = None,
         any_readout_groups: list[tuple[str, str | None]] | None = None,
     ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
-        """Batch enrichment for search results.
+        """Unsplit columns with a run scope per token — the SAR colour channels.
 
-        protocol_columns format:
-          - "rd:{readout_definition_id}" -- aggregated raw readout value
-          - "rd:{protocol_id}:{readout_definition_id}" -- same, with protocol scope
-          - "rd:{protocol_id}:{readout_definition_id}:{normalization}" -- the
-            named normalization layer of the readout (e.g. ``percent_inhibition``,
-            ``z_score``). Without the suffix the raw layer is returned.
-          - "drc:{readout_definition_id}" -- aggregated dose-response curve for
-            that DR readout-def. The readout-def identifies the column on
-            multi-DR protocols (target IC50, counter-screen IC50, ...);
-            curve_type was ambiguous when two DRs shared it.
-          - "any" -- one AnyProtocolActivity listing every protocol the
-            molecule has DR curves in (plus readout groups named in
-            ``any_readout_groups``), best first, native units.
-
-        DR columns flow through the shared run-aggregator (``run_aggregation``):
-        every in-scope run contributes a ``ResolvedRun``, and ``selection_rule``
-        collapses them into a single per-cell value. Default rule
-        ``LATEST_APPROVED_RUN`` + ``EXCLUDE_QUALIFIED`` matches the campaign
-        default + chemist mental model. ``run_scopes`` is a per-column override
-        (key = ``"drc:<rd_id>"``); any column without an entry uses
-        ``RunScope.all()``.
+        Same calculation as :meth:`enrich_plan`; ``run_scopes`` keys are the
+        tokens (``drc:<rd>``, ``rd:<protocol>:<rd>``); a token without one
+        reads every non-rejected run.
         """
         if not molecule_ids or not protocol_columns:
             return {}
 
-        if self._uow.is_active:
-            return await self._enrich_molecules(
-                workspace_id,
-                molecule_ids,
-                protocol_columns,
-                selection_rule=selection_rule,
-                qualifier_handling=qualifier_handling,
-                run_scopes=run_scopes,
-                any_readout_groups=any_readout_groups,
+        async def run() -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
+            plan = await self.planner.plan_from_scopes(
+                workspace_id, protocol_columns, run_scopes or {}
             )
-        async with self._uow:
-            return await self._enrich_molecules(
+            return await self._enrich_plan(
                 workspace_id,
                 molecule_ids,
-                protocol_columns,
+                plan,
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
-                run_scopes=run_scopes,
                 any_readout_groups=any_readout_groups,
+                lean=False,
             )
 
-    async def _enrich_molecules(
+        return await self._in_uow(run)
+
+    async def enrich_plan(
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
-        protocol_columns: list[str],
+        plan: ColumnPlan,
         *,
-        selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
-        qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
-        run_scopes: dict[str, RunScope] | None = None,
+        selection_rule: SelectionRule = SelectionRule.LATEST_RUN,
+        qualifier_handling: QualifierHandling = QualifierHandling.INCLUDE_QUALIFIED,
         any_readout_groups: list[tuple[str, str | None]] | None = None,
+        lean: bool = False,
     ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
-        # Parse column specs
-        # Formats:
-        #   "rd:{rd_def_id}"                          -- raw, legacy/unscoped
-        #   "rd:{proto_id}:{rd_def_id}"               -- raw, protocol-scoped
-        #   "rd:{proto_id}:{rd_def_id}:{normalization}" -- normalized layer
-        #   "drc:{rd_def_id}"                         -- best DR curve for the
-        #                                                DR readout-def
-        rd_specs: list[tuple[uuid.UUID, str | None]] = []
-        rd_col_map: dict[tuple[uuid.UUID, str | None], str] = {}
-        drc_specs: list[uuid.UUID] = []  # readout_definition_id
-        for col in protocol_columns:
-            if col.startswith("rd:"):
-                parts = col.split(":")
-                # Identify the rd_def_id and optional normalization. Last UUID
-                # segment is the readout def; anything after it is a formula.
-                if len(parts) == 4:
-                    rd_id = uuid.UUID(parts[2])
-                    normalization: str | None = parts[3] or None
-                else:
-                    rd_id = uuid.UUID(parts[-1])
-                    normalization = None
-                spec = (rd_id, normalization)
-                rd_specs.append(spec)
-                rd_col_map[spec] = col
-            elif col.startswith("drc:"):
-                drc_specs.append(uuid.UUID(col.split(":", 1)[1]))
-        want_any = "any" in protocol_columns
+        """One cell per (molecule, planned column, group), keyed ``column.key(group)``.
 
-        # Fetch aggregated readouts
-        rd_data: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
-        if rd_specs:
-            rd_data = await self._readout_repo.find_aggregated_by_molecules(
-                workspace_id, molecule_ids, rd_specs
+        Every cell's runs are the column's protocol's non-rejected runs in its
+        run scope, narrowed to the group. Dose-response cells use the fitted
+        curves; with no curve in the group they fall back to reported endpoints
+        (well-less readout rows). Single-point cells combine each run's
+        replicates (``combine_replicates``) and then the runs. Both go through
+        ``run_aggregation`` with the column's effective rule. ``lean`` (sorting)
+        skips the drawing payload: point arrays, run history, overlays.
+        """
+        if not molecule_ids or not (plan.columns or plan.want_any):
+            return {}
+        return await self._in_uow(
+            lambda: self._enrich_plan(
+                workspace_id,
+                molecule_ids,
+                plan,
+                selection_rule=selection_rule,
+                qualifier_handling=qualifier_handling,
+                any_readout_groups=any_readout_groups,
+                lean=lean,
             )
+        )
 
-        # Fetch ALL curves for the DR columns, grouped by per-column run_scope.
-        # The shared aggregator collapses them to one ActivityValue per
-        # (compound, rd) cell — same code path as the campaign grid.
-        curve_data: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
-        proto_dose_unit: dict[uuid.UUID, str] = {}
-        runs_by_id: dict[uuid.UUID, Run] = {}
-        if drc_specs:
-            curve_data, runs_by_id = await self._fetch_curves_and_runs(
-                workspace_id, molecule_ids, drc_specs, run_scopes or {}
-            )
-            # Resolve dose_unit per protocol once. The fitted IC50 unit
-            # decoration is sourced from the owning protocol (not denormalized
-            # on the curve), so we collect the protocols the picked curves
-            # actually came from.
-            curve_proto_ids = {
-                curve.protocol_id
-                for by_rd in curve_data.values()
-                for curves in by_rd.values()
-                for curve in curves
-            }
-            if curve_proto_ids:
-                protos = await self._protocol_repo.find_by_ids(workspace_id, list(curve_proto_ids))
-                proto_dose_unit = {p.id: p.dose_unit.value for p in protos}
+    async def _in_uow[T](self, fn: Callable[[], Awaitable[T]]) -> T:
+        if self._uow.is_active:
+            return await fn()
+        async with self._uow:
+            return await fn()
 
-        # Reported-endpoint fallback (spec D1, same rule the campaign channel
-        # resolver applies): a DR readout-def with no fitted curve for a
-        # molecule may still carry a summary-imported endpoint on the raw
-        # readout layer — an IC50 someone reported without dose points. Fetch
-        # those aggregates only for the (molecule, rd) cells the curve query
-        # left empty; a molecule with curves never consults this map.
-        #
-        # Only an unscoped column falls back: the raw-layer aggregate carries
-        # no run filter, so a column the chemist scoped (last N runs, since a
-        # date, specific runs) would otherwise show an endpoint from a run
-        # outside that scope. See docs/backlog/drc-fallback-run-scope.md for
-        # the scope-aware aggregate that would lift this restriction.
-        drc_fallback: dict[uuid.UUID, dict[tuple[uuid.UUID, str | None], AggregatedReadout]] = {}
-        fallback_rd_ids = [
-            rd_id
-            for rd_id in drc_specs
-            if ((run_scopes or {}).get(f"drc:{rd_id}") or RunScope.all()).is_all()
-        ]
-        if fallback_rd_ids:
-            missing_mols = [
-                mol_id
-                for mol_id in molecule_ids
-                if any(not curve_data.get(mol_id, {}).get(rd_id) for rd_id in fallback_rd_ids)
-            ]
-            if missing_mols:
-                drc_fallback = await self._readout_repo.find_aggregated_by_molecules(
-                    workspace_id,
-                    missing_mols,
-                    [(rd_id, None) for rd_id in fallback_rd_ids],
-                    wellless_only=True,
-                )
-
-        # "any" column: every curve the molecule has, in every protocol.
-        any_curves: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
-        any_runs: dict[uuid.UUID, Run] = {}
-        any_protos: dict[uuid.UUID, Any] = {}
-        any_targets: dict[uuid.UUID, list[str]] = {}
-        any_readouts: dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]] = {}
-        if want_any:
-            # ponytail: loads every curve incl. raw_data for the page (100 rows ×
-            # protocols × runs); if it bites, add a dedicated fetch with
-            # defer(raw_data) — entries need only fitted_value/curve_class/
-            # intercept_values/protocol_id/run_id.
-            any_curves = await self._curve_repo.find_all_curves_for_molecules(
-                workspace_id, molecule_ids, readout_definition_ids=None, run_scope=RunScope.all()
-            )
-            any_run_ids = list(
-                {c.run_id for by_rd in any_curves.values() for cs in by_rd.values() for c in cs}
-            )
-            any_runs = (
-                await self._run_repo.find_by_ids(workspace_id, any_run_ids) if any_run_ids else {}
-            )
-            any_proto_ids = list(
-                {
-                    c.protocol_id
-                    for by_rd in any_curves.values()
-                    for cs in by_rd.values()
-                    for c in cs
-                }
-            )
-            if any_proto_ids:
-                for p in await self._protocol_repo.find_by_ids(workspace_id, any_proto_ids):
-                    any_protos[p.id] = p
-                targets = await self._protocol_repo.find_effective_targets_for_protocols(
-                    workspace_id, any_proto_ids
-                )
-                any_targets = {pid: [t.name for t in refs] for pid, refs in targets.items()}
-
-            if any_readout_groups:
-                any_readouts = await self._readout_repo.find_aggregated_by_molecules_and_names(
-                    workspace_id, molecule_ids, any_readout_groups
-                )
-                extra_proto_ids = [
-                    pid for lst in any_readouts.values() for pid, _ in lst if pid not in any_protos
-                ]
-                if extra_proto_ids:
-                    for p in await self._protocol_repo.find_by_ids(workspace_id, extra_proto_ids):
-                        any_protos[p.id] = p
-                    more = await self._protocol_repo.find_effective_targets_for_protocols(
-                        workspace_id, extra_proto_ids
-                    )
-                    any_targets.update({pid: [t.name for t in refs] for pid, refs in more.items()})
-
-        # Build result
-        result: dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]] = {}
-        for mol_id in molecule_ids:
-            mol_activity: dict[str, ActivityValue | AnyProtocolActivity] = {}
-
-            # Readout columns
-            mol_rds = rd_data.get(mol_id, {})
-            for spec in rd_specs:
-                col_key = rd_col_map[spec]
-                agg = mol_rds.get(spec)
-                if agg:
-                    mol_activity[col_key] = ActivityValue(
-                        value=agg.value,
-                        qualifier=agg.qualifier,
-                        unit=agg.unit,
-                        source="readout",
-                        data_point_count=agg.data_point_count,
-                    )
-
-            # Dose-response columns
-            mol_curves = curve_data.get(mol_id, {})
-            for rd_id in drc_specs:
-                col_key = f"drc:{rd_id}"
-                curves = mol_curves.get(rd_id) or []
-                if not curves:
-                    agg = drc_fallback.get(mol_id, {}).get((rd_id, None))
-                    if agg:
-                        mol_activity[col_key] = ActivityValue(
-                            value=agg.value,
-                            qualifier=agg.qualifier,
-                            unit=agg.unit,
-                            source="readout",
-                            data_point_count=agg.data_point_count,
-                        )
-                    continue
-
-                resolved_runs = self._build_resolved_runs(curves, runs_by_id)
-                if not resolved_runs:
-                    continue
-
-                # Pick the dose unit from the first curve's protocol — every
-                # curve under one rd_id shares a protocol (the rd_id IS keyed
-                # by protocol), so any candidate gives the same answer.
-                unit = proto_dose_unit.get(curves[0].protocol_id, "uM")
-
-                activity = self._build_dr_activity(
-                    resolved_runs=resolved_runs,
-                    unit=unit,
-                    selection_rule=selection_rule,
-                    qualifier_handling=qualifier_handling,
-                )
-                if activity is not None:
-                    mol_activity[col_key] = activity
-
-            if want_any:
-                block = self._build_any_activity(
-                    any_curves.get(mol_id, {}),
-                    readouts=any_readouts.get(mol_id, []),
-                    runs_by_id=any_runs,
-                    protos=any_protos,
-                    targets=any_targets,
-                    selection_rule=selection_rule,
-                    qualifier_handling=qualifier_handling,
-                )
-                if block is not None:
-                    mol_activity["any"] = block
-
-            if mol_activity:
-                result[mol_id] = mol_activity
-
-        return result
-
-    # ------------------------------------------------------------------
-    # DR enrichment helpers
-    # ------------------------------------------------------------------
-
-    async def _fetch_curves_and_runs(
+    async def _enrich_plan(
         self,
         workspace_id: uuid.UUID,
         molecule_ids: list[uuid.UUID],
-        drc_specs: list[uuid.UUID],
-        run_scopes: dict[str, RunScope],
-    ) -> tuple[
-        dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]],
-        dict[uuid.UUID, Run],
-    ]:
-        """Fetch curves (grouped by scope) and the runs they reference.
+        plan: ColumnPlan,
+        *,
+        selection_rule: SelectionRule,
+        qualifier_handling: QualifierHandling,
+        any_readout_groups: list[tuple[str, str | None]] | None,
+        lean: bool,
+    ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
+        dr_by_scope: dict[RunScope, list[uuid.UUID]] = {}
+        rd_by_scope: dict[RunScope, list[tuple[uuid.UUID, str | None]]] = {}
+        for col in plan.columns:
+            if col.kind == "drc":
+                dr_by_scope.setdefault(col.run_scope, []).append(col.readout_definition_id)
+            else:
+                rd_by_scope.setdefault(col.run_scope, []).append(
+                    (col.readout_definition_id, col.normalization)
+                )
 
-        Groups ``drc_specs`` by their per-column ``RunScope`` so we make
-        one repo round-trip per distinct scope, then unions the results.
-        Without scope-grouping a 20-column search would issue 20 separate
-        ``find_all_curves_for_molecules`` calls; grouping shrinks that to
-        one call per distinct scope (typically 1-2 in practice).
-        """
-        # Group rd_ids by the scope each one carries.
-        scope_groups: dict[RunScope, list[uuid.UUID]] = {}
-        for rd_id in drc_specs:
-            scope = run_scopes.get(f"drc:{rd_id}") or RunScope.all()
-            scope_groups.setdefault(scope, []).append(rd_id)
-
-        merged: dict[uuid.UUID, dict[uuid.UUID, list[DoseResponseCurve]]] = {}
-        for scope, rd_ids in scope_groups.items():
+        curves: dict[tuple[uuid.UUID, uuid.UUID], list[DoseResponseCurve]] = {}
+        endpoints: dict[tuple[uuid.UUID, uuid.UUID], list[RunReadoutStats]] = {}
+        for scope, rd_ids in dr_by_scope.items():
             grouped = await self._curve_repo.find_all_curves_for_molecules(
                 workspace_id,
                 molecule_ids,
                 readout_definition_ids=rd_ids,
                 run_scope=scope,
+                exclude_rejected=True,
+                lean=lean,
             )
             for mol_id, by_rd in grouped.items():
-                bucket = merged.setdefault(mol_id, {})
-                for rd_id, curves in by_rd.items():
-                    bucket[rd_id] = curves
+                for rd_id, found in by_rd.items():
+                    curves[(mol_id, rd_id)] = found
+            for row in await self._readout_repo.find_run_stats(
+                workspace_id,
+                molecule_ids,
+                [(rd_id, None) for rd_id in rd_ids],
+                run_scope=scope,
+                wellless_only=True,
+            ):
+                endpoints.setdefault((row.molecule_id, row.readout_definition_id), []).append(row)
 
-        # Batch-fetch the owning Run aggregates so the adapter has
-        # run_date + run_approved without N+1.
-        run_ids = list(
-            {
-                curve.run_id
-                for by_rd in merged.values()
-                for curves in by_rd.values()
-                for curve in curves
-            }
+        readings: dict[tuple[uuid.UUID, uuid.UUID, str | None], list[RunReadoutStats]] = {}
+        for scope, specs in rd_by_scope.items():
+            for row in await self._readout_repo.find_run_stats(
+                workspace_id, molecule_ids, specs, run_scope=scope
+            ):
+                key = (row.molecule_id, row.readout_definition_id, row.normalization)
+                readings.setdefault(key, []).append(row)
+
+        run_ids = list({c.run_id for found in curves.values() for c in found})
+        headers = await self._run_repo.find_headers(workspace_id, run_ids) if run_ids else {}
+        dr_protocols = list({c.protocol_id for c in plan.columns if c.kind == "drc"})
+        dr_protos = (
+            await self._protocol_repo.find_by_ids(workspace_id, dr_protocols)
+            if dr_protocols
+            else []
         )
-        runs_by_id = await self._run_repo.find_by_ids(workspace_id, run_ids) if run_ids else {}
-        return merged, runs_by_id
+        dose_unit = {p.id: p.dose_unit.value for p in dr_protos}
+        # A reported endpoint stands for its readout's primary intercept.
+        primary_spec = {
+            rd.id: _spec_dict(rd.dose_response_config.intercepts[0])
+            for p in dr_protos
+            for rd in p.readout_definitions
+            if rd.dose_response_config and rd.dose_response_config.intercepts
+        }
+
+        any_block = (
+            await self._any_column(
+                workspace_id,
+                molecule_ids,
+                any_readout_groups=any_readout_groups,
+                selection_rule=selection_rule,
+                qualifier_handling=qualifier_handling,
+                lean=lean,
+            )
+            if plan.want_any
+            else {}
+        )
+
+        result: dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]] = {}
+        for mol_id in molecule_ids:
+            cells: dict[str, ActivityValue | AnyProtocolActivity] = {}
+            for col in plan.columns:
+                rd_id = col.readout_definition_id
+                for group in col.groups:
+                    if col.kind == "drc":
+                        av = self._dose_response_cell(
+                            [c for c in curves.get((mol_id, rd_id), []) if _in(group, c.run_id)],
+                            [
+                                r
+                                for r in endpoints.get((mol_id, rd_id), [])
+                                if _in(group, r.run_id)
+                            ],
+                            headers=headers,
+                            unit=dose_unit.get(col.protocol_id, "uM"),
+                            intercept_spec=primary_spec.get(rd_id),
+                            selection_rule=selection_rule,
+                            qualifier_handling=qualifier_handling,
+                            lean=lean,
+                        )
+                    else:
+                        av = _single_point_cell(
+                            [
+                                r
+                                for r in readings.get((mol_id, rd_id, col.normalization), [])
+                                if _in(group, r.run_id)
+                            ],
+                            selection_rule=selection_rule,
+                            qualifier_handling=qualifier_handling,
+                            lean=lean,
+                        )
+                    if av is not None:
+                        cells[col.key(group)] = av
+            if (block := any_block.get(mol_id)) is not None:
+                cells[ANY_COLUMN] = block
+            if cells:
+                result[mol_id] = cells
+        return result
+
+    def _dose_response_cell(
+        self,
+        curves: list[DoseResponseCurve],
+        endpoints: list[RunReadoutStats],
+        *,
+        headers: dict[uuid.UUID, RunHeader],
+        unit: str,
+        intercept_spec: dict[str, Any] | None,
+        selection_rule: SelectionRule,
+        qualifier_handling: QualifierHandling,
+        lean: bool,
+    ) -> ActivityValue | None:
+        """Fitted curves win (any class); reported endpoints only when the
+        group has none — the campaign channel resolver's rule D1. An endpoint
+        cell carries its readout's primary intercept (``intercept_spec``) so
+        the grid, sorting and export read it like a fitted cell."""
+        resolved = self._build_resolved_runs(curves, headers)
+        if resolved:
+            return self._build_dr_activity(
+                resolved_runs=resolved,
+                unit=unit,
+                selection_rule=selection_rule,
+                qualifier_handling=qualifier_handling,
+                lean=lean,
+            )
+        return _single_point_cell(
+            endpoints,
+            selection_rule=selection_rule,
+            qualifier_handling=qualifier_handling,
+            lean=lean,
+            intercept_spec=intercept_spec,
+        )
+
+    async def _any_column(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        *,
+        any_readout_groups: list[tuple[str, str | None]] | None,
+        selection_rule: SelectionRule,
+        qualifier_handling: QualifierHandling,
+        lean: bool = False,
+    ) -> dict[uuid.UUID, AnyProtocolActivity]:
+        """The "Active in" column: every protocol the molecule has curves in
+        (plus readout groups the search names), each collapsed like a column."""
+        any_curves = await self._curve_repo.find_all_curves_for_molecules(
+            workspace_id,
+            molecule_ids,
+            readout_definition_ids=None,
+            exclude_rejected=True,
+            lean=True,  # entries are values only; no point drawing here
+        )
+        run_ids = list(
+            {c.run_id for by_rd in any_curves.values() for cs in by_rd.values() for c in cs}
+        )
+        headers = await self._run_repo.find_headers(workspace_id, run_ids) if run_ids else {}
+
+        readout_rows: dict[uuid.UUID, dict[uuid.UUID, list[RunReadoutStats]]] = {}
+        readout_protocol: dict[uuid.UUID, uuid.UUID] = {}
+        if any_readout_groups:
+            readout_protocol = await self._readout_repo.find_readout_definitions_by_names(
+                workspace_id, any_readout_groups
+            )
+            if readout_protocol:
+                for row in await self._readout_repo.find_run_stats(
+                    workspace_id,
+                    molecule_ids,
+                    [(rd_id, None) for rd_id in readout_protocol],
+                    run_scope=RunScope.all(),
+                ):
+                    readout_rows.setdefault(row.molecule_id, {}).setdefault(
+                        row.readout_definition_id, []
+                    ).append(row)
+
+        protocol_ids = {
+            c.protocol_id for by_rd in any_curves.values() for cs in by_rd.values() for c in cs
+        } | set(readout_protocol.values())
+        protos: dict[uuid.UUID, Any] = {}
+        targets: dict[uuid.UUID, list[str]] = {}
+        if protocol_ids:
+            for p in await self._protocol_repo.find_by_ids(workspace_id, list(protocol_ids)):
+                protos[p.id] = p
+            found = await self._protocol_repo.find_effective_targets_for_protocols(
+                workspace_id, list(protocol_ids)
+            )
+            targets = {pid: [t.name for t in refs] for pid, refs in found.items()}
+
+        out: dict[uuid.UUID, AnyProtocolActivity] = {}
+        for mol_id in molecule_ids:
+            readouts: list[tuple[uuid.UUID, uuid.UUID, ActivityValue, str]] = []
+            for rd_id, rows in readout_rows.get(mol_id, {}).items():
+                av = _single_point_cell(
+                    rows,
+                    selection_rule=selection_rule,
+                    qualifier_handling=qualifier_handling,
+                    lean=True,
+                )
+                if av is not None:
+                    readouts.append((readout_protocol[rd_id], rd_id, av, rows[0].readout_name))
+            block = self._build_any_activity(
+                any_curves.get(mol_id, {}),
+                readouts=readouts,
+                runs_by_id=headers,
+                protos=protos,
+                targets=targets,
+                selection_rule=selection_rule,
+                qualifier_handling=qualifier_handling,
+                lean=lean,
+            )
+            if block is not None:
+                out[mol_id] = block
+        return out
 
     @staticmethod
     def _build_resolved_runs(
-        curves: list[DoseResponseCurve], runs_by_id: dict[uuid.UUID, Run]
+        curves: list[DoseResponseCurve], runs_by_id: dict[uuid.UUID, RunHeader]
     ) -> list[ResolvedRun]:
         """Adapt persisted curves + their owning runs to the aggregator's input.
 
@@ -802,6 +792,7 @@ class MoleculeActivityService:
         unit: str,
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
+        lean: bool = False,
     ) -> ActivityValue | None:
         """Collapse N ResolvedRuns to one ActivityValue using the aggregator.
 
@@ -857,9 +848,13 @@ class MoleculeActivityService:
             key=lambda r: (r.run_date is not None, r.run_date),
             reverse=True,
         )
-        runs_payload = [_to_run_summary(r) for r in runs_sorted[:_MAX_RUNS_PAYLOAD]]
+        runs_payload = (
+            [] if lean else [_to_run_summary(r) for r in runs_sorted[:_MAX_RUNS_PAYLOAD]]
+        )
 
-        condensed = _condense_raw_data(rep.curve_raw_data) if rep.curve_raw_data else None
+        condensed = (
+            _condense_raw_data(rep.curve_raw_data) if rep.curve_raw_data and not lean else None
+        )
 
         # Cell-level qualifier: ND/GT from the primary aggregate's qualifier
         # overrides "no qualifier" on EQ; otherwise carry through.
@@ -890,7 +885,7 @@ class MoleculeActivityService:
             SelectionRule.MEAN_ACROSS_RUNS,
             SelectionRule.GEOMETRIC_MEAN,
         }
-        if is_aggregate and primary_result.value is not None:
+        if is_aggregate and primary_result.value is not None and not lean:
             marker_label = "gmean" if selection_rule == SelectionRule.GEOMETRIC_MEAN else "mean"
             snap = build_aggregate_curve_snapshot(
                 resolved_runs,
@@ -930,18 +925,21 @@ class MoleculeActivityService:
             ),
             additional_curves=additional_curves,
             aggregate=aggregate_marker,
+            representative_curve_id=rep.curve_id,
+            run_ids=[r.run_id for r in runs_sorted],
         )
 
     def _build_any_activity(
         self,
         by_rd: dict[uuid.UUID, list[DoseResponseCurve]],
         *,
-        readouts: list[tuple[uuid.UUID, AggregatedReadout]] | None = None,
-        runs_by_id: dict[uuid.UUID, Run],
+        readouts: list[tuple[uuid.UUID, uuid.UUID, ActivityValue, str]] | None = None,
+        runs_by_id: dict[uuid.UUID, RunHeader],
         protos: dict[uuid.UUID, Any],
         targets: dict[uuid.UUID, list[str]],
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
+        lean: bool = True,
     ) -> AnyProtocolActivity | None:
         """One entry per (protocol, DR readout-def) the molecule has curves in,
         collapsed per readout-def by the same run aggregation as the DR
@@ -960,6 +958,7 @@ class MoleculeActivityService:
                 unit=unit,
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
+                lean=lean,
             )
             if av is None:
                 continue
@@ -981,7 +980,7 @@ class MoleculeActivityService:
                     run_count=av.run_count,
                 )
             )
-        for proto_id, agg in readouts or []:
+        for proto_id, rd_id, av, readout_name in readouts or []:
             proto = protos.get(proto_id)
             entries.append(
                 AnyProtocolEntry(
@@ -990,15 +989,15 @@ class MoleculeActivityService:
                     protocol_code=proto.code if proto is not None else None,
                     protocol_type=proto.protocol_type.value if proto is not None else "",
                     target_names=targets.get(proto_id, []),
-                    label=agg.readout_name,
+                    label=readout_name,
                     source="readout",
-                    readout_definition_id=agg.readout_definition_id,
-                    value=agg.value,
-                    qualifier=agg.qualifier,
-                    unit=agg.unit,
+                    readout_definition_id=rd_id,
+                    value=av.value,
+                    qualifier=av.qualifier,
+                    unit=av.unit,
                     value_um=None,
                     curve_class=None,
-                    run_count=agg.data_point_count,
+                    run_count=av.run_count,
                 )
             )
         if not entries:
@@ -1053,6 +1052,90 @@ def _intercept_key_spec(key: InterceptKey, runs: list[ResolvedRun]) -> dict[str,
     return {"kind": key.kind, "level": key.level}
 
 
+def _spec_dict(spec: Any) -> dict[str, Any]:
+    """An ``InterceptSpec`` in the wire shape intercept values carry."""
+    return {
+        "kind": spec.kind.value,
+        "level": spec.level,
+        "basis": spec.basis.value,
+        "label": spec.label,
+    }
+
+
+def _in(group: ColumnGroup, run_id: uuid.UUID) -> bool:
+    return group.run_ids is None or run_id in group.run_ids
+
+
+def _single_point_cell(
+    rows: list[RunReadoutStats],
+    *,
+    selection_rule: SelectionRule,
+    qualifier_handling: QualifierHandling,
+    lean: bool,
+    intercept_spec: dict[str, Any] | None = None,
+) -> ActivityValue | None:
+    """A cell from per-run replicate summaries (single-point readouts and
+    reported dose-response endpoints): each run's replicates become one value
+    (``combine_replicates``), then the column's effective rule combines runs."""
+    if not rows:
+        return None
+    unit = rows[0].unit
+    spec = intercept_spec or {"kind": "value", "label": rows[0].readout_name}
+    runs: list[ResolvedRun] = []
+    for row in rows:
+        value, qualifier = combine_replicates(row.stats, row.aggregation, unit=unit)
+        runs.append(
+            ResolvedRun(
+                run_id=row.run_id,
+                run_date=row.run_date,
+                run_approved=row.run_status == RunStatus.APPROVED,
+                curve_id=None,
+                value=value,
+                qualifier=qualifier,
+                unit=unit or "",
+                z_prime=None,
+                protocol_name="",
+                protocol_version=0,
+                readout_id=row.readout_definition_id,
+                intercept_values=[{"spec": spec, "value": value, "qualifier": qualifier.value}],
+            )
+        )
+    rule = effective_rule(selection_rule, unit=unit, single_point=True)
+    picked = apply_selection_rule(runs, rule, qualifier_handling, None)
+    if picked.representative_run is None:
+        return None
+    newest_first = sorted(runs, key=lambda r: (r.run_date is not None, r.run_date), reverse=True)
+    log_scale = is_concentration_unit(unit)
+    disagree = detect_disagreement(runs, None, log_scale=log_scale)
+    return ActivityValue(
+        value=picked.value,
+        qualifier=picked.qualifier.value if picked.qualifier != ValueQualifier.EQ else None,
+        unit=unit,
+        source="readout",
+        data_point_count=sum(r.stats.eq_count + r.stats.gt_count + r.stats.lt_count for r in rows),
+        run_count=len(runs),
+        selection_rule=rule.value,
+        runs=None if lean else [_to_run_summary(r) for r in newest_first[:_MAX_RUNS_PAYLOAD]],
+        disagreement_flag=disagree,
+        # An endpoint cell stands for its readout's primary intercept: the same
+        # field a fitted cell's intercept columns, sorting and export read.
+        intercept_aggregates=(
+            [
+                InterceptAggregate(
+                    spec=dict(intercept_spec),
+                    selected_value=picked.value,
+                    selected_qualifier=picked.qualifier.value,
+                    aggregate_stats=compute_aggregate_stats(runs, None) if log_scale else None,
+                    disagreement_flag=disagree,
+                )
+            ]
+            if intercept_spec
+            else None
+        ),
+        run_ids=[r.run_id for r in newest_first],
+    )
+
+
 def _to_run_summary(run: ResolvedRun) -> RunSummary:
     """Adapt a ResolvedRun to its tooltip-payload shape.
 
@@ -1065,7 +1148,7 @@ def _to_run_summary(run: ResolvedRun) -> RunSummary:
     return RunSummary(
         run_id=run.run_id,
         run_date=run.run_date or date.min,
-        curve_id=run.curve_id or run.run_id,
+        curve_id=run.curve_id,
         curve_class=run.curve_class,
         r_squared=run.curve_r_squared,
         intercept_values=list(run.intercept_values or []),

@@ -39,7 +39,7 @@ async def test_empty_candidates_for_unknown_molecule(session_factory):
         protocol_id=uuid.uuid4(),
         readout_definition_id=uuid.uuid4(),
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )
@@ -175,7 +175,7 @@ async def test_multi_dr_protocol_disambiguates_by_readout_def(session_factory):
         protocol_id=protocol_id,
         readout_definition_id=rd_target_id,
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )
@@ -185,7 +185,7 @@ async def test_multi_dr_protocol_disambiguates_by_readout_def(session_factory):
         protocol_id=protocol_id,
         readout_definition_id=rd_counter_id,
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=1,
     )
@@ -370,7 +370,7 @@ async def test_curve_candidate_carries_chart_fields_into_snapshot(session_factor
         protocol_id=protocol_id,
         readout_definition_id=rd_id,
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )
@@ -572,7 +572,7 @@ async def test_endpoint_candidates_on_a_dr_channel(session_factory):
         protocol_id=protocol_id,
         readout_definition_id=rd_id,
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )
@@ -767,7 +767,7 @@ async def test_run_scope_excludes_other_runs_on_both_branches(session_factory):
             protocol_id=protocol_id,
             readout_definition_id=rd_id,
             source_kind=source_kind,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
             display_order=0,
         )

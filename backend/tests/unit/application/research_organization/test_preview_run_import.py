@@ -224,7 +224,7 @@ class TestPreviewRunImport:
                     readout_definition_id=uuid.uuid4(),
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -252,7 +252,7 @@ class TestPreviewRunImport:
                     readout_definition_id=uuid.uuid4(),
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -309,7 +309,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_id,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=None,  # no threshold -> no active filter
                 )
             ],
@@ -356,7 +356,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_id,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -415,7 +415,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_a,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -426,7 +426,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_b,
                     label="%inh",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="%inh", operator="gt", value=50.0
                     ),
@@ -474,7 +474,7 @@ class TestPreviewRunImport:
                     readout_definition_id=ra,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="lt", value=1000.0
                     ),
@@ -484,7 +484,7 @@ class TestPreviewRunImport:
                     readout_definition_id=rb,
                     label="%inh",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="%inh", operator="gt", value=50.0
                     ),
@@ -511,7 +511,7 @@ class TestPreviewRunImport:
             protocol_id=proto_id,
             readout_definition_id=readout_id,
             source_kind=ChannelSourceKind.READOUT_DATA,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         )
         campaign.channels.append(existing_channel)
@@ -537,7 +537,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_id,
                     label="IC50 (updated)",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -588,7 +588,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_id,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -681,7 +681,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     hit_threshold=HitCriterion(
                         readout_name="IC50", operator="between", value=[10.0, 100.0]
                     ),
@@ -741,7 +741,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     allowed_curve_classes=["full"],
                 )
             ],
@@ -810,7 +810,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout,
                     label="EC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     # Channel-level intercept_key=None → primary intercept.
                     intercept_key=None,
                     hit_threshold=HitCriterion(
@@ -823,7 +823,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout,
                     label="EC90",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     # Channel IS for EC90 — identity lives on the config.
                     intercept_key=InterceptKey(kind="ec", level=90),
                     hit_threshold=HitCriterion(
@@ -930,7 +930,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout,
                     label="EC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     intercept_key=None,
                     hit_threshold=HitCriterion(
                         readout_name="EC50", operator="lt", value=50.0
@@ -942,7 +942,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout,
                     label="EC90",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     intercept_key=InterceptKey(kind="ec", level=90),
                     hit_threshold=None,
                     use_for_filter=False,
@@ -1084,7 +1084,7 @@ class TestPreviewRunImport:
 
     @pytest.mark.asyncio
     async def test_latest_mode_cell_keeps_legacy_snapshot_shape(self) -> None:
-        """LATEST_APPROVED_RUN cells: no aggregate fields on the snapshot
+        """LATEST_RUN cells: no aggregate fields on the snapshot
         (the cell value IS a single curve's value; nothing to overlay)."""
         from cellar.application.research_organization.preview_run_import import (
             _apply_selection_rule,
@@ -1095,7 +1095,7 @@ class TestPreviewRunImport:
             _dr_curve_candidate(value=20.0, run_id=uuid.uuid4(), run_date=date(2026, 5, 1)),
         ]
         picked = _apply_selection_rule(
-            candidates, SelectionRule.LATEST_APPROVED_RUN, intercept_key=None
+            candidates, SelectionRule.LATEST_RUN, intercept_key=None
         )
         assert picked is not None
         assert picked.value == 20.0  # latest
@@ -1154,7 +1154,7 @@ class TestPreviewRunImport:
                     readout_definition_id=readout_id,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -1227,7 +1227,7 @@ class TestPreviewRunImportEndpointFallback:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -1248,7 +1248,7 @@ class TestPreviewRunImportEndpointFallback:
 
         picked = _apply_selection_rule(
             [_candidate(value=50.0, qualifier=ValueQualifier.GT)],
-            SelectionRule.LATEST_APPROVED_RUN,
+            SelectionRule.LATEST_RUN,
         )
         assert picked is not None
         assert picked.value == 50.0
@@ -1280,7 +1280,7 @@ class TestPreviewRunImportEndpointFallback:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.READOUT_DATA,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                 )
             ],
         )
@@ -1329,7 +1329,7 @@ class TestPreviewRunImportEndpointFallback:
                     readout_definition_id=readout,
                     label="IC50",
                     source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-                    selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+                    selection_rule=SelectionRule.LATEST_RUN,
                     allowed_curve_classes=["active"],
                 )
             ],

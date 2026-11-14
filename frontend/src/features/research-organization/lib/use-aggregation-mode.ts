@@ -22,6 +22,11 @@ export const AGGREGATION_LABELS: Record<AggregationMode, string> = {
   best_r2: "Best fit (R²)",
 };
 
+/** What each rule picks, shown under its label in the menu. */
+export const AGGREGATION_DESCRIPTIONS: Partial<Record<AggregationMode, string>> = {
+  latest: "Newest run that isn't rejected.",
+};
+
 const URL_TO_MODE: Record<string, AggregationMode> = {
   latest: "latest",
   gmean: "gmean",
@@ -30,14 +35,14 @@ const URL_TO_MODE: Record<string, AggregationMode> = {
 };
 
 const WIRE_TO_MODE: Record<string, AggregationMode> = {
-  latest_approved_run: "latest",
+  latest_run: "latest",
   geometric_mean: "gmean",
   mean_across_runs: "mean",
   best_r_squared: "best_r2",
 };
 
 const MODE_TO_WIRE: Record<AggregationMode, SelectionRule> = {
-  latest: "latest_approved_run" as SelectionRule,
+  latest: "latest_run" as SelectionRule,
   gmean: "geometric_mean" as SelectionRule,
   mean: "mean_across_runs" as SelectionRule,
   best_r2: "best_r_squared" as SelectionRule,
@@ -112,42 +117,6 @@ function isSingleRunScope(
     return fromList + fromLegacy === 1;
   }
   return false;
-}
-
-type ActivityRunScope = Extract<SearchCriterion, { type: "activity" }>["run_scope"];
-
-/**
- * Walk the criteria tree and collect each activity criterion's `run_scope`
- * keyed by `protocol_id`. Twin of the backend's `_collect_run_scopes` so
- * the search detail drawer (a FE surface that fetches all curves for a
- * molecule independently of the search) can filter its per-protocol curve
- * list to the same set the grid cell saw, keeping the chart and the cell
- * value in lock-step.
- *
- * Skips criteria whose scope is `any` / `all` / omitted (those mean "no
- * filter", so they don't belong in the map). On duplicate protocol IDs the
- * LAST wins, matching the backend's deterministic insertion-order rule —
- * the chemist's tightest query is the source of truth.
- */
-export function collectRunScopesByProtocol(
-  criteria: SearchCriterion[],
-): Map<string, NonNullable<ActivityRunScope>> {
-  const out = new Map<string, NonNullable<ActivityRunScope>>();
-
-  function walk(list: SearchCriterion[]): void {
-    for (const c of list) {
-      if (c.type === "activity") {
-        if (!c.run_scope || c.protocol_id === null) continue;
-        if (c.run_scope.mode === "any" || c.run_scope.mode === "all") continue;
-        out.set(c.protocol_id, c.run_scope);
-      } else if (c.type === "group") {
-        walk(c.criteria);
-      }
-    }
-  }
-
-  walk(criteria);
-  return out;
 }
 
 // ─── Cross-subscriber sync ──────────────────────────────────────────────────

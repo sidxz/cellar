@@ -56,7 +56,7 @@ def _make_channel(campaign_id: uuid.UUID) -> CampaignChannel:
         protocol_id=uuid.uuid4(),
         readout_definition_id=uuid.uuid4(),
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )

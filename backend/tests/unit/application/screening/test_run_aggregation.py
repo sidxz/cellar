@@ -169,14 +169,14 @@ def test_mean_skips_censored_reported_rows():
 # ---- apply_selection_rule ----
 
 
-def test_latest_approved_run_picks_max_run_date_among_eq():
+def test_latest_run_picks_max_run_date_among_eq():
     runs = [
         _run(value=0.10, run_date=date(2026, 1, 1)),
         _run(value=0.20, run_date=date(2026, 4, 1)),  # newest
         _run(value=0.05, run_date=date(2026, 3, 1)),
     ]
     out = apply_selection_rule(
-        runs, SelectionRule.LATEST_APPROVED_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
+        runs, SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value == 0.20
     assert out.qualifier is ValueQualifier.EQ
@@ -187,7 +187,7 @@ def test_latest_approved_run_picks_max_run_date_among_eq():
     assert out.contributing_run_ids[0] == out.representative_run.run_id
 
 
-def test_latest_approved_run_skips_inactive_under_exclude_qualified():
+def test_latest_run_skips_inactive_under_exclude_qualified():
     """Latest is the latest *EQ* run when EXCLUDE_QUALIFIED."""
     runs = [
         _run(value=0.10, run_date=date(2026, 1, 1)),
@@ -195,7 +195,7 @@ def test_latest_approved_run_skips_inactive_under_exclude_qualified():
         _run(value=None, curve_class="inactive", run_date=date(2026, 4, 1)),
     ]
     out = apply_selection_rule(
-        runs, SelectionRule.LATEST_APPROVED_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
+        runs, SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value == 0.20  # the most recent EQ run, not the most recent overall
 
@@ -203,7 +203,7 @@ def test_latest_approved_run_skips_inactive_under_exclude_qualified():
 def test_all_inactive_returns_nd():
     runs = [_run(value=None, curve_class="inactive") for _ in range(3)]
     out = apply_selection_rule(
-        runs, SelectionRule.LATEST_APPROVED_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
+        runs, SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value is None
     assert out.qualifier is ValueQualifier.ND
@@ -285,7 +285,7 @@ def test_manual_pick_returns_nd_in_search_context():
 
 def test_empty_run_list_returns_nd():
     out = apply_selection_rule(
-        [], SelectionRule.LATEST_APPROVED_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
+        [], SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value is None
     assert out.qualifier is ValueQualifier.ND

@@ -14,7 +14,7 @@ vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
 
 import { render } from "@testing-library/react";
 import type { ActivityValue } from "../../types";
-import { DoseResponseCell } from "./dose-response-cell";
+import { DoseResponseCell, DoseResponseOverlay } from "./dose-response-cell";
 
 function reset() {
   figureCalls.length = 0;
@@ -96,5 +96,33 @@ describe("<DoseResponseCell /> — aggregate overlay passthrough", () => {
 
     expect(figureCalls).toHaveLength(0);
     expect(container.textContent).toContain("—");
+  });
+});
+
+describe("DoseResponseOverlay", () => {
+  it("hands the figure one entry per group, keeping a slot for a missing cell", () => {
+    reset();
+    render(
+      <DoseResponseOverlay
+        entries={[
+          { value: BASE_AV, label: "10 µM" },
+          { value: undefined, label: "1 mM" },
+        ]}
+      />,
+    );
+    const curves = figureCalls[0].curves as { curve: unknown; label: string }[];
+    expect(curves.map((c) => c.label)).toEqual(["10 µM", "1 mM"]);
+    expect(curves[0].curve).not.toBeNull();
+    expect(curves[1].curve).toBeNull();
+    expect(figureCalls[0].unit).toBe("uM");
+  });
+
+  it("shows the no-data dash when no group has a curve", () => {
+    reset();
+    const { container } = render(
+      <DoseResponseOverlay entries={[{ value: undefined, label: "10 µM" }]} />,
+    );
+    expect(figureCalls).toHaveLength(0);
+    expect(container.textContent).toBe("—");
   });
 });

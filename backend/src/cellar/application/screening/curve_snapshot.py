@@ -9,7 +9,7 @@ curve reproducible without a live FK lookup back to the underlying
 
 Two builders, both pure functions over ``ResolvedRun``:
 
-- ``build_curve_snapshot`` — single curve (latest_approved_run / best_r²).
+- ``build_curve_snapshot`` — single curve (latest_run / best_r²).
 - ``build_aggregate_curve_snapshot`` — representative curve + every other
   contributor as ``additional_curves[]`` + an explicit ``aggregate`` marker
   carrying the cell value (used when the per-curve intercept dashed line

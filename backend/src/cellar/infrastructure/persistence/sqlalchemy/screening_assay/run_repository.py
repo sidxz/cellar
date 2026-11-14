@@ -8,6 +8,7 @@ from datetime import date
 from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
+from cellar.domain.screening_assay.activity_types import RunHeader
 from cellar.domain.screening_assay.enums import (
     HolderKind,
     PlateFormat,
@@ -17,17 +18,25 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.repository import CollectionLinkResult, TargetLinkResult
 from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.screening_assay.target import TargetRef
 from cellar.domain.shared.hit_criterion import HitCriterion
 from cellar.domain.shared.value_objects import Barcode
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
     CollectionModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
+    NOT_REJECTED,
+    run_scope_filters,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    DoseResponseCurveModel,
     PlateModel,
+    ReadoutDataModel,
     RunModel,
     TargetModel,
     WellModel,
@@ -36,6 +45,17 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
 )
 from cellar.infrastructure.persistence.sqlalchemy.tagging.models import RunTagLinkModel
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import tag_filter_subquery
+
+_HEADER_COLUMNS = (
+    RunModel.id,
+    RunModel.protocol_id,
+    RunModel.run_date,
+    RunModel.created_at,
+    RunModel.status,
+    RunModel.operator,
+    RunModel.notes,
+    RunModel.conditions,
+)
 
 
 class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
@@ -62,6 +82,86 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
         )
         result = await self._session.execute(stmt)
         return {m.id: self._to_domain_tracked(m) for m in result.scalars().all()}
+
+    async def find_headers(
+        self, workspace_id: uuid.UUID, ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, RunHeader]:
+        """Runs by id without plates and wells (the aggregate loads every well)."""
+        if not ids:
+            return {}
+        return await self._headers(
+            select(*_HEADER_COLUMNS).where(
+                RunModel.workspace_id == workspace_id, any_id(RunModel.id, ids)
+            )
+        )
+
+    async def find_runs_measuring(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        molecule_ids: list[uuid.UUID],
+        *,
+        run_scope: RunScope,
+    ) -> list[RunHeader]:
+        """Non-rejected runs of the protocol in ``run_scope`` with a curve or a
+        readout for at least one of the molecules."""
+        if not molecule_ids:
+            return []
+        has_curve = (
+            select(DoseResponseCurveModel.id)
+            .where(
+                DoseResponseCurveModel.run_id == RunModel.id,
+                any_id(DoseResponseCurveModel.molecule_id, molecule_ids),
+            )
+            .exists()
+        )
+        has_readout = (
+            select(ReadoutDataModel.id)
+            .where(
+                ReadoutDataModel.run_id == RunModel.id,
+                any_id(ReadoutDataModel.molecule_id, molecule_ids),
+            )
+            .exists()
+        )
+        stmt = select(*_HEADER_COLUMNS).where(
+            RunModel.workspace_id == workspace_id,
+            RunModel.protocol_id == protocol_id,
+            NOT_REJECTED,
+            *run_scope_filters(run_scope, workspace_id),
+            has_curve | has_readout,
+        )
+        return list((await self._headers(stmt)).values())
+
+    async def _headers(self, stmt) -> dict[uuid.UUID, RunHeader]:  # type: ignore[no-untyped-def]
+        rows = (
+            await self._session.execute(stmt.order_by(RunModel.run_date, RunModel.created_at))
+        ).all()
+        barcodes: dict[uuid.UUID, list[str]] = {}
+        if rows:
+            plates = await self._session.execute(
+                select(PlateModel.run_id, PlateModel.barcode)
+                .where(
+                    any_id(PlateModel.run_id, [r.id for r in rows]),
+                    PlateModel.barcode.is_not(None),
+                )
+                .order_by(PlateModel.plate_number)
+            )
+            for run_id, barcode in plates.all():
+                barcodes.setdefault(run_id, []).append(barcode)
+        return {
+            r.id: RunHeader(
+                id=r.id,
+                protocol_id=r.protocol_id,
+                run_date=r.run_date,
+                created_at=r.created_at,
+                status=r.status,
+                operator=r.operator,
+                notes=r.notes,
+                conditions=r.conditions,
+                plate_barcodes=barcodes.get(r.id, []),
+            )
+            for r in rows
+        }
 
     async def find_by_protocol(
         self,

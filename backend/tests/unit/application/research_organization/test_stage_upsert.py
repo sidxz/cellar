@@ -38,7 +38,7 @@ def _campaign_with_channel() -> tuple[Campaign, CampaignChannel]:
         protocol_id=uuid.uuid4(),
         readout_definition_id=uuid.uuid4(),
         source_kind=ChannelSourceKind.READOUT_DATA,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
     )
     campaign.add_channel(channel)

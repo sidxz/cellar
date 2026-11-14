@@ -1,7 +1,7 @@
 """RunScope — narrow which runs of a protocol contribute to a cell.
 
 A criterion-level filter the chemist sets on the search panel
-("Last 3 runs", "Since Apr 2026", "Specific runs"). The aggregator
+("Latest run", "Since Apr 2026", "Specific runs"). The aggregator
 then operates only over the runs that match.
 
 Implemented as a tagged-union dataclass with smart constructors. The
@@ -21,7 +21,11 @@ from typing import Any
 class RunScope:
     """Filter on which runs of a (protocol, compound) feed into the cell."""
 
-    last_n_count: int | None = None
+    # The protocol's single newest run (by run date, then creation) — the
+    # same run for every compound, as the picker's "this protocol's most
+    # recent run" says. Each compound's own newest run is a selection rule
+    # (LATEST_RUN), not a scope.
+    protocol_latest: bool = False
     since_date: date | None = None
     from_date: date | None = None
     to_date: date | None = None
@@ -32,10 +36,8 @@ class RunScope:
         return cls()
 
     @classmethod
-    def last_n(cls, n: int) -> RunScope:
-        if n < 1:
-            raise ValueError("last_n requires n >= 1")
-        return cls(last_n_count=n)
+    def latest_of_protocol(cls) -> RunScope:
+        return cls(protocol_latest=True)
 
     @classmethod
     def since(cls, when: date) -> RunScope:
@@ -53,7 +55,7 @@ class RunScope:
 
     def is_all(self) -> bool:
         return (
-            self.last_n_count is None
+            not self.protocol_latest
             and self.since_date is None
             and self.from_date is None
             and self.to_date is None
@@ -69,7 +71,7 @@ class RunScope:
         ONE place that interprets it. Wire shape:
 
         - ``{"mode": "any" | "all"}`` → ``RunScope.all()``
-        - ``{"mode": "latest"}`` → ``RunScope.last_n(1)``
+        - ``{"mode": "latest"}`` → ``RunScope.latest_of_protocol()``
         - ``{"mode": "past_n_days", "days": N}`` →
           ``RunScope.since(today - N days)``
         - ``{"mode": "specific", "run_ids": [...]}`` (or legacy
@@ -90,7 +92,7 @@ class RunScope:
         if mode in (None, "any", "all"):
             return cls.all()
         if mode == "latest":
-            return cls.last_n(1)
+            return cls.latest_of_protocol()
         if mode == "past_n_days":
             try:
                 days = int(raw.get("days", 30))
@@ -119,5 +121,7 @@ class RunScope:
                 return cls.between(d_from, d_to)
             if d_from is not None:
                 return cls.since(d_from)
+            if d_to is not None:
+                return cls(to_date=d_to)
             return cls.all()
         return cls.all()

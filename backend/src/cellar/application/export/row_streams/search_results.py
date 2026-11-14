@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from returns.result import Success
@@ -49,16 +49,12 @@ class SearchResultsRowStream:
         self.columns: list[ColumnSpec] = []  # populated lazily by _ensure_columns
 
     async def total_count(self) -> int:
-        # _ensure_columns shares the same lazy prerequisites (protocols lookup +
-        # first-page probe) and is idempotent.  Calling it here guarantees that
-        # ``self.columns`` is populated before any consumer reads it — in
-        # particular before ``RenderExport.__call__`` passes ``stream.columns``
-        # to the renderer, which happens right after ``await stream.total_count()``.
+        # _ensure_columns runs the first-page probe that yields both the total
+        # and the split column groups, and is idempotent. Calling it here
+        # guarantees ``self.columns`` is populated before ``RenderExport``
+        # passes ``stream.columns`` to the renderer.
         await self._ensure_columns()
-        if self._cached_total is None:
-            page = await self._fetch_page(cursor=None, limit=1)
-            self._cached_total = page.total_count or 0
-        return self._cached_total
+        return self._cached_total or 0
 
     async def iter_batches(self, batch_size: int) -> AsyncIterator[list[ExportRow]]:
         await self._ensure_columns()
@@ -79,9 +75,9 @@ class SearchResultsRowStream:
             saved_search_id=_parse_uuid(self.payload.get("saved_search_id")),
             protocol_columns=self.payload.get("protocol_columns"),
             aggregation=SelectionRule(
-                self.payload.get("aggregation", SelectionRule.LATEST_APPROVED_RUN.value)
+                self.payload.get("aggregation", SelectionRule.LATEST_RUN.value)
             ),
-            cursor_id=_parse_uuid(cursor) if cursor else None,
+            cursor=cursor,
             limit=limit,
             # None (not []) when absent: [] means "unassigned molecules only"
             # to the visibility clause, which would drop every compound that
@@ -100,6 +96,8 @@ class SearchResultsRowStream:
     async def _ensure_columns(self) -> None:
         if self.columns:
             return
+        probe = await self._fetch_page(cursor=None, limit=1)
+        self._cached_total = probe.total_count or 0
         protocol_cols = self.payload.get("protocol_columns") or []
         report_config = self.payload.get("reportConfig") or self.payload.get("report_config")
         self._protocols_cache = await self.protocols_reader(self.workspace_id)
@@ -108,6 +106,7 @@ class SearchResultsRowStream:
             self._protocols_cache,
             report_config=report_config,
             format=self.format,
+            column_groups=probe.column_groups,
         )
 
     def _row_for(self, mol, activity_data: dict | None) -> ExportRow:
@@ -175,6 +174,7 @@ def _build_columns(
     *,
     report_config: dict | None = None,
     format: str | None = None,
+    column_groups: dict[str, Any] | None = None,
 ) -> list[ColumnSpec]:
     """Build export columns honoring the FE reportConfig.
 
@@ -243,8 +243,46 @@ def _build_columns(
     # name) plus one Plot column per readout.
     by_id = {str(p.id): p for p in protocols}
     for col_token in protocol_cols:
-        base.extend(_expand_protocol_column(col_token, by_id))
+        specs = _expand_protocol_column(col_token, by_id)
+        split = (column_groups or {}).get(_owning_protocol_id(col_token, by_id) or "")
+        if split is None:
+            base.extend(specs)
+            continue
+        # A split protocol repeats its columns once per group, side by side;
+        # the group header names the group ("EGFR · 10 µM").
+        for group in split["groups"]:
+            base.extend(
+                replace(
+                    spec,
+                    key=_group_key(spec.key, group["key"]),
+                    group=f"{spec.group} · {group['label']}" if spec.group else group["label"],
+                )
+                for spec in specs
+            )
     return base
+
+
+def _owning_protocol_id(token: str, by_id: dict[str, Any]) -> str | None:
+    parts = token.split(":")
+    if parts[0] == "rd" and len(parts) >= 3:
+        return parts[1]
+    if parts[0] == "drc" and len(parts) >= 2:
+        return next(
+            (
+                pid
+                for pid, p in by_id.items()
+                for r in (p.readout_definitions or [])
+                if str(r.id) == parts[1]
+            ),
+            None,
+        )
+    return None
+
+
+def _group_key(key: str, group_key: str) -> str:
+    """``<column>::<suffix>`` → ``<column>@<group>::<suffix>``."""
+    column, sep, suffix = key.rpartition("::")
+    return f"{column}@{group_key}{sep}{suffix}" if sep else f"{key}@{group_key}"
 
 
 def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
@@ -420,15 +458,16 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     if col_token == "any":  # noqa: S105  # column-spec token, not a credential
         block = (raw.get("activity") or {}).get("any") or {}
         return _format_any_entries(block.get("entries") or [])
-    parent_token = _activity_parent_token(col_token)
+    col_token, at, group_key = col_token.partition("@")
+    parent_token = _activity_parent_token(col_token) + (f"@{group_key}" if at else "")
     av = (raw.get("activity") or {}).get(parent_token)
     if not av:
         return None
-    iv = _intercept_for(av, col_token) if col_token.startswith("drc:") else None
+    value, qualifier = _endpoint(av, col_token)
     if suffix == "value":
-        return _display_value(av, iv)
+        return _display(value, qualifier)
     if suffix == "qualifier":
-        return _qualifier_of(av, iv)
+        return _qualifier_text(value, qualifier)
     if suffix == "unit":
         return av.get("unit")
     if suffix == "run_count":
@@ -460,65 +499,43 @@ def _format_any_entries(entries: list[dict]) -> str:
     return "; ".join(parts)
 
 
-def _display_value(av: dict, iv: dict | None) -> Any:
-    """Return the cell value the chemist sees on the FE grid.
+def _endpoint(av: dict[str, Any], col_token: str) -> tuple[Any, str | None]:
+    """The value and qualifier the grid shows for this column.
 
-    Mirrors ``formatInterceptDisplay``:
-      - Inactive curve  → string "ND"
-      - At-bound curve  → string ">{value}" (numeric in a text wrapper so
-        chemists doing Excel filters still see "compound > X")
-      - Active scalar   → numeric (preserved as a number so XLSX cells
-        right-align and the column sorts numerically)
-      - No data         → None (Excel empty cell, PDF em-dash)
-
-    Run-count subscripts (₂, ₃…) are NOT folded into this cell — that info
-    lives in the chart thumbnail. Keeping the cell single-value preserves
-    Excel sort + filter behaviour.
-    """
-    if iv is not None:
-        if iv.get("at_bound") and iv.get("value") is not None:
-            return f">{iv['value']}"
-        if iv.get("value") is None:
-            return "ND"
-        return iv["value"]
-    # No intercept entry — single-curve / non-DR fallback.
-    curve_class = (av.get("curve_params") or {}).get("curve_class")
-    if curve_class == "inactive":
-        return "ND"
-    return av.get("value")
-
-
-def _intercept_for(av: dict, col_token: str) -> dict | None:
-    """Find the intercept entry in ``av["intercept_values"]`` matching the token.
-
-    Token format: ``drc:<rd_id>:<kind>:<level>``
+    An intercept column (``drc:<rd>:<kind>:<level>``) reads the cell's selected
+    aggregate for that intercept — what the grid renders under every selection
+    rule — never the representative curve's own intercept. Any other column
+    reads the cell value.
     """
     parts = col_token.split(":")
-    if len(parts) < 4:
-        return None
-    target = (parts[2], float(parts[3]))
-    for iv in av.get("intercept_values") or []:
-        spec = iv.get("spec") or {}
-        if (spec.get("kind"), spec.get("level")) == target:
-            return iv
-    return None
+    if col_token.startswith("drc:") and len(parts) >= 4:
+        target = (parts[2], float(parts[3]))
+        for agg in av.get("intercept_aggregates") or []:
+            spec = agg.get("spec") or {}
+            if (spec.get("kind"), spec.get("level")) == target:
+                return agg.get("selected_value"), agg.get("selected_qualifier")
+        return None, None
+    return av.get("value"), av.get("qualifier")
 
 
-def _qualifier_of(av: dict, iv: dict | None) -> str:
-    """Derive the display qualifier string from an activity value dict.
-
-    Inactive curves → ``"ND"``; at-bound curves → ``">"``; healthy → ``"="``.
-    """
-    if iv is not None:
-        if iv.get("at_bound"):
-            return ">"
-        if iv.get("value") is None:
-            return "ND"
-        return "="
-    cc = (av.get("curve_params") or {}).get("curve_class")
-    if cc == "inactive":
+def _display(value: Any, qualifier: str | None) -> Any:
+    """ND for no reportable value, ``>100`` / ``<0.1`` for a bound (numeric in a
+    text wrapper so Excel filters still read "compound > X"), the number
+    otherwise, None for no data. Run counts are not folded in, so Excel sorts
+    and filters the column as numbers."""
+    if qualifier == "nd":
         return "ND"
-    return av.get("qualifier") or "="
+    if value is None:
+        return None
+    if qualifier in (">", "<"):
+        return f"{qualifier}{value}"
+    return value
+
+
+def _qualifier_text(value: Any, qualifier: str | None) -> str:
+    if qualifier == "nd" or (value is None and qualifier):
+        return "ND"
+    return qualifier if qualifier in (">", "<") else "="
 
 
 # ---------------------------------------------------------------------------

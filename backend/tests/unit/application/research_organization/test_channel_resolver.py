@@ -106,8 +106,8 @@ def _iv(kind: str, level: float, value: float) -> dict:
 
 
 @pytest.mark.asyncio
-async def test_latest_approved_run_picks_highest_run_date():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+async def test_latest_run_picks_highest_run_date():
+    ch = _channel(SelectionRule.LATEST_RUN)
     candidates = [
         _candidate(10.0, run_date=date(2026, 5, 1)),
         _candidate(20.0, run_date=date(2026, 4, 1)),
@@ -152,7 +152,7 @@ async def test_geometric_mean_logspace():
 
 @pytest.mark.asyncio
 async def test_no_candidates_yields_nd():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     resolver = ChannelResolver(_FakeQuery([]))
     m = await resolver.resolve(
         workspace_id=uuid.uuid4(),
@@ -170,7 +170,7 @@ async def test_no_candidates_yields_nd():
 @pytest.mark.asyncio
 async def test_qc_filter_drops_low_z_prime():
     ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
+        SelectionRule.LATEST_RUN,
         qc={"min_z_prime": 0.5, "require_approved": True},
     )
     candidates = [_candidate(99.0, run_date=date(2026, 5, 1), z_prime=0.3)]
@@ -189,7 +189,7 @@ async def test_intercept_key_resolves_secondary_intercept_value():
     """A channel that surfaces EC90 yields EC90's value as the cell value,
     not the curve's primary (EC50) value."""
     ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
+        SelectionRule.LATEST_RUN,
         intercept_key=InterceptKey(kind="ec", level=90.0),
     )
     candidates = [
@@ -212,7 +212,7 @@ async def test_intercept_key_resolves_secondary_intercept_value():
 @pytest.mark.asyncio
 async def test_intercept_key_none_keeps_legacy_primary_behavior():
     """No channel-level intercept_key → cell value is the primary fitted value."""
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     candidates = [
         _candidate(
             2.0,
@@ -234,7 +234,7 @@ async def test_intercept_key_none_keeps_legacy_primary_behavior():
 async def test_intercept_key_missing_match_yields_no_value():
     """Channel targets EC90 but the curve only has EC50 → cell value None."""
     ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
+        SelectionRule.LATEST_RUN,
         intercept_key=InterceptKey(kind="ec", level=90.0),
     )
     candidates = [
@@ -462,8 +462,8 @@ class TestResolveIntercept:
 
 
 @pytest.mark.asyncio
-async def test_latest_approved_run_inactive_pick_emits_nd():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+async def test_latest_run_inactive_pick_emits_nd():
+    ch = _channel(SelectionRule.LATEST_RUN)
     candidates = [
         _dr_candidate(
             0.013,
@@ -509,9 +509,9 @@ async def test_manual_pick_nd_carries_no_provenance():
 
 
 @pytest.mark.asyncio
-async def test_latest_approved_run_at_bound_pick_emits_gt_max_dose():
+async def test_latest_run_at_bound_pick_emits_gt_max_dose():
     ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
+        SelectionRule.LATEST_RUN,
         intercept_key=InterceptKey(kind="ec", level=90.0),
     )
     candidates = [
@@ -813,7 +813,7 @@ async def test_resolver_latest_mode_snapshot_has_no_aggregate_fields():
     """Non-aggregate cells keep the legacy snapshot shape — no additional_curves,
     no aggregate field (FE chart adapter distinguishes single-curve from
     overlay rendering by these key's presence)."""
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     candidates = [
         _dr_candidate(
             10.0,
@@ -870,7 +870,7 @@ def _endpoint_candidate(
 
 @pytest.mark.asyncio
 async def test_dr_channel_with_no_curves_falls_back_to_reported_endpoint():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     endpoint = _endpoint_candidate(32.0, qualifier=ValueQualifier.GT)
     resolver = ChannelResolver(_FakeQuery([], endpoints=[endpoint]))
     m = await resolver.resolve(
@@ -887,7 +887,7 @@ async def test_dr_channel_with_no_curves_falls_back_to_reported_endpoint():
 
 @pytest.mark.asyncio
 async def test_dr_channel_endpoint_wins_when_the_only_curve_fails_qc():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN, qc={"require_approved": True})
+    ch = _channel(SelectionRule.LATEST_RUN, qc={"require_approved": True})
     endpoint = _endpoint_candidate(7.5)
     resolver = ChannelResolver(
         _FakeQuery([_candidate(1.0, approved=False)], endpoints=[endpoint])
@@ -906,7 +906,7 @@ async def test_dr_channel_endpoint_wins_when_the_only_curve_fails_qc():
 async def test_dr_channel_qc_passing_inactive_curve_beats_an_endpoint():
     """A curve of any class that survives QC wins — an inactive one still
     resolves ND rather than letting the reported endpoint through."""
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     resolver = ChannelResolver(
         _FakeQuery(
             [_dr_candidate(0.013, run_date=date(2026, 1, 1), curve_class="inactive")],
@@ -935,7 +935,7 @@ async def test_dr_channel_endpoint_fills_only_its_primary_intercept_channel():
     )
 
     async def resolve(key: InterceptKey):
-        ch = _channel(SelectionRule.LATEST_APPROVED_RUN, intercept_key=key)
+        ch = _channel(SelectionRule.LATEST_RUN, intercept_key=key)
         return await ChannelResolver(_FakeQuery([], endpoints=[endpoint])).resolve(
             workspace_id=uuid.uuid4(),
             channel=ch,
@@ -957,7 +957,7 @@ async def test_dr_channel_endpoint_fills_only_its_primary_intercept_channel():
 @pytest.mark.asyncio
 async def test_readout_channel_does_not_reach_for_the_endpoint_fallback():
     ch = _channel(
-        SelectionRule.LATEST_APPROVED_RUN,
+        SelectionRule.LATEST_RUN,
         source_kind=ChannelSourceKind.READOUT_DATA,
     )
     resolver = ChannelResolver(_FakeQuery([], endpoints=[_endpoint_candidate(7.5)]))
@@ -991,7 +991,7 @@ def _campaign_seeded_from(*seed_runs: SeedRun) -> Campaign:
 
 @pytest.mark.asyncio
 async def test_resolve_forwards_run_ids_to_the_candidate_fetch():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     q = _FakeQuery([_candidate(1.0)])
     run_ids = [uuid.uuid4(), uuid.uuid4()]
     await ChannelResolver(q).resolve(
@@ -1008,7 +1008,7 @@ async def test_resolve_forwards_run_ids_to_the_candidate_fetch():
 async def test_resolve_forwards_run_ids_to_the_endpoint_fallback():
     """The D1 reported-endpoint fallback must be scoped too — otherwise a
     run-scoped DR channel with no surviving curve silently reads every run."""
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     q = _FakeQuery([], endpoints=[_endpoint_candidate(12.0)])
     run_ids = [uuid.uuid4()]
     m = await ChannelResolver(q).resolve(
@@ -1025,7 +1025,7 @@ async def test_resolve_forwards_run_ids_to_the_endpoint_fallback():
 
 @pytest.mark.asyncio
 async def test_resolve_defaults_to_unrestricted():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     q = _FakeQuery([], endpoints=[_endpoint_candidate(12.0)])
     await ChannelResolver(q).resolve(
         workspace_id=uuid.uuid4(),
@@ -1042,7 +1042,7 @@ def test_resolution_run_ids_is_the_channel_protocols_seed_runs_in_order():
     p1, p2 = uuid.uuid4(), uuid.uuid4()
     r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     campaign = _campaign_seeded_from(SeedRun(r2, p1), SeedRun(r3, p2), SeedRun(r1, p1))
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     ch.protocol_id = p1
     assert resolution_run_ids(campaign, ch) == [r2, r1]
 
@@ -1052,7 +1052,7 @@ def test_resolution_run_ids_is_none_for_a_protocol_with_no_seed_runs():
     from resolves protocol-wide — no opt-out flag needed."""
     p1 = uuid.uuid4()
     campaign = _campaign_seeded_from(SeedRun(uuid.uuid4(), p1))
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     ch.protocol_id = uuid.uuid4()
     assert resolution_run_ids(campaign, ch) is None
 
@@ -1064,11 +1064,11 @@ def test_resolution_run_ids_is_none_without_seed_runs():
     campaign.add_result(
         CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=uuid.uuid4()))
     )
-    assert resolution_run_ids(campaign, _channel(SelectionRule.LATEST_APPROVED_RUN)) is None
+    assert resolution_run_ids(campaign, _channel(SelectionRule.LATEST_RUN)) is None
 
 
 def test_resolution_run_ids_is_none_when_the_channel_opts_out():
-    ch = _channel(SelectionRule.LATEST_APPROVED_RUN)
+    ch = _channel(SelectionRule.LATEST_RUN)
     campaign = _campaign_seeded_from(SeedRun(uuid.uuid4(), ch.protocol_id))
     ch.resolve_from_all_runs = True
     assert resolution_run_ids(campaign, ch) is None

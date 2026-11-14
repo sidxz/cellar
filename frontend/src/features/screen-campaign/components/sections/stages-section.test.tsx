@@ -25,7 +25,7 @@ function makeChannel(overrides: Partial<CampaignChannelResponse>): CampaignChann
     protocol_id: "proto-1",
     readout_definition_id: "rd-1",
     source_kind: "readout_data",
-    selection_rule: "latest_approved_run",
+    selection_rule: "latest_run",
     qualifier_handling: "include_qualified",
     display_order: 0,
     ...overrides,

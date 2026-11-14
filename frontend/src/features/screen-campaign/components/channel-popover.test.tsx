@@ -55,7 +55,7 @@ const existing = {
   protocol_id: "proto-1",
   readout_definition_id: "rd-1",
   source_kind: "readout_data",
-  selection_rule: "latest_approved_run",
+  selection_rule: "latest_run",
   qualifier_handling: "include_qualified",
   display_order: 0,
   resolve_from_all_runs: false,
@@ -119,7 +119,7 @@ describe("ChannelPopoverForm run scope", () => {
       channelId: "ch-1",
       data: {
         label: "% Inhibition",
-        selection_rule: "latest_approved_run",
+        selection_rule: "latest_run",
         qc_filter: null,
         resolve_from_all_runs: true,
       },
@@ -145,5 +145,22 @@ describe("ChannelPopoverForm run scope", () => {
 
     await waitFor(() => expect(updateMutate).toHaveBeenCalledTimes(1));
     expect(updateMutate.mock.calls[0][0].data).toMatchObject({ resolve_from_all_runs: true });
+  });
+});
+
+describe("ChannelPopoverForm selection rule", () => {
+  it("labels the rule Latest run and says what it picks", () => {
+    render(
+      <ChannelPopoverForm campaignId="c1" projectId="p1" existing={existing} onClose={vi.fn()} />,
+      { wrapper },
+    );
+    const trigger = screen.getAllByRole("combobox").find((el) => el.textContent === "Latest run");
+    expect(trigger).toBeDefined();
+    fireEvent.click(trigger as HTMLElement);
+    expect(
+      within(screen.getByRole("listbox")).getByText(
+        "Newest run that passes this channel's QC filter.",
+      ),
+    ).toBeInTheDocument();
   });
 });

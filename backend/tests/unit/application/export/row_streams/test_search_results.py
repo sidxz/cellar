@@ -139,19 +139,26 @@ def _success(page):
     from returns.result import Success
 
     from cellar.application.shared.pagination import EnrichedPageResult
-    return Success(EnrichedPageResult(
-        items=page.items,
-        next_cursor=page.next_cursor,
-        total_count=page.total_count,
-        activity_data=None,
-        similarity_scores=None,
-    ))
+
+    return Success(
+        EnrichedPageResult(
+            items=page.items,
+            next_cursor=page.next_cursor,
+            total_count=page.total_count,
+            activity_data=None,
+            similarity_scores=None,
+            # Only a page built with explicit groups carries them (MagicMock would
+            # invent an attribute).
+            column_groups=page.column_groups if isinstance(page.column_groups, dict) else None,
+        )
+    )
 
 
 # ---------------------------------------------------------------------------
 # Bug #1 regression — narrowed drc col_token must look up the parent
 # ActivityValue in raw["activity"], not the narrowed key.
 # ---------------------------------------------------------------------------
+
 
 def test_activity_parent_token_strips_intercept_suffix():
     """_activity_parent_token must strip kind+level from a narrowed drc token."""
@@ -202,15 +209,31 @@ def test_cell_value_narrowed_drc_resolves_intercept():
                 "at_bound": False,
             },
         ],
-        "curve_params": {"hill_slope": 1.2, "top": 100.0, "bottom": 0.0,
-                         "num_points": 8, "curve_class": "active",
-                         "confidence_interval_low": None,
-                         "confidence_interval_high": None,
-                         "fit_quality_warnings": None},
+        "curve_params": {
+            "hill_slope": 1.2,
+            "top": 100.0,
+            "bottom": 0.0,
+            "num_points": 8,
+            "curve_class": "active",
+            "confidence_interval_low": None,
+            "confidence_interval_high": None,
+            "fit_quality_warnings": None,
+        },
         "run_count": 1,
         "selection_rule": None,
         "runs": None,
-        "intercept_aggregates": None,
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ec", "level": 50.0},
+                "selected_value": 1.23,
+                "selected_qualifier": "=",
+            },
+            {
+                "spec": {"kind": "ec", "level": 90.0},
+                "selected_value": 4.56,
+                "selected_qualifier": "=",
+            },
+        ],
         "disagreement_flag": False,
         "additional_curves": None,
         "aggregate": None,
@@ -220,7 +243,7 @@ def test_cell_value_narrowed_drc_resolves_intercept():
 
     spec = ColumnSpec(key=narrowed_key, header="Mtb::EC50", kind="number", unit="uM")
     assert _cell_value(spec, raw) == 1.23, (
-        "Bug #1: _cell_value should have found the EC50 intercept_values entry "
+        "Bug #1: _cell_value should have found the EC50 intercept aggregate "
         "via the parent token 'drc:<rd_id>', not the narrowed 'drc:<rd_id>:ec:50.0'"
     )
 
@@ -243,21 +266,34 @@ def test_cell_value_narrowed_drc_qualifier_column():
                 "at_bound": False,
             },
         ],
-        "curve_params": {"hill_slope": 0.0, "top": 0.0, "bottom": 0.0,
-                         "num_points": 6, "curve_class": "inactive",
-                         "confidence_interval_low": None,
-                         "confidence_interval_high": None,
-                         "fit_quality_warnings": None},
+        "curve_params": {
+            "hill_slope": 0.0,
+            "top": 0.0,
+            "bottom": 0.0,
+            "num_points": 6,
+            "curve_class": "inactive",
+            "confidence_interval_low": None,
+            "confidence_interval_high": None,
+            "fit_quality_warnings": None,
+        },
         "run_count": 1,
         "selection_rule": None,
         "runs": None,
-        "intercept_aggregates": None,
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ic", "level": 50.0},
+                "selected_value": None,
+                "selected_qualifier": "nd",
+            }
+        ],
         "disagreement_flag": False,
         "additional_curves": None,
         "aggregate": None,
     }
     raw = {"activity": {parent_key: av}}
-    spec = ColumnSpec(key=f"drc:{rd_id}:ic:50.0::qualifier", header="Mtb::IC50::qualifier", kind="qualifier")
+    spec = ColumnSpec(
+        key=f"drc:{rd_id}:ic:50.0::qualifier", header="Mtb::IC50::qualifier", kind="qualifier"
+    )
     # intercept_values[0].value is None and at_bound is False → ND
     assert _cell_value(spec, raw) == "ND"
 
@@ -265,6 +301,7 @@ def test_cell_value_narrowed_drc_qualifier_column():
 # ---------------------------------------------------------------------------
 # reportConfig honoring — columns reflect visibleFields
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_report_config_visible_fields_trims_property_columns():
@@ -298,12 +335,16 @@ async def test_report_config_visible_fields_trims_property_columns():
     )
     await stream.total_count()
     keys = [c.key for c in stream.columns]
-    assert "structure" in keys, "structure column must be emitted when visibleFields.structure includes 'structure'"
+    assert "structure" in keys, (
+        "structure column must be emitted when visibleFields.structure includes 'structure'"
+    )
     assert "registration_number" in keys
     assert "name" in keys
     assert "logp" in keys
     assert "tpsa" in keys
-    assert "molecular_weight" not in keys, "MW must be dropped when not in visibleFields.properties"
+    assert "molecular_weight" not in keys, (
+        "MW must be dropped when not in visibleFields.properties"
+    )
     # The structure column should be of the new image_structure kind so the
     # XLSX/PDF renderer knows to embed a PNG.
     structure_col = next(c for c in stream.columns if c.key == "structure")
@@ -327,8 +368,16 @@ async def test_report_config_omitted_falls_back_to_legacy_columns():
     await stream.total_count()
     keys = {c.key for c in stream.columns}
     assert keys == {
-        "registration_number", "name", "smiles", "inchi_key",
-        "molecular_formula", "molecular_weight", "logp", "hbd", "hba", "tpsa",
+        "registration_number",
+        "name",
+        "smiles",
+        "inchi_key",
+        "molecular_formula",
+        "molecular_weight",
+        "logp",
+        "hbd",
+        "hba",
+        "tpsa",
     }
 
 
@@ -337,16 +386,31 @@ async def test_report_config_omitted_falls_back_to_legacy_columns():
 # sub-columns. Plot column carries the protocol-group label.
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.asyncio
 async def test_intercepts_collapse_to_one_column_per_label():
     workspace = uuid.uuid4()
     rd_id = uuid.uuid4()
 
-    ic_ec50 = MagicMock(); ic_ec50.kind.value = "ec"; ic_ec50.level = 50.0; ic_ec50.label = None
-    ic_ec90 = MagicMock(); ic_ec90.kind.value = "ec"; ic_ec90.level = 90.0; ic_ec90.label = None
-    drc_cfg = MagicMock(); drc_cfg.intercepts = [ic_ec50, ic_ec90]
-    rd = MagicMock(); rd.id = rd_id; rd.name = "Resazurin"; rd.unit = "µM"; rd.dose_response_config = drc_cfg
-    proto = MagicMock(); proto.id = uuid.uuid4(); proto.name = "Mtb_WCA"; proto.readout_definitions = [rd]
+    ic_ec50 = MagicMock()
+    ic_ec50.kind.value = "ec"
+    ic_ec50.level = 50.0
+    ic_ec50.label = None
+    ic_ec90 = MagicMock()
+    ic_ec90.kind.value = "ec"
+    ic_ec90.level = 90.0
+    ic_ec90.label = None
+    drc_cfg = MagicMock()
+    drc_cfg.intercepts = [ic_ec50, ic_ec90]
+    rd = MagicMock()
+    rd.id = rd_id
+    rd.name = "Resazurin"
+    rd.unit = "µM"
+    rd.dose_response_config = drc_cfg
+    proto = MagicMock()
+    proto.id = uuid.uuid4()
+    proto.name = "Mtb_WCA"
+    proto.readout_definitions = [rd]
     proto.code = None
     proto.dose_unit = "uM"  # potencies are labelled with the protocol dose unit
 
@@ -366,8 +430,7 @@ async def test_intercepts_collapse_to_one_column_per_label():
     assert plot_cols[0].group == "Mtb_WCA"
 
     intercept_cols = [
-        c for c in stream.columns
-        if c.key.startswith(f"drc:{rd_id}:") and c not in plot_cols
+        c for c in stream.columns if c.key.startswith(f"drc:{rd_id}:") and c not in plot_cols
     ]
     # Only ::value suffix should be present for the intercepts.
     suffixes = {c.key.rsplit("::", 1)[1] for c in intercept_cols}
@@ -378,40 +441,26 @@ async def test_intercepts_collapse_to_one_column_per_label():
 
 
 # ---------------------------------------------------------------------------
-# _display_value chemist-mirror — inactive → "ND", at_bound → ">value",
+# _display chemist-mirror — inactive → "ND", at_bound → ">value",
 # scalar → number.
 # ---------------------------------------------------------------------------
 
-def test_cell_value_inactive_shows_nd_text():
-    from cellar.application.export.row_streams.search_results import _display_value
-    iv_inactive = {"value": None, "at_bound": False,
-                   "spec": {"kind": "ec", "level": 50.0}}
-    assert _display_value({}, iv_inactive) == "ND"
 
+def test_display_shows_nd_bounds_and_numbers():
+    from cellar.application.export.row_streams.search_results import _display
 
-def test_cell_value_at_bound_shows_gt_value():
-    from cellar.application.export.row_streams.search_results import _display_value
-    iv_at_bound = {"value": 100.0, "at_bound": True,
-                   "spec": {"kind": "ec", "level": 50.0}}
-    assert _display_value({}, iv_at_bound) == ">100.0"
-
-
-def test_cell_value_active_returns_scalar():
-    from cellar.application.export.row_streams.search_results import _display_value
-    iv_eq = {"value": 67.4, "at_bound": False,
-             "spec": {"kind": "ec", "level": 50.0}}
-    assert _display_value({}, iv_eq) == 67.4
-
-
-def test_cell_value_legacy_inactive_fallback():
-    from cellar.application.export.row_streams.search_results import _display_value
-    av = {"value": None, "curve_params": {"curve_class": "inactive"}}
-    assert _display_value(av, None) == "ND"
+    assert _display(None, "nd") == "ND"
+    assert _display(100.0, ">") == ">100.0"
+    assert _display(0.1, "<") == "<0.1"
+    assert _display(67.4, "=") == 67.4
+    assert _display(67.4, None) == 67.4
+    assert _display(None, None) is None
 
 
 # ---------------------------------------------------------------------------
 # Format hint forces SMILES on for CSV/SDF even when chemist hid it.
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.asyncio
 async def test_csv_format_forces_smiles_on():
@@ -424,9 +473,11 @@ async def test_csv_format_forces_smiles_on():
             "protocol_columns": [],
             "reportConfig": {
                 "visibleFields": {
-                    "structure": ["registration_number"],   # SMILES intentionally hidden
-                    "properties": [], "molecule": [],
-                    "collections": False, "protocols": {},
+                    "structure": ["registration_number"],  # SMILES intentionally hidden
+                    "properties": [],
+                    "molecule": [],
+                    "collections": False,
+                    "protocols": {},
                 },
             },
         },
@@ -451,8 +502,10 @@ async def test_pdf_format_honors_smiles_hidden():
             "reportConfig": {
                 "visibleFields": {
                     "structure": ["structure", "registration_number"],
-                    "properties": [], "molecule": [],
-                    "collections": False, "protocols": {},
+                    "properties": [],
+                    "molecule": [],
+                    "collections": False,
+                    "protocols": {},
                 },
             },
         },
@@ -472,12 +525,35 @@ def test_any_token_expands_to_one_text_column():
 
 def test_cell_value_any_joins_entries():
     spec = ColumnSpec(key="any::text", header="Active in", kind="text")
-    raw = {"activity": {"any": {"entries": [
-        {"protocol_name": "Beta", "label": "IC50", "value": 5.0, "unit": "nM", "qualifier": None},
-        {"protocol_name": "Alpha", "label": "IC50", "value": 5.0, "unit": "uM", "qualifier": ">"},
-        {"protocol_name": "Gamma", "label": "% Inhibition", "value": None, "unit": "%",
-         "qualifier": None},
-    ]}}}
+    raw = {
+        "activity": {
+            "any": {
+                "entries": [
+                    {
+                        "protocol_name": "Beta",
+                        "label": "IC50",
+                        "value": 5.0,
+                        "unit": "nM",
+                        "qualifier": None,
+                    },
+                    {
+                        "protocol_name": "Alpha",
+                        "label": "IC50",
+                        "value": 5.0,
+                        "unit": "uM",
+                        "qualifier": ">",
+                    },
+                    {
+                        "protocol_name": "Gamma",
+                        "label": "% Inhibition",
+                        "value": None,
+                        "unit": "%",
+                        "qualifier": None,
+                    },
+                ]
+            }
+        }
+    }
     assert _cell_value(spec, raw) == "Beta: IC50 5 nM; Alpha: IC50 >5 uM; Gamma: % Inhibition —"
 
 
@@ -548,3 +624,92 @@ async def test_protocol_column_group_carries_the_code():
     value_col = next(c for c in stream.columns if c.key.endswith("::value"))
     assert value_col.group == "PRT-00042 PptT inhibition [FP]"
     assert value_col.flat_header == "IC50 (uM) [PRT-00042]"
+
+
+@pytest.mark.asyncio
+async def test_split_protocol_exports_one_column_set_per_group():
+    rd_id, proto_id = uuid.uuid4(), uuid.uuid4()
+    rd = MagicMock(id=rd_id, unit="µM", dose_response_config=None)
+    rd.name = "MIC"
+    proto = MagicMock(id=proto_id, code=None, readout_definitions=[rd])
+    proto.name = "Mtb WCA"
+    token = f"rd:{proto_id}:{rd_id}"
+    groups = {
+        str(proto_id): {
+            "split": {"by": "condition", "condition": "ATP"},
+            "groups": [
+                {
+                    "key": "cond:10 µM",
+                    "label": "10 µM",
+                    "run_ids": [],
+                    "run_count": 1,
+                    "flags": [],
+                },
+                {"key": "cond:1 mM", "label": "1 mM", "run_ids": [], "run_count": 1, "flags": []},
+            ],
+        }
+    }
+    page = MagicMock(items=[_mol("CV-1")], next_cursor=None, total_count=1, column_groups=groups)
+    stream = SearchResultsRowStream(
+        workspace_id=uuid.uuid4(),
+        payload={
+            "query": {"criteria": []},
+            "protocol_columns": [token],
+            "sort_by": token,
+            "sort_dir": "desc",
+        },
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[proto]),
+        requested_by=uuid.uuid4(),
+    )
+    await stream.total_count()
+
+    split = [c for c in stream.columns if c.key.startswith(token)]
+    assert [(c.key, c.group) for c in split] == [
+        (f"{token}@cond:10 µM::value", "Mtb WCA · 10 µM"),
+        (f"{token}@cond:1 mM::value", "Mtb WCA · 1 mM"),
+    ]
+    raw = {"activity": {f"{token}@cond:1 mM": {"value": 4.0, "qualifier": None, "unit": "µM"}}}
+    assert _cell_value(split[1], raw) == 4.0
+    assert _cell_value(split[0], raw) is None
+    cmd = stream.execute_search.await_args.args[0]
+    assert (cmd.sort_by, cmd.sort_dir) == (token, "desc")
+
+
+def test_single_point_cell_exports_its_qualifier_and_nd():
+    spec = ColumnSpec(key="rd:p:rd::value", header="MIC", kind="number")
+    assert (
+        _cell_value(spec, {"activity": {"rd:p:rd": {"value": 50.0, "qualifier": ">"}}}) == ">50.0"
+    )
+    assert _cell_value(spec, {"activity": {"rd:p:rd": {"value": None, "qualifier": "nd"}}}) == "ND"
+    assert _cell_value(spec, {"activity": {"rd:p:rd": {"value": 12.5, "qualifier": None}}}) == 12.5
+
+
+def test_intercept_cell_exports_the_value_the_grid_shows():
+    spec = ColumnSpec(key="drc:rd:ic:50.0::value", header="IC50", kind="number")
+    av = {
+        "value": 30.0,
+        "qualifier": None,
+        # The representative curve's own intercept…
+        "intercept_values": [{"spec": {"kind": "ic", "level": 50.0}, "value": 5.0}],
+        # …is not what a mean cell shows: the selected aggregate is.
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ic", "level": 50.0},
+                "selected_value": 30.0,
+                "selected_qualifier": "=",
+            }
+        ],
+    }
+    assert _cell_value(spec, {"activity": {"drc:rd": av}}) == 30.0
+    gt = {
+        **av,
+        "intercept_aggregates": [
+            {
+                "spec": {"kind": "ic", "level": 50.0},
+                "selected_value": 100.0,
+                "selected_qualifier": ">",
+            }
+        ],
+    }
+    assert _cell_value(spec, {"activity": {"drc:rd": gt}}) == ">100.0"

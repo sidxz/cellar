@@ -16,7 +16,11 @@ import { useProjects } from "../hooks/use-projects";
 import { useReportConfig } from "../hooks/use-report-config";
 import { useSavedSearches } from "../hooks/use-saved-searches";
 import { type EnrichedSearchResponse, useExecuteSearch } from "../hooks/use-search";
-import { toBackendProtocolColumns, uniqueProtocolIds } from "../lib/protocol-column-id";
+import {
+  hasOverlayablePlots,
+  toBackendProtocolColumns,
+  uniqueProtocolIds,
+} from "../lib/protocol-column-id";
 import {
   AGGREGATION_LABELS,
   aggregationModeToWire,
@@ -27,6 +31,7 @@ import {
 import type { AggregationMode } from "../lib/use-aggregation-mode";
 import {
   type ActivityValue,
+  type ProtocolColumnGroups,
   type SavedSearch,
   type SearchQuery,
   type SortDir,
@@ -61,9 +66,14 @@ interface SearchState {
   results: EnrichedMolecule[];
   nextCursor: string | null;
   totalCount: number | null;
+  /** Split protocols' column groups — the same on every page of a search. */
+  columnGroups: Record<string, ProtocolColumnGroups> | null;
   hasSearched: boolean;
   selectedMolecule: EnrichedMolecule | null;
   selectedIndex: number;
+  /** The grid column the drawer was opened from; it opens a split protocol on
+   *  that column's group and keeps it while stepping through compounds. */
+  focusColumn: string | null;
   sortBy: SortField | undefined;
   sortDir: SortDir;
   gridSelectedIds: Set<string>;
@@ -82,6 +92,7 @@ type SearchAction =
       results: EnrichedMolecule[];
       nextCursor: string | null;
       totalCount: number | null;
+      columnGroups: Record<string, ProtocolColumnGroups> | null;
     }
   | {
       type: "loadMoreComplete";
@@ -91,7 +102,7 @@ type SearchAction =
     }
   | { type: "setSort"; sortBy: SortField | undefined; sortDir: SortDir }
   | { type: "setGridSelection"; ids: Set<string> }
-  | { type: "select"; molecule: EnrichedMolecule; index: number }
+  | { type: "select"; molecule: EnrichedMolecule; index: number; column: string | null }
   | { type: "navigate"; index: number; molecule: EnrichedMolecule | null }
   | { type: "clearSelection" };
 
@@ -102,9 +113,11 @@ const initialSearchState: SearchState = {
   results: [],
   nextCursor: null,
   totalCount: null,
+  columnGroups: null,
   hasSearched: false,
   selectedMolecule: null,
   selectedIndex: 0,
+  focusColumn: null,
   sortBy: undefined,
   sortDir: "asc",
   gridSelectedIds: new Set(),
@@ -130,6 +143,7 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
         results: action.results,
         nextCursor: action.nextCursor,
         totalCount: action.totalCount,
+        columnGroups: action.columnGroups,
       };
     case "loadMoreComplete":
       return {
@@ -143,7 +157,12 @@ function searchReducer(state: SearchState, action: SearchAction): SearchState {
     case "setGridSelection":
       return { ...state, gridSelectedIds: action.ids };
     case "select":
-      return { ...state, selectedMolecule: action.molecule, selectedIndex: action.index };
+      return {
+        ...state,
+        selectedMolecule: action.molecule,
+        selectedIndex: action.index,
+        focusColumn: action.column,
+      };
     case "navigate":
       return {
         ...state,
@@ -188,9 +207,11 @@ function SearchPageInner() {
       results,
       nextCursor,
       totalCount,
+      columnGroups,
       hasSearched,
       selectedMolecule,
       selectedIndex,
+      focusColumn,
       sortBy,
       sortDir,
       gridSelectedIds,
@@ -287,13 +308,21 @@ function SearchPageInner() {
   // Commit rows and their query together. Request versions also invalidate
   // responses after Reset or a newer search, including saved-search handoffs.
   const { mutateAsync } = searchMutation;
+  // The sort the last request ran with; header clicks re-run when it changes.
+  const previousSortRef = useRef({ sortBy, sortDir });
   const executeRequest = useCallback(
     function run(
       query: SearchQuery,
       columns: string[],
       mode: AggregationMode,
-      options: { cursor?: string; collapse?: boolean } = {},
+      options: {
+        cursor?: string;
+        collapse?: boolean;
+        /** Overrides the current sort (an explicit "unsorted" included). */
+        sort?: { sortBy: SortField | undefined; sortDir: SortDir };
+      } = {},
     ) {
+      const sort = options.sort ?? { sortBy, sortDir };
       const version = ++requestVersion.current;
       const startingDraft = draftQuery.current ? searchQueryKey(draftQuery.current) : null;
       setSearchPending(true);
@@ -312,8 +341,8 @@ function SearchPageInner() {
         },
         limit: SEARCH_PAGE_SIZE,
         cursor: options.cursor,
-        sort_by: sortBy,
-        sort_dir: sortDir,
+        sort_by: sort.sortBy,
+        sort_dir: sort.sortDir,
       })
         .then((data) => {
           if (version !== requestVersion.current) return;
@@ -329,6 +358,7 @@ function SearchPageInner() {
               query,
               protocolColumns: columns,
               aggregation: mode,
+              columnGroups: data.column_groups ?? null,
               ...payload,
             });
           if (
@@ -342,6 +372,29 @@ function SearchPageInner() {
         })
         .catch((error: unknown) => {
           if (version !== requestVersion.current) return;
+          // A ranked page's cursor row vanished (data changed since page 1):
+          // the ranking is stale, so start the search over.
+          if (
+            options.cursor &&
+            error instanceof Error &&
+            error.message.includes("run the search again")
+          ) {
+            run(query, columns, mode, {});
+            return;
+          }
+          // The new search no longer has the column the grid was sorted by:
+          // drop the sort and run it in the default order.
+          if (
+            sort.sortBy &&
+            error instanceof Error &&
+            error.message.includes("Unknown sort column")
+          ) {
+            const unsorted = { sortBy: undefined, sortDir: "asc" as SortDir };
+            previousSortRef.current = unsorted;
+            dispatch({ type: "setSort", ...unsorted });
+            run(query, columns, mode, { ...options, sort: unsorted });
+            return;
+          }
           setSearchError(
             error instanceof Error
               ? error.message.replace(/^API error: \d+ — /, "")
@@ -376,6 +429,17 @@ function SearchPageInner() {
   const handleSetProtocolColumns = useCallback((next: string[]) => {
     setReportColumns(next);
   }, []);
+
+  // A header click sorts the WHOLE result set on the server: re-run from page 1.
+  const handleSortChange = useCallback((next: SortField | undefined, dir: SortDir) => {
+    dispatch({ type: "setSort", sortBy: next, sortDir: dir });
+  }, []);
+  useEffect(() => {
+    const previous = previousSortRef.current;
+    if (previous.sortBy === sortBy && previous.sortDir === sortDir) return;
+    previousSortRef.current = { sortBy, sortDir };
+    if (currentQuery) executeRequest(currentQuery, protocolColumns, executedAggregation);
+  }, [sortBy, sortDir, currentQuery, protocolColumns, executedAggregation, executeRequest]);
 
   const previousAggregationModeRef = useRef(aggregationMode);
   useEffect(() => {
@@ -544,9 +608,9 @@ function SearchPageInner() {
 
   // ── Row click -> detail panel ──────────────────────────────────────────
   const handleRowClick = useCallback(
-    (molecule: EnrichedMolecule) => {
+    (molecule: EnrichedMolecule, colId?: string) => {
       const idx = results.findIndex((m) => m.id === molecule.id);
-      dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0 });
+      dispatch({ type: "select", molecule, index: idx >= 0 ? idx : 0, column: colId ?? null });
     },
     [results],
   );
@@ -631,6 +695,8 @@ function SearchPageInner() {
           <ResultsGrid
             results={results}
             protocolColumns={protocolColumns}
+            columnGroups={columnGroups}
+            onSortChange={handleSortChange}
             protocols={protocols ?? []}
             reportConfig={reportConfig}
             loading={searchPending && !currentQuery}
@@ -674,7 +740,7 @@ function SearchPageInner() {
                 scopeForcesSingleRun={scopeForcesSingleRun}
                 busy={searchPending}
                 hasAssays={protocolColumns.length > 0}
-                hasCurves={protocolColumns.some((column) => column.startsWith("drc:"))}
+                canOverlay={hasOverlayablePlots(protocolColumns, protocols ?? [], columnGroups)}
               />
             }
             selectionActions={
@@ -735,6 +801,7 @@ function SearchPageInner() {
           loading={searchPending}
           protocols={protocols ?? []}
           protocolColumns={protocolColumns}
+          columnGroups={columnGroups}
           mode={executedAggregation}
           onClose={() => setCompareOpen(false)}
         />
@@ -749,7 +816,8 @@ function SearchPageInner() {
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
         onOpenChange={(open) => !open && dispatch({ type: "clearSelection" })}
-        currentQuery={currentQuery}
+        columnGroups={columnGroups}
+        focusColumn={focusColumn}
         aggregationMode={executedAggregation}
       />
 

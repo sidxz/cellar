@@ -1,7 +1,7 @@
 "use client";
 
 import { create } from "zustand";
-import type { ReportConfig, VisibleFields } from "../types";
+import type { PlotLayout, ReportConfig, VisibleFields } from "../types";
 
 // Default property columns: Lipinski Rule of Five essentials (MW, LogP, HBD,
 // HBA) plus Veber's TPSA. Single-glance druglikeness scan that med-chem users
@@ -14,8 +14,9 @@ const DEFAULT_VISIBLE_FIELDS: VisibleFields = {
 };
 
 const DEFAULT_CONFIG: ReportConfig = {
-  imageSize: "small",
-  displayPreset: "compact",
+  imageSize: "medium",
+  displayPreset: "detailed",
+  plotLayout: "side_by_side",
   visibleFields: DEFAULT_VISIBLE_FIELDS,
 };
 
@@ -47,7 +48,9 @@ export const useReportConfig = create<ReportConfigState>((set) => ({
     set({
       config: {
         imageSize: partial.imageSize ?? DEFAULT_CONFIG.imageSize,
-        displayPreset: partial.displayPreset ?? "curves",
+        // The old Structure and Curves displays both became Detailed.
+        displayPreset: partial.displayPreset === "compact" ? "compact" : "detailed",
+        plotLayout: partial.plotLayout === "overlay" ? "overlay" : "side_by_side",
         visibleFields: {
           structure: partial.visibleFields?.structure ?? DEFAULT_VISIBLE_FIELDS.structure,
           properties: partial.visibleFields?.properties ?? DEFAULT_VISIBLE_FIELDS.properties,
@@ -57,3 +60,11 @@ export const useReportConfig = create<ReportConfigState>((set) => ({
     });
   },
 }));
+
+/** The layout the grid draws: overlaid only in the Detailed display, the one
+ *  place plots show — elsewhere the group headers carry no colour key. */
+export function shownPlotLayout(config: ReportConfig): PlotLayout {
+  return (config.displayPreset ?? "detailed") === "detailed"
+    ? (config.plotLayout ?? "side_by_side")
+    : "side_by_side";
+}

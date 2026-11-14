@@ -33,7 +33,7 @@ def test_channel_label_stripped():
         protocol_id=uuid.uuid4(),
         readout_definition_id=uuid.uuid4(),
         source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-        selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+        selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
     )
@@ -80,7 +80,7 @@ def test_channel_resolve_from_all_runs_defaults_false_and_round_trips():
             protocol_id=uuid.uuid4(),
             readout_definition_id=uuid.uuid4(),
             source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
             display_order=0,
             **kw,

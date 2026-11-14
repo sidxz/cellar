@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import {
+  AGGREGATION_DESCRIPTIONS,
   AGGREGATION_LABELS,
   AGGREGATION_MODES,
   type AggregationMode,
@@ -68,7 +69,12 @@ export function AggregationControl({ mode, onChange, disabled, busy }: Aggregati
         </SelectTrigger>
         <SelectContent>
           {AGGREGATION_MODES.map((m) => (
-            <SelectItem key={m} value={m} className="text-xs">
+            <SelectItem
+              key={m}
+              value={m}
+              className="text-xs"
+              description={AGGREGATION_DESCRIPTIONS[m]}
+            >
               {AGGREGATION_LABELS[m]}
             </SelectItem>
           ))}

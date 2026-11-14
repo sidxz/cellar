@@ -6,11 +6,13 @@ import type { CurveClass, TargetRef } from "@/features/screening-assay/types";
 import type {
   CollectionResponse,
   CollectionType,
+  ColumnGroupResponse,
   MembershipResultResponse,
   MoleculeReferenceBody,
   ProjectMemberResponse,
   ProjectResponse,
   ProjectStatus,
+  ProtocolColumnGroupsResponse,
   SavedSearchResponse,
   SearchVisibility,
   SelectionRule,
@@ -270,6 +272,13 @@ export type RunScope =
 
 export type RunScopeMode = RunScope["mode"];
 
+/** Wire shape of `ActivityCriterion.split` (BE `ColumnSplit.from_wire`). */
+export type ColumnSplitWire = { by: "run" } | { by: "condition"; condition: string };
+
+/** A split protocol's side-by-side column groups (BE response `column_groups`). */
+export type ProtocolColumnGroups = ProtocolColumnGroupsResponse;
+export type ColumnGroup = ColumnGroupResponse;
+
 /** Bare `InterceptKey` mirror — see ``CurveInterceptSpec`` below for the
  *  full spec. The where-condition only needs (kind, level) to disambiguate
  *  which intercept on a multi-intercept DR readout it's filtering on. */
@@ -329,6 +338,10 @@ export interface ActivityCriterion {
   where?: ActivityWhereCondition[];
   /** Run scope. Omit (or {mode:"any"}) for cross-run match — the default. */
   run_scope?: RunScope;
+  /** Optional side-by-side split of this protocol's result columns. Omit for
+   *  today's one-value-per-readout columns. "run" uses the hand-picked runs of
+   *  a `specific` run scope; "condition" groups runs by one run condition. */
+  split?: ColumnSplitWire;
   /** Single-where shape. The composer normalizes it to a single-element
    *  where list — useful for saved searches stored from the old UI. */
   source?: ActivityWhereSource;
@@ -432,15 +445,10 @@ export interface SearchQuery {
   logic?: "and" | "or";
 }
 
-export type SortField =
-  | "name"
-  | "registration_number"
-  | "molecular_weight"
-  | "logp"
-  | "tpsa"
-  | "hbd"
-  | "hba"
-  | "created_at";
+/** A backend sort token: a molecule column, `similarity`, or an activity
+ *  column (`drc:…`, `rd:…`, `any`, optionally `@<group>`). See
+ *  `lib/search-sort.ts`. */
+export type SortField = string;
 export type SortDir = "asc" | "desc";
 
 export interface ExecuteSearchInput {
@@ -448,7 +456,7 @@ export interface ExecuteSearchInput {
   saved_search_id?: string;
   protocol_columns?: string[];
   /** Multi-run aggregation rule. Omitted -> BE default
-   *  (`latest_approved_run`). Drives how `_intercept_scalar` collapses
+   *  (`latest_run`). Drives how `_intercept_scalar` collapses
    *  per-(compound, intercept) rows across all in-scope runs. */
   aggregation?: SelectionRule;
 }
@@ -465,13 +473,16 @@ export interface AggregateStats {
 export interface RunSummary {
   run_id: string;
   run_date: string;
-  curve_id: string;
+  /** Null for single-point readouts and reported endpoints (no fit). */
+  curve_id: string | null;
   curve_class: string | null;
   r_squared: number | null;
   intercept_values: Array<{
-    spec: { kind: string; level: number };
+    spec: { kind: string; level?: number; label?: string };
     value: number | null;
     at_bound?: boolean;
+    /** Single-point runs: "=" | "<" | ">" | "nd". */
+    qualifier?: string;
   }>;
 }
 
@@ -529,13 +540,18 @@ export interface ActivityValue {
   /** Non-representative contributing curves in aggregate modes
    *  (MEAN_ACROSS_RUNS / GEOMETRIC_MEAN). The cell's chart overlays them
    *  muted underneath the representative curve. Absent on
-   *  LATEST_APPROVED_RUN / BEST_R_SQUARED. Mirrors CurveSnapshot's field. */
+   *  LATEST_RUN / BEST_R_SQUARED. Mirrors CurveSnapshot's field. */
   additional_curves?: AdditionalCurve[] | null;
   /** Aggregate marker — present only on MEAN_ACROSS_RUNS / GEOMETRIC_MEAN
    *  cells. The chart draws a single vertical line at marker_x and
    *  suppresses the per-curve intercept dashed lines (per-run fitted_values
    *  don't equal the cell value in aggregate modes). Mirrors CurveSnapshot. */
   aggregate?: AggregateMarker | null;
+  /** The curve the cell's value comes from (null for single-point and
+   *  reported values) — surfaces that draw the cell's curve mark it by id. */
+  representative_curve_id?: string | null;
+  /** Every in-scope run that was a candidate for this cell, newest first. */
+  run_ids?: string[] | null;
 }
 
 // ─── "any" column — CLIENT-SIDE narrowing, NOT a DTO alias ─────────────────
@@ -586,10 +602,17 @@ export type ImageSize = "small" | "medium" | "large";
 /** What the results grid + exports show. Every key here is honored by both
  *  the on-screen grid and the export column builder — options that only one
  *  side understood used to sit in the customizer doing nothing. */
-export type SearchDisplayPreset = "compact" | "structure" | "curves";
+/** Compact: dense rows, values only. Detailed: larger structures, curve
+ *  plots and run dates. */
+export type SearchDisplayPreset = "compact" | "detailed";
+
+/** How a split protocol's curves are drawn: one plot per group, or every
+ *  group's curve overlaid in one plot. */
+export type PlotLayout = "side_by_side" | "overlay";
 
 export interface ReportConfig {
   displayPreset?: SearchDisplayPreset;
+  plotLayout?: PlotLayout;
   imageSize: ImageSize;
   visibleFields: VisibleFields;
 }

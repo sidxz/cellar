@@ -36,6 +36,8 @@
  */
 import { narrowInterceptKey } from "@/features/screening-assay/lib/intercept-label";
 import type { InterceptKey, Protocol } from "@/features/screening-assay/types";
+import { MAX_OVERLAY_CURVES } from "@structflo/components/dose-response";
+import type { ProtocolColumnGroups } from "../types";
 
 // ─── Formatters (paired with the resolver below) ───────────────────────────
 
@@ -228,4 +230,24 @@ export function toBackendProtocolColumns(protocolColumns: string[]): string[] {
     }
   }
   return out;
+}
+
+/** A split protocol whose groups fit one overlay: at least one group, and
+ *  no more than the overlay can colour distinctly. */
+export function canOverlaySplit(split: ProtocolColumnGroups | null | undefined): boolean {
+  const n = split?.groups.length ?? 0;
+  return n > 0 && n <= MAX_OVERLAY_CURVES;
+}
+
+/** True when a split protocol in these results has a dose-response column
+ *  and few enough groups to overlay, so the Overlay switch would change
+ *  something. */
+export function hasOverlayablePlots(
+  protocolColumns: string[],
+  protocols: Protocol[],
+  columnGroups?: Record<string, ProtocolColumnGroups> | null,
+): boolean {
+  return resolveColumns(protocolColumns, protocols).some(
+    (c) => c.prefix === "drc" && canOverlaySplit(columnGroups?.[c.protocolId]),
+  );
 }

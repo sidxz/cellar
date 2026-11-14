@@ -27,6 +27,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
+    not_in_rejected_run,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ProtocolModel,
@@ -184,6 +187,8 @@ def _selectivity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> C
             t.readout_definition_id == target_rd,
             c.workspace_id == workspace_id,
             c.readout_definition_id == counter_rd,
+            not_in_rejected_run(t.run_id, workspace_id),
+            not_in_rejected_run(c.run_id, workspace_id),
             ratio_cond,
         )
     )

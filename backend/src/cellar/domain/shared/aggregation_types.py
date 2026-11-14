@@ -30,7 +30,7 @@ from enum import StrEnum
 class SelectionRule(StrEnum):
     """How to collapse multiple runs of the same (compound, intercept) pair."""
 
-    LATEST_APPROVED_RUN = "latest_approved_run"
+    LATEST_RUN = "latest_run"
     MEAN_ACROSS_RUNS = "mean_across_runs"
     GEOMETRIC_MEAN = "geometric_mean"
     MANUAL_PICK = "manual_pick"

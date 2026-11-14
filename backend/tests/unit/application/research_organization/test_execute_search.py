@@ -85,10 +85,12 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=None,
+            cursor=None,
         )
 
-        with patch.object(saved_search, "record_execution", wraps=saved_search.record_execution) as mock_record:
+        with patch.object(
+            saved_search, "record_execution", wraps=saved_search.record_execution
+        ) as mock_record:
             result = await uc(query, auth=auth)
 
         assert isinstance(result, Success)
@@ -122,7 +124,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=None,
+            cursor=None,
         )
 
         result = await uc(query, auth=auth)
@@ -155,7 +157,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=uuid.uuid4(),  # Subsequent page
+            cursor=str(uuid.uuid4()),  # Subsequent page
         )
 
         with patch.object(saved_search, "record_execution") as mock_record:
@@ -187,7 +189,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             query={"keyword": "test"},
-            cursor_id=None,
+            cursor=None,
         )
 
         result = await uc(query, auth=auth)
@@ -224,7 +226,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=None,
+            cursor=None,
         )
 
         result = await uc(query, auth=auth)
@@ -232,3 +234,39 @@ class TestExecuteSearchRecordExecution:
         assert isinstance(result, Success)
         page = result.unwrap()
         assert page.total_count == 10
+
+
+class TestRankedPagingReusesTheRanking:
+    """One ExecuteSearch instance (an export walking its pages) ranks once."""
+
+    @pytest.mark.asyncio
+    async def test_pages_of_one_sorted_search_rank_once(self) -> None:
+        ws_id = uuid.uuid4()
+        ids = [uuid.uuid4() for _ in range(5)]
+        mol_reader = AsyncMock()
+        mol_reader.ranked_ids_by_query = AsyncMock(return_value=[(i, None) for i in ids])
+        mol_reader.find_by_ids_ordered = AsyncMock(
+            side_effect=lambda ws, page: [type("M", (), {"id": i})() for i in page]
+        )
+        uc = ExecuteSearch(
+            uow=FakeUnitOfWork(), molecule_reader=mol_reader, saved_search_repo=AsyncMock()
+        )
+
+        cursor = None
+        seen: list[uuid.UUID] = []
+        for _ in range(3):
+            result = await uc(
+                ExecuteSearchQuery(
+                    workspace_id=ws_id,
+                    query={"logic": "and", "criteria": []},
+                    sort_by="molecular_weight",
+                    limit=2,
+                    cursor=cursor,
+                ),
+                auth=FakeAuth(workspace_id=ws_id),
+            )
+            page = result.unwrap()
+            seen += [m.id for m in page.items]
+            cursor = page.next_cursor
+        assert seen == ids
+        assert mol_reader.ranked_ids_by_query.await_count == 1

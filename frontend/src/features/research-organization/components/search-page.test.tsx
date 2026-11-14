@@ -5,6 +5,7 @@ import type { SearchQuery } from "../types";
 
 const mocks = vi.hoisted(() => ({
   mutateAsync: vi.fn(),
+  exported: null as unknown,
   mode: "latest",
   setMode: vi.fn(),
   load: vi.fn(),
@@ -70,12 +71,18 @@ vi.mock("./search/results-grid", () => ({
     toolbarLeft,
     summary,
     footer,
+    onSortChange,
+    buildExportRequest,
+    onRowClick,
   }: {
+    onRowClick?: (row: { id: string; name: string }, colId?: string) => void;
     results: { id: string; name: string }[];
     aggregationMode: string;
     toolbarLeft: ReactNode;
     summary: ReactNode;
     footer: ReactNode;
+    onSortChange?: (sortBy: string | undefined, sortDir: "asc" | "desc") => void;
+    buildExportRequest?: (format: string) => { payload: Record<string, unknown> } | null;
   }) => (
     <div data-testid="results" data-mode={aggregationMode}>
       {toolbarLeft}
@@ -84,6 +91,20 @@ vi.mock("./search/results-grid", () => ({
         <span key={r.id}>{r.name}</span>
       ))}
       {footer}
+      <button type="button" onClick={() => onSortChange?.("drc:rd-1", "desc")}>
+        Sort IC50
+      </button>
+      <button type="button" onClick={() => onRowClick?.(results[0], "drc:rd-1:plot@cond:1 mM")}>
+        Open 1 mM plot
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          mocks.exported = buildExportRequest?.("csv") ?? null;
+        }}
+      >
+        Export CSV
+      </button>
     </div>
   ),
 }));
@@ -95,7 +116,13 @@ vi.mock("./search/results-toolbar", () => ({
   ResultsViewControls: () => null,
   ResultsSelectionActions: () => null,
 }));
-vi.mock("./search/compound-detail-sheet", () => ({ CompoundDetailSheet: () => null }));
+const sheetProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
+vi.mock("./search/compound-detail-sheet", () => ({
+  CompoundDetailSheet: (props: Record<string, unknown>) => {
+    sheetProps.push(props);
+    return null;
+  },
+}));
 vi.mock("./search/report-customizer", () => ({ ReportCustomizer: () => null }));
 vi.mock("./search/save-search-dialog", () => ({ SaveSearchDialog: () => null }));
 vi.mock("./search/search-structure-reference", () => ({ SearchStructureReference: () => null }));
@@ -201,5 +228,95 @@ describe("search result provenance", () => {
       expect(screen.getByRole("alert")).toHaveTextContent("Aggregation unavailable"),
     );
     expect(screen.getByTestId("results")).toHaveAttribute("data-mode", "latest");
+  });
+});
+
+describe("server-side sort", () => {
+  it("re-runs the search from the first page sorted by the clicked column", async () => {
+    mocks.mutateAsync
+      .mockResolvedValueOnce({ ...response("Compound A"), next_cursor: "page-2" })
+      .mockResolvedValueOnce(response("Compound B"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Sort IC50"));
+    await screen.findByText("Compound B");
+    const call = mocks.mutateAsync.mock.calls.at(-1)?.[0];
+    expect(call.cursor).toBeUndefined();
+    expect([call.sort_by, call.sort_dir]).toEqual(["drc:rd-1", "desc"]);
+  });
+
+  it("opens the drawer on the column that was clicked", async () => {
+    mocks.mutateAsync.mockResolvedValueOnce(response("Compound A"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Open 1 mM plot"));
+    expect(sheetProps.at(-1)?.focusColumn).toBe("drc:rd-1:plot@cond:1 mM");
+  });
+
+  it("keeps the sort when loading more", async () => {
+    mocks.mutateAsync
+      .mockResolvedValueOnce(response("Compound A"))
+      .mockResolvedValueOnce({ ...response("Compound B"), next_cursor: "r1:0:b" })
+      .mockResolvedValueOnce(response("Compound C"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Sort IC50"));
+    await screen.findByText("Compound B");
+    fireEvent.click(screen.getByText("Load More"));
+    await screen.findByText("Compound C");
+    const call = mocks.mutateAsync.mock.calls.at(-1)?.[0];
+    expect([call.cursor, call.sort_by]).toEqual(["r1:0:b", "drc:rd-1"]);
+  });
+
+  it("starts over when the next page's cursor no longer exists", async () => {
+    mocks.mutateAsync
+      .mockResolvedValueOnce({ ...response("Compound A"), next_cursor: "r1:0:a" })
+      .mockRejectedValueOnce(new Error("API error: 422 — Results changed — run the search again"))
+      .mockResolvedValueOnce(response("Compound Z"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Load More"));
+    await screen.findByText("Compound Z");
+    expect(mocks.mutateAsync.mock.calls.at(-1)?.[0].cursor).toBeUndefined();
+  });
+
+  it("exports with the grid's sort", async () => {
+    mocks.mutateAsync
+      .mockResolvedValueOnce(response("Compound A"))
+      .mockResolvedValueOnce(response("Compound B"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Sort IC50"));
+    await screen.findByText("Compound B");
+    fireEvent.click(screen.getByText("Export CSV"));
+    expect(mocks.exported).toMatchObject({
+      payload: { sort_by: "drc:rd-1", sort_dir: "desc" },
+    });
+  });
+});
+
+describe("sort across searches", () => {
+  it("drops a sort whose column the new search no longer has and runs it unsorted", async () => {
+    mocks.mutateAsync
+      .mockResolvedValueOnce(response("Compound A"))
+      .mockResolvedValueOnce(response("Compound B"))
+      .mockRejectedValueOnce(new Error("API error: 422 — Unknown sort column for this search"))
+      .mockResolvedValueOnce(response("Compound C"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Sort IC50"));
+    await screen.findByText("Compound B");
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound C");
+    const retried = mocks.mutateAsync.mock.calls.at(-1)?.[0];
+    expect(retried.sort_by).toBeUndefined();
+    expect(screen.queryByText("Search could not be completed")).not.toBeInTheDocument();
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(4);
   });
 });

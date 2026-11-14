@@ -2,7 +2,11 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ActivityCriterion } from "../../types";
-import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
+import {
+  type ProtocolConjunction,
+  ProtocolSection,
+  pickProtocolCriterion,
+} from "./protocol-section";
 
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocol: () => ({ data: undefined }),
@@ -74,5 +78,69 @@ describe("assay matching controls", () => {
     chooseMode("Custom logic");
     expect(screen.getByRole("combobox", { name: "Join assay 2" })).toBeVisible();
     expect(screen.getByTestId("joins")).toHaveTextContent('["or","or"]');
+  });
+});
+
+describe("pickProtocolCriterion", () => {
+  it("drops the split and hand-picked runs, which belong to the old protocol", () => {
+    const before: ActivityCriterion = {
+      type: "activity",
+      protocol_id: "p1",
+      where: [],
+      run_scope: { mode: "specific", run_ids: ["r1"] },
+      split: { by: "run" },
+    };
+    const after = pickProtocolCriterion(before, "p2");
+    expect(after.protocol_id).toBe("p2");
+    expect(after.split).toBeUndefined();
+    expect(after.run_scope).toBeUndefined();
+  });
+
+  it("keeps a run filter that isn't tied to particular runs", () => {
+    const before: ActivityCriterion = {
+      type: "activity",
+      protocol_id: "p1",
+      where: [],
+      run_scope: { mode: "latest" },
+    };
+    expect(pickProtocolCriterion(before, "p2").run_scope).toEqual({ mode: "latest" });
+  });
+});
+
+describe("two rows on one protocol", () => {
+  it("flags a second row whose run filter disagrees with the first", () => {
+    render(
+      <ProtocolSection
+        criteria={[
+          { type: "activity", protocol_id: "p1", where: [], run_scope: { mode: "latest" } },
+          { type: "activity", protocol_id: "p1", where: [] },
+        ]}
+        conjunctions={["or", "or"]}
+        protocols={[]}
+        projectIds={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.getAllByText("This protocol already has a different run filter or split above."),
+    ).toHaveLength(1);
+  });
+
+  it("doesn't flag rows that agree", () => {
+    render(
+      <ProtocolSection
+        criteria={[
+          { type: "activity", protocol_id: "p1", where: [] },
+          { type: "activity", protocol_id: "p1", where: [] },
+        ]}
+        conjunctions={["or", "or"]}
+        protocols={[]}
+        projectIds={[]}
+        onChange={() => {}}
+      />,
+    );
+    expect(
+      screen.queryByText("This protocol already has a different run filter or split above."),
+    ).toBeNull();
   });
 });

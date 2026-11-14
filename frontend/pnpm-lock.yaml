@@ -28,8 +28,8 @@ importers:
         specifier: 2025.3.4-1.0.0
         version: 2025.3.4-1.0.0
       '@structflo/components':
-        specifier: ^0.3.0
-        version: 0.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^0.4.1
+        version: 0.4.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@structflo/daikon-design-tokens':
         specifier: ^1.0.0
         version: 1.0.0
@@ -2141,8 +2141,8 @@ packages:
   '@standard-schema/utils@0.3.0':
     resolution: {integrity: sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g==}
 
-  '@structflo/components@0.3.0':
-    resolution: {integrity: sha512-SKuhhwZt9Y8DxDb4GcZIKqkACKrp2L3HFPAsbBZfOBWfWOgCTNAKDkNzmIUQnd7CpfPcOo4a0C8uyd4ZO3W9mQ==}
+  '@structflo/components@0.4.1':
+    resolution: {integrity: sha512-n3kc2BjnLKc/doVPrcySb8giYMTXjJoWkdNVbqYtbGpaKMXRFq84oEnFZQzNZGNVZixL6CrC+UJPsce/RorekQ==}
     peerDependencies:
       react: ^19.0.0
       react-dom: ^19.0.0
@@ -7049,7 +7049,7 @@ snapshots:
 
   '@standard-schema/utils@0.3.0': {}
 
-  '@structflo/components@0.3.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@structflo/components@0.4.1(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       clsx: 2.1.1
       react: 19.2.8

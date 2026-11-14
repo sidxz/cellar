@@ -616,14 +616,14 @@ class TestExecuteSearchAggregationWiring:
         assert cell["selection_rule"] == "geometric_mean"
         assert cell["run_count"] == 3
 
-    async def test_default_aggregation_is_latest_approved_run(
+    async def test_default_aggregation_is_latest_run(
         self,
         client: AsyncClient,
         org_id: str,
         uow: AsyncUnitOfWork,
         workspace_id: uuid.UUID,
     ) -> None:
-        """A body without ``aggregation`` defaults to LATEST_APPROVED_RUN."""
+        """A body without ``aggregation`` defaults to LATEST_RUN."""
         resp = await client.post(
             "/api/v1/molecules",
             json={
@@ -657,7 +657,7 @@ class TestExecuteSearchAggregationWiring:
         assert res.status_code == 200
         data = res.json()
         cell = data["activity_data"][str(mol_id)][f"drc:{rd_id}"]
-        assert cell["selection_rule"] == "latest_approved_run"
+        assert cell["selection_rule"] == "latest_run"
 
     async def test_per_criterion_run_scope_narrows_aggregation(
         self,

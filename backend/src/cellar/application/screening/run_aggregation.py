@@ -21,6 +21,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import date
 
+from cellar.domain.screening_assay.activity_types import ReplicateStats
 from cellar.domain.screening_assay.aggregation_types import (
     AggregateStats,
     QualifierHandling,
@@ -28,6 +29,7 @@ from cellar.domain.screening_assay.aggregation_types import (
     ValueQualifier,
 )
 from cellar.domain.shared.hit_criterion import InterceptKey
+from cellar.domain.shared.units import is_concentration_unit
 
 
 @dataclass(frozen=True)
@@ -78,7 +80,7 @@ class AggregateResult:
     - ``MANUAL_PICK`` was the rule (campaign-only path).
 
     For every other ND case (e.g. all runs Inactive under
-    LATEST_APPROVED_RUN), ``representative_run`` is the latest-by-date
+    LATEST_RUN), ``representative_run`` is the latest-by-date
     run from the (non-empty) filtered input — so callers always have
     *something* to render as a curve thumbnail on the ND cell.
     """
@@ -215,7 +217,7 @@ def _resolvable_runs(
     Includes both EQ (healthy fit) and GT (at_bound → >max_dose) outcomes;
     excludes ND (inactive, missing intercept, at_bound with no max_dose).
 
-    Used by the "pick one" rules (LATEST_APPROVED_RUN, BEST_R_SQUARED)
+    Used by the "pick one" rules (LATEST_RUN, BEST_R_SQUARED)
     where an at_bound row IS a real measurement and should surface as a
     GT-qualified cell. The aggregating rules (MEAN, GEOMETRIC_MEAN) use
     ``intercept_scalar`` instead, which keeps only EQ rows — non-scalar
@@ -236,7 +238,7 @@ def _pick_one_resolvable(
 ) -> AggregateResult:
     """Pick the single resolvable run that maximizes ``key_fn``; ND otherwise.
 
-    Used by LATEST_APPROVED_RUN (key_fn = run_date) and BEST_R_SQUARED
+    Used by LATEST_RUN (key_fn = run_date) and BEST_R_SQUARED
     (key_fn = curve_r_squared). Both EQ and GT-from-at_bound runs are
     eligible (hence the "resolvable" — not "eq" — name) — an at_bound run
     carries a real upper-bound measurement and should win on date / r²
@@ -326,7 +328,7 @@ def apply_selection_rule(
             representative_run=None,
         )
 
-    if rule == SelectionRule.LATEST_APPROVED_RUN:
+    if rule == SelectionRule.LATEST_RUN:
         return _pick_one_resolvable(
             filtered, intercept_key, key_fn=lambda r: r.run_date or date.min
         )
@@ -362,6 +364,51 @@ def apply_selection_rule(
         )
 
     raise NotImplementedError(f"Unknown SelectionRule: {rule!r}")
+
+
+def effective_rule(rule: SelectionRule, *, unit: str | None, single_point: bool) -> SelectionRule:
+    """The rule a search column really applies — decided once per column.
+
+    A geometric mean is only meaningful for positive, ratio-scale values, so a
+    single-point column in % / z-score / signal units uses the arithmetic mean
+    instead (rather than silently dropping its zero and negative runs). "Best
+    fit (R²)" has no fit to rank on a single-point column, so it falls back to
+    the latest run. Dose-response columns (always concentrations) keep every rule.
+    """
+    if not single_point:
+        return rule
+    if rule == SelectionRule.BEST_R_SQUARED:
+        return SelectionRule.LATEST_RUN
+    if rule == SelectionRule.GEOMETRIC_MEAN and not is_concentration_unit(unit):
+        return SelectionRule.MEAN_ACROSS_RUNS
+    return rule
+
+
+def combine_replicates(
+    stats: ReplicateStats, aggregation: str, *, unit: str | None
+) -> tuple[float | None, ValueQualifier]:
+    """One run's replicate wells → that run's (value, qualifier).
+
+    Unqualified replicates win: when any exist, the ``>``/``<`` ones are set
+    aside and the readout definition's aggregation applies (``none`` = mean;
+    ``geometric_mean`` only for concentration units, else mean). With only
+    qualified replicates the run keeps the tightest bound still true for all
+    of them (``>``: the largest; ``<``: the smallest); a mix of ``>`` and ``<``
+    says nothing and is ND.
+    """
+    if stats.eq_count > 0:
+        by_aggregation = {
+            "median": stats.eq_median,
+            "min": stats.eq_min,
+            "max": stats.eq_max,
+            "geometric_mean": stats.eq_geomean if is_concentration_unit(unit) else stats.eq_mean,
+        }
+        return by_aggregation.get(aggregation, stats.eq_mean), ValueQualifier.EQ
+    if stats.gt_count > 0 and stats.lt_count == 0:
+        return stats.gt_max_bound, ValueQualifier.GT
+    if stats.lt_count > 0 and stats.gt_count == 0:
+        return stats.lt_min_bound, ValueQualifier.LT
+    return None, ValueQualifier.ND
 
 
 # ---------------------------------------------------------------------------
@@ -417,11 +464,15 @@ def compute_aggregate_stats(
     )
 
 
-def detect_disagreement(runs: list[ResolvedRun], intercept_key: InterceptKey | None) -> bool:
+def detect_disagreement(
+    runs: list[ResolvedRun], intercept_key: InterceptKey | None, *, log_scale: bool = True
+) -> bool:
     """True when the cell deserves a disagreement glyph.
 
     Two triggers:
     - log10-range across EQ-qualified runs > ``DISAGREEMENT_LOG_THRESHOLD``
+      (only for ``log_scale`` values — concentrations; a log range means
+      nothing for % or z-score readouts, whose run values the tooltip lists)
     - mixed: at least one EQ run AND at least one non-EQ run (Inactive/at_bound)
     """
     qualifiers = [resolve_intercept(r, intercept_key)[1] for r in runs]
@@ -430,6 +481,8 @@ def detect_disagreement(runs: list[ResolvedRun], intercept_key: InterceptKey | N
 
     if eq_count >= 1 and non_eq_count >= 1:
         return True
+    if not log_scale:
+        return False
 
     scalars = [
         v for v in (intercept_scalar(r, intercept_key) for r in runs) if v is not None and v > 0

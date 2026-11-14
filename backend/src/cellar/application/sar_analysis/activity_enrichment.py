@@ -31,8 +31,8 @@ class MoleculeActivityEnricher(Protocol):
         molecule_ids: list[UUID],
         protocol_columns: list[str],
         *,
-        selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
-        qualifier_handling: QualifierHandling = QualifierHandling.EXCLUDE_QUALIFIED,
+        selection_rule: SelectionRule = SelectionRule.LATEST_RUN,
+        qualifier_handling: QualifierHandling = QualifierHandling.INCLUDE_QUALIFIED,
         run_scopes: dict[str, RunScope] | None = None,
     ) -> dict[UUID, dict[str, ActivityValue]]: ...
 

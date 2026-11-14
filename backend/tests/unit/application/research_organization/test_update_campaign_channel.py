@@ -63,7 +63,7 @@ def _make_measurement(
 def _make_campaign_with_channel(
     workspace_id: uuid.UUID,
     *,
-    selection_rule: SelectionRule = SelectionRule.LATEST_APPROVED_RUN,
+    selection_rule: SelectionRule = SelectionRule.LATEST_RUN,
     qc_filter: dict | None = None,
     add_measurement: bool = True,
     manual_override: bool = False,
@@ -226,7 +226,7 @@ class TestUpdateCampaignChannel:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(
             auth.workspace_id,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
         )
         # Original measurement value is 10.0 (from _make_measurement)
         assert result.measurements[0].value == 10.0
@@ -399,7 +399,7 @@ class TestUpdateCampaignChannel:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(
             auth.workspace_id,
-            selection_rule=SelectionRule.LATEST_APPROVED_RUN,
+            selection_rule=SelectionRule.LATEST_RUN,
         )
         original_m = result.find_measurement(channel.id)
         assert original_m is not None

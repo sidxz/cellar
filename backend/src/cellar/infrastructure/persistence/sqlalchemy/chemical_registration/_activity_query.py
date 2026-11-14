@@ -22,6 +22,10 @@ from cellar.domain.shared.units import canonical_unit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
+    NOT_REJECTED,
+    not_in_rejected_run,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ProtocolModel,
@@ -33,7 +37,8 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
 # "Latest run" = the experiment run most recently (run date), the same order
 # the results grid uses to pick a compound's latest value. created_at only
 # breaks ties — an old run imported today is not the latest experiment.
-_LATEST_RUN_ORDER = (RunModel.run_date.desc(), RunModel.created_at.desc())
+# Same order as RunScope.protocol_latest (_run_scope_sql): a tie never picks differently.
+_LATEST_RUN_ORDER = (RunModel.run_date.desc(), RunModel.created_at.desc(), RunModel.id.desc())
 
 _ACTIVITY_OP_MAP: dict[str, str] = {
     "eq": "__eq__",
@@ -151,6 +156,7 @@ def _activity_where_clause(
         base_filters: list[ColumnElement] = [
             DoseResponseCurveModel.workspace_id == workspace_id,
             DoseResponseCurveModel.curve_class.in_(classes),
+            not_in_rejected_run(DoseResponseCurveModel.run_id, workspace_id),
         ]
         if protocol_id is not None:
             base_filters.append(DoseResponseCurveModel.protocol_id == protocol_id)
@@ -227,6 +233,7 @@ def _activity_where_clause(
         msg = f"Unknown activity where source: {source!r}"
         raise ValueError(msg)
 
+    base_filters.append(not_in_rejected_run(run_id_col, workspace_id))
     scope_filter = _run_scope_filter(run_scope, workspace_id, protocol_id, run_id_col)
     if scope_filter is not None:
         base_filters.append(scope_filter)
@@ -398,6 +405,7 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
         .where(
             DoseResponseCurveModel.workspace_id == workspace_id,
             ProtocolModel.workspace_id == workspace_id,
+            not_in_rejected_run(DoseResponseCurveModel.run_id, workspace_id),
             _value_filter(
                 to_micromolar(reportable_curve_value(expr, DoseResponseCurveModel.curve_class)),
                 cond,
@@ -428,6 +436,7 @@ def _readout_name_any_protocol_clause(
         .where(
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.molecule_id.is_not(None),  # control wells; see per-protocol path
+            not_in_rejected_run(ReadoutDataModel.run_id, workspace_id),
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied.is_(None),
             _sql_normalized_name(ReadoutDefinitionModel.name) == normalize_readout_name(name),
@@ -453,6 +462,7 @@ def _activity_presence_clause(
         # Control wells (molecule_id NULL) would poison a negated NOT IN.
         ReadoutDataModel.molecule_id.is_not(None),
         RunModel.workspace_id == workspace_id,
+        NOT_REJECTED,
     ]
     if protocol_id is not None:
         conds.append(RunModel.protocol_id == protocol_id)
@@ -488,6 +498,7 @@ def _activity_presence_clause(
                     .where(
                         RunModel.workspace_id == workspace_id,
                         RunModel.protocol_id == protocol_id,
+                        NOT_REJECTED,
                     )
                     .order_by(*_LATEST_RUN_ORDER)
                     .limit(1)
@@ -570,6 +581,7 @@ def _run_scope_filter(
             .where(
                 RunModel.workspace_id == workspace_id,
                 RunModel.protocol_id == protocol_id,
+                NOT_REJECTED,
             )
             .order_by(*_LATEST_RUN_ORDER)
             .limit(1)
