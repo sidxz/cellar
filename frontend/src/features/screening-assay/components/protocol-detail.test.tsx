@@ -168,7 +168,10 @@ describe("ProtocolDetail Curves tab", () => {
     state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
     render();
     fireEvent.click(screen.getByRole("button", { name: "Compare traces" }));
-    expect(screen.getByRole("tab", { name: "Compare traces" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Compare traces" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     expect(screen.getByText("Curves for r1,r3")).toBeInTheDocument();
   });
 });
