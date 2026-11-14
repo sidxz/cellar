@@ -49,7 +49,10 @@ def test_pick_scalar_intercept_matches_by_kind_and_level():
 
 def test_pick_scalar_intercept_miss_returns_none():
     av = ActivityValue(
-        value=0.5, qualifier=None, unit="uM", source="dose_response",
+        value=0.5,
+        qualifier=None,
+        unit="uM",
+        source="dose_response",
         intercept_values=[{"spec": {"kind": "ic", "level": 50.0}, "value": 0.5}],
     )
     assert pick_scalar(av, InterceptKey(kind="ec", level=50.0)) is None
@@ -79,7 +82,9 @@ def test_channel_hash_changes_on_selection_rule():
 
 
 def test_to_spec_dict_round_trips():
-    a = _spec(intercept_key=InterceptKey(kind="ec", level=50.0), run_scopes={"drc:x": {"mode": "latest"}})
+    a = _spec(
+        intercept_key=InterceptKey(kind="ec", level=50.0), run_scopes={"drc:x": {"mode": "latest"}}
+    )
     d = a.to_spec_dict()
     back = ActivityChannelSpec.from_spec_dict(d)
     assert back.column == a.column
@@ -101,15 +106,20 @@ def test_snapshot_is_json_safe_even_with_uuid_and_date_fields():
     import json
 
     av = ActivityValue(
-        value=0.5, qualifier=None, unit="uM", source="dose_response",
-        runs=[RunSummary(
-            run_id=uuid.uuid4(),
-            run_date=datetime.date(2026, 6, 1),
-            curve_id=uuid.uuid4(),
-            curve_class="active",
-            r_squared=0.99,
-            intercept_values=[],
-        )],
+        value=0.5,
+        qualifier=None,
+        unit="uM",
+        source="dose_response",
+        runs=[
+            RunSummary(
+                run_id=uuid.uuid4(),
+                run_date=datetime.date(2026, 6, 1),
+                curve_id=uuid.uuid4(),
+                curve_class="active",
+                r_squared=0.99,
+                intercept_values=[],
+            )
+        ],
     )
     snap = activity_value_snapshot(av)
     # Round-trips through JSON without raising (UUID -> str, date -> isoformat).
@@ -117,3 +127,17 @@ def test_snapshot_is_json_safe_even_with_uuid_and_date_fields():
     assert snap["value"] == 0.5
     assert isinstance(snap["runs"][0]["run_id"], str)
     assert snap["runs"][0]["run_date"] == "2026-06-01"
+
+
+def test_hash_changes_when_the_activity_calculation_changes():
+    """Cached projections are keyed by this hash. When the values a channel
+    yields change (2026-11: rejected runs excluded, single-point readouts
+    combined per run), the hash must change so stale projections recompute."""
+    spec = ActivityChannelSpec(
+        column="drc:00000000-0000-0000-0000-000000000001",
+        source="dr_curve",
+        selection_rule=SelectionRule.LATEST_RUN,
+        qualifier_handling=QualifierHandling.EXCLUDE_QUALIFIED,
+    )
+    before_2026_11 = "f2cb920e8494fb39902bd0d7f484d5bbc49dea50c9249aaffd0bfd1abe94404f"
+    assert channel_hash(spec) != before_2026_11

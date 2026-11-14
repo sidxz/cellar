@@ -451,15 +451,11 @@ class ReadoutDataRepository(Protocol):
         endpoints)."""
         ...
 
-    async def find_aggregated_by_molecules_and_names(
-        self,
-        workspace_id: uuid.UUID,
-        molecule_ids: list[uuid.UUID],
-        groups: list[tuple[str, str | None]],
-    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]]:
-        """Raw-layer aggregation across EVERY protocol whose readout-def matches
-        a ``(normalized_name, unit)`` group. Returns, per molecule, one
-        ``(protocol_id, AggregatedReadout)`` per matching readout-def."""
+    async def find_readout_definitions_by_names(
+        self, workspace_id: uuid.UUID, groups: list[tuple[str, str | None]]
+    ) -> dict[uuid.UUID, uuid.UUID]:
+        """``{readout_definition_id: protocol_id}`` matching ``(name, unit)``
+        groups by normalized name and canonical unit, across every protocol."""
         ...
 
     async def find_by_molecule_and_definition(

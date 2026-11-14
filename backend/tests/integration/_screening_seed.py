@@ -58,6 +58,15 @@ async def protocol(
     return pid
 
 
+# A minimal IC50 fit config; the domain requires one on dose-response readouts.
+DR_CONFIG = {
+    "curve_type": "ic50",
+    "intercepts": [{"kind": "ic", "basis": "relative_percent", "label": None, "level": 50.0}],
+    "y_readout_name": "Signal",
+    "y_normalization": "percent_inhibition",
+}
+
+
 async def readout_def(
     s: AsyncSession,
     protocol_id: uuid.UUID,
@@ -71,8 +80,8 @@ async def readout_def(
     await s.execute(
         sa.text(
             "INSERT INTO readout_definitions (id, protocol_id, name, data_type, unit, "
-            "aggregation, display_order, is_calculated) "
-            "VALUES (:id, :p, :name, :dt, :unit, :agg, 0, false)"
+            "aggregation, display_order, is_calculated, dose_response_config) "
+            "VALUES (:id, :p, :name, :dt, :unit, :agg, 0, false, cast(:cfg as jsonb))"
         ),
         {
             "id": rid,
@@ -81,6 +90,7 @@ async def readout_def(
             "dt": data_type,
             "unit": unit,
             "agg": aggregation,
+            "cfg": json.dumps(DR_CONFIG) if data_type == "dose_response" else None,
         },
     )
     return rid

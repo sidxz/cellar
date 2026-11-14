@@ -464,11 +464,15 @@ def compute_aggregate_stats(
     )
 
 
-def detect_disagreement(runs: list[ResolvedRun], intercept_key: InterceptKey | None) -> bool:
+def detect_disagreement(
+    runs: list[ResolvedRun], intercept_key: InterceptKey | None, *, log_scale: bool = True
+) -> bool:
     """True when the cell deserves a disagreement glyph.
 
     Two triggers:
     - log10-range across EQ-qualified runs > ``DISAGREEMENT_LOG_THRESHOLD``
+      (only for ``log_scale`` values — concentrations; a log range means
+      nothing for % or z-score readouts, whose run values the tooltip lists)
     - mixed: at least one EQ run AND at least one non-EQ run (Inactive/at_bound)
     """
     qualifiers = [resolve_intercept(r, intercept_key)[1] for r in runs]
@@ -477,6 +481,8 @@ def detect_disagreement(runs: list[ResolvedRun], intercept_key: InterceptKey | N
 
     if eq_count >= 1 and non_eq_count >= 1:
         return True
+    if not log_scale:
+        return False
 
     scalars = [
         v for v in (intercept_scalar(r, intercept_key) for r in runs) if v is not None and v > 0

@@ -332,3 +332,24 @@ async def test_protocol_ids_by_readout_definition_are_workspace_scoped(uow, work
             workspace_id, [rd, foreign_rd, uuid.uuid4()]
         )
     assert found == {rd: p}
+
+
+async def test_readout_definitions_by_name_match_normalized_name_and_canonical_unit(
+    uow, workspace_id
+):
+    async with uow:
+        s = uow.session
+        p1 = await seed.protocol(s, workspace_id)
+        p2 = await seed.protocol(s, workspace_id)
+        hit1 = await seed.readout_def(s, p1, name="% Inhibition", unit="%")
+        hit2 = await seed.readout_def(s, p2, name="  % inhibition ", unit="%")
+        await seed.readout_def(s, p2, name="% Inhibition", unit="µM")
+        foreign = await seed.protocol(s, uuid.uuid4())
+        await seed.readout_def(s, foreign, name="% Inhibition", unit="%")
+        await uow.commit()
+
+    async with uow:
+        found = await SQLAlchemyReadoutDataRepository(uow).find_readout_definitions_by_names(
+            workspace_id, [("% inhibition", "%")]
+        )
+    assert found == {hit1: p1, hit2: p2}

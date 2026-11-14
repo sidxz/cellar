@@ -50,6 +50,7 @@ class RunReadoutStats:
     normalization: str | None
     run_id: uuid.UUID
     run_date: date | None
+    run_status: str
     protocol_id: uuid.UUID
     unit: str | None
     aggregation: str
@@ -113,7 +114,7 @@ class RunSummary:
 
     run_id: uuid.UUID
     run_date: date
-    curve_id: uuid.UUID
+    curve_id: uuid.UUID | None  # None for single-point and reported values
     curve_class: str | None
     r_squared: float | None
     intercept_values: list[dict[str, Any]]
@@ -171,6 +172,12 @@ class ActivityValue:
     # *extras* needed for an aggregate overlay. None on non-aggregate rules.
     additional_curves: list[dict[str, Any]] | None = None
     aggregate: dict[str, Any] | None = None
+    # ---- the cell's run set, for surfaces that draw its curves ----
+    # The curve the cell's value comes from (None for single-point and
+    # reported values) and every in-scope run that was a candidate, newest
+    # first — so the detail drawer never re-derives the selection itself.
+    representative_curve_id: uuid.UUID | None = None
+    run_ids: list[uuid.UUID] | None = None
 
 
 @dataclass(frozen=True)

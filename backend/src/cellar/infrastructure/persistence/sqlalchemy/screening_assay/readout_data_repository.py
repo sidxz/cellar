@@ -224,6 +224,7 @@ class SQLAlchemyReadoutDataRepository:
                 rd.normalization_applied,
                 rd.run_id,
                 RunModel.run_date,
+                RunModel.status,
                 RunModel.protocol_id,
                 ReadoutDefinitionModel.unit,
                 ReadoutDefinitionModel.aggregation,
@@ -258,6 +259,7 @@ class SQLAlchemyReadoutDataRepository:
                 rd.normalization_applied,
                 rd.run_id,
                 RunModel.run_date,
+                RunModel.status,
                 RunModel.protocol_id,
                 ReadoutDefinitionModel.unit,
                 ReadoutDefinitionModel.aggregation,
@@ -276,6 +278,7 @@ class SQLAlchemyReadoutDataRepository:
                     normalization=row.normalization_applied,
                     run_id=row.run_id,
                     run_date=row.run_date,
+                    run_status=row.status,
                     protocol_id=row.protocol_id,
                     unit=unit_for_normalization(row.normalization_applied, row.unit),
                     aggregation=row.aggregation or "none",
@@ -296,89 +299,34 @@ class SQLAlchemyReadoutDataRepository:
             )
         return out
 
-    async def find_aggregated_by_molecules_and_names(
-        self,
-        workspace_id: uuid.UUID,
-        molecule_ids: list[uuid.UUID],
-        groups: list[tuple[str, str | None]],
-    ) -> dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]]:
-        """Raw-layer aggregation across EVERY protocol whose readout-def matches
-        a ``(normalized_name, unit)`` group.
-
-        Used by the ``any`` search column: unlike ``find_aggregated_by_molecules``
-        (which targets specific readout-def ids), this groups by the readout's
-        *name* so a criterion like "% Inhibition" pulls in the matching
-        readout-def from every protocol that defines one, not just one.
-        """
+    async def find_readout_definitions_by_names(
+        self, workspace_id: uuid.UUID, groups: list[tuple[str, str | None]]
+    ) -> dict[uuid.UUID, uuid.UUID]:
+        """``{readout_definition_id: protocol_id}`` for every readout definition
+        in the workspace whose name (normalized) and unit (canonical) match a
+        ``(name, unit)`` group — the any-protocol "Active in" readout entries."""
         from cellar.domain.screening_assay.readout_name import normalize_readout_name
         from cellar.domain.shared.units import canonical_unit
         from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
-            ReadoutDefinitionModel,
+            ProtocolModel,
         )
 
-        if not molecule_ids or not groups:
+        if not groups:
             return {}
-        # Stored units are canonical, so a group's unit is compared by its canonical spelling.
         wanted = {(normalize_readout_name(n), canonical_unit(u) or "") for n, u in groups}
         norm_name = func.lower(
             func.btrim(func.regexp_replace(ReadoutDefinitionModel.name, r"\s+", " ", "g"))
-        ).label("norm_name")
-        unit_key = func.coalesce(ReadoutDefinitionModel.unit, "").label("unit_key")
+        )
+        unit_key = func.coalesce(ReadoutDefinitionModel.unit, "")
         stmt = (
-            select(
-                ReadoutDataModel.molecule_id,
-                ReadoutDataModel.readout_definition_id,
-                ReadoutDefinitionModel.protocol_id,
-                ReadoutDefinitionModel.name.label("readout_name"),
-                ReadoutDefinitionModel.aggregation,
-                ReadoutDefinitionModel.unit,
-                norm_name,
-                unit_key,
-                func.avg(ReadoutDataModel.value_numeric).label("avg_val"),
-                func.min(ReadoutDataModel.value_numeric).label("min_val"),
-                func.max(ReadoutDataModel.value_numeric).label("max_val"),
-                func.count(ReadoutDataModel.value_numeric).label("count_val"),
-            )
-            .join(
-                ReadoutDefinitionModel,
-                ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
-            )
+            select(ReadoutDefinitionModel.id, ReadoutDefinitionModel.protocol_id)
+            .join(ProtocolModel, ReadoutDefinitionModel.protocol_id == ProtocolModel.id)
             .where(
-                ReadoutDataModel.workspace_id == workspace_id,
-                ReadoutDataModel.molecule_id.in_(molecule_ids),
-                ReadoutDataModel.normalization_applied.is_(None),
-                ReadoutDataModel.is_outlier == False,  # noqa: E712
+                ProtocolModel.workspace_id == workspace_id,
                 sa.tuple_(norm_name, unit_key).in_(list(wanted)),
             )
-            .group_by(
-                ReadoutDataModel.molecule_id,
-                ReadoutDataModel.readout_definition_id,
-                ReadoutDefinitionModel.protocol_id,
-                ReadoutDefinitionModel.name,
-                ReadoutDefinitionModel.aggregation,
-                ReadoutDefinitionModel.unit,
-            )
         )
-        rows = (await self._uow.session.execute(stmt)).all()
-        out: dict[uuid.UUID, list[tuple[uuid.UUID, AggregatedReadout]]] = {}
-        for row in rows:
-            agg = row.aggregation or "mean"
-            val = row.min_val if agg == "min" else row.max_val if agg == "max" else row.avg_val
-            out.setdefault(row.molecule_id, []).append(
-                (
-                    row.protocol_id,
-                    AggregatedReadout(
-                        readout_definition_id=row.readout_definition_id,
-                        readout_name=row.readout_name,
-                        value=val,
-                        qualifier=None,
-                        unit=row.unit,
-                        aggregation=agg,
-                        data_point_count=row.count_val,
-                    ),
-                )
-            )
-        return out
+        return {rd_id: p_id for rd_id, p_id in (await self._uow.session.execute(stmt)).all()}
 
     async def find_by_molecule_and_definition(
         self,

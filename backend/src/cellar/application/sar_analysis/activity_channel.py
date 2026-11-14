@@ -92,6 +92,11 @@ def channel_hash(spec: ActivityChannelSpec) -> str:
     selection rule, qualifier handling, run scopes. ``label``/``protocol_id``/
     ``source`` are excluded (cosmetic or redundant with ``column``)."""
     semantic = {
+        # Bump when the calculation behind a channel's scalar changes, so
+        # cached projections built from the old numbers recompute.
+        # v2 (2026-11): rejected runs excluded; single-point readouts
+        # combined per run; protocol-wide "latest run" scope.
+        "v": 2,
         "column": spec.column,
         "intercept_key": (
             {"kind": spec.intercept_key.kind, "level": spec.intercept_key.level}
