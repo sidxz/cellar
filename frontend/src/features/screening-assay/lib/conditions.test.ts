@@ -7,7 +7,6 @@ import {
   editableConditionDefs,
   fixedConditionValues,
   formatConditionEntries,
-  formatFixedCondition,
   isFixedValueValid,
   parseConditionValue,
   readConditionCell,
@@ -211,11 +210,6 @@ describe("fixed values", () => {
     data_type: "pick_list",
     pick_list_values: ["yes", "no"],
     fixed_value: "yes",
-  });
-
-  it("formats value then unit with a space", () => {
-    expect(formatFixedCondition(hypoxia)).toBe("Hypoxia: yes");
-    expect(formatFixedCondition(time)).toBe("Incubation time: 72 h");
   });
 
   it("seeds a run's inputs with the bare fixed values", () => {

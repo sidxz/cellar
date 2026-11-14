@@ -139,6 +139,7 @@ describe("DesignTabProtocolCard targets partition", () => {
 describe("DesignTabProtocolCard ontology annotations", () => {
   it("shows the standard facets when the workspace configured no slots", () => {
     const protocol = makeProtocol({
+      status: "draft",
       ontology_annotations: {
         assay_format: [
           {
@@ -158,5 +159,20 @@ describe("DesignTabProtocolCard ontology annotations", () => {
     expect(screen.getByText("Assay format")).toBeInTheDocument();
     expect(screen.getByText("Detection method")).toBeInTheDocument();
     expect(screen.getByText("biochemical format")).toBeInTheDocument();
+  });
+
+  it("read-only, leaves out empty facets a cell-free type settles", () => {
+    const protocol = makeProtocol({
+      ontology_annotations: {
+        strain: [{ term_id: "H37Rv", label: "H37Rv", ontology_source: "local", uri: null }],
+      },
+    });
+    render(<DesignTabProtocolCard protocol={protocol} protocolId="p-1" />);
+    // Active and biochemical: a cell line adds nothing; the organism still filters the library.
+    expect(screen.queryByText("Cell line")).not.toBeInTheDocument();
+    expect(screen.getByText("Organism")).toBeInTheDocument();
+    // A value already recorded still shows.
+    expect(screen.getByText("H37Rv")).toBeInTheDocument();
+    expect(screen.getByText("Detection method")).toBeInTheDocument();
   });
 });

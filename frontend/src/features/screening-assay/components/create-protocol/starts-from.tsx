@@ -4,7 +4,8 @@ import type { ProtocolForm } from "@/features/workspace-config/hooks/use-protoco
 import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
 
-/** The category's forms as one-click starting points. */
+/** The category's forms as one-click starting points, named for what the protocol reports
+ *  (IC50 dose-response, Ki, MIC...); "Custom" starts with no readouts. */
 export function StartsFrom({
   forms,
   selectedId,
@@ -17,7 +18,7 @@ export function StartsFrom({
   if (forms.length === 0) return null;
   return (
     <div className="grid gap-2">
-      <Label>Starts from</Label>
+      <Label>What it reports</Label>
       <div className="flex flex-wrap gap-2">
         {forms.map((f) => (
           <Button
@@ -32,7 +33,7 @@ export function StartsFrom({
           </Button>
         ))}
         <Button type="button" size="sm" variant="outline" onClick={() => onPick(null)}>
-          Blank
+          Custom
         </Button>
       </div>
     </div>

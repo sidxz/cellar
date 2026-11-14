@@ -72,14 +72,14 @@ export function ProtocolNamePreview({
       )}
       {preview.clash && (
         <p className="mt-2 text-sm text-destructive">
-          {preview.clash.code} already has this exact name. Use a different discriminator.
+          {preview.clash.code} already has this exact name. Change what distinguishes this one.
         </p>
       )}
       {!preview.clash && preview.needs_discriminator && (
         <p className="mt-2 text-sm text-amber-700 dark:text-amber-400">
           Other protocols share the name "{preview.base}":{" "}
-          {preview.siblings.map((s) => `${s.code} ${s.name}`).join(", ")}. Add a discriminator, such
-          as the method.
+          {preview.siblings.map((s) => `${s.code} ${s.name}`).join(", ")}. Add what distinguishes
+          it, such as the method.
         </p>
       )}
       {preview.discriminator_error && (

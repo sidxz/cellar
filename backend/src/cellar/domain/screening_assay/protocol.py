@@ -747,7 +747,7 @@ class Protocol(AggregateRoot):
         self._guard_draft()
 
         if description is not ...:
-            self.description = description
+            self.set_description(description)
         if pos_control_signal is not None:
             self.pos_control_signal = pos_control_signal
         self.updated_at = datetime.now(UTC)
@@ -774,6 +774,15 @@ class Protocol(AggregateRoot):
         self.discriminator = clean_discriminator(value)
         self.updated_at = datetime.now(UTC)
         self._record_correction("discriminator", old, self.discriminator, reason)
+
+    def set_description(self, description: str | None, *, reason: str | None = None) -> None:
+        """The method: how the assay is run. Free on a draft; once published, a correction with
+        a reason (a changed procedure is a new version, not a correction)."""
+        self._guard_correction(reason)
+        old = self.description
+        self.description = description.strip() if description and description.strip() else None
+        self.updated_at = datetime.now(UTC)
+        self._record_correction("description", old, self.description, reason)
 
     def _record_correction(
         self, field: str, old: str | None, new: str | None, reason: str | None

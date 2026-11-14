@@ -36,6 +36,7 @@ import {
   type Protocol,
   type ProtocolStatus,
 } from "../../types";
+import { hidesFacet, settledSlots } from "../create-protocol/required-facts";
 import { TargetMultiSelect } from "../target-multi-select";
 
 // ---------------------------------------------------------------------------
@@ -77,6 +78,11 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   // lightweight effective list without it.
   const { data: richTargets } = useProtocolTargets(protocolId);
   const directTargets = (richTargets ?? []).filter((t) => t.is_direct);
+  // Read-only, an empty slot a cell-free type settles is only noise.
+  const settled = settledSlots(protocol.protocol_type);
+  const shownSlots = canStructurallyEdit
+    ? ontologySlots
+    : ontologySlots.filter((s) => !hidesFacet(s, settled, protocol.ontology_annotations?.[s.name]));
   const inheritedTargets = (richTargets ?? []).filter((t) => !t.is_direct);
   const directTargetIds = directTargets.map((t) => t.id);
   const targetMutationPending = addProtocolTarget.isPending || removeProtocolTarget.isPending;
@@ -162,7 +168,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
       </Card>
 
       {/* ── 1. Ontology Annotations ─────────────────────────────────────── */}
-      {ontologySlots.length > 0 && (
+      {shownSlots.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Ontology Annotations</CardTitle>
@@ -174,7 +180,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
             )}
           </CardHeader>
           <CardContent className="space-y-4">
-            {ontologySlots.map((slot) => {
+            {shownSlots.map((slot) => {
               const currentTerms = protocol.ontology_annotations?.[slot.name] ?? [];
               return (
                 <div key={slot.id} className="space-y-1">

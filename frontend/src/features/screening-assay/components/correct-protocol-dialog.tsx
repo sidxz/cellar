@@ -206,7 +206,7 @@ export function CorrectProtocolDialog({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="correct-discriminator">
-                Discriminator{needs.has("discriminator") ? "" : " (optional)"}
+                Distinguished by{needs.has("discriminator") ? "" : " (optional)"}
               </Label>
               <DiscriminatorInput
                 id="correct-discriminator"
@@ -223,7 +223,8 @@ export function CorrectProtocolDialog({
               <div className="grid gap-2">
                 <Label>Fixed condition values</Label>
                 <p className="text-xs text-muted-foreground">
-                  A fixed value defines the protocol; leave one empty when it varies per run.
+                  Conditions are recorded run by run. Fix one only when every run of this protocol
+                  uses the same value.
                 </p>
                 {protocol.condition_definitions.map((cd) => {
                   const label = cd.unit ? `${cd.name} (${cd.unit})` : cd.name;

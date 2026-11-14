@@ -12,7 +12,6 @@ import { Beaker, Clock, FlaskConical, Target } from "lucide-react";
 import { useState } from "react";
 import { useProtocolCollectionCoverage } from "../../hooks/use-protocol-collection-coverage";
 import { useProtocolStats } from "../../hooks/use-protocol-stats";
-import { formatFixedCondition } from "../../lib/conditions";
 import {
   PLATE_FORMAT_LABELS,
   PROTOCOL_TYPE_LABELS,
@@ -24,6 +23,8 @@ import { CoverageBar } from "../coverage-bar";
 import { CoverageGapDialog } from "../coverage-gap-dialog";
 import { ProtocolAliasesCard } from "../protocol-aliases-card";
 import { ProtocolReferencesCard } from "../protocol-references";
+import { ProtocolConditionsCard } from "./protocol-conditions-card";
+import { ProtocolMethodCard } from "./protocol-method-card";
 
 // ---------------------------------------------------------------------------
 // Z' quality badge helper
@@ -140,7 +141,6 @@ interface OverviewTabProps {
 }
 
 export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: OverviewTabProps) {
-  const fixedConditions = protocol.condition_definitions.filter((cd) => cd.fixed_value);
   const { data: stats, isLoading } = useProtocolStats(protocolId);
   const { data: coverage } = useProtocolCollectionCoverage(protocolId);
   const canEditTags = useAuthzHasRole("editor");
@@ -149,6 +149,8 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
   return (
     <div className="space-y-6">
       <NameFlagNotice protocol={protocol} onTabChange={onTabChange} onEditName={onEditName} />
+      <ProtocolMethodCard protocol={protocol} onOpenFiles={() => onTabChange("files")} />
+      <ProtocolConditionsCard protocol={protocol} onOpenDesign={() => onTabChange("design")} />
       {/* Stats Cards */}
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -267,16 +269,13 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
           <CardTitle>Details</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          {protocol.description && (
-            <p className="text-sm text-muted-foreground">{protocol.description}</p>
-          )}
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">Code</p>
               <p className="font-mono font-medium">{protocol.code ?? "\u2014"}</p>
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Discriminator</p>
+              <p className="text-sm text-muted-foreground">Distinguished by</p>
               <p className="font-medium">{protocol.discriminator ?? "\u2014"}</p>
             </div>
             <div>
@@ -299,16 +298,6 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
               <p className="font-medium">{protocol.readout_definitions.length}</p>
             </div>
           </div>
-          {fixedConditions.length > 0 && (
-            <div>
-              <p className="text-sm text-muted-foreground">Defining conditions</p>
-              <ul className="font-medium">
-                {fixedConditions.map((cd) => (
-                  <li key={cd.id}>{formatFixedCondition(cd)}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </CardContent>
       </Card>
 

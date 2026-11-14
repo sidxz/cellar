@@ -58,7 +58,7 @@ describe("ProtocolNamePreview", () => {
     };
     const p = { ...base, name: base.base, siblings: [sib], needs_discriminator: true };
     render(<ProtocolNamePreview preview={p} isFetching={false} />);
-    expect(screen.getByText(/add a discriminator/i)).toBeInTheDocument();
+    expect(screen.getByText(/add what distinguishes it/i)).toBeInTheDocument();
   });
 
   it("shows an existing protocol's code instead of the create hint", () => {

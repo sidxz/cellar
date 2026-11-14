@@ -14,4 +14,5 @@ export interface CorrectProtocolRequest {
   ontology_annotations?: CorrectProtocolRequestOntologyAnnotations;
   target_ids?: string[] | null;
   condition_fixed_values?: CorrectProtocolRequestConditionFixedValues;
+  description?: string | null;
 }

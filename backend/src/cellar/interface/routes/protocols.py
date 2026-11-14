@@ -1076,6 +1076,8 @@ class CorrectProtocolRequest(BaseModel):
     target_ids: list[uuid.UUID] | None = None
     # condition definition id -> its fixed value (null clears it)
     condition_fixed_values: dict[uuid.UUID, str | None] | None = None
+    # the method (description); null clears it
+    description: str | None = None
     model_config = {"extra": "forbid"}
 
 
@@ -1107,6 +1109,7 @@ async def correct_protocol(
         condition_fixed_values=(body.condition_fixed_values or {})
         if "condition_fixed_values" in sent
         else UNSET,
+        description=body.description if "description" in sent else UNSET,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
