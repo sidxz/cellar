@@ -79,3 +79,60 @@ describe("ActivityTab reported endpoints", () => {
     expect(screen.getByText("No readout data for this protocol.")).toBeInTheDocument();
   });
 });
+
+function plain(over: Record<string, unknown> = {}) {
+  return {
+    readout_definition_id: "rd1",
+    readout_name: "Max ΔTm (Main)",
+    value: -8.483,
+    qualifier: "=",
+    unit: "°C",
+    data_point_count: 1,
+    run_count: 2,
+    draft_run_count: 1,
+    ...over,
+  };
+}
+
+const outside = { readout_name: "Max ΔTm (Main)", operator: "not_between", value: [-2, 2] };
+
+describe("ActivityTab plain readouts and hit marker", () => {
+  it("lists plain readouts with their value, unit and runs, drafts marked", () => {
+    renderTab({
+      plain_readouts: [
+        plain(),
+        plain({
+          readout_name: "Lowest shifting conc. (Main, ±2 °C)",
+          value: 50,
+          qualifier: ">",
+          unit: "µM",
+          run_count: 1,
+          draft_run_count: 1,
+        }),
+      ],
+    });
+    expect(screen.getByText("Max ΔTm (Main)")).toBeInTheDocument();
+    expect(screen.getByText("-8.483")).toBeInTheDocument();
+    expect(screen.getByText("2 runs (1 draft)")).toBeInTheDocument();
+    expect(screen.getByText("> 50")).toBeInTheDocument();
+    expect(screen.getByText("1 run (draft)")).toBeInTheDocument();
+    expect(screen.queryByText("No readout data for this protocol.")).toBeNull();
+  });
+
+  it("shows the protocol's hit call with the rule it used", () => {
+    renderTab({ plain_readouts: [plain()], hit: true, hit_criteria: [outside] });
+    expect(screen.getByText("Hit")).toHaveAttribute(
+      "title",
+      "By the protocol's recommended rule: Max ΔTm (Main) outside -2 – 2",
+    );
+  });
+
+  it("says not a hit when the rule is not met, and nothing without a rule", () => {
+    const first = renderTab({ plain_readouts: [plain()], hit: false, hit_criteria: [outside] });
+    expect(screen.getByText("Not a hit")).toBeInTheDocument();
+    first.unmount();
+    renderTab({ plain_readouts: [plain()], hit: null, hit_criteria: [] });
+    expect(screen.queryByText("Hit")).toBeNull();
+    expect(screen.queryByText("Not a hit")).toBeNull();
+  });
+});

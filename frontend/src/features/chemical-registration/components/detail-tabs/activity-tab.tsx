@@ -1,9 +1,15 @@
 "use client";
 
+import { criterionLabel } from "@/features/screening-assay/components/detail-tabs/use-activity-tab";
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { findInterceptValue, interceptLabel } from "@/features/screening-assay/lib/intercept-label";
-import type { CurveClass, InterceptSpec, InterceptValue } from "@/features/screening-assay/types";
+import type {
+  CurveClass,
+  HitCriterion,
+  InterceptSpec,
+  InterceptValue,
+} from "@/features/screening-assay/types";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -20,6 +26,7 @@ import type {
   ProtocolActivityResponse,
   ProtocolActivityResponseBestCurvesItem,
   ProtocolActivityResponseInterceptsItem,
+  ReadoutSummaryResponse,
 } from "@/shared/lib/api/model";
 import { FlaskConical } from "lucide-react";
 import { useMoleculeActivity } from "../../hooks/use-molecule-activity";
@@ -98,12 +105,14 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
       {activity.protocols.map((protocol) => {
         const curves = bestCurves(protocol);
         const readouts = protocol.readouts ?? [];
+        const plain = protocol.plain_readouts ?? [];
         return (
           <Card key={protocol.protocol_id}>
             <CardHeader>
               <div className="flex items-center gap-3">
                 <CardTitle className="text-base">{protocol.protocol_name}</CardTitle>
                 <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
+                <HitMarker protocol={protocol} />
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -150,7 +159,8 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                   </Table>
                 </div>
               )}
-              {curves.length === 0 && readouts.length === 0 && (
+              {plain.length > 0 && <PlainReadoutTable readouts={plain} />}
+              {curves.length === 0 && readouts.length === 0 && plain.length === 0 && (
                 <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
               )}
             </CardContent>
@@ -158,6 +168,70 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
         );
       })}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Plain readouts (thermal shift, single-point assays) and the hit call
+// ---------------------------------------------------------------------------
+
+/** Four significant figures, as the run's results show them. */
+const fmt = (v: number) => String(Number(v.toPrecision(4)));
+
+function runsText(r: ReadoutSummaryResponse): string {
+  const runs = `${r.run_count} run${r.run_count === 1 ? "" : "s"}`;
+  if (r.draft_run_count === 0) return runs;
+  return r.draft_run_count === r.run_count && r.run_count === 1
+    ? `${runs} (draft)`
+    : `${runs} (${r.draft_run_count} draft)`;
+}
+
+function PlainReadoutTable({ readouts }: { readouts: ReadoutSummaryResponse[] }) {
+  return (
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Readout</TableHead>
+            <TableHead>Value</TableHead>
+            <TableHead>Unit</TableHead>
+            <TableHead>Runs</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {readouts.map((r) => (
+            <TableRow key={r.readout_definition_id}>
+              <TableCell>{r.readout_name}</TableCell>
+              <TableCell className="font-mono">
+                {`${r.qualifier !== "=" ? `${r.qualifier} ` : ""}${fmt(r.value)}`}
+              </TableCell>
+              <TableCell className="text-muted-foreground">{r.unit ?? "—"}</TableCell>
+              <TableCell className={r.draft_run_count > 0 ? "text-muted-foreground" : undefined}>
+                {runsText(r)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+/** The protocol's recommended hit rule applied to this compound; nothing without a rule. */
+function HitMarker({ protocol }: { protocol: ProtocolActivityResponse }) {
+  if (protocol.hit == null) return null;
+  const rule = (protocol.hit_criteria ?? [])
+    .map((c) => criterionLabel(c as HitCriterion))
+    .join(" and ");
+  const title = `By the protocol's recommended rule: ${rule}`;
+  return protocol.hit ? (
+    <Badge variant="secondary" title={title}>
+      Hit
+    </Badge>
+  ) : (
+    <span className="text-xs text-muted-foreground" title={title}>
+      Not a hit
+    </span>
   );
 }
 

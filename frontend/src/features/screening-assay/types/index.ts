@@ -762,7 +762,7 @@ export interface ReadoutDefInfo {
   name: string;
   data_type: string;
   unit: string | null;
-  best_direction: "high" | "low";
+  best_direction: "high" | "low" | "magnitude";
   /** For ``dose_response`` readouts: the protocol's declared intercept
    *  specs, drives the per-readout dynamic column set on the activity
    *  grid (EC50, EC90, IC10, ...). Empty for numeric readouts. */
