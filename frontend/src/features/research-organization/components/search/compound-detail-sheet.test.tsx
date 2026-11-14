@@ -279,5 +279,46 @@ describe("the drawer trusts the search's run set", () => {
     const labels = options("Source curve · Potency");
     expect(labels.some((l) => l?.startsWith("1 mM ·"))).toBe(true);
     expect(labels.some((l) => l?.startsWith("10 µM ·"))).toBe(true);
+    // Split values live per group in the grid; no single "reported" value here.
+    expect(screen.queryByRole("region", { name: "Reported search results" })).toBeNull();
+  });
+
+  it("doesn't repeat a run split's date in the curve options", () => {
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
+          {
+            protocol_id: "proto",
+            protocol_name: "Target assay",
+            curves: [{ ...curve, curve_id: "a", run_id: "r1", run_date: "2026-05-13" }],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{ ...molecule, activity: { "drc:rd@run:r1": { ...av, run_ids: ["r1"] } } }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        columnGroups={{
+          proto: {
+            split: { by: "run", condition: null },
+            groups: [
+              { key: "run:r1", label: "2026-05-13", run_ids: ["r1"], run_count: 1, flags: [] },
+            ],
+          },
+        }}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="latest"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(options("Source curve · Potency")[0]).toMatch(/^2026-05-13 · IC50/);
   });
 });

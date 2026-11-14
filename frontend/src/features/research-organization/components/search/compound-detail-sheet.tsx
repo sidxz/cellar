@@ -335,7 +335,10 @@ function ProtocolCard({
         Number(channels.some((c) => c.readoutId === a)),
     );
   }, [inScopeCurves, channels]);
-  const unmatched = channels.filter(
+  // A split protocol's values live per run/condition group in the grid; the
+  // drawer shows its source curves without a single "reported" value.
+  const reported = runSet?.split ? [] : channels;
+  const unmatched = reported.filter(
     (channel) => !channel.doseResponse || !readouts.some(([id]) => id === channel.readoutId),
   );
   return (
@@ -382,7 +385,7 @@ function ProtocolCard({
                 curves[0].curve_type.toUpperCase()
               }
               molecule={molecule}
-              channels={channels.filter(
+              channels={reported.filter(
                 (channel) => channel.doseResponse && channel.readoutId === readoutId,
               )}
               mode={mode}

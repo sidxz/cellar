@@ -6,8 +6,11 @@ export interface ProtocolRunSet {
   /** Every run any of the protocol's cells drew on (non-rejected, in the
    *  search's run filter). */
   runIds: Set<string>;
-  /** Split protocols: run id → its group's label ("10 µM", "2026-03-01"). */
+  /** Condition splits: run id → its group's label ("10 µM"). A run split's
+   *  label is the run date the curve already shows, so it isn't repeated. */
   groupLabel: Map<string, string>;
+  /** The protocol is split: its values live per group in the grid. */
+  split: boolean;
 }
 
 /** Each searched protocol's run set, read from the cells the backend sent —
@@ -19,11 +22,20 @@ export function protocolRunSets(
 ): Map<string, ProtocolRunSet> {
   const out = new Map<string, ProtocolRunSet>();
   for (const channel of channels) {
-    const set = out.get(channel.protocolId) ?? { runIds: new Set(), groupLabel: new Map() };
+    const split = columnGroups?.[channel.protocolId];
+    const set = out.get(channel.protocolId) ?? {
+      runIds: new Set(),
+      groupLabel: new Map(),
+      split: !!split,
+    };
     out.set(channel.protocolId, set);
-    const groups = columnGroups?.[channel.protocolId]?.groups;
+    const groups = split?.groups;
+    const labelled = split?.split.by === "condition";
     const cells = groups
-      ? groups.map((g) => ({ av: activity?.[`${channel.activityKey}@${g.key}`], label: g.label }))
+      ? groups.map((g) => ({
+          av: activity?.[`${channel.activityKey}@${g.key}`],
+          label: labelled ? g.label : null,
+        }))
       : [{ av: activity?.[channel.activityKey], label: null }];
     for (const { av, label } of cells) {
       for (const runId of av?.run_ids ?? []) {
