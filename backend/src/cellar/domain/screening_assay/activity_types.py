@@ -147,6 +147,20 @@ class AnyProtocolActivity:
 
 
 @dataclass(frozen=True)
+class ReadoutSummary:
+    """A plain (non-dose-response) readout of one molecule on one protocol, across its runs."""
+
+    readout_definition_id: uuid.UUID
+    readout_name: str
+    value: float  # the value that stands for the molecule (see readout_best)
+    qualifier: str  # "=", ">" or "<"
+    unit: str | None
+    data_point_count: int
+    run_count: int
+    draft_run_count: int  # runs not yet completed or approved
+
+
+@dataclass(frozen=True)
 class ProtocolActivitySummary:
     """Activity summary for one protocol on one molecule."""
 
@@ -162,6 +176,11 @@ class ProtocolActivitySummary:
     # per-Card dynamic column set on the molecule activity tab. Empty when
     # the protocol's DR readouts declare no explicit intercepts.
     intercepts: list[dict[str, Any]] = field(default_factory=list)
+    # Plain readouts (Tm, ΔTm, a single-point % inhibition, ...), in protocol order.
+    plain_readouts: list[ReadoutSummary] = field(default_factory=list)
+    # The protocol's recommended hit rule applied to this molecule; None without one.
+    hit: bool | None = None
+    hit_criteria: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass(frozen=True)

@@ -35,6 +35,7 @@ from cellar.domain.screening_assay.activity_types import (
     CurveParams,
     InterceptAggregate,
     ProtocolActivitySummary,
+    ReadoutSummary,
     RunSummary,
 )
 from cellar.domain.screening_assay.aggregation_types import (
@@ -44,7 +45,8 @@ from cellar.domain.screening_assay.aggregation_types import (
 )
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from cellar.domain.screening_assay.enums import RunStatus
+from cellar.domain.screening_assay.enums import ReadoutDataType, RunStatus
+from cellar.domain.screening_assay.readout_best import best_direction, pick_best
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
@@ -54,7 +56,7 @@ from cellar.domain.screening_assay.repository import (
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.enums import ConcentrationUnit
-from cellar.domain.shared.hit_criterion import InterceptKey
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 # Cap the per-cell wire payload of per-run summaries. Multi-year programs
 # can accumulate dozens of runs on a single compound; the tooltip needs
@@ -88,6 +90,98 @@ def _serialize_intercept_values(
         }
         for iv in values
     ]
+
+
+_FINISHED = (RunStatus.COMPLETED, RunStatus.APPROVED)
+_VALUE_QUALIFIER = {"=": ValueQualifier.EQ, ">": ValueQualifier.GT, "<": ValueQualifier.LT}
+
+
+def _plain_readouts(
+    proto: Any, rows: list[Any], runs_by_id: dict[uuid.UUID, Run]
+) -> list[ReadoutSummary]:
+    """One summary per plain numeric readout of the protocol the molecule has values on.
+
+    Raw layer only (a normalized layer is a different quantity), outliers left
+    out, every run counted (drafts too, counted separately for the page to mark).
+    """
+    out: list[ReadoutSummary] = []
+    for rd in getattr(proto, "readout_definitions", []):
+        if getattr(rd, "data_type", None) != ReadoutDataType.NUMERIC or getattr(
+            rd, "dose_response_config", None
+        ):
+            continue
+        mine = [
+            r
+            for r in rows
+            if r.readout_definition_id == rd.id
+            and r.normalization_applied is None
+            and not r.is_outlier
+            and r.value is not None
+        ]
+        if not mine:
+            continue
+        mc = rd.melt_config
+        direction = best_direction(rd.data_type.value, mc.measure.value if mc else None)
+        best = pick_best([(r.value.value, r.value.qualifier) for r in mine], direction)
+        run_ids = {r.run_id for r in mine}
+        out.append(
+            ReadoutSummary(
+                readout_definition_id=rd.id,
+                readout_name=rd.name,
+                value=best[0],  # type: ignore[index]
+                qualifier=best[1].value,  # type: ignore[index]
+                unit=rd.unit,
+                data_point_count=len(mine),
+                run_count=len(run_ids),
+                draft_run_count=sum(
+                    1
+                    for rid in run_ids
+                    if (run := runs_by_id.get(rid)) is not None and run.status not in _FINISHED
+                ),
+            )
+        )
+    return out
+
+
+def _protocol_hit(
+    rules: list[HitCriterion],
+    proto: Any,
+    plain: list[ReadoutSummary],
+    curves: list[DoseResponseCurve],
+) -> bool:
+    """Every recommended rule met by the molecule's values (the protocol Activity tab's rule).
+
+    A plain readout uses its best value; a dose-response readout its best
+    (lowest) fit, or the named intercept; Curve Class any curve's class. A
+    rule with no value to test is not met.
+    """
+    plain_by_name = {p.readout_name: p for p in plain}
+    rd_by_name = {rd.name: rd for rd in getattr(proto, "readout_definitions", [])}
+    for rule in rules:
+        if rule.readout_name == "Curve Class":
+            classes = {c.curve_class.value for c in curves if c.curve_class is not None}
+            met = isinstance(rule.value, list) and bool(classes & set(rule.value))
+        elif (p := plain_by_name.get(rule.readout_name)) is not None:
+            met = bool(rule.is_met(p.value, _VALUE_QUALIFIER.get(p.qualifier, ValueQualifier.EQ)))
+        else:
+            rd = rd_by_name.get(rule.readout_name)
+            fits: list[float] = []
+            for c in curves:
+                if rd is None or c.readout_definition_id != rd.id:
+                    continue
+                if rule.intercept_key is None:
+                    fits.append(c.fitted_value)
+                else:
+                    fits.extend(
+                        iv.value
+                        for iv in c.intercept_values or []
+                        if iv.spec.kind.value == rule.intercept_key.kind
+                        and iv.spec.level == rule.intercept_key.level
+                    )
+            met = bool(fits) and bool(rule.is_met(min(fits)))
+        if not met:
+            return False
+    return True
 
 
 class MoleculeActivityService:
@@ -145,13 +239,16 @@ class MoleculeActivityService:
             if row.normalization_applied is None and row.well_id is None
         ]
         raw_rd_ids = {row.readout_definition_id for row in endpoint_rows}
-        readout_runs = (
-            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in endpoint_rows}))
-            if endpoint_rows
+        # Every run behind a readout row: endpoints and plain readouts name
+        # their protocol through it, and plain readouts mark draft runs.
+        runs_by_id = (
+            await self._run_repo.find_by_ids(workspace_id, list({r.run_id for r in readout_rows}))
+            if readout_rows
             else {}
         )
         curve_proto_ids = {curve.protocol_id for curve in curves}
-        proto_ids |= {run.protocol_id for run in readout_runs.values()}
+        proto_ids |= {run.protocol_id for run in runs_by_id.values()}
+        protocols_found: dict[uuid.UUID, Any] = {}
 
         # Fetch protocol metadata (single query) — used for display
         # name/type, dose_unit (for IC50 unit decoration), and the
@@ -166,6 +263,7 @@ class MoleculeActivityService:
         if proto_ids:
             protos = await self._protocol_repo.find_by_ids(workspace_id, list(proto_ids))
             for proto in protos:
+                protocols_found[proto.id] = proto
                 endpoint_defs.update(
                     {
                         rd.id: proto.id
@@ -252,9 +350,12 @@ class MoleculeActivityService:
             # A protocol reached only through readout rows earns a card only if
             # it actually yielded an endpoint — otherwise a well-less row on
             # some unrelated readout would add an empty card.
-            if pid not in curve_proto_ids and not endpoints_by_proto.get(pid):
+            proto = protocols_found.get(pid)
+            plain = _plain_readouts(proto, readout_rows, runs_by_id) if proto else []
+            if pid not in curve_proto_ids and not endpoints_by_proto.get(pid) and not plain:
                 continue
             name, ptype, _unit = protocols_by_id.get(pid, ("Unknown", "unknown", "uM"))
+            rules = list(getattr(proto, "recommended_hit_criteria", None) or [])
             summaries.append(
                 ProtocolActivitySummary(
                     protocol_id=pid,
@@ -263,6 +364,15 @@ class MoleculeActivityService:
                     readouts=endpoints_by_proto.get(pid, []),
                     best_curves=curves_by_proto.get(pid, []),
                     intercepts=intercepts_by_proto.get(pid, []),
+                    plain_readouts=plain,
+                    hit=(
+                        _protocol_hit(
+                            rules, proto, plain, [c for c in curves if c.protocol_id == pid]
+                        )
+                        if rules
+                        else None
+                    ),
+                    hit_criteria=[r.to_dict() for r in rules],
                 )
             )
 

@@ -77,6 +77,7 @@ from cellar.interface.pagination import (
     clamp_limit,
     parse_cursor,
 )
+from cellar.interface.routes._campaign_dtos import HitCriterionDTO
 from cellar.interface.routes.batches import BatchResponse
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecules"])
@@ -257,6 +258,20 @@ class ActivityValueResponse(BaseModel):
     data_point_count: int = 1
 
 
+class ReadoutSummaryResponse(BaseModel):
+    """A plain (non-dose-response) readout of the molecule on the protocol, across runs."""
+
+    readout_definition_id: uuid.UUID
+    readout_name: str
+    value: float
+    qualifier: str
+    unit: str | None = None
+    data_point_count: int
+    run_count: int
+    # Runs not yet completed or approved; the page marks values that rest on them.
+    draft_run_count: int
+
+
 class ProtocolActivityResponse(BaseModel):
     protocol_id: uuid.UUID
     protocol_name: str
@@ -267,6 +282,10 @@ class ProtocolActivityResponse(BaseModel):
     # builds one column per spec inside this protocol's Card; matches
     # cell values out of each row's ``intercept_values``.
     intercepts: list[dict[str, Any]] = []
+    plain_readouts: list[ReadoutSummaryResponse] = []
+    # The protocol's recommended hit rule applied to the molecule; null without one.
+    hit: bool | None = None
+    hit_criteria: list[HitCriterionDTO] = []
 
 
 class ActivitySummaryResponse(BaseModel):
@@ -296,6 +315,21 @@ class ActivitySummaryResponse(BaseModel):
                     ],
                     best_curves=p.best_curves,
                     intercepts=p.intercepts,
+                    plain_readouts=[
+                        ReadoutSummaryResponse(
+                            readout_definition_id=r.readout_definition_id,
+                            readout_name=r.readout_name,
+                            value=r.value,
+                            qualifier=r.qualifier,
+                            unit=r.unit,
+                            data_point_count=r.data_point_count,
+                            run_count=r.run_count,
+                            draft_run_count=r.draft_run_count,
+                        )
+                        for r in p.plain_readouts
+                    ],
+                    hit=p.hit,
+                    hit_criteria=[HitCriterionDTO.model_validate(c) for c in p.hit_criteria],
                 )
                 for p in summary.protocols
             ],
