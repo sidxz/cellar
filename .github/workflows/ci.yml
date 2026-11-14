@@ -118,6 +118,12 @@ jobs:
   docker-build:
     name: Docker Build
     runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: cellar # images build as cellar-backend / cellar-frontend
     steps:
       - uses: actions/checkout@v6
       - run: docker compose -f docker-compose.infra.yml -f docker-compose.yml build backend frontend
+      # The unit tests run on the runner, which ships Pango and fonts; only a render
+      # inside the built image catches a native lib the image itself is missing.
+      - name: PDF export renders inside the backend image
+        run: docker run --rm --entrypoint /app/.venv/bin/python cellar-backend -c "from weasyprint import HTML; assert HTML(string='<p>IC50 ≥ 5 µM</p>').write_pdf()[:5] == b'%PDF-'"
