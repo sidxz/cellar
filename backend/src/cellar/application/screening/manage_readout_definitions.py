@@ -24,6 +24,7 @@ from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutCo
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.units import canonical_unit
 
 # ---------------------------------------------------------------------------
 # Commands
@@ -93,7 +94,10 @@ class AddTemperatureWindowCommand(Command):
     channel_key: str
     low: float
     high: float
-    measures: tuple[MeltMeasure, ...]  # one or both, no repeats
+    measures: tuple[MeltMeasure, ...]  # at least one, no repeats
+    # Each parameter goes with, and only with, its measure.
+    lowest_shift_threshold: float | None = None
+    delta_tm_at_concentration: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -305,11 +309,41 @@ class UpdateReadoutDefinition:
         return Success(protocol)
 
 
-_MEASURE_PREFIX = {MeltMeasure.TM: "Tm", MeltMeasure.DELTA_TM: "ΔTm"}
+def _window_readout(
+    protocol: Protocol, cfg: MeltReadoutConfig, display_order: int
+) -> ReadoutDefinition:
+    """A window readout named, united and aggregated for what it measures."""
+    dose = canonical_unit(protocol.dose_unit.value) or protocol.dose_unit.value
+    unit, aggregation = "°C", ReadoutAggregation.MEAN
+    match cfg.measure:
+        case MeltMeasure.TM:
+            name = f"Tm ({cfg.window})"
+        case MeltMeasure.DELTA_TM:
+            name = f"ΔTm ({cfg.window})"
+        case MeltMeasure.MAX_DELTA_TM:
+            name = f"Max ΔTm ({cfg.window})"
+        case MeltMeasure.LOWEST_SHIFT_CONCENTRATION:
+            name = f"Lowest shifting conc. ({cfg.window}, ±{cfg.threshold:g} °C)"
+            # Concentrations are log-spaced, as potencies are.
+            unit, aggregation = dose, ReadoutAggregation.GEOMETRIC_MEAN
+        case MeltMeasure.DELTA_TM_AT_CONCENTRATION:
+            name = f"ΔTm at {cfg.concentration:g} {dose} ({cfg.window})"
+    return ReadoutDefinition(
+        protocol_id=protocol.id,
+        name=name,
+        data_type=ReadoutDataType.NUMERIC,
+        unit=unit,
+        aggregation=aggregation,
+        display_order=display_order,
+        melt_config=cfg,
+    )
 
 
 class AddTemperatureWindow:
-    """Add a temperature window's Tm and/or ΔTm readouts in one change."""
+    """Add a temperature window's readouts (Tm, ΔTm, series values) in one change.
+
+    The window may already exist; the protocol then checks the new readouts agree
+    with its signal and limits."""
 
     def __init__(
         self,
@@ -327,7 +361,18 @@ class AddTemperatureWindow:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
         if not input.measures or len(set(input.measures)) != len(input.measures):
-            return Failure(ValidationError("Choose Tm, ΔTm or both, each at most once"))
+            return Failure(ValidationError("Choose at least one value, each at most once"))
+        if (input.lowest_shift_threshold is not None) != (
+            MeltMeasure.LOWEST_SHIFT_CONCENTRATION in input.measures
+        ) or (input.delta_tm_at_concentration is not None) != (
+            MeltMeasure.DELTA_TM_AT_CONCENTRATION in input.measures
+        ):
+            return Failure(
+                ValidationError(
+                    "A shift threshold goes with the lowest shifting concentration, and a "
+                    "concentration with ΔTm at a stated concentration; neither goes alone"
+                )
+            )
         async with self._uow:
             protocol = await self._repo.find_by_id_in_workspace(
                 input.workspace_id, input.protocol_id
@@ -338,7 +383,7 @@ class AddTemperatureWindow:
             before = list(protocol.readout_definitions)
             try:
                 next_order = max((rd.display_order for rd in before), default=-1) + 1
-                # Tm first, then ΔTm, whatever order the caller listed them in.
+                # Declaration order (Tm, ΔTm, then series), whatever order the caller used.
                 for i, measure in enumerate(m for m in MeltMeasure if m in input.measures):
                     cfg = MeltReadoutConfig(
                         window=input.window,
@@ -346,18 +391,18 @@ class AddTemperatureWindow:
                         channel_key=input.channel_key,
                         low=input.low,
                         high=input.high,
+                        threshold=(
+                            input.lowest_shift_threshold
+                            if measure is MeltMeasure.LOWEST_SHIFT_CONCENTRATION
+                            else None
+                        ),
+                        concentration=(
+                            input.delta_tm_at_concentration
+                            if measure is MeltMeasure.DELTA_TM_AT_CONCENTRATION
+                            else None
+                        ),
                     )
-                    protocol.add_readout_definition(
-                        ReadoutDefinition(
-                            protocol_id=protocol.id,
-                            name=f"{_MEASURE_PREFIX[measure]} ({cfg.window})",
-                            data_type=ReadoutDataType.NUMERIC,
-                            unit="°C",
-                            aggregation=ReadoutAggregation.MEAN,
-                            display_order=next_order + i,
-                            melt_config=cfg,
-                        )
-                    )
+                    protocol.add_readout_definition(_window_readout(protocol, cfg, next_order + i))
             except DomainError as exc:
                 protocol.readout_definitions[:] = before  # all or nothing
                 return Failure(exc)

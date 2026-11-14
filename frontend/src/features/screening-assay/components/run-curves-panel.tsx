@@ -6,6 +6,7 @@ import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { cn, shortId } from "@/shared/lib/utils";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMeltingAnalysis } from "../hooks/use-melting-analysis";
+import { useProtocol } from "../hooks/use-protocols";
 import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
 import {
   type PlotStep,
@@ -14,6 +15,7 @@ import {
   orderedPositions,
 } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState, applyClick } from "../lib/curve-selection";
+import { bandFor, hitWells, splitRunRules } from "../lib/melt-hits";
 import {
   batchDoseCount,
   batchSeries,
@@ -21,12 +23,14 @@ import {
   firstToSelect,
   resultRows,
   sampleTextOf,
+  seriesCaption,
 } from "../lib/melt-results";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
 import { ConcentrationChart } from "./concentration-chart";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
+import { MeltHitRule } from "./melt-hit-rule";
 import { MeltResultsPanel } from "./melt-results-panel";
 import { MeltingStepsPanel, stepInput } from "./melting-steps-panel";
 
@@ -43,8 +47,17 @@ export function RunCurvesPanel({
   run,
 }: {
   runId: string;
-  /** Given, Edit labelling is offered to editors. */
-  run?: Pick<Run, "id" | "protocol_id" | "status" | "is_locked">;
+  /** Given, Edit labelling is offered to editors and the run's hit rule calls hits. */
+  run?: Pick<
+    Run,
+    | "id"
+    | "protocol_id"
+    | "status"
+    | "is_locked"
+    | "hit_criteria"
+    | "hit_criteria_set_by"
+    | "hit_criteria_set_at"
+  >;
 }) {
   const canEdit = useCanEdit();
   const [editOpen, setEditOpen] = useState(false);
@@ -76,6 +89,17 @@ export function RunCurvesPanel({
 
   const melting = useMeltingAnalysis(runId);
   const analysis = melting.data;
+  // The run's recorded hit rule (never the protocol's recommendation by itself).
+  const { data: protocol } = useProtocol(run?.protocol_id);
+  const readouts = useMemo(() => protocol?.readout_definitions ?? [], [protocol]);
+  const { applicable, other } = useMemo(
+    () => splitRunRules(run?.hit_criteria ?? [], readouts),
+    [run?.hit_criteria, readouts],
+  );
+  const hits = useMemo(
+    () => (analysis && data ? hitWells(analysis, data.positions, applicable) : new Set<string>()),
+    [analysis, data, applicable],
+  );
   // The value field of the open step form; a plot click fills it.
   const [stepValue, setStepValue] = useState("");
   const channelKey = set?.channel ?? null;
@@ -94,7 +118,6 @@ export function RunCurvesPanel({
   // Once per run: with nothing selected yet, start on the row most worth a look.
   const [leadWindow, setLeadWindow] = useState<string | null>(null);
   const [shown, setShown] = useState<readonly string[]>([]);
-  const [threshold, setThreshold] = useState(2);
   const initialised = useRef<string | null>(null);
   useEffect(() => {
     if (!analysis || !data || initialised.current === runId) return;
@@ -160,9 +183,11 @@ export function RunCurvesPanel({
       {lead && anchor && series.length > 0 ? (
         <ConcentrationChart
           title={`${[sampleTextOf(anchor), batchSuffix(anchor)].filter(Boolean).join(" · ")} — ΔTm (${lead.window}) by concentration`}
+          caption={anchorBatch ? seriesCaption(lead, anchorBatch, doseUnit) : undefined}
           points={series}
           doseUnit={doseUnit}
-          threshold={threshold}
+          hits={hits}
+          band={bandFor(applicable, lead.window)}
           selected={selection.selected}
           onSelect={(id) =>
             setSelection(applyClick(selection, [id], id, { shift: false, toggle: false }))
@@ -215,7 +240,20 @@ export function RunCurvesPanel({
               headerAction={editLabelling}
               onLeadWindowChange={setLeadWindow}
               onShownWindowsChange={setShown}
-              onThresholdChange={setThreshold}
+              hits={hits}
+              applicable={applicable}
+              hitRule={
+                run && (
+                  <MeltHitRule
+                    run={run}
+                    readoutDefinitions={readouts}
+                    recommendation={protocol?.recommended_hit_criteria ?? null}
+                    applicable={applicable}
+                    other={other}
+                    canEdit={canEdit}
+                  />
+                )
+              }
               designHref={run && `/assays/protocols/${run.protocol_id}#design`}
             />
           ) : melting.isLoading ? (

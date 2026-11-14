@@ -1,9 +1,8 @@
 "use client";
 
-import { Input } from "@/shared/components/ui/input";
 import { cn } from "@/shared/lib/utils";
 import { X } from "lucide-react";
-import { Fragment, type ReactNode, useState } from "react";
+import { Fragment, type ReactNode } from "react";
 import type { ResultFilter, WindowSummary } from "../lib/melt-results";
 
 const NOTE = "font-medium text-amber-700 dark:text-amber-400";
@@ -60,8 +59,7 @@ export function MeltSummaryStrip({
   perWindow,
   shown,
   onSelectReferences,
-  threshold,
-  onThresholdChange,
+  hasRule,
   filter,
   onFilterChange,
 }: {
@@ -74,17 +72,11 @@ export function MeltSummaryStrip({
   shown?: { count: number; total: number };
   /** Selects the reference positions, so their steps can be reviewed. */
   onSelectReferences?: () => void;
-  threshold: number;
-  onThresholdChange: (t: number) => void;
+  /** The run's hit rule names a Tm or ΔTm readout, so hits are counted. */
+  hasRule: boolean;
   filter: ResultFilter;
   onFilterChange: (f: ResultFilter) => void;
 }) {
-  // The field's text while typing; a usable value applies at once, the rest on blur.
-  const [draft, setDraft] = useState<string | null>(null);
-  const commit = () => {
-    if (draft !== null) onThresholdChange(Number(draft));
-    setDraft(null);
-  };
   const toggle = { active: filter, onToggle: onFilterChange };
   const labels = [...new Set(summary.referenceLabels)].join(", ");
   const reference = ["Reference", labels].filter(Boolean).join(" ");
@@ -143,46 +135,37 @@ export function MeltSummaryStrip({
       <CountButton value="provisional" count={summary.provisional} {...toggle}>
         {`Provisional ${summary.provisional}`}
       </CountButton>
-      <Dot />
-      <span className="inline-flex items-center gap-1.5">
-        <span className="text-muted-foreground">|ΔTm| ≥</span>
-        <Input
-          type="number"
-          aria-label="Shift threshold (°C)"
-          min={0}
-          step={0.5}
-          className="h-7 w-16 px-2 text-sm tabular-nums"
-          value={draft ?? threshold}
-          onChange={(e) => {
-            setDraft(e.target.value);
-            if (Number(e.target.value) > 0) onThresholdChange(Number(e.target.value));
-          }}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") commit();
-          }}
-        />
-        <span className="text-muted-foreground">°C:</span>
-        <CountButton
-          value="up"
-          count={summary.up}
-          tone="text-blue-700 dark:text-blue-300"
-          {...toggle}
-        >
-          {`${summary.up} up`}
-        </CountButton>
-        <span aria-hidden className="text-muted-foreground">
-          ·
-        </span>
-        <CountButton
-          value="down"
-          count={summary.down}
-          tone="text-red-700 dark:text-red-300"
-          {...toggle}
-        >
-          {`${summary.down} down`}
-        </CountButton>
-      </span>
+      {hasRule && (
+        <>
+          <Dot />
+          <span className="inline-flex items-center gap-1.5">
+            <CountButton value="hits" count={summary.hits} tone="font-medium" {...toggle}>
+              {`Hits ${summary.hits}`}
+            </CountButton>
+            <span className="text-muted-foreground">(</span>
+            <CountButton
+              value="up"
+              count={summary.up}
+              tone="text-blue-700 dark:text-blue-300"
+              {...toggle}
+            >
+              {`${summary.up} up`}
+            </CountButton>
+            <span aria-hidden className="text-muted-foreground">
+              ·
+            </span>
+            <CountButton
+              value="down"
+              count={summary.down}
+              tone="text-red-700 dark:text-red-300"
+              {...toggle}
+            >
+              {`${summary.down} down`}
+            </CountButton>
+            <span className="text-muted-foreground">)</span>
+          </span>
+        </>
+      )}
       {shown && (
         <span className="text-muted-foreground">{`${shown.count} of ${shown.total} samples`}</span>
       )}

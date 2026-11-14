@@ -8,6 +8,7 @@ import type { MeltWindowModelTmReadoutId } from './meltWindowModelTmReadoutId';
 import type { MeltWindowModelDeltaTmReadoutId } from './meltWindowModelDeltaTmReadoutId';
 import type { MeltWindowModelReferenceTm } from './meltWindowModelReferenceTm';
 import type { MeltWindowPositionModel } from './meltWindowPositionModel';
+import type { MeltSeriesModel } from './meltSeriesModel';
 
 export interface MeltWindowModel {
   window: string;
@@ -20,4 +21,5 @@ export interface MeltWindowModel {
   reference_count: number;
   flags: string[];
   positions: MeltWindowPositionModel[];
+  series: MeltSeriesModel[];
 }

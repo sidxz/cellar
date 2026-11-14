@@ -13,13 +13,14 @@ from cellar.application.screening.get_melting_analysis import (
     GetMeltingAnalysisQuery,
     MeltingAnalysis,
     WindowAnalysis,
+    WindowSeries,
 )
 from cellar.application.screening.manage_melting_steps import (
     AddMeltingStepCommand,
     MeltingStepChange,
     ReviewMeltingStepCommand,
 )
-from cellar.domain.screening_assay.melt_window import PositionWindowResult
+from cellar.domain.screening_assay.melt_window import MeltMeasure, PositionWindowResult
 from cellar.domain.screening_assay.melting_step import (
     MeltingStep,
     MeltingStepSource,
@@ -81,6 +82,46 @@ class MeltWindowPositionModel(BaseModel):
         )
 
 
+class MeltSeriesValueModel(BaseModel):
+    batch_id: uuid.UUID
+    value: float
+    # "=" or ">" (a lowest shifting concentration not reached: above the highest tested).
+    qualifier: str
+    # Where the value belongs: where Max ΔTm occurred, the lowest shifting
+    # concentration itself, or the stated concentration. Protocol dose unit.
+    concentration: float | None
+
+
+class MeltSeriesModel(BaseModel):
+    """A descriptive series readout of the window and its value per batch (no fit)."""
+
+    readout_id: uuid.UUID
+    readout_name: str
+    measure: MeltMeasure
+    threshold: float | None
+    concentration: float | None
+    values: list[MeltSeriesValueModel]
+
+    @classmethod
+    def from_domain(cls, s: WindowSeries) -> MeltSeriesModel:
+        return cls(
+            readout_id=s.readout_id,
+            readout_name=s.readout_name,
+            measure=s.measure,
+            threshold=s.threshold,
+            concentration=s.concentration,
+            values=[
+                MeltSeriesValueModel(
+                    batch_id=v.batch_id,
+                    value=v.value,
+                    qualifier=v.qualifier.value,
+                    concentration=v.concentration,
+                )
+                for v in s.values
+            ],
+        )
+
+
 class MeltWindowModel(BaseModel):
     window: str
     channel_key: str
@@ -92,6 +133,7 @@ class MeltWindowModel(BaseModel):
     reference_count: int
     flags: list[str]
     positions: list[MeltWindowPositionModel]
+    series: list[MeltSeriesModel]
 
     @classmethod
     def from_domain(cls, w: WindowAnalysis) -> MeltWindowModel:
@@ -106,6 +148,7 @@ class MeltWindowModel(BaseModel):
             reference_count=w.result.reference_count,
             flags=[f.value for f in w.result.flags],
             positions=[MeltWindowPositionModel.from_domain(p) for p in w.result.positions],
+            series=[MeltSeriesModel.from_domain(x) for x in w.series],
         )
 
 

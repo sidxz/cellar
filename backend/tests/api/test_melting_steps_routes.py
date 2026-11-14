@@ -57,7 +57,10 @@ async def _analysis(client: AsyncClient, run_id: uuid.UUID) -> dict[str, Any]:
 
 
 async def _setup(
-    client: AsyncClient, session_factory: async_sessionmaker[AsyncSession], ws: uuid.UUID
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    ws: uuid.UUID,
+    main_extra: dict[str, Any] | None = None,
 ) -> tuple[Seeded, dict[str, Any]]:
     """Seed, add the two windows through the protocol route, import the melt file."""
     s = await _seed(session_factory, ws)
@@ -73,7 +76,8 @@ async def _setup(
                 "low": low,
                 "high": high,
                 "measures": ["tm", "delta_tm"],
-            },
+            }
+            | (main_extra or {} if name == "Main" else {}),
         )
         assert resp.status_code == 201, resp.text
 
@@ -369,3 +373,37 @@ async def test_other_workspace_step_returns_404(
         )
     assert (read.status_code, review.status_code, add.status_code) == (404, 404, 404)
     assert _step(await _analysis(client, s.run_id), 64.0)["version"] == 1
+
+
+async def test_analysis_lists_series_values_with_their_qualifier(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    extra = {
+        "measures": ["tm", "delta_tm", "max_delta_tm", "lowest_shift_concentration"],
+        "lowest_shift_threshold": 8.0,
+    }
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id, main_extra=extra)
+    series = {x["readout_name"]: x for x in _window(analysis, "Main")["series"]}
+    assert _window(analysis, "Lower")["series"] == []
+
+    [mx] = series["Max ΔTm (Main)"]["values"]
+    assert (mx["batch_id"], mx["qualifier"], mx["concentration"]) == (str(s.batch_id), "=", 10.0)
+    assert mx["value"] == pytest.approx(-7.3)
+    low = series["Lowest shifting conc. (Main, ±8 °C)"]
+    assert (low["measure"], low["threshold"], low["concentration"]) == (
+        "lowest_shift_concentration",
+        8.0,
+        None,
+    )
+    assert [(v["value"], v["qualifier"]) for v in low["values"]] == [(10.0, ">")]
+
+    stored = await _sql(
+        session_factory,
+        "SELECT well_id, batch_id, value_numeric FROM readout_data "
+        "WHERE readout_definition_id = :rd AND is_computed = true",
+        rd=uuid.UUID(series["Max ΔTm (Main)"]["readout_id"]),
+    )
+    [(well_id, batch_id, value)] = list(stored)
+    assert (well_id, batch_id) == (None, s.batch_id) and value == pytest.approx(-7.3)

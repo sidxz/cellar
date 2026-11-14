@@ -25,6 +25,7 @@ from cellar.interface.routes._intercept_response import (
     InterceptSpecResponse,
     InterceptValueResponse,
 )
+from cellar.interface.routes.protocols import MeltConfigModel
 
 __all__ = ["InterceptSpecResponse", "InterceptValueResponse"]
 
@@ -93,6 +94,8 @@ class ReadoutDefInfoResponse(BaseModel):
     # For DR readouts, the protocol's declared intercept specs. Drives
     # the activity grid's dynamic column headers (one column per spec).
     intercepts: list[InterceptSpecResponse] = []
+    # A thermal-shift readout's temperature window; null for other readouts.
+    melt_config: MeltConfigModel | None = None
 
 
 class CompoundActivityResponse(BaseModel):
@@ -215,6 +218,7 @@ async def get_protocol_activity_summary(
                 data_type=rd.data_type,
                 unit=rd.unit,
                 best_direction=rd.best_direction,
+                melt_config=MeltConfigModel(**rd.melt_config) if rd.melt_config else None,
                 intercepts=[
                     InterceptSpecResponse(
                         kind=spec.kind,

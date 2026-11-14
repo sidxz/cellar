@@ -4,6 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
+import { type ApplicableRule, bandFor } from "../lib/melt-hits";
 import {
   type ResultFilter,
   type WindowSummary,
@@ -13,7 +14,6 @@ import {
   shiftRows,
   windowSummary,
 } from "../lib/melt-results";
-import { useShiftThreshold } from "../lib/use-shift-threshold";
 import type { MeltingAnalysis } from "../types";
 import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
@@ -37,8 +37,12 @@ export interface MeltResultsPanelProps {
   onLeadWindowChange?: (windowName: string | null) => void;
   /** The windows the results show: the lead, or all of them in Compare. */
   onShownWindowsChange?: (names: readonly string[]) => void;
-  /** Reports the ΔTm threshold in use (the chart beside the grid shows the same band). */
-  onThresholdChange?: (threshold: number) => void;
+  /** The positions the run's hit rule calls hits (empty without a rule). */
+  hits: ReadonlySet<string>;
+  /** The run's rules that apply to Tm/ΔTm; they draw the shift plot's band. */
+  applicable: readonly ApplicableRule[];
+  /** The run's hit rule line, shown above the counts. */
+  hitRule?: ReactNode;
   /** The protocol's Design tab, where windows are added; links the no-window note. */
   designHref?: string;
 }
@@ -55,10 +59,11 @@ export function MeltResultsPanel({
   headerAction,
   onLeadWindowChange,
   onShownWindowsChange,
-  onThresholdChange,
+  hits,
+  applicable,
+  hitRule,
   designHref,
 }: MeltResultsPanelProps) {
-  const [threshold, setThreshold] = useShiftThreshold();
   // The window last chosen by name; kept across signals and used where it exists.
   const [chosen, setChosen] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
@@ -82,9 +87,6 @@ export function MeltResultsPanel({
   useEffect(() => {
     onShownWindowsChange?.(windowNames);
   }, [windowNames, onShownWindowsChange]);
-  useEffect(() => {
-    onThresholdChange?.(threshold);
-  }, [threshold, onThresholdChange]);
 
   const rows = useMemo(
     () => resultRows(windows, positions, analysis.steps, analysis.step_checks),
@@ -95,24 +97,24 @@ export function MeltResultsPanel({
     const { pinned, body } = orderRows(rows, windowNames);
     return {
       pinned,
-      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, threshold)),
+      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, hits)),
     };
-  }, [rows, windowNames, activeFilter, threshold]);
+  }, [rows, windowNames, activeFilter, hits]);
 
   const sampleCount = useMemo(() => rows.filter((r) => r.isSample).length, [rows]);
   const each = useMemo<WindowSummary[]>(
     () =>
       (comparing ? windows : lead ? [lead] : []).map((w) =>
-        windowSummary(w, rows, positions, analysis.steps, analysis.step_checks, threshold),
+        windowSummary(w, rows, positions, analysis.steps, analysis.step_checks, hits),
       ),
-    [comparing, windows, lead, rows, positions, analysis, threshold],
+    [comparing, windows, lead, rows, positions, analysis, hits],
   );
   const summary = useMemo<WindowSummary | null>(() => {
     if (each.length === 0) return null;
     // Counted per position across the shown windows (once each), as the filters match.
     const samples = rows.filter((r) => r.isSample);
     const n = (f: ResultFilter) =>
-      samples.filter((r) => matchesFilter(r, windowNames, f, threshold)).length;
+      samples.filter((r) => matchesFilter(r, windowNames, f, hits)).length;
     return {
       ...each[0],
       referenceLabels: each.flatMap((s) => s.referenceLabels),
@@ -120,10 +122,11 @@ export function MeltResultsPanel({
       referenceUnreviewed: each.some((s) => s.referenceUnreviewed),
       needsReview: n("needs_review"),
       provisional: n("provisional"),
+      hits: n("hits"),
       up: n("up"),
       down: n("down"),
     };
-  }, [each, rows, threshold, windowNames]);
+  }, [each, rows, hits, windowNames]);
   // The references with a value in the shown windows (all of them if none has).
   const selectReferences = () => {
     const inShown = ordered.pinned.filter((r) => windowNames.some((n) => r.cells[n]));
@@ -165,6 +168,7 @@ export function MeltResultsPanel({
         </div>
         {headerAction && <div className="ml-auto flex items-center gap-2">{headerAction}</div>}
       </div>
+      {hitRule}
       {summary ? (
         <MeltSummaryStrip
           summary={summary}
@@ -176,8 +180,7 @@ export function MeltResultsPanel({
               : undefined
           }
           onSelectReferences={ordered.pinned.length ? selectReferences : undefined}
-          threshold={threshold}
-          onThresholdChange={setThreshold}
+          hasRule={applicable.length > 0}
           filter={activeFilter}
           onFilterChange={setFilter}
         />
@@ -195,10 +198,11 @@ export function MeltResultsPanel({
       {view === "plot" && !comparing && lead ? (
         <ShiftPlot
           rows={shiftRows(
-            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, threshold)),
+            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits)),
             lead.window,
           )}
-          threshold={threshold}
+          hits={hits}
+          band={bandFor(applicable, lead.window)}
           selected={selection.selected}
           onSelect={(id) =>
             onSelectionChange(applyClick(selection, [id], id, { shift: false, toggle: false }))
@@ -208,7 +212,7 @@ export function MeltResultsPanel({
         <MeltResultsGrid
           rows={ordered}
           windowNames={windowNames}
-          threshold={threshold}
+          hits={hits}
           doseUnit={doseUnit}
           selection={selection}
           onRowClick={(id, mods, order) =>

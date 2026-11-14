@@ -106,6 +106,7 @@ def _make_run(
     run_date: date,
     status: RunStatus = RunStatus.APPROVED,
     protocol_id: uuid.UUID = PROTO_ID,
+    notes: str | None = None,
 ) -> Run:
     """Build a Run aggregate suitable as a `find_by_ids` payload row.
 
@@ -121,6 +122,7 @@ def _make_run(
         run_date=run_date,
         operator=uuid.uuid4(),
         status=status,
+        notes=notes,
     )
 
 
@@ -1133,6 +1135,8 @@ class TestGetActivitySummaryReportedEndpoints:
         assert len(proto.best_curves) == 1
         assert proto.best_curves[0]["fitted_value"] == 5.2
         assert proto.readouts == []
+        # Curves: the results live on the run's Dose-Response tab.
+        assert proto.results_tab == "dose-response"
         readout_repo.find_aggregated_by_molecules.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -1146,3 +1150,167 @@ class TestGetActivitySummaryReportedEndpoints:
 
         assert summary.protocols == []
         readout_repo.find_aggregated_by_molecules.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# get_activity_summary — plain (non-dose-response) readouts and the hit marker.
+# ---------------------------------------------------------------------------
+
+
+class TestGetActivitySummaryPlainReadouts:
+    """A thermal-shift protocol has no curves; its readouts still earn a card."""
+
+    DRAFT_RUN = uuid.uuid4()
+    DONE_RUN = uuid.uuid4()
+
+    @staticmethod
+    def _rd(name: str, measure: str | None, unit: str = "°C"):
+        from cellar.domain.screening_assay.enums import ReadoutAggregation, ReadoutDataType
+        from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
+        from cellar.domain.screening_assay.protocol import ReadoutDefinition
+
+        param = {}
+        if measure == "lowest_shift_concentration":
+            param = {"threshold": 2.0}
+        cfg = (
+            MeltReadoutConfig(
+                window="Main",
+                measure=MeltMeasure(measure),
+                channel_key="ratio",
+                low=50.0,
+                high=85.0,
+                **param,
+            )
+            if measure
+            else None
+        )
+        return ReadoutDefinition(
+            protocol_id=PROTO_ID,
+            name=name,
+            data_type=ReadoutDataType.NUMERIC,
+            unit=unit,
+            aggregation=ReadoutAggregation.MEAN,
+            melt_config=cfg,
+        )
+
+    def _setup(self, criteria=None):
+        from cellar.domain.screening_assay.enums import ReadoutNormalization
+        from cellar.domain.shared.enums import Qualifier
+        from cellar.domain.shared.value_objects import QualifiedValue
+
+        dtm = self._rd("ΔTm (Main)", "delta_tm")
+        mx = self._rd("Max ΔTm (Main)", "max_delta_tm")
+        low = self._rd("Lowest shifting conc. (Main, ±2 °C)", "lowest_shift_concentration", "uM")
+
+        def row(rd, run, value, *, q=Qualifier.EQUAL, well=True, norm=None, outlier=False):
+            return ReadoutData(
+                workspace_id=WS,
+                run_id=run,
+                well_id=uuid.uuid4() if well else None,
+                molecule_id=MOL_ID,
+                readout_definition_id=rd.id,
+                value=QualifiedValue(value=value, qualifier=q),
+                is_computed=True,
+                normalization_applied=norm,
+                is_outlier=outlier,
+            )
+
+        rows = [
+            row(dtm, self.DRAFT_RUN, -8.5),
+            row(dtm, self.DRAFT_RUN, -7.8),
+            row(dtm, self.DRAFT_RUN, 1.4),
+            row(dtm, self.DRAFT_RUN, -30.0, outlier=True),
+            row(dtm, self.DRAFT_RUN, 99.0, norm=ReadoutNormalization.PERCENT_INHIBITION),
+            row(mx, self.DRAFT_RUN, -8.5, well=False),
+            row(low, self.DRAFT_RUN, 6.25, well=False),
+            row(low, self.DONE_RUN, 50.0, q=Qualifier.GREATER_THAN, well=False),
+        ]
+        readout_repo = AsyncMock()
+        readout_repo.find_by_molecule = AsyncMock(return_value=rows)
+        readout_repo.find_aggregated_by_molecules = AsyncMock(return_value={})
+        curve_repo = AsyncMock()
+        curve_repo.find_by_molecule = AsyncMock(return_value=[])
+        service = _make_service(
+            curve_repo=curve_repo,
+            run_repo=_run_repo_for(
+                {
+                    self.DRAFT_RUN: _make_run(
+                        run_id=self.DRAFT_RUN,
+                        run_date=date(2026, 11, 13),
+                        status=RunStatus.DRAFT,
+                        notes="Second walk-through run",
+                    ),
+                    self.DONE_RUN: _make_run(run_id=self.DONE_RUN, run_date=date(2026, 11, 1)),
+                }
+            ),
+            readout_repo=readout_repo,
+        )
+        proto = _make_protocol(
+            protocol_id=PROTO_ID, name="Thermal", dose_unit="uM", readout_defs=[dtm, mx, low]
+        )
+        proto.recommended_hit_criteria = criteria
+        service._protocol_repo.find_by_ids = AsyncMock(return_value=[proto])
+        return service
+
+    @pytest.mark.asyncio
+    async def test_plain_readouts_earn_a_card_with_best_value_runs_and_drafts(self) -> None:
+        summary = await self._setup().get_activity_summary(WS, MOL_ID)
+
+        [card] = summary.protocols
+        assert card.best_curves == [] and card.readouts == []
+        got = {r.readout_name: r for r in card.plain_readouts}
+        assert list(got) == [
+            "ΔTm (Main)",
+            "Max ΔTm (Main)",
+            "Lowest shifting conc. (Main, ±2 °C)",
+        ]
+        dtm = got["ΔTm (Main)"]
+        # Largest shift either way; the outlier and the normalized layer are left out.
+        assert (dtm.value, dtm.qualifier, dtm.data_point_count) == (-8.5, "=", 3)
+        assert (dtm.run_count, dtm.draft_run_count, dtm.unit) == (1, 1, "°C")
+        low = got["Lowest shifting conc. (Main, ±2 °C)"]
+        assert (low.value, low.qualifier, low.run_count, low.draft_run_count) == (6.25, "=", 2, 1)
+        assert card.hit is None and card.hit_criteria == []
+
+    @pytest.mark.asyncio
+    async def test_hit_marker_follows_the_protocol_recommendation(self) -> None:
+        from cellar.domain.shared.hit_criterion import HitCriterion
+
+        outside = HitCriterion(
+            readout_name="Max ΔTm (Main)", operator="not_between", value=[-2.0, 2.0]
+        )
+        summary = await self._setup([outside]).get_activity_summary(WS, MOL_ID)
+        [card] = summary.protocols
+        assert card.hit is True
+        assert card.hit_criteria == [outside.to_dict()]
+
+        big = HitCriterion(readout_name="ΔTm (Main)", operator="gt", value=5.0)
+        [card] = (await self._setup([outside, big]).get_activity_summary(WS, MOL_ID)).protocols
+        assert card.hit is False
+
+        missing = HitCriterion(readout_name="Not measured", operator="gt", value=0.0)
+        [card] = (await self._setup([missing]).get_activity_summary(WS, MOL_ID)).protocols
+        assert card.hit is False
+
+    @pytest.mark.asyncio
+    async def test_card_names_the_protocol_its_runs_and_where_to_look(self) -> None:
+        service = self._setup()
+        [proto] = service._protocol_repo.find_by_ids.return_value
+        proto.code = "PRT-00219"
+
+        [card] = (await service.get_activity_summary(WS, MOL_ID)).protocols
+
+        assert card.protocol_code == "PRT-00219"
+        # Newest first, with status, so the page can link each and mark drafts.
+        assert [(r.run_id, r.run_date, r.status, r.notes) for r in card.runs] == [
+            (self.DRAFT_RUN, date(2026, 11, 13), "draft", "Second walk-through run"),
+            (self.DONE_RUN, date(2026, 11, 1), "approved", None),
+        ]
+        # Thermal-shift readouts: the results live on the run's Traces tab.
+        assert card.results_tab == "curves"
+        directions = {r.readout_name: r.best_direction for r in card.plain_readouts}
+        assert directions == {
+            "ΔTm (Main)": "magnitude",
+            "Max ΔTm (Main)": "magnitude",
+            "Lowest shifting conc. (Main, ±2 °C)": "low",
+        }

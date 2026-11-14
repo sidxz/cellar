@@ -77,6 +77,7 @@ from cellar.interface.pagination import (
     clamp_limit,
     parse_cursor,
 )
+from cellar.interface.routes._campaign_dtos import HitCriterionDTO
 from cellar.interface.routes.batches import BatchResponse
 
 router = APIRouter(prefix="/api/v1/molecules", tags=["molecules"])
@@ -257,6 +258,30 @@ class ActivityValueResponse(BaseModel):
     data_point_count: int = 1
 
 
+class ReadoutSummaryResponse(BaseModel):
+    """A plain (non-dose-response) readout of the molecule on the protocol, across runs."""
+
+    readout_definition_id: uuid.UUID
+    readout_name: str
+    value: float
+    qualifier: str
+    unit: str | None = None
+    data_point_count: int
+    run_count: int
+    # Runs not yet completed or approved; the page marks values that rest on them.
+    draft_run_count: int
+    # How the value was chosen: "high", "low" or "magnitude" (largest shift either way).
+    best_direction: str
+
+
+class RunLinkResponse(BaseModel):
+    run_id: uuid.UUID
+    run_date: date
+    status: str
+    # The run's notes (its description); tells runs on the same day apart.
+    notes: str | None = None
+
+
 class ProtocolActivityResponse(BaseModel):
     protocol_id: uuid.UUID
     protocol_name: str
@@ -267,6 +292,15 @@ class ProtocolActivityResponse(BaseModel):
     # builds one column per spec inside this protocol's Card; matches
     # cell values out of each row's ``intercept_values``.
     intercepts: list[dict[str, Any]] = []
+    plain_readouts: list[ReadoutSummaryResponse] = []
+    # The protocol's recommended hit rule applied to the molecule; null without one.
+    hit: bool | None = None
+    hit_criteria: list[HitCriterionDTO] = []
+    protocol_code: str | None = None
+    # Runs of the protocol holding the molecule's data, newest first.
+    runs: list[RunLinkResponse] = []
+    # The run tab that shows these results ("curves" = Traces, "dose-response").
+    results_tab: str | None = None
 
 
 class ActivitySummaryResponse(BaseModel):
@@ -296,6 +330,30 @@ class ActivitySummaryResponse(BaseModel):
                     ],
                     best_curves=p.best_curves,
                     intercepts=p.intercepts,
+                    plain_readouts=[
+                        ReadoutSummaryResponse(
+                            readout_definition_id=r.readout_definition_id,
+                            readout_name=r.readout_name,
+                            value=r.value,
+                            qualifier=r.qualifier,
+                            unit=r.unit,
+                            data_point_count=r.data_point_count,
+                            run_count=r.run_count,
+                            draft_run_count=r.draft_run_count,
+                            best_direction=r.best_direction,
+                        )
+                        for r in p.plain_readouts
+                    ],
+                    hit=p.hit,
+                    hit_criteria=[HitCriterionDTO.model_validate(c) for c in p.hit_criteria],
+                    protocol_code=p.protocol_code,
+                    runs=[
+                        RunLinkResponse(
+                            run_id=r.run_id, run_date=r.run_date, status=r.status, notes=r.notes
+                        )
+                        for r in p.runs
+                    ],
+                    results_tab=p.results_tab,
                 )
                 for p in summary.protocols
             ],

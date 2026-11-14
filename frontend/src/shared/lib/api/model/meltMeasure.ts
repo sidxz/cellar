@@ -12,4 +12,7 @@ export type MeltMeasure = typeof MeltMeasure[keyof typeof MeltMeasure];
 export const MeltMeasure = {
   tm: 'tm',
   delta_tm: 'delta_tm',
+  max_delta_tm: 'max_delta_tm',
+  lowest_shift_concentration: 'lowest_shift_concentration',
+  delta_tm_at_concentration: 'delta_tm_at_concentration',
 } as const;

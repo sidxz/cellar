@@ -11,6 +11,7 @@ from cellar.application.auth import AuthContext, require_same_workspace, require
 from cellar.application.screening.manage_melting_steps import NOT_EDITABLE
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
+from cellar.domain.screening_assay.melt_series import SeriesValue, series_points, series_values
 from cellar.domain.screening_assay.melt_window import (
     MeltMeasure,
     StepCountCheck,
@@ -20,6 +21,7 @@ from cellar.domain.screening_assay.melt_window import (
     window_positions,
 )
 from cellar.domain.screening_assay.melting_step import MeltingStep
+from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.repository import (
     MeasuredCurveRepository,
     MeltingStepRepository,
@@ -38,6 +40,18 @@ class GetMeltingAnalysisQuery(Query):
 
 
 @dataclass(frozen=True)
+class WindowSeries:
+    """A series readout of a window and its value per batch, as the engine computes it."""
+
+    readout_id: uuid.UUID
+    readout_name: str
+    measure: MeltMeasure
+    threshold: float | None
+    concentration: float | None
+    values: tuple[SeriesValue, ...]
+
+
+@dataclass(frozen=True)
 class WindowAnalysis:
     window: str
     channel_key: str
@@ -46,6 +60,7 @@ class WindowAnalysis:
     tm_readout_id: uuid.UUID | None
     delta_tm_readout_id: uuid.UUID | None
     result: WindowResult
+    series: tuple[WindowSeries, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -102,25 +117,48 @@ class GetMeltingAnalysis:
         wells = [(w.id, w.well_type) for w in run.wells]
         counted = [(s.well_id, s.channel_key, s.value, s.counts) for s in steps]
 
+        batch_and_dose = {w.id: (w.batch_id, w.dose) for w in run.wells}
+
         # Readouts of one window share its channel and limits (Protocol enforces it).
-        grouped: dict[str, dict[MeltMeasure, uuid.UUID]] = {}
+        per_position: dict[str, dict[MeltMeasure, uuid.UUID]] = {}
+        series_defs: dict[str, list[ReadoutDefinition]] = {}
         shape: dict[str, tuple[str, float, float]] = {}
         for rd in protocol.readout_definitions:
-            if (mc := rd.melt_config) is not None:
-                grouped.setdefault(mc.window, {})[mc.measure] = rd.id
-                shape[mc.window] = (mc.channel_key, mc.low, mc.high)
-        windows = tuple(
-            WindowAnalysis(
+            if (mc := rd.melt_config) is None:
+                continue
+            shape[mc.window] = (mc.channel_key, mc.low, mc.high)
+            if mc.measure.is_series:
+                series_defs.setdefault(mc.window, []).append(rd)
+            else:
+                per_position.setdefault(mc.window, {})[mc.measure] = rd.id
+
+        def analyse(name: str, channel: str, low: float, high: float) -> WindowAnalysis:
+            result = evaluate_window(low, high, window_positions(wells, counted, channel, traced))
+            points = series_points(result, batch_and_dose)
+            ids = per_position.get(name, {})
+            return WindowAnalysis(
                 window=name,
                 channel_key=channel,
                 low=low,
                 high=high,
-                tm_readout_id=grouped[name].get(MeltMeasure.TM),
-                delta_tm_readout_id=grouped[name].get(MeltMeasure.DELTA_TM),
-                result=evaluate_window(
-                    low, high, window_positions(wells, counted, channel, traced)
+                tm_readout_id=ids.get(MeltMeasure.TM),
+                delta_tm_readout_id=ids.get(MeltMeasure.DELTA_TM),
+                result=result,
+                series=tuple(
+                    WindowSeries(
+                        readout_id=rd.id,
+                        readout_name=rd.name,
+                        measure=rd.melt_config.measure,  # type: ignore[union-attr]
+                        threshold=rd.melt_config.threshold,  # type: ignore[union-attr]
+                        concentration=rd.melt_config.concentration,  # type: ignore[union-attr]
+                        values=tuple(series_values(rd.melt_config, points)),  # type: ignore[arg-type]
+                    )
+                    for rd in series_defs.get(name, [])
                 ),
             )
+
+        windows = tuple(
+            analyse(name, channel, low, high)
             for name, (channel, low, high) in sorted(shape.items(), key=lambda kv: kv[1][1])
         )
         step_checks = tuple(

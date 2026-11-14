@@ -5,6 +5,8 @@
  * OpenAPI spec version: 1.3.0-153-g5425880a
  */
 import type { MeltMeasure } from './meltMeasure';
+import type { AddTemperatureWindowRequestLowestShiftThreshold } from './addTemperatureWindowRequestLowestShiftThreshold';
+import type { AddTemperatureWindowRequestDeltaTmAtConcentration } from './addTemperatureWindowRequestDeltaTmAtConcentration';
 
 export interface AddTemperatureWindowRequest {
   /**
@@ -18,4 +20,6 @@ export interface AddTemperatureWindowRequest {
   high: number;
   /** @minItems 1 */
   measures: MeltMeasure[];
+  lowest_shift_threshold?: AddTemperatureWindowRequestLowestShiftThreshold;
+  delta_tm_at_concentration?: AddTemperatureWindowRequestDeltaTmAtConcentration;
 }

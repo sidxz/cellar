@@ -168,6 +168,7 @@ class SQLAlchemyProtocolActivityReader:
                     ReadoutDataModel.molecule_id,
                     ReadoutDefinitionModel.name.label("readout_name"),
                     func.max(ReadoutDataModel.value_numeric).label("best"),
+                    func.min(ReadoutDataModel.value_numeric).label("low"),
                     func.avg(ReadoutDataModel.value_numeric).label("mean"),
                     func.count(ReadoutDataModel.value_numeric).label("n"),
                     func.stddev_samp(ReadoutDataModel.value_numeric).label("sd"),
@@ -199,6 +200,7 @@ class SQLAlchemyProtocolActivityReader:
                     mean=r.mean,
                     n=r.n,
                     sd=r.sd,
+                    low=r.low,
                 )
                 for r in raw_numeric_rows
             ]

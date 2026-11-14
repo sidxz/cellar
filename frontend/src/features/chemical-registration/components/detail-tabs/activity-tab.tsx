@@ -1,9 +1,17 @@
 "use client";
 
+import { criterionLabel } from "@/features/screening-assay/components/detail-tabs/use-activity-tab";
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
 import { findInterceptValue, interceptLabel } from "@/features/screening-assay/lib/intercept-label";
-import type { CurveClass, InterceptSpec, InterceptValue } from "@/features/screening-assay/types";
+import {
+  type CurveClass,
+  type HitCriterion,
+  type InterceptSpec,
+  type InterceptValue,
+  RUN_STATUS_LABELS,
+  type RunStatus,
+} from "@/features/screening-assay/types";
 import { EmptyState } from "@/shared/components/empty-state";
 import { Badge } from "@/shared/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
@@ -20,8 +28,11 @@ import type {
   ProtocolActivityResponse,
   ProtocolActivityResponseBestCurvesItem,
   ProtocolActivityResponseInterceptsItem,
+  ReadoutSummaryResponse,
 } from "@/shared/lib/api/model";
+import { formatDate } from "@/shared/lib/format-date";
 import { FlaskConical } from "lucide-react";
+import Link from "next/link";
 import { useMoleculeActivity } from "../../hooks/use-molecule-activity";
 
 // ---------------------------------------------------------------------------
@@ -98,12 +109,26 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
       {activity.protocols.map((protocol) => {
         const curves = bestCurves(protocol);
         const readouts = protocol.readouts ?? [];
+        const plain = protocol.plain_readouts ?? [];
         return (
           <Card key={protocol.protocol_id}>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <CardTitle className="text-base">{protocol.protocol_name}</CardTitle>
+                <CardTitle className="text-base">
+                  <Link
+                    href={`/assays/protocols/${protocol.protocol_id}`}
+                    className="underline-offset-4 hover:underline"
+                  >
+                    {protocol.protocol_name}
+                  </Link>
+                </CardTitle>
+                {protocol.protocol_code && (
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {protocol.protocol_code}
+                  </span>
+                )}
                 <Badge variant="outline">{protocol.protocol_type.replace(/_/g, " ")}</Badge>
+                <HitMarker protocol={protocol} />
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -150,7 +175,9 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
                   </Table>
                 </div>
               )}
-              {curves.length === 0 && readouts.length === 0 && (
+              {plain.length > 0 && <PlainReadoutTable readouts={plain} />}
+              <RunLinks protocol={protocol} />
+              {curves.length === 0 && readouts.length === 0 && plain.length === 0 && (
                 <p className="text-sm text-muted-foreground">No readout data for this protocol.</p>
               )}
             </CardContent>
@@ -158,6 +185,119 @@ export function ActivityTab({ moleculeId }: ActivityTabProps) {
         );
       })}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Plain readouts (thermal shift, single-point assays) and the hit call
+// ---------------------------------------------------------------------------
+
+/** Four significant figures, as the run's results show them. */
+const fmt = (v: number) => String(Number(v.toPrecision(4)));
+
+function runsText(r: ReadoutSummaryResponse): string {
+  const runs = `${r.run_count} run${r.run_count === 1 ? "" : "s"}`;
+  if (r.draft_run_count === 0) return runs;
+  return r.draft_run_count === r.run_count && r.run_count === 1
+    ? `${runs} (draft)`
+    : `${runs} (${r.draft_run_count} draft)`;
+}
+
+/** How the shown value was picked from the compound's values on this protocol. */
+function howChosen(r: ReadoutSummaryResponse): string {
+  const of = `${r.data_point_count} value${r.data_point_count === 1 ? "" : "s"} in ${
+    r.run_count
+  } run${r.run_count === 1 ? "" : "s"}`;
+  if (r.data_point_count === 1) return `From ${of}`;
+  if (r.best_direction === "magnitude") return `Largest shift in either direction of ${of}`;
+  if (r.best_direction === "low") return `Lowest of ${of}`;
+  return `Highest of ${of}`;
+}
+
+/** How much of a run's notes a same-day run link shows. */
+const NOTE_CHARS = 37;
+
+/** The runs holding the compound's data, each opening the tab that shows it. */
+function RunLinks({ protocol }: { protocol: ProtocolActivityResponse }) {
+  const runs = protocol.runs ?? [];
+  if (runs.length === 0) return null;
+  const hash = protocol.results_tab ? `#${protocol.results_tab}` : "";
+  // Runs on one date read alike; name them by their notes, else number them.
+  const sameDay = new Map<string, number>();
+  for (const r of runs) sameDay.set(r.run_date, (sameDay.get(r.run_date) ?? 0) + 1);
+  const seen = new Map<string, number>();
+  const label = (run: (typeof runs)[number]) => {
+    const base = `${formatDate(run.run_date)} · ${RUN_STATUS_LABELS[run.status as RunStatus] ?? run.status}`;
+    if ((sameDay.get(run.run_date) ?? 0) < 2) return base;
+    const nth = (seen.get(run.run_date) ?? 0) + 1;
+    seen.set(run.run_date, nth);
+    const notes = run.notes?.trim();
+    if (!notes) return `${base} (${nth})`;
+    return `${base} · ${notes.length > NOTE_CHARS ? `${notes.slice(0, NOTE_CHARS)}…` : notes}`;
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+      <span className="text-muted-foreground">Runs</span>
+      {runs.map((run) => (
+        <Link
+          key={run.run_id}
+          href={`/assays/runs/${run.run_id}${hash}`}
+          title={run.notes ?? undefined}
+          className="underline-offset-4 hover:underline"
+        >
+          {label(run)}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function PlainReadoutTable({ readouts }: { readouts: ReadoutSummaryResponse[] }) {
+  return (
+    <div className="rounded-lg border">
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Readout</TableHead>
+            <TableHead>Value</TableHead>
+            <TableHead>Unit</TableHead>
+            <TableHead>Runs</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {readouts.map((r) => (
+            <TableRow key={r.readout_definition_id}>
+              <TableCell>{r.readout_name}</TableCell>
+              <TableCell className="font-mono" title={howChosen(r)}>
+                {`${r.qualifier !== "=" ? `${r.qualifier} ` : ""}${fmt(r.value)}`}
+              </TableCell>
+              <TableCell className="text-muted-foreground">{r.unit ?? "—"}</TableCell>
+              <TableCell className={r.draft_run_count > 0 ? "text-muted-foreground" : undefined}>
+                {runsText(r)}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
+/** The protocol's recommended hit rule applied to this compound; nothing without a rule. */
+function HitMarker({ protocol }: { protocol: ProtocolActivityResponse }) {
+  if (protocol.hit == null) return null;
+  const rule = (protocol.hit_criteria ?? [])
+    .map((c) => criterionLabel(c as HitCriterion))
+    .join(" and ");
+  const title = `By the protocol's recommended rule: ${rule}`;
+  return protocol.hit ? (
+    <Badge variant="secondary" title={title}>
+      Hit
+    </Badge>
+  ) : (
+    <span className="text-xs text-muted-foreground" title={title}>
+      Not a hit
+    </span>
   );
 }
 

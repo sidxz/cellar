@@ -1,6 +1,7 @@
 import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
 import { findInterceptValue } from "../lib/intercept-label";
+import { meetsRule } from "../lib/melt-hits";
 import {
   type CurveClass,
   type DoseResponseCurve,
@@ -101,6 +102,11 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
 
 /** Apply hit criteria filter to compound rows.
  *
+ *  A run's criteria may name readouts this tab does not show (a thermal
+ *  shift ΔTm, a plain readout); only `Curve Class` and rules on the
+ *  protocol's dose-response readouts (`drReadoutNames`) are evaluated here,
+ *  the rest are skipped (the caller lists them).
+ *
  *  Numeric rules read a scalar from the row before comparing against the
  *  threshold. A criterion with `intercept_key` set (e.g. `EC90`) looks up
  *  the matching `(kind, level)` pair in `row.intercept_values`; the
@@ -110,10 +116,14 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
 export function applyHitFilter(
   rows: CompoundCurveRow[],
   criteria: HitCriterion[],
+  drReadoutNames: ReadonlySet<string>,
 ): CompoundCurveRow[] {
-  if (criteria.length === 0) return rows;
+  const rules = criteria.filter(
+    (r) => r.readout_name === "Curve Class" || drReadoutNames.has(r.readout_name),
+  );
+  if (rules.length === 0) return rows;
   return rows.filter((row) =>
-    criteria.every((rule) => {
+    rules.every((rule) => {
       if (rule.readout_name === "Curve Class") {
         if (rule.operator === "in" && Array.isArray(rule.value)) {
           return row.curve_class != null && (rule.value as string[]).includes(row.curve_class);
@@ -121,20 +131,7 @@ export function applyHitFilter(
         return true;
       }
       const measured = rowValueForRule(row, rule);
-      if (measured === null) return false;
-      const threshold = typeof rule.value === "number" ? rule.value : 0;
-      switch (rule.operator) {
-        case "gt":
-          return measured > threshold;
-        case "lt":
-          return measured < threshold;
-        case "gte":
-          return measured >= threshold;
-        case "lte":
-          return measured <= threshold;
-        default:
-          return true;
-      }
+      return measured !== null && meetsRule(measured, rule);
     }),
   );
 }

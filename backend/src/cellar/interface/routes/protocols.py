@@ -170,13 +170,18 @@ async def _protocol_response(targets_uc, auth, result) -> ProtocolResponse:
 
 
 class MeltConfigModel(BaseModel):
-    """A temperature window's Tm or ΔTm readout: the window, the measure, its signal and limits."""
+    """A readout computed from a temperature window: the window, the measure, its signal and
+    limits, and the measure's parameter (series values only)."""
 
     window: str
     measure: MeltMeasure
     channel_key: str
     low: float
     high: float
+    # Lowest shifting concentration: |ΔTm| above this (°C) counts as a shift.
+    threshold: float | None = None
+    # ΔTm at a stated concentration, in the protocol's dose unit.
+    concentration: float | None = None
 
 
 class ReadoutDefinitionResponse(BaseModel):
@@ -544,6 +549,10 @@ class AddTemperatureWindowRequest(BaseModel):
     low: float
     high: float
     measures: list[MeltMeasure] = Field(min_length=1)
+    # Required with, and only with, lowest_shift_concentration (°C).
+    lowest_shift_threshold: float | None = None
+    # Required with, and only with, delta_tm_at_concentration (protocol dose unit).
+    delta_tm_at_concentration: float | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1300,7 +1309,7 @@ async def add_temperature_window(
     targets_uc: ResolveProtocolTargetsDep,
     uc: AddTemperatureWindowDep,
 ) -> ProtocolResponse:
-    """Add a temperature window's Tm and/or ΔTm readouts in one change."""
+    """Add a temperature window's readouts (Tm, ΔTm, series values) in one change."""
     cmd = AddTemperatureWindowCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
@@ -1309,6 +1318,8 @@ async def add_temperature_window(
         low=body.low,
         high=body.high,
         measures=tuple(body.measures),
+        lowest_shift_threshold=body.lowest_shift_threshold,
+        delta_tm_at_concentration=body.delta_tm_at_concentration,
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)

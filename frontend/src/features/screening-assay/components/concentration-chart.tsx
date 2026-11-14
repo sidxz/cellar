@@ -3,6 +3,7 @@
 import { CHART_AXIS, CHART_COLORS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
+import type { Band } from "../lib/melt-hits";
 import type { SeriesPoint } from "../lib/melt-results";
 import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
@@ -10,16 +11,23 @@ import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figu
  *  Points whose step is not reviewed yet are drawn hollow. */
 export function ConcentrationChart({
   title,
+  caption,
   points,
   doseUnit,
-  threshold,
+  hits,
+  band,
   selected,
   onSelect,
 }: {
   title: string;
+  /** The batch's stored series values (descriptive, no fit). */
+  caption?: string;
   points: readonly SeriesPoint[];
   doseUnit: string;
-  threshold: number;
+  /** The positions the run's hit rule calls hits. */
+  hits: ReadonlySet<string>;
+  /** The rule on this window's ΔTm, drawn as a band or line; null draws none. */
+  band: Band | null;
   selected: ReadonlySet<string>;
   onSelect: (wellId: string) => void;
 }) {
@@ -32,10 +40,11 @@ export function ConcentrationChart({
     return v.reduce((a, b) => a + b, 0) / v.length;
   };
   const repeated = doses.filter((d) => (byDose.get(d) as number[]).length >= 2);
-  const { shapes, annotations } = shiftBand(threshold, "y");
+  const { shapes, annotations } = shiftBand(band, "y");
   return (
     <div>
       <p className="mb-1 text-sm font-medium">{title}</p>
+      {caption && <p className="mb-1 text-xs text-muted-foreground">{caption}</p>}
       <Plot
         data={[
           {
@@ -46,7 +55,7 @@ export function ConcentrationChart({
             customdata: points.map((p) => p.wellId),
             text: points.map((p) => (p.provisional ? "Provisional" : "Reviewed")),
             marker: {
-              color: points.map((p) => shiftColour(p.deltaTm, threshold)),
+              color: points.map((p) => shiftColour(p.deltaTm, hits.has(p.wellId))),
               symbol: points.map((p) => (p.provisional ? "circle-open" : "circle")),
               size: points.map((p) => (selected.has(p.wellId) ? 11 : 8)),
               // An open marker is stroked in its own colour at this width.

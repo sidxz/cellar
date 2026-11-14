@@ -37,7 +37,8 @@ const show = (selected: string[] = [], onSelect = () => {}) =>
       title="CC-1 · 001 — ΔTm (Main) by concentration"
       points={points}
       doseUnit="µM"
-      threshold={2}
+      hits={new Set(["c", "d"])}
+      band={{ kind: "outside", low: -2, high: 2 }}
       selected={new Set(selected)}
       onSelect={onSelect}
     />,
@@ -68,7 +69,7 @@ describe("ConcentrationChart", () => {
     // Labels at the left end, the band's below it and the zero line's above;
     // nothing at the right edge, where the highest dose sits.
     expect(last().layout.annotations).toMatchObject([
-      { text: "within ±2 °C", x: 0, xanchor: "left", y: -2, yanchor: "top" },
+      { text: "outside −2 to 2 °C is a hit", x: 0, xanchor: "left", y: -2, yanchor: "top" },
       { text: "ΔTm = 0 (reference)", x: 0, xanchor: "left", y: 0, yanchor: "bottom" },
     ]);
     expect(pts.marker.line.color).toBe(selectedOutline(undefined));
@@ -92,6 +93,30 @@ describe("ConcentrationChart", () => {
     const ticks = last().data[2];
     expect(ticks.x).toEqual([10]);
     expect(ticks.y).toEqual([4]);
+  });
+
+  it("colours hit points by sign and the rest neutral", () => {
+    show();
+    const c = last().data[0].marker.color;
+    expect(c[1]).not.toBe(c[2]); // b (+3) is no hit, c (+5) is
+    expect(c[2]).toBe(c[3]);
+    expect(c[0]).toBe(c[1]);
+  });
+
+  it("shows the batch's series values under the title when given", () => {
+    render(
+      <ConcentrationChart
+        title="T"
+        caption="Max ΔTm −8.6 °C at 25 µM"
+        points={points}
+        doseUnit="µM"
+        hits={new Set()}
+        band={null}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.getByText("Max ΔTm −8.6 °C at 25 µM")).toBeInTheDocument();
   });
 
   it("click selects", () => {

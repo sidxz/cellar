@@ -9,22 +9,47 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
+import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { groupBy } from "@/shared/lib/group-by";
 import { Plot } from "@/shared/lib/plotly";
 import { shortId } from "@/shared/lib/utils";
 import { DoseResponseChartView } from "@structflo/components/dose-response";
-import type { ColDef } from "ag-grid-community";
-import { Eye, Filter, FlaskConical, FolderPlus, Settings2, Star } from "lucide-react";
-import { useMemo } from "react";
+import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
 import type { CompoundActivity, CurveClass, Protocol } from "../../types";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
 import { CurveNavigator } from "../curve-navigator";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
-import { buildColumnDefs } from "./activity-tab-columns";
-import { criterionLabel, useActivityTab } from "./use-activity-tab";
+import { Segmented } from "../segmented";
+import { ActivityColumnsMenu, useColumnChoices } from "./activity-columns-menu";
+import { type Statistic, buildColumnDefs } from "./activity-tab-columns";
+import { type StatusFilter, criterionLabel, useActivityTab } from "./use-activity-tab";
+
+const STRUCTURES_KEY = "cellar.activity.structures";
+
+/** Whether the grid draws structures (taller rows), kept per browser. */
+function useStructuresChoice(): [boolean, (show: boolean) => void] {
+  const [show, setShow] = useState(() => {
+    try {
+      return localStorage.getItem(STRUCTURES_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
+  const save = useCallback((next: boolean) => {
+    setShow(next);
+    try {
+      localStorage.setItem(STRUCTURES_KEY, next ? "1" : "0");
+    } catch {
+      // Storage unavailable: the choice holds for this visit only.
+    }
+  }, []);
+  return [show, save];
+}
 
 // ---------------------------------------------------------------------------
 // Curve class badge
@@ -58,9 +83,10 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     setShowFlaggedOnly,
     handleToggleFlag,
     savedCriteria,
-    activeCriteria,
-    setActiveCriteria,
-    isModified,
+    hits,
+    statusCounts,
+    statusFilter,
+    setStatusFilter,
     criteriaDialogOpen,
     setCriteriaDialogOpen,
     collectionDialogOpen,
@@ -79,11 +105,52 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     hasDRCurves,
   } = useActivityTab(protocol, protocolId);
 
-  // AG Grid columns (dynamic from readout definitions).
-  const columnDefs = useMemo<ColDef<CompoundActivity>[]>(
-    () => buildColumnDefs(readoutDefs, flagsByMolecule, handleToggleFlag),
-    [readoutDefs, flagsByMolecule, handleToggleFlag],
+  // One column per result, grouped; what shows comes from the catalog's
+  // defaults and the user's Columns-menu choices.
+  const [statistic, setStatistic] = useState<Statistic>("best");
+  const [showStructures, setShowStructures] = useStructuresChoice();
+  const { choices, toggle: toggleColumn, reset: resetColumns } = useColumnChoices(protocolId);
+  const items = activity?.items;
+  const catalog = useMemo(
+    () => activityCatalog(readoutDefs, items ?? [], savedCriteria),
+    [readoutDefs, items, savedCriteria],
   );
+  const visible = useMemo(() => visibleColumnIds(catalog, choices), [catalog, choices]);
+  const sort = useMemo(
+    () => defaultSortColumn(catalog, readoutDefs, savedCriteria),
+    [catalog, readoutDefs, savedCriteria],
+  );
+  const columnDefs = useMemo(
+    () =>
+      buildColumnDefs({
+        catalog,
+        visible,
+        readoutDefs,
+        statistic,
+        showStructures,
+        hits,
+        sort,
+        flagsByMolecule,
+        onToggleFlag: handleToggleFlag,
+      }),
+    [
+      catalog,
+      visible,
+      readoutDefs,
+      statistic,
+      showStructures,
+      hits,
+      sort,
+      flagsByMolecule,
+      handleToggleFlag,
+    ],
+  );
+  // The row-click detail sheet shows dose-response curves; other protocols
+  // link to the compound page from the compound cell instead.
+  const hasDoseResponse = readoutDefs.some((rd) => rd.data_type === "dose_response");
+  const chartReadout =
+    readoutDefs.find((rd) => rd.name === catalog.find((c) => c.colId === sort?.colId)?.readout) ??
+    readoutDefs[0];
 
   // ---------------------------------------------------------------------------
   // Build Plotly curve overlay traces
@@ -169,7 +236,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   // Fallback bar chart for single-point-only selection
   const barChartData = useMemo(() => {
     if (hasDRCurves || selectedRows.length < 2 || selectedRows.length > 5) return null;
-    const firstReadout = readoutDefs[0];
+    const firstReadout = chartReadout;
     if (!firstReadout) return null;
     return [
       {
@@ -180,10 +247,10 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         hoverinfo: "x+y",
       },
     ];
-  }, [selectedRows, readoutDefs, hasDRCurves]);
+  }, [selectedRows, chartReadout, hasDRCurves]);
 
   const comparisonLayout = useMemo(() => {
-    const firstReadout = readoutDefs[0];
+    const firstReadout = chartReadout;
     const unitSuffix = firstReadout?.unit ? ` (${firstReadout.unit})` : "";
     const isDR = firstReadout?.data_type === "dose_response";
     return {
@@ -212,7 +279,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       margin: { l: 60, r: 20, t: 20, b: 80 },
       bargap: 0.3,
     };
-  }, [readoutDefs]);
+  }, [chartReadout]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -237,125 +304,132 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     );
   }
 
-  const hasCriteria = savedCriteria.length > 0 || activeCriteria.length > 0;
+  const hasCriteria = savedCriteria.length > 0;
+  const total = activity.items.length;
 
   return (
-    <div className="space-y-4">
-      {/* Hit Criteria CTA or Filter Bar */}
+    <div className="space-y-3">
+      {/* The protocol's hit rule, or an invitation to set one */}
       {!hasCriteria ? (
-        <Card className="border-2 border-dashed">
-          <CardContent className="flex items-center justify-between p-4">
-            <div>
-              <p className="font-medium">No hit criteria defined</p>
-              <p className="text-sm text-muted-foreground">
-                Define recommended criteria so your team knows which compounds qualify as hits.
-              </p>
-            </div>
-            <Button onClick={() => setCriteriaDialogOpen(true)}>
-              <Settings2 className="mr-2 h-4 w-4" /> Set Hit Criteria
+        <Card className="border-dashed">
+          <CardContent className="flex items-center justify-between gap-4 p-3">
+            <p className="text-sm text-muted-foreground">
+              No hit rule yet. Set one so your team knows which compounds qualify as hits.
+            </p>
+            <Button size="sm" onClick={() => setCriteriaDialogOpen(true)}>
+              <Settings2 className="mr-1.5 h-3.5 w-3.5" /> Set hit criteria
             </Button>
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Protocol Hit Criteria</span>
-            <span className="text-xs text-muted-foreground">(applied across all runs)</span>
-            <span className="text-muted-foreground">|</span>
-
-            {activeCriteria.length > 0 ? (
-              activeCriteria.map((rule, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                <Badge key={i} variant="secondary">
-                  {criterionLabel(rule)}
-                </Badge>
-              ))
-            ) : (
-              <span className="text-sm text-muted-foreground italic">
-                Disabled — showing all compounds
-              </span>
-            )}
-
-            {isModified && activeCriteria.length > 0 && (
-              <Badge variant="outline" className="border-yellow-500/40 text-yellow-400">
-                Modified
-              </Badge>
-            )}
-
-            <div className="ml-auto flex items-center gap-2">
-              <Button
-                variant={showFlaggedOnly ? "secondary" : "ghost"}
-                size="sm"
-                onClick={() => setShowFlaggedOnly((v) => !v)}
-              >
-                <Star
-                  className={`mr-1 h-3.5 w-3.5 ${
-                    showFlaggedOnly ? "fill-yellow-400 text-yellow-400" : ""
-                  }`}
-                />
-                Flagged
-              </Button>
-              {activeCriteria.length > 0 ? (
-                <Button variant="ghost" size="sm" onClick={() => setActiveCriteria([])}>
-                  <Eye className="mr-1 h-3.5 w-3.5" />
-                  Show All
-                </Button>
-              ) : (
-                <Button variant="ghost" size="sm" onClick={() => setActiveCriteria(savedCriteria)}>
-                  <Filter className="mr-1 h-3.5 w-3.5" />
-                  Apply Filter
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => setCriteriaDialogOpen(true)}>
-                <Settings2 className="mr-1 h-3.5 w-3.5" />
-                Edit Criteria
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="font-medium">Hit rule</span>
+          {savedCriteria.map((rule, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+            <Badge key={i} variant="secondary">
+              {criterionLabel(rule)}
+            </Badge>
+          ))}
+          <span className="text-xs text-muted-foreground">on each compound's best value</span>
+          <Button variant="ghost" size="sm" onClick={() => setCriteriaDialogOpen(true)}>
+            <Settings2 className="mr-1 h-3.5 w-3.5" /> Edit
+          </Button>
+        </div>
       )}
 
-      {/* Filtered count indicator */}
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          {filteredItems.length} of {activity.items.length} compound
-          {activity.items.length !== 1 ? "s" : ""}
-          {activeCriteria.length > 0 ? " match criteria" : ""}
-        </span>
+      {/* Toolbar: what to list, which statistic, how to show it */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {hits ? (
+          <Segmented
+            label="Hit status"
+            value={statusFilter}
+            options={[
+              { value: "all", label: `All (${total})` },
+              { value: "meets", label: `Meets criteria (${statusCounts.meets})` },
+              { value: "fails", label: `Doesn't meet (${statusCounts.fails})` },
+              { value: "no_data", label: `No data (${statusCounts.no_data})` },
+            ]}
+            onChange={(v) => setStatusFilter(v as StatusFilter)}
+          />
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {total} compound{total !== 1 ? "s" : ""}
+          </span>
+        )}
         <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">Summary across completed runs</span>
+          <Segmented
+            label="Summary"
+            value={statistic}
+            options={[
+              { value: "best", label: "Best" },
+              { value: "mean", label: "Mean" },
+            ]}
+            onChange={(v) => setStatistic(v as Statistic)}
+          />
+        </div>
+        <div className="ml-auto flex items-center gap-2">
           {selectedRows.length > 0 && (
             <>
+              <span className="text-sm text-muted-foreground">{selectedRows.length} selected</span>
               <Button variant="outline" size="sm" onClick={() => setCollectionDialogOpen(true)}>
                 <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
                 Add to Collection
               </Button>
-              <span>{selectedRows.length} selected</span>
             </>
           )}
+          <Button
+            variant={showFlaggedOnly ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={showFlaggedOnly}
+            onClick={() => setShowFlaggedOnly((v) => !v)}
+          >
+            <Star
+              className={`mr-1 h-3.5 w-3.5 ${showFlaggedOnly ? "fill-yellow-400 text-yellow-400" : ""}`}
+            />
+            Flagged
+          </Button>
+          <Button
+            variant={showStructures ? "secondary" : "ghost"}
+            size="sm"
+            aria-pressed={showStructures}
+            onClick={() => setShowStructures(!showStructures)}
+          >
+            <Hexagon className="mr-1 h-3.5 w-3.5" />
+            Structures
+          </Button>
+          <ActivityColumnsMenu
+            catalog={catalog}
+            visible={visible}
+            onToggle={toggleColumn}
+            onReset={resetColumns}
+          />
         </div>
       </div>
 
       {/* AG Grid with dynamic columns */}
-      <DataGrid<CompoundActivity>
-        rowData={filteredItems}
-        columnDefs={columnDefs}
-        height="auto"
-        domLayout="autoHeight"
-        rowHeight={115}
-        onRowClick={(row) => setViewingId(row.molecule_id)}
-        enableMultiSelect
-        suppressSelectColumn
-        onSelectionChanged={handleSelectionChanged}
-        getRowId={(params) => params.data.molecule_id}
-        emptyState={
-          <EmptyState
-            icon={Filter}
-            title="No compounds match"
-            description="Adjust or remove hit criteria to see more compounds."
-          />
-        }
-      />
+      <TooltipProvider delayDuration={200}>
+        <DataGrid<CompoundActivity>
+          rowData={filteredItems}
+          columnDefs={columnDefs}
+          height="auto"
+          domLayout="autoHeight"
+          rowHeight={showStructures ? 115 : 44}
+          suppressFilters
+          onRowClick={hasDoseResponse ? (row) => setViewingId(row.molecule_id) : undefined}
+          enableMultiSelect
+          suppressSelectColumn
+          onSelectionChanged={handleSelectionChanged}
+          getRowId={(params) => params.data.molecule_id}
+          emptyState={
+            <EmptyState
+              icon={Filter}
+              title="No compounds match"
+              description="Choose another hit status or turn off Flagged."
+            />
+          }
+        />
+      </TooltipProvider>
 
       {/* Compound detail sheet — driven by row click, independent from selection */}
       <Sheet

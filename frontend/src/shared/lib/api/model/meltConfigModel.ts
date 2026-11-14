@@ -5,9 +5,12 @@
  * OpenAPI spec version: 1.3.0-153-g5425880a
  */
 import type { MeltMeasure } from './meltMeasure';
+import type { MeltConfigModelThreshold } from './meltConfigModelThreshold';
+import type { MeltConfigModelConcentration } from './meltConfigModelConcentration';
 
 /**
- * A temperature window's Tm or ΔTm readout: the window, the measure, its signal and limits.
+ * A readout computed from a temperature window: the window, the measure, its signal and
+limits, and the measure's parameter (series values only).
  */
 export interface MeltConfigModel {
   window: string;
@@ -15,4 +18,6 @@ export interface MeltConfigModel {
   channel_key: string;
   low: number;
   high: number;
+  threshold?: MeltConfigModelThreshold;
+  concentration?: MeltConfigModelConcentration;
 }

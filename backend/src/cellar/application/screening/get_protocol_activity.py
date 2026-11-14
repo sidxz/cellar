@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -20,6 +21,11 @@ from cellar.application.screening.protocol_activity_reader import (
     ProtocolActivityReader,
 )
 from cellar.application.shared.query import Query
+from cellar.domain.screening_assay.readout_best import (
+    BestDirection,
+    best_direction,
+    best_of_range,
+)
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 # ---------------------------------------------------------------------------
@@ -116,11 +122,15 @@ class ReadoutDefInfo:
     name: str
     data_type: str
     unit: str | None
-    best_direction: str  # "high" or "low"
+    best_direction: str  # "high", "low" or "magnitude" (a shift in either direction)
     # For ``dose_response`` readouts, the protocol's declared intercept
     # specs (one per column on the activity grid). Empty for numeric
     # readouts. Drives dynamic column headers — never hardcode "EC50".
     intercepts: list[InterceptSpecPayload] = field(default_factory=list)
+    # A thermal-shift readout's temperature window settings (window, measure,
+    # channel_key, low, high, threshold, concentration); None otherwise.
+    # Lets the grid group a window's readouts under one header.
+    melt_config: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -187,7 +197,10 @@ class GetProtocolActivitySummary:
             if rd.data_type not in _AGGREGATABLE_DATA_TYPES:
                 continue
 
-            best_direction = "low" if rd.data_type == "dose_response" else "high"
+            melt = getattr(rd, "melt_config", None)
+            direction = best_direction(
+                rd.data_type, melt.get("measure") if isinstance(melt, dict) else None
+            )
             intercept_specs: list[InterceptSpecPayload] = []
             if rd.data_type == "dose_response":
                 cfg = rd.dose_response_config
@@ -217,7 +230,8 @@ class GetProtocolActivitySummary:
                     name=rd.name,
                     data_type=rd.data_type,
                     unit=rd.unit,
-                    best_direction=best_direction,
+                    best_direction=direction.value,
+                    melt_config=melt if isinstance(melt, dict) else None,
                     intercepts=intercept_specs,
                 )
             )
@@ -310,8 +324,13 @@ class GetProtocolActivitySummary:
                     if num_row is None:
                         continue
 
+                    best = best_of_range(
+                        num_row.low if num_row.low is not None else num_row.best,
+                        num_row.best,
+                        BestDirection(rd_info.best_direction),
+                    )
                     readouts[rd_info.name] = ReadoutValue(
-                        best=float(num_row.best) if num_row.best is not None else None,
+                        best=float(best) if best is not None else None,
                         mean=round(float(num_row.mean), 4) if num_row.mean is not None else None,
                         n=int(num_row.n) if num_row.n is not None else None,
                         sd=round(float(num_row.sd), 4) if num_row.sd is not None else None,

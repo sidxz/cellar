@@ -147,6 +147,33 @@ class AnyProtocolActivity:
 
 
 @dataclass(frozen=True)
+class ReadoutSummary:
+    """A plain (non-dose-response) readout of one molecule on one protocol, across its runs."""
+
+    readout_definition_id: uuid.UUID
+    readout_name: str
+    value: float  # the value that stands for the molecule (see readout_best)
+    qualifier: str  # "=", ">" or "<"
+    unit: str | None
+    data_point_count: int
+    run_count: int
+    draft_run_count: int  # runs not yet completed or approved
+    # How ``value`` was chosen from the runs' values: "high", "low" or
+    # "magnitude" (the largest shift in either direction).
+    best_direction: str = "high"
+
+
+@dataclass(frozen=True)
+class RunLink:
+    """A run of the protocol that holds data for the molecule."""
+
+    run_id: uuid.UUID
+    run_date: date
+    status: str
+    notes: str | None = None  # the run's own description; tells same-day runs apart
+
+
+@dataclass(frozen=True)
 class ProtocolActivitySummary:
     """Activity summary for one protocol on one molecule."""
 
@@ -162,6 +189,16 @@ class ProtocolActivitySummary:
     # per-Card dynamic column set on the molecule activity tab. Empty when
     # the protocol's DR readouts declare no explicit intercepts.
     intercepts: list[dict[str, Any]] = field(default_factory=list)
+    # Plain readouts (Tm, ΔTm, a single-point % inhibition, ...), in protocol order.
+    plain_readouts: list[ReadoutSummary] = field(default_factory=list)
+    # The protocol's recommended hit rule applied to this molecule; None without one.
+    hit: bool | None = None
+    hit_criteria: list[dict[str, Any]] = field(default_factory=list)
+    protocol_code: str | None = None
+    # Newest first: where a chemist checks the values (traces, curves).
+    runs: list[RunLink] = field(default_factory=list)
+    # The run tab that shows these results: "curves" (traces) or "dose-response".
+    results_tab: str | None = None
 
 
 @dataclass(frozen=True)

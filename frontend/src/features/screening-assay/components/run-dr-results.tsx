@@ -27,10 +27,12 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
+import { runRulesOf } from "../lib/melt-hits";
 import { worstZPrime } from "../lib/qc-metrics";
 import type { DoseResponseCurve, HitCriterion, Run } from "../types";
 import { ComparisonTable } from "./comparison-table";
 import { CurveNavigator } from "./curve-navigator";
+import { criterionLabel } from "./detail-tabs/use-activity-tab";
 import { DoseResponseChart } from "./dose-response-chart";
 import { RunHitCriteriaDialog } from "./hit-criteria-dialog";
 import { buildColumnDefs } from "./run-dr-results-columns";
@@ -40,21 +42,6 @@ import type { CompoundCurveRow } from "./run-dr-results-transforms";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const OPERATOR_SYMBOLS: Record<string, string> = {
-  gt: ">",
-  lt: "<",
-  gte: ">=",
-  lte: "<=",
-  in: "in",
-};
-
-/** Compact chip text for a single rule, e.g. "% Inhibition > 50". */
-function criterionChipText(rule: HitCriterion): string {
-  const op = OPERATOR_SYMBOLS[rule.operator] ?? rule.operator;
-  const val = Array.isArray(rule.value) ? rule.value.join(", ") : rule.value;
-  return `${rule.readout_name} ${op} ${val}`;
-}
 
 // ---------------------------------------------------------------------------
 // Props
@@ -106,9 +93,25 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   const allRows = useMemo(() => buildCompoundRows(curves), [curves]);
   // The true hit set (threshold applied) — drives the "N hits" count regardless
   // of the view-only bypass below.
+  // This tab evaluates rules on dose-response readouts (and Curve Class); a
+  // run's rule on another readout (a thermal shift ΔTm) is listed, not applied.
+  const drReadoutNames = useMemo(
+    () =>
+      new Set(
+        (protocol?.readout_definitions ?? [])
+          .filter((rd) => rd.dose_response_config)
+          .map((rd) => rd.name),
+      ),
+    [protocol],
+  );
+  const isOtherTabRule = (rule: HitCriterion) =>
+    rule.readout_name !== "Curve Class" && !drReadoutNames.has(rule.readout_name);
   const hitRows = useMemo(
-    () => (runCriteria && runCriteria.length > 0 ? applyHitFilter(allRows, runCriteria) : allRows),
-    [allRows, runCriteria],
+    () =>
+      runCriteria && runCriteria.length > 0
+        ? applyHitFilter(allRows, runCriteria, drReadoutNames)
+        : allRows,
+    [allRows, runCriteria, drReadoutNames],
   );
   // Rows the grid actually shows: the hit set when a threshold is active, unless
   // the screener has toggled the non-destructive "Show all" bypass.
@@ -230,7 +233,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                   {recommendation.map((rule, i) => (
                     // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
                     <Badge key={i} variant="secondary">
-                      {criterionChipText(rule)}
+                      {criterionLabel(rule)}
                     </Badge>
                   ))}
                 </div>
@@ -239,7 +242,11 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                   <Button
                     size="sm"
                     onClick={() =>
-                      setHitCriteria.mutate({ runId: run.id, criteria: recommendation })
+                      setHitCriteria.mutate({
+                        runId: run.id,
+                        criteria: runRulesOf(recommendation, protocol?.readout_definitions ?? [])
+                          .kept,
+                      })
                     }
                     disabled={setHitCriteria.isPending || run.is_locked}
                   >
@@ -283,12 +290,19 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
             <span className="text-muted-foreground">|</span>
 
             {hasThreshold ? (
-              (runCriteria ?? []).map((rule, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                <Badge key={i} variant="secondary">
-                  {criterionChipText(rule)}
-                </Badge>
-              ))
+              (runCriteria ?? []).map((rule, i) =>
+                isOtherTabRule(rule) ? (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                  <span key={i} className="text-xs text-muted-foreground">
+                    {criterionLabel(rule)} (evaluated on another tab)
+                  </span>
+                ) : (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                  <Badge key={i} variant="secondary">
+                    {criterionLabel(rule)}
+                  </Badge>
+                ),
+              )
             ) : (
               <span className="text-sm text-muted-foreground italic">
                 No threshold — showing all compounds (recorded)

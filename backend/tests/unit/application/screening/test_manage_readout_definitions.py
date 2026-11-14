@@ -172,3 +172,85 @@ async def test_update_with_malformed_melt_config_is_validation_error(bad):
     assert isinstance(result, Failure)
     assert isinstance(result.failure(), ValidationError)
     repo.save.assert_not_awaited()
+
+
+# ---- Series values on a window ----
+
+SERIES = (
+    MeltMeasure.MAX_DELTA_TM,
+    MeltMeasure.LOWEST_SHIFT_CONCENTRATION,
+    MeltMeasure.DELTA_TM_AT_CONCENTRATION,
+)
+
+
+async def test_add_series_values_to_existing_window():
+    p = _protocol()
+    await _add(p, _cmd(p))
+    result, _ = await _add(
+        p,
+        _cmd(p, measures=SERIES, lowest_shift_threshold=2.0, delta_tm_at_concentration=50.0),
+    )
+    assert isinstance(result, Success)
+    added = {rd.name: rd for rd in p.readout_definitions[3:]}
+    assert list(added) == [
+        "Max ΔTm (Main)",
+        "Lowest shifting conc. (Main, ±2 °C)",
+        "ΔTm at 50 µM (Main)",
+    ]
+    mx, low, at = added.values()
+    assert (mx.unit, mx.aggregation.value) == ("°C", "mean")
+    assert (low.unit, low.aggregation.value) == ("µM", "geometric_mean")
+    assert low.melt_config.threshold == 2.0
+    assert (at.unit, at.aggregation.value, at.melt_config.concentration) == ("°C", "mean", 50.0)
+
+
+async def test_existing_window_with_other_limits_refused():
+    p = _protocol()
+    await _add(p, _cmd(p))
+    cmd = AddTemperatureWindowCommand(
+        workspace_id=WS,
+        protocol_id=p.id,
+        window="Main",
+        channel_key="ch1",
+        low=25.0,
+        high=60.0,
+        measures=(MeltMeasure.MAX_DELTA_TM,),
+    )
+    result, _ = await _add(p, cmd)
+    assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
+
+
+async def test_duplicate_measure_and_parameter_refused_all_or_nothing():
+    p = _protocol()
+    await _add(
+        p,
+        _cmd(p, measures=(MeltMeasure.DELTA_TM_AT_CONCENTRATION,), delta_tm_at_concentration=50.0),
+    )
+    before = [rd.name for rd in p.readout_definitions]
+    result, repo = await _add(
+        p,
+        _cmd(
+            p,
+            measures=(MeltMeasure.MAX_DELTA_TM, MeltMeasure.DELTA_TM_AT_CONCENTRATION),
+            delta_tm_at_concentration=50.0,
+        ),
+    )
+    assert isinstance(result, Failure)
+    assert [rd.name for rd in p.readout_definitions] == before
+    repo.save.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    "kw",
+    [
+        dict(measures=(MeltMeasure.LOWEST_SHIFT_CONCENTRATION,)),
+        dict(measures=(MeltMeasure.TM,), lowest_shift_threshold=2.0),
+        dict(measures=(MeltMeasure.DELTA_TM_AT_CONCENTRATION,)),
+        dict(measures=(MeltMeasure.TM,), delta_tm_at_concentration=50.0),
+    ],
+)
+async def test_parameter_goes_with_its_measure(kw):
+    p = _protocol()
+    result, repo = await _add(p, _cmd(p, **kw))
+    assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
+    repo.save.assert_not_awaited()

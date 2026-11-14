@@ -34,6 +34,7 @@ from cellar.domain.screening_assay.enums import (
     WellType,
 )
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
+from cellar.domain.screening_assay.melt_series import series_points, series_values
 from cellar.domain.screening_assay.melt_window import (
     MeltMeasure,
     WindowResult,
@@ -294,11 +295,13 @@ class ReadoutCalculationEngine:
         # ------------------------------------------------------------------
         # 4.6. Tm and ΔTm per temperature window
         # ------------------------------------------------------------------
-        window_rows = await self._window_rows(run, protocol, workspace_id)
-        if not raw_data and not window_rows:
+        window_rows, series_rows = await self._window_rows(run, protocol, workspace_id)
+        if not raw_data and not window_rows and not series_rows:
             return Success(ComputeRunResult(computed_readouts=[]))
-        computed.extend(window_rows)
-        # Window rows aggregate like raw rows, so formulas can name them.
+        computed.extend(window_rows + series_rows)
+        # Per-position window rows aggregate like raw rows, so formulas can name
+        # them. Series rows do not: the in-run aggregator ignores qualifiers, and
+        # a censored "> 50" from one lot would be averaged as 50.
         source_rows = raw_data + window_rows
 
         # ------------------------------------------------------------------
@@ -413,62 +416,76 @@ class ReadoutCalculationEngine:
 
     async def _window_rows(
         self, run: Run, protocol: Protocol, workspace_id: uuid.UUID
-    ) -> list[ReadoutData]:
-        """One computed row per position with a Tm (or ΔTm) in each window readout."""
+    ) -> tuple[list[ReadoutData], list[ReadoutData]]:
+        """Per-position Tm/ΔTm rows, and one series row per batch, for each window readout."""
         melt_defs = [
             (rd, rd.melt_config)
             for rd in protocol.readout_definitions
             if rd.melt_config is not None
         ]
         if not melt_defs or self._melting_step_repo is None or self._measured_curve_repo is None:
-            return []
+            return [], []
         steps = [
             (s.well_id, s.channel_key, s.value, s.counts)
             for s in await self._melting_step_repo.find_by_run(workspace_id, run.id)
         ]
         traced = await self._measured_curve_repo.list_traced(workspace_id, run.id)
         wells = [(w.id, w.well_type) for w in run.wells]
+        batch_and_dose = {w.id: (w.batch_id, w.dose) for w in run.wells}
 
         # Readouts of one window share its channel and limits (Protocol enforces it).
         by_window: dict[str, WindowResult] = {}
-        values: list[tuple[ReadoutDefinition, uuid.UUID, float]] = []
+        # (readout, well or None, batch, value)
+        values: list[tuple[ReadoutDefinition, uuid.UUID | None, uuid.UUID | None, QualifiedValue]]
+        values = []
         for rd, mc in melt_defs:
             result = by_window.get(mc.window)
             if result is None:
                 result = by_window[mc.window] = evaluate_window(
                     mc.low, mc.high, window_positions(wells, steps, mc.channel_key, traced)
                 )
+            if mc.measure.is_series:
+                for sv in series_values(mc, series_points(result, batch_and_dose)):
+                    values.append(
+                        (
+                            rd,
+                            None,
+                            sv.batch_id,
+                            QualifiedValue(value=sv.value, qualifier=sv.qualifier),
+                        )
+                    )
+                continue
             for p in result.positions:
                 v = p.tm if mc.measure is MeltMeasure.TM else p.delta_tm
                 if v is not None:
-                    values.append((rd, p.well_id, v))
+                    values.append(
+                        (rd, p.well_id, batch_and_dose[p.well_id][0], QualifiedValue(value=v))
+                    )
         if not values:
-            return []
+            return [], []
 
-        batch_by_well = {w.id: w.batch_id for w in run.wells}
-        batch_ids = list(dict.fromkeys(b for _, w, _ in values if (b := batch_by_well[w])))
+        batch_ids = list(dict.fromkeys(b for _, _, b, _ in values if b))
         molecule_by_batch: dict[uuid.UUID, uuid.UUID] = {}
         if batch_ids and self._batch_repo is not None:
             molecule_by_batch = {
                 b.id: b.molecule_id
                 for b in await self._batch_repo.find_by_ids(workspace_id, batch_ids)
             }
-        rows: list[ReadoutData] = []
-        for rd, well_id, v in values:
-            batch_id = batch_by_well[well_id]
-            rows.append(
-                ReadoutData(
-                    workspace_id=run.workspace_id,
-                    run_id=run.id,
-                    well_id=well_id,
-                    molecule_id=molecule_by_batch.get(batch_id) if batch_id else None,
-                    batch_id=batch_id,
-                    readout_definition_id=rd.id,
-                    value=QualifiedValue(value=v),
-                    is_computed=True,
-                )
+        position_rows: list[ReadoutData] = []
+        series_rows: list[ReadoutData] = []
+        for rd, well_id, batch_id, value in values:
+            row = ReadoutData(
+                workspace_id=run.workspace_id,
+                run_id=run.id,
+                well_id=well_id,
+                molecule_id=molecule_by_batch.get(batch_id) if batch_id else None,
+                batch_id=batch_id,
+                readout_definition_id=rd.id,
+                value=value,
+                is_computed=True,
             )
-        return rows
+            (position_rows if well_id is not None else series_rows).append(row)
+        return position_rows, series_rows
 
     # ------------------------------------------------------------------
     # Topological sort

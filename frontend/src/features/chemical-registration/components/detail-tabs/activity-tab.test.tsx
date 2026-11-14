@@ -79,3 +79,174 @@ describe("ActivityTab reported endpoints", () => {
     expect(screen.getByText("No readout data for this protocol.")).toBeInTheDocument();
   });
 });
+
+function plain(over: Record<string, unknown> = {}) {
+  return {
+    readout_definition_id: "rd1",
+    readout_name: "Max ΔTm (Main)",
+    value: -8.483,
+    qualifier: "=",
+    unit: "°C",
+    data_point_count: 1,
+    run_count: 2,
+    draft_run_count: 1,
+    ...over,
+  };
+}
+
+const outside = { readout_name: "Max ΔTm (Main)", operator: "not_between", value: [-2, 2] };
+
+describe("ActivityTab plain readouts and hit marker", () => {
+  it("lists plain readouts with their value, unit and runs, drafts marked", () => {
+    renderTab({
+      plain_readouts: [
+        plain(),
+        plain({
+          readout_name: "Lowest shifting conc. (Main, ±2 °C)",
+          value: 50,
+          qualifier: ">",
+          unit: "µM",
+          run_count: 1,
+          draft_run_count: 1,
+        }),
+      ],
+    });
+    expect(screen.getByText("Max ΔTm (Main)")).toBeInTheDocument();
+    expect(screen.getByText("-8.483")).toBeInTheDocument();
+    expect(screen.getByText("2 runs (1 draft)")).toBeInTheDocument();
+    expect(screen.getByText("> 50")).toBeInTheDocument();
+    expect(screen.getByText("1 run (draft)")).toBeInTheDocument();
+    expect(screen.queryByText("No readout data for this protocol.")).toBeNull();
+  });
+
+  it("shows the protocol's hit call with the rule it used", () => {
+    renderTab({ plain_readouts: [plain()], hit: true, hit_criteria: [outside] });
+    expect(screen.getByText("Hit")).toHaveAttribute(
+      "title",
+      "By the protocol's recommended rule: Max ΔTm (Main) outside -2 – 2",
+    );
+  });
+
+  it("says not a hit when the rule is not met, and nothing without a rule", () => {
+    const first = renderTab({ plain_readouts: [plain()], hit: false, hit_criteria: [outside] });
+    expect(screen.getByText("Not a hit")).toBeInTheDocument();
+    first.unmount();
+    renderTab({ plain_readouts: [plain()], hit: null, hit_criteria: [] });
+    expect(screen.queryByText("Hit")).toBeNull();
+    expect(screen.queryByText("Not a hit")).toBeNull();
+  });
+});
+
+describe("ActivityTab card links and provenance", () => {
+  const runs = [
+    { run_id: "r2", run_date: "2026-11-13", status: "draft" },
+    { run_id: "r1", run_date: "2026-11-01", status: "approved" },
+  ];
+
+  it("links the protocol, shows its code, and links each run to its results tab", () => {
+    renderTab({
+      plain_readouts: [plain()],
+      protocol_code: "PRT-00219",
+      runs,
+      results_tab: "curves",
+    });
+    expect(screen.getByRole("link", { name: "NadD Dose Response" })).toHaveAttribute(
+      "href",
+      "/assays/protocols/p1",
+    );
+    expect(screen.getByText("PRT-00219")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft" })).toHaveAttribute(
+      "href",
+      "/assays/runs/r2#curves",
+    );
+    expect(screen.getByRole("link", { name: "Nov 1, 2026 · Approved" })).toHaveAttribute(
+      "href",
+      "/assays/runs/r1#curves",
+    );
+  });
+
+  it("a run link without a results tab opens the run page", () => {
+    renderTab({ plain_readouts: [plain()], runs: [runs[1]], results_tab: null });
+    expect(screen.getByRole("link", { name: "Nov 1, 2026 · Approved" })).toHaveAttribute(
+      "href",
+      "/assays/runs/r1",
+    );
+  });
+
+  it("says how each value was chosen", () => {
+    renderTab({
+      plain_readouts: [
+        plain({ best_direction: "magnitude", data_point_count: 6, run_count: 2 }),
+        plain({
+          readout_definition_id: "rd2",
+          readout_name: "Lowest shifting conc.",
+          value: 6.25,
+          best_direction: "low",
+          data_point_count: 2,
+          run_count: 2,
+        }),
+        plain({
+          readout_definition_id: "rd3",
+          readout_name: "Signal",
+          value: 9,
+          best_direction: "high",
+          data_point_count: 1,
+          run_count: 1,
+          draft_run_count: 0,
+        }),
+      ],
+    });
+    expect(screen.getByText("-8.483")).toHaveAttribute(
+      "title",
+      "Largest shift in either direction of 6 values in 2 runs",
+    );
+    expect(screen.getByText("6.25")).toHaveAttribute("title", "Lowest of 2 values in 2 runs");
+    expect(screen.getByText("9")).toHaveAttribute("title", "From 1 value in 1 run");
+  });
+});
+
+describe("ActivityTab runs on the same day", () => {
+  it("names same-day runs by their notes, and keeps the notes on hover", () => {
+    renderTab({
+      plain_readouts: [plain()],
+      results_tab: "curves",
+      runs: [
+        {
+          run_id: "r2",
+          run_date: "2026-11-13",
+          status: "draft",
+          notes: "Second walk-through run, same file, for comparing runs",
+        },
+        { run_id: "r1", run_date: "2026-11-13", status: "draft", notes: "Walk-through test" },
+        { run_id: "r0", run_date: "2026-11-01", status: "approved", notes: "Pilot" },
+      ],
+    });
+    const second = screen.getByRole("link", {
+      name: "Nov 13, 2026 · Draft · Second walk-through run, same file, f…",
+    });
+    expect(second).toHaveAttribute(
+      "title",
+      "Second walk-through run, same file, for comparing runs",
+    );
+    expect(
+      screen.getByRole("link", { name: "Nov 13, 2026 · Draft · Walk-through test" }),
+    ).toBeInTheDocument();
+    // A run alone on its date keeps the short label; its notes show on hover.
+    expect(screen.getByRole("link", { name: "Nov 1, 2026 · Approved" })).toHaveAttribute(
+      "title",
+      "Pilot",
+    );
+  });
+
+  it("numbers same-day runs that have no notes", () => {
+    renderTab({
+      plain_readouts: [plain()],
+      runs: [
+        { run_id: "r2", run_date: "2026-11-13", status: "draft", notes: null },
+        { run_id: "r1", run_date: "2026-11-13", status: "draft", notes: null },
+      ],
+    });
+    expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft (1)" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft (2)" })).toBeInTheDocument();
+  });
+});

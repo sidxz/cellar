@@ -116,3 +116,122 @@ def test_changing_melt_config_on_active_protocol_needs_a_new_version():
     p.publish()
     with pytest.raises(ConflictError, match="melt_config"):
         p.update_readout_definition(rd.id, melt_config=_cfg(measure=MeltMeasure.TM, high=90.0))
+
+
+# ---- Series values (descriptive per-batch values from a window) ----
+
+
+@pytest.mark.parametrize("threshold", [0.0, -1.0, float("inf"), float("nan")])
+def test_lowest_shift_threshold_must_be_positive_and_finite(threshold):
+    with pytest.raises(ValidationError):
+        _cfg(measure=MeltMeasure.LOWEST_SHIFT_CONCENTRATION, threshold=threshold)
+
+
+def test_threshold_only_on_lowest_shift_concentration():
+    with pytest.raises(ValidationError):
+        _cfg(measure=MeltMeasure.DELTA_TM, threshold=2.0)
+    with pytest.raises(ValidationError):
+        _cfg(measure=MeltMeasure.LOWEST_SHIFT_CONCENTRATION)
+
+
+def test_concentration_only_on_delta_tm_at_concentration():
+    with pytest.raises(ValidationError):
+        _cfg(measure=MeltMeasure.MAX_DELTA_TM, concentration=50.0)
+    with pytest.raises(ValidationError):
+        _cfg(measure=MeltMeasure.DELTA_TM_AT_CONCENTRATION)
+    for bad in [0.0, -5.0, float("inf")]:
+        with pytest.raises(ValidationError):
+            _cfg(measure=MeltMeasure.DELTA_TM_AT_CONCENTRATION, concentration=bad)
+
+
+def test_to_dict_omits_unset_parameters():
+    d = _cfg(measure=MeltMeasure.TM).to_dict()
+    assert "threshold" not in d and "concentration" not in d
+
+
+@pytest.mark.parametrize(
+    "over",
+    [
+        dict(measure=MeltMeasure.MAX_DELTA_TM),
+        dict(measure=MeltMeasure.LOWEST_SHIFT_CONCENTRATION, threshold=2.0),
+        dict(measure=MeltMeasure.DELTA_TM_AT_CONCENTRATION, concentration=50.0),
+    ],
+)
+def test_series_measures_round_trip(over):
+    c = _cfg(**over)
+    assert c.measure.is_series
+    assert MeltReadoutConfig.from_dict(c.to_dict()) == c
+
+
+def test_per_position_measures_are_not_series():
+    assert not MeltMeasure.TM.is_series and not MeltMeasure.DELTA_TM.is_series
+
+
+def _at(c: float, name: str | None = None) -> ReadoutDefinition:
+    return _melt_rd(
+        name or f"ΔTm at {c:g} µM (Main)",
+        melt_config=_cfg(measure=MeltMeasure.DELTA_TM_AT_CONCENTRATION, concentration=c),
+    )
+
+
+def test_window_allows_two_delta_tm_at_different_concentrations():
+    p = _protocol()
+    p.add_readout_definition(_at(10.0))
+    p.add_readout_definition(_at(50.0))
+    assert len([r for r in p.readout_definitions if r.melt_config]) == 2
+
+
+def test_window_refuses_same_measure_and_parameter():
+    p = _protocol()
+    p.add_readout_definition(_at(50.0))
+    with pytest.raises(ValidationError, match="Temperature window 'Main'"):
+        p.add_readout_definition(_at(50.0, name="Again"))
+
+
+def _lowest(unit: str | None, **over) -> ReadoutDefinition:
+    return _melt_rd(
+        "Lowest shifting conc. (Main, ±2 °C)",
+        unit=unit,
+        melt_config=_cfg(measure=MeltMeasure.LOWEST_SHIFT_CONCENTRATION, threshold=2.0),
+        **over,
+    )
+
+
+def test_lowest_shift_concentration_unit_must_be_dose_unit():
+    p = _protocol()
+    with pytest.raises(ValidationError, match="dose unit"):
+        p.add_readout_definition(_lowest("°C"))
+    p.add_readout_definition(_lowest(p.dose_unit.value))
+
+
+def test_series_values_other_than_lowest_need_celsius():
+    with pytest.raises(ValidationError, match="°C"):
+        _melt_rd("Max ΔTm (Main)", unit="uM", melt_config=_cfg(measure=MeltMeasure.MAX_DELTA_TM))
+
+
+def test_geometric_mean_only_for_lowest_shift_concentration():
+    with pytest.raises(ValidationError, match="geometric mean"):
+        _melt_rd(
+            "Max ΔTm (Main)",
+            aggregation=ReadoutAggregation.GEOMETRIC_MEAN,
+            melt_config=_cfg(measure=MeltMeasure.MAX_DELTA_TM),
+        )
+    _lowest("uM", aggregation=ReadoutAggregation.GEOMETRIC_MEAN)
+
+
+def test_series_readout_names():
+    p = _protocol()
+    p.add_readout_definition(_melt_rd("Tm (Main)"))
+    p.add_readout_definition(
+        _melt_rd("Max ΔTm (Main)", melt_config=_cfg(measure=MeltMeasure.MAX_DELTA_TM))
+    )
+    p.add_readout_definition(_at(50.0))
+    assert p.series_readout_names() == frozenset({"Max ΔTm (Main)", "ΔTm at 50 µM (Main)"})
+
+
+def test_lowest_shift_concentration_unit_cannot_be_edited_away_from_dose_unit():
+    p = _protocol()
+    rd = _lowest(p.dose_unit.value)
+    p.add_readout_definition(rd)
+    with pytest.raises(ValidationError, match="dose unit"):
+        p.update_readout_definition(rd.id, unit="nM")

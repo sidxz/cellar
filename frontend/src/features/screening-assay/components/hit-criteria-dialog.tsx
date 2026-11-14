@@ -19,10 +19,11 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Plus, RotateCcw, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useUpdateProtocol } from "../hooks/use-protocols";
 import { useResetRunHitCriteria, useSetRunHitCriteria } from "../hooks/use-runs";
 import { buildHitCriterionOptions, optionIdForRule } from "../lib/hit-criteria-options";
+import { isSeriesReadout, runRulesOf } from "../lib/melt-hits";
 import type { HitCriterion, ReadoutDefinition } from "../types";
 import { DeltaTmHint } from "./delta-tm-hint";
 
@@ -40,9 +41,7 @@ const OPERATOR_LABELS: Record<string, string> = {
 };
 
 type Operator = HitCriterion["operator"];
-const RUN_OPERATORS: readonly Operator[] = ["gt", "lt", "gte", "lte", "in"];
-// Only the protocol dialog offers "outside": the run's Dose-Response filter cannot evaluate it.
-const PROTOCOL_OPERATORS: readonly Operator[] = [...RUN_OPERATORS, "not_between"];
+const OPERATORS: readonly Operator[] = ["gt", "lt", "gte", "lte", "in", "not_between"];
 
 const boundsOf = (v: HitCriterion["value"]): [number, number] =>
   Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === "number")
@@ -161,15 +160,14 @@ function useHitCriteriaRules(
         .filter(Boolean);
       updateRule(index, { value: parts });
     } else {
-      const num = Number.parseFloat(raw);
-      updateRule(index, { value: Number.isNaN(num) ? 0 : num });
+      // Left unparsable ("", "-") so the rule is invalid until it is a number.
+      updateRule(index, { value: Number.parseFloat(raw) });
     }
   };
 
   const handleBoundChange = (index: number, which: 0 | 1, raw: string) => {
     const next = boundsOf(rules[index].value);
-    const num = Number.parseFloat(raw);
-    next[which] = Number.isNaN(num) ? 0 : num;
+    next[which] = Number.parseFloat(raw); // NaN while unfinished: the rule is invalid
     updateRule(index, { value: next });
   };
 
@@ -177,7 +175,11 @@ function useHitCriteriaRules(
     (r) =>
       r.readout_name !== "" &&
       (r.operator !== "in" || (Array.isArray(r.value) && r.value.length > 0)) &&
-      (r.operator !== "not_between" || boundsOf(r.value)[0] < boundsOf(r.value)[1]),
+      (r.operator !== "not_between" || boundsOf(r.value)[0] < boundsOf(r.value)[1]) &&
+      (r.operator === "in" ||
+        r.operator === "not_between" ||
+        r.readout_name === "Curve Class" ||
+        (typeof r.value === "number" && Number.isFinite(r.value))),
   );
 
   return {
@@ -193,6 +195,36 @@ function useHitCriteriaRules(
     handleValueChange,
     handleBoundChange,
   };
+}
+
+/** A number input that keeps what is typed ("-", "1.") until it is a number,
+ *  so a negative or decimal value can be entered one keystroke at a time. */
+function NumberField({
+  value,
+  onText,
+  className,
+}: {
+  value: number;
+  /** Every edit; the rule holds NaN (and cannot be saved) until it is a number. */
+  onText: (text: string) => void;
+  className?: string;
+}) {
+  const [text, setText] = useState(Number.isNaN(value) ? "" : String(value));
+  // Follow a value set from elsewhere (seeding, a reset), not one being typed.
+  useEffect(() => {
+    setText((t) => (Object.is(Number.parseFloat(t), value) ? t : String(value)));
+  }, [value]);
+  return (
+    <Input
+      className={className}
+      type="number"
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        onText(e.target.value);
+      }}
+    />
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -264,33 +296,39 @@ function HitCriteriaRulesEditor({
                 <>
                   <div className="w-24 space-y-1">
                     <Label className="text-xs">Low</Label>
-                    <Input
+                    <NumberField
                       className="h-9"
-                      type="number"
                       value={low}
-                      onChange={(e) => state.handleBoundChange(index, 0, e.target.value)}
+                      onText={(t) => state.handleBoundChange(index, 0, t)}
                     />
                   </div>
                   <div className="w-24 space-y-1">
                     <Label className="text-xs">High</Label>
-                    <Input
+                    <NumberField
                       className="h-9"
-                      type="number"
                       value={high}
-                      onChange={(e) => state.handleBoundChange(index, 1, e.target.value)}
+                      onText={(t) => state.handleBoundChange(index, 1, t)}
                     />
                   </div>
                 </>
               ) : (
                 <div className="w-32 space-y-1">
                   <Label className="text-xs">Value</Label>
-                  <Input
-                    className="h-9"
-                    type={rule.operator === "in" ? "text" : "number"}
-                    placeholder={rule.operator === "in" ? "full, partial" : "0"}
-                    value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
-                    onChange={(e) => state.handleValueChange(index, e.target.value)}
-                  />
+                  {rule.operator === "in" ? (
+                    <Input
+                      className="h-9"
+                      type="text"
+                      placeholder="full, partial"
+                      value={Array.isArray(rule.value) ? rule.value.join(", ") : rule.value}
+                      onChange={(e) => state.handleValueChange(index, e.target.value)}
+                    />
+                  ) : (
+                    <NumberField
+                      className="h-9"
+                      value={typeof rule.value === "number" ? rule.value : 0}
+                      onText={(t) => state.handleValueChange(index, t)}
+                    />
+                  )}
                 </div>
               )}
 
@@ -379,7 +417,7 @@ export function HitCriteriaDialog({
         <HitCriteriaRulesEditor
           state={state}
           readoutDefinitions={readoutDefinitions}
-          operators={PROTOCOL_OPERATORS}
+          operators={OPERATORS}
         />
 
         <DialogFooter>
@@ -428,11 +466,17 @@ export function RunHitCriteriaDialog({
 }: RunHitCriteriaDialogProps) {
   const setHitCriteria = useSetRunHitCriteria();
   const resetHitCriteria = useResetRunHitCriteria();
-  // The run's filter cannot evaluate "outside", so such a rule is not carried in.
-  const source = currentCriteria ?? recommendation ?? [];
-  const seed = source.filter((r) => RUN_OPERATORS.includes(r.operator));
-  const droppedOutside = seed.length < source.length;
-  const state = useHitCriteriaRules(readoutDefinitions, seed);
+  // A series value is one number per batch; no run view evaluates it (the
+  // server refuses it), so it is neither offered nor carried in.
+  const { kept: seed, dropped } = runRulesOf(
+    currentCriteria ?? recommendation ?? [],
+    readoutDefinitions,
+  );
+  const readouts = useMemo(
+    () => readoutDefinitions.filter((rd) => !isSeriesReadout(rd)),
+    [readoutDefinitions],
+  );
+  const state = useHitCriteriaRules(readouts, seed);
 
   const handleOpenChange = (next: boolean) => {
     if (next) state.reset(seed);
@@ -458,17 +502,15 @@ export function RunHitCriteriaDialog({
             Saving with no rules records "show all compounds".
           </DialogDescription>
         </DialogHeader>
-        {droppedOutside && (
+
+        {dropped.length > 0 && (
           <p className="text-sm text-muted-foreground">
-            The “outside” rule is left out: this run's filter cannot evaluate it.
+            {`Left out (a series value is not a run rule): ${dropped
+              .map((r) => r.readout_name)
+              .join(", ")}`}
           </p>
         )}
-
-        <HitCriteriaRulesEditor
-          state={state}
-          readoutDefinitions={readoutDefinitions}
-          operators={RUN_OPERATORS}
-        />
+        <HitCriteriaRulesEditor state={state} readoutDefinitions={readouts} operators={OPERATORS} />
 
         <DialogFooter>
           {/* Reset clears the run's recorded decision so it reverts to "unset"

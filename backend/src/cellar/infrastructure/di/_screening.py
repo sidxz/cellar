@@ -634,7 +634,17 @@ def register_screening(container: Container) -> None:
     container.define(UpdateRun, _run_cmd(UpdateRun))
     container.define(LockRun, _run_cmd(LockRun))
     container.define(UnlockRun, _run_cmd(UnlockRun))
-    container.define(SetRunHitCriteria, _run_cmd(SetRunHitCriteria))
+
+    def _set_run_hit_criteria(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return SetRunHitCriteria(
+            uow,
+            SQLAlchemyRunRepository(uow),
+            c[EventDispatcher],
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
+
+    container.define(SetRunHitCriteria, _set_run_hit_criteria)
     container.define(ResetRunHitCriteria, _run_cmd(ResetRunHitCriteria))
     container.define(AddRunTarget, _run_cmd(AddRunTarget))
     container.define(RemoveRunTarget, _run_cmd(RemoveRunTarget))

@@ -57,7 +57,9 @@ def _rd(window: str, measure: MeltMeasure) -> ReadoutDefinition:
 class Harness:
     def __init__(self, status: RunStatus = RunStatus.DRAFT, locked: bool = False) -> None:
         # Declared high window first: results must still come back ordered by low.
-        self.defs = [_rd(w, m) for w in ("Main", "Low") for m in MeltMeasure]
+        self.defs = [
+            _rd(w, m) for w in ("Main", "Low") for m in (MeltMeasure.TM, MeltMeasure.DELTA_TM)
+        ]
         self.protocol = Protocol.create(
             workspace_id=WS,
             name="Thermal shift",
@@ -207,3 +209,66 @@ async def test_position_without_a_trace_on_the_channel_is_not_evaluated():
         assert [p.well_id for p in w.result.positions] == [h.ref.id]
     (check,) = out.step_checks
     assert check.check.differs == frozenset()
+
+
+def _series_rd(name: str, measure: MeltMeasure, **param) -> ReadoutDefinition:
+    low, high = WINDOWS["Main"]
+    return ReadoutDefinition(
+        protocol_id=uuid.UUID(int=0),
+        name=name,
+        data_type=ReadoutDataType.NUMERIC,
+        unit="°C",
+        aggregation=ReadoutAggregation.MEAN,
+        melt_config=MeltReadoutConfig(
+            window="Main", measure=measure, channel_key=CH, low=low, high=high, **param
+        ),
+    )
+
+
+async def test_series_values_listed_per_window_with_the_engine_numbers():
+    h = Harness()
+    extra = [
+        _series_rd("Max ΔTm (Main)", MeltMeasure.MAX_DELTA_TM),
+        _series_rd(
+            "ΔTm at 10 µM (Main)", MeltMeasure.DELTA_TM_AT_CONCENTRATION, concentration=10.0
+        ),
+        _series_rd(
+            "ΔTm at 50 µM (Main)", MeltMeasure.DELTA_TM_AT_CONCENTRATION, concentration=50.0
+        ),
+    ]
+    for rd in extra:
+        h.protocol.add_readout_definition(rd)
+    batch = uuid.uuid4()
+    h.sample.batch_id, h.sample.dose = batch, 10.0
+    second = Well(
+        plate_id=h.ref.plate_id,
+        row="A",
+        column=3,
+        well_type=WellType.SAMPLE,
+        batch_id=batch,
+        dose=50.0,
+    )
+    h.run.wells.append(second)
+    h.traced.add((second.id, CH))
+    h.step(h.ref, 71.0)
+    h.step(h.sample, 70.0)
+    h.step(second, 63.0)
+
+    main = next(w for w in (await h.read()).unwrap().windows if w.window == "Main")
+
+    by_name = {d.name: d.id for d in h.defs}
+    assert main.delta_tm_readout_id == by_name["ΔTm (Main)"]
+    got = {s.readout_name: s for s in main.series}
+    assert list(got) == ["Max ΔTm (Main)", "ΔTm at 10 µM (Main)", "ΔTm at 50 µM (Main)"]
+    [mx] = got["Max ΔTm (Main)"].values
+    assert (mx.batch_id, mx.value, mx.concentration) == (batch, -8.0, 50.0)
+    assert got["ΔTm at 10 µM (Main)"].concentration == 10.0
+    assert [v.value for v in got["ΔTm at 10 µM (Main)"].values] == [-1.0]
+    assert got["Max ΔTm (Main)"].readout_id == extra[0].id
+    assert got["Max ΔTm (Main)"].measure is MeltMeasure.MAX_DELTA_TM
+
+
+async def test_window_without_series_readouts_has_no_series():
+    h = Harness()
+    h.step(h.ref, 71.0)
+    assert all(w.series == () for w in (await h.read()).unwrap().windows)

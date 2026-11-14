@@ -26,9 +26,9 @@ from cellar.application.auth import (
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.screening_assay.repository import RunRepository
+from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.domain.screening_assay.run import Run
-from cellar.domain.shared.errors import DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.hit_criterion import HitCriterion
 
 
@@ -53,10 +53,12 @@ class SetRunHitCriteria:
         uow: UnitOfWork,
         repo: RunRepository,
         dispatcher: EventDispatcherProtocol,
+        protocol_repo: ProtocolRepository,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._protocol_repo = protocol_repo
 
     async def __call__(
         self,
@@ -70,6 +72,22 @@ class SetRunHitCriteria:
             run = await self._repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
+            protocol = await self._protocol_repo.find_by_id_in_workspace(
+                input.workspace_id, run.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(run.protocol_id)))
+            # A series value is one number per batch; a run's results are per
+            # position, so no run view could evaluate such a rule.
+            series = protocol.series_readout_names()
+            named = sorted({c.readout_name for c in input.criteria if c.readout_name in series})
+            if named:
+                return Failure(
+                    ValidationError(
+                        f"Run hit rules cannot use series values ({', '.join(named)}); "
+                        "set them on the protocol"
+                    )
+                )
             run.set_hit_criteria(input.criteria, set_by=auth.user_id)
             await self._repo.save(run)
             events = await self._uow.commit()
