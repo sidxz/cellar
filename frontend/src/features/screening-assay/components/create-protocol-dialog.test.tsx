@@ -807,7 +807,9 @@ describe("CreateProtocolDialog", () => {
     fireEvent.keyDown(nickname, { key: "Enter" });
     expect(screen.getByText(/already the protocol's name/)).toBeInTheDocument();
     expect(nickname).toHaveAttribute("aria-invalid", "true");
-    expect(screen.queryByRole("button", { name: /^Remove / })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /^Remove m\. abscessus/i }),
+    ).not.toBeInTheDocument();
 
     fireEvent.change(nickname, { target: { value: "Mabs MIC" } });
     expect(screen.queryByText(/already the protocol's name/)).not.toBeInTheDocument();

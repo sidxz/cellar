@@ -537,6 +537,109 @@ export function CreateProtocolDialog({
             </p>
           </div>
 
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between">
+              <Label>Assay conditions</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => appendCondition(defaultCondition())}
+              >
+                <Plus className="mr-2 h-4 w-4" />
+                Add Condition
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Concentrations, times, temperatures: fix a value for this protocol, or leave it to
+              vary per run.
+            </p>
+            {conditionFields.map((field, index) => (
+              <div key={field.id} className="grid gap-2">
+                <div className="flex items-end gap-2">
+                  <div className="grid flex-1 gap-1">
+                    <Label className="text-xs">Name</Label>
+                    <Input
+                      placeholder="e.g., Incubation time"
+                      {...form.register(`conditions.${index}.name`)}
+                    />
+                  </div>
+                  <div className="grid w-[130px] gap-1">
+                    <Label className="text-xs">Type</Label>
+                    <Controller
+                      control={form.control}
+                      name={`conditions.${index}.data_type`}
+                      render={({ field: f }) => (
+                        <Select value={f.value} onValueChange={f.onChange}>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="text">Text</SelectItem>
+                            <SelectItem value="numeric">Numeric</SelectItem>
+                            <SelectItem value="pick_list">Pick List</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                  <div className="grid w-40 gap-1">
+                    <Label className="text-xs">Unit</Label>
+                    <Controller
+                      control={form.control}
+                      name={`conditions.${index}.unit`}
+                      render={({ field: f }) => (
+                        <UnitPicker value={f.value} onChange={f.onChange} />
+                      )}
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Remove condition"
+                    className="shrink-0"
+                    onClick={() => removeCondition(index)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+                {conditionValues[index]?.data_type === "pick_list" && (
+                  <Controller
+                    control={form.control}
+                    name={`conditions.${index}.pick_list_values`}
+                    render={({ field: f }) => (
+                      <PickListValuesInput values={f.value} onChange={f.onChange} />
+                    )}
+                  />
+                )}
+                <div className="grid gap-1">
+                  <Label className="text-xs">Fixed for this protocol (optional)</Label>
+                  <Controller
+                    control={form.control}
+                    name={`conditions.${index}.fixed_value`}
+                    render={({ field: f }) => (
+                      <ConditionValueInput
+                        def={conditionValues[index] ?? defaultCondition()}
+                        value={f.value}
+                        onChange={f.onChange}
+                        noneLabel="(varies per run)"
+                        aria-label="Fixed for this protocol"
+                      />
+                    )}
+                  />
+                  {conditionValues[index] && !isFixedValueValid(conditionValues[index]) && (
+                    <p className="text-xs text-destructive">
+                      {conditionValues[index].data_type === "numeric"
+                        ? "Must be a number."
+                        : "Must be one of the values."}
+                    </p>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
           <StartsFrom
             forms={ownForms.length > 0 ? ownForms : genericForms}
             selectedId={selectedForm?.id ?? null}
@@ -643,109 +746,6 @@ export function CreateProtocolDialog({
                   searchPlaceholder="Search projects..."
                   emptyMessage="No projects found."
                 />
-              </div>
-
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between">
-                  <Label>Assay conditions</Label>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => appendCondition(defaultCondition())}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Condition
-                  </Button>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  Concentrations, times, temperatures: fix a value for this protocol, or leave it to
-                  vary per run.
-                </p>
-                {conditionFields.map((field, index) => (
-                  <div key={field.id} className="grid gap-2">
-                    <div className="flex items-end gap-2">
-                      <div className="grid flex-1 gap-1">
-                        <Label className="text-xs">Name</Label>
-                        <Input
-                          placeholder="e.g., Incubation time"
-                          {...form.register(`conditions.${index}.name`)}
-                        />
-                      </div>
-                      <div className="grid w-[130px] gap-1">
-                        <Label className="text-xs">Type</Label>
-                        <Controller
-                          control={form.control}
-                          name={`conditions.${index}.data_type`}
-                          render={({ field: f }) => (
-                            <Select value={f.value} onValueChange={f.onChange}>
-                              <SelectTrigger>
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="text">Text</SelectItem>
-                                <SelectItem value="numeric">Numeric</SelectItem>
-                                <SelectItem value="pick_list">Pick List</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          )}
-                        />
-                      </div>
-                      <div className="grid w-40 gap-1">
-                        <Label className="text-xs">Unit</Label>
-                        <Controller
-                          control={form.control}
-                          name={`conditions.${index}.unit`}
-                          render={({ field: f }) => (
-                            <UnitPicker value={f.value} onChange={f.onChange} />
-                          )}
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Remove condition"
-                        className="shrink-0"
-                        onClick={() => removeCondition(index)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </div>
-                    {conditionValues[index]?.data_type === "pick_list" && (
-                      <Controller
-                        control={form.control}
-                        name={`conditions.${index}.pick_list_values`}
-                        render={({ field: f }) => (
-                          <PickListValuesInput values={f.value} onChange={f.onChange} />
-                        )}
-                      />
-                    )}
-                    <div className="grid gap-1">
-                      <Label className="text-xs">Fixed for this protocol (optional)</Label>
-                      <Controller
-                        control={form.control}
-                        name={`conditions.${index}.fixed_value`}
-                        render={({ field: f }) => (
-                          <ConditionValueInput
-                            def={conditionValues[index] ?? defaultCondition()}
-                            value={f.value}
-                            onChange={f.onChange}
-                            noneLabel="(varies per run)"
-                            aria-label="Fixed for this protocol"
-                          />
-                        )}
-                      />
-                      {conditionValues[index] && !isFixedValueValid(conditionValues[index]) && (
-                        <p className="text-xs text-destructive">
-                          {conditionValues[index].data_type === "numeric"
-                            ? "Must be a number."
-                            : "Must be one of the values."}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
               </div>
 
               {readoutValues.some((r) => r.data_type === "dose_response") && (

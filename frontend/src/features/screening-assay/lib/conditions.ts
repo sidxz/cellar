@@ -176,12 +176,6 @@ type FixedValueShape = Pick<ConditionDefinition, "data_type" | "pick_list_values
   fixed_value?: string | null;
 };
 
-/** "Hypoxia: yes", "Incubation time: 72 h": the value that defines the protocol. */
-export function formatFixedCondition(cd: ConditionDefinition): string {
-  const unit = cd.unit?.trim();
-  return `${cd.name}: ${cd.fixed_value}${unit ? ` ${unit}` : ""}`;
-}
-
 /** name → bare fixed value, to seed a new run's condition inputs. */
 export function fixedConditionValues(defs: ConditionDefinition[]): Record<string, string> {
   return Object.fromEntries(
