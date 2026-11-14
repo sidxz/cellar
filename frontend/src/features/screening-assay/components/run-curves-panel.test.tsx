@@ -2,7 +2,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
-import type { MeltWindowPosition, MeltingAnalysis, RunCurves } from "../types";
+import type { HitCriterion, MeltWindowPosition, MeltingAnalysis, RunCurves } from "../types";
 
 const plotCalls: Array<{
   data: Array<Record<string, unknown>>;
@@ -40,6 +40,19 @@ vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => canEdit.va
 vi.mock("./edit-labelling-dialog", () => ({
   EditLabellingDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="edit-labelling">edit labelling dialog</div> : null,
+}));
+
+const protocolData: { value: unknown } = { value: undefined };
+vi.mock("../hooks/use-protocols", () => ({
+  useProtocol: () => ({ data: protocolData.value }),
+}));
+const setHitCriteria = vi.fn();
+vi.mock("../hooks/use-runs", () => ({
+  useSetRunHitCriteria: () => ({ mutate: setHitCriteria, isPending: false }),
+  useResetRunHitCriteria: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@/shared/components/entity-name", () => ({
+  MemberName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
 
 import { gridRow } from "../test/test-data-grid";
@@ -84,7 +97,37 @@ const curves: RunCurves = {
   window: null,
 };
 
-const RUN = { id: "r1", protocol_id: "p1", status: "draft", is_locked: false } as const;
+const RUN = {
+  id: "r1",
+  protocol_id: "p1",
+  status: "draft",
+  is_locked: false,
+  hit_criteria: null,
+  hit_criteria_set_by: null,
+  hit_criteria_set_at: null,
+} as const;
+const OUTSIDE: HitCriterion = {
+  readout_name: "ΔTm (Main)",
+  operator: "not_between",
+  value: [-2, 2],
+};
+/** The run with "ΔTm (Main) outside −2 to 2" recorded. */
+const RULE_RUN = {
+  ...RUN,
+  hit_criteria: [OUTSIDE],
+  hit_criteria_set_by: "u1",
+  hit_criteria_set_at: "2026-11-13",
+};
+const PROTOCOL = {
+  id: "p1",
+  recommended_hit_criteria: [OUTSIDE],
+  readout_definitions: [
+    {
+      name: "ΔTm (Main)",
+      melt_config: { window: "Main", measure: "delta_tm", channel_key: "a", low: 30, high: 90 },
+    },
+  ],
+};
 
 type Cell = Partial<Omit<MeltWindowPosition, "well_id">>;
 /** An analysis with one window "Main" on signal a; `cells` by well id. */
@@ -139,6 +182,8 @@ function lastPlot() {
 
 beforeEach(() => {
   canEdit.value = true;
+  protocolData.value = PROTOCOL;
+  setHitCriteria.mockReset();
   melting.data = undefined;
   melting.isLoading = false;
   plotCalls.length = 0;
@@ -441,7 +486,7 @@ describe("RunCurvesPanel", () => {
 
     it("filtering keeps the selection", () => {
       withAnalysis({ w2: { tm: 55, delta_tm: -5 }, w3: { flags: ["no_step_in_window"] } });
-      render(<RunCurvesPanel runId="r1" />);
+      render(<RunCurvesPanel runId="r1" run={RULE_RUN} />);
       expect(selectedRows()).toEqual(["w3"]);
       fireEvent.click(screen.getByRole("button", { name: "1 down" }));
       expect(document.querySelector('tr[data-row-id="w3"]')).toBeNull();
@@ -582,5 +627,39 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       ["Main", true],
       ["Alt", true],
     ]);
+  });
+
+  describe("hit rule", () => {
+    it("the run's recorded rule calls the hits and counts them", () => {
+      withAnalysis({
+        w2: { tm: 55, delta_tm: -5 },
+        w3: { tm: 63, delta_tm: 3 },
+        w4: { tm: 61, delta_tm: 1 },
+      });
+      render(<RunCurvesPanel runId="r1" run={RULE_RUN} />);
+      expect(screen.getByText("Hit rule: ΔTm (Main) outside -2 – 2")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Hits 2" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
+    });
+
+    it("an unset run shows the recommendation and calls no hits until applied", () => {
+      withAnalysis({ w2: { tm: 55, delta_tm: -5 } });
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      expect(
+        screen.getByText("Protocol recommends: ΔTm (Main) outside -2 – 2"),
+      ).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Hits/ })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Apply to this run" }));
+      expect(setHitCriteria).toHaveBeenCalledWith({ runId: "r1", criteria: [OUTSIDE] });
+    });
+
+    it("does not read or write a stored threshold", () => {
+      const get = vi.spyOn(Storage.prototype, "getItem");
+      withAnalysis({ w2: { tm: 55, delta_tm: -5 } });
+      render(<RunCurvesPanel runId="r1" run={RULE_RUN} />);
+      expect(get).not.toHaveBeenCalledWith("cellar.thermalShift.threshold");
+      get.mockRestore();
+    });
   });
 });

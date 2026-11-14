@@ -3,24 +3,29 @@
 import { CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
+import type { Band } from "../lib/melt-hits";
 import type { ShiftRow } from "../lib/melt-results";
 import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
 export function ShiftPlot({
   rows,
-  threshold,
+  hits,
+  band,
   selected,
   onSelect,
 }: {
   rows: readonly ShiftRow[];
-  threshold: number;
+  /** The positions the run's hit rule calls hits. */
+  hits: ReadonlySet<string>;
+  /** The rule on this window's ΔTm, drawn as a band or line; null draws none. */
+  band: Band | null;
   selected: ReadonlySet<string>;
   onSelect: (wellId: string) => void;
 }) {
   const { resolvedTheme } = useTheme();
   const longest = Math.max(0, ...rows.map((r) => r.label.length));
   const left = Math.min(180, 40 + longest * 7);
-  const { shapes, annotations } = shiftBand(threshold, "x");
+  const { shapes, annotations } = shiftBand(band, "x");
   const plot = (
     <Plot
       data={[
@@ -32,7 +37,7 @@ export function ShiftPlot({
           y: rows.map((r) => r.label),
           customdata: rows.map((r) => r.wellId),
           marker: {
-            color: rows.map((r) => shiftColour(r.deltaTm, threshold)),
+            color: rows.map((r) => shiftColour(r.deltaTm, hits.has(r.wellId))),
             size: rows.map((r) => (selected.has(r.wellId) ? 11 : 8)),
             line: {
               width: rows.map((r) => (selected.has(r.wellId) ? 2 : 0)),

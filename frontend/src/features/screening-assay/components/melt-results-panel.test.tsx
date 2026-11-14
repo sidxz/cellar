@@ -1,10 +1,10 @@
-import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { CurvePosition } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
-import { useShiftThreshold } from "../lib/use-shift-threshold";
+import type { ApplicableRule } from "../lib/melt-hits";
 import type { MeltWindow, MeltingAnalysis, MeltingStep } from "../types";
 
 vi.mock("@/shared/components/chemistry/structure-thumbnail", () => ({
@@ -102,16 +102,30 @@ const analysis = {
   step_checks: [],
 } as unknown as MeltingAnalysis;
 
+/** The run's rule "ΔTm (Main) outside −2 to 2": s1 (−8.5) and s2 (+3.0) are hits. */
+const OUTSIDE_MAIN: ApplicableRule[] = [
+  {
+    rule: { readout_name: "ΔTm (Main)", operator: "not_between", value: [-2, 2] },
+    window: "Main",
+    measure: "delta_tm",
+  },
+];
+const HITS = new Set(["s1", "s2"]);
+
 function Harness({
   channel = "a",
   onChange = () => {},
   onLead,
   data = analysis,
+  hits = HITS,
+  applicable = OUTSIDE_MAIN,
 }: {
   channel?: string;
   onChange?: (s: SelectionState) => void;
   onLead?: (w: string | null) => void;
   data?: MeltingAnalysis;
+  hits?: ReadonlySet<string>;
+  applicable?: ApplicableRule[];
 }) {
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
   return (
@@ -126,6 +140,8 @@ function Harness({
         setSelection(s);
       }}
       onLeadWindowChange={onLead}
+      hits={hits}
+      applicable={applicable}
     />
   );
 }
@@ -144,8 +160,6 @@ const tabNames = () =>
   within(screen.getByRole("tablist", { name: "Window" }))
     .getAllByRole("tab")
     .map((t) => t.textContent);
-
-beforeEach(() => localStorage.clear());
 
 const lastSelected = (fn: ReturnType<typeof vi.fn>) => [
   ...(fn.mock.lastCall?.[0] as SelectionState).selected,
@@ -213,8 +227,10 @@ describe("MeltResultsPanel", () => {
     expect(screen.getByText("Main", { selector: "span" })).toBeInTheDocument();
     expect(screen.queryByText(/of 4 samples/)).toBeNull();
     expect(screen.getByRole("button", { name: "Provisional 1" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hits 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("Shift threshold (°C)")).toBeNull();
     const needs = screen.getByRole("button", { name: "Step issues 1" });
     fireEvent.click(needs);
     expect(needs).toHaveAttribute("aria-pressed", "true");
@@ -254,7 +270,7 @@ describe("MeltResultsPanel", () => {
   });
 
   it("compare shows a column pair per window and sorts by the largest shift", () => {
-    render(<Harness />);
+    render(<Harness hits={new Set(["s1", "s2", "s3"])} />);
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
     const t = within(table());
     expect(t.getByRole("columnheader", { name: "Main" })).toBeInTheDocument();
@@ -283,21 +299,23 @@ describe("MeltResultsPanel", () => {
     expect(within(strip).getByText("No reference")).toBeInTheDocument();
   });
 
-  it("ΔTm is judged as shown: +1.96 at a threshold of 2 reads +2.0 and counts up", () => {
-    const data = {
-      ...analysis,
-      windows: analysis.windows.map((w, i) =>
-        i === 0
-          ? {
-              ...w,
-              positions: w.positions.map((p) => (p.well_id === "s3" ? wp("s3", 73, 1.96) : p)),
-            }
-          : w,
-      ),
-    } as MeltingAnalysis;
-    render(<Harness data={data} />);
-    expect(within(row("s3")).getByText("+2.0").closest("td")).toHaveClass("text-blue-700");
-    expect(screen.getByRole("button", { name: "2 up" })).toBeInTheDocument();
+  it("tint and counts follow the run's hits, not a threshold", () => {
+    // s3 (−1.0) is called a hit; s2 (+3.0) is not.
+    render(<Harness hits={new Set(["s1", "s3"])} />);
+    expect(within(row("s3")).getByText("−1.0").closest("td")).toHaveClass("text-red-700");
+    expect(within(row("s2")).getByText("+3.0").closest("td")).toHaveClass("text-muted-foreground");
+    expect(within(row("s3")).getByText("Hit")).toBeInTheDocument();
+    expect(within(row("s2")).queryByText("Hit")).toBeNull();
+    expect(screen.getByRole("button", { name: "2 down" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Hits 2" }));
+    expect(bodyIds()).toEqual(["r1", "s1", "s3"]);
+  });
+
+  it("without a rule on Tm or ΔTm the strip shows no hit counts", () => {
+    render(<Harness hits={new Set()} applicable={[]} />);
+    expect(screen.queryByRole("button", { name: /^Hits/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /up$/ })).toBeNull();
+    expect(within(row("s2")).getByText("+3.0").closest("td")).toHaveClass("text-muted-foreground");
   });
 
   it("an unreviewed reference is a button that selects it, and its chip says Provisional", () => {
@@ -343,30 +361,6 @@ describe("MeltResultsPanel", () => {
     expect(screen.queryByTestId("structure")).toBeNull();
     act(() => within(row("s1")).getByRole("link", { name: "CC-014538" }).focus());
     expect(screen.getAllByTestId("structure").length).toBeGreaterThan(0);
-  });
-});
-
-describe("useShiftThreshold", () => {
-  it("threshold is read from and saved to localStorage, falling back to 2", () => {
-    const key = "cellar.thermalShift.threshold";
-    expect(renderHook(() => useShiftThreshold()).result.current[0]).toBe(2);
-    localStorage.setItem(key, "3");
-    const { result } = renderHook(() => useShiftThreshold());
-    expect(result.current[0]).toBe(3);
-    act(() => result.current[1](1.5));
-    expect(result.current[0]).toBe(1.5);
-    expect(localStorage.getItem(key)).toBe("1.5");
-    act(() => result.current[1](0));
-    expect(result.current[0]).toBe(2);
-    act(() => result.current[1](Number.NaN));
-    expect(result.current[0]).toBe(2);
-    localStorage.setItem(key, "-1");
-    expect(renderHook(() => useShiftThreshold()).result.current[0]).toBe(2);
-    const spy = vi.spyOn(localStorage, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    expect(renderHook(() => useShiftThreshold()).result.current[0]).toBe(2);
-    spy.mockRestore();
   });
 });
 

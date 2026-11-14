@@ -10,7 +10,6 @@ import {
   maxAbsDelta,
   orderRows,
   resultRows,
-  shiftDirection,
   shiftRows,
   windowSummary,
   worstStatus,
@@ -88,15 +87,21 @@ describe("melt-results", () => {
     expect(cell(rows, "s")?.review).toBeNull();
   });
 
-  it("the threshold is tested on the one-decimal value the grid shows", () => {
-    expect(shiftDirection(1.96, 2)).toBe("up");
-    expect(shiftDirection(1.94, 2)).toBeNull();
-    expect(shiftDirection(-1.96, 2)).toBe("down");
-    const w = win([wp("ref", 70, 0), wp("a", 72, 1.96)]);
-    const positions = [pos("ref", { well_type: "reference" }), pos("a")];
+  it("up and down count hits only, by the sign of their ΔTm", () => {
+    const w = win([wp("ref", 70, 0), wp("a", 72, 1.96), wp("b", 60, -10), wp("c", 69, -1)]);
+    const positions = [pos("ref", { well_type: "reference" }), pos("a"), pos("b"), pos("c")];
     const rows = resultRows([w], positions, [], noChecks);
-    expect(matchesFilter(rows[1], ["Main"], "up", 2)).toBe(true);
-    expect(windowSummary(w, rows, positions, [], noChecks, 2).up).toBe(1);
+    const hits = new Set(["a", "b"]);
+    const by = (id: string) => rows.find((r) => r.wellId === id) as (typeof rows)[number];
+    expect(matchesFilter(by("a"), ["Main"], "up", hits)).toBe(true);
+    expect(matchesFilter(by("c"), ["Main"], "down", hits)).toBe(false);
+    expect(matchesFilter(by("b"), ["Main"], "hits", hits)).toBe(true);
+    expect(matchesFilter(by("c"), ["Main"], "hits", hits)).toBe(false);
+    expect(windowSummary(w, rows, positions, [], noChecks, hits)).toMatchObject({
+      hits: 2,
+      up: 1,
+      down: 1,
+    });
   });
 
   it("one batch-suffix rule: the registration prefix dropped, else the batch number", () => {
@@ -157,8 +162,9 @@ describe("melt-results", () => {
     const { w, positions } = fixture();
     const rows = resultRows([w], positions, [step("up", 73)], noChecks);
     const by = (id: string) => rows.find((r) => r.wellId === id) as (typeof rows)[number];
+    const hits = new Set(["up", "big", "ref", "bl"]);
     const m = (id: string, f: Parameters<typeof matchesFilter>[2]) =>
-      matchesFilter(by(id), ["Main"], f, 2);
+      matchesFilter(by(id), ["Main"], f, hits);
     expect(m("up", "up")).toBe(true);
     expect(m("big", "down")).toBe(true);
     expect(m("m1", "up") || m("m1", "down")).toBe(false);
@@ -189,7 +195,7 @@ describe("melt-results", () => {
       step("d", 70, "accepted"),
     ];
     const rows = resultRows([w], positions, steps, noChecks);
-    const s = windowSummary(w, rows, positions, steps, noChecks, 2);
+    const s = windowSummary(w, rows, positions, steps, noChecks, new Set(["a", "b"]));
     expect(s).toMatchObject({
       needsReview: 1,
       provisional: 0,
@@ -205,7 +211,7 @@ describe("melt-results", () => {
       positions,
       [...steps, step("c", 70)],
       noChecks,
-      2,
+      new Set(),
     );
     expect(s2.needsReview).toBe(1);
   });
@@ -217,7 +223,7 @@ describe("melt-results", () => {
     const checks = [{ channel_key: "a", differs: ["a"], references_differ: true }] as StepCheck[];
     const rows = resultRows([w], positions, steps, checks);
     expect(rows[1].cells.Main.differs).toBe(true);
-    const s = windowSummary(w, rows, positions, steps, checks, 2);
+    const s = windowSummary(w, rows, positions, steps, checks, new Set());
     expect(s.provisional).toBe(1);
     expect(s.referencesDiffer).toBe(true);
     expect(s.referenceUnreviewed).toBe(false);
@@ -234,7 +240,7 @@ describe("melt-results", () => {
     const positions = [pos("a"), pos("b")];
     const rows = resultRows([w], positions, [], noChecks);
     expect(rows.map((r) => r.cells.Main.status)).toEqual(["no_reference", "no_reference"]);
-    const s = windowSummary(w, rows, positions, [], noChecks, 2);
+    const s = windowSummary(w, rows, positions, [], noChecks, new Set(["a"]));
     expect(s.up === 0 && s.down === 0).toBe(true);
     expect(s.referenceTm).toBeNull();
   });
@@ -272,7 +278,7 @@ describe("melt-results", () => {
     expect(rows.every((r) => Object.keys(r.cells).length === 0)).toBe(true);
     expect(worstStatus(rows[0], ["Main"])).toBeNull();
     expect(maxAbsDelta(rows[0], ["Main"])).toBeNull();
-    expect(matchesFilter(rows[0], ["Main"], "up", 2)).toBe(false);
+    expect(matchesFilter(rows[0], ["Main"], "up", new Set(["a"]))).toBe(false);
     const { body } = orderRows(rows, ["Main"]);
     expect(body.map((r) => r.wellId)).toEqual(["a", "c", "b"]);
   });

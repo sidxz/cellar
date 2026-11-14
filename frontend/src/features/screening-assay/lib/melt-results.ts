@@ -52,11 +52,13 @@ export interface WindowSummary {
   referenceUnreviewed: boolean;
   needsReview: number;
   provisional: number;
+  /** Samples the run's hit rule calls hits; up/down split them by ΔTm sign. */
+  hits: number;
   up: number;
   down: number;
 }
 
-export type ResultFilter = "needs_review" | "provisional" | "up" | "down" | null;
+export type ResultFilter = "needs_review" | "provisional" | "hits" | "up" | "down" | null;
 
 /** Worst first; references sit outside this ranking. */
 export const STATUS_ORDER: readonly CellStatus[] = [
@@ -67,11 +69,9 @@ export const STATUS_ORDER: readonly CellStatus[] = [
   "reviewed",
 ];
 
-/** Which side of the ±threshold band a ΔTm falls, judged on the one-decimal
- *  value the grid shows, so `+2.0` counts at a threshold of 2. */
-export function shiftDirection(deltaTm: number, threshold: number): "up" | "down" | null {
-  const shown = Number(deltaTm.toFixed(1));
-  return shown >= threshold ? "up" : shown <= -threshold ? "down" : null;
+/** A hit's direction: the sign of its ΔTm in the shown windows. */
+function hitSign(cells: readonly WindowCell[], sign: "up" | "down"): boolean {
+  return cells.some((c) => c.deltaTm != null && (sign === "up" ? c.deltaTm > 0 : c.deltaTm < 0));
 }
 
 /** The step that gives a position its Tm in a window: non-rejected, on the
@@ -215,7 +215,7 @@ export function matchesFilter(
   row: ResultRow,
   windowNames: readonly string[],
   filter: ResultFilter,
-  threshold: number,
+  hits: ReadonlySet<string>,
 ): boolean {
   if (filter === null) return true;
   if (!row.isSample) return false;
@@ -225,11 +225,11 @@ export function matchesFilter(
       return cells.some((c) => c.status === "several_steps" || c.status === "no_step");
     case "provisional":
       return cells.some((c) => c.status === "provisional");
+    case "hits":
+      return hits.has(row.wellId);
     case "up":
     case "down":
-      return cells.some(
-        (c) => c.deltaTm != null && shiftDirection(c.deltaTm, threshold) === filter,
-      );
+      return hits.has(row.wellId) && hitSign(cells, filter);
   }
 }
 
@@ -239,12 +239,16 @@ export function windowSummary(
   positions: readonly CurvePosition[],
   steps: readonly MeltingStep[],
   checks: readonly StepCheck[],
-  threshold: number,
+  hits: ReadonlySet<string>,
 ): WindowSummary {
   const inWindow = new Set(window.positions.map((r) => r.well_id));
   const refs = positions.filter((p) => p.well_type === "reference" && inWindow.has(p.well_id));
-  const cells = rows.filter((r) => r.isSample).flatMap((r) => cellsOf(r, [window.window]));
+  const samples = rows.filter((r) => r.isSample);
+  const cells = samples.flatMap((r) => cellsOf(r, [window.window]));
   const n = (f: (c: WindowCell) => boolean) => cells.filter(f).length;
+  const hitRows = samples.filter((r) => hits.has(r.wellId));
+  const signed = (sign: "up" | "down") =>
+    hitRows.filter((r) => hitSign(cellsOf(r, [window.window]), sign)).length;
   return {
     window: window.window,
     referenceLabels: refs.map((p) => p.label ?? p.position_label),
@@ -258,8 +262,9 @@ export function windowSummary(
     ),
     needsReview: n((c) => c.status === "several_steps" || c.status === "no_step"),
     provisional: n((c) => c.status === "provisional"),
-    up: n((c) => c.deltaTm != null && shiftDirection(c.deltaTm, threshold) === "up"),
-    down: n((c) => c.deltaTm != null && shiftDirection(c.deltaTm, threshold) === "down"),
+    hits: hitRows.length,
+    up: signed("up"),
+    down: signed("down"),
   };
 }
 

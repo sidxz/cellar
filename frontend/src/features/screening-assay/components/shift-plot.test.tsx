@@ -30,15 +30,24 @@ const rows = [
   { wellId: "c", label: "C", deltaTm: 3 },
 ];
 const last = () => plots[plots.length - 1];
+const OUTSIDE = { kind: "outside", low: -2, high: 2 } as const;
 const show = (selected: string[] = [], onSelect = () => {}) =>
-  render(<ShiftPlot rows={rows} threshold={2} selected={new Set(selected)} onSelect={onSelect} />);
+  render(
+    <ShiftPlot
+      rows={rows}
+      hits={new Set(["a", "c"])}
+      band={OUTSIDE}
+      selected={new Set(selected)}
+      onSelect={onSelect}
+    />,
+  );
 
 beforeEach(() => {
   plots.length = 0;
 });
 
 describe("ShiftPlot", () => {
-  it("ranks by ΔTm with the threshold band and zero line", () => {
+  it("ranks by ΔTm with the rule's band and zero line", () => {
     show();
     const { data, layout } = last();
     expect(data[0].x).toEqual([-5, 0.5, 3]);
@@ -49,7 +58,7 @@ describe("ShiftPlot", () => {
     expect([band.x0, band.x1]).toEqual([-2, 2]);
     expect(layout.shapes.some((s: any) => s.type === "line" && s.x0 === 0)).toBe(true);
     const text = layout.annotations.map((a: any) => a.text);
-    expect(text).toEqual(["within ±2 °C", "ΔTm = 0 (reference)"]);
+    expect(text).toEqual(["outside −2 to 2 °C is a hit", "ΔTm = 0 (reference)"]);
     expect(last().config).toMatchObject({ displayModeBar: false });
   });
 
@@ -66,22 +75,49 @@ describe("ShiftPlot", () => {
     expect(selectedOutline("light")).toBe("#111827");
   });
 
-  it("colours by the value as shown: +1.96 at a threshold of 2 is up", () => {
+  it("colours hits by sign and everything else neutral", () => {
     render(
       <ShiftPlot
         rows={[
-          { wellId: "a", label: "A", deltaTm: 1.96 },
+          { wellId: "a", label: "A", deltaTm: 1.5 },
           { wellId: "b", label: "B", deltaTm: 3 },
-          { wellId: "c", label: "C", deltaTm: 1.94 },
+          { wellId: "c", label: "C", deltaTm: -3 },
         ]}
-        threshold={2}
+        hits={new Set(["a", "c"])}
+        band={null}
         selected={new Set()}
         onSelect={() => {}}
       />,
     );
     const c = last().data[0].marker.color;
-    expect(c[0]).toBe(c[1]);
-    expect(c[2]).not.toBe(c[1]);
+    expect(c[0]).not.toBe(c[1]); // a hit at +1.5 is coloured; b at +3 is no hit
+    expect(c[0]).not.toBe(c[2]); // up and down differ
+  });
+
+  it("a one-sided rule draws a dashed line; no rule draws only the zero line", () => {
+    render(
+      <ShiftPlot
+        rows={rows}
+        hits={new Set()}
+        band={{ kind: "line", at: 2 }}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    const line = last().layout.shapes.find((s: any) => s.x0 === 2);
+    expect(line).toMatchObject({ type: "line", x1: 2, line: { dash: "dash" } });
+    expect(last().layout.shapes.some((s: any) => s.type === "rect")).toBe(false);
+    render(
+      <ShiftPlot
+        rows={rows}
+        hits={new Set()}
+        band={null}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(last().layout.shapes).toHaveLength(1);
+    expect(last().layout.annotations.map((a: any) => a.text)).toEqual(["ΔTm = 0 (reference)"]);
   });
 
   it("click selects the position", () => {
@@ -95,7 +131,15 @@ describe("ShiftPlot", () => {
     const many = (n: number) =>
       Array.from({ length: n }, (_, i) => ({ wellId: `w${i}`, label: `L${i}`, deltaTm: i }));
     const view = (n: number) =>
-      render(<ShiftPlot rows={many(n)} threshold={2} selected={new Set()} onSelect={() => {}} />);
+      render(
+        <ShiftPlot
+          rows={many(n)}
+          hits={new Set()}
+          band={null}
+          selected={new Set()}
+          onSelect={() => {}}
+        />,
+      );
     const a = view(61);
     expect(a.getByTestId("plot").parentElement).toHaveStyle({
       maxHeight: "560px",

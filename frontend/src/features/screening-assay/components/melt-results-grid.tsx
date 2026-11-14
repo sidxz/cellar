@@ -29,7 +29,6 @@ import {
   type ResultRow,
   STATUS_ORDER,
   type WindowCell,
-  shiftDirection,
   worstStatus,
 } from "../lib/melt-results";
 import { WELL_TYPE_LABELS, type WellType } from "../types";
@@ -72,12 +71,11 @@ export function formatDelta(d: number): string {
   return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)}`;
 }
 
-/** Blue at or above +threshold (stabilising), red at or below −threshold,
- *  muted inside; the sign says the same without colour. */
-function deltaTint(d: number, threshold: number): string {
-  const dir = shiftDirection(d, threshold);
-  if (dir === "up") return "font-semibold text-blue-700 dark:text-blue-300";
-  if (dir === "down") return "font-semibold text-red-700 dark:text-red-300";
+/** A hit is blue up (stabilising) or red down; everything else is muted. The
+ *  sign says the same without colour. */
+function deltaTint(d: number, isHit: boolean): string {
+  if (isHit && d > 0) return "font-semibold text-blue-700 dark:text-blue-300";
+  if (isHit && d < 0) return "font-semibold text-red-700 dark:text-red-300";
   return "text-muted-foreground";
 }
 
@@ -176,7 +174,11 @@ function StatusCell({ row, windowNames }: { row: ResultRow; windowNames: readonl
   );
 }
 
-function windowColumns(name: string, threshold: number, grouped: boolean): ColDef<ResultRow>[] {
+function windowColumns(
+  name: string,
+  hits: ReadonlySet<string>,
+  grouped: boolean,
+): ColDef<ResultRow>[] {
   const cell = (r: ResultRow | undefined): WindowCell | undefined => r?.cells[name];
   return [
     {
@@ -200,7 +202,12 @@ function windowColumns(name: string, threshold: number, grouped: boolean): ColDe
       valueFormatter: (p) =>
         p.data?.wellType === "reference" ? "—" : p.value == null ? "" : formatDelta(p.value),
       cellClass: (p) =>
-        cn(NUMERIC, p.data?.isSample && p.value != null && deltaTint(p.value as number, threshold)),
+        cn(
+          NUMERIC,
+          p.data?.isSample &&
+            p.value != null &&
+            deltaTint(p.value as number, hits.has(p.data.wellId)),
+        ),
     },
   ];
 }
@@ -218,14 +225,15 @@ const gridHeight = (rows: number, grouped: boolean) =>
 export function MeltResultsGrid({
   rows,
   windowNames,
-  threshold,
+  hits,
   doseUnit,
   selection,
   onRowClick,
 }: {
   rows: { pinned: ResultRow[]; body: ResultRow[] };
   windowNames: readonly string[];
-  threshold: number;
+  /** The positions the run's hit rule calls hits. */
+  hits: ReadonlySet<string>;
   doseUnit: string;
   selection: SelectionState;
   onRowClick: (
@@ -272,12 +280,25 @@ export function MeltResultsGrid({
     const values: Col[] = compare
       ? windowNames.map((n) => ({
           headerName: n,
-          children: windowColumns(n, threshold, true),
+          children: windowColumns(n, hits, true),
         }))
-      : windowColumns(windowNames[0], threshold, false);
+      : windowColumns(windowNames[0], hits, false);
     return [
       ...identity,
       ...values,
+      {
+        colId: "hit",
+        headerName: "Hit",
+        width: 64,
+        getQuickFilterText: NOT_SEARCHED,
+        valueGetter: (p) => (p.data && hits.has(p.data.wellId) ? 1 : 0),
+        cellRenderer: (p: Params) =>
+          p.data && hits.has(p.data.wellId) ? (
+            <Badge variant="secondary" className="px-1.5">
+              Hit
+            </Badge>
+          ) : null,
+      },
       {
         colId: "status",
         headerName: "Status",
@@ -288,7 +309,7 @@ export function MeltResultsGrid({
           p.data ? <StatusCell row={p.data} windowNames={windowNames} /> : null,
       },
     ];
-  }, [windowNames, compare, threshold, doseUnit]);
+  }, [windowNames, compare, hits, doseUnit]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
   // classes) when they change, so the highlight follows the selection.
