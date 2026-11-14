@@ -4,7 +4,7 @@ import type { Protocol } from "@/features/screening-assay/types";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActivityValue, CurveDetail } from "../../types";
-import { CompoundDetailSheet, findSearchSourceCurve } from "./compound-detail-sheet";
+import { CompoundDetailSheet } from "./compound-detail-sheet";
 
 const curvesProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("@/features/screening-assay/components/multi-run-curves", () => ({
@@ -43,6 +43,8 @@ const av: ActivityValue = {
   data_point_count: 8,
   raw_data: null,
   curve_params: null,
+  // The runs the backend says the cell drew on; the drawer shows only these.
+  run_ids: ["run"],
 };
 const molecule = {
   id: "mol",
@@ -95,7 +97,6 @@ function setup(
       protocols={protocols}
       protocolColumns={["drc:rd"]}
       visibleProtocolIds={["proto"]}
-      currentQuery={null}
       aggregationMode="gmean"
       currentIndex={0}
       totalCount={3}
@@ -177,7 +178,6 @@ describe("curves from the compound sheet", () => {
           protocols={withCurves}
           protocolColumns={["drc:rd"]}
           visibleProtocolIds={["proto", "plain"]}
-          currentQuery={null}
           currentIndex={0}
           totalCount={1}
           onNavigate={() => {}}
@@ -200,56 +200,84 @@ describe("curves from the compound sheet", () => {
   });
 });
 
-describe("matching a plotted source to the search snapshot", () => {
-  const source = {
-    ...curve,
-    top: 100,
-    bottom: 0,
-    hill_slope: 1,
-    confidence_interval_low: 10,
-    confidence_interval_high: 30,
-  };
-  const snapshot = {
-    ...av,
-    value: 30,
-    curve_params: {
-      top: 100,
-      bottom: 0,
-      hill_slope: 1,
-      num_points: 8,
-      curve_class: "inactive",
-      confidence_interval_low: 10,
-      confidence_interval_high: 30,
-    },
-  };
-  it("matches fit metadata even when the reported value is an aggregate", () => {
-    expect(
-      findSearchSourceCurve([{ ...source, curve_id: "newer", hill_slope: 2 }, source], snapshot)
-        ?.curve_id,
-    ).toBe("fit");
+describe("the drawer trusts the search's run set", () => {
+  const options = (name: string) =>
+    within(screen.getByRole("combobox", { name }))
+      .getAllByRole("option")
+      .map((o) => o.textContent);
+
+  it("marks the cell's representative curve by id", () => {
+    setup(
+      [
+        { ...curve, curve_id: "newer", run_id: "r2", run_date: "2026-07-01" },
+        { ...curve, curve_id: "fit", run_id: "run" },
+      ],
+      false,
+      { ...av, representative_curve_id: "fit", run_ids: ["r2", "run"] },
+    );
+    expect(screen.getByRole("combobox", { name: "Source curve · Potency" })).toHaveValue("fit");
   });
-  it("does not claim an ambiguous or missing fit is the report source", () => {
-    expect(
-      findSearchSourceCurve([source, { ...source, curve_id: "duplicate" }], snapshot),
-    ).toBeNull();
-    expect(findSearchSourceCurve([source], av)).toBeNull();
+
+  it("hides curves from runs outside the cell's run set (rejected or filtered out)", () => {
+    setup(
+      [
+        { ...curve, curve_id: "kept", run_id: "run" },
+        { ...curve, curve_id: "rejected", run_id: "rejected-run", run_date: "2026-08-01" },
+      ],
+      false,
+      { ...av, representative_curve_id: "kept", run_ids: ["run"] },
+    );
+    expect(options("Source curve · Potency")).toHaveLength(1);
   });
-  it("uses the exact curve ID for an explicitly single-run report", () => {
-    expect(
-      findSearchSourceCurve([source], {
-        ...av,
-        run_count: 1,
-        runs: [
+
+  it("labels a split protocol's curves with their group", () => {
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
           {
-            run_id: "run",
-            curve_id: "fit",
-            run_date: "2026-06-05",
-            curve_class: "inactive",
-            r_squared: 0.43,
-            intercept_values: [],
+            protocol_id: "proto",
+            protocol_name: "Target assay",
+            curves: [
+              { ...curve, curve_id: "low", run_id: "r1", run_date: "2026-01-01" },
+              { ...curve, curve_id: "high", run_id: "r2", run_date: "2026-02-01" },
+            ],
           },
         ],
-      })?.curve_id,
-    ).toBe("fit");
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{
+          ...molecule,
+          activity: {
+            "drc:rd@cond:10 µM": { ...av, run_ids: ["r1"] },
+            "drc:rd@cond:1 mM": { ...av, run_ids: ["r2"] },
+          },
+        }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        columnGroups={{
+          proto: {
+            split: { by: "condition", condition: "ATP" },
+            groups: [
+              { key: "cond:10 µM", label: "10 µM", run_ids: ["r1"], run_count: 1, flags: [] },
+              { key: "cond:1 mM", label: "1 mM", run_ids: ["r2"], run_count: 1, flags: [] },
+            ],
+          },
+        }}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="latest"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+    const labels = options("Source curve · Potency");
+    expect(labels.some((l) => l?.startsWith("1 mM ·"))).toBe(true);
+    expect(labels.some((l) => l?.startsWith("10 µM ·"))).toBe(true);
   });
 });

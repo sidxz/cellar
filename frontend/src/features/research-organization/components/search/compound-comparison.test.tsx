@@ -163,3 +163,28 @@ it("Curves on a protocol opens the curves of all compared compounds, once per pr
   expect(curvesProps.at(-1)?.protocolId).toBe("Target");
   expect(curvesProps.at(-1)?.filter).toEqual({ moleculeIds: ["A", "B"] });
 });
+
+describe("compound comparison — split protocols", () => {
+  it("shows a split protocol's endpoints as unavailable instead of picking a group", () => {
+    render(
+      <CompoundComparison
+        molecules={molecules}
+        availableMolecules={allMolecules}
+        onMoleculesChange={() => {}}
+        endpointPair={{ targetId: "", counterId: "" }}
+        onEndpointPairChange={() => {}}
+        onSaveShortlist={() => {}}
+        protocols={protocols}
+        protocolColumns={["drc:Target", "drc:Counter"]}
+        columnGroups={{
+          Target: { split: { by: "run", condition: null }, groups: [] },
+        }}
+        mode="latest"
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      screen.getAllByText("Split by run/condition in search — compare runs in the grid").length,
+    ).toBeGreaterThan(0);
+  });
+});

@@ -19,7 +19,7 @@ import { selectivityRatio } from "../../lib/assay-evidence";
 import { comparisonChannels } from "../../lib/comparison-channels";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import { AGGREGATION_LABELS, type AggregationMode } from "../../lib/use-aggregation-mode";
-import type { ActivityValue } from "../../types";
+import type { ActivityValue, ProtocolColumnGroups } from "../../types";
 import { AssayResult } from "./assay-result";
 import { ComparisonCompoundPicker } from "./comparison-compound-picker";
 
@@ -47,6 +47,7 @@ export function CompoundComparison({
   onSaveShortlist,
   onLoadMore,
   loading,
+  columnGroups = null,
 }: {
   molecules: ComparisonMolecule[];
   protocolColumns: string[];
@@ -61,12 +62,16 @@ export function CompoundComparison({
   onSaveShortlist: () => void;
   onLoadMore?: () => void;
   loading?: boolean;
+  /** Split protocols have one value per run/condition group; the dialog
+   *  doesn't pick one of them silently. */
+  columnGroups?: Record<string, ProtocolColumnGroups> | null;
 }) {
   const channels = useMemo(
     () => comparisonChannels(protocolColumns, protocols),
     [protocolColumns, protocols],
   );
-  const potency = channels.filter((c) => c.doseResponse);
+  const isSplit = (protocolId: string) => !!columnGroups?.[protocolId];
+  const potency = channels.filter((c) => c.doseResponse && !isSplit(c.protocolId));
   const { targetId, counterId } = endpointPair;
   const ids = molecules.map((mol) => mol.id);
   const candidates = availableMolecules.filter((mol) => !ids.includes(mol.id));
@@ -242,7 +247,13 @@ export function CompoundComparison({
                     const av = mol.activity?.[channel.activityKey];
                     return (
                       <td key={mol.id} className={tdClass}>
-                        <AssayResult av={av} channel={channel} mode={mode} />
+                        {isSplit(channel.protocolId) ? (
+                          <span className="text-xs text-muted-foreground">
+                            Split by run/condition in search — compare runs in the grid
+                          </span>
+                        ) : (
+                          <AssayResult av={av} channel={channel} mode={mode} />
+                        )}
                       </td>
                     );
                   })}

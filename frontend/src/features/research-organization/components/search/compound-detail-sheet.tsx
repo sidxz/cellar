@@ -25,21 +25,16 @@ import { ChevronDown, ChevronUp, ExternalLink, X } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMoleculeActivityDetail } from "../../hooks/use-molecule-activity-detail";
+import { type ProtocolRunSet, protocolRunSets } from "../../lib/cell-run-set";
 import { type ComparisonChannel, comparisonChannels } from "../../lib/comparison-channels";
-import { filterCurvesByRunScope, pickRepresentative } from "../../lib/compound-detail-selection";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
-import {
-  AGGREGATION_LABELS,
-  type AggregationMode,
-  collectRunScopesByProtocol,
-} from "../../lib/use-aggregation-mode";
+import { AGGREGATION_LABELS, type AggregationMode } from "../../lib/use-aggregation-mode";
 import { anyProtocolActivity } from "../../types";
 import type {
   ActivityValue,
   CurveDetail,
+  ProtocolColumnGroups,
   ProtocolCurveGroup,
-  RunScope,
-  SearchQuery,
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayResult } from "./assay-result";
@@ -60,15 +55,11 @@ interface CompoundDetailSheetProps {
   totalCount: number;
   onNavigate: (direction: "prev" | "next") => void;
   onOpenChange: (open: boolean) => void;
-  /**
-   * The executed search query. Used to derive per-protocol `run_scope`
-   * filters so the drawer's curve list (fetched separately via
-   * `useMoleculeActivityDetail`) honors the same narrowing that produced
-   * the grid cell. Without this the drawer can show curves from runs the
-   * search excluded — chemists noticed the mismatch the moment the
-   * toolbar started saying "Single run per compound."
-   */
-  currentQuery: SearchQuery | null;
+  /** Split protocols' column groups from the executed search. The drawer's
+   *  curve list (fetched separately via `useMoleculeActivityDetail`) keeps to
+   *  the runs the search cells drew on — the cells' `run_ids` — so the chart
+   *  and the cell value always describe the same runs. */
+  columnGroups?: Record<string, ProtocolColumnGroups> | null;
   aggregationMode?: AggregationMode;
 }
 
@@ -119,38 +110,13 @@ type ReportedMolecule = Molecule & { activity?: Record<string, ActivityValue> };
 interface ProtocolCardProps {
   group: Pick<ProtocolCurveGroup, "protocol_id" | "protocol_name" | "curves">;
   molecule: ReportedMolecule;
-  scope?: RunScope;
+  /** The search cells' runs; absent for protocols the search didn't show. */
+  runSet?: ProtocolRunSet;
   protocol?: Protocol;
   channels?: ComparisonChannel[];
   mode?: AggregationMode;
   defaultExpanded?: boolean;
   loading?: boolean;
-}
-
-/** Identify the snapshot's representative fit without inferring it from an aggregate value. */
-export function findSearchSourceCurve(
-  curves: CurveDetail[],
-  av?: ActivityValue,
-): CurveDetail | null {
-  if (!av) return null;
-  if (av.curve_params) {
-    const params = av.curve_params;
-    const matching = curves.filter(
-      (curve) =>
-        curve.top === params.top &&
-        curve.bottom === params.bottom &&
-        curve.hill_slope === params.hill_slope &&
-        curve.r_squared === av.r_squared &&
-        curve.curve_class === params.curve_class &&
-        curve.confidence_interval_low === params.confidence_interval_low &&
-        curve.confidence_interval_high === params.confidence_interval_high,
-    );
-    if (matching.length === 1) return matching[0];
-  }
-  if (av.run_count === 1 && av.runs?.length === 1) {
-    return curves.find((curve) => curve.curve_id === av.runs?.[0].curve_id) ?? null;
-  }
-  return null;
 }
 
 function ReportedEndpoints({
@@ -202,6 +168,7 @@ function SourceCurveCard({
   molecule,
   channels,
   mode,
+  groupLabel,
 }: {
   curves: CurveDetail[];
   protocolId: string;
@@ -209,6 +176,7 @@ function SourceCurveCard({
   molecule: ReportedMolecule;
   channels: ComparisonChannel[];
   mode: AggregationMode;
+  groupLabel?: Map<string, string>;
 }) {
   const [curveId, setCurveId] = useState("");
   const [inspecting, setInspecting] = useState(false);
@@ -217,9 +185,9 @@ function SourceCurveCard({
     [curves],
   );
   const av = channels.length ? molecule.activity?.[channels[0].activityKey] : undefined;
-  const matched = findSearchSourceCurve(sorted, av);
-  const curve =
-    sorted.find((c) => c.curve_id === curveId) ?? matched ?? pickRepresentative(sorted, mode);
+  // The backend names the curve behind the cell's value; otherwise the newest.
+  const representative = sorted.find((c) => c.curve_id === av?.representative_curve_id);
+  const curve = sorted.find((c) => c.curve_id === curveId) ?? representative ?? sorted[0];
   const adapted = useMemo(
     () => (curve ? adaptCurve(curve, protocolId, molecule) : null),
     [curve, protocolId, molecule],
@@ -249,6 +217,7 @@ function SourceCurveCard({
         >
           {sorted.map((c) => (
             <option key={c.curve_id} value={c.curve_id}>
+              {groupLabel?.get(c.run_id) ? `${groupLabel.get(c.run_id)} · ` : ""}
               {c.run_date ?? "Date unavailable"} · {c.curve_type.toUpperCase()} ·{" "}
               {c.curve_class ?? "Unclassified"} · {c.curve_id.slice(0, 8)}
             </option>
@@ -270,7 +239,7 @@ function SourceCurveCard({
         <p className="text-xs leading-relaxed text-muted-foreground">
           {aggregate
             ? `Individual source fit shown. Reported ${AGGREGATION_LABELS[mode].toLowerCase()} summarizes in-scope results and may differ from this curve’s fitted value.`
-            : matched?.curve_id === curve.curve_id
+            : representative?.curve_id === curve.curve_id
               ? "Source of the search’s representative curve. Reported endpoints retain the search’s qualifiers."
               : curveId
                 ? "Selected source fit. Reported search values remain unchanged."
@@ -341,7 +310,7 @@ function SourceCurveCard({
 function ProtocolCard({
   group,
   molecule,
-  scope,
+  runSet,
   protocol,
   channels = [],
   mode = "latest",
@@ -350,8 +319,8 @@ function ProtocolCard({
 }: ProtocolCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const inScopeCurves = useMemo(
-    () => filterCurvesByRunScope(group.curves, scope),
-    [group.curves, scope],
+    () => (runSet ? group.curves.filter((c) => runSet.runIds.has(c.run_id)) : group.curves),
+    [group.curves, runSet],
   );
   const readouts = useMemo(() => {
     const map = new Map<string, CurveDetail[]>();
@@ -417,6 +386,7 @@ function ProtocolCard({
                 (channel) => channel.doseResponse && channel.readoutId === readoutId,
               )}
               mode={mode}
+              groupLabel={runSet?.groupLabel}
             />
           ))}
         </div>
@@ -436,7 +406,7 @@ export function CompoundDetailSheet({
   totalCount,
   onNavigate,
   onOpenChange,
-  currentQuery,
+  columnGroups = null,
   aggregationMode = "latest",
 }: CompoundDetailSheetProps) {
   const [othersExpanded, setOthersExpanded] = useState(false);
@@ -448,11 +418,16 @@ export function CompoundDetailSheet({
     refetch,
   } = useMoleculeActivityDetail(molecule?.id ?? null);
 
-  // Per-protocol run_scope from the executed search. Derived once per query
-  // change; ProtocolCard reads its own entry to filter the curves it draws.
-  const runScopesByProtocol = useMemo(
-    () => collectRunScopesByProtocol(currentQuery?.criteria ?? []),
-    [currentQuery],
+  // The runs behind each searched protocol's cells; ProtocolCard draws only
+  // those curves. Protocols the search didn't show have no entry.
+  const runSets = useMemo(
+    () =>
+      protocolRunSets(
+        molecule?.activity,
+        comparisonChannels(protocolColumns, protocols),
+        columnGroups,
+      ),
+    [molecule?.activity, protocolColumns, protocols, columnGroups],
   );
 
   // Keyboard navigation: Arrow Up/Down to move between results
@@ -651,7 +626,7 @@ export function CompoundDetailSheet({
                     group={group}
                     molecule={molecule}
                     protocol={protocols.find((p) => p.id === group.protocol_id)}
-                    scope={runScopesByProtocol.get(group.protocol_id)}
+                    runSet={runSets.get(group.protocol_id)}
                     channels={groupChannels}
                     mode={aggregationMode}
                     loading={isLoading}
@@ -715,10 +690,10 @@ export function CompoundDetailSheet({
                           key={group.protocol_id}
                           group={group}
                           molecule={molecule}
-                          // "Other" protocols weren't in the search query, so
-                          // they carry no scope — chemist sees the full curve
+                          // "Other" protocols weren't in the search, so they
+                          // carry no run set — chemist sees the full curve
                           // history for the drilldown.
-                          scope={runScopesByProtocol.get(group.protocol_id)}
+                          runSet={runSets.get(group.protocol_id)}
                           defaultExpanded={false}
                         />
                       ))}

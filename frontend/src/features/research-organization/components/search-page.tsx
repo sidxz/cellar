@@ -767,6 +767,7 @@ function SearchPageInner() {
           loading={searchPending}
           protocols={protocols ?? []}
           protocolColumns={protocolColumns}
+          columnGroups={columnGroups}
           mode={executedAggregation}
           onClose={() => setCompareOpen(false)}
         />
@@ -781,7 +782,7 @@ function SearchPageInner() {
         totalCount={results.length}
         onNavigate={handleDetailNavigate}
         onOpenChange={(open) => !open && dispatch({ type: "clearSelection" })}
-        currentQuery={currentQuery}
+        columnGroups={columnGroups}
         aggregationMode={executedAggregation}
       />
 
