@@ -101,6 +101,27 @@ describe("ProtocolMethodCard", () => {
     expect(screen.getByText("Later")).toBeInTheDocument();
   });
 
+  it("follows the server once it confirms, even when the old text comes back (A→B→A)", () => {
+    state.correct.mockImplementation((_body, opts) => opts.onSuccess());
+    const { rerender } = card(protocol({ status: "active", description: "A" }));
+    fireEvent.click(screen.getByRole("button", { name: "Edit method" }));
+    fireEvent.change(screen.getByLabelText("Method"), { target: { value: "B" } });
+    fireEvent.change(screen.getByLabelText("Reason for the change"), { target: { value: "r" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    const at = (description: string) =>
+      rerender(
+        <ProtocolMethodCard
+          protocol={protocol({ status: "active", description })}
+          onOpenFiles={vi.fn()}
+        />,
+      );
+    at("B"); // the refetch confirms the save
+    at("A"); // another correction restores the old text
+    expect(screen.getByText("A")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit method" }));
+    expect(screen.getByLabelText("Method")).toHaveValue("A");
+  });
+
   it("cancel discards the edit", () => {
     card(protocol());
     fireEvent.click(screen.getByRole("button", { name: "Edit method" }));

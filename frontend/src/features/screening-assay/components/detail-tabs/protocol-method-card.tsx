@@ -37,7 +37,10 @@ export function ProtocolMethodCard({
     null,
   );
   const fromServer = protocol.description ?? null;
-  const saved = (justSaved?.over === fromServer ? justSaved.text : fromServer) ?? "";
+  // Once the server's text moves off what was saved over, it is the truth from then on (even if
+  // a later change brings the old text back).
+  if (justSaved && justSaved.over !== fromServer) setJustSaved(null);
+  const saved = (justSaved && justSaved.over === fromServer ? justSaved.text : fromServer) ?? "";
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(saved);
@@ -123,9 +126,9 @@ export function ProtocolMethodCard({
                   disabled={pending}
                 />
                 <p className="text-xs text-muted-foreground">
-                  This protocol is published, so the change is recorded with your reason. A changed
-                  procedure (new concentrations, times or reagents) belongs in a new version
-                  instead.
+                  This protocol is published, so the change is recorded with your reason. If the
+                  procedure itself changes (steps, reagents, detection), make a new version; values
+                  that differ from run to run are assay conditions.
                 </p>
               </div>
             )}
