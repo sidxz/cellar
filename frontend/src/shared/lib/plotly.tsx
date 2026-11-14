@@ -1,14 +1,13 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { CSSProperties, ComponentType } from "react";
+import { type CSSProperties, type ComponentType, useMemo } from "react";
 
 /** Loose Plotly props.
  *
- * @types/react-plotly.js transitively requires @types/plotly.js, which is not
- * installed in this project. Rather than pull in the full types (which also
- * reject several runtime-valid layout/config shapes the app uses today), we
- * re-declare a loose shape here. This still removes the per-call-site
+ * Rather than lean on the full plotly.js types (which reject several
+ * runtime-valid layout/config shapes the app uses today), we re-declare a
+ * loose shape here. This still removes the per-call-site
  * `as any` casts and gives autocomplete on the well-typed props (style,
  * useResizeHandler). The object-typed props accept any plain object literal. */
 export interface PlotProps {
@@ -23,12 +22,21 @@ export interface PlotProps {
   className?: string;
 }
 
-/** SSR-disabled Plotly component. Centralizing the dynamic import here
- * removes per-call-site `as any` casts and keeps the ssr-skip behavior
- * consistent across the app. */
-export const Plot = dynamic(() => import("react-plotly.js"), {
+const PlotlyPlot = dynamic(() => import("react-plotly.js"), {
   ssr: false,
 }) as ComponentType<PlotProps>;
+
+/** SSR-disabled Plotly component. Centralizing the dynamic import here
+ * removes per-call-site `as any` casts and keeps the ssr-skip behavior
+ * consistent across the app.
+ *
+ * plotly.js 4 shows a modebar button by default that uploads the figure, and
+ * with it the compound data, to cloud.plotly.com. Every chart goes through
+ * here, so it is switched off once for all of them. */
+export function Plot({ config, ...props }: PlotProps) {
+  const safeConfig = useMemo(() => ({ ...config, showSendToCloud: false }), [config]);
+  return <PlotlyPlot {...props} config={safeConfig} />;
+}
 
 /** Subset of the runtime Plotly namespace exposed on `window` after the
  * react-plotly.js bundle loads. Used for imperative side-channel calls
