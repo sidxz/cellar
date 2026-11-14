@@ -7,6 +7,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import ARRAY, BindParameter, ColumnElement, Uuid, any_, bindparam
+from sqlalchemy.orm import QueryableAttribute
 
 
 def uuid_array(ids: Sequence[uuid.UUID]) -> BindParameter[Any]:
@@ -18,7 +19,9 @@ def uuid_array(ids: Sequence[uuid.UUID]) -> BindParameter[Any]:
     return bindparam(None, list(ids), type_=ARRAY(Uuid(as_uuid=True)))
 
 
-def any_id(column: ColumnElement[Any], ids: Sequence[uuid.UUID]) -> ColumnElement[bool]:
+def any_id(
+    column: ColumnElement[Any] | QueryableAttribute[Any], ids: Sequence[uuid.UUID]
+) -> ColumnElement[bool]:
     """``column = ANY(:ids)``, with the ids bound as one array parameter."""
     return column == any_(uuid_array(ids))
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from returns.result import Success
@@ -49,16 +49,12 @@ class SearchResultsRowStream:
         self.columns: list[ColumnSpec] = []  # populated lazily by _ensure_columns
 
     async def total_count(self) -> int:
-        # _ensure_columns shares the same lazy prerequisites (protocols lookup +
-        # first-page probe) and is idempotent.  Calling it here guarantees that
-        # ``self.columns`` is populated before any consumer reads it — in
-        # particular before ``RenderExport.__call__`` passes ``stream.columns``
-        # to the renderer, which happens right after ``await stream.total_count()``.
+        # _ensure_columns runs the first-page probe that yields both the total
+        # and the split column groups, and is idempotent. Calling it here
+        # guarantees ``self.columns`` is populated before ``RenderExport``
+        # passes ``stream.columns`` to the renderer.
         await self._ensure_columns()
-        if self._cached_total is None:
-            page = await self._fetch_page(cursor=None, limit=1)
-            self._cached_total = page.total_count or 0
-        return self._cached_total
+        return self._cached_total or 0
 
     async def iter_batches(self, batch_size: int) -> AsyncIterator[list[ExportRow]]:
         await self._ensure_columns()
@@ -81,7 +77,7 @@ class SearchResultsRowStream:
             aggregation=SelectionRule(
                 self.payload.get("aggregation", SelectionRule.LATEST_RUN.value)
             ),
-            cursor_id=_parse_uuid(cursor) if cursor else None,
+            cursor=cursor,
             limit=limit,
             # None (not []) when absent: [] means "unassigned molecules only"
             # to the visibility clause, which would drop every compound that
@@ -100,6 +96,8 @@ class SearchResultsRowStream:
     async def _ensure_columns(self) -> None:
         if self.columns:
             return
+        probe = await self._fetch_page(cursor=None, limit=1)
+        self._cached_total = probe.total_count or 0
         protocol_cols = self.payload.get("protocol_columns") or []
         report_config = self.payload.get("reportConfig") or self.payload.get("report_config")
         self._protocols_cache = await self.protocols_reader(self.workspace_id)
@@ -108,6 +106,7 @@ class SearchResultsRowStream:
             self._protocols_cache,
             report_config=report_config,
             format=self.format,
+            column_groups=probe.column_groups,
         )
 
     def _row_for(self, mol, activity_data: dict | None) -> ExportRow:
@@ -175,6 +174,7 @@ def _build_columns(
     *,
     report_config: dict | None = None,
     format: str | None = None,
+    column_groups: dict[str, Any] | None = None,
 ) -> list[ColumnSpec]:
     """Build export columns honoring the FE reportConfig.
 
@@ -243,8 +243,46 @@ def _build_columns(
     # name) plus one Plot column per readout.
     by_id = {str(p.id): p for p in protocols}
     for col_token in protocol_cols:
-        base.extend(_expand_protocol_column(col_token, by_id))
+        specs = _expand_protocol_column(col_token, by_id)
+        split = (column_groups or {}).get(_owning_protocol_id(col_token, by_id) or "")
+        if split is None:
+            base.extend(specs)
+            continue
+        # A split protocol repeats its columns once per group, side by side;
+        # the group header names the group ("EGFR · 10 µM").
+        for group in split["groups"]:
+            base.extend(
+                replace(
+                    spec,
+                    key=_group_key(spec.key, group["key"]),
+                    group=f"{spec.group} · {group['label']}" if spec.group else group["label"],
+                )
+                for spec in specs
+            )
     return base
+
+
+def _owning_protocol_id(token: str, by_id: dict[str, Any]) -> str | None:
+    parts = token.split(":")
+    if parts[0] == "rd" and len(parts) >= 3:
+        return parts[1]
+    if parts[0] == "drc" and len(parts) >= 2:
+        return next(
+            (
+                pid
+                for pid, p in by_id.items()
+                for r in (p.readout_definitions or [])
+                if str(r.id) == parts[1]
+            ),
+            None,
+        )
+    return None
+
+
+def _group_key(key: str, group_key: str) -> str:
+    """``<column>::<suffix>`` → ``<column>@<group>::<suffix>``."""
+    column, sep, suffix = key.rpartition("::")
+    return f"{column}@{group_key}{sep}{suffix}" if sep else f"{key}@{group_key}"
 
 
 def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
@@ -420,7 +458,8 @@ def _cell_value(spec: ColumnSpec, raw: dict) -> Any:
     if col_token == "any":  # noqa: S105  # column-spec token, not a credential
         block = (raw.get("activity") or {}).get("any") or {}
         return _format_any_entries(block.get("entries") or [])
-    parent_token = _activity_parent_token(col_token)
+    col_token, at, group_key = col_token.partition("@")
+    parent_token = _activity_parent_token(col_token) + (f"@{group_key}" if at else "")
     av = (raw.get("activity") or {}).get(parent_token)
     if not av:
         return None

@@ -246,72 +246,22 @@ class SQLAlchemyMoleculeReader:
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
         project_ids: list[uuid.UUID] | None = None,
-        sort_by: str | None = None,
-        sort_dir: str | None = None,
-        include_similarity_score: bool = False,
-    ) -> list[Molecule] | list[tuple[Molecule, float | None]]:
-        """Compound search using a structured query dict.
+    ) -> list[Molecule]:
+        """One page of matches in id order, after ``cursor_id``.
 
-        Supports configurable sorting via ``sort_by`` / ``sort_dir``. Uses
-        keyset pagination: cursor encodes ``(sort_value, id)`` when sorting
-        by a field other than ``id``. Special sort
-        ``drc:{readout_definition_id}`` orders by the best (lowest)
-        ``fitted_value`` from DoseResponseCurve for that DR readout-def;
-        compounds without data sort last (NULLS LAST).
-
-        When ``include_similarity_score=True``, returns
-        ``list[tuple[Molecule, float | None]]`` instead of ``list[Molecule]``.
-        The score is ``None`` if no similarity criterion is present in the query
-        (the flag becomes a no-op for non-similarity searches).  When a
-        similarity criterion is found, results are ordered by score DESC unless
-        ``sort_by`` is explicitly provided.
+        Sorted and similarity-ranked result sets page through
+        :meth:`ranked_ids_by_query` instead.
         """
-        sim_criterion = _find_first_similarity_criterion(query.get("criteria", []))
-        project_score = include_similarity_score and sim_criterion is not None
-
         async with self._session_factory() as session:
             await _set_similarity_threshold(session, query)
-
-            if project_score:
-                stmt = _build_base_stmt_with_score(
-                    workspace_id, query, sim_criterion, project_ids=project_ids
-                )
-            else:
-                stmt = _build_base_stmt(workspace_id, query, project_ids=project_ids)
-
-            descending = sort_dir == "desc"
-            drc_sort = _parse_drc_sort(sort_by)
-
-            if drc_sort is not None:
-                stmt = _apply_drc_sort(stmt, workspace_id, drc_sort, descending)
-            elif project_score and sort_by is None:
-                # Default: order by similarity score DESC (most similar first)
-                stmt = stmt.order_by(text("similarity DESC"))
-            else:
-                sort_col = _SORT_FIELDS.get(sort_by) if sort_by else None
-                if sort_col is not None:
-                    if descending:
-                        stmt = stmt.order_by(sort_col.desc().nulls_last(), MoleculeModel.id)
-                    else:
-                        stmt = stmt.order_by(sort_col.asc().nulls_last(), MoleculeModel.id)
-                else:
-                    stmt = stmt.order_by(MoleculeModel.id)
-
+            stmt = _build_base_stmt(workspace_id, query, project_ids=project_ids).order_by(
+                MoleculeModel.id
+            )
             if cursor_id is not None:
                 stmt = stmt.where(MoleculeModel.id > cursor_id)
             if limit is not None:
                 stmt = stmt.limit(limit)
-
             result = await session.execute(stmt)
-
-            if project_score:
-                rows = result.all()
-                return [(model_to_molecule(row[0]), float(row[1])) for row in rows]
-
-            if include_similarity_score:
-                # include_similarity_score=True but no similarity criterion — no-op
-                return [(model_to_molecule(m), None) for m in result.scalars()]
-
             return [model_to_molecule(m) for m in result.scalars()]
 
     async def ranked_ids_by_query(
@@ -481,25 +431,6 @@ def _find_first_tanimoto_threshold(criteria: list[dict[str, Any]]) -> float | No
     return float(t)
 
 
-def _parse_drc_sort(sort_by: str | None) -> uuid.UUID | None:
-    """Parse ``drc:{readout_definition_id}`` into the readout-def UUID.
-
-    A DR readout-def uniquely identifies the column ("Target IC50",
-    "Counter IC50", "Cytotoxicity LD50", ...). Protocol and curve_type are
-    implied by it — sorting by `(protocol, curve_type)` was ambiguous when
-    a protocol had multiple DR readouts of the same curve_type.
-    """
-    if not sort_by or not sort_by.startswith("drc:"):
-        return None
-    parts = sort_by.split(":", 1)
-    if len(parts) != 2:
-        return None
-    try:
-        return uuid.UUID(parts[1])
-    except ValueError:
-        return None
-
-
 def _find_first_similarity_criterion(
     criteria: list[dict[str, Any]],
 ) -> dict[str, Any] | None:
@@ -601,43 +532,5 @@ def _build_base_stmt_with_score(
 
     if project_ids is not None:
         stmt = stmt.where(_project_clause({"project_ids": list(project_ids)}, workspace_id))
-
-    return stmt
-
-
-def _apply_drc_sort(
-    stmt: sa.Select,
-    workspace_id: uuid.UUID,
-    readout_definition_id: uuid.UUID,
-    descending: bool,
-) -> sa.Select:
-    """LEFT JOIN a best-value subquery for one DR readout-def and order by it."""
-    from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
-        DoseResponseCurveModel,
-    )
-
-    best_value_sq = (
-        select(
-            DoseResponseCurveModel.molecule_id.label("molecule_id"),
-            func.min(DoseResponseCurveModel.fitted_value).label("best_value"),
-        )
-        .where(
-            DoseResponseCurveModel.workspace_id == workspace_id,
-            DoseResponseCurveModel.readout_definition_id == readout_definition_id,
-        )
-        .group_by(DoseResponseCurveModel.molecule_id)
-        .subquery("drc_best")
-    )
-
-    stmt = stmt.outerjoin(
-        best_value_sq,
-        MoleculeModel.id == best_value_sq.c.molecule_id,
-    )
-
-    best_col = best_value_sq.c.best_value
-    if descending:
-        stmt = stmt.order_by(best_col.desc().nulls_last(), MoleculeModel.id)
-    else:
-        stmt = stmt.order_by(best_col.asc().nulls_last(), MoleculeModel.id)
 
     return stmt

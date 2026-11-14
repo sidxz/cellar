@@ -173,8 +173,14 @@ async def curve(
     fitted_value: float = 10.0,
     r_squared: float = 0.95,
     curve_class: str | None = "full",
+    with_well: bool = True,
 ) -> uuid.UUID:
+    """A fitted curve, plus (``with_well``) one per-well response reading on the
+    same readout — real dose-response runs always carry their well data, and
+    search matching finds tested compounds through it."""
     cid = uuid.uuid4()
+    if with_well:
+        await readout(s, ws, run_id, rd_id, molecule_id, 50.0)
     await s.execute(
         sa.text(
             "INSERT INTO dose_response_curves (id, workspace_id, molecule_id, batch_id, "

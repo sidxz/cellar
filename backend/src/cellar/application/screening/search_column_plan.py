@@ -25,7 +25,7 @@ from cellar.domain.screening_assay.column_split import ColumnSplit
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.errors import ValidationError
-from cellar.domain.shared.units import canonical_unit
+from cellar.domain.shared.units import canonical_unit, comparable_magnitude
 
 NOT_RECORDED = "Not recorded"
 ANY_COLUMN = "any"  # the cross-protocol "Active in" column
@@ -342,5 +342,5 @@ def _condition_value(raw: Any, definition: Any) -> tuple[tuple[Any, ...], str]:
         number = float(m.group(1))
         unit = canonical_unit(m.group(2)) or canonical_unit(definition.unit) or ""
         label = f"{number:g} {unit}".strip()
-        return (0, unit, number), label
+        return (0, *comparable_magnitude(number, unit)), label
     return (2, text.casefold()), text

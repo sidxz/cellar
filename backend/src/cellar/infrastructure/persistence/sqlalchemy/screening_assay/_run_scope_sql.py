@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import ColumnElement, select
-from sqlalchemy.orm import aliased
+from sqlalchemy.orm import QueryableAttribute, aliased
 
 from cellar.domain.screening_assay.enums import RunStatus
 from cellar.domain.screening_assay.run_scope import RunScope
@@ -51,7 +52,7 @@ def run_scope_filters(
 
 
 def not_in_rejected_run(
-    run_id_col: ColumnElement[uuid.UUID], workspace_id: uuid.UUID
+    run_id_col: ColumnElement[Any] | QueryableAttribute[Any], workspace_id: uuid.UUID
 ) -> ColumnElement[bool]:
     """The row's run is not rejected — for queries that don't join ``RunModel``."""
     return ~run_id_col.in_(

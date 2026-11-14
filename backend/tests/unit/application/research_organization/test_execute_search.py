@@ -85,7 +85,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=None,
+            cursor=None,
         )
 
         with patch.object(saved_search, "record_execution", wraps=saved_search.record_execution) as mock_record:
@@ -122,7 +122,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=None,
+            cursor=None,
         )
 
         result = await uc(query, auth=auth)
@@ -155,7 +155,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=uuid.uuid4(),  # Subsequent page
+            cursor=str(uuid.uuid4()),  # Subsequent page
         )
 
         with patch.object(saved_search, "record_execution") as mock_record:
@@ -187,7 +187,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             query={"keyword": "test"},
-            cursor_id=None,
+            cursor=None,
         )
 
         result = await uc(query, auth=auth)
@@ -224,7 +224,7 @@ class TestExecuteSearchRecordExecution:
         query = ExecuteSearchQuery(
             workspace_id=ws_id,
             saved_search_id=saved_search.id,
-            cursor_id=None,
+            cursor=None,
         )
 
         result = await uc(query, auth=auth)

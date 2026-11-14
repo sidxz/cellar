@@ -14,6 +14,7 @@ in-scope run of the (compound, readout-def) cell.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from cellar.application.screening import _condense_raw_data
@@ -493,7 +494,7 @@ class MoleculeActivityService:
             )
         )
 
-    async def _in_uow(self, fn):  # type: ignore[no-untyped-def]
+    async def _in_uow[T](self, fn: Callable[[], Awaitable[T]]) -> T:
         if self._uow.is_active:
             return await fn()
         async with self._uow:

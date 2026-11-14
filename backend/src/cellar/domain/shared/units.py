@@ -130,3 +130,29 @@ def is_concentration_unit(unit: str | None) -> bool:
     positive, ratio-scale values where a geometric mean is meaningful."""
     canonical = canonical_unit(unit)
     return canonical is not None and canonical in _CONCENTRATION_UNITS
+
+
+# Base-unit factors for ORDERING values within one unit family — never for
+# converting across families (molar ↔ mass needs a molecular weight).
+_FAMILY_FACTORS: dict[str, tuple[str, float]] = {
+    "M": ("molar", 1.0),
+    "mM": ("molar", 1e-3),
+    f"{MICRO}M": ("molar", 1e-6),
+    "nM": ("molar", 1e-9),
+    "pM": ("molar", 1e-12),
+    "mg/mL": ("mass concentration", 1e-3),
+    f"{MICRO}g/mL": ("mass concentration", 1e-6),
+    "ng/mL": ("mass concentration", 1e-9),
+    "d": ("time", 86_400.0),
+    "h": ("time", 3_600.0),
+    "min": ("time", 60.0),
+    "s": ("time", 1.0),
+}
+
+
+def comparable_magnitude(value: float, unit: str | None) -> tuple[str, float]:
+    """``(family, value in the family's base unit)`` so "10 µM" sorts before
+    "1 mM". A unit outside the known families is its own family."""
+    canonical = canonical_unit(unit) or ""
+    family, factor = _FAMILY_FACTORS.get(canonical, (canonical, 1.0))
+    return family, float(value) * factor

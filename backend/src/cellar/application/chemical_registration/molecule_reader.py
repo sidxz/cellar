@@ -49,10 +49,9 @@ class MoleculeReader(Protocol):
         cursor_id: uuid.UUID | None = None,
         limit: int | None = None,
         project_ids: list[uuid.UUID] | None = None,
-        sort_by: str | None = None,
-        sort_dir: str | None = None,
-        include_similarity_score: bool = False,
-    ) -> list[Molecule] | list[tuple[Molecule, float | None]]: ...
+    ) -> list[Molecule]:
+        """One page of matches in id order, after ``cursor_id``."""
+        ...
 
     async def ranked_ids_by_query(
         self,

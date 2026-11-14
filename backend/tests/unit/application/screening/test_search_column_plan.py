@@ -309,3 +309,19 @@ async def test_plan_from_scopes_uses_the_given_scopes_and_never_splits():
     (col,) = plan.columns
     assert col.run_scope == RunScope.latest_of_protocol()
     assert plan.protocol_groups == {}
+
+
+async def test_condition_groups_compare_values_across_units_of_one_family():
+    runs = FakeRuns(
+        [
+            _header(date(2026, 1, 1), conditions={"ATP Concentration": "1 mM"}),
+            _header(date(2026, 1, 2), conditions={"ATP Concentration": "10 uM"}),
+        ]
+    )
+    plan = await _plan(
+        [f"drc:{RD_A}"],
+        [_criterion(P_A, split={"by": "condition", "condition": "ATP Concentration"})],
+        runs=runs,
+        protocols=FakeProtocols({P_A: ATP}),
+    )
+    assert [g.label for g in plan.protocol_groups[P_A].groups] == ["10 µM", "1 mM"]
