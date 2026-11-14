@@ -1,8 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { Run } from "@/features/screening-assay/types";
 import type { RunScope } from "../../types";
-import { RunScopePicker } from "./run-scope-picker";
+import { RunScopePicker, differingConditionKeys } from "./run-scope-picker";
 
 // Radix Select + the SpecificRunPicker's Popover open via portals that need
 // scrollIntoView + hasPointerCapture polyfills in jsdom.
@@ -18,9 +19,29 @@ beforeAll(() => {
   }
 });
 
+const runsMock = vi.hoisted(() => ({ data: [] as unknown[] }));
 vi.mock("@/features/screening-assay/hooks/use-runs", () => ({
-  useRunsByProtocol: () => ({ data: [], isLoading: false }),
+  useRunsByProtocol: () => ({ data: runsMock.data, isLoading: false }),
 }));
+beforeEach(() => {
+  runsMock.data = [];
+});
+
+function run(overrides: Partial<Run>): Run {
+  return {
+    id: "r",
+    run_date: "2026-11-01",
+    created_at: "2026-11-14T00:04:00Z",
+    operator: "u1",
+    status: "approved",
+    is_locked: false,
+    plate_count: 1,
+    molecule_count: 40,
+    plate_barcodes: [],
+    conditions: null,
+    ...overrides,
+  } as Run;
+}
 vi.mock("@/shared/hooks/use-workspace-members", () => ({
   useWorkspaceMembers: () => ({ data: [] }),
 }));
@@ -72,5 +93,63 @@ describe("RunScopePicker — Latest run under a condition split", () => {
     const latest = screen.getByRole("option", { name: /Latest run/ });
     expect(latest).toHaveAttribute("data-disabled");
     expect(latest).toHaveTextContent("Latest run picks a single run.");
+  });
+});
+
+describe("RunScopePicker — specific runs", () => {
+  const low = run({
+    id: "r1",
+    run_date: "2026-11-01",
+    conditions: { "ATP Concentration": "1 mM", Temperature: "25 C" },
+    notes: "low ATP arm",
+  });
+  const high = run({
+    id: "r2",
+    run_date: "2026-11-10",
+    status: "completed",
+    conditions: { "ATP Concentration": "10 mM", Temperature: "25 C" },
+    notes: "high ATP arm",
+  });
+
+  it("opens the run list on arrival, newest experiment first, showing what sets runs apart", () => {
+    runsMock.data = [low, high];
+    render(
+      <RunScopePicker
+        protocolId="p1"
+        value={{ mode: "specific", run_ids: [] }}
+        onChange={vi.fn()}
+      />,
+    );
+    const [first, second] = screen.getAllByRole("option");
+    expect(first).toHaveTextContent("2026-11-10");
+    expect(first).toHaveTextContent("ATP Concentration:10 mM");
+    expect(first).toHaveTextContent("high ATP arm");
+    expect(first).toHaveTextContent("Completed");
+    expect(second).toHaveTextContent("2026-11-01");
+    expect(second).not.toHaveTextContent("Approved");
+  });
+
+  it("flags an empty pick only after the run list is closed", () => {
+    runsMock.data = [low];
+    render(
+      <RunScopePicker
+        protocolId="p1"
+        value={{ mode: "specific", run_ids: [] }}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.queryByText("Pick at least one run.")).toBeNull();
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
+    expect(screen.getByText("Pick at least one run.")).toBeInTheDocument();
+  });
+});
+
+describe("differingConditionKeys", () => {
+  it("keeps the conditions that differ between runs, including one a run lacks", () => {
+    const keys = differingConditionKeys([
+      run({ conditions: { ATP: "1 mM", Temp: "25 C", Strain: "H37Rv" } }),
+      run({ conditions: { ATP: "10 mM", Temp: "25 C" } }),
+    ]);
+    expect([...keys].sort()).toEqual(["ATP", "Strain"]);
   });
 });

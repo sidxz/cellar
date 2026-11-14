@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { cn } from "@/shared/lib/utils";
+import { useRef } from "react";
 import type { ColumnSplitWire, RunScope } from "../../types";
 
 export type SplitMode = "none" | "run" | "condition";
@@ -21,7 +22,7 @@ export interface SplitChange {
 /** The criterion's split and run filter after choosing a split mode.
  *
  *  - By run uses the runs picked by hand, so the run filter becomes
- *    "Specific run" (keeping any runs already picked).
+ *    "Specific runs" (keeping any runs already picked).
  *  - By condition needs more than one run, so "Latest run" (a single run)
  *    becomes "Any run". With one condition defined it is chosen for you. */
 export function applySplit(
@@ -67,17 +68,30 @@ interface SplitPickerProps {
 export function SplitPicker({ conditions, split, runScope, onChange }: SplitPickerProps) {
   const mode: SplitMode = split?.by ?? "none";
   const condition = split?.by === "condition" ? split.condition : "";
+  const keepFocus = useRef(false);
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
-      <span className="text-sm text-muted-foreground shrink-0 w-16">split</span>
+      <span className="text-sm text-muted-foreground shrink-0 w-24">Split columns</span>
       <Select
         value={mode}
-        onValueChange={(v) => onChange(applySplit(v as SplitMode, runScope, conditions))}
+        onValueChange={(v) => {
+          const next = applySplit(v as SplitMode, runScope, conditions);
+          // An empty run pick opens the run list next; don't let this menu
+          // hand focus back to its trigger and close that list.
+          keepFocus.current = next.run_scope?.mode === "specific" && runScope?.mode !== "specific";
+          onChange(next);
+        }}
       >
         <SelectTrigger className="h-8 w-36 text-sm shrink-0" aria-label="Split columns">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent className="min-w-[18rem]">
+        <SelectContent
+          className="min-w-[18rem]"
+          onCloseAutoFocus={(e) => {
+            if (keepFocus.current) e.preventDefault();
+            keepFocus.current = false;
+          }}
+        >
           {MODES.map((m) => {
             const unavailable = m.value === "condition" && conditions.length === 0;
             return (
@@ -123,7 +137,7 @@ export function SplitPicker({ conditions, split, runScope, onChange }: SplitPick
 }
 
 /** The criterion's split after its run filter changes: splitting by run needs
- *  hand-picked runs, so leaving "Specific run" turns that split off. */
+ *  hand-picked runs, so leaving "Specific runs" turns that split off. */
 export function withRunScope(
   split: ColumnSplitWire | undefined,
   next: RunScope | undefined,

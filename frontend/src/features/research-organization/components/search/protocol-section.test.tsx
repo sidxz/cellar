@@ -52,7 +52,7 @@ describe("assay matching controls", () => {
     render(<Harness initialJoins={["or", "or"]} />);
     chooseMode("Match all assays");
     expect(screen.getByTestId("joins")).toHaveTextContent('["and","and"]');
-    fireEvent.click(screen.getByRole("button", { name: "Add assay" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add another assay" }));
     expect(screen.getByTestId("joins")).toHaveTextContent('["and","and","and"]');
     expect(screen.queryByRole("combobox", { name: "Join assay 2" })).not.toBeInTheDocument();
   });
@@ -142,5 +142,19 @@ describe("two rows on one protocol", () => {
     expect(
       screen.queryByText("This protocol already has a different run filter or split above."),
     ).toBeNull();
+  });
+});
+
+describe("removing an assay", () => {
+  it("offers no per-assay remove on the only assay — the section's × covers it", () => {
+    render(<Harness initialJoins={["or"]} />);
+    expect(screen.queryByRole("button", { name: "Remove assay 1" })).toBeNull();
+  });
+
+  it("offers a remove on each assay once there are two", () => {
+    render(<Harness initialJoins={["or", "or"]} />);
+    fireEvent.click(screen.getByRole("button", { name: "Remove assay 2" }));
+    expect(screen.getByTestId("joins")).toHaveTextContent('["or"]');
+    expect(screen.queryByRole("button", { name: "Remove assay 1" })).toBeNull();
   });
 });
