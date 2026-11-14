@@ -279,3 +279,24 @@ describe("server-side sort", () => {
     });
   });
 });
+
+describe("sort across searches", () => {
+  it("drops a sort whose column the new search no longer has and runs it unsorted", async () => {
+    mocks.mutateAsync
+      .mockResolvedValueOnce(response("Compound A"))
+      .mockResolvedValueOnce(response("Compound B"))
+      .mockRejectedValueOnce(new Error("API error: 422 — Unknown sort column for this search"))
+      .mockResolvedValueOnce(response("Compound C"));
+    render(<SearchPage />);
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound A");
+    fireEvent.click(screen.getByText("Sort IC50"));
+    await screen.findByText("Compound B");
+    fireEvent.click(screen.getByText("Search A"));
+    await screen.findByText("Compound C");
+    const retried = mocks.mutateAsync.mock.calls.at(-1)?.[0];
+    expect(retried.sort_by).toBeUndefined();
+    expect(screen.queryByText("Search could not be completed")).not.toBeInTheDocument();
+    expect(mocks.mutateAsync).toHaveBeenCalledTimes(4);
+  });
+});

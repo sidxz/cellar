@@ -294,13 +294,21 @@ function SearchPageInner() {
   // Commit rows and their query together. Request versions also invalidate
   // responses after Reset or a newer search, including saved-search handoffs.
   const { mutateAsync } = searchMutation;
+  // The sort the last request ran with; header clicks re-run when it changes.
+  const previousSortRef = useRef({ sortBy, sortDir });
   const executeRequest = useCallback(
     function run(
       query: SearchQuery,
       columns: string[],
       mode: AggregationMode,
-      options: { cursor?: string; collapse?: boolean } = {},
+      options: {
+        cursor?: string;
+        collapse?: boolean;
+        /** Overrides the current sort (an explicit "unsorted" included). */
+        sort?: { sortBy: SortField | undefined; sortDir: SortDir };
+      } = {},
     ) {
+      const sort = options.sort ?? { sortBy, sortDir };
       const version = ++requestVersion.current;
       const startingDraft = draftQuery.current ? searchQueryKey(draftQuery.current) : null;
       setSearchPending(true);
@@ -319,8 +327,8 @@ function SearchPageInner() {
         },
         limit: SEARCH_PAGE_SIZE,
         cursor: options.cursor,
-        sort_by: sortBy,
-        sort_dir: sortDir,
+        sort_by: sort.sortBy,
+        sort_dir: sort.sortDir,
       })
         .then((data) => {
           if (version !== requestVersion.current) return;
@@ -358,6 +366,19 @@ function SearchPageInner() {
             error.message.includes("run the search again")
           ) {
             run(query, columns, mode, {});
+            return;
+          }
+          // The new search no longer has the column the grid was sorted by:
+          // drop the sort and run it in the default order.
+          if (
+            sort.sortBy &&
+            error instanceof Error &&
+            error.message.includes("Unknown sort column")
+          ) {
+            const unsorted = { sortBy: undefined, sortDir: "asc" as SortDir };
+            previousSortRef.current = unsorted;
+            dispatch({ type: "setSort", ...unsorted });
+            run(query, columns, mode, { ...options, sort: unsorted });
             return;
           }
           setSearchError(
@@ -399,7 +420,6 @@ function SearchPageInner() {
   const handleSortChange = useCallback((next: SortField | undefined, dir: SortDir) => {
     dispatch({ type: "setSort", sortBy: next, sortDir: dir });
   }, []);
-  const previousSortRef = useRef({ sortBy, sortDir });
   useEffect(() => {
     const previous = previousSortRef.current;
     if (previous.sortBy === sortBy && previous.sortDir === sortDir) return;
