@@ -207,6 +207,7 @@ from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
+from cellar.application.screening.suggest_from_method import MethodReader, SuggestFromMethod
 from cellar.application.screening.sync_targets import SyncFreshness, SyncTargetsFromProtCellar
 from cellar.application.screening.target_renamed_handler import TargetRenamedHandler
 from cellar.application.screening.target_source import TargetSource
@@ -224,6 +225,10 @@ from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+from cellar.infrastructure.external.assay_classifier import (
+    AssayClassifierSettings,
+    HttpMethodReader,
+)
 from cellar.infrastructure.external.bioportal.client import BioPortalClient
 from cellar.infrastructure.instrument_readers import default_readers
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -1347,6 +1352,24 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(GetMoleculeTestCounts, _get_molecule_test_counts)
+
+    # --- Suggestions from the method (off unless ASSAY_CLASSIFIER_URL is set) ---
+    # Guarded so create_container(overrides={MethodReader: stub}) can turn them on in tests.
+    if MethodReader not in container.defined_types:
+        classifier = AssayClassifierSettings()
+        if classifier.url:
+            container.define(
+                MethodReader,
+                Singleton(lambda c: HttpMethodReader(c[httpx.AsyncClient], classifier)),
+            )
+    container.define(
+        SuggestFromMethod,
+        Singleton(
+            lambda c: SuggestFromMethod(
+                c[MethodReader] if MethodReader in c.defined_types else None
+            )
+        ),
+    )
 
     # --- Ontology Search & Annotations ---
     container.define(BioPortalClient, lambda c: BioPortalClient(c[SecretProvider]))

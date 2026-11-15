@@ -45,6 +45,7 @@ export * from './protocol-categories/protocol-categories';
 export * from './protocol-forms/protocol-forms';
 export * from './protocol-hub/protocol-hub';
 export * from './protocol-names/protocol-names';
+export * from './protocol-suggestions/protocol-suggestions';
 export * from './protocols/protocols';
 export * from './readout-data/readout-data';
 export * from './recent-searches/recent-searches';

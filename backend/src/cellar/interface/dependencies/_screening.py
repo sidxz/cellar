@@ -139,6 +139,7 @@ from cellar.application.screening.set_run_hit_criteria import (
     ResetRunHitCriteria,
     SetRunHitCriteria,
 )
+from cellar.application.screening.suggest_from_method import SuggestFromMethod
 from cellar.application.screening.sync_targets import SyncTargetsFromProtCellar
 from cellar.application.screening.update_run import UpdateRun
 
@@ -249,6 +250,7 @@ __all__ = [
     "SetRunHitCriteriaDep",
     "SetUpRunPlateDep",
     "StartRunDep",
+    "SuggestFromMethodDep",
     "SyncTargetsDep",
     "UnlinkRunPlateDep",
     "UnlockProtocolDep",
@@ -311,6 +313,7 @@ GetProtocolCollectionGapDep = Annotated[
 ]
 UpdateProtocolDep = Annotated[UpdateProtocol, Depends(_get_use_case(UpdateProtocol))]
 ListNameFlagsDep = Annotated[ListNameFlags, Depends(_get_use_case(ListNameFlags))]
+SuggestFromMethodDep = Annotated[SuggestFromMethod, Depends(_get_use_case(SuggestFromMethod))]
 RederiveAllProtocolNamesDep = Annotated[
     RederiveAllProtocolNames, Depends(_get_use_case(RederiveAllProtocolNames))
 ]

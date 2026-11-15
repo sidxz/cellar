@@ -1,0 +1,29 @@
+# Optional: the assay classifier behind "Suggest from method" on the protocol form.
+# Add it to the prod stack (or `make prod-up CLASSIFIER=1`):
+#   ASSAY_CLASSIFIER_TAG=<tag> docker compose -f docker-compose.infra.yml \
+#     -f docker-compose.prod.yml -f docker-compose.classifier.yml up -d
+# Without this file the backend has no ASSAY_CLASSIFIER_URL and the feature stays off.
+#
+# Needs a Linux host with an NVIDIA GPU and the NVIDIA Container Toolkit. On a Mac, run the
+# classifier natively instead (Docker there can't reach Apple's GPU); see .env.example.
+# Internal only: no published port, and the server has no auth; the backend reaches it by name.
+services:
+  assay-classifier:
+    image: ghcr.io/sidxz/assay-classifier:${ASSAY_CLASSIFIER_TAG:?set ASSAY_CLASSIFIER_TAG}
+    restart: unless-stopped
+    volumes:
+      - classifier-hf-cache:/cache/hf # the public Qwen3-1.7B base (3.8 GB), downloaded once
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  backend:
+    environment:
+      ASSAY_CLASSIFIER_URL: http://assay-classifier:8765
+
+volumes:
+  classifier-hf-cache:
