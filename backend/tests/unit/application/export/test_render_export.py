@@ -69,3 +69,31 @@ async def test_render_export_csv_marks_ready(tmp_path):
     assert completed[0].user_id == job.requested_by
     assert completed[0].row_count == 2
     assert completed[0].byte_size == job.byte_size
+
+
+def test_the_pdf_heading_uses_the_grids_summary_and_names_the_requester():
+    from datetime import UTC, datetime
+
+    from cellar.application.export.render_export import _extras_for
+
+    job = ExportJob.create(
+        id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        requested_by=uuid.uuid4(),
+        requested_by_email="ada@lab.org",
+        source=ExportSource.SEARCH,
+        format=ExportFormat.PDF,
+        query_snapshot={
+            "query": {"criteria": [{"type": "activity"}]},
+            "summary": "All projects · Tested in InhA (any run, split by ATP)",
+        },
+        filename="x.pdf",
+    )
+    job.requested_at = datetime(2026, 11, 15, 19, 35, tzinfo=UTC)
+    extras = _extras_for(job)
+    assert extras["query_summary"] == "All projects · Tested in InhA (any run, split by ATP)"
+    assert extras["exported_by"] == "ada@lab.org"
+    assert extras["exported_at"] == "2026-11-15 19:35 UTC"
+
+    job.query_snapshot = {"query": {"criteria": [{"type": "activity"}]}}  # an older request
+    assert _extras_for(job)["query_summary"] == "1 activity criterion"

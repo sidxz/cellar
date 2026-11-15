@@ -158,5 +158,7 @@ async def test_an_unreachable_classifier_is_unavailable():
             await reader.read(METHOD)
 
 
-def test_off_by_default():
+def test_off_by_default(monkeypatch):
+    # `make` exports the root .env, which may switch it on for this machine.
+    monkeypatch.delenv("ASSAY_CLASSIFIER_URL", raising=False)
     assert AssayClassifierSettings(_env_file=None).url is None

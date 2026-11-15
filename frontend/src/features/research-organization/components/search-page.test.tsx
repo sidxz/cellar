@@ -309,7 +309,12 @@ describe("server-side sort", () => {
     await screen.findByText("Compound B");
     fireEvent.click(screen.getByText("Export CSV"));
     expect(mocks.exported).toMatchObject({
-      payload: { sort_by: "drc:rd-1", sort_dir: "desc" },
+      payload: {
+        sort_by: "drc:rd-1",
+        sort_dir: "desc",
+        // The summary line above the grid rides along as the PDF's heading.
+        summary: expect.stringMatching(/^All (compounds · All )?projects/),
+      },
     });
   });
 });

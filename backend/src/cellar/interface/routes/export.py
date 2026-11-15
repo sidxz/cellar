@@ -78,6 +78,7 @@ async def start_export(
         StartExportCommand(
             workspace_id=auth.workspace_id,
             requested_by=auth.user_id,
+            requested_by_email=auth.email or None,
             source=body.source,
             format=body.format,
             payload=body.payload,

@@ -171,7 +171,7 @@ _AGGREGATION_LABELS = {
 
 
 def _title_for(job: ExportJob) -> str:
-    return "Cellar Search"
+    return "Search results"
 
 
 def _image_size_for(job: ExportJob) -> str:
@@ -189,13 +189,20 @@ def _extras_for(job: ExportJob) -> dict:
     agg_raw = (payload.get("aggregation") or "latest_run").lower()
     extras: dict = {
         "aggregation_label": _AGGREGATION_LABELS.get(agg_raw, agg_raw.replace("_", " ").title()),
-        "exported_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC"),
+        # When the person asked for it, which is what the audit trail records.
+        "exported_at": (job.requested_at or datetime.now(UTC))
+        .astimezone(UTC)
+        .strftime("%Y-%m-%d %H:%M UTC"),
+        "exported_by": job.requested_by_email,
     }
+    # The grid's own summary line ("All projects · Tested in … (any run, split by
+    # ATP)"), sent with the request; older requests fall back to the kinds count.
+    summary = payload.get("summary")
     query = payload.get("query")
-    if isinstance(query, dict):
+    if not (isinstance(summary, str) and summary.strip()) and isinstance(query, dict):
         summary = _summarize_query(query)
-        if summary:
-            extras["query_summary"] = summary
+    if summary:
+        extras["query_summary"] = summary.strip()
     return extras
 
 

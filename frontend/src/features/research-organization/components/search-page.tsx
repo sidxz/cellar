@@ -41,7 +41,12 @@ import {
 } from "../types";
 import { CompoundComparison } from "./search/compound-comparison";
 import { CompoundDetailSheet } from "./search/compound-detail-sheet";
-import { QuerySummary, searchQueryKey, structureQuery } from "./search/query-summary";
+import {
+  QuerySummary,
+  querySummaryText,
+  searchQueryKey,
+  structureQuery,
+} from "./search/query-summary";
 import { RecentSearchesMenu, storedCriteria } from "./search/recent-searches-menu";
 import { ReportCustomizer } from "./search/report-customizer";
 import { ResultsGrid } from "./search/results-grid";
@@ -623,10 +628,20 @@ function SearchPageInner() {
           // property column whitelist, image size. The BE column builder
           // reads this and trims columns / sizes images accordingly.
           reportConfig,
+          // The line above the grid, which the PDF prints as its heading.
+          summary: querySummaryText(currentQuery, summaryContext),
         },
       };
     },
-    [currentQuery, protocolColumns, executedAggregation, sortBy, sortDir, reportConfig],
+    [
+      currentQuery,
+      protocolColumns,
+      executedAggregation,
+      sortBy,
+      sortDir,
+      reportConfig,
+      summaryContext,
+    ],
   );
 
   // ── Add to collection ──────────────────────────────────────────────────

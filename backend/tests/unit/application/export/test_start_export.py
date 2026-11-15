@@ -125,3 +125,25 @@ async def test_start_filename_uses_hint():
     # The saved job should have the hinted filename + extension
     saved_job = repo.save.call_args[0][0]
     assert saved_job.filename == "my-report.xlsx"
+
+
+@pytest.mark.asyncio
+async def test_start_keeps_who_asked_for_the_file():
+    workspace, user = uuid.uuid4(), uuid.uuid4()
+    repo = MagicMock()
+    repo.save = AsyncMock()
+    orch = MagicMock()
+    orch.start = AsyncMock(return_value="wf-1")
+    uc = StartExport(_make_uow(), repo, orch, _dispatcher())
+    await uc(
+        StartExportCommand(
+            workspace_id=workspace,
+            requested_by=user,
+            requested_by_email="ada@lab.org",
+            source=ExportSource.SEARCH,
+            format=ExportFormat.PDF,
+            payload={"query": {}},
+        ),
+        auth=_Auth(workspace_id=workspace, user_id=user),
+    )
+    assert repo.save.await_args.args[0].requested_by_email == "ada@lab.org"

@@ -32,8 +32,11 @@ async def test_excel_writes_data_sheet_with_numeric_cells(tmp_path: Path):
     rows = [[ExportRow(cells={"reg": "CV-1", "mw": 421.5, "drc:rd1:ec:50.0::value": 1.23})]]
     out = tmp_path / "out.xlsx"
     await ExcelRenderer().render(
-        columns=cols, batches=_batches(rows), out_path=out,
-        options=RenderOptions(), row_count_hint=1,
+        columns=cols,
+        batches=_batches(rows),
+        out_path=out,
+        options=RenderOptions(),
+        row_count_hint=1,
     )
     wb = load_workbook(out)
     ws = wb["Data"]
@@ -125,19 +128,24 @@ async def test_excel_sparkline_uses_per_column_activity_lookup(tmp_path: Path):
             "fit_quality_warnings": None,
         },
     }
-    rows = [[ExportRow(
-        cells={"reg": "CV-1", f"{parent_token}::plot": ""},
-        raw={"activity": {parent_token: av_dict}},
-    )]]
+    rows = [
+        [
+            ExportRow(
+                cells={"reg": "CV-1", f"{parent_token}::plot": ""},
+                raw={"activity": {parent_token: av_dict}},
+            )
+        ]
+    ]
 
     out = tmp_path / "out.xlsx"
     # Minimal valid 1×1 white PNG so openpyxl's XLImage can open it.
     import base64
+
     _1x1_png = base64.b64decode(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
     )
     with patch(
-        "cellar.application.export.renderers.excel_renderer.render_sparkline_png",
+        "cellar.application.export.renderers.sparkline.render_sparkline",
         return_value=_1x1_png,
     ) as mock_render:
         await ExcelRenderer().render(
@@ -148,12 +156,12 @@ async def test_excel_sparkline_uses_per_column_activity_lookup(tmp_path: Path):
             row_count_hint=1,
         )
 
-    # render_sparkline_png must have been called with the assembled snapshot,
+    # render_sparkline must have been called with the assembled snapshot,
     # NOT with None (which the old code always produced).
     mock_render.assert_called_once()
     called_snapshot = mock_render.call_args[0][0]
     assert called_snapshot is not None, (
-        "Bug #2: render_sparkline_png was called with None — activity lookup "
+        "Bug #2: render_sparkline was called with None — activity lookup "
         "used the wrong key (looked for 'curve_snapshot' on the activity dict "
         "instead of fetching the ActivityValue by parent token)"
     )
@@ -167,10 +175,71 @@ async def test_excel_notes_sheet_when_sparkline_cap_tripped(tmp_path: Path):
     big_rows = [[ExportRow(cells={"reg": f"CV-{i}"}) for i in range(SPARKLINE_ROW_CAP + 10)]]
     out = tmp_path / "out.xlsx"
     await ExcelRenderer().render(
-        columns=cols, batches=_batches(big_rows), out_path=out,
-        options=RenderOptions(), row_count_hint=SPARKLINE_ROW_CAP + 10,
+        columns=cols,
+        batches=_batches(big_rows),
+        out_path=out,
+        options=RenderOptions(),
+        row_count_hint=SPARKLINE_ROW_CAP + 10,
     )
     wb = load_workbook(out)
     assert "Notes" in wb.sheetnames
-    notes_text = "\n".join(str(c.value or "") for c in wb["Notes"]["A"])
+    notes_text = "\n".join(str(c.value or "") for row in wb["Notes"].iter_rows() for c in row)
     assert "Images omitted" in notes_text
+
+
+@pytest.mark.asyncio
+async def test_branding_sits_apart_from_the_records(tmp_path: Path):
+    cols = [ColumnSpec(key="reg", header="Reg #", kind="text")]
+    out = tmp_path / "out.xlsx"
+    await ExcelRenderer().render(
+        columns=cols,
+        batches=_batches([[ExportRow(cells={"reg": "CV-1"})]]),
+        out_path=out,
+        options=RenderOptions(
+            title="Search results",
+            extras={"exported_at": "2026-11-15 19:35 UTC", "exported_by": "ada@lab.org"},
+        ),
+        row_count_hint=1,
+    )
+    wb = load_workbook(out)
+    data = wb["Data"]
+    assert [[c.value for c in row] for row in data.iter_rows()] == [["Reg #"], ["CV-1"]]
+    notes = [c.value for row in wb["Notes"].iter_rows() for c in row if c.value]
+    assert notes[0] == "ChemCellar"
+    assert "Exported 2026-11-15 19:35 UTC" in notes and "By ada@lab.org" in notes
+    assert len(wb["Notes"]._images) == 1  # the logo
+    assert wb.properties.creator == "ada@lab.org"
+
+
+@pytest.mark.asyncio
+async def test_an_overlaid_group_header_wears_its_curve_colour(tmp_path: Path):
+    cols = [
+        ColumnSpec(
+            key="v@a::value",
+            header="IC50",
+            kind="number",
+            group="P",
+            subgroup="10 µM",
+            group_color="#3b6fb6",
+        ),
+        ColumnSpec(
+            key="v@b::value",
+            header="IC50",
+            kind="number",
+            group="P",
+            subgroup="1 mM",
+            group_color="#18974c",
+        ),
+    ]
+    out = tmp_path / "out.xlsx"
+    await ExcelRenderer().render(
+        columns=cols,
+        batches=_batches([[ExportRow(cells={})]]),
+        out_path=out,
+        options=RenderOptions(),
+        row_count_hint=1,
+    )
+    ws = load_workbook(out)["Data"]
+    assert (ws["A1"].value, ws["B1"].value) == ("P · 10 µM", "P · 1 mM")
+    assert ws["A1"].font.color.rgb.endswith("3B6FB6")
+    assert ws["B1"].font.color.rgb.endswith("18974C")

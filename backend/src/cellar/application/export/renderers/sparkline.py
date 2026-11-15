@@ -19,9 +19,14 @@ from __future__ import annotations
 
 import io
 import math
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
+
+if TYPE_CHECKING:
+    from cellar.application.export.row_streams.base import ColumnSpec
 
 SizePreset = Literal["small", "medium", "large"]
+# PNG for Excel, which embeds only bitmaps; SVG for the PDF, which keeps it vector.
+ImageFormat = Literal["png", "svg"]
 
 SIZE_PRESETS: dict[str, tuple[int, int]] = {
     "small": (240, 140),
@@ -37,6 +42,21 @@ _AGGREGATE_LINE = "#f49e17"  # CHART_COLORS.warning (amber)
 _INTERCEPT_LINE = "#f49e17"  # same amber, dotted
 _AXIS_GRID = "#c0c4c3"  # CHART_CANVAS.grid (light bg)
 _AXIS_TICK = "#707372"  # CHART_CANVAS.label
+
+# Mirrors @structflo/components dose-response colors.ts: an overlay colours its
+# curves with GROUP_PALETTE's first MAX_OVERLAY_CURVES entries, in group order,
+# and a split with more groups than that stays side by side.
+MAX_OVERLAY_CURVES = 8
+OVERLAY_COLORS = (
+    "#3b6fb6",
+    "#18974c",
+    "#f49e17",
+    "#d41645",
+    "#734595",
+    "#0891b2",
+    "#db2777",
+    "#65a30d",
+)
 
 
 def _resolve_size(size: SizePreset | tuple[int, int] | None) -> tuple[int, int]:
@@ -95,7 +115,7 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
     curve_params, value (the fitted primary intercept), curve_class via
     curve_params, plus aggregate-mode extras (``additional_curves`` +
     ``aggregate``).  This helper maps those fields onto the snapshot
-    shape consumed by :func:`render_sparkline_png`.
+    shape consumed by :func:`render_sparkline`.
 
     Returns None when there is not enough shape information to render
     (e.g. a readout_data source, or a curve missing fit params).
@@ -134,12 +154,13 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
     }
 
 
-def render_sparkline_png(
+def render_sparkline(
     curve_snapshot: dict | None,
     *,
     size: SizePreset | tuple[int, int] | None = None,
+    fmt: ImageFormat = "png",
 ) -> bytes | None:
-    """Render a dose-response sparkline as PNG bytes.
+    """Render a dose-response sparkline as PNG or SVG bytes.
 
     ``curve_snapshot`` shape (built by ``_av_to_sparkline_snapshot`` in the
     XLSX renderer or directly from a ``CurveSnapshot`` in the PDF renderer):
@@ -158,9 +179,63 @@ def render_sparkline_png(
 
     Returns None if there's nothing usable to draw (no points + no fit).
     """
-    if not curve_snapshot:
+    if not _drawable(curve_snapshot):
         return None
+    fig, ax = _figure(size, *_xrange_for(curve_snapshot))
+    _draw_curve(ax, curve_snapshot)
+    return _save(fig, fmt)
 
+
+def render_overlay(
+    snapshots: list[dict | None],
+    *,
+    size: SizePreset | tuple[int, int] | None = None,
+    fmt: ImageFormat = "png",
+) -> bytes | None:
+    """Every split group's curve on one axis, curve ``i`` in ``OVERLAY_COLORS[i]``
+    (the colour on its group's header), so a group with no curve keeps its slot.
+    Mirrors the FE ``DoseResponseOverlay`` at cell size: no legend, no labels."""
+    drawn = [(i, s) for i, s in enumerate(snapshots) if _drawable(s)]
+    if not drawn:
+        return None
+    ranges = [_xrange_for(s) for _, s in drawn]
+    fig, ax = _figure(size, min(r[0] for r in ranges), max(r[1] for r in ranges))
+    for i, snapshot in drawn:
+        _draw_curve(ax, snapshot, color=OVERLAY_COLORS[i % MAX_OVERLAY_CURVES])
+    return _save(fig, fmt)
+
+
+def column_plot(
+    column: ColumnSpec,
+    activity: dict,
+    *,
+    size: SizePreset | tuple[int, int] | None = None,
+    fmt: ImageFormat = "png",
+) -> bytes | None:
+    """The plot an ``image_curve`` column shows for one row's activity: an
+    overlay of each group's curve, or the one curve of ``drc:<rd>[@group]``."""
+    if column.overlay_of:
+        return render_overlay(
+            [av_to_sparkline_snapshot(activity.get(key)) for key in column.overlay_of],
+            size=size,
+            fmt=fmt,
+        )
+    parent_token = column.key.rsplit("::", 1)[0]
+    snapshot = av_to_sparkline_snapshot(activity.get(parent_token))
+    return render_sparkline(snapshot, size=size, fmt=fmt)
+
+
+def _drawable(curve_snapshot: dict | None) -> bool:
+    if not curve_snapshot:
+        return False
+    points = curve_snapshot.get("data_points") or []
+    fit = curve_snapshot.get("fit") or {}
+    has_points = any(isinstance(p.get("dose"), (int, float)) and p["dose"] > 0 for p in points)
+    return has_points or all(k in fit for k in ("top", "bottom", "ec50", "hill_slope"))
+
+
+def _figure(size: SizePreset | tuple[int, int] | None, lo: float, hi: float):
+    """Axes styled like the FE chart: log10 x with decade ticks, y at 0/50/100."""
     import matplotlib
 
     matplotlib.use("Agg")
@@ -168,17 +243,6 @@ def render_sparkline_png(
     from matplotlib.ticker import FixedLocator, LogLocator
 
     width, height = _resolve_size(size)
-    points = curve_snapshot.get("data_points") or []
-    fit = curve_snapshot.get("fit") or {}
-    inactive = curve_snapshot.get("curve_class") == "inactive"
-    additional = curve_snapshot.get("additional_curves") or []
-    aggregate = curve_snapshot.get("aggregate")
-
-    has_points = any(isinstance(p.get("dose"), (int, float)) and p["dose"] > 0 for p in points)
-    has_fit = all(k in fit for k in ("top", "bottom", "ec50", "hill_slope"))
-    if not has_points and not has_fit:
-        return None
-
     fig, ax = plt.subplots(figsize=(width / 100, height / 100), dpi=100)
     fig.patch.set_alpha(0)
     ax.set_facecolor("white")
@@ -189,7 +253,6 @@ def render_sparkline_png(
         ax.spines[spine].set_linewidth(0.8)
 
     # X-axis: log scale with decade major ticks.
-    lo, hi = _xrange_for(curve_snapshot)
     ax.set_xscale("log")
     ax.set_xlim(lo, hi)
     ax.xaxis.set_major_locator(LogLocator(base=10.0, numticks=8))
@@ -203,21 +266,28 @@ def render_sparkline_png(
     ax.set_ylim(-15, 115)
 
     ax.grid(True, which="major", color=_AXIS_GRID, linewidth=0.4, alpha=0.6)
+    return fig, ax
+
+
+def _draw_curve(ax, curve_snapshot: dict, *, color: str | None = None) -> None:
+    """One curve's points, fit and reference line. ``color`` paints every mark
+    of an overlaid curve, as the FE overlay does; alone, a curve keeps the
+    quality colours."""
+    lo, hi = ax.get_xlim()
+    points = curve_snapshot.get("data_points") or []
+    fit = curve_snapshot.get("fit") or {}
+    inactive = curve_snapshot.get("curve_class") == "inactive"
+    additional = curve_snapshot.get("additional_curves") or []
+    aggregate = curve_snapshot.get("aggregate")
+    has_fit = all(k in fit for k in ("top", "bottom", "ec50", "hill_slope"))
 
     # Raw data markers (always drawn when present, both for active and
     # inactive curves — matches FE).
-    marker_color = _INACTIVE_MARKER_COLOR if inactive else _MARKER_COLOR
-    if has_points:
-        xs = [
-            float(p["dose"])
-            for p in points
-            if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0
-        ]
-        ys = [
-            float(p.get("response", 0))
-            for p in points
-            if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0
-        ]
+    marker_color = color or (_INACTIVE_MARKER_COLOR if inactive else _MARKER_COLOR)
+    doses = [p for p in points if isinstance(p.get("dose"), (int, float)) and p["dose"] > 0]
+    if doses:
+        xs = [float(p["dose"]) for p in doses]
+        ys = [float(p.get("response", 0)) for p in doses]
         ax.scatter(xs, ys, s=10, color=marker_color, zorder=3, edgecolors="none")
 
     # Aggregate-mode sibling sigmoids (muted dashed) — drawn under the
@@ -241,7 +311,7 @@ def render_sparkline_png(
                 ax.plot(
                     sx,
                     sy,
-                    color=_FIT_COLOR,
+                    color=color or _FIT_COLOR,
                     linewidth=0.8,
                     linestyle=(0, (2, 2)),
                     alpha=0.35,
@@ -259,7 +329,7 @@ def render_sparkline_png(
             math.log10(hi),
         )
         if sx:
-            ax.plot(sx, sy, color=_FIT_COLOR, linewidth=1.6, zorder=2)
+            ax.plot(sx, sy, color=color or _FIT_COLOR, linewidth=1.6, zorder=2)
 
     # Reference line:
     #   - Aggregate mode: solid amber at aggregate.marker_x (suppresses
@@ -270,21 +340,25 @@ def render_sparkline_png(
     if aggregate and isinstance(aggregate.get("marker_x"), (int, float)):
         mx = float(aggregate["marker_x"])
         if mx > 0:
-            ax.axvline(mx, color=_AGGREGATE_LINE, linewidth=1.4, alpha=0.95, zorder=2)
+            ax.axvline(mx, color=color or _AGGREGATE_LINE, linewidth=1.4, alpha=0.95, zorder=2)
     elif not inactive and has_fit:
         fv = float(fit["ec50"])
         if fv > 0:
             ax.axvline(
                 fv,
-                color=_INTERCEPT_LINE,
+                color=color or _INTERCEPT_LINE,
                 linewidth=0.9,
                 linestyle=(0, (1.5, 1.5)),
                 alpha=0.7,
                 zorder=2,
             )
 
+
+def _save(fig, fmt: ImageFormat) -> bytes:
+    import matplotlib.pyplot as plt
+
     fig.tight_layout(pad=0.3)
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.06, facecolor="white")
+    fig.savefig(buf, format=fmt, bbox_inches="tight", pad_inches=0.06, facecolor="white")
     plt.close(fig)
     return buf.getvalue()
