@@ -22,7 +22,7 @@ BACKEND  := cd backend
 FRONTEND := cd frontend
 LOGDIR   := .logs
 COMPOSE_INFRA := docker compose -f docker-compose.infra.yml
-COMPOSE_PROD  := docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml
+COMPOSE_PROD  := docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml $(if $(CLASSIFIER),-f docker-compose.classifier.yml)
 # Compose names built images <project>-<service>, reading COMPOSE_PROJECT_NAME from
 # .env, which can differ from the directory name. Mirror that so the scan targets the
 # image compose actually built; fall back to the directory name.
@@ -183,7 +183,7 @@ restart: nuke up dev ## Nuke + start fresh + dev servers
 prod-pull: ## Pull the prod images from GHCR (CELLAR_TAG=<tag>, default latest)
 	$(COMPOSE_PROD) pull
 
-prod-up: ## Start the prod stack from GHCR images (runs migrations first)
+prod-up: ## Start the prod stack from GHCR images (runs migrations first; CLASSIFIER=1 adds the assay classifier)
 	$(COMPOSE_PROD) up -d
 	@echo "Prod stack up. Backend :8000  Frontend :3000  (tag: $${CELLAR_TAG:-latest})"
 
