@@ -5,7 +5,7 @@ import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
 import type { Band } from "../lib/melt-hits";
 import type { ShiftRow } from "../lib/melt-results";
-import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
+import { GRID, saveAsSvg, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
 export function ShiftPlot({
   rows,
@@ -65,7 +65,7 @@ export function ShiftPlot({
         shapes,
         annotations,
       }}
-      config={{ displayModeBar: false, responsive: true }}
+      config={saveAsSvg("shift-plot")}
       style={{ width: "100%" }}
       onClick={(event) => {
         const id = (event as { points: { customdata?: unknown }[] }).points[0]?.customdata;

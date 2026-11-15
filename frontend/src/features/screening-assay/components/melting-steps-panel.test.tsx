@@ -216,6 +216,7 @@ describe("MeltingStepsPanel", () => {
   it("requires a reason to reject and sends expected_version", async () => {
     api.mockImplementation((req: { url: string; method: string }) => {
       if (req.url.endsWith("/melting-analysis")) return Promise.resolve(analysis);
+      if (req.url.endsWith("/workspace-members")) return Promise.resolve([]);
       return Promise.resolve(
         change({ ...steps[0], status: "rejected" }, "Recompute the run to update its results."),
       );

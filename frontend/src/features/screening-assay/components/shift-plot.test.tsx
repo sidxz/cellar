@@ -8,7 +8,9 @@ type P = {
   onClick?: (e: unknown) => void;
 };
 const plots: P[] = [];
+const downloadImage = vi.fn();
 vi.mock("@/shared/lib/plotly", () => ({
+  getPlotlyGlobal: () => ({ downloadImage }),
   Plot: (p: P) => {
     plots.push(p);
     return (
@@ -59,7 +61,29 @@ describe("ShiftPlot", () => {
     expect(layout.shapes.some((s: any) => s.type === "line" && s.x0 === 0)).toBe(true);
     const text = layout.annotations.map((a: any) => a.text);
     expect(text).toEqual(["outside −2 to 2 °C is a hit", "ΔTm = 0 (reference)"]);
-    expect(last().config).toMatchObject({ displayModeBar: false });
+    // One button saves the figure as SVG on white with dark ink, whatever the theme.
+    const [[save]] = last().config.modeBarButtons as {
+      name: string;
+      click: (gd: unknown) => void;
+    }[][];
+    expect(save.name).toBe("Save as SVG");
+    save.click({
+      data: [{ x: [1] }],
+      layout: { font: { size: 12 } },
+      clientWidth: 640,
+      clientHeight: 300,
+    });
+    expect(downloadImage).toHaveBeenCalledWith(
+      {
+        data: [{ x: [1] }],
+        layout: {
+          font: { size: 12, color: "#707372" },
+          paper_bgcolor: "#ffffff",
+          plot_bgcolor: "#ffffff",
+        },
+      },
+      { format: "svg", width: 640, height: 300, filename: "shift-plot" },
+    );
   });
 
   it("colours match the grid tint and the selected point is enlarged", () => {

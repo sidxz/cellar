@@ -21,10 +21,13 @@ const ITEMS: { format: ExportFormat; label: string; extension: string }[] = [
 
 interface Props {
   buildRequest: (format: ExportFormat) => ExportRequest | null;
+  /** The formats offered, in menu order; every format by default. */
+  formats?: readonly ExportFormat[];
 }
 
-export function ExportToolbar({ buildRequest }: Props) {
+export function ExportToolbar({ buildRequest, formats }: Props) {
   const exp = useExport();
+  const items = formats ? ITEMS.filter((it) => formats.includes(it.format)) : ITEMS;
 
   return (
     <>
@@ -41,7 +44,7 @@ export function ExportToolbar({ buildRequest }: Props) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-[10rem]">
-          {ITEMS.map((it) => (
+          {items.map((it) => (
             <DropdownMenuItem
               key={it.format}
               onSelect={() => {

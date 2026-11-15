@@ -1,4 +1,5 @@
-import { CHART_AXIS, CHART_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_AXIS, CHART_CANVAS, CHART_COLORS } from "@/shared/lib/chart-colors";
+import { getPlotlyGlobal } from "@/shared/lib/plotly";
 import type { Band } from "./melt-hits";
 
 /** Shared look of the ΔTm figures (ranked shift plot, ΔTm by concentration). */
@@ -7,6 +8,47 @@ import type { Band } from "./melt-hits";
 const UP = "#3b82f6";
 const DOWN = "#ef4444";
 export const GRID = "rgba(113,113,122,0.2)";
+
+type Graph = HTMLElement & {
+  data: ReadonlyArray<Record<string, unknown>>;
+  layout: Record<string, unknown>;
+};
+
+// A download arrow over a tray, in Plotly's 1000-unit icon box.
+const DOWNLOAD_ICON = {
+  width: 1000,
+  height: 1000,
+  path: "M450 100h100v450h150L500 750 300 550h150zM150 800h700v100H150z",
+};
+
+/** A figure's toolbar: one button saving it as a vector SVG at its size on
+ *  screen, on white with dark ink whatever the screen's theme, as the traces
+ *  figure's own export does. */
+export const saveAsSvg = (filename: string) => ({
+  displaylogo: false,
+  responsive: true,
+  modeBarButtons: [
+    [
+      {
+        name: "Save as SVG",
+        icon: DOWNLOAD_ICON,
+        click: (gd: Graph) =>
+          getPlotlyGlobal()?.downloadImage?.(
+            {
+              data: gd.data,
+              layout: {
+                ...gd.layout,
+                paper_bgcolor: CHART_CANVAS.background,
+                plot_bgcolor: CHART_CANVAS.background,
+                font: { ...(gd.layout.font as object), color: CHART_CANVAS.label },
+              },
+            },
+            { format: "svg", width: gd.clientWidth, height: gd.clientHeight, filename },
+          ),
+      },
+    ],
+  ],
+});
 
 /** A hit is blue up or red down; everything else is neutral. */
 export const shiftColour = (deltaTm: number, isHit: boolean) =>

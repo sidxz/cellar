@@ -1,10 +1,13 @@
 "use client";
 
+import { ExportToolbar } from "@/shared/components/export/export-toolbar";
+import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
+import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { cn, shortId } from "@/shared/lib/utils";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMeltingAnalysis } from "../hooks/use-melting-analysis";
 import { useProtocol } from "../hooks/use-protocols";
 import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
@@ -42,6 +45,8 @@ const PLOT_HEIGHT = "h-[400px]";
  *  windows as bands; under the plot, the steps are reviewed and the batch's
  *  ΔTm is charted by concentration. Without an analysis (it failed to load)
  *  the viewer keeps its own position selector. */
+const RUN_FORMATS: readonly ExportFormat[] = ["xlsx", "csv", "pdf"];
+
 export function RunCurvesPanel({
   runId,
   run,
@@ -52,6 +57,8 @@ export function RunCurvesPanel({
     Run,
     | "id"
     | "protocol_id"
+    | "run_date"
+    | "operator"
     | "status"
     | "is_locked"
     | "hit_criteria"
@@ -99,6 +106,28 @@ export function RunCurvesPanel({
   const hits = useMemo(
     () => (analysis && data ? hitWells(analysis, data.positions, applicable) : new Set<string>()),
     [analysis, data, applicable],
+  );
+  // The run's export: results, steps and traces, built from what this tab reads.
+  // The names shown here (operator, step reviewers) ride along: the export
+  // worker can't look people up without the person's sign-in.
+  const { data: members } = useWorkspaceMembers();
+  const buildExport = useCallback(
+    (format: ExportFormat): ExportRequest | null => {
+      if (!run) return null;
+      const ids = [run.operator, ...(analysis?.steps ?? []).map((s) => s.changed_by)];
+      const people: Record<string, string> = {};
+      for (const id of ids) {
+        const m = id ? members?.find((u) => u.user_id === id) : undefined;
+        if (id && m) people[id] = m.name || m.email;
+      }
+      return {
+        source: "run",
+        format,
+        filename_hint: `run-${protocol?.code ?? "report"}-${run.run_date}`,
+        payload: { run_id: run.id, people },
+      };
+    },
+    [run, analysis, members, protocol?.code],
   );
   // The value field of the open step form; a plot click fills it.
   const [stepValue, setStepValue] = useState("");
@@ -237,7 +266,12 @@ export function RunCurvesPanel({
               doseUnit={doseUnit}
               selection={selection}
               onSelectionChange={setSelection}
-              headerAction={editLabelling}
+              headerAction={
+                <>
+                  {run && <ExportToolbar formats={RUN_FORMATS} buildRequest={buildExport} />}
+                  {editLabelling}
+                </>
+              }
               onLeadWindowChange={setLeadWindow}
               onShownWindowsChange={setShown}
               hits={hits}
