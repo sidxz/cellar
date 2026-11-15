@@ -145,7 +145,7 @@ def _write_xlsx(report: RunReport, out_path: Path, options: RenderOptions) -> No
 
 
 def _write_traces(ws, signal: RunSignal) -> None:
-    """Each capillary has its own temperatures, so two columns each: its
+    """Each position has its own temperatures, so two columns each: its
     temperature and its signal, under a "position · sample" heading."""
     first, second = [], []
     for t in signal.traces:

@@ -1,8 +1,8 @@
 """A run's thermal shift results, gathered for export as the Traces tab shows them.
 
-The results table (lib/melt-results.ts): one row per capillary with its Tm and ΔTm
+The results table (lib/melt-results.ts): one row per position with its Tm and ΔTm
 per window, the window status the page shows, and the run's hit call
-(lib/melt-hits.ts: a sample meeting every rule on a per-capillary Tm or ΔTm; a
+(lib/melt-hits.ts: a sample meeting every rule on a per-position Tm or ΔTm; a
 missing value fails its rule). Then the melting steps with their review, and
 every signal's traces, measured and as the derivative.
 """
@@ -123,7 +123,7 @@ class RunReport:
     run_date: date
     status: str
     operator: str | None
-    holder: str  # "Cassette, 24 capillaries"
+    holder: str  # the holder as the instrument reader names it
     notes: str | None
     dose_unit: str
     windows: tuple[RunWindow, ...]

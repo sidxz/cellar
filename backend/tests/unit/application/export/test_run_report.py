@@ -66,7 +66,7 @@ def _pos(well_id, kind, label, reg=None, batch=None):
         registration_number=reg,
         batch_number=batch,
         label=label,
-        position_label=f"Capillary {label}",
+        position_label=f"Position {label}",
     )
 
 
@@ -161,7 +161,7 @@ def _report() -> RunReport:
     rows = (
         RunRow(
             REF,
-            "Capillary 1",
+            "Position 1",
             "MadR",
             None,
             None,
@@ -174,7 +174,7 @@ def _report() -> RunReport:
         ),
         RunRow(
             A,
-            "Capillary 2",
+            "Position 2",
             "16:0-CoA",
             None,
             None,
@@ -186,14 +186,14 @@ def _report() -> RunReport:
             True,
         ),
     )
-    trace = RunTrace("Capillary 2", "16:0-CoA", "sample", True, (50.0, 60.0), (0.1, 0.2))
-    ref = RunTrace("Capillary 1", "MadR", "reference", None, (50.5, 60.5), (0.3, 0.4))
+    trace = RunTrace("Position 2", "16:0-CoA", "sample", True, (50.0, 60.0), (0.1, 0.2))
+    ref = RunTrace("Position 1", "MadR", "reference", None, (50.5, 60.5), (0.3, 0.4))
     return RunReport(
         protocol="PRT-00219 HsaA/B binding",
         run_date=date(2026, 11, 13),
         status="approved",
         operator="Ada",
-        holder="Cassette, 24 capillaries",
+        holder="Holder of 24",
         notes=None,
         dose_unit="uM",
         windows=(window,),
@@ -201,7 +201,7 @@ def _report() -> RunReport:
         rows=rows,
         steps=(
             RunStep(
-                "Capillary 2",
+                "Position 2",
                 "16:0-CoA",
                 "Ratio 350/330",
                 62.8,
@@ -248,11 +248,11 @@ async def test_csv_is_the_results_table_alone(tmp_path: Path):
     rows = list(csv.reader(out.open(encoding="utf-8")))
     assert rows[0] == results_table(_report())[0]
     assert rows[0][7:10] == ["Main Tm (°C)", "Main ΔTm (°C)", "Main status"]
-    assert rows[2][:2] == ["Capillary 2", "16:0-CoA"] and rows[2][-2:] == ["Hit", "cloudy"]
+    assert rows[2][:2] == ["Position 2", "16:0-CoA"] and rows[2][-2:] == ["Hit", "cloudy"]
     assert "ChemCellar" not in out.read_text(encoding="utf-8")  # no branding in the records
 
 
-async def test_excel_holds_results_steps_and_each_capillarys_own_temperatures(tmp_path: Path):
+async def test_excel_holds_results_steps_and_each_positions_own_temperatures(tmp_path: Path):
     out = tmp_path / "run.xlsx"
     await render_run_report(_report(), ExportFormat.XLSX, out, OPTIONS)
     wb = load_workbook(out)
@@ -266,7 +266,7 @@ async def test_excel_holds_results_steps_and_each_capillarys_own_temperatures(tm
     assert wb["Results"]["A1"].value == "Position"
     assert wb["Steps"]["I2"].value == "Ada"
     traces = [[c.value for c in row] for row in wb["Ratio 350-330 measured"].iter_rows()]
-    assert traces[0] == ["Capillary 1 · MadR", None, "Capillary 2 · 16:0-CoA", None]
+    assert traces[0] == ["Position 1 · MadR", None, "Position 2 · 16:0-CoA", None]
     assert traces[2] == [50.5, 0.3, 50.0, 0.1]
     notes = [c.value for row in wb["Notes"].iter_rows() for c in row if c.value]
     assert notes[0] == "ChemCellar" and "By ada@lab.org" in notes

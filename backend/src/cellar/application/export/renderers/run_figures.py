@@ -15,7 +15,7 @@ _TICK = "#71717a"
 
 
 def traces_svg(report: RunReport) -> str | None:
-    """Every capillary's derivative of the analysis signal (the measured
+    """Every position's derivative of the analysis signal (the measured
     signal when there is none): references violet, hits blue, the rest grey,
     each window shaded with its reference Tm dashed."""
     signal = _analysis_signal(report)

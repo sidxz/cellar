@@ -121,7 +121,7 @@ async def test_a_run_export_renders_the_runs_report():
         run_date=date(2026, 11, 13),
         status="approved",
         operator=None,
-        holder="Cassette, 24 capillaries",
+        holder="Holder of 24",
         notes=None,
         dose_unit="uM",
         windows=(RunWindow("Main", "Ratio 350/330", 50, 85, 71.3, 1),),
@@ -129,7 +129,7 @@ async def test_a_run_export_renders_the_runs_report():
         rows=(
             RunRow(
                 uuid.uuid4(),
-                "Capillary 1",
+                "Position 1",
                 "MadR",
                 None,
                 None,
@@ -173,4 +173,4 @@ async def test_a_run_export_renders_the_runs_report():
     assert built == [job]
     assert job.status == ExportStatus.READY and job.row_count == 1
     uploaded = storage.upload.await_args.args[1].decode()
-    assert uploaded.splitlines()[1].startswith("Capillary 1,MadR")
+    assert uploaded.splitlines()[1].startswith("Position 1,MadR")
