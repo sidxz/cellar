@@ -80,7 +80,7 @@ make import-demo-data   # demo data
 make test
 ```
 
-Python is managed with `uv`, JavaScript with `pnpm`. The domain model, conventions and decisions are under [docs/](docs/).
+Python is managed with `uv`, JavaScript with `pnpm`. On macOS, PDF export needs Pango: `brew install pango`. The domain model, conventions and decisions are under [docs/](docs/).
 
 ## Related
 

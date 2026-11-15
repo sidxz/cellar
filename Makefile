@@ -21,6 +21,14 @@ endif
 BACKEND  := cd backend
 FRONTEND := cd frontend
 LOGDIR   := .logs
+# WeasyPrint (PDF export) loads Pango and GObject with dlopen. On macOS, uv's Python does not
+# search Homebrew's lib dir, and SIP strips DYLD_* from make and /bin/sh, so the path rides on
+# each command that can render a PDF. Needs `brew install pango`.
+ifeq ($(shell uname -s),Darwin)
+  UV := DYLD_FALLBACK_LIBRARY_PATH=$(shell brew --prefix 2>/dev/null)/lib:/usr/local/lib:/usr/lib uv
+else
+  UV := uv
+endif
 COMPOSE_INFRA := docker compose -f docker-compose.infra.yml
 COMPOSE_PROD  := docker compose -f docker-compose.infra.yml -f docker-compose.prod.yml $(if $(CLASSIFIER),-f docker-compose.classifier.yml)
 # Compose names built images <project>-<service>, reading COMPOSE_PROJECT_NAME from
@@ -70,10 +78,10 @@ dev: install stop migrate ## Install deps, stop old instances, run migrations, s
 	@lsof -ti:3000 | xargs kill 2>/dev/null || true
 	@sleep 1
 	@echo "Starting backend on :8000..."
-	@nohup sh -c 'eval "$$(scripts/build-info.sh backend | sed s/^/export\ APP_/)" && $(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
+	@nohup sh -c 'eval "$$(scripts/build-info.sh backend | sed s/^/export\ APP_/)" && $(BACKEND) && $(UV) run uvicorn cellar.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
 	@echo "Starting Temporal worker..."
-	@nohup sh -c '$(BACKEND) && uv run python -m cellar.infrastructure.temporal.worker' \
+	@nohup sh -c '$(BACKEND) && $(UV) run python -m cellar.infrastructure.temporal.worker' \
 		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
 	@echo "Starting frontend on :3000..."
 	@nohup sh -c 'eval "$$(scripts/build-info.sh frontend | sed s/^/export\ APP_/)" && $(FRONTEND) && pnpm dev' \
@@ -89,7 +97,7 @@ dev: install stop migrate ## Install deps, stop old instances, run migrations, s
 
 dev-be: ## Start backend only
 	@mkdir -p $(LOGDIR)
-	@nohup sh -c 'eval "$$(scripts/build-info.sh backend | sed s/^/export\ APP_/)" && $(BACKEND) && uv run uvicorn cellar.interface.app:app --reload --port 8000' \
+	@nohup sh -c 'eval "$$(scripts/build-info.sh backend | sed s/^/export\ APP_/)" && $(BACKEND) && $(UV) run uvicorn cellar.interface.app:app --reload --port 8000' \
 		> $(LOGDIR)/backend.log 2>&1 & echo "$$!" > $(LOGDIR)/backend.pid
 	@echo "Backend started on :8000 (PID $$(cat $(LOGDIR)/backend.pid))"
 
@@ -103,7 +111,7 @@ dev-worker: ## Start Temporal worker only (kills existing first)
 	@pkill -f "cellar.infrastructure.temporal.worker" 2>/dev/null || true
 	@sleep 1
 	@mkdir -p $(LOGDIR)
-	@nohup sh -c '$(BACKEND) && uv run python -m cellar.infrastructure.temporal.worker' \
+	@nohup sh -c '$(BACKEND) && $(UV) run python -m cellar.infrastructure.temporal.worker' \
 		> $(LOGDIR)/worker.log 2>&1 & echo "$$!" > $(LOGDIR)/worker.pid
 	@echo "Temporal worker started (PID $$(cat $(LOGDIR)/worker.pid))"
 
@@ -148,13 +156,13 @@ import-data: ## Import a bundle into this machine. Required: BUNDLE=<path>. Opti
 # ── Testing ────────────────────────────────────────────────────
 
 test: ## Run unit tests + import-linter
-	$(BACKEND) && uv run pytest tests/unit/ -v --tb=short && uv run lint-imports
+	$(BACKEND) && $(UV) run pytest tests/unit/ -v --tb=short && uv run lint-imports
 
 test-api: ## Run API tests (requires `make up`)
-	$(BACKEND) && uv run pytest tests/api/ -v --tb=short
+	$(BACKEND) && $(UV) run pytest tests/api/ -v --tb=short
 
 test-all: ## Run all tests
-	$(BACKEND) && uv run pytest -v --tb=short && uv run lint-imports
+	$(BACKEND) && $(UV) run pytest -v --tb=short && uv run lint-imports
 
 lint: ## Run import-linter only
 	$(BACKEND) && uv run lint-imports
