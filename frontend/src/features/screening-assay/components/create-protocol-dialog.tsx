@@ -45,10 +45,15 @@ import {
 import { Textarea } from "@/shared/components/ui/textarea";
 import { UnitPicker } from "@/shared/components/unit-picker";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ChevronDown, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Loader2, Plus, Sparkles, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Controller, useFieldArray, useForm } from "react-hook-form";
+import {
+  type ConditionSuggestion,
+  useMethodSuggestionsEnabled,
+  useSuggestFromMethod,
+} from "../hooks/use-method-suggestions";
 import { useProtocolFacetSlots } from "../hooks/use-protocol-facet-slots";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
@@ -99,6 +104,7 @@ import {
   siblingDiscriminatorsPayload,
 } from "./create-protocol/sibling-discriminators";
 import { StartsFrom } from "./create-protocol/starts-from";
+import { SuggestedConditions } from "./create-protocol/suggested-conditions";
 import { DiscriminatorInput } from "./discriminator-input";
 import { ProtocolCategoryInput } from "./protocol-category-input";
 import { ProtocolNamePreview, isPreviewSavable, useNameSlots } from "./protocol-name-preview";
@@ -172,6 +178,10 @@ export function CreateProtocolDialog({
   const [references, setReferences] = useState<ProtocolReference[]>([]);
   const [siblingValues, setSiblingValues] = useState<SiblingValues>({});
   const [showDiscriminator, setShowDiscriminator] = useState(false);
+  // What the method suggested (null: not asked). Shown for review, never added on its own.
+  const [suggested, setSuggested] = useState<ConditionSuggestion[] | null>(null);
+  const suggestionsOn = useMethodSuggestionsEnabled();
+  const suggest = useSuggestFromMethod();
 
   // ---- react-hook-form setup ----
 
@@ -222,6 +232,7 @@ export function CreateProtocolDialog({
     setReferences([]);
     setSiblingValues({});
     setShowDiscriminator(false);
+    setSuggested(null);
     setDraftKept(false);
   };
 
@@ -353,6 +364,25 @@ export function CreateProtocolDialog({
   const hasInvalidFixedValue = conditionValues.some(
     (cd) => cd.name.trim() && !isFixedValueValid(cd),
   );
+  const methodValue = form.watch("description");
+  // TanStack runs a mutate call's own callbacks for the latest call only: a slower earlier
+  // answer never replaces a newer one.
+  const suggestFromMethod = () =>
+    suggest.mutate(methodValue.trim(), { onSuccess: (r) => setSuggested(r.conditions) });
+  const listedConditions = new Set(conditionValues.map((cd) => cd.name.trim().toLowerCase()));
+  const openSuggestions = (suggested ?? []).filter(
+    (s) => !listedConditions.has(s.name.toLowerCase()),
+  );
+  const addSuggestion = (s: ConditionSuggestion) =>
+    appendCondition({
+      ...defaultCondition(),
+      name: s.name,
+      data_type: s.data_type,
+      unit: s.unit ?? "",
+    });
+  const dismissSuggestion = (s: ConditionSuggestion) =>
+    setSuggested((prev) => prev?.filter((x) => x.name !== s.name) ?? null);
+
   const canSubmit =
     validReadouts.length > 0 &&
     !hasEmptyPickList &&
@@ -532,9 +562,28 @@ export function CreateProtocolDialog({
               placeholder={METHOD_PLACEHOLDER}
               {...form.register("description")}
             />
-            <p className="text-xs text-muted-foreground">
-              How the assay is run, so a colleague can repeat it. You can refine it on the draft.
-            </p>
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-xs text-muted-foreground">
+                How the assay is run, so a colleague can repeat it. You can refine it on the draft.
+              </p>
+              {suggestionsOn && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  disabled={!methodValue.trim() || suggest.isPending}
+                  onClick={suggestFromMethod}
+                >
+                  {suggest.isPending ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="mr-2 h-4 w-4" />
+                  )}
+                  {suggest.isPending ? "Reading the method…" : "Suggest from method"}
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="grid gap-2">
@@ -554,6 +603,14 @@ export function CreateProtocolDialog({
               What each run records, so its runs can be told apart: concentrations, times,
               temperatures. Together they define the protocol.
             </p>
+            <SuggestedConditions
+              suggestions={openSuggestions}
+              onAdd={addSuggestion}
+              onDismiss={dismissSuggestion}
+            />
+            {suggested?.length === 0 && (
+              <p className="text-xs text-muted-foreground">Nothing to suggest from this method.</p>
+            )}
             {conditionFields.map((field, index) => (
               <div key={field.id} className="grid gap-2">
                 <div className="flex items-end gap-2">

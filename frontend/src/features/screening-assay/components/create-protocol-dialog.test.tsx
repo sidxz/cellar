@@ -42,6 +42,8 @@ const state = vi.hoisted(() => ({
   extraForms: [] as unknown[],
   draft: null as unknown,
   push: vi.fn(),
+  suggestionsOn: false,
+  suggest: vi.fn(),
 }));
 state.preview = incomplete;
 afterEach(() => {
@@ -50,6 +52,8 @@ afterEach(() => {
   state.extraForms = [];
   state.mutate.mockReset();
   state.push.mockReset();
+  state.suggestionsOn = false;
+  state.suggest.mockReset();
 });
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }));
 
@@ -73,6 +77,10 @@ vi.mock("@/shared/lib/api/custom-instance", () => ({
 vi.mock("../hooks/use-protocols", () => ({
   useCreateProtocol: () => ({ mutate: state.mutate, isPending: false }),
   useProtocols: () => ({ data: [] }),
+}));
+vi.mock("../hooks/use-method-suggestions", () => ({
+  useMethodSuggestionsEnabled: () => state.suggestionsOn,
+  useSuggestFromMethod: () => ({ mutate: state.suggest, isPending: false }),
 }));
 vi.mock("../hooks/use-targets", () => ({ useTargets: () => ({ data: [] }) }));
 vi.mock("../hooks/use-protocol-projects", () => ({
@@ -917,5 +925,84 @@ describe("CreateProtocolDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create Protocol" }));
     await waitFor(() => expect(state.push).toHaveBeenCalledWith("/assays/protocols/new-1"));
     expect(state.mutate.mock.calls[0][0]).toMatchObject({ description: method });
+  });
+
+  describe("suggestions from the method", () => {
+    const METHOD = "Buffer at pH 6.8.\n1. Preincubate 10 min at 25 °C.";
+    const FOUND = [
+      {
+        name: "pH",
+        data_type: "numeric",
+        unit: null,
+        evidence: [{ value: "6.8", quote: "Buffer at pH 6.8." }],
+      },
+      {
+        name: "Temperature",
+        data_type: "numeric",
+        unit: "°C",
+        evidence: [{ value: "25 °C", quote: "1. Preincubate 10 min at 25 °C." }],
+      },
+    ];
+    const askWith = (conditions: unknown[]) => {
+      state.suggestionsOn = true;
+      state.suggest.mockImplementation((_method, opts) => opts.onSuccess({ conditions }));
+    };
+    const writeAndAsk = () => {
+      fireEvent.change(screen.getByLabelText("Method"), { target: { value: `  ${METHOD}\n` } });
+      fireEvent.click(screen.getByRole("button", { name: "Suggest from method" }));
+    };
+
+    it("is off unless the deployment has a classifier", () => {
+      render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+      expect(screen.queryByRole("button", { name: "Suggest from method" })).not.toBeInTheDocument();
+    });
+
+    it("waits for a method", () => {
+      state.suggestionsOn = true;
+      render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+      expect(screen.getByRole("button", { name: "Suggest from method" })).toBeDisabled();
+    });
+
+    it("adds only what the person adds, as a definition without a fixed value", async () => {
+      state.preview = complete;
+      askWith(FOUND);
+      render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+      pickCategory("Enzyme inhibition");
+      writeAndAsk();
+      expect(state.suggest).toHaveBeenCalledWith(METHOD, expect.anything());
+      expect(screen.getByText("25 °C", { selector: "mark" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Add Temperature" }));
+      fireEvent.click(screen.getByRole("button", { name: "Dismiss pH" }));
+      expect(
+        screen.queryByRole("button", { name: /Add (pH|Temperature)/ }),
+      ).not.toBeInTheDocument();
+      const payload = await submit();
+      expect(payload.condition_definitions).toEqual([
+        { name: "Temperature", data_type: "numeric", unit: "°C" },
+      ]);
+    });
+
+    it("keeps an added suggestion when the category's form changes", async () => {
+      state.preview = complete;
+      askWith(FOUND);
+      render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+      pickCategory("Growth inhibition");
+      writeAndAsk();
+      fireEvent.click(screen.getByRole("button", { name: "Add pH" }));
+      pickCategory("Cytotoxicity");
+      const payload = await submit();
+      expect(payload.condition_definitions).toContainEqual({
+        name: "pH",
+        data_type: "numeric",
+        unit: null,
+      });
+    });
+
+    it("leaves out what is already listed, and says when nothing was found", () => {
+      askWith([]);
+      render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+      writeAndAsk();
+      expect(screen.getByText("Nothing to suggest from this method.")).toBeInTheDocument();
+    });
   });
 });
