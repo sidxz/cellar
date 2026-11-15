@@ -1,8 +1,8 @@
-"""Molecule structure PNG renderer for exports.
+"""Molecule structure renderer for exports.
 
-Wraps :class:`DepictionGenerator` to produce PNG bytes (not base64) at
-size presets that match ``reportConfig.imageSize``. Used by both XLSX
-(``openpyxl.drawing.image.Image``) and PDF (inline base64 data URI).
+PNG bytes for XLSX (``openpyxl.drawing.image.Image`` embeds only bitmaps) and
+SVG for the PDF, which stays vector and so sharp at any zoom or print size, at
+size presets that match ``reportConfig.imageSize``.
 
 Batches by SMILES — same SMILES across many rows renders once.
 """
@@ -43,15 +43,28 @@ def render_structure_pngs(
     drawn via ``rdMolDraw2D.MolDraw2DCairo`` which produces antialiased
     output suitable for embedding in spreadsheets and PDFs.
     """
+    return _draw(smiles_list, size, rdMolDraw2D.MolDraw2DCairo)
+
+
+def render_structure_svgs(
+    smiles_list: list[str | None],
+    *,
+    size: StructureSize | tuple[int, int] | None = None,
+) -> dict[str, str]:
+    """Render a batch of SMILES → ``{smiles: SVG text}``, as ``render_structure_pngs``."""
+    return _draw(smiles_list, size, rdMolDraw2D.MolDraw2DSVG)
+
+
+def _draw(smiles_list: list[str | None], size, drawer_class) -> dict:
     width, height = _resolve_size(size)
-    out: dict[str, bytes] = {}
+    out: dict = {}
     for smiles in smiles_list:
         if not smiles or smiles in out:
             continue
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             continue
-        drawer = rdMolDraw2D.MolDraw2DCairo(width, height)
+        drawer = drawer_class(width, height)
         drawer.DrawMolecule(mol)
         drawer.FinishDrawing()
         out[smiles] = drawer.GetDrawingText()

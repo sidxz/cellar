@@ -89,6 +89,7 @@ def test_cells_take_the_grids_decimals_figures_and_bounds():
 
 def test_the_report_keeps_header_case_and_names_who_exported_it():
     cols = [
+        ColumnSpec(key="structure", header="Structure", kind="image_structure"),
         ColumnSpec(key="reg", header="Reg #", kind="text"),
         ColumnSpec(
             key="drc:r:ic:50.0@cond:10 µM::value",
@@ -103,7 +104,12 @@ def test_the_report_keeps_header_case_and_names_who_exported_it():
     ]
     html = PdfRenderer().html(
         columns=cols,
-        rows=[ExportRow(cells={"reg": "CV-1", "drc:r:ic:50.0@cond:10 µM::value": 1.33})],
+        rows=[
+            ExportRow(
+                cells={"reg": "CV-1", "drc:r:ic:50.0@cond:10 µM::value": 1.33},
+                raw={"smiles": "CCO"},
+            )
+        ],
         options=RenderOptions(
             title="Search results",
             extras={
@@ -120,3 +126,5 @@ def test_the_report_keeps_header_case_and_names_who_exported_it():
     assert "PRT-1 InhA · by ATP" in html and "10 µM" in html  # protocol row, then its group
     assert "background: #3b6fb6" in html
     assert "1.330" in html
+    # Vector, so the structure stays sharp when the PDF is zoomed or printed.
+    assert "data:image/svg+xml" in html and "data:image/png" not in html

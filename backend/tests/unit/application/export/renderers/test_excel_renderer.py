@@ -145,7 +145,7 @@ async def test_excel_sparkline_uses_per_column_activity_lookup(tmp_path: Path):
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
     )
     with patch(
-        "cellar.application.export.renderers.sparkline.render_sparkline_png",
+        "cellar.application.export.renderers.sparkline.render_sparkline",
         return_value=_1x1_png,
     ) as mock_render:
         await ExcelRenderer().render(
@@ -156,12 +156,12 @@ async def test_excel_sparkline_uses_per_column_activity_lookup(tmp_path: Path):
             row_count_hint=1,
         )
 
-    # render_sparkline_png must have been called with the assembled snapshot,
+    # render_sparkline must have been called with the assembled snapshot,
     # NOT with None (which the old code always produced).
     mock_render.assert_called_once()
     called_snapshot = mock_render.call_args[0][0]
     assert called_snapshot is not None, (
-        "Bug #2: render_sparkline_png was called with None — activity lookup "
+        "Bug #2: render_sparkline was called with None — activity lookup "
         "used the wrong key (looked for 'curve_snapshot' on the activity dict "
         "instead of fetching the ActivityValue by parent token)"
     )

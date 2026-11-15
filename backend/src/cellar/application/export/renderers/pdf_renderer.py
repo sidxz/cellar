@@ -10,10 +10,10 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, select_autoescape
 
 from cellar.application.export.renderers.base import BRAND, LOGO_SVG, RenderOptions
-from cellar.application.export.renderers.sparkline import SIZE_PRESETS, column_plot_png
+from cellar.application.export.renderers.sparkline import SIZE_PRESETS, column_plot
 from cellar.application.export.renderers.structure import (
     STRUCTURE_SIZE_PRESETS,
-    render_structure_pngs,
+    render_structure_svgs,
 )
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow, group_spans
 
@@ -25,8 +25,10 @@ PDF_TEMPLATE_DIR = Path(__file__).parent / "pdf_template"
 _BOUND = re.compile(r"^([<>])\s*(-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)$")
 
 
-def _png_to_data_uri(png: bytes) -> str:
-    return "data:image/png;base64," + base64.b64encode(png).decode("ascii")
+def _svg_data_uri(svg: bytes | str) -> str:
+    """Structures and plots go in as SVG: vector, so sharp when zoomed or printed."""
+    data = svg.encode() if isinstance(svg, str) else svg
+    return "data:image/svg+xml;base64," + base64.b64encode(data).decode("ascii")
 
 
 def to_precision(x: float, p: int) -> str:
@@ -133,17 +135,16 @@ class PdfRenderer:
                     if smiles:
                         uri = structure_cache.get(smiles)
                         if uri is None:
-                            pngs = render_structure_pngs([smiles], size=struct_size)
-                            png = pngs.get(smiles)
-                            uri = _png_to_data_uri(png) if png else ""
+                            svg = render_structure_svgs([smiles], size=struct_size).get(smiles)
+                            uri = _svg_data_uri(svg) if svg else ""
                             structure_cache[smiles] = uri
                         if uri:
                             row_images["structure"] = uri
                 activity = (row.raw or {}).get("activity") or {}
                 for column in curve_columns:
-                    png = column_plot_png(column, activity, size=size_preset)
-                    if png:
-                        row_images[column.key] = _png_to_data_uri(png)
+                    svg = column_plot(column, activity, size=size_preset, fmt="svg")
+                    if svg:
+                        row_images[column.key] = _svg_data_uri(svg)
             rendered_rows.append({"row": row, "images": row_images})
 
         extras = options.extras or {}

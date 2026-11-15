@@ -11,7 +11,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from cellar.application.export.renderers.base import BRAND, LOGO_PNG, RenderOptions
-from cellar.application.export.renderers.sparkline import SIZE_PRESETS, column_plot_png
+from cellar.application.export.renderers.sparkline import SIZE_PRESETS, column_plot
 from cellar.application.export.renderers.structure import (
     STRUCTURE_SIZE_PRESETS,
     render_structure_pngs,
@@ -141,7 +141,7 @@ class ExcelRenderer:
                         # every group's curve on an overlay column.
                         activity = (row.raw.get("activity") or {}) if row.raw else {}
                         for ci in sparkline_col_indices:
-                            png = column_plot_png(columns[ci], activity, size=size_preset)
+                            png = column_plot(columns[ci], activity, size=size_preset)
                             if not png:
                                 continue
                             with NamedTemporaryFile(suffix=".png", delete=False) as tf:

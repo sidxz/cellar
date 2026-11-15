@@ -25,6 +25,8 @@ if TYPE_CHECKING:
     from cellar.application.export.row_streams.base import ColumnSpec
 
 SizePreset = Literal["small", "medium", "large"]
+# PNG for Excel, which embeds only bitmaps; SVG for the PDF, which keeps it vector.
+ImageFormat = Literal["png", "svg"]
 
 SIZE_PRESETS: dict[str, tuple[int, int]] = {
     "small": (240, 140),
@@ -113,7 +115,7 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
     curve_params, value (the fitted primary intercept), curve_class via
     curve_params, plus aggregate-mode extras (``additional_curves`` +
     ``aggregate``).  This helper maps those fields onto the snapshot
-    shape consumed by :func:`render_sparkline_png`.
+    shape consumed by :func:`render_sparkline`.
 
     Returns None when there is not enough shape information to render
     (e.g. a readout_data source, or a curve missing fit params).
@@ -152,12 +154,13 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
     }
 
 
-def render_sparkline_png(
+def render_sparkline(
     curve_snapshot: dict | None,
     *,
     size: SizePreset | tuple[int, int] | None = None,
+    fmt: ImageFormat = "png",
 ) -> bytes | None:
-    """Render a dose-response sparkline as PNG bytes.
+    """Render a dose-response sparkline as PNG or SVG bytes.
 
     ``curve_snapshot`` shape (built by ``_av_to_sparkline_snapshot`` in the
     XLSX renderer or directly from a ``CurveSnapshot`` in the PDF renderer):
@@ -180,13 +183,14 @@ def render_sparkline_png(
         return None
     fig, ax = _figure(size, *_xrange_for(curve_snapshot))
     _draw_curve(ax, curve_snapshot)
-    return _png(fig)
+    return _save(fig, fmt)
 
 
-def render_overlay_png(
+def render_overlay(
     snapshots: list[dict | None],
     *,
     size: SizePreset | tuple[int, int] | None = None,
+    fmt: ImageFormat = "png",
 ) -> bytes | None:
     """Every split group's curve on one axis, curve ``i`` in ``OVERLAY_COLORS[i]``
     (the colour on its group's header), so a group with no curve keeps its slot.
@@ -198,24 +202,27 @@ def render_overlay_png(
     fig, ax = _figure(size, min(r[0] for r in ranges), max(r[1] for r in ranges))
     for i, snapshot in drawn:
         _draw_curve(ax, snapshot, color=OVERLAY_COLORS[i % MAX_OVERLAY_CURVES])
-    return _png(fig)
+    return _save(fig, fmt)
 
 
-def column_plot_png(
+def column_plot(
     column: ColumnSpec,
     activity: dict,
     *,
     size: SizePreset | tuple[int, int] | None = None,
+    fmt: ImageFormat = "png",
 ) -> bytes | None:
     """The plot an ``image_curve`` column shows for one row's activity: an
     overlay of each group's curve, or the one curve of ``drc:<rd>[@group]``."""
     if column.overlay_of:
-        return render_overlay_png(
+        return render_overlay(
             [av_to_sparkline_snapshot(activity.get(key)) for key in column.overlay_of],
             size=size,
+            fmt=fmt,
         )
     parent_token = column.key.rsplit("::", 1)[0]
-    return render_sparkline_png(av_to_sparkline_snapshot(activity.get(parent_token)), size=size)
+    snapshot = av_to_sparkline_snapshot(activity.get(parent_token))
+    return render_sparkline(snapshot, size=size, fmt=fmt)
 
 
 def _drawable(curve_snapshot: dict | None) -> bool:
@@ -347,11 +354,11 @@ def _draw_curve(ax, curve_snapshot: dict, *, color: str | None = None) -> None:
             )
 
 
-def _png(fig) -> bytes:
+def _save(fig, fmt: ImageFormat) -> bytes:
     import matplotlib.pyplot as plt
 
     fig.tight_layout(pad=0.3)
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", pad_inches=0.06, facecolor="white")
+    fig.savefig(buf, format=fmt, bbox_inches="tight", pad_inches=0.06, facecolor="white")
     plt.close(fig)
     return buf.getvalue()
