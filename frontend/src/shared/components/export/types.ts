@@ -1,5 +1,7 @@
+export type { ExportSource } from "@/shared/lib/api/model";
+import type { ExportSource } from "@/shared/lib/api/model";
+
 export type ExportFormat = "csv" | "sdf" | "xlsx" | "pdf";
-export type ExportSource = "search";
 export type ExportStatus =
   | "pending"
   | "running"

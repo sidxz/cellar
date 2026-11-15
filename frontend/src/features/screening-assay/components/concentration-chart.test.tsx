@@ -64,7 +64,8 @@ describe("ConcentrationChart", () => {
     expect(last().layout.xaxis.title.text).toContain("µM");
     expect(last().layout.yaxis.title.text).toBe("ΔTm (°C)");
     expect(last().layout.height).toBe(260);
-    expect(last().config).toEqual({ displayModeBar: false, responsive: true });
+    const [[save]] = last().config.modeBarButtons as { name: string }[][];
+    expect(save.name).toBe("Save as SVG");
     expect(last().layout.shapes[0]).toMatchObject({ y0: -2, y1: 2 });
     // Labels at the left end, the band's below it and the zero line's above;
     // nothing at the right edge, where the highest dose sits.

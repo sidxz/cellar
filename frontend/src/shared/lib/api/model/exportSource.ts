@@ -10,4 +10,5 @@ export type ExportSource = typeof ExportSource[keyof typeof ExportSource];
 
 export const ExportSource = {
   search: 'search',
+  run: 'run',
 } as const;

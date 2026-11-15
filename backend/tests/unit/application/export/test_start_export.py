@@ -147,3 +147,34 @@ async def test_start_keeps_who_asked_for_the_file():
         auth=_Auth(workspace_id=workspace, user_id=user),
     )
     assert repo.save.await_args.args[0].requested_by_email == "ada@lab.org"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("fmt", "payload", "refused"),
+    [
+        (ExportFormat.PDF, {"run_id": str(uuid.uuid4())}, None),
+        (ExportFormat.XLSX, {}, "needs the run's id"),
+        (ExportFormat.SDF, {"run_id": str(uuid.uuid4())}, "Excel, CSV or PDF"),
+    ],
+)
+async def test_a_run_export_names_its_run_and_skips_sdf(fmt, payload, refused):
+    workspace, user = uuid.uuid4(), uuid.uuid4()
+    repo = MagicMock()
+    repo.save = AsyncMock()
+    orch = MagicMock()
+    orch.start = AsyncMock(return_value="wf-1")
+    result = await StartExport(_make_uow(), repo, orch, _dispatcher())(
+        StartExportCommand(
+            workspace_id=workspace,
+            requested_by=user,
+            source=ExportSource.RUN,
+            format=fmt,
+            payload=payload,
+        ),
+        auth=_Auth(workspace_id=workspace, user_id=user),
+    )
+    if refused is None:
+        assert isinstance(result, Success)
+    else:
+        assert isinstance(result, Failure) and refused in str(result.failure())

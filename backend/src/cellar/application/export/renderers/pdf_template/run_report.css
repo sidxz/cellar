@@ -1,0 +1,30 @@
+/* The run report, on top of search_report.css (page, header, footer, table). */
+
+h2 {
+  font-size: 11px;
+  font-weight: 600;
+  margin: 1.2em 0 0.4em;
+  color: #18181b;
+}
+
+.run-details ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  columns: 2;
+  font-size: 9px;
+  color: #3f3f46;
+  line-height: 1.5;
+}
+
+.figure { page-break-inside: avoid; }
+.figure img { display: block; width: 100%; height: auto; }
+/* A sample per line: at full width a long list would outrun the page. */
+.figure.shift img { width: 58%; }
+.figure .caption { font-size: 8px; color: #71717a; margin: 0.2em 0 0; }
+
+table.results, table.steps { table-layout: auto; }
+table.results td.status { font-size: 8px; color: #52525b; }
+table.results tr.reference td { background: #f5f3ff; }
+table.results tr.hit td { font-weight: 600; }
+table.steps td { font-size: 8px; }

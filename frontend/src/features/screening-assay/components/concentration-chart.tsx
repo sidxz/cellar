@@ -5,7 +5,7 @@ import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
 import type { Band } from "../lib/melt-hits";
 import type { SeriesPoint } from "../lib/melt-results";
-import { GRID, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
+import { GRID, saveAsSvg, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
 /** ΔTm against dose for one batch: a dose-dependent shift rises, then plateaus.
  *  Points whose step is not reviewed yet are drawn hollow. */
@@ -109,7 +109,7 @@ export function ConcentrationChart({
           shapes,
           annotations,
         }}
-        config={{ displayModeBar: false, responsive: true }}
+        config={saveAsSvg("shift-by-concentration")}
         style={{ width: "100%" }}
         onClick={(event) => {
           const id = (event as { points: { customdata?: unknown }[] }).points[0]?.customdata;

@@ -178,7 +178,7 @@ class ExcelRenderer:
             # The Data sheet holds only the records; where they came from and
             # who took them sits apart, on Notes and in the file's properties.
             notes = wb.create_sheet("Notes")
-            _write_notes(notes, options, rows_written)
+            write_notes(notes, options, rows_written)
             if not embed_images and row_count_hint > SPARKLINE_ROW_CAP:
                 notes.append(
                     [
@@ -200,7 +200,7 @@ class ExcelRenderer:
                     os.unlink(p)
 
 
-def _write_notes(ws, options: RenderOptions, rows_written: int) -> None:
+def write_notes(ws, options: RenderOptions, rows_written: int) -> None:
     """The ChemCellar mark, then what was exported, when and by whom."""
     ws.row_dimensions[1].height = 30
     ws.column_dimensions["A"].width = 6

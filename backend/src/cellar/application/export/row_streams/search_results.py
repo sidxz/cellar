@@ -88,7 +88,7 @@ class SearchResultsRowStream:
             sort_dir=self.payload.get("sort_dir"),
         )
         result = await self.execute_search(
-            cmd, auth=_AuthShim(self.workspace_id, self.requested_by)
+            cmd, auth=ExportAuth(self.workspace_id, self.requested_by)
         )
         if not isinstance(result, Success):
             raise RuntimeError(f"search execution failed: {result.failure()}")
@@ -624,7 +624,7 @@ def _parse_uuid(value: Any) -> uuid.UUID | None:
     return uuid.UUID(str(value))
 
 
-class _AuthShim:
+class ExportAuth:
     """Minimal AuthContext stand-in for re-running ExecuteSearch in a worker context.
 
     ``require_same_workspace`` only reads ``.workspace_id``.

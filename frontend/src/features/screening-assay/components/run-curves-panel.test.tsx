@@ -37,6 +37,29 @@ vi.mock("@/shared/components/data-grid/data-grid", async () => ({
 
 const canEdit = { value: true };
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => canEdit.value }));
+// The run's export: the toolbar stands in as one button that builds a PDF request.
+const exported: { formats?: readonly string[]; request?: unknown }[] = [];
+vi.mock("@/shared/components/export/export-toolbar", () => ({
+  ExportToolbar: ({
+    formats,
+    buildRequest,
+  }: {
+    formats?: readonly string[];
+    buildRequest: (f: string) => unknown;
+  }) => (
+    <button type="button" onClick={() => exported.push({ formats, request: buildRequest("pdf") })}>
+      Export
+    </button>
+  ),
+}));
+vi.mock("@/shared/hooks/use-workspace-members", () => ({
+  useWorkspaceMembers: () => ({
+    data: [
+      { user_id: "u1", name: "Ada Lovelace", email: "ada@lab.org" },
+      { user_id: "u2", name: "", email: "grace@lab.org" },
+    ],
+  }),
+}));
 vi.mock("./edit-labelling-dialog", () => ({
   EditLabellingDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="edit-labelling">edit labelling dialog</div> : null,
@@ -100,6 +123,8 @@ const curves: RunCurves = {
 const RUN = {
   id: "r1",
   protocol_id: "p1",
+  run_date: "2026-11-13",
+  operator: "u1",
   status: "draft",
   is_locked: false,
   hit_criteria: null,
@@ -425,6 +450,30 @@ describe("RunCurvesPanel", () => {
   });
 
   describe("with the results", () => {
+    it("exports the run as Excel, CSV or PDF with the names it shows", () => {
+      withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
+      if (melting.data) {
+        melting.data.steps = [
+          { changed_by: "u2" } as MeltingAnalysis["steps"][number],
+          { changed_by: null } as MeltingAnalysis["steps"][number],
+        ];
+      }
+      exported.length = 0;
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(screen.getByRole("button", { name: "Export" }));
+      expect(exported).toEqual([
+        {
+          formats: ["xlsx", "csv", "pdf"],
+          request: {
+            source: "run",
+            format: "pdf",
+            filename_hint: expect.stringMatching(/^run-.+-2026-11-13$/),
+            payload: { run_id: "r1", people: { u1: "Ada Lovelace", u2: "grace@lab.org" } },
+          },
+        },
+      ]);
+    });
+
     it("selects the first position needing review on load", () => {
       withAnalysis({
         w2: { tm: 59, delta_tm: -1 },
