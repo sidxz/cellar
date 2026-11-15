@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 
 from lagom import Container
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -14,10 +15,16 @@ from cellar.application.export.orchestration import ExportOrchestrator
 from cellar.application.export.prepare_export_download import PrepareExportDownload
 from cellar.application.export.purge_expired_exports import PurgeExpiredExports
 from cellar.application.export.render_export import RenderExport
-from cellar.application.export.row_streams.search_results import SearchResultsRowStream
+from cellar.application.export.row_streams.search_results import (
+    ExportAuth,
+    SearchResultsRowStream,
+)
+from cellar.application.export.run_report import BuildRunReport, RunReport
 from cellar.application.export.start_export import StartExport
 from cellar.application.research_organization.execute_search import ExecuteSearch
+from cellar.application.screening.get_melting_analysis import GetMeltingAnalysis
 from cellar.application.screening.get_protocol import ListProtocols, ListProtocolsQuery
+from cellar.application.screening.get_run_curves import GetRunCurves
 from cellar.domain.export.repository import ExportJobRepository
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.export.export_job_repository import (
@@ -25,6 +32,9 @@ from cellar.infrastructure.persistence.sqlalchemy.export.export_job_repository i
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository import (
+    SQLAlchemyRunRepository,
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.storage.fsspec_client import FsspecStorageClient
@@ -75,12 +85,34 @@ def register_export(container: Container) -> None:
                 format=job.format.value,
             )
 
+        async def _build_run_report(job) -> RunReport:  # type: ignore[no-untyped-def]
+            # Built from the queries the Traces tab reads; the page sends the
+            # names it shows (operator, step reviewers), which the worker can't
+            # look up without the person's sign-in.
+            payload = job.query_snapshot or {}
+            r_uow = AsyncUnitOfWork(session_factory)
+            build = BuildRunReport(
+                uow=r_uow,
+                run_repo=SQLAlchemyRunRepository(r_uow),
+                protocol_repo=SQLAlchemyProtocolRepository(r_uow),
+                get_analysis=c[GetMeltingAnalysis],
+                get_curves=c[GetRunCurves],
+            )
+            people = payload.get("people")
+            return await build(
+                workspace_id=job.workspace_id,
+                run_id=uuid.UUID(str(payload["run_id"])),
+                people=people if isinstance(people, dict) else {},
+                auth=ExportAuth(job.workspace_id, job.requested_by),
+            )
+
         return RenderExport(
             uow=uow,
             repo=repo,
             storage=storage,
             build_search_stream=_build_search_stream,
             dispatcher=c[EventDispatcher],
+            build_run_report=_build_run_report,
         )
 
     container.define(RenderExport, _render_export)

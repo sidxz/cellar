@@ -37,4 +37,5 @@ class ExportStatus(StrEnum):
 
 class ExportSource(StrEnum):
     SEARCH = "search"
-    # Future: RUNS, BATCHES, ACTIVITY, COLLECTION, ELN
+    RUN = "run"  # a run's results, steps and traces (the Traces tab)
+    # Future: BATCHES, ACTIVITY, COLLECTION, ELN

@@ -62,7 +62,14 @@ class StartExport:
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, cmd.workspace_id)
 
-        if cmd.source != ExportSource.SEARCH:
+        if cmd.source == ExportSource.RUN:
+            if cmd.format == ExportFormat.SDF:
+                return Failure(ValidationError("A run exports as Excel, CSV or PDF"))
+            try:
+                uuid.UUID(str(cmd.payload.get("run_id")))
+            except ValueError:
+                return Failure(ValidationError("A run export needs the run's id"))
+        elif cmd.source != ExportSource.SEARCH:
             return Failure(ValidationError(f"Unsupported export source: {cmd.source}"))
 
         job = ExportJob.create(

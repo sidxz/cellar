@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{ brand }} · {{ title }}</title>
+  {%- if extras.exported_by %}
+  <meta name="author" content="{{ extras.exported_by }}">
+  {%- endif %}
+  <meta name="generator" content="{{ brand }}">
+</head>
+<body>
+  <div class="page-footer">{{ attribution }}</div>
+
+  <header class="report-header">
+    <div class="brand-row">
+      <div class="brand">
+        <img class="logo" src="{{ logo_src }}" alt="">
+        <span class="wordmark">{{ brand }}</span>
+      </div>
+      <div class="report-meta">
+        {%- if extras.exported_at %}<span class="meta-row">Exported {{ extras.exported_at }}</span>{%- endif %}
+        {%- if extras.exported_by %}<span class="meta-row">by {{ extras.exported_by }}</span>{%- endif %}
+      </div>
+    </div>
+    <div class="report-title-row">
+      <h1>{{ title }}</h1>
+      <div class="report-meta">
+        <span class="meta-row">{{ report.rows | length }} positions</span>
+        <span class="meta-row">{{ report.status | capitalize }}</span>
+      </div>
+    </div>
+    <p class="query-summary">{{ report.summary }}</p>
+  </header>
+
+  <section class="run-details">
+    <ul>
+      {%- for line in details %}<li>{{ line }}</li>{%- endfor %}
+    </ul>
+  </section>
+
+  {%- if traces %}
+  <section class="figure">
+    <h2>Traces</h2>
+    <img src="{{ traces }}" alt="traces">
+    <p class="caption">Reference violet, hits blue, other positions grey; windows shaded, reference Tm dashed.</p>
+  </section>
+  {%- endif %}
+
+  <section>
+    <h2>Results</h2>
+    <table class="results">
+      <thead>
+        {%- if report.windows %}
+        <tr class="group-row">
+          <th colspan="4" class="group-spacer"></th>
+          {%- for w in report.windows %}
+          <th colspan="3" class="group-header">{{ w.name }} · {{ w.low | num }}–{{ w.high | num }} °C</th>
+          {%- endfor %}
+          <th class="group-spacer"></th>
+        </tr>
+        {%- endif %}
+        <tr>
+          <th>Position</th><th>Sample</th><th>Batch</th><th>Conc. <span class="unit">({{ report.dose_unit }})</span></th>
+          {%- for w in report.windows %}
+          <th>Tm <span class="unit">(°C)</span></th><th>ΔTm <span class="unit">(°C)</span></th><th>Status</th>
+          {%- endfor %}
+          <th>Hit</th>
+        </tr>
+      </thead>
+      <tbody>
+        {%- for r in report.rows %}
+        <tr class="{{ 'hit' if r.hit else '' }} {{ 'reference' if r.role == 'reference' else '' }}">
+          <td class="cell-id">{{ r.position }}</td>
+          <td class="cell-id">{{ r.sample }}{% if r.label and r.label != r.sample %} <span class="muted">{{ r.label }}</span>{% endif %}</td>
+          <td>{{ r.batch or "" }}</td>
+          <td class="cell-number">{{ r.concentration | num }}</td>
+          {%- for w in report.windows %}
+            {%- set c = r.cells.get(w.name) %}
+            <td class="cell-number">{{ c.tm | tm if c else "—" }}</td>
+            <td class="cell-number">{{ c.delta_tm | delta if c else "—" }}</td>
+            <td class="status">{{ c.status if c else "" }}</td>
+          {%- endfor %}
+          <td>{{ hit_text[r.hit] }}</td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </section>
+
+  {%- for w, svg in shifts if svg %}
+  <section class="figure shift">
+    <h2>Shift plot · {{ w.name }}</h2>
+    <img src="{{ svg }}" alt="shift plot {{ w.name }}">
+    <p class="caption">ΔTm against the reference; a hit is blue up or red down{% if w.band %}, the rule's band shaded{% elif w.line is not none %}, the rule's line dashed{% endif %}.</p>
+  </section>
+  {%- endfor %}
+
+  {%- if steps %}
+  <section>
+    <h2>Melting steps</h2>
+    <table class="steps">
+      <thead>
+        <tr><th>Position</th><th>Sample</th><th>Signal</th><th>Step <span class="unit">(°C)</span></th><th>Source</th><th>Status</th><th>Instrument <span class="unit">(°C)</span></th><th>Reason</th><th>Changed by</th><th>Changed <span class="unit">(UTC)</span></th></tr>
+      </thead>
+      <tbody>
+        {%- for s in steps %}
+        <tr>
+          <td class="cell-id">{{ s[0] }}</td><td class="cell-id">{{ s[1] }}</td><td>{{ s[2] }}</td>
+          <td class="cell-number">{{ s[3] | tm }}</td><td>{{ s[4] }}</td><td>{{ s[5] }}</td>
+          <td class="cell-number">{{ s[6] | tm }}</td><td>{{ s[7] or "" }}</td><td>{{ s[8] or "" }}</td><td>{{ s[9] or "" }}</td>
+        </tr>
+        {%- endfor %}
+      </tbody>
+    </table>
+  </section>
+  {%- endif %}
+</body>
+</html>
