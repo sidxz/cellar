@@ -7,10 +7,15 @@
     color: #999;
   }
   @bottom-left {
-    content: "Cellar export";
-    font-size: 8px;
-    color: #999;
+    content: element(pageFooter);
   }
+}
+
+/* "ChemCellar export · <when> · <who>" on every page (WeasyPrint running element). */
+.page-footer {
+  position: running(pageFooter);
+  font-size: 8px;
+  color: #999;
 }
 
 * { box-sizing: border-box; }
@@ -30,11 +35,17 @@ body {
   margin-bottom: 0.7em;
 }
 
+.brand-row,
 .report-title-row {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
 }
+
+.brand-row { align-items: center; margin-bottom: 0.4em; }
+.brand { display: flex; align-items: center; gap: 5px; }
+.brand .logo { width: 18px; height: 18px; }
+.brand .wordmark { font-size: 13px; font-weight: 700; color: #18181b; letter-spacing: -0.2px; }
 
 .report-header h1 {
   font-size: 16px;
@@ -49,6 +60,8 @@ body {
   font-size: 9px;
   color: #71717a;
 }
+
+.report-meta .meta-row { white-space: nowrap; }
 
 .query-summary {
   margin: 0.3em 0 0 0;
@@ -90,14 +103,13 @@ th {
   font-weight: 600;
   font-size: 8.5px;
   color: #3f3f46;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  /* No uppercase: it turns "10 µM" into "10 ΜM" and "Tm" into "TM". A long
+     word breaks at a hyphenation point, not mid-syllable. */
+  hyphens: auto;
 }
 
 th .unit {
   font-weight: 400;
-  text-transform: none;
-  letter-spacing: 0;
   color: #71717a;
 }
 
@@ -109,9 +121,17 @@ th .unit {
   background: #f4f4f5;
   color: hsl(220, 80%, 35%);
   border-bottom: 2px solid #d4d4d8;
-  letter-spacing: 0.3px;
   text-align: center;
   padding: 4px 4px;
+}
+
+.group-row th.group-header .swatch {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
 }
 
 .group-row th.group-spacer {
@@ -156,6 +176,8 @@ td { font-size: 9px; line-height: 1.3; }
 
 .muted { color: #a1a1aa; }
 
+.cell-id { white-space: nowrap; }
+
 /* ─── Per-kind column widths ─────────────────────────────────── */
 /* table-layout: fixed honors these proportionally to the table width.
    Tunes the relative widths so structure + chart get the most space. */
@@ -163,5 +185,6 @@ td { font-size: 9px; line-height: 1.3; }
 .col-image_curve     { width: 14%; }
 .col-smiles          { width: 14%; }
 .col-text            { width: 6%; }
+.col-id              { width: 8%; }
 .col-number          { width: 5%; }
 .col-qualifier       { width: 3%; }

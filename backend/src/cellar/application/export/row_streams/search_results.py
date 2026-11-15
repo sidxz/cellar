@@ -9,6 +9,7 @@ from typing import Any
 
 from returns.result import Success
 
+from cellar.application.export.renderers.sparkline import MAX_OVERLAY_CURVES, OVERLAY_COLORS
 from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
 from cellar.application.research_organization.execute_search import (
     ExecuteSearch,
@@ -136,23 +137,27 @@ class SearchResultsRowStream:
 # ---------------------------------------------------------------------------
 
 
-# Property column id → (header, kind). The default set matches the FE
-# ReportConfig.visibleFields.properties default (Lipinski + Veber).
-# Keys are ``ComputedDescriptors`` fields — the same ids the FE customizer
-# (report-customizer.tsx PROPERTY_FIELDS) and grid use.
-_PROPERTY_COLUMNS: dict[str, tuple[str, str]] = {
-    "molecular_weight": ("MW", "number"),
-    "logp": ("LogP", "number"),
-    "tpsa": ("TPSA", "number"),
-    "hbd": ("HBD", "number"),
-    "hba": ("HBA", "number"),
-    "rotatable_bonds": ("RotB", "number"),
-    "heavy_atom_count": ("Heavy Atoms", "number"),
-    "aromatic_rings": ("Aromatic Rings", "number"),
-    "ring_count": ("Rings", "number"),
-    "ro5_violations": ("Ro5 Violations", "number"),
-    "molecular_formula": ("Formula", "text"),
+# Property column id → (header, kind, decimals). Keys are ``ComputedDescriptors``
+# fields — the same ids the FE customizer (report-customizer.tsx PROPERTY_FIELDS)
+# and grid use. Listed in the grid's display order with the grid's decimals
+# (results-grid.tsx PROPERTY_COLUMNS); headers stay spelled out, since CSV
+# consumers read columns by name.
+_PROPERTY_COLUMNS: dict[str, tuple[str, str, int | None]] = {
+    "molecular_weight": ("MW", "number", 1),
+    "logp": ("LogP", "number", 2),
+    "tpsa": ("TPSA", "number", 1),
+    "hbd": ("HBD", "number", None),
+    "hba": ("HBA", "number", None),
+    "rotatable_bonds": ("RotB", "number", None),
+    "heavy_atom_count": ("Heavy Atoms", "number", None),
+    "aromatic_rings": ("Aromatic Rings", "number", None),
+    "ring_count": ("Rings", "number", None),
+    "ro5_violations": ("Ro5 Violations", "number", None),
+    "molecular_formula": ("Formula", "text", None),
 }
+
+# The grid's value cells read ``value.toPrecision(4)``.
+_VALUE_PRECISION = 4
 
 _NORMALIZATION_LABELS: dict[str | None, str] = {
     "percent_inhibition": "% Inhibition",
@@ -233,33 +238,100 @@ def _build_columns(
             base.append(ColumnSpec(key="smiles", header="SMILES", kind="smiles"))
         if "inchi_key" in structure_fields:
             base.append(ColumnSpec(key="inchi_key", header="InChIKey", kind="text"))
-        for prop_id in fields.get("properties") or []:
-            spec = _PROPERTY_COLUMNS.get(prop_id)
-            if spec:
-                base.append(ColumnSpec(key=prop_id, header=spec[0], kind=spec[1]))  # type: ignore[arg-type]
+        wanted = set(fields.get("properties") or [])
+        for prop_id, (header, kind, digits) in _PROPERTY_COLUMNS.items():
+            if prop_id in wanted:
+                base.append(ColumnSpec(key=prop_id, header=header, kind=kind, digits=digits))  # type: ignore[arg-type]
 
-    # Activity columns — one per protocol_column token. DR tokens expand
-    # to one *value* column per intercept (header = label, group = protocol
-    # name) plus one Plot column per readout.
+    # The grid's display settings (use-report-config.ts shownPlotLayout):
+    # Compact hides every plot; Overlay applies in Detailed only.
+    config = report_config if isinstance(report_config, dict) else {}
+    show_plots = config.get("displayPreset", "detailed") != "compact"
+    overlay = show_plots and config.get("plotLayout") == "overlay"
+
+    # Activity columns. DR tokens expand to one *value* column per intercept
+    # (header = label, group = protocol name) plus one Plot column per readout.
+    # A protocol's columns sit together, as in the grid.
     by_id = {str(p.id): p for p in protocols}
-    for col_token in protocol_cols:
-        specs = _expand_protocol_column(col_token, by_id)
-        split = (column_groups or {}).get(_owning_protocol_id(col_token, by_id) or "")
+    for proto_id, tokens in _by_protocol(protocol_cols, by_id):
+        specs = [spec for token in tokens for spec in _expand_protocol_column(token, by_id)]
+        if not show_plots:
+            specs = [s for s in specs if s.kind != "image_curve"]
+        split = (column_groups or {}).get(proto_id or "")
         if split is None:
             base.extend(specs)
             continue
-        # A split protocol repeats its columns once per group, side by side;
-        # the group header names the group ("EGFR · 10 µM").
-        for group in split["groups"]:
+        # A split protocol repeats its columns once per group, side by side,
+        # under the protocol's header ("EGFR · by ATP") and the group's ("10 µM").
+        # Overlaid, each group drops its own plot for one plot per readout after
+        # the groups, every group's curve in the colour its header carries.
+        groups = split["groups"]
+        by = split["split"]
+        protocol = f"by {by['condition']}" if by.get("by") == "condition" else "by run"
+        specs = [replace(s, group=" · ".join(p for p in (s.group, protocol) if p)) for s in specs]
+        plots = [s for s in specs if s.kind == "image_curve"]
+        overlaid = overlay and bool(plots) and 0 < len(groups) <= MAX_OVERLAY_CURVES
+        for i, group in enumerate(groups):
             base.extend(
                 replace(
                     spec,
                     key=_group_key(spec.key, group["key"]),
-                    group=f"{spec.group} · {group['label']}" if spec.group else group["label"],
+                    subgroup=_group_header(group),
+                    group_color=OVERLAY_COLORS[i] if overlaid else None,
                 )
                 for spec in specs
+                if not (overlaid and spec.kind == "image_curve")
+            )
+        if overlaid:
+            base.extend(
+                _overlay_plot(plot, groups, by_id, several=len(plots) > 1) for plot in plots
             )
     return base
+
+
+def _group_header(group: dict) -> str:
+    """A split group's label, marked when its run was rejected (the grid's
+    groupHeader without the run count, which a CSV column name shouldn't carry)."""
+    return (
+        f"{group['label']} (rejected)"
+        if "rejected" in (group.get("flags") or [])
+        else group["label"]
+    )
+
+
+def _by_protocol(tokens: list[str], by_id: dict[str, Any]) -> list[tuple[str | None, list[str]]]:
+    """Tokens grouped by their protocol in first-seen order; a token with no
+    protocol (``any``) stands alone."""
+    grouped: dict[str, tuple[str | None, list[str]]] = {}
+    for token in tokens:
+        proto_id = _owning_protocol_id(token, by_id)
+        grouped.setdefault(proto_id or token, (proto_id, []))[1].append(token)
+    return list(grouped.values())
+
+
+def _overlay_plot(
+    plot: ColumnSpec, groups: list[dict], by_id: dict, *, several: bool
+) -> ColumnSpec:
+    """One plot of every group's curve for a DR readout (results-grid.tsx
+    buildOverlayPlotColumns): "Plot", or "Plot · <readout>" when the protocol
+    shows several."""
+    parent = plot.key.rsplit("::", 1)[0]  # drc:<rd_id>
+    rd_id = parent.split(":")[1]
+    name = next(
+        (
+            r.name
+            for p in by_id.values()
+            for r in (p.readout_definitions or [])
+            if str(r.id) == rd_id
+        ),
+        None,
+    )
+    return replace(
+        plot,
+        key=f"{parent}::overlay",
+        header=f"Plot · {name}" if several and name else "Plot",
+        overlay_of=tuple(f"{parent}@{g['key']}" for g in groups),
+    )
 
 
 def _owning_protocol_id(token: str, by_id: dict[str, Any]) -> str | None:
@@ -331,6 +403,7 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                 unit=None if normalization else getattr(rd, "unit", None),
                 group=group_label,
                 group_code=proto_code,
+                precision=_VALUE_PRECISION,
             )
         ]
     if parts[0] == "drc":
@@ -389,6 +462,7 @@ def _expand_protocol_column(token: str, by_id: dict) -> list[ColumnSpec]:
                     unit=str(proto.dose_unit) if proto else getattr(rd, "unit", None),
                     group=group_label,
                     group_code=proto_code,
+                    precision=_VALUE_PRECISION,
                 )
             )
         # One Plot column per readout-def — matches the frontend grid.

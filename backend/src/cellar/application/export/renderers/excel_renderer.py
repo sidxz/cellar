@@ -10,39 +10,15 @@ from openpyxl.drawing.image import Image as XLImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from cellar.application.export.renderers.base import RenderOptions
-from cellar.application.export.renderers.sparkline import (
-    SIZE_PRESETS,
-    av_to_sparkline_snapshot,
-    render_sparkline_png,
-)
+from cellar.application.export.renderers.base import BRAND, LOGO_PNG, RenderOptions
+from cellar.application.export.renderers.sparkline import SIZE_PRESETS, column_plot_png
 from cellar.application.export.renderers.structure import (
     STRUCTURE_SIZE_PRESETS,
     render_structure_pngs,
 )
-from cellar.application.export.row_streams.base import ColumnSpec, ExportRow
+from cellar.application.export.row_streams.base import ColumnSpec, ExportRow, group_spans
 
 SPARKLINE_ROW_CAP = 5000
-
-
-def _group_spans(columns: list[ColumnSpec]) -> list[tuple[int, int, str | None]]:
-    """Compute consecutive-column spans by ColumnSpec.group.
-
-    Returns a list of (start_index, end_index_inclusive, group_label).
-    ``group_label`` is None for ungrouped columns.
-    """
-    spans: list[tuple[int, int, str | None]] = []
-    if not columns:
-        return spans
-    start = 0
-    cur = columns[0].group
-    for i in range(1, len(columns)):
-        if columns[i].group != cur:
-            spans.append((start, i - 1, cur))
-            start = i
-            cur = columns[i].group
-    spans.append((start, len(columns) - 1, cur))
-    return spans
 
 
 _GROUP_FILL = PatternFill(start_color="EFF6FF", end_color="EFF6FF", fill_type="solid")
@@ -51,11 +27,14 @@ _GROUP_ALIGN = Alignment(horizontal="center", vertical="center")
 _GROUP_BORDER = Border(bottom=Side(style="medium", color="93C5FD"))
 
 
-def _style_group_header(cell) -> None:
-    cell.font = _GROUP_FONT
+def _style_group_header(cell, color: str | None = None) -> None:
+    """``color`` is an overlaid split group's curve colour: the header wears it,
+    the key to the group's curve in the overlay plot."""
+    argb = "FF" + color.lstrip("#").upper() if color else None  # opaque
+    cell.font = Font(bold=True, size=10, color=argb) if argb else _GROUP_FONT
     cell.fill = _GROUP_FILL
     cell.alignment = _GROUP_ALIGN
-    cell.border = _GROUP_BORDER
+    cell.border = Border(bottom=Side(style="thick", color=argb)) if argb else _GROUP_BORDER
 
 
 class ExcelRenderer:
@@ -81,10 +60,12 @@ class ExcelRenderer:
         # group labels (merged across each protocol's columns) on row 1,
         # per-column labels on row 2. With image_curve cells stacked under
         # the group, this mirrors the FE search grid 1:1.
-        has_groups = any(c.group for c in columns)
+        has_groups = any(c.group_label for c in columns)
         if has_groups:
             ws.append([""] * len(columns))  # placeholder for group row
-            for start, end, label in _group_spans(columns):
+            spans = group_spans(columns, key=lambda c: (c.group_label, c.group_color))
+            for start, end, first in spans:
+                label, color = first.group_label, first.group_color
                 if not label:
                     continue
                 if end > start:
@@ -95,7 +76,7 @@ class ExcelRenderer:
                         end_column=end + 1,
                     )
                 cell = ws.cell(row=1, column=start + 1, value=label)
-                _style_group_header(cell)
+                _style_group_header(cell, color)
             _HEADER_ROWS = 2
         else:
             _HEADER_ROWS = 1
@@ -156,28 +137,11 @@ class ExcelRenderer:
                         ws.row_dimensions[excel_row].height = row_height_pt
 
                     if embed_images and sparkline_col_indices:
-                        # Each image_curve column is keyed by "drc:<rd_id>::plot".
-                        # The parent activity token is "drc:<rd_id>" — one
-                        # ActivityValue (serialised via dataclasses.asdict) per
-                        # readout-def.  ActivityValue has no pre-built
-                        # curve_snapshot field; we assemble a snapshot-compatible
-                        # dict from the component fields that the sparkline
-                        # renderer expects.
+                        # One curve per "drc:<rd_id>[@group]::plot" column, or
+                        # every group's curve on an overlay column.
                         activity = (row.raw.get("activity") or {}) if row.raw else {}
                         for ci in sparkline_col_indices:
-                            col = columns[ci]
-                            if "::" not in col.key:
-                                continue
-                            parent_token = col.key.rsplit("::", 1)[0]
-                            av = activity.get(parent_token)
-                            if not av:
-                                continue
-                            snapshot = av_to_sparkline_snapshot(av)
-                            png = (
-                                render_sparkline_png(snapshot, size=size_preset)
-                                if snapshot
-                                else None
-                            )
+                            png = column_plot_png(columns[ci], activity, size=size_preset)
                             if not png:
                                 continue
                             with NamedTemporaryFile(suffix=".png", delete=False) as tf:
@@ -211,16 +175,21 @@ class ExcelRenderer:
                             cell_ref = f"{get_column_letter(ci + 1)}{excel_row}"
                             ws.add_image(img, cell_ref)
 
+            # The Data sheet holds only the records; where they came from and
+            # who took them sits apart, on Notes and in the file's properties.
             notes = wb.create_sheet("Notes")
-            notes.append([options.title])
-            notes.append([f"Rows: {rows_written}"])
+            _write_notes(notes, options, rows_written)
             if not embed_images and row_count_hint > SPARKLINE_ROW_CAP:
                 notes.append(
                     [
+                        "",
                         f"Images omitted: row count {row_count_hint} "
-                        f"exceeds {SPARKLINE_ROW_CAP} cap."
+                        f"exceeds {SPARKLINE_ROW_CAP} cap.",
                     ]
                 )
+            wb.properties.title = f"{BRAND} · {options.title}"
+            wb.properties.creator = options.extras.get("exported_by") or BRAND
+            wb.properties.description = options.attribution
 
             wb.save(out_path)
         finally:
@@ -229,3 +198,28 @@ class ExcelRenderer:
             for p in tempfiles:
                 with contextlib.suppress(OSError):
                     os.unlink(p)
+
+
+def _write_notes(ws, options: RenderOptions, rows_written: int) -> None:
+    """The ChemCellar mark, then what was exported, when and by whom."""
+    ws.row_dimensions[1].height = 30
+    ws.column_dimensions["A"].width = 6
+    ws.column_dimensions["B"].width = 90
+    logo = XLImage(str(LOGO_PNG))
+    logo.width = logo.height = 32
+    ws.add_image(logo, "A1")
+    ws["B1"] = BRAND
+    ws["B1"].font = Font(bold=True, size=16)
+    ws["B1"].alignment = Alignment(vertical="center")
+    extras = options.extras or {}
+    lines = [
+        options.title,
+        extras.get("query_summary"),
+        f"Rows: {rows_written}",
+        extras.get("aggregation_label"),
+        f"Exported {extras['exported_at']}" if extras.get("exported_at") else None,
+        f"By {extras['exported_by']}" if extras.get("exported_by") else None,
+    ]
+    for line in lines:
+        if line:
+            ws.append(["", line])

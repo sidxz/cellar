@@ -30,6 +30,7 @@ class StartExportCommand:
     format: ExportFormat
     payload: dict[str, Any]
     filename_hint: str | None = None
+    requested_by_email: str | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ class StartExport:
             id=uuid.uuid4(),
             workspace_id=cmd.workspace_id,
             requested_by=cmd.requested_by,
+            requested_by_email=cmd.requested_by_email,
             source=cmd.source,
             format=cmd.format,
             query_snapshot=cmd.payload,

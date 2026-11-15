@@ -28,6 +28,7 @@ class ExportJobModel(Base, WorkspaceIdMixin, VersionMixin):
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True)
 
     requested_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+    requested_by_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     format: Mapped[str] = mapped_column(String(10), nullable=False)
     query_snapshot: Mapped[dict] = mapped_column(JSONB, nullable=False)

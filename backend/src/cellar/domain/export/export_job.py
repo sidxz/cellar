@@ -39,6 +39,7 @@ class ExportJob(AggregateRoot):
         format: ExportFormat,
         query_snapshot: dict[str, Any],
         filename: str,
+        requested_by_email: str | None = None,
         status: ExportStatus = ExportStatus.PENDING,
         row_count: int | None = None,
         progress: float | None = None,
@@ -57,6 +58,8 @@ class ExportJob(AggregateRoot):
         super().__init__(id=id, created_at=created_at, updated_at=updated_at, version=version)
         self.workspace_id = workspace_id
         self.requested_by = requested_by
+        # Printed on the file it produces; kept as it was when they asked.
+        self.requested_by_email = requested_by_email
         self.source = source
         self.format = format
         self.query_snapshot = query_snapshot
@@ -88,11 +91,13 @@ class ExportJob(AggregateRoot):
         format: ExportFormat,
         query_snapshot: dict[str, Any],
         filename: str,
+        requested_by_email: str | None = None,
     ) -> ExportJob:
         job = cls(
             id=id,
             workspace_id=workspace_id,
             requested_by=requested_by,
+            requested_by_email=requested_by_email,
             source=source,
             format=format,
             query_snapshot=query_snapshot,

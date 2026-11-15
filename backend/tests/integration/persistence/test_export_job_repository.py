@@ -31,7 +31,7 @@ def _make_job(**over) -> ExportJob:
 @pytest.mark.asyncio
 async def test_save_and_load(uow):
     repo = SqlAlchemyExportJobRepository(uow)
-    job = _make_job()
+    job = _make_job(requested_by_email="ada@lab.org")
     async with uow:
         await repo.save(job)
         await uow.commit()
@@ -39,6 +39,7 @@ async def test_save_and_load(uow):
         loaded = await repo.find_by_id_in_workspace(job.workspace_id, job.id)
     assert loaded is not None
     assert loaded.status == ExportStatus.PENDING
+    assert loaded.requested_by_email == "ada@lab.org"
 
 
 @pytest.mark.asyncio

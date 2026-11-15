@@ -665,10 +665,13 @@ async def test_split_protocol_exports_one_column_set_per_group():
     await stream.total_count()
 
     split = [c for c in stream.columns if c.key.startswith(token)]
-    assert [(c.key, c.group) for c in split] == [
-        (f"{token}@cond:10 µM::value", "Mtb WCA · 10 µM"),
-        (f"{token}@cond:1 mM::value", "Mtb WCA · 1 mM"),
+    assert [(c.key, c.group, c.subgroup) for c in split] == [
+        (f"{token}@cond:10 µM::value", "Mtb WCA · by ATP", "10 µM"),
+        (f"{token}@cond:1 mM::value", "Mtb WCA · by ATP", "1 mM"),
     ]
+    # One group row (Excel) names both; a flat header (CSV) tells them apart.
+    assert split[0].group_label == "Mtb WCA · by ATP · 10 µM"
+    assert [c.flat_header for c in split] == ["MIC (µM) [10 µM]", "MIC (µM) [1 mM]"]
     raw = {"activity": {f"{token}@cond:1 mM": {"value": 4.0, "qualifier": None, "unit": "µM"}}}
     assert _cell_value(split[1], raw) == 4.0
     assert _cell_value(split[0], raw) is None
@@ -713,3 +716,179 @@ def test_intercept_cell_exports_the_value_the_grid_shows():
         ],
     }
     assert _cell_value(spec, {"activity": {"drc:rd": gt}}) == ">100.0"
+
+
+# ---------------------------------------------------------------------------
+# The grid's display settings: Compact hides plots, Overlay puts a split
+# protocol's curves on one plot after its groups, properties in grid order.
+# ---------------------------------------------------------------------------
+
+
+def _dr_protocol(n_readouts: int = 1):
+    proto_id = uuid.uuid4()
+    readouts = []
+    for i in range(n_readouts):
+        ic50 = MagicMock()
+        ic50.kind.value = "ic"
+        ic50.level = 50.0
+        ic50.label = None
+        rd = MagicMock(id=uuid.uuid4(), unit="µM")
+        rd.name = f"Signal {i + 1}"
+        rd.dose_response_config = MagicMock(intercepts=[ic50])
+        readouts.append(rd)
+    proto = MagicMock(id=proto_id, code="PRT-1", readout_definitions=readouts, dose_unit="µM")
+    proto.name = "InhA"
+    return proto
+
+
+def _split(proto, n_groups: int) -> dict:
+    labels = ["10 µM", "1 mM", *[f"{i} mM" for i in range(2, n_groups)]][:n_groups]
+    return {
+        str(proto.id): {
+            "split": {"by": "condition", "condition": "ATP"},
+            "groups": [
+                {
+                    "key": f"cond:{label}",
+                    "label": label,
+                    "run_ids": [],
+                    "run_count": 1,
+                    "flags": [],
+                }
+                for label in labels
+            ],
+        }
+    }
+
+
+async def _columns(proto, tokens, report_config, column_groups=None):
+    page = MagicMock(
+        items=[_mol("CV-1")], next_cursor=None, total_count=1, column_groups=column_groups
+    )
+    stream = SearchResultsRowStream(
+        workspace_id=uuid.uuid4(),
+        payload={
+            "query": {"criteria": []},
+            "protocol_columns": tokens,
+            "reportConfig": {
+                "visibleFields": {"structure": [], "properties": []},
+                **report_config,
+            },
+        },
+        execute_search=AsyncMock(return_value=_success(page)),
+        protocols_reader=AsyncMock(return_value=[proto]),
+        requested_by=uuid.uuid4(),
+        format="pdf",
+    )
+    await stream.total_count()
+    return stream.columns
+
+
+async def test_overlay_draws_every_group_on_one_plot_after_the_groups():
+    proto = _dr_protocol()
+    rd = proto.readout_definitions[0].id
+    cols = await _columns(
+        proto,
+        [f"drc:{rd}"],
+        {"displayPreset": "detailed", "plotLayout": "overlay"},
+        _split(proto, 2),
+    )
+    assert [(c.key, c.kind) for c in cols] == [
+        (f"drc:{rd}:ic:50.0@cond:10 µM::value", "number"),
+        (f"drc:{rd}:ic:50.0@cond:1 mM::value", "number"),
+        (f"drc:{rd}::overlay", "image_curve"),
+    ]
+    # Each group's header carries its curve's colour, as in the grid.
+    assert [c.group_color for c in cols[:2]] == ["#3b6fb6", "#18974c"]
+    plot = cols[2]
+    assert plot.header == "Plot"
+    assert (plot.group, plot.subgroup) == ("PRT-1 InhA · by ATP", None)
+    assert [c.subgroup for c in cols[:2]] == ["10 µM", "1 mM"]
+    assert plot.overlay_of == (f"drc:{rd}@cond:10 µM", f"drc:{rd}@cond:1 mM")
+
+
+async def test_overlay_names_the_readout_when_a_protocol_has_several():
+    proto = _dr_protocol(2)
+    tokens = [f"drc:{rd.id}" for rd in proto.readout_definitions]
+    cols = await _columns(proto, tokens, {"plotLayout": "overlay"}, _split(proto, 2))
+    assert [c.header for c in cols if c.overlay_of] == ["Plot · Signal 1", "Plot · Signal 2"]
+
+
+async def test_compact_drops_every_plot():
+    proto = _dr_protocol()
+    rd = proto.readout_definitions[0].id
+    for groups in (None, _split(proto, 2)):
+        cols = await _columns(
+            proto, [f"drc:{rd}"], {"displayPreset": "compact", "plotLayout": "overlay"}, groups
+        )
+        assert [c.kind for c in cols] == ["number"] * (1 if groups is None else 2)
+
+
+async def test_overlay_stays_side_by_side_past_eight_groups_or_without_a_split():
+    proto = _dr_protocol()
+    rd = proto.readout_definitions[0].id
+    nine = await _columns(proto, [f"drc:{rd}"], {"plotLayout": "overlay"}, _split(proto, 9))
+    assert sum(c.kind == "image_curve" for c in nine) == 9
+    assert not any(c.overlay_of or c.group_color for c in nine)
+
+    flat = await _columns(proto, [f"drc:{rd}"], {"plotLayout": "overlay"})
+    assert [(c.key, c.kind) for c in flat] == [
+        (f"drc:{rd}:ic:50.0::value", "number"),
+        (f"drc:{rd}::plot", "image_curve"),
+    ]
+
+
+async def test_split_protocol_lists_its_columns_group_by_group_like_the_grid():
+    proto = _dr_protocol(2)
+    a, b = (rd.id for rd in proto.readout_definitions)
+    cols = await _columns(
+        proto, [f"drc:{a}", f"drc:{b}"], {"displayPreset": "compact"}, _split(proto, 2)
+    )
+    assert [c.key for c in cols] == [
+        f"drc:{a}:ic:50.0@cond:10 µM::value",
+        f"drc:{b}:ic:50.0@cond:10 µM::value",
+        f"drc:{a}:ic:50.0@cond:1 mM::value",
+        f"drc:{b}:ic:50.0@cond:1 mM::value",
+    ]
+
+
+async def test_properties_follow_the_grid_order_headers_and_digits():
+    stream = SearchResultsRowStream(
+        workspace_id=uuid.uuid4(),
+        payload={
+            "query": {"criteria": []},
+            "reportConfig": {
+                "visibleFields": {
+                    "structure": [],
+                    "properties": [
+                        "molecular_weight",
+                        "logp",
+                        "hbd",
+                        "hba",
+                        "tpsa",
+                        "aromatic_rings",
+                    ],
+                }
+            },
+        },
+        execute_search=AsyncMock(
+            return_value=_success(MagicMock(items=[], next_cursor=None, total_count=0))
+        ),
+        protocols_reader=AsyncMock(return_value=[]),
+        requested_by=uuid.uuid4(),
+    )
+    await stream.total_count()
+    assert [(c.header, c.digits) for c in stream.columns] == [
+        ("MW", 1),
+        ("LogP", 2),
+        ("TPSA", 1),
+        ("HBD", None),
+        ("HBA", None),
+        ("Aromatic Rings", None),
+    ]
+
+
+async def test_activity_values_carry_the_grids_four_significant_figures():
+    proto = _dr_protocol()
+    rd = proto.readout_definitions[0].id
+    cols = await _columns(proto, [f"drc:{rd}"], {})
+    assert cols[0].precision == 4
