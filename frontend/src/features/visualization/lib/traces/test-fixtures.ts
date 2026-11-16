@@ -3,6 +3,18 @@ import type { Dataset, DatasetColumn } from "../../types";
 
 type Kind = DatasetColumn["kind"];
 
+/** A column's provenance as the server sends it: ``rd:<readout>:<layer>`` values carry their
+ * readout id, their ``:q`` / ``:outlier`` / ``:n`` … siblings also a stat. */
+export function provenanceOf(key: string): DatasetColumn["provenance"] {
+  if (!key.startsWith("rd:")) return {};
+  const [, readout, layer, stat] = key.split(":");
+  return {
+    readout_definition_id: readout,
+    layer,
+    ...(stat && { stat: stat === "q" ? "qualifier" : stat }),
+  };
+}
+
 /** A dataset from columns of values; a column is numeric when its first value is a number.
  * Column ``y`` is labeled "Signal". */
 export function dataset(
@@ -21,7 +33,7 @@ export function dataset(
       key,
       label: key === "y" ? "Signal" : key,
       kind: kindOf(key),
-      provenance: {},
+      provenance: provenanceOf(key),
     })),
     values,
   };

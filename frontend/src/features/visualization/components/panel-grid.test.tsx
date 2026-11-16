@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { provenanceOf } from "../lib/traces/test-fixtures";
 import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../types";
@@ -12,7 +13,7 @@ const col = (key: string, label: string, kind: DatasetColumn["kind"]): DatasetCo
   key,
   label,
   kind,
-  provenance: {},
+  provenance: provenanceOf(key),
 });
 const dataset = (numeric = true): Dataset => ({
   revision: "r",

@@ -1,7 +1,5 @@
 import type { Dataset, DatasetColumn } from "../types";
 
-const SIBLING = /:(q|outlier)$/;
-
 export function column(ds: Dataset, key: string): DatasetColumn | undefined {
   return ds.columns.find((c) => c.key === key);
 }
@@ -21,9 +19,17 @@ export function categoryColumns(ds: Dataset): DatasetColumn[] {
   return ds.columns.filter((c) => (c.kind === "category" || c.kind === "user") && !c.hidden);
 }
 
-/** Readout value columns, without their qualifier/outlier siblings. */
+/** Readout value columns (p-values included), without their siblings (qualifier, outlier,
+ * n, SD, …: the columns that carry a ``stat``) and without hidden ones. */
 export function valueColumns(ds: Dataset): DatasetColumn[] {
-  return ds.columns.filter((c) => c.key.startsWith("rd:") && !SIBLING.test(c.key));
+  return ds.columns.filter(
+    (c) => c.provenance.readout_definition_id && !c.provenance.stat && !c.hidden,
+  );
+}
+
+/** Row ``i`` of the ``stat`` sibling of value column ``key`` (``<key>:<stat>``). */
+export function siblingAt(ds: Dataset, key: string, stat: string, i: number): unknown {
+  return ds.values[`${key}:${stat}`]?.[i];
 }
 
 /** A sample well, or a well-less summary row that names a compound. */

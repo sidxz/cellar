@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DatasetSource } from "../types";
-import { sourceFromParams, visualizeHref } from "./source-url";
+import { levelFromParams, sourceFromParams, visualizeHref } from "./source-url";
 
 describe("visualize URL contract", () => {
   it("round-trips a run, a protocol and a protocol with chosen runs", () => {
@@ -20,5 +20,33 @@ describe("visualize URL contract", () => {
   it("returns null when the URL names no source", () => {
     expect(sourceFromParams({})).toBeNull();
     expect(sourceFromParams({ runs: "r1" })).toBeNull();
+  });
+});
+
+describe("visualize URL level", () => {
+  const run: DatasetSource = { kind: "run", runId: "r1" };
+
+  it("names the level unless it is wells", () => {
+    expect(visualizeHref(run, "runs")).toBe("/assays/visualize?run=r1&level=runs");
+    expect(visualizeHref(run, "wells")).toBe("/assays/visualize?run=r1");
+    expect(visualizeHref({ kind: "protocol", protocolId: "p1" }, "compounds")).toBe(
+      "/assays/visualize?protocol=p1&level=compounds",
+    );
+  });
+
+  it("reads the level back, falling back to wells", () => {
+    expect(levelFromParams({ level: "compounds" })).toBe("compounds");
+    expect(levelFromParams({ level: ["batches"] })).toBe("batches");
+    expect(levelFromParams({ level: "bogus" })).toBe("wells");
+    expect(levelFromParams({ level: "toString" })).toBe("wells");
+    expect(levelFromParams({})).toBe("wells");
+  });
+
+  it("keeps the source when a level is named", () => {
+    const query = Object.fromEntries(
+      new URL(visualizeHref(run, "batches"), "http://x").searchParams,
+    );
+    expect(sourceFromParams(query)).toEqual(run);
+    expect(levelFromParams(query)).toBe("batches");
   });
 });

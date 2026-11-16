@@ -1,6 +1,7 @@
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { provenanceOf } from "../lib/traces/test-fixtures";
 import type { Dataset, DatasetColumn } from "../types";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -49,7 +50,7 @@ const col = (key: string, kind: DatasetColumn["kind"], hidden = false): DatasetC
   key,
   label: key,
   kind,
-  provenance: {},
+  provenance: provenanceOf(key),
   hidden,
 });
 

@@ -9,7 +9,7 @@ export type DatasetColumn = DatasetColumnResponse;
 export type RunRowCounts = RunRowCountsResponse;
 
 /** Row level: what one dataset row is. */
-export type Level = "wells";
+export type Level = DatasetResponse["level"];
 
 export type DatasetSource =
   | { kind: "protocol"; protocolId: string; runIds?: string[] }

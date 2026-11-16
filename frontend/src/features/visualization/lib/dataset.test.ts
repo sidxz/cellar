@@ -7,6 +7,7 @@ import {
   numberAt,
   numericColumns,
   resolveUserColumns,
+  siblingAt,
   uniqueCompounds,
   valueColumns,
 } from "./dataset";
@@ -14,15 +15,21 @@ import {
 const RAW = "rd:r1:raw";
 
 function ds(): Dataset {
-  const col = (key: string, kind: Dataset["columns"][number]["kind"], hidden = false) => ({
+  const col = (
+    key: string,
+    kind: Dataset["columns"][number]["kind"],
+    hidden = false,
+    provenance: Dataset["columns"][number]["provenance"] = {},
+  ) => ({
     key,
     label: key,
     kind,
     unit: null,
     group: null,
-    provenance: {},
+    provenance,
     hidden,
   });
+  const rd = { readout_definition_id: "r1", layer: "raw" };
   return {
     revision: "x",
     level: "wells",
@@ -34,9 +41,9 @@ function ds(): Dataset {
       col("well_type", "category"),
       col("operator", "user"),
       col("well_order", "number"),
-      col(RAW, "number"),
-      col(`${RAW}:q`, "category"),
-      col(`${RAW}:outlier`, "category"),
+      col(RAW, "number", false, rd),
+      col(`${RAW}:q`, "category", false, { ...rd, stat: "qualifier" }),
+      col(`${RAW}:outlier`, "category", false, { ...rd, stat: "outlier" }),
     ],
     values: {
       compound: ["CEL-1", "CEL-1", "DMSO", "CEL-2", null],
@@ -62,6 +69,41 @@ describe("dataset helpers", () => {
 
   it("valueColumns excludes qualifier and outlier siblings", () => {
     expect(valueColumns(ds()).map((c) => c.key)).toEqual([RAW]);
+  });
+
+  it("valueColumns tells siblings by their stat, keeps p-values and skips hidden ones", () => {
+    const rdCol = (key: string, stat: string | null, hidden = false) => ({
+      key,
+      label: key,
+      kind: "number" as const,
+      provenance: {
+        readout_definition_id: key.split(":")[1],
+        aggregation: key.endsWith(":p") ? "p" : "mean",
+        stat,
+      },
+      hidden,
+    });
+    const d: Dataset = {
+      ...ds(),
+      columns: [
+        { key: "compound", label: "Compound", kind: "category", provenance: {} },
+        rdCol("rd:r1:raw", null),
+        rdCol("rd:r1:raw:n", "n"),
+        rdCol("rd:r1:raw:q", "qualifier"),
+        rdCol("rd:r1:raw:p", null),
+        rdCol("dr:r2", null),
+        rdCol("dr:r2:ci_low", "ci_low", true),
+        rdCol("dr:r3", null, true),
+      ],
+    };
+    expect(valueColumns(d).map((c) => c.key)).toEqual(["rd:r1:raw", "rd:r1:raw:p", "dr:r2"]);
+  });
+
+  it("siblingAt reads a value's sibling column at one row", () => {
+    const d = ds();
+    expect(siblingAt(d, RAW, "q", 3)).toBe(">");
+    expect(siblingAt(d, RAW, "outlier", 1)).toBe("outlier");
+    expect(siblingAt(d, RAW, "n", 0)).toBeUndefined();
   });
 
   it("numeric and category columns skip hidden ones and include user columns as categories", () => {

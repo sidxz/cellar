@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
 import { defaultPanels, panelDefaults, retypePanel } from "./default-panels";
-import { panel } from "./traces/test-fixtures";
+import { panel, provenanceOf } from "./traces/test-fixtures";
 
 const col = (key: string, kind: DatasetColumn["kind"]): DatasetColumn => ({
   key,
   label: key,
   kind,
-  provenance: {},
+  provenance: provenanceOf(key),
 });
 
 const ds = (columns: DatasetColumn[], values: Dataset["values"] = {}): Dataset => ({
@@ -56,6 +56,28 @@ describe("defaultPanels", () => {
     );
     expect(defaultPanels(d)).toEqual([
       { type: "histogram", defaults: { x: "rd:ic50:raw", appearance: { colorBy: "well_type" } } },
+    ]);
+  });
+
+  it("opens an aggregated level (no well columns) on a histogram of the first value", () => {
+    const rd = (key: string, stat?: string): DatasetColumn => ({
+      key,
+      label: key,
+      kind: stat === "qualifier" ? "category" : "number",
+      provenance: { readout_definition_id: "a", aggregation: "mean", stat },
+    });
+    const d: Dataset = {
+      ...ds([
+        col("compound", "category"),
+        rd("rd:a:raw:n", "n"),
+        rd("rd:a:raw:q", "qualifier"),
+        rd("rd:a:raw"),
+        col("mw", "number"),
+      ]),
+      level: "compounds",
+    };
+    expect(defaultPanels(d)).toEqual([
+      { type: "histogram", defaults: { x: "rd:a:raw", appearance: {} } },
     ]);
   });
 

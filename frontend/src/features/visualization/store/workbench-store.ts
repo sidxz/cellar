@@ -84,6 +84,12 @@ export function makePanel(type: PanelType, defaults: PanelPatch = {}): PanelConf
   };
 }
 
+/** ``p`` with ``patch`` applied; appearance merges field by field. */
+export function patchPanel(p: PanelConfig, patch: PanelPatch): PanelConfig {
+  const { appearance, ...rest } = patch;
+  return { ...p, ...rest, appearance: { ...p.appearance, ...appearance } };
+}
+
 /** A maximize survives history steps only while its panel exists. */
 const keepMaximized = (id: string | null, panels: PanelConfig[]) =>
   id && panels.some((p) => p.id === id) ? id : null;
@@ -115,12 +121,7 @@ export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?:
         return panel.id;
       },
       updatePanel: (id, patch) => {
-        const { appearance, ...rest } = patch;
-        commit({
-          panels: get().panels.map((p) =>
-            p.id === id ? { ...p, ...rest, appearance: { ...p.appearance, ...appearance } } : p,
-          ),
-        });
+        commit({ panels: get().panels.map((p) => (p.id === id ? patchPanel(p, patch) : p)) });
       },
       removePanel: (id) => {
         commit({ panels: get().panels.filter((p) => p.id !== id) });
