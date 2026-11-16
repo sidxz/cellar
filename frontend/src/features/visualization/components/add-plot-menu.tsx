@@ -59,19 +59,24 @@ export function AddPlotMenu({ ds }: { ds: Dataset }) {
           Add plot ({count}/{MAX_PANELS})
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
+      {/* A fixed width: an item's reason wraps rather than widening the menu off-screen. */}
+      <DropdownMenuContent align="end" className="w-64">
         {TYPES.map(({ type, label, icon: Icon, numeric }) => (
           <DropdownMenuItem key={type} disabled={numeric && !hasNumeric} onSelect={() => add(type)}>
             <Icon className="h-4 w-4" />
             {label}
           </DropdownMenuItem>
         ))}
-        <DropdownMenuItem disabled={!hasRGroups} onSelect={() => add("rgroup-matrix")}>
-          <Grid3x3 className="h-4 w-4" />
-          <span className="flex flex-col">
+        <DropdownMenuItem
+          disabled={!hasRGroups}
+          className="items-start"
+          onSelect={() => add("rgroup-matrix")}
+        >
+          <Grid3x3 className="mt-0.5 h-4 w-4" />
+          <span className="flex min-w-0 flex-col">
             R-group matrix
             {!hasRGroups && (
-              <span className="text-xs text-muted-foreground">
+              <span className="whitespace-normal text-xs text-muted-foreground">
                 Add R-groups first: Add columns → R-groups…
               </span>
             )}
