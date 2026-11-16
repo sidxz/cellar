@@ -479,6 +479,10 @@ def create_app() -> FastAPI:
 
     app.include_router(protocol_hub_router)
 
+    from cellar.interface.routes.visualization import router as visualization_router
+
+    app.include_router(visualization_router)
+
     from cellar.interface.routes.compound_flags import router as compound_flags_router
 
     app.include_router(compound_flags_router)

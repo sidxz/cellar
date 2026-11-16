@@ -215,6 +215,9 @@ from cellar.application.screening.update_run import UpdateRun
 from cellar.application.shared.molecule_resolver import MoleculeResolver
 from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.application.shared.parsers import TabularParser
+from cellar.application.visualization.dataset_reader import VisualizationDatasetReader
+from cellar.application.visualization.get_dataset import GetVisualizationDataset
+from cellar.application.visualization.get_run_row_counts import GetRunRowCounts
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.screening_assay.curve_derivative import CurveDerivativeService
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
@@ -310,6 +313,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_repository
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_repository import (
     SQLAlchemyTargetRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.visualization.dataset_reader import (
+    SQLAlchemyVisualizationDatasetReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_repository import (
     SQLAlchemyNamingLabelRepository,
@@ -1284,6 +1290,20 @@ def register_screening(container: Container) -> None:
     container.define(
         PlateReadModelService,
         lambda c: SQLAlchemyPlateReadModelService(c[async_sessionmaker]),
+    )
+
+    # --- Visualization workbench ---
+    container.define(
+        VisualizationDatasetReader,
+        lambda c: SQLAlchemyVisualizationDatasetReader(c[async_sessionmaker]),
+    )
+    container.define(
+        GetVisualizationDataset,
+        lambda c: GetVisualizationDataset(reader=c[VisualizationDatasetReader]),
+    )
+    container.define(
+        GetRunRowCounts,
+        lambda c: GetRunRowCounts(reader=c[VisualizationDatasetReader]),
     )
 
     # --- Screening Read Models ---

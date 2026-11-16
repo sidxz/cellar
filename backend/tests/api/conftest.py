@@ -138,6 +138,7 @@ def _create_test_app(
     from cellar.interface.routes.readout_data import router as readout_data_router
     from cellar.interface.routes.melting_steps import router as melting_steps_router
     from cellar.interface.routes.measured_curves import router as measured_curves_router
+    from cellar.interface.routes.visualization import router as visualization_router
     from cellar.interface.routes.run_positions import router as run_positions_router
     from cellar.interface.routes.run_import import router as run_import_router
     from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
@@ -221,6 +222,7 @@ def _create_test_app(
     app.include_router(readout_data_router)
     app.include_router(run_import_router)
     app.include_router(measured_curves_router)
+    app.include_router(visualization_router)
     app.include_router(melting_steps_router)
     app.include_router(run_positions_router)
     app.include_router(tags_router)

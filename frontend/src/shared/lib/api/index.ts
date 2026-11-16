@@ -69,5 +69,6 @@ export * from './tags/tags';
 export * from './targets/targets';
 export * from './units/units';
 export * from './user/user';
+export * from './visualization/visualization';
 export * from './vocabularies/vocabularies';
 export * from './workspace-setup/workspace-setup';
