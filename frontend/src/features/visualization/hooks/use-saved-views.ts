@@ -33,10 +33,12 @@ export function useSavedViews(protocolId: string) {
   });
 }
 
-/** One view, fetched once: a background refetch would move its version under the chemist's
- * unsaved changes and let their next Save pass the stale-edit check. */
+/** One view, fetched once per opening: a background refetch would move its version under the
+ * chemist's unsaved changes and let their next Save pass the stale-edit check. Dropped once
+ * no page shows it, so the next opening fetches it as saved now. */
 export const useSavedView = (id: string) =>
   hooks.useGet(id, {
+    gcTime: 0,
     staleTime: Number.POSITIVE_INFINITY,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
