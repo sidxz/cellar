@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { linearFit, meanSd } from "./math";
+import { clipDiagonal, linearFit, meanSd } from "./math";
 
 describe("meanSd", () => {
   it("gives the mean and the sample SD (n − 1)", () => {
@@ -20,5 +20,20 @@ describe("linearFit", () => {
   it("needs two distinct x values", () => {
     expect(linearFit([2, 2], [1, 3])).toBeNull();
     expect(linearFit([1], [1])).toBeNull();
+  });
+});
+
+describe("clipDiagonal", () => {
+  const box = { x0: 1, x1: 4, y0: 5, y1: 9 };
+
+  it("gives the part of y = x + offset inside the box", () => {
+    expect(clipDiagonal(3, box)).toEqual([2, 5, 4, 7]);
+    expect(clipDiagonal(5, box)).toEqual([1, 6, 4, 9]);
+  });
+
+  it("is null when the line misses the box or only touches a corner", () => {
+    expect(clipDiagonal(8, box)).toBeNull();
+    expect(clipDiagonal(-4, box)).toBeNull();
+    expect(clipDiagonal(1, { x0: 2, x1: 2, y0: 3, y1: 3 })).toBeNull();
   });
 });

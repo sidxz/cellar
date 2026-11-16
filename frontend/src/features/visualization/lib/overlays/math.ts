@@ -25,3 +25,14 @@ export function linearFit(xs: number[], ys: number[]): { slope: number; intercep
   const slope = sxy / sxx;
   return { slope, intercept: my - slope * mx };
 }
+
+/** The segment of ``y = x + offset`` inside ``box`` as [x0, y0, x1, y1]; null when the
+ * line misses the box or only touches it at a point. */
+export function clipDiagonal(
+  offset: number,
+  box: { x0: number; x1: number; y0: number; y1: number },
+): [number, number, number, number] | null {
+  const lo = Math.max(box.x0, box.y0 - offset);
+  const hi = Math.min(box.x1, box.y1 - offset);
+  return lo < hi ? [lo, lo + offset, hi, hi + offset] : null;
+}

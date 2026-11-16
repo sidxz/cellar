@@ -8,7 +8,7 @@ import { type Figure, GRID, axisTitle, baseLayout, facetsOf, lackNote } from "./
 export const FILTERED = "Filtered";
 const FILTERED_COLOR = "#a1a1aa";
 /** SVG draws crisper and is plenty fast below this; WebGL above it. */
-const WEBGL_ABOVE = 5000;
+export const WEBGL_ABOVE = 5000;
 
 /** 0 up to 1k points, 1 from 50k, linear in log n. */
 const crowding = (n: number) => Math.min(1, Math.max(0, Math.log(n / 1000) / Math.log(50)));

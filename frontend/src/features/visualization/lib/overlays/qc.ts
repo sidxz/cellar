@@ -20,7 +20,7 @@ const Z_PRIME_COLORS: Record<ZPrimeQuality, string> = {
   poor: CHART_COLORS.error,
 };
 
-const parts = (p: Partial<OverlayParts>): OverlayParts => ({
+export const parts = (p: Partial<OverlayParts>): OverlayParts => ({
   traces: [],
   shapes: [],
   annotations: [],
@@ -29,7 +29,7 @@ const parts = (p: Partial<OverlayParts>): OverlayParts => ({
 });
 
 /** A facet's note: "Plate 3: no control wells", or the bare sentence when unsplit. */
-const say = (f: Facet, text: string) =>
+export const say = (f: Facet, text: string) =>
   f.label ? `${f.label}: ${text}` : text[0].toUpperCase() + text.slice(1);
 
 /** One control type's wells in a facet: ``drawn`` = plotted (passing, X and Y present),
