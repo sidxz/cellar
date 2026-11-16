@@ -108,6 +108,10 @@ describe("R-group matrix fields", () => {
       plain,
     );
     expect(panels[0].type).toBe("scatter");
-    expect(dropped).toEqual(["Plot 1: Columns (R2)", "Plot 1: Rows (R1)"]);
+    expect(dropped).toEqual([
+      "Plot 1: Columns (R2)",
+      "Plot 1: Rows (R1)",
+      "Plot 1: R-group matrix (now a scatter)",
+    ]);
   });
 });
