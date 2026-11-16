@@ -5,7 +5,8 @@ import { Alert } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
-import { AlertTriangle, ChartScatter, Database, Info, Loader2, Rows3, X } from "lucide-react";
+import { useBreadcrumbTrail } from "@/shared/lib/stores/breadcrumb-store";
+import { AlertTriangle, Database, Info, Loader2, Rows3, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { type Dispatch, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
@@ -82,22 +83,13 @@ export function WorkbenchPage({
   level,
   view,
 }: {
-  source: DatasetSource | null;
+  source: DatasetSource;
   level: Level;
   view?: OpenedView;
 }) {
   // A run's workbench changing runs moves to its protocol (another key) yet stays the same
   // workbench: ``moved`` keeps the key it had for the one it moved to.
   const [moved, setMoved] = useState<{ to: string; as: string } | null>(null);
-  if (!source) {
-    return (
-      <EmptyState
-        icon={ChartScatter}
-        title="Nothing to visualize"
-        description="Open the workbench with Visualize on a protocol or a run."
-      />
-    );
-  }
   // Chemistry columns belong to the protocol or run; they survive level and run changes.
   const key = sourceKey(source);
   const as = moved?.to === key ? moved.as : key;
@@ -128,6 +120,21 @@ function Workbench({
 }) {
   const query = useDataset(source, level);
   const nameOf = useMemberNames();
+  // A saved view's "Visualize" crumb leads to the list of saved views.
+  const viewName = view?.view.name;
+  useBreadcrumbTrail(
+    useMemo(
+      () =>
+        viewName
+          ? [
+              { label: "Protocols", href: "/assays" },
+              { label: "Visualize", href: "/assays/visualize" },
+              { label: viewName },
+            ]
+          : [],
+      [viewName],
+    ),
+  );
   const router = useRouter();
   const protocolId = source.kind === "protocol" ? source.protocolId : null;
   const { data: rowCounts } = useRunRowCounts(protocolId);

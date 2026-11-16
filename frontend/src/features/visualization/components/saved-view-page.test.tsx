@@ -1,7 +1,10 @@
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
-import { useBreadcrumbOverrides } from "@/shared/lib/stores/breadcrumb-store";
+import {
+  useBreadcrumbOverrides,
+  useBreadcrumbTrailValue,
+} from "@/shared/lib/stores/breadcrumb-store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -273,6 +276,19 @@ describe("SavedViewPage", () => {
     unmount();
     crumbs.rerender();
     expect(crumbs.result.current.has("v1")).toBe(false);
+  });
+
+  it("links Visualize in the breadcrumb to the list of saved views", () => {
+    const { unmount } = show();
+    const trail = renderHook(() => useBreadcrumbTrailValue());
+    expect(trail.result.current).toEqual([
+      { label: "Protocols", href: "/assays" },
+      { label: "Visualize", href: "/assays/visualize" },
+      { label: "Potency by compound" },
+    ]);
+    unmount();
+    trail.rerender();
+    expect(trail.result.current).toBeNull();
   });
 
   it("names a view it cannot load generically in the breadcrumb", () => {

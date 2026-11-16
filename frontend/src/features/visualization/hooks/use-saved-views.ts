@@ -20,15 +20,16 @@ const hooks = createCrudHooks<
   UpdateSavedVisualizationBody
 >({ entityName: "View", baseUrl: BASE, queryKey: SAVED_VIEWS_KEY });
 
-/** The views the caller can see that read ``protocolId`` (private ones only their owner's). */
-export function useSavedViews(protocolId: string) {
+/** The views the caller can see (private ones only their owner's); with ``protocolId``, only
+ * those that read it. */
+export function useSavedViews(protocolId?: string) {
   return useQuery({
     queryKey: [...LIST_KEY, { protocolId }],
     queryFn: () =>
       customInstance<SavedViewSummary[]>({
         url: BASE,
         method: "GET",
-        params: { protocol_id: protocolId },
+        ...(protocolId && { params: { protocol_id: protocolId } }),
       }),
   });
 }
