@@ -82,6 +82,10 @@ export function makePanel(type: PanelType, defaults: PanelPatch = {}): PanelConf
   };
 }
 
+/** A maximize survives history steps only while its panel exists. */
+const keepMaximized = (id: string | null, panels: PanelConfig[]) =>
+  id && panels.some((p) => p.id === id) ? id : null;
+
 export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?: Filter[] }) {
   return createStore<WorkbenchState>()((set, get) => {
     /** Apply a panels/filters change as one undoable step. */
@@ -138,13 +142,23 @@ export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?:
         const { past, future, panels, filters } = get();
         const prev = past.at(-1);
         if (!prev) return;
-        set({ ...prev, past: past.slice(0, -1), future: [{ panels, filters }, ...future] });
+        set({
+          ...prev,
+          maximized: keepMaximized(get().maximized, prev.panels),
+          past: past.slice(0, -1),
+          future: [{ panels, filters }, ...future],
+        });
       },
       redo: () => {
         const { past, future, panels, filters } = get();
         const next = future[0];
         if (!next) return;
-        set({ ...next, past: [...past, { panels, filters }], future: future.slice(1) });
+        set({
+          ...next,
+          maximized: keepMaximized(get().maximized, next.panels),
+          past: [...past, { panels, filters }],
+          future: future.slice(1),
+        });
       },
     };
   });

@@ -68,6 +68,10 @@ export function retypePanel(ds: Dataset, p: PanelConfig, type: PanelType): Panel
  * still sees something. */
 export function defaultPanels(ds: Dataset): Array<{ type: PanelType; defaults: PanelPatch }> {
   if (numericValueColumn(ds)) {
+    // Summary results have no well positions: a plate-order scatter would be empty.
+    if (!(ds.values.well_order ?? []).some((v) => v != null)) {
+      return [{ type: "histogram", defaults: panelDefaults(ds, "histogram") }];
+    }
     const scatter = panelDefaults(ds, "scatter");
     return [
       {

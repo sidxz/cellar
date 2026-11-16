@@ -8,7 +8,7 @@ export type Dataset = DatasetResponse;
 export type DatasetColumn = DatasetColumnResponse;
 export type RunRowCounts = RunRowCountsResponse;
 
-/** Row level. Only Wells exists in this stage; Runs/Batches/Compounds arrive with stage 3. */
+/** Row level: what one dataset row is. */
 export type Level = "wells";
 
 export type DatasetSource =

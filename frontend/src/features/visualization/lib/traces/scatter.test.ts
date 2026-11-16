@@ -99,11 +99,11 @@ describe("buildScatterFigure", () => {
   });
 
   it("sizes points by a numeric field and adds tooltip fields to the hover", () => {
-    const ds = dataset({ well_order: [1, 2], y: [10, 30], plate: ["1", "2"] });
+    const ds = dataset({ well_order: [1, 2], y: [10, 30], plate: ["Plate 1", "Plate 2"] });
     const fig = buildScatterFigure(ds, panel({ sizeBy: "y", tooltip: ["plate"] }), pass(2), NONE);
     const [t] = plotted(fig);
     expect(t.marker.size).toEqual([5, 16]);
-    expect(t.text?.[1]).toBe("No compound · Plate 2<br>plate: 2");
+    expect(t.text?.[1]).toBe("No compound · Plate 2<br>plate: Plate 2");
   });
 
   it("gives traces uids that are valid CSS class names", () => {

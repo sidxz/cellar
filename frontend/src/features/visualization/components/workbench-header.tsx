@@ -103,9 +103,9 @@ export function SourceBar({ source }: { source: DatasetSource }) {
 interface WorkbenchHeaderProps {
   source: DatasetSource;
   ds: Dataset;
-  /** Export menu (Task 14). */
+  /** Export menu. */
   exportMenu?: ReactNode;
-  /** "+ Add plot (n/4)" menu (Task 11). */
+  /** "+ Add plot (n/4)" menu. */
   addPlotMenu?: ReactNode;
 }
 

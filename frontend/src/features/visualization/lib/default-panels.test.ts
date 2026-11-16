@@ -10,25 +10,28 @@ const col = (key: string, kind: DatasetColumn["kind"]): DatasetColumn => ({
   provenance: {},
 });
 
-const ds = (columns: DatasetColumn[]): Dataset => ({
+const ds = (columns: DatasetColumn[], values: Dataset["values"] = {}): Dataset => ({
   revision: "x",
   level: "wells",
   row_count: 0,
   row_ids: [],
   columns,
-  values: {},
+  values,
 });
 
 describe("defaultPanels", () => {
   it("scatters well order against the first numeric value column, split by plate", () => {
-    const d = ds([
-      col("plate", "category"),
-      col("well_type", "category"),
-      col("well_order", "number"),
-      col("rd:pick:raw", "category"),
-      col("rd:sig:raw", "number"),
-      col("rd:sig:raw:q", "category"),
-    ]);
+    const d = ds(
+      [
+        col("plate", "category"),
+        col("well_type", "category"),
+        col("well_order", "number"),
+        col("rd:pick:raw", "category"),
+        col("rd:sig:raw", "number"),
+        col("rd:sig:raw:q", "category"),
+      ],
+      { well_order: [1, 2] },
+    );
     expect(defaultPanels(d)).toEqual([
       {
         type: "scatter",
@@ -38,6 +41,21 @@ describe("defaultPanels", () => {
           appearance: { splitBy: "plate", colorBy: "well_type", shapeBy: "well_type" },
         },
       },
+    ]);
+  });
+
+  it("opens summary-only runs (no well positions) on a histogram of the first value", () => {
+    const d = ds(
+      [
+        col("well_type", "category"),
+        col("well_order", "number"),
+        col("rd:pick:raw", "category"),
+        col("rd:ic50:raw", "number"),
+      ],
+      { well_order: [null, null] },
+    );
+    expect(defaultPanels(d)).toEqual([
+      { type: "histogram", defaults: { x: "rd:ic50:raw", appearance: { colorBy: "well_type" } } },
     ]);
   });
 

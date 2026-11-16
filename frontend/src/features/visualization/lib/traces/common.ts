@@ -43,10 +43,9 @@ export function facetsOf(ds: Dataset, key: string | undefined) {
   return { labels, of: (i: number) => index.get(categoryLabel(key, ds.values[key]?.[i])) ?? 0 };
 }
 
-/** "CEL-12 · Plate 3 B07": what a hovered point is. */
+/** "CEL-12 · Plate 3 B07": what a hovered point is (the plate value is its full label). */
 export function hoverText(ds: Dataset, i: number): string {
-  const plate = ds.values.plate?.[i];
-  const place = [plate != null ? `Plate ${plate}` : null, ds.values.well?.[i]].filter(Boolean);
+  const place = [ds.values.plate?.[i], ds.values.well?.[i]].filter(Boolean);
   return [ds.values.compound?.[i] ?? "No compound", place.join(" ")].filter(Boolean).join(" · ");
 }
 

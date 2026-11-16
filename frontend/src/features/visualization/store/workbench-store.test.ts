@@ -88,4 +88,20 @@ describe("workbench store", () => {
     store.getState().removePanel(id);
     expect(store.getState().maximized).toBeNull();
   });
+
+  it("undo and redo drop a maximize whose panel no longer exists", () => {
+    const store = createWorkbenchStore({ panels: [] });
+    store.getState().addPanel("scatter");
+    const b = store.getState().addPanel("box") as string;
+    store.getState().setMaximized(b);
+    store.getState().undo();
+    expect(store.getState().maximized).toBeNull();
+    store.getState().redo();
+    store.getState().setMaximized(b);
+    store.getState().removePanel(b);
+    store.getState().undo();
+    store.getState().setMaximized(b);
+    store.getState().redo();
+    expect(store.getState().maximized).toBeNull();
+  });
 });

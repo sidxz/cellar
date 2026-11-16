@@ -82,15 +82,16 @@ describe("tooltipText", () => {
   it("adds each chosen field to the identity line", () => {
     const ds = dataset({
       compound: ["CEL-1"],
-      plate: ["3"],
+      // The backend sends the whole plate label (barcode, or "Plate n" with its run).
+      plate: ["Plate 3 · 2026-11-12"],
       well: ["B07"],
       y: [12.3456],
       well_type: ["positive_control"],
       dose: [null],
     });
     expect(tooltipText(ds, 0, ["y", "well_type", "dose"])).toBe(
-      "CEL-1 · Plate 3 B07<br>Signal: 12.3<br>well_type: Positive control<br>dose: (none)",
+      "CEL-1 · Plate 3 · 2026-11-12 B07<br>Signal: 12.3<br>well_type: Positive control<br>dose: (none)",
     );
-    expect(tooltipText(ds, 0, [])).toBe("CEL-1 · Plate 3 B07");
+    expect(tooltipText(ds, 0, [])).toBe("CEL-1 · Plate 3 · 2026-11-12 B07");
   });
 });
