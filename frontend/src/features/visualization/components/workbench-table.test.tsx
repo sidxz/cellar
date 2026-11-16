@@ -189,6 +189,28 @@ describe("WorkbenchTable", () => {
     expect(screen.getByText("Negative control")).toBeInTheDocument();
   });
 
+  it("keeps rows in the DOM in their shown order, so Tab follows a sort", async () => {
+    const shuffled: Dataset = {
+      ...ds,
+      values: {
+        ...ds.values,
+        compound: ["CEL-2", "CEL-1", "CEL-3"],
+        molecule_id: ["m2", "m1", "m3"],
+      },
+    };
+    const { container } = show([], { table: shuffled });
+    await screen.findByRole("link", { name: "CEL-1" });
+    const header = container.querySelector('.ag-header-cell[col-id="compound"]');
+    fireEvent.click(header?.querySelector(".ag-header-cell-label") as Element);
+    await vi.waitFor(() =>
+      expect(screen.getAllByRole("link").map((a) => a.textContent)).toEqual([
+        "CEL-1",
+        "CEL-2",
+        "CEL-3",
+      ]),
+    );
+  });
+
   it("drops structures in compact density", async () => {
     show();
     await screen.findByText("structure CCO");

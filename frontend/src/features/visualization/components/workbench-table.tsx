@@ -498,6 +498,9 @@ export function WorkbenchTable({
           rowHeight={ROW_HEIGHT[density]}
           getRowHeight={getRowHeight}
           suppressCellFocus
+          // Rows stay in the DOM in their shown order, so Tab through the cell buttons follows
+          // a sort or a re-pin.
+          ensureDomOrder
           animateRows={false}
           localeText={NO_ROWS}
         />
