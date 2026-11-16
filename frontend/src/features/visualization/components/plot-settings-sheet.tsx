@@ -17,6 +17,7 @@ import type { Appearance, PanelConfig, PanelPatch, PanelType } from "../store/wo
 import type { Dataset, DatasetColumn } from "../types";
 import { FieldSelect } from "./field-select";
 import { type EditField, panelTitle } from "./panels/panel-frame";
+import { OverlaySection } from "./settings/overlay-section";
 
 type Kind = DatasetColumn["kind"];
 const NUMBER: Kind[] = ["number"];
@@ -39,9 +40,9 @@ function tooManyGroups(ds: Dataset, key: string): string | undefined {
   return `${n.toLocaleString()} values; at most ${MAX_CATEGORIES.toLocaleString()} groups can be shown`;
 }
 
-/** The plot editor: Data, Appearance and Tooltip settings of one panel, shown in place of
- * the filter rail so the plot stays in view and redraws as settings change. Every change
- * is one ``updatePanel`` (one undo step); typed numbers commit when the input is left. */
+/** The plot editor: Data, Appearance, Tooltip and Overlays settings of one panel, shown in
+ * place of the filter rail so the plot stays in view and redraws as settings change. Every
+ * change is one ``updatePanel`` (one undo step); typed numbers commit when the input is left. */
 export function PlotSettingsSheet({
   ds,
   panelId,
@@ -339,6 +340,8 @@ export function PlotSettingsSheet({
             </Section>
           </>
         )}
+
+        <OverlaySection ds={ds} panelId={p.id} />
       </div>
     </div>
   );

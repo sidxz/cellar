@@ -148,6 +148,16 @@ describe("PlotSettingsSheet", () => {
     expect(screen.queryByRole("option", { name: "run_date" })).not.toBeInTheDocument();
   });
 
+  it("ends with the overlays the plot can draw, none on a histogram", () => {
+    show(scatter());
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings.at(-1)).toBe("Overlays");
+    expect(screen.getByRole("checkbox", { name: "Control bands (mean ± 3 SD)" })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Histogram" }));
+    expect(screen.queryByRole("heading", { name: "Overlays" })).not.toBeInTheDocument();
+  });
+
   it("names the opacity slider", () => {
     show(scatter());
     expect(screen.getByRole("slider", { name: "Opacity" })).toBeInTheDocument();
