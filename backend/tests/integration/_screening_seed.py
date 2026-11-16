@@ -140,19 +140,25 @@ async def readout(
     wellless: bool = False,
     outlier: bool = False,
     normalization: str | None = None,
+    well_id: uuid.UUID | None = None,
+    batch_id: uuid.UUID | None = None,
+    text: str | None = None,
 ) -> None:
     await s.execute(
         sa.text(
-            "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, "
-            "readout_definition_id, value_numeric, value_qualifier, is_outlier, "
-            "normalization_applied) VALUES (:id, :ws, :run, :well, :m, :rd, :v, :q, :o, :n)"
+            "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, batch_id, "
+            "readout_definition_id, value_numeric, value_qualifier, value_text, is_outlier, "
+            "normalization_applied) "
+            "VALUES (:id, :ws, :run, :well, :m, :b, :rd, :v, :q, :t, :o, :n)"
         ),
         {
             "id": uuid.uuid4(),
             "ws": ws,
             "run": run_id,
-            "well": None if wellless else uuid.uuid4(),
+            "well": None if wellless else (well_id or uuid.uuid4()),
             "m": molecule_id,
+            "b": batch_id,
+            "t": text,
             "rd": rd_id,
             "v": value,
             "q": qualifier,
@@ -160,6 +166,54 @@ async def readout(
             "n": normalization,
         },
     )
+
+
+async def plate(
+    s: AsyncSession,
+    run_id: uuid.UUID,
+    number: int,
+    *,
+    format: str | None = "384",
+    barcode: str | None = None,
+) -> uuid.UUID:
+    pid = uuid.uuid4()
+    await s.execute(
+        sa.text(
+            "INSERT INTO plates (id, run_id, plate_number, barcode, format) "
+            "VALUES (:id, :run, :n, :bc, :f)"
+        ),
+        {"id": pid, "run": run_id, "n": number, "bc": barcode, "f": format},
+    )
+    return pid
+
+
+async def well(
+    s: AsyncSession,
+    plate_id: uuid.UUID,
+    row: str,
+    column: int,
+    *,
+    well_type: str = "sample",
+    dose: float | None = None,
+    batch_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    wid = uuid.uuid4()
+    await s.execute(
+        sa.text(
+            'INSERT INTO wells (id, plate_id, "row", "column", well_type, dose, batch_id) '
+            "VALUES (:id, :p, :r, :c, :t, :d, :b)"
+        ),
+        {
+            "id": wid,
+            "p": plate_id,
+            "r": row,
+            "c": column,
+            "t": well_type,
+            "d": dose,
+            "b": batch_id,
+        },
+    )
+    return wid
 
 
 async def curve(
