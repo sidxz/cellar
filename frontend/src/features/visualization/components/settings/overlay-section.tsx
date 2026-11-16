@@ -135,7 +135,6 @@ export function OverlaySection({ ds, panelId }: { ds: Dataset; panelId: string }
               key={kind}
               id={id(kind)}
               label={kind === "lipe" ? "LipE guides" : "Selectivity folds"}
-              placeholder={kind === "lipe" ? "e.g. 3, 5" : "e.g. 10, 100"}
               values={o[kind]}
               reason={reason(kind)}
               onChange={(values) => set({ [kind]: values })}
@@ -151,14 +150,12 @@ export function OverlaySection({ ds, panelId }: { ds: Dataset; panelId: string }
 function NumberList({
   id,
   label,
-  placeholder,
   values = [],
   reason,
   onChange,
 }: {
   id: string;
   label: string;
-  placeholder: string;
   values?: number[];
   reason?: string;
   onChange: (values: number[] | undefined) => void;
@@ -171,7 +168,6 @@ function NumberList({
         </Label>
         <CommitInput
           id={id}
-          placeholder={placeholder}
           value={values.join(", ")}
           disabled={Boolean(reason)}
           aria-describedby={reason ? `${id}-reason` : undefined}

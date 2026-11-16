@@ -127,10 +127,8 @@ describe("OverlaySection", () => {
     unmount();
     show(scatter({ x: "logp", y: P }), compounds);
     expect(screen.getByRole("textbox", { name: "LipE guides" })).toHaveValue("");
-    expect(screen.getByRole("textbox", { name: "LipE guides" })).toHaveAttribute(
-      "placeholder",
-      "e.g. 3, 5",
-    );
+    // No suggested values: the chemist types their own.
+    expect(screen.getByRole("textbox", { name: "LipE guides" })).not.toHaveAttribute("placeholder");
   });
 
   it("commits the reference line when left, says it is display only, and clears when emptied", () => {
@@ -175,7 +173,7 @@ describe("OverlaySection", () => {
     show(scatter({ x: "dr:y:p", y: "dr:x:p" }), crossProtocol);
     const folds = screen.getByRole("textbox", { name: "Selectivity folds" });
     expect(folds).toHaveValue("");
-    expect(folds).toHaveAttribute("placeholder", "e.g. 10, 100");
+    expect(folds).not.toHaveAttribute("placeholder");
     enter(folds, "10, 100");
     expect(state().panel.overlays).toEqual({ selectivity: [10, 100] });
     expect(state().history).toBe(1);
