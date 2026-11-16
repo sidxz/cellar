@@ -7,23 +7,33 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { AlertTriangle, ChartScatter, Database, Info, Rows3, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { type Dispatch, useCallback, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
+import {
+  type DerivedAction,
+  type DerivedEntry,
+  derivedReducer,
+  setsOf,
+  useDerived,
+} from "../hooks/use-derived";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
 import { errorText } from "../lib/api-errors";
 import type { ViewConfig } from "../lib/config-schema";
 import { resolveUserColumns } from "../lib/dataset";
-import { defaultPanels } from "../lib/default-panels";
+import { defaultPanels, panelDefaults } from "../lib/default-panels";
+import { jobMoleculeIds, rgroupPositions, rgroupSetOf, withDerived } from "../lib/derived";
 import { type Carry, carryConfig, switchNote } from "../lib/level-switch";
 import { countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
 import { resolveViewConfig } from "../lib/saved-view";
 import { visualizeHref } from "../lib/source-url";
-import { WorkbenchProvider } from "../store/workbench-context";
-import { makePanel } from "../store/workbench-store";
+import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
+import { MAX_PANELS, type PanelPatch, makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level, SavedView } from "../types";
 import { AddPlotMenu } from "./add-plot-menu";
 import { CurvesDialog, type CurvesTarget, curvesTarget } from "./curves-dialog";
+import { DerivedColumnsBar, derivedTitle } from "./derived-columns-bar";
+import { DerivedRunner } from "./derived-runner";
 import { ExportMenu } from "./export-menu";
 import { FilterRail, NoRowsMatch } from "./filter-rail";
 import { PanelGrid } from "./panel-grid";
@@ -66,7 +76,9 @@ export function WorkbenchPage({
       />
     );
   }
-  return <Workbench source={source} level={level} view={view} />;
+  // Chemistry columns belong to the protocol or run; they survive level and run changes.
+  const key = source.kind === "protocol" ? source.protocolId : source.runId;
+  return <Workbench key={key} source={source} level={level} view={view} />;
 }
 
 /** The last view change: the view it leads to, the level it left and what it takes along. */
@@ -94,11 +106,15 @@ function Workbench({
   const tableRef = useRef<WorkbenchTableHandle>(null);
   const [curves, setCurves] = useState<CurvesTarget | null>(null);
   const [viewNoteOpen, setViewNoteOpen] = useState(true);
+  const [removedNote, setRemovedNote] = useState<string | null>(null);
+  const { entries, readySets, dispatch } = useDerived();
 
-  const ds = useMemo(
+  const base = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
     [query.data, nameOf],
   );
+  // Chemistry columns, computed per compound, joined onto whatever level is loaded.
+  const ds = useMemo(() => base && withDerived(base, readySets), [base, readySets]);
   // A row above Runs pools the source runs that count at its level; its curves come from those.
   const countedRunIds = useMemo(
     () => runs.filter((r) => countsAtLevel(level, r.status)).map((r) => r.id),
@@ -225,8 +241,19 @@ function Workbench({
 
   return (
     <div className="flex h-[calc(100dvh-4.5rem)] min-h-[560px] flex-col gap-2">
-      {/* Always mounted, so screen readers announce the switch note when it appears. */}
-      <output className="sr-only">{note}</output>
+      {/* Always mounted, so screen readers announce the notes when they appear. */}
+      <output className="sr-only">{[note, removedNote].filter(Boolean).join(" ")}</output>
+      {entries
+        .filter((e) => e.status === "running")
+        .map((e) => (
+          <DerivedRunner
+            key={`${e.spec.id}:${e.attempt}`}
+            entry={e}
+            ds={base}
+            readySets={readySets}
+            dispatch={dispatch}
+          />
+        ))}
       {body || !ds ? (
         <>
           <SourceBar
@@ -261,25 +288,23 @@ function Workbench({
             addPlotMenu={<AddPlotMenu ds={ds} />}
             viewControls={<ViewControls source={source} level={level} ds={ds} />}
           />
+          {entries.length > 0 && base && (
+            <DerivedStrip
+              entries={entries}
+              base={base}
+              ds={ds}
+              dispatch={dispatch}
+              onRemoved={setRemovedNote}
+            />
+          )}
           {viewNote}
           {note && (
-            <div className="flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-sm">
-              <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
-              {/* Read out by the status line above; hidden here so it is not heard twice. */}
-              <p aria-hidden="true" className="min-w-0 flex-1">
-                {note}
-              </p>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-6 w-6 shrink-0"
-                aria-label="Dismiss note"
-                onClick={() => setSwitched((s) => s && { ...s, dismissed: true })}
-              >
-                <X className="h-3.5 w-3.5" />
-              </Button>
-            </div>
+            <Note
+              text={note}
+              onDismiss={() => setSwitched((s) => s && { ...s, dismissed: true })}
+            />
           )}
+          {removedNote && <Note text={removedNote} onDismiss={() => setRemovedNote(null)} />}
           <WorkbenchBody
             plots={
               <NoRowsMatch ds={ds}>
@@ -327,6 +352,110 @@ function Workbench({
       )}
     </div>
   );
+}
+
+/** A dismissable note under the header (read out by the page's status line). */
+function Note({ text, onDismiss }: { text: string; onDismiss: () => void }) {
+  return (
+    <div className="flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-sm">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      {/* Read out by the status line; hidden here so it is not heard twice. */}
+      <p aria-hidden="true" className="min-w-0 flex-1">
+        {text}
+      </p>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-6 w-6 shrink-0"
+        aria-label="Dismiss note"
+        onClick={onDismiss}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </div>
+  );
+}
+
+/** The chemistry columns bar, wired to the workbench: removing a set drops the filters and
+ * plot fields on its columns as one undo step and says what went; its plot button adds the
+ * cluster map or an R-group matrix. */
+function DerivedStrip({
+  entries,
+  base,
+  ds,
+  dispatch,
+  onRemoved,
+}: {
+  entries: DerivedEntry[];
+  base: Dataset;
+  ds: Dataset;
+  dispatch: Dispatch<DerivedAction>;
+  onRemoved: (note: string | null) => void;
+}) {
+  const panels = useWorkbench((s) => s.panels);
+  const filters = useWorkbench((s) => s.filters);
+  const setConfig = useWorkbench((s) => s.setConfig);
+  const addPanel = useWorkbench((s) => s.addPanel);
+  const setMaximized = useWorkbench((s) => s.setMaximized);
+  const specOf = (id: string) => entries.find((e) => e.spec.id === id)?.spec;
+
+  const remove = (id: string) => {
+    const spec = specOf(id);
+    const after = withDerived(base, setsOf(derivedReducer(entries, { type: "remove", id })));
+    // Rows keep their ids, so a selection filter stays.
+    const fitted = carryConfig(
+      {
+        panels,
+        filters: filters.filter((f) => f.kind !== "rows"),
+        selectedIds: [],
+        columns: ds.columns,
+      },
+      after,
+    );
+    dispatch({ type: "remove", id });
+    if (!spec || fitted.dropped.length === 0) return onRemoved(null);
+    setConfig(
+      fitted.panels,
+      filters.filter((f) => f.kind === "rows" || fitted.filters.includes(f)),
+    );
+    onRemoved(`${derivedTitle(spec)} removed. Not available now: ${fitted.dropped.join(", ")}.`);
+  };
+
+  const plot = (id: string) => {
+    const added =
+      specOf(id)?.kind === "clusters"
+        ? addPanel("scatter", {
+            x: "chem:clusters:x",
+            y: "chem:clusters:y",
+            appearance: { colorBy: "chem:clusters:id" },
+          })
+        : addPanel("rgroup-matrix", matrixOf(ds, id));
+    // A maximized plot would hide the new one.
+    if (added) setMaximized(null);
+  };
+
+  return (
+    <DerivedColumnsBar
+      entries={entries}
+      ds={ds}
+      plotsFull={panels.length >= MAX_PANELS}
+      onCancel={(id) => dispatch({ type: "cancel", id })}
+      onRetry={(id) => dispatch({ type: "retry", id })}
+      onRemove={remove}
+      onRecompute={(id) => dispatch({ type: "recompute", id, moleculeIds: jobMoleculeIds(base) })}
+      onPlot={plot}
+    />
+  );
+}
+
+/** An R-group matrix of set ``id``: its R1 rows × R2 columns (else R1). */
+function matrixOf(ds: Dataset, id: string): PanelPatch {
+  const positions = rgroupPositions(ds).filter((k) => rgroupSetOf(k) === `chem:${id}`);
+  return {
+    ...panelDefaults(ds, "rgroup-matrix"),
+    category: positions[0],
+    x: positions[1] ?? positions[0],
+  };
 }
 
 // The URL: one spelling per view, whatever order the source's fields were set in.

@@ -205,6 +205,14 @@ export function coverage(ds: Dataset, set: DerivedSet): { covered: number; total
   return { covered: ids.filter((id) => set.byMolecule.has(id)).length, total: ids.length };
 }
 
+/** The compounds a derived job runs over: every dataset compound with a structure (never only
+ * the filtered ones), sorted. */
+export const jobMoleculeIds = (ds: Dataset): string[] =>
+  [...moleculeStructures(ds)]
+    .filter(([, structured]) => structured)
+    .map(([id]) => id)
+    .sort();
+
 /** R-group position columns (R1, R2, … of every R-groups set): the visible columns whose
  * ``:smiles`` sibling holds the raw fragment. */
 export function rgroupPositions(ds: Dataset): string[] {

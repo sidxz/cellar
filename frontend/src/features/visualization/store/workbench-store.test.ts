@@ -40,6 +40,21 @@ describe("workbench store", () => {
     expect(canRedo(store.getState())).toBe(false);
   });
 
+  it("setConfig swaps the panels and filters in one undo step and keeps the history", () => {
+    const store = createWorkbenchStore({ panels: [] });
+    store.getState().upsertFilter(range("a", 10));
+    store.getState().addPanel("scatter", { x: "inh" });
+    store.getState().setConfig([], [range("b", 5)]);
+    expect(store.getState().panels).toEqual([]);
+    expect(store.getState().filters.map((f) => f.id)).toEqual(["b"]);
+    store.getState().undo();
+    expect(store.getState().panels).toHaveLength(1);
+    expect(store.getState().filters.map((f) => f.id)).toEqual(["a"]);
+    store.getState().undo();
+    store.getState().undo();
+    expect(canUndo(store.getState())).toBe(false);
+  });
+
   it("selection changes never create history entries", () => {
     const store = createWorkbenchStore({ panels: [] });
     store.getState().setSelection(["r1", "r2"]);

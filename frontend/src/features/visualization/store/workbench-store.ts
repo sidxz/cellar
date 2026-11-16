@@ -39,6 +39,8 @@ export interface WorkbenchState extends Snapshot {
   setFilters: (filters: Filter[]) => void;
   upsertFilter: (filter: Filter) => void;
   removeFilter: (id: string) => void;
+  /** Replace the panels and filters together, as one undo step. */
+  setConfig: (panels: PanelConfig[], filters: Filter[]) => void;
   setSelection: (rowIds: Iterable<string>) => void;
   clearSelection: () => void;
   /** Turn the selection into a rows filter (one undo step) and clear it. */
@@ -140,6 +142,7 @@ export function createWorkbenchStore(initial: {
         });
       },
       removeFilter: (id) => commit({ filters: get().filters.filter((f) => f.id !== id) }),
+      setConfig: (panels, filters) => commit({ panels, filters }),
       setSelection: (rowIds) => set({ selection: new Set(rowIds) }),
       clearSelection: () => set({ selection: new Set<string>() }),
       filterToSelection: () => {

@@ -10,6 +10,8 @@ export type SubstructureFilter = Extract<Filter, { kind: "substructure" }>;
 type Predicate = (i: number) => boolean;
 
 function predicate(ds: Dataset, f: Filter): Predicate {
+  // An undo step can bring back a filter on columns removed since (derived ones): it is inert.
+  if ((f.kind === "range" || f.kind === "category") && !column(ds, f.key)) return () => true;
   if (f.kind === "range") {
     return (i) => {
       const v = numberAt(ds, f.key, i);

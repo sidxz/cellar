@@ -23,6 +23,7 @@ const state = vi.hoisted(() => ({
   counts: undefined as Record<string, number> | undefined,
   replace: vi.fn(),
   curves: [] as DoseResponseCurve[],
+  derived: [] as DerivedEntry[],
 }));
 
 vi.mock("next/navigation", () => ({
@@ -56,12 +57,19 @@ vi.mock("@structflo/components/dose-response", () => ({
   DoseResponseFigure: () => null,
 }));
 vi.mock("../hooks/use-dataset", () => ({ useDataset: () => state.query }));
+vi.mock("../hooks/use-derived", async (importOriginal) => {
+  const mod = await importOriginal<typeof import("../hooks/use-derived")>();
+  return { ...mod, useDerived: () => mod.useDerived(state.derived) };
+});
+vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
 vi.mock("../hooks/use-run-row-counts", () => ({
   useRunRowCounts: (id: string | null) => ({
     data: id && state.counts ? { counts: state.counts } : undefined,
   }),
 }));
 
+import type { DerivedEntry } from "../hooks/use-derived";
+import { rgroupSet } from "../lib/derived";
 import type { Level } from "../types";
 import { WorkbenchPage } from "./workbench-page";
 
@@ -130,6 +138,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  state.derived = [];
   state.replace.mockReset();
   state.counts = undefined;
   state.query = ready(dataset());
@@ -362,5 +371,66 @@ describe("WorkbenchPage", () => {
         .map((li) => li.textContent),
     ).toEqual(["2026-11-05 · A. Chen", "2026-11-12 · A. Chen"]);
     expect(document.body.textContent).not.toMatch(UUID);
+  });
+
+  describe("with R-group columns", () => {
+    const spec = {
+      id: "rg1",
+      kind: "rgroups",
+      coreSmiles: "c1ccccc1[*:1]",
+      name: "Core A",
+    } as const;
+    const withStructures = (ds: Dataset): Dataset => ({
+      ...ds,
+      columns: [...ds.columns, col("structure", "structure")],
+      values: { ...ds.values, structure: ds.values.molecule_id.map((m) => m && "c1ccccc1Cl") },
+    });
+
+    beforeEach(() => {
+      const base = withStructures(dataset());
+      const set = rgroupSet(spec, base, {
+        core_smiles: spec.coreSmiles,
+        labels: ["R1"],
+        assignments: { m1: { R1: "Cl[*:1]" } },
+      });
+      state.query = ready(base);
+      state.derived = [
+        { spec, moleculeIds: ["m1", "m2"], status: "ready", set, startedAt: 0, attempt: 1 },
+      ];
+    });
+
+    const addFilter = (name: string) => {
+      fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+      fireEvent.click(screen.getByRole("option", { name }));
+    };
+
+    it("keeps a filter on an R-group column across a level switch", () => {
+      const run = { kind: "run", runId: R1 } as const;
+      const { rerender } = render(<WorkbenchPage level="wells" source={run} />);
+      expect(screen.getByText("R-groups · Core A")).toBeInTheDocument();
+      addFilter("R1");
+      expect(screen.getByRole("group", { name: "R1" })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Compounds" }));
+      state.query = ready(withStructures(aggregated("compounds")));
+      rerender(<WorkbenchPage level="compounds" source={run} />);
+      expect(screen.getByText("Each row: compound")).toBeInTheDocument();
+      expect(screen.getByRole("group", { name: "R1" })).toBeInTheDocument();
+      expect(screen.getByText("R-groups · Core A")).toBeInTheDocument();
+    });
+
+    it("removing the set drops its filter as one undo step and says so", () => {
+      render(<WorkbenchPage level="wells" source={{ kind: "run", runId: R1 }} />);
+      addFilter("R1");
+      fireEvent.click(screen.getByRole("button", { name: "Remove R-groups · Core A" }));
+      expect(screen.queryByText("R-groups · Core A")).not.toBeInTheDocument();
+      expect(screen.queryByRole("group", { name: "R1" })).not.toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "R-groups · Core A removed. Not available now: Filter: R1.",
+      );
+      // The chemist's history stays: the drop is an ordinary undo step.
+      fireEvent.click(screen.getByRole("button", { name: "Undo" }));
+      expect(screen.getByText("3 / 3 wells · 2 compounds")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    });
   });
 });

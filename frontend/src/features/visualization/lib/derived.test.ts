@@ -6,6 +6,7 @@ import {
   type DerivedSpec,
   clusterSet,
   coverage,
+  jobMoleculeIds,
   rgroupSet,
   seriesSet,
   withDerived,
@@ -260,5 +261,11 @@ describe("coverage", () => {
       { structure: "structure" },
     );
     expect(coverage(larger, set)).toEqual({ covered: 2, total: 3 });
+  });
+});
+
+describe("jobMoleculeIds", () => {
+  it("runs over every dataset compound with a structure, once, sorted", () => {
+    expect(jobMoleculeIds(wells())).toEqual(["m1", "m2", "m4"]);
   });
 });

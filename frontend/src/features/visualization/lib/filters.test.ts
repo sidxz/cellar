@@ -97,6 +97,18 @@ describe("computePassMask", () => {
     expect(mask(computePassMask(ds(), [f]))).toEqual([0, 1, 0, 0, 1, 0]);
   });
 
+  it("a filter on a column the data no longer has keeps every row", () => {
+    const gone: Filter = {
+      id: "g",
+      kind: "category",
+      key: "chem:rg1:R1",
+      values: [],
+      includeMissing: false,
+    };
+    expect([...computePassMask(ds(), [gone])]).toEqual([1, 1, 1, 1, 1, 1]);
+    expect(isFilterActive(ds(), gone)).toBe(false);
+  });
+
   it("no filters → everything passes", () => {
     expect(mask(computePassMask(ds(), []))).toEqual([1, 1, 1, 1, 1, 1]);
   });
