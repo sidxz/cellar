@@ -337,8 +337,18 @@ async def test_list_a_protocols_views(as_user, session_factory, workspace_id):
 
 
 async def test_an_unreadable_view_is_left_out_of_the_list_and_says_why_on_open(
-    client, session_factory, fake_auth, capsys
+    client, session_factory, fake_auth, monkeypatch
 ):
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization import (
+        saved_visualization_repository as repo_module,
+    )
+
+    warnings: list[str] = []
+    # Record the event on the module's own logger: global logging state left by earlier
+    # tests (cached structlog loggers, stdlib handlers) must not decide this test.
+    monkeypatch.setattr(
+        repo_module.log, "warning", lambda event, **_: warnings.append(event), raising=False
+    )
     w = await _seed(session_factory, fake_auth.workspace_id)
     good = await _create(client, _protocol(w["p"]), name="Good")
     bad = await _create(client, _protocol(w["p"]), name="From a newer version")
@@ -355,7 +365,7 @@ async def test_an_unreadable_view_is_left_out_of_the_list_and_says_why_on_open(
 
     assert listed.status_code == 200, listed.text
     assert [v["id"] for v in listed.json()] == [good["id"]]
-    assert "saved_visualization.list_skipped" in capsys.readouterr().out
+    assert warnings == ["saved_visualization.list_skipped"]
     assert opened.status_code == 422
     assert "saved by a newer version" in opened.json()["message"]
 
