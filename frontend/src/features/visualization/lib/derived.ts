@@ -3,7 +3,7 @@ import { buildSubtreeMolIdMap } from "@/features/sar-analysis/lib/scaffold-tree-
 import type { ScaffoldTreeResult, UmapResult } from "@/features/sar-analysis/types";
 import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
 import type { Dataset, DatasetColumn } from "../types";
-import { moleculeStructures } from "./dataset";
+import { column, moleculeStructures } from "./dataset";
 
 /** One series: compounds under a scaffold-tree node, or matching an R-groups set's core
  * (exactly one of the two). */
@@ -204,3 +204,14 @@ export function coverage(ds: Dataset, set: DerivedSet): { covered: number; total
   const ids = [...moleculeStructures(ds).keys()];
   return { covered: ids.filter((id) => set.byMolecule.has(id)).length, total: ids.length };
 }
+
+/** R-group position columns (R1, R2, … of every R-groups set): the visible columns whose
+ * ``:smiles`` sibling holds the raw fragment. */
+export function rgroupPositions(ds: Dataset): string[] {
+  return ds.columns
+    .filter((c) => !c.hidden && column(ds, `${c.key}:smiles`)?.kind === "structure")
+    .map((c) => c.key);
+}
+
+/** The R-groups set a position column belongs to: "chem:rg1:R2" → "chem:rg1". */
+export const rgroupSetOf = (key: string) => key.slice(0, key.lastIndexOf(":"));

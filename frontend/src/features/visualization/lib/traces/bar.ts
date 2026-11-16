@@ -16,8 +16,8 @@ import {
   panelNote,
 } from "./common";
 
-const mean = (vs: number[]) => vs.reduce((a, b) => a + b, 0) / vs.length;
-function median(vs: number[]): number {
+export const mean = (vs: number[]) => vs.reduce((a, b) => a + b, 0) / vs.length;
+export function median(vs: number[]): number {
   const s = [...vs].sort((a, b) => a - b);
   const m = s.length >> 1;
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;

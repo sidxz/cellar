@@ -8,7 +8,7 @@ import { buildOverlays, mergeOverlays } from "../../lib/overlays/build";
 import { buildBarFigure } from "../../lib/traces/bar";
 import { buildBoxFigure } from "../../lib/traces/box";
 import { buildHistogramFigure } from "../../lib/traces/histogram";
-import type { PanelConfig, PanelType } from "../../store/workbench-store";
+import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 
 const CONFIG = { displaylogo: false };
@@ -20,7 +20,7 @@ export function ChartPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset }) {
   const mask = usePassMask(ds);
   const dark = useTheme().resolvedTheme === "dark";
   const fig = useMemo(() => {
-    const f = BUILDERS[panel.type as Exclude<PanelType, "scatter">](ds, panel, mask, dark);
+    const f = BUILDERS[panel.type as keyof typeof BUILDERS](ds, panel, mask, dark);
     return f.facets ? mergeOverlays(f, buildOverlays(ds, panel, mask, f.facets)) : f;
   }, [ds, panel, mask, dark]);
   return (

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { MAX_CATEGORIES } from "../lib/traces/common";
-import { dataset, panel } from "../lib/traces/test-fixtures";
+import { dataset, matrixWells, panel } from "../lib/traces/test-fixtures";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import type { PanelConfig, PanelPatch } from "../store/workbench-store";
 import type { EditField } from "./panels/panel-frame";
@@ -161,5 +161,16 @@ describe("PlotSettingsSheet", () => {
   it("names the opacity slider", () => {
     show(scatter());
     expect(screen.getByRole("slider", { name: "Opacity" })).toBeInTheDocument();
+  });
+
+  it("edits an R-group matrix's rows, columns, value and aggregate", () => {
+    const m = panel("rgroup-matrix", { category: "chem:rg1:R1", x: "chem:rg1:R2", y: "rd:s:raw" });
+    show(m, undefined, matrixWells());
+    expect(screen.queryByRole("group", { name: "Plot type" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /Log/ })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Rows")).toHaveTextContent("R1");
+    expect(screen.getByLabelText("Columns")).toHaveTextContent("R2");
+    fireEvent.click(screen.getByRole("button", { name: "Mean" }));
+    expect(state().panel).toMatchObject({ agg: "mean", category: "chem:rg1:R1" });
   });
 });

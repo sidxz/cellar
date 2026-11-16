@@ -25,6 +25,8 @@ function drawable(p: PanelConfig): boolean {
       return Boolean(p.y && p.category);
     case "bar":
       return Boolean(p.category && ((p.agg ?? "count") === "count" || p.y));
+    case "rgroup-matrix":
+      return Boolean(p.x && p.category);
   }
 }
 
@@ -62,10 +64,11 @@ export function carryConfig(
       return undefined;
     };
     const a = p.appearance;
+    const matrix = p.type === "rgroup-matrix";
     // Axes first, so the note reads in the editor's order.
-    const x = kept(p.x, "X");
-    const y = kept(p.y, "Y");
-    const category = kept(p.category, "Group");
+    const x = kept(p.x, matrix ? "Columns" : "X");
+    const y = kept(p.y, matrix ? "Value" : "Y");
+    const category = kept(p.category, matrix ? "Rows" : "Group");
     const colorBy = kept(a.colorBy, "Color");
     let next: PanelConfig = {
       ...p,

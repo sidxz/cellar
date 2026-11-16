@@ -27,6 +27,11 @@ export function panelTitle(ds: Dataset, p: PanelConfig): string {
       return !p.agg || p.agg === "count"
         ? `Count by ${l(p.category)}`
         : `${p.agg === "mean" ? "Mean" : "Median"} ${l(p.y)} by ${l(p.category)}`;
+    case "rgroup-matrix": {
+      const what = p.y ? `${p.agg === "mean" ? "Mean" : "Median"} ${l(p.y)}` : "Compounds";
+      const set = p.x ? column(ds, p.x)?.group : undefined;
+      return `${what} by ${l(p.category)} × ${l(p.x)}${set ? ` (${set})` : ""}`;
+    }
   }
 }
 
@@ -42,6 +47,12 @@ function chips(ds: Dataset, p: PanelConfig): { field: EditField; name: string; t
     scatter || (p.type === "histogram" && a.colorBy && column(ds, a.colorBy)?.kind !== "number");
   const shape = scatter ? a.shapeBy : undefined;
   const out: { field: EditField; name: string; text: string }[] = [];
+  if (p.type === "rgroup-matrix") {
+    if (p.category) out.push({ field: "category", name: "Rows", text: text(p.category) });
+    if (p.x) out.push({ field: "x", name: "Columns", text: text(p.x) });
+    if (p.y) out.push({ field: "y", name: "Value", text: text(p.y) });
+    return out;
+  }
   if (y && p.y) out.push({ field: "y", name: "Y", text: text(p.y, p.logY) });
   if (p.x && p.type !== "bar" && p.type !== "box") {
     out.push({ field: "x", name: "X", text: text(p.x, scatter && p.logX) });

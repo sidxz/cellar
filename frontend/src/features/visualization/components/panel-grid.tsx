@@ -7,6 +7,7 @@ import type { Dataset } from "../types";
 import { AddPlotMenu } from "./add-plot-menu";
 import { ChartPanel } from "./panels/chart-panel";
 import { type OnEditPanel, PanelFrame } from "./panels/panel-frame";
+import { RGroupMatrixPanel } from "./panels/rgroup-matrix-panel";
 import { ScatterPanel } from "./panels/scatter-panel";
 
 /** The plots area: up to four panels in a 2×2 grid (a lone or odd last panel spans the
@@ -40,6 +41,8 @@ export function PanelGrid({ ds, onEdit }: { ds: Dataset; onEdit: OnEditPanel }) 
             <PanelFrame key={p.id} panel={p} ds={ds} onEdit={onEdit}>
               {p.type === "scatter" ? (
                 <ScatterPanel panel={p} ds={ds} />
+              ) : p.type === "rgroup-matrix" ? (
+                <RGroupMatrixPanel panel={p} ds={ds} />
               ) : (
                 <ChartPanel panel={p} ds={ds} />
               )}

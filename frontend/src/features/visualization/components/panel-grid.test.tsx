@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { provenanceOf } from "../lib/traces/test-fixtures";
+import { matrixWells, provenanceOf } from "../lib/traces/test-fixtures";
 import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../types";
@@ -8,6 +8,7 @@ import { AddPlotMenu } from "./add-plot-menu";
 import { PanelGrid } from "./panel-grid";
 
 vi.mock("@/shared/lib/plotly", () => ({ Plot: () => null }));
+vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
 
 const col = (key: string, label: string, kind: DatasetColumn["kind"]): DatasetColumn => ({
   key,
@@ -88,5 +89,22 @@ describe("PanelGrid and AddPlotMenu", () => {
       expect(screen.getByRole("menuitem", { name })).toHaveAttribute("data-disabled");
     }
     expect(screen.getByText(/no numeric fields to plot/i)).toBeInTheDocument();
+  });
+
+  it("offers the R-group matrix only once R-group columns exist, saying why", () => {
+    show(1);
+    openMenu(/Add plot/);
+    const item = screen.getByRole("menuitem", { name: /R-group matrix/ });
+    expect(item).toHaveAttribute("data-disabled");
+    expect(item).toHaveTextContent("Add R-groups first: Add columns → R-groups…");
+  });
+
+  it("adds an R-group matrix of R1 × R2", () => {
+    show(1, matrixWells());
+    openMenu(/Add plot/);
+    fireEvent.click(screen.getByRole("menuitem", { name: "R-group matrix" }));
+    expect(
+      screen.getByRole("region", { name: "Median Signal by R1 × R2 (R-groups · Core A)" }),
+    ).toBeInTheDocument();
   });
 });

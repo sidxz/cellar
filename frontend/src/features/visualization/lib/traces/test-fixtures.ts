@@ -1,6 +1,7 @@
 import type { DoseResponseCurve } from "@/features/screening-assay/types";
 import { DEFAULT_APPEARANCE, type PanelConfig, type PanelPatch } from "../../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../../types";
+import { rgroupSet, withDerived } from "../derived";
 
 type Kind = DatasetColumn["kind"];
 
@@ -87,3 +88,34 @@ export const compoundCurve = (patch: Partial<DoseResponseCurve> = {}): DoseRespo
   excluded_points: [],
   ...patch,
 });
+
+/** Wells with R-group columns (set rg1, "Core A"): m1 three times and m2 in (Cl, –H), m3
+ * not matching the core, m4 in (F, –H), a control without a compound; ``rd:s:raw`` is
+ * "Signal". */
+export function matrixWells(): Dataset {
+  const V = "rd:s:raw";
+  const H = "[H][*:2]";
+  const ds = dataset(
+    {
+      molecule_id: ["m1", "m1", "m1", "m2", "m3", "m4", null],
+      structure: ["c1", "c1", "c1", "c2", "c3", "c4", null],
+      [V]: [1, 3, 10, 100, 2, 5, 7],
+    },
+    { structure: "structure" },
+  );
+  ds.columns = ds.columns.map((c) => (c.key === V ? { ...c, label: "Signal" } : c));
+  const set = rgroupSet(
+    { id: "rg1", kind: "rgroups", coreSmiles: "c1ccccc1", name: "Core A" },
+    ds,
+    {
+      core_smiles: "c1ccccc1",
+      labels: ["R1", "R2"],
+      assignments: {
+        m1: { R1: "Cl[*:1]", R2: H },
+        m2: { R1: "Cl[*:1]", R2: H },
+        m4: { R1: "F[*:1]", R2: H },
+      },
+    },
+  );
+  return withDerived(ds, [set]);
+}

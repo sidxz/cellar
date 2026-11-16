@@ -12,9 +12,11 @@ import {
   ChartColumn,
   ChartColumnStacked,
   ChartScatter,
+  Grid3x3,
   Plus,
 } from "lucide-react";
 import { numericValueColumn, panelDefaults } from "../lib/default-panels";
+import { rgroupPositions } from "../lib/derived";
 import { useWorkbench } from "../store/workbench-context";
 import { MAX_PANELS, type PanelType } from "../store/workbench-store";
 import type { Dataset } from "../types";
@@ -34,6 +36,7 @@ export function AddPlotMenu({ ds }: { ds: Dataset }) {
   const setMaximized = useWorkbench((s) => s.setMaximized);
   const full = count >= MAX_PANELS;
   const hasNumeric = Boolean(numericValueColumn(ds));
+  const hasRGroups = rgroupPositions(ds).length > 0;
 
   const add = (type: PanelType) => {
     // A maximized plot would hide the new one.
@@ -61,6 +64,17 @@ export function AddPlotMenu({ ds }: { ds: Dataset }) {
               {label}
             </DropdownMenuItem>
           ))}
+          <DropdownMenuItem disabled={!hasRGroups} onSelect={() => add("rgroup-matrix")}>
+            <Grid3x3 className="h-4 w-4" />
+            <span className="flex flex-col">
+              R-group matrix
+              {!hasRGroups && (
+                <span className="text-xs text-muted-foreground">
+                  Add R-groups first: Add columns → R-groups…
+                </span>
+              )}
+            </span>
+          </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
     </span>

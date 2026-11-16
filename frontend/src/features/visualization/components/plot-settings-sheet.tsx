@@ -11,6 +11,7 @@ import { Fragment, type ReactNode, useEffect } from "react";
 import { colorBins, numericRange } from "../lib/appearance";
 import { column } from "../lib/dataset";
 import { numericValueColumn, retypePanel } from "../lib/default-panels";
+import { rgroupPositions, rgroupSetOf } from "../lib/derived";
 import { MAX_CATEGORIES, levels } from "../lib/traces/common";
 import { useWorkbench } from "../store/workbench-context";
 import type { Appearance, PanelConfig, PanelPatch, PanelType } from "../store/workbench-store";
@@ -104,13 +105,17 @@ export function PlotSettingsSheet({
         <p className="text-xs text-muted-foreground">Changes apply live; Undo reverts them.</p>
 
         <Section title="Data">
-          <Segmented
-            label="Plot type"
-            className="grid w-full grid-cols-4"
-            value={p.type}
-            options={TYPES.map((t) => ({ ...t, disabled: t.numeric && !firstNumeric }))}
-            onChange={(type) => set(retypePanel(ds, p, type))}
-          />
+          {p.type === "rgroup-matrix" ? (
+            <MatrixFields ds={ds} p={p} set={set} id={id} />
+          ) : (
+            <Segmented
+              label="Plot type"
+              className="grid w-full grid-cols-4"
+              value={p.type}
+              options={TYPES.map((t) => ({ ...t, disabled: t.numeric && !firstNumeric }))}
+              onChange={(type) => set(retypePanel(ds, p, type))}
+            />
+          )}
           {(p.type === "scatter" || p.type === "histogram") && (
             <Row label="X" htmlFor={id("x")}>
               <FieldSelect
@@ -169,7 +174,7 @@ export function PlotSettingsSheet({
               />
             </Row>
           )}
-          {p.type !== "histogram" && (
+          {p.type !== "histogram" && p.type !== "rgroup-matrix" && (
             <Toggle
               id={id("logY")}
               label="Log Y"
@@ -344,6 +349,77 @@ export function PlotSettingsSheet({
         <OverlaySection ds={ds} panelId={p.id} />
       </div>
     </div>
+  );
+}
+
+/** An R-group matrix's rows and columns (R positions; columns from the rows' R-groups set,
+ * so picking rows from another set moves the columns to it), value and aggregate. */
+function MatrixFields({
+  ds,
+  p,
+  set,
+  id,
+}: {
+  ds: Dataset;
+  p: PanelConfig;
+  set: (patch: PanelPatch) => void;
+  id: (field: string) => string;
+}) {
+  const positions = rgroupPositions(ds);
+  const sameSet = (key: string) => positions.filter((k) => rgroupSetOf(k) === rgroupSetOf(key));
+  return (
+    <>
+      <Row label="Rows" htmlFor={id("category")}>
+        <FieldSelect
+          id={id("category")}
+          ds={ds}
+          kinds={[]}
+          include={positions}
+          value={p.category}
+          onChange={(category) => {
+            if (!category) return;
+            const columns = sameSet(category);
+            set(
+              p.x && columns.includes(p.x) ? { category } : { category, x: columns[1] ?? category },
+            );
+          }}
+        />
+      </Row>
+      <Row label="Columns" htmlFor={id("x")}>
+        <FieldSelect
+          id={id("x")}
+          ds={ds}
+          kinds={[]}
+          include={p.category ? sameSet(p.category) : positions}
+          value={p.x}
+          onChange={(x) => x && set({ x })}
+        />
+      </Row>
+      <Row label="Value" htmlFor={id("y")}>
+        <FieldSelect
+          id={id("y")}
+          ds={ds}
+          kinds={NUMBER}
+          clearable
+          placeholder="None (count compounds)"
+          value={p.y}
+          onChange={(y) => set({ y })}
+        />
+      </Row>
+      {p.y && (
+        <Row label="Aggregate">
+          <Segmented
+            label="Aggregate"
+            value={p.agg === "mean" ? "mean" : "median"}
+            options={[
+              { value: "median", label: "Median" },
+              { value: "mean", label: "Mean" },
+            ]}
+            onChange={(agg) => set({ agg })}
+          />
+        </Row>
+      )}
+    </>
   );
 }
 

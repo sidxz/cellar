@@ -37,7 +37,7 @@ export const overlaySchema = z.object({
 
 export const panelSchema = z.object({
   id: z.string(),
-  type: z.enum(["scatter", "histogram", "bar", "box"]),
+  type: z.enum(["scatter", "histogram", "bar", "box", "rgroup-matrix"]),
   x: z.string().optional(),
   y: z.string().optional(),
   category: z.string().optional(),

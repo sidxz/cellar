@@ -1,6 +1,7 @@
 import type { Appearance, PanelConfig, PanelPatch, PanelType } from "../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../types";
 import { categoryColumns, column, valueColumns } from "./dataset";
+import { rgroupPositions, rgroupSetOf } from "./derived";
 
 /** The first readout value column that holds numbers, if any. */
 export function numericValueColumn(ds: Dataset): DatasetColumn | undefined {
@@ -9,7 +10,8 @@ export function numericValueColumn(ds: Dataset): DatasetColumn | undefined {
 
 /** The fields a newly added panel of ``type`` starts with: numeric fields take the first
  * numeric readout, category fields well type (else the first category column), and well
- * type colors (and stacks) the plot when the dataset has it. */
+ * type colors (and stacks) the plot when the dataset has it. An R-group matrix takes R1
+ * rows × R2 columns of the first R-groups set and the median of the first numeric readout. */
 export function panelDefaults(ds: Dataset, type: PanelType): PanelPatch {
   const value = numericValueColumn(ds)?.key;
   const wellType = column(ds, "well_type")?.key;
@@ -27,6 +29,11 @@ export function panelDefaults(ds: Dataset, type: PanelType): PanelPatch {
       return { agg: "count", category };
     case "box":
       return { y: value, category };
+    case "rgroup-matrix": {
+      const positions = rgroupPositions(ds);
+      const set = positions.filter((k) => rgroupSetOf(k) === rgroupSetOf(positions[0] ?? ""));
+      return { category: set[0], x: set[1] ?? set[0], y: value, agg: "median" };
+    }
   }
 }
 
@@ -60,6 +67,8 @@ export function retypePanel(ds: Dataset, p: PanelConfig, type: PanelType): Panel
       return { ...base, category: p.category ?? d.category, agg: p.agg ?? d.agg, y: value };
     case "box":
       return { ...base, category: p.category ?? d.category, y: value ?? d.y, logY: p.logY };
+    case "rgroup-matrix":
+      return { ...base, category: d.category, x: d.x, y: value ?? d.y, agg: d.agg };
   }
 }
 
