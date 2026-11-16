@@ -61,6 +61,8 @@ export type FragmentDisplay = {
   title: string;
   /** True for `[H][*:n]` — an unsubstituted position. Render plainly, no thumbnail. */
   isHydrogen: boolean;
+  /** True when ``label`` is a conventional name (or –H), false when it is a cleaned SMILES. */
+  named: boolean;
   /** Raw fragment SMILES to depict; null for hydrogen / empty (nothing to draw). */
   thumbnailSmiles: string | null;
 };
@@ -73,13 +75,25 @@ export type FragmentDisplay = {
 export function fragmentDisplay(fragmentSmiles: string): FragmentDisplay {
   const raw = (fragmentSmiles ?? "").trim();
   if (!raw) {
-    return { label: "—", title: "no substituent", isHydrogen: false, thumbnailSmiles: null };
+    return {
+      label: "—",
+      title: "no substituent",
+      isHydrogen: false,
+      named: false,
+      thumbnailSmiles: null,
+    };
   }
 
   const key = raw.replace(ATTACHMENT_RE, "[*:1]");
 
   if (key === HYDROGEN_KEY) {
-    return { label: "–H", title: "unsubstituted (–H)", isHydrogen: true, thumbnailSmiles: null };
+    return {
+      label: "–H",
+      title: "unsubstituted (–H)",
+      isHydrogen: true,
+      named: true,
+      thumbnailSmiles: null,
+    };
   }
 
   const known = SUBSTITUENT_NAMES[key];
@@ -88,6 +102,7 @@ export function fragmentDisplay(fragmentSmiles: string): FragmentDisplay {
       label: known.label,
       title: `${known.name} — ${raw}`,
       isHydrogen: false,
+      named: true,
       thumbnailSmiles: raw,
     };
   }
@@ -98,6 +113,7 @@ export function fragmentDisplay(fragmentSmiles: string): FragmentDisplay {
     label: raw.replace(ATTACHMENT_RE, "*"),
     title: raw,
     isHydrogen: false,
+    named: false,
     thumbnailSmiles: raw,
   };
 }

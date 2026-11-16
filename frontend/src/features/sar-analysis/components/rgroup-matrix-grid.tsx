@@ -46,7 +46,12 @@ function AxisFragment({ smiles, orientation }: { smiles: string; orientation: "c
           className={orientation === "row" ? "shrink-0" : undefined}
         />
       )}
-      <span className="break-all text-[9px] leading-tight text-muted-foreground">{frag.label}</span>
+      {/* An unnamed substituent's text would be its SMILES: the depiction says it, the hover keeps it. */}
+      {(frag.named || !frag.thumbnailSmiles) && (
+        <span className="break-all text-[9px] leading-tight text-muted-foreground">
+          {frag.label}
+        </span>
+      )}
     </div>
   );
 }
