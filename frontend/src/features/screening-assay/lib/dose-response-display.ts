@@ -8,7 +8,12 @@
  * uses.
  */
 
-import { X_AXIS_FLOOR, generate4PLPoints } from "@structflo/components/dose-response";
+import {
+  type CurveLike,
+  X_AXIS_FLOOR,
+  generate4PLPoints,
+} from "@structflo/components/dose-response";
+import { curvePotency, curvePotencyText } from "./intercept-label";
 
 /** Compact dose-response chart dimensions used in cell renderers / detail sheets. */
 export const COMPACT_DR_CHART = {
@@ -71,11 +76,13 @@ export function fitNoteLabel(code: string): string {
   return `${n} point${n === 1 ? "" : "s"} at dose 0 left out of the fit`;
 }
 
-/** The curve with its fit notes worded (the same object when there is nothing to word). */
-export function withFitNotes<T extends { fit_quality_warnings?: readonly string[] | null }>(
-  curve: T,
-): T {
-  const codes = curve.fit_quality_warnings;
-  if (!codes?.some((c) => c.startsWith(DOSE_ZERO_LEFT_OUT))) return curve;
-  return { ...curve, fit_quality_warnings: codes.map(fitNoteLabel) };
+/** The curve with its fit notes worded, and a note of the value it reports when that value
+ *  is censored at the dose range — the suite's card headline shows the fitted number (the
+ *  same object when there is nothing to add). */
+export function withFitNotes<T extends CurveLike>(curve: T): T {
+  const codes = curve.fit_quality_warnings ?? [];
+  const reported =
+    curvePotency(curve).kind === "qualifier" ? [`Reported as ${curvePotencyText(curve)}`] : [];
+  if (!reported.length && !codes.some((c) => c.startsWith(DOSE_ZERO_LEFT_OUT))) return curve;
+  return { ...curve, fit_quality_warnings: [...reported, ...codes.map(fitNoteLabel)] };
 }

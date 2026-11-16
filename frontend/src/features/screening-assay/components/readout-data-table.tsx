@@ -14,10 +14,10 @@ import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
 import {
+  doseRange,
   findInterceptValue,
   formatInterceptDisplay,
   interceptOptionLabel,
-  maxDoseFromRawData,
 } from "../lib/intercept-label";
 import {
   type PivotRow,
@@ -228,9 +228,7 @@ export function ReadoutDataTable({
                   value,
                   at_bound: iv?.at_bound,
                   curve_class: curve.curve_class,
-                  max_dose: maxDoseFromRawData(
-                    curve.raw_data as Array<{ x?: number; concentration?: number }> | null,
-                  ),
+                  ...doseRange(curve.raw_data),
                 }).sortValue;
               },
               cellRenderer: (params: { data: PivotRow | undefined }) => {
@@ -244,9 +242,7 @@ export function ReadoutDataTable({
                   value,
                   at_bound: iv?.at_bound,
                   curve_class: curve.curve_class,
-                  max_dose: maxDoseFromRawData(
-                    curve.raw_data as Array<{ x?: number; concentration?: number }> | null,
-                  ),
+                  ...doseRange(curve.raw_data),
                 });
                 const showUnit = display.kind === "scalar" || display.kind === "qualifier";
                 const unitSuffix = showUnit && curve.fitted_unit ? ` ${curve.fitted_unit}` : "";

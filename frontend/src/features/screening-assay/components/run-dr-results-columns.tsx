@@ -2,10 +2,10 @@ import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import {
+  doseRange,
   findInterceptValue,
   formatInterceptDisplay,
   interceptLabel,
-  maxDoseFromRawData,
 } from "../lib/intercept-label";
 import type { CurveClass, InterceptSpec } from "../types";
 import { CurveClassBadge } from "./curve-class-badge";
@@ -208,7 +208,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
           value,
           at_bound: iv?.at_bound,
           curve_class: params.data.curve_class,
-          max_dose: maxDoseFromRawData(params.data.data_points),
+          ...doseRange(params.data.data_points),
         }).sortValue;
       },
       cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
@@ -219,7 +219,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
           value,
           at_bound: iv?.at_bound,
           curve_class: params.data.curve_class,
-          max_dose: maxDoseFromRawData(params.data.data_points),
+          ...doseRange(params.data.data_points),
         });
         const showUnit = display.kind === "scalar" || display.kind === "qualifier";
         const unitSuffix = showUnit && params.data.fitted_unit ? ` ${params.data.fitted_unit}` : "";

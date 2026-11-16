@@ -446,6 +446,8 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                 curve_class: row.curve_class,
                 top: row.top,
                 bottom: row.bottom,
+                raw_data: row.data_points,
+                intercept_values: row.intercept_values,
               }))}
             />
           </CardContent>

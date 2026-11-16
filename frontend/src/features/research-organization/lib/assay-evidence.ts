@@ -1,7 +1,4 @@
-import {
-  formatInterceptDisplay,
-  maxDoseFromRawData,
-} from "@/features/screening-assay/lib/intercept-label";
+import { doseRange, formatInterceptDisplay } from "@/features/screening-assay/lib/intercept-label";
 import type { ActivityValue, InterceptKey } from "../types";
 import { type AggregationMode, wireToAggregationMode } from "./use-aggregation-mode";
 
@@ -25,7 +22,7 @@ export function activityEndpoint(
     value,
     at_bound: aggregate ? false : iv?.at_bound,
     curve_class: aggregate ? null : av.curve_params?.curve_class,
-    max_dose: maxDoseFromRawData(av.raw_data),
+    ...doseRange(av.raw_data),
     runCount: av.run_count ?? 1,
     mode,
     foldRange: aggregate?.aggregate_stats?.fold_range,

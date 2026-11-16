@@ -6,11 +6,7 @@ import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
 import { Star } from "lucide-react";
 import { type CatalogColumn, compareForDirection } from "../../lib/activity-columns";
-import {
-  findInterceptValue,
-  formatInterceptDisplay,
-  maxDoseFromRawData,
-} from "../../lib/intercept-label";
+import { doseRange, findInterceptValue, formatInterceptDisplay } from "../../lib/intercept-label";
 import type {
   CompoundActivity,
   CompoundFlag as CompoundFlagType,
@@ -167,7 +163,7 @@ function interceptColumn(
       value,
       at_bound: iv?.at_bound,
       curve_class: rv?.curve_class,
-      max_dose: maxDoseFromRawData(rv?.data_points),
+      ...doseRange(rv?.data_points),
     });
   };
   return {
@@ -180,7 +176,7 @@ function interceptColumn(
     autoHeaderHeight: true,
     comparator: compareForDirection(rd?.best_direction ?? "low"),
     ...(o.sort?.colId === c.colId ? { sort: o.sort.sort } : {}),
-    // Same rule as the cell, so sorting and display agree (inactive → null).
+    // Same rule as the cell, so sorting and display agree.
     valueGetter: (p) => display(p.data).sortValue,
     cellRenderer: (p: ICellRendererParams<CompoundActivity>) => {
       const d = display(p.data);

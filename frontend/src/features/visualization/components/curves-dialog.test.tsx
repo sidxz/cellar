@@ -130,6 +130,17 @@ describe("CurvesDialog", () => {
     expect(screen.getByRole("cell", { name: "CEL-000001-02" })).toBeInTheDocument();
   });
 
+  it("reads an inactive curve's value as above its top dose", () => {
+    const doses = [0.5, 5, 50, 500].map((concentration) => ({ concentration, response: 5 }));
+    state.curves = [
+      { ...curve("c1", R1, 1172.1), curve_class: "inactive", raw_data: doses },
+      { ...curve("c2", R2, 12.5), raw_data: doses },
+    ];
+    render(<CurvesDialog {...target} runIds={[R1, R2]} open onOpenChange={() => {}} />);
+    expect(screen.getByRole("cell", { name: "> 500 uM" })).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "12.5 uM" })).toBeInTheDocument();
+  });
+
   it("says when the chosen runs have no curves for the compound", () => {
     state.curves = [curve("c3", R3, 1)];
     render(<CurvesDialog {...target} runIds={[R1]} open onOpenChange={() => {}} />);

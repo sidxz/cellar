@@ -170,7 +170,13 @@ export interface InterceptDisplay {
 }
 
 const TOOLTIP_INACTIVE =
-  "ND = Not Determined. Curve was classified inactive, so the fitted scalar isn't reported.";
+  "Inactive: no response within the tested doses, so the value lies above the top dose.";
+const TOOLTIP_INACTIVE_NO_RANGE =
+  "ND = Not Determined. Curve was classified inactive, and no tested concentration is available to report as a bound.";
+const TOOLTIP_ABOVE_RANGE =
+  "The fit puts this value above the tested doses; it is reported as a bound, not the extrapolated number.";
+const TOOLTIP_BELOW_RANGE =
+  "The fit puts this value below the tested doses; it is reported as a bound, not the extrapolated number.";
 const TOOLTIP_MISSING = "No value for this intercept. Recompute the curve to refresh.";
 const TOOLTIP_QUALIFIER =
   "Response did not reach this intercept within the tested concentration range. Reported as an upper-bound qualifier.";
@@ -203,13 +209,18 @@ function toSubscript(n: number): string {
 /**
  * Decide how an intercept cell should display its value.
  *
- *   - `curve_class === "inactive"` → "ND". The Hill fit doesn't represent
- *     real activity, so we never report a scalar (industry: CDD, Genedata).
+ *   - `curve_class === "inactive"` → "> {max_dose}" (muted, not a warning): no response in
+ *     the tested doses, so the value lies above them — the fit's number never shows.
  *   - `value == null`             → "—" with a recompute hint (intercept
  *     was added to the protocol after this curve was fit).
  *   - `at_bound === true`         → "> {max_dose}" qualifier when we know
- *     the tested range; otherwise "ND" (we don't fabricate a bound).
+ *     the tested range (the intercept resolver's and the workbench's censoring rule).
+ *   - value above `max_dose` / below `min_dose` → "> {max_dose}" / "< {min_dose}": an
+ *     extrapolated value is censored at the dose range, as the external platform reports it.
  *   - else                        → scalar `value.toPrecision(4)`.
+ *
+ * Without a tested dose to quote, an inactive or at-bound cell reads "ND" (we don't
+ * fabricate a bound).
  *
  * Unit-agnostic — callers append units only when `kind === "scalar" ||
  * "qualifier"`.
@@ -227,6 +238,8 @@ export function formatInterceptDisplay(args: {
   at_bound: boolean | undefined | null;
   curve_class: string | null | undefined;
   max_dose: number | null;
+  /** The lowest tested dose; without it nothing is censored below the range. */
+  min_dose?: number | null;
   // ---- NEW: multi-run aggregation context (all optional, defaults
   // preserve current single-run behavior) ----
   runCount?: number;
@@ -243,14 +256,27 @@ export function formatInterceptDisplay(args: {
   // the current display rules.
   let base: Omit<InterceptDisplay, "primary" | "decoration">;
 
+  const maxDose = positive(args.max_dose);
+  const minDose = positive(args.min_dose);
+  const above = (tooltip: string, warning: boolean) => ({
+    kind: "qualifier" as const,
+    text: `> ${boundText(maxDose as number)}`,
+    tooltip,
+    warning,
+    // Weaker than the tested range — sorts after every finite scalar in
+    // ascending order but ahead of nulls.
+    sortValue: Number.POSITIVE_INFINITY,
+  });
+  const nd = (tooltip: string) => ({
+    kind: "nd" as const,
+    text: "ND",
+    tooltip,
+    warning: false,
+    sortValue: null,
+  });
+
   if (args.curve_class === "inactive") {
-    base = {
-      kind: "nd",
-      text: "ND",
-      tooltip: TOOLTIP_INACTIVE,
-      warning: false,
-      sortValue: null,
-    };
+    base = maxDose != null ? above(TOOLTIP_INACTIVE, false) : nd(TOOLTIP_INACTIVE_NO_RANGE);
   } else if (args.value == null) {
     base = {
       kind: "missing",
@@ -260,25 +286,18 @@ export function formatInterceptDisplay(args: {
       sortValue: null,
     };
   } else if (args.at_bound) {
-    if (args.max_dose != null && Number.isFinite(args.max_dose) && args.max_dose > 0) {
-      base = {
-        kind: "qualifier",
-        text: `> ${args.max_dose.toPrecision(4)}`,
-        tooltip: TOOLTIP_QUALIFIER,
-        warning: true,
-        // Some response, weaker than tested range — sorts after every
-        // finite scalar in ascending order but ahead of nulls.
-        sortValue: Number.POSITIVE_INFINITY,
-      };
-    } else {
-      base = {
-        kind: "nd",
-        text: "ND",
-        tooltip: TOOLTIP_AT_BOUND_NO_RANGE,
-        warning: false,
-        sortValue: null,
-      };
-    }
+    base = maxDose != null ? above(TOOLTIP_QUALIFIER, true) : nd(TOOLTIP_AT_BOUND_NO_RANGE);
+  } else if (maxDose != null && args.value > maxDose) {
+    base = above(TOOLTIP_ABOVE_RANGE, true);
+  } else if (minDose != null && args.value < minDose) {
+    base = {
+      kind: "qualifier",
+      text: `< ${boundText(minDose)}`,
+      tooltip: TOOLTIP_BELOW_RANGE,
+      warning: true,
+      // More potent than the tested range — ahead of every finite scalar.
+      sortValue: Number.NEGATIVE_INFINITY,
+    };
   } else {
     base = {
       kind: "scalar",
@@ -315,25 +334,64 @@ export function formatInterceptDisplay(args: {
   };
 }
 
+/** A fitted curve's headline value — its primary intercept, `fitted_value` — as
+ *  `formatInterceptDisplay` reads it, for a surface that shows one value per curve. */
+export function curvePotency(curve: {
+  fitted_value: number;
+  curve_class?: string | null;
+  intercept_values?: readonly unknown[] | null;
+  raw_data?: readonly unknown[] | null;
+}): InterceptDisplay {
+  const primary = curve.intercept_values?.[0] as { at_bound?: boolean } | undefined;
+  return formatInterceptDisplay({
+    value: curve.fitted_value,
+    at_bound: primary?.at_bound,
+    curve_class: curve.curve_class,
+    ...doseRange(curve.raw_data),
+  });
+}
+
+/** `curvePotency` as one string, with the unit where a value shows ("> 500 uM", "ND"). */
+export function curvePotencyText(
+  curve: Parameters<typeof curvePotency>[0] & { fitted_unit?: string | null },
+): string {
+  const p = curvePotency(curve);
+  const valued = p.kind === "scalar" || p.kind === "qualifier";
+  return valued ? `${p.text} ${curve.fitted_unit ?? ""}`.trimEnd() : p.text;
+}
+
+function positive(v: number | null | undefined): number | null {
+  return v != null && Number.isFinite(v) && v > 0 ? v : null;
+}
+
+/** A tested dose as a bound reads: 4 significant digits, no trailing zeros ("> 500"). */
+function boundText(dose: number): string {
+  return String(Number(dose.toPrecision(4)));
+}
+
 /**
- * Pull the largest positive concentration from a raw_data list. Accepts
+ * The lowest and highest positive tested dose on a raw_data list. Accepts
  * both `{x, y}` (the chart-normalized shape) and `{concentration,
  * response}` (the persisted shape on `DoseResponseCurve.raw_data`).
  *
- * Returns null when the list is empty or every entry is non-positive /
- * non-finite — caller falls back to "ND" rather than fabricating a
- * qualifier.
+ * Nulls when the list is empty or every entry is non-positive / non-finite —
+ * the caller then reads "ND" rather than fabricating a qualifier.
  */
-export function maxDoseFromRawData(
-  rawData: Array<{ x?: number; concentration?: number }> | null | undefined,
-): number | null {
-  if (!rawData || rawData.length === 0) return null;
+export function doseRange(rawData: readonly unknown[] | null | undefined): {
+  min_dose: number | null;
+  max_dose: number | null;
+} {
+  let min = Number.POSITIVE_INFINITY;
   let max = Number.NEGATIVE_INFINITY;
-  for (const pt of rawData) {
-    const raw = pt.x ?? pt.concentration;
-    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0 && raw > max) {
-      max = raw;
+  for (const pt of rawData ?? []) {
+    const { x, concentration } = (pt ?? {}) as { x?: unknown; concentration?: unknown };
+    const raw = x ?? concentration;
+    if (typeof raw === "number" && Number.isFinite(raw) && raw > 0) {
+      min = Math.min(min, raw);
+      max = Math.max(max, raw);
     }
   }
-  return max === Number.NEGATIVE_INFINITY ? null : max;
+  return max === Number.NEGATIVE_INFINITY
+    ? { min_dose: null, max_dose: null }
+    : { min_dose: min, max_dose: max };
 }

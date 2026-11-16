@@ -4,6 +4,8 @@ import { CurveClassBadge } from "@/features/screening-assay/components/curve-cla
 import { DoseResponseChartView } from "@/features/screening-assay/components/dose-response-figure";
 import { useCompoundCurves } from "@/features/screening-assay/hooks/use-compound-curves";
 import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
+import { curvePotency, curvePotencyText } from "@/features/screening-assay/lib/intercept-label";
+import type { DoseResponseCurve } from "@/features/screening-assay/types";
 import {
   Dialog,
   DialogContent,
@@ -138,11 +140,7 @@ export function CurvesDialog({
                   <tr key={c.id} className="border-b last:border-0">
                     <td className="px-2 py-1.5">{c.runName}</td>
                     <td className="px-2 py-1.5 text-muted-foreground">{c.batch_number ?? "—"}</td>
-                    <td className="px-2 py-1.5 text-right tabular-nums">
-                      {c.curve_class === "inactive"
-                        ? "—"
-                        : `${formatMeasurementValue(c.fitted_value, 4)} ${c.fitted_unit}`}
-                    </td>
+                    <td className="px-2 py-1.5 text-right tabular-nums">{valueText(c)}</td>
                     <td className="px-2 py-1.5">
                       <CurveClassBadge curveClass={c.curve_class} />
                     </td>
@@ -155,4 +153,12 @@ export function CurvesDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** A curve's value as a chemist reads it: censored at its dose range ("> 500 uM"), else its
+ *  number. */
+function valueText(c: DoseResponseCurve): string {
+  return curvePotency(c).kind === "scalar"
+    ? `${formatMeasurementValue(c.fitted_value, 4)} ${c.fitted_unit}`
+    : curvePotencyText(c);
 }

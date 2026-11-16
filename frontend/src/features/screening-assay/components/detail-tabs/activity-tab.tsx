@@ -18,6 +18,7 @@ import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "luci
 import { useCallback, useMemo, useState } from "react";
 import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
+import { curvePotencyText } from "../../lib/intercept-label";
 import type { CompoundActivity, CurveClass, Protocol } from "../../types";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
@@ -499,9 +500,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                                 <td className="px-3 py-2 text-xs text-muted-foreground">
                                   {curve.batch_number ?? shortId(curve.batch_id)}
                                 </td>
-                                <td className="px-3 py-2 font-mono">
-                                  {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
-                                </td>
+                                <td className="px-3 py-2 font-mono">{curvePotencyText(curve)}</td>
                                 <td className="px-3 py-2 font-mono">
                                   {curve.r_squared.toFixed(3)}
                                 </td>
