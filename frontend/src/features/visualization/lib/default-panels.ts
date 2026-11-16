@@ -1,5 +1,6 @@
 import type { Appearance, PanelConfig, PanelPatch, PanelType } from "../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../types";
+import { isCrossProtocol } from "./cross-protocol";
 import { categoryColumns, column, valueColumns } from "./dataset";
 import { rgroupPositions, rgroupSetOf } from "./derived";
 
@@ -8,21 +9,55 @@ export function numericValueColumn(ds: Dataset): DatasetColumn | undefined {
   return valueColumns(ds).find((c) => c.kind === "number");
 }
 
+/** Fields naming the row itself above Wells: a box or bar of them holds one row each. */
+const IDENTITY = new Set(["compound", "batch"]);
+
+/** A compared column's name without its "<protocol> · " prefix. */
+const ownLabel = (c: DatasetColumn) =>
+  c.group && c.label.startsWith(`${c.group} · `) ? c.label.slice(c.group.length + 3) : c.label;
+
+/** A cross-protocol scatter's axes: the primary protocol's potency (its first p-value, else
+ * its first number) on X; on Y the first compared protocol's matching value (same kind,
+ * same name if one has it, else the first of that kind), else its first number. */
+function compareAxes(ds: Dataset): { x?: string; y?: string } {
+  const [primary, compared] = (ds.protocols ?? []).map((p) => p.protocol_id);
+  const numbers = valueColumns(ds).filter((c) => c.kind === "number");
+  const of = (pid: string) => numbers.filter((c) => c.provenance.protocol_id === pid);
+  const mine = of(primary);
+  const x = mine.find((c) => c.provenance.aggregation === "p") ?? mine[0];
+  const theirs = of(compared);
+  const same = theirs.filter((c) => c.provenance.aggregation === x?.provenance.aggregation);
+  const y = same.find((c) => x && ownLabel(c) === ownLabel(x)) ?? same[0] ?? theirs[0];
+  return { x: x?.key, y: y?.key };
+}
+
 /** The fields a newly added panel of ``type`` starts with: numeric fields take the first
- * numeric readout, category fields well type (else the first category column), and well
- * type colors (and stacks) the plot when the dataset has it. An R-group matrix takes R1
+ * numeric readout, category fields well type (else the first category column that is not
+ * the row's own identity), and well type colors (and stacks) the plot when the dataset has
+ * it. A scatter plots two different fields: well order, or across protocols the compared
+ * potencies (see compareAxes), else another numeric readout. An R-group matrix takes R1
  * rows × R2 columns of the first R-groups set and the median of the first numeric readout. */
 export function panelDefaults(ds: Dataset, type: PanelType): PanelPatch {
   const value = numericValueColumn(ds)?.key;
   const wellType = column(ds, "well_type")?.key;
-  const category = wellType ?? categoryColumns(ds)[0]?.key;
+  const aggregated = ds.level !== "wells";
+  const category =
+    wellType ?? categoryColumns(ds).find((c) => !(aggregated && IDENTITY.has(c.key)))?.key;
   switch (type) {
-    case "scatter":
+    case "scatter": {
+      const cross = isCrossProtocol(ds) ? compareAxes(ds) : {};
+      const y = cross.y ?? value;
+      const other = (key?: string) => (key !== y ? key : undefined);
       return {
-        x: column(ds, "well_order")?.key ?? value,
-        y: value,
+        x:
+          column(ds, "well_order")?.key ??
+          other(cross.x) ??
+          valueColumns(ds).find((c) => c.kind === "number" && c.key !== y)?.key ??
+          y,
+        y,
         appearance: { colorBy: wellType, shapeBy: wellType },
       };
+    }
     case "histogram":
       return { x: value, appearance: { colorBy: wellType } };
     case "bar":

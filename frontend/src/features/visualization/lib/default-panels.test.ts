@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
+import { crossProtocol, pColumn } from "./cross-protocol-fixture";
 import { defaultPanels, panelDefaults, retypePanel } from "./default-panels";
 import { panel, provenanceOf } from "./traces/test-fixtures";
 
@@ -127,6 +128,59 @@ describe("panelDefaults", () => {
     const plain = ds([col("compound", "category"), col("rd:sig:raw", "number")]);
     expect(panelDefaults(plain, "bar")).toEqual({ agg: "count", category: "compound" });
     expect(panelDefaults(plain, "histogram")).toEqual({ x: "rd:sig:raw", appearance: {} });
+  });
+});
+
+describe("panelDefaults at aggregated levels", () => {
+  const mean = (key: string, label: string, protocolId: string): DatasetColumn => ({
+    ...pColumn(key, label, protocolId),
+    provenance: { protocol_id: protocolId, readout_definition_id: "m", aggregation: "mean" },
+  });
+
+  it("scatters the primary protocol's potency against the compared protocol's matching one", () => {
+    const d: Dataset = {
+      ...crossProtocol,
+      columns: [
+        { key: "compound", label: "Compound", kind: "category", provenance: {} },
+        mean("rd:m:pct", "Primary · % inhibition", "A"),
+        pColumn("dr:x:p", "Primary · pIC50", "A"),
+        pColumn("dr:z:p", "Counter · pEC50", "B"),
+        pColumn("dr:y:p", "Counter · pIC50", "B"),
+      ],
+    };
+    expect(panelDefaults(d, "scatter")).toMatchObject({ x: "dr:x:p", y: "dr:y:p" });
+    // Without a matching potency, the compared protocol's first value still differs from X.
+    const unmatched = {
+      ...d,
+      columns: [...d.columns.slice(0, 3), mean("rd:n:pct", "Counter · %", "B")],
+    };
+    expect(panelDefaults(unmatched, "scatter")).toMatchObject({ x: "dr:x:p", y: "rd:n:pct" });
+  });
+
+  it("never scatters a field against itself when another numeric field exists", () => {
+    const d = {
+      ...ds([col("rd:a:raw", "number"), col("rd:b:raw", "number")]),
+      level: "compounds" as const,
+    };
+    const s = panelDefaults(d, "scatter");
+    expect(s.x).not.toBe(s.y);
+  });
+
+  it("never groups a box or bar by the row's own identity, picking a real category or none", () => {
+    const columns = [
+      col("compound", "category"),
+      col("batch", "category"),
+      col("series", "category"),
+      col("rd:a:raw", "number"),
+    ];
+    const compounds = { ...ds(columns), level: "compounds" as const };
+    expect(panelDefaults(compounds, "box")).toEqual({ y: "rd:a:raw", category: "series" });
+    expect(panelDefaults(compounds, "bar")).toEqual({ agg: "count", category: "series" });
+    const batches = {
+      ...ds([col("compound", "category"), col("batch", "category"), col("rd:a:raw", "number")]),
+      level: "batches" as const,
+    };
+    expect(panelDefaults(batches, "box").category).toBeUndefined();
   });
 });
 
