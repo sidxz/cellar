@@ -457,7 +457,11 @@ class ImportRunFile:
 
         # The resolver has already attached molecule_id + batch_id to
         # each row; the conflict scan threaded those through into the
-        # _ReadoutWrite records. Just forward them to ReadoutData.
+        # _ReadoutWrite records. Just forward them to ReadoutData. A well
+        # flagged as an outlier stays flagged: its new readouts take the flag.
+        flagged_wells = {
+            r.well_id for r in existing_readouts if r.is_outlier and not r.is_computed
+        }
         new_readouts: list[ReadoutData] = []
         for rd_write in plan.new_readouts:
             new_readouts.append(
@@ -470,6 +474,7 @@ class ImportRunFile:
                     readout_definition_id=rd_write.readout_definition_id,
                     value=rd_write.value,
                     value_text=rd_write.value_text,
+                    is_outlier=rd_write.well_id in flagged_wells,
                 )
             )
 

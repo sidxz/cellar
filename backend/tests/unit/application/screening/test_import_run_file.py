@@ -1374,6 +1374,83 @@ class TestConflictAwareReimport:
         assert existing_readout.value.value == 0.123
 
     @pytest.mark.asyncio
+    async def test_a_new_readout_on_a_flagged_well_is_flagged_too(self) -> None:
+        from cellar.domain.screening_assay.readout_data import ReadoutData
+        from cellar.domain.screening_assay.run import Plate, Well
+        from cellar.domain.shared.value_objects import QualifiedValue
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data", "Second"])
+        raw_id, second_id = (rd.id for rd in protocol.readout_definitions)
+        batch = FakeBatch()
+        plate = Plate(run_id=run.id, plate_number=1, format=PlateFormat.F384)
+        plate.plate_map = {"name": "P1"}
+        flagged = Well(
+            plate_id=plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.SAMPLE,
+            batch_id=batch.id,
+            dose=100.0,
+        )
+        run.plates.append(plate)
+        run.wells.append(flagged)
+        existing = ReadoutData(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            well_id=flagged.id,
+            molecule_id=batch.molecule_id,
+            batch_id=batch.id,
+            readout_definition_id=raw_id,
+            value=QualifiedValue(value=0.9),
+            is_outlier=True,
+        )
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Second\nP1,A1,100,LG-1,0.4\nP1,A2,100,LG-1,0.5\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="b.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+            existing_readouts=[existing],
+        )
+
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    concentration="Concentration",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Second", readout_definition_id=second_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Success), result
+        by_well = {r.well_id: r.is_outlier for r in saved}
+        assert by_well.pop(flagged.id) is True
+        assert list(by_well.values()) == [False]  # A2, a new well
+
+    @pytest.mark.asyncio
     async def test_well_metadata_mismatch_skips_row(self) -> None:
         """A row whose well metadata disagrees with the existing well is skipped entirely."""
         from cellar.domain.screening_assay.run import Plate, Well

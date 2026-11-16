@@ -219,6 +219,12 @@ class ImportRunReadouts:
 
         # 6. Process rows ----------------------------------------------------
         result = ImportRunReadoutsResult()
+        # A well flagged as an outlier stays flagged: its new readouts take the flag.
+        flagged_wells = {
+            r.well_id
+            for r in await self._readout_data_repo.find_by_run(cmd.workspace_id, cmd.run_id)
+            if r.is_outlier and not r.is_computed
+        }
         # Cache batch → molecule_id lookups
         mol_by_batch: dict[uuid.UUID, uuid.UUID | None] = {}
 
@@ -275,6 +281,7 @@ class ImportRunReadouts:
                         batch_id=well.batch_id,
                         readout_definition_id=rd_id,
                         value=QualifiedValue(value=numeric, qualifier=Qualifier.EQUAL),
+                        is_outlier=well.id in flagged_wells,
                     )
                 )
                 result.readouts_created += 1

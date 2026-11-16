@@ -151,6 +151,7 @@ def _build_use_case(
     batch: FakeBatch | None = None,
     save_bulk_called: list | None = None,
     has_wellless_rows: bool = False,
+    existing_readouts: list | None = None,
 ) -> tuple[ImportRunReadouts, FakeUoW, AsyncMock]:
     uow = FakeUoW()
 
@@ -162,6 +163,7 @@ def _build_use_case(
 
     readout_data_repo = AsyncMock()
     readout_data_repo.has_wellless_rows = AsyncMock(return_value=has_wellless_rows)
+    readout_data_repo.find_by_run = AsyncMock(return_value=existing_readouts or [])
     _saved: list = save_bulk_called if save_bulk_called is not None else []
 
     async def _save_bulk(entities):
@@ -189,6 +191,48 @@ def _build_use_case(
 
 
 class TestImportRunReadouts:
+    @pytest.mark.asyncio
+    async def test_a_value_imported_into_a_flagged_well_is_flagged_too(self):
+        from cellar.domain.screening_assay.readout_data import ReadoutData
+        from cellar.domain.shared.value_objects import QualifiedValue
+
+        ws_id, auth = _make_ws_and_auth()
+        batch = FakeBatch()
+        plate_id = uuid.uuid4()
+        a1, a2 = (_make_well(plate_id, "A", c, batch_id=batch.id) for c in (1, 2))
+        run = _make_run_with_wells(ws_id, [a1, a2])
+        protocol = _make_protocol(ws_id, ["% Inhibition"])
+        rd_id = protocol.readout_definitions[0].id
+        flag = ReadoutData(
+            workspace_id=ws_id,
+            run_id=run.id,
+            well_id=a1.id,
+            readout_definition_id=uuid.uuid4(),  # another readout of the well
+            value=QualifiedValue(value=1.0),
+            is_outlier=True,
+        )
+        saved: list = []
+        uc, _, _ = _build_use_case(
+            run=run,
+            protocol=protocol,
+            batch=batch,
+            save_bulk_called=saved,
+            existing_readouts=[flag],
+        )
+
+        result = await uc(
+            ImportRunReadoutsCommand(
+                workspace_id=ws_id,
+                run_id=run.id,
+                file_content=b"Well,Value\nA1,2.3\nA2,5.1\n",
+                readout_definition_id=rd_id,
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Success), result
+        assert {r.well_id: r.is_outlier for r in saved} == {a1.id: True, a2.id: False}
+
     @pytest.mark.asyncio
     async def test_successful_single_value_import(self):
         """CSV with Well + Value columns, readout_definition_id supplied."""
