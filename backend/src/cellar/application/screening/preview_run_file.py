@@ -97,6 +97,24 @@ def _swap_check(
     return _swapped_controls(norm, layouts, readout_ids, protocol.pos_control_signal)
 
 
+def _readout_def_refs(protocol: AssayProtocol | None) -> tuple[ReadoutDefRef, ...]:
+    """The protocol's readouts as header inference sees them. Derived readouts
+    (formula / temperature window) are never bound to a column, only recognised
+    as values the source calculated."""
+    if protocol is None:
+        return ()
+    return tuple(
+        ReadoutDefRef(
+            id=rd.id,
+            name=rd.name,
+            data_type=rd.data_type.value,
+            normalizations=tuple(str(n) for n in rd.normalizations),
+            derived=rd.is_derived,
+        )
+        for rd in protocol.readout_definitions
+    )
+
+
 def _conflict_errors(resolutions: Resolutions) -> tuple[dict[str, str], ...]:
     """Batch Ref / Compound Ref disagreements in the shared ``errors`` shape."""
     return tuple(
@@ -175,23 +193,7 @@ class PreviewRunFile:
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             input.workspace_id, run.protocol_id
         )
-        readout_def_refs: tuple[ReadoutDefRef, ...] = (
-            tuple(
-                ReadoutDefRef(
-                    id=rd.id,
-                    name=rd.name,
-                    data_type=rd.data_type.value,
-                )
-                for rd in protocol.readout_definitions
-                # Calculated readouts are derived from their formula — never a
-                # legal import target, so never suggested as one.
-                if not rd.is_calculated
-            )
-            if protocol is not None
-            else ()
-        )
-
-        suggested = infer_mapping(table, readout_defs=readout_def_refs)
+        suggested = infer_mapping(table, readout_defs=_readout_def_refs(protocol))
         guessed = _build_guess_mapping(suggested)
 
         plates: tuple[PlatePreview, ...] = ()
@@ -423,21 +425,6 @@ class RepreviewRunFile:
         protocol = await self._protocol_repo.find_by_id_in_workspace(
             input.workspace_id, run.protocol_id
         )
-        readout_def_refs: tuple[ReadoutDefRef, ...] = (
-            tuple(
-                ReadoutDefRef(
-                    id=rd.id,
-                    name=rd.name,
-                    data_type=rd.data_type.value,
-                )
-                for rd in protocol.readout_definitions
-                # Calculated readouts are derived from their formula — never a
-                # legal import target, so never suggested as one.
-                if not rd.is_calculated
-            )
-            if protocol is not None
-            else ()
-        )
 
         # The chemist-confirmed mapping is the first place a calculated
         # readout can be bound to a column, so guard it here too.
@@ -454,7 +441,7 @@ class RepreviewRunFile:
         # Re-run header inference for the response (so the wizard can
         # still display confidence badges) but use the user-supplied
         # mapping for normalization.
-        suggested = infer_mapping(cached.table, readout_defs=readout_def_refs)
+        suggested = infer_mapping(cached.table, readout_defs=_readout_def_refs(protocol))
 
         normalized = normalize(cached.table, input.mapping)
         if isinstance(normalized, Failure):

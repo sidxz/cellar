@@ -24,6 +24,7 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.import_run_file_validator import _swapped_controls
 from cellar.application.screening.long_format_normalizer import (
+    CALCULATED_BY_SOURCE,
     ColumnMapping,
     NormalizedTable,
     ReadoutColumn,
@@ -46,7 +47,6 @@ from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser, parse_tabular
-
 
 # Real lab export, not in the repo: set NADD_FIXTURE=/path/to/file.xlsx to run these tests.
 _NADD_FIXTURE = os.environ.get("NADD_FIXTURE", "")
@@ -206,7 +206,7 @@ def _build_preview_uc(
     *,
     run: Run | None,
     batches_by_ref: dict[str, FakeBatch] | None = None,
-    molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
+    molecules_by_synonym: dict[str, FakeMolecule] | None = None,
     store: InMemoryPreviewStore | None = None,
     protocol: Protocol | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
@@ -264,7 +264,7 @@ def _build_import_uc(
     batches_by_ref: dict[str, FakeBatch],
     store: InMemoryPreviewStore,
     save_bulk: list | None = None,
-    molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
+    molecules_by_synonym: dict[str, FakeMolecule] | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
     existing_readouts: list | None = None,
     upload_attachment=None,
@@ -394,7 +394,34 @@ class TestPreviewRunFile:
         assert preview.matched_batch_count == 1
         assert preview.unmatched_batch_refs == ()
         # Cached for follow-up import
-        assert preview.preview_id in store._items  # noqa: SLF001
+        assert preview.preview_id in store._items
+
+    @pytest.mark.asyncio
+    async def test_columns_the_source_calculated_from_a_readout_default_to_ignore(
+        self,
+    ) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id, ["raw AU"], normalization=ReadoutNormalization.PERCENT_INHIBITION
+        )
+        uc, _ = _build_preview_uc(run=run, protocol=protocol)
+        csv = b"Plate,Well,raw AU (AU),% inhibition (%)\nP1,A1,0.42,45\n"
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        s = {x.header: x for x in result.unwrap().suggestions}
+        assert s["raw AU (AU)"].readout_definition_id == protocol.readout_definitions[0].id
+        assert (s["% inhibition (%)"].role, s["% inhibition (%)"].reason) == (
+            None,
+            CALCULATED_BY_SOURCE,
+        )
 
     @pytest.mark.asyncio
     async def test_unmatched_batches_listed(self) -> None:
@@ -1218,8 +1245,8 @@ class TestConflictAwareReimport:
         """A re-imported readout cell that already has a value is left alone."""
         from cellar.domain.screening_assay.readout_data import ReadoutData
         from cellar.domain.screening_assay.run import Plate, Well
-        from cellar.domain.shared.value_objects import QualifiedValue
         from cellar.domain.shared.enums import Qualifier
+        from cellar.domain.shared.value_objects import QualifiedValue
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1456,8 +1483,8 @@ class TestConflictAwareReimport:
         """Same well, same plate — different readout def. The new one writes."""
         from cellar.domain.screening_assay.readout_data import ReadoutData
         from cellar.domain.screening_assay.run import Plate, Well
-        from cellar.domain.shared.value_objects import QualifiedValue
         from cellar.domain.shared.enums import Qualifier
+        from cellar.domain.shared.value_objects import QualifiedValue
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1724,7 +1751,7 @@ class TestRepreviewRunFile:
             auth=auth,
         )
         # Still in the store — chemist can repreview again or import.
-        assert preview_id in store._items  # noqa: SLF001
+        assert preview_id in store._items
 
     @pytest.mark.asyncio
     async def test_repreview_unknown_preview_id_returns_not_found(self) -> None:
@@ -1786,8 +1813,9 @@ class TestAutoCreateMissingBatches:
         created: bool = True,
     ) -> AsyncMock:
         """Return an AsyncMock that simulates EnsureBatchExists returning Success."""
-        from cellar.application.inventory.ensure_batch_exists import EnsureBatchExistsOutcome
         from returns.result import Success as _Success
+
+        from cellar.application.inventory.ensure_batch_exists import EnsureBatchExistsOutcome
 
         mock_uc = AsyncMock()
 
@@ -2544,9 +2572,7 @@ class TestRunLayoutPrecedence:
         protocol, default = _layout_protocol(auth)
         own = _run_layout(auth)
         run.plate_template_id = own.id
-        preview = await self._repreview(
-            run, protocol, [default, own], well_role="Control State"
-        )
+        preview = await self._repreview(run, protocol, [default, own], well_role="Control State")
         assert preview.plates[0].roles_from == 'the file\'s "Control State" column'
         # The file agrees with the run's layout on A1/A2; only its blank (A4) differs there.
         assert preview.warnings == (
