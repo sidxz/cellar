@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { crossProtocol } from "../../lib/cross-protocol-fixture";
 import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
@@ -10,6 +10,8 @@ type Handlers = {
   onSelected: (ev: unknown) => void;
   onDeselect: () => void;
   onClick: (ev: unknown) => void;
+  onHover: (ev: unknown) => void;
+  onUnhover: (ev: unknown) => void;
 };
 const plot = vi.hoisted(() => ({ last: null as unknown }));
 vi.mock("@/shared/lib/plotly", () => ({
@@ -19,6 +21,9 @@ vi.mock("@/shared/lib/plotly", () => ({
   },
 }));
 const handlers = () => plot.last as Handlers;
+vi.mock("@/shared/components/chemistry", () => ({
+  StructureThumbnail: ({ smiles }: { smiles: string }) => <span>structure {smiles}</span>,
+}));
 
 const ds: Dataset = {
   revision: "r",
@@ -29,7 +34,14 @@ const ds: Dataset = {
     { key: "well_order", label: "Well order", kind: "number", provenance: {} },
     { key: "y", label: "Signal", kind: "number", provenance: {} },
   ],
-  values: { well_order: [1, 2, 3], y: [5, null, 7] },
+  values: {
+    well_order: [1, 2, 3],
+    y: [5, null, 7],
+    compound: ["CEL-1", null, null],
+    structure: ["c1ccccc1", null, null],
+    plate: ["Plate 1", "Plate 1", "Plate 1"],
+    well: ["B07", "A02", "A03"],
+  },
 };
 const panel: PanelConfig = {
   id: "p1",
@@ -64,7 +76,7 @@ const show = () =>
   );
 const drawn = () =>
   plot.last as {
-    data: { x: unknown; text: unknown; selectedpoints?: number[] }[];
+    data: { x: unknown; customdata: unknown; selectedpoints?: number[] }[];
     layout: { uirevision: string; selectionrevision: string };
   };
 const lasso = (...rows: number[]) =>
@@ -97,11 +109,32 @@ describe("ScatterPanel", () => {
 
   it("reuses the plotted arrays when only the selection changes", () => {
     show();
-    const { x, text } = drawn().data[0];
+    const { x, customdata } = drawn().data[0];
     fireEvent.click(screen.getByRole("button", { name: "external" }));
     expect(drawn().data[0].selectedpoints).toEqual([0]);
     expect(drawn().data[0].x).toBe(x);
-    expect(drawn().data[0].text).toBe(text);
+    expect(drawn().data[0].customdata).toBe(customdata);
+  });
+
+  it("shows the hovered point's structure, compound, place and plotted values in one card", () => {
+    show();
+    act(() =>
+      handlers().onHover({ points: [{ customdata: 0 }], event: { clientX: 5, clientY: 5 } }),
+    );
+    const card = screen.getByRole("tooltip");
+    expect(within(card).getByText("structure c1ccccc1")).toBeInTheDocument();
+    expect(within(card).getByText("CEL-1")).toBeInTheDocument();
+    expect(within(card).getByText("Plate 1 B07")).toBeInTheDocument();
+    expect(within(card).getByText("Well order").nextSibling).toHaveTextContent("1");
+    expect(within(card).getByText("Signal").nextSibling).toHaveTextContent("5");
+    // A well without a compound gets the text card.
+    act(() =>
+      handlers().onHover({ points: [{ customdata: 2 }], event: { clientX: 5, clientY: 5 } }),
+    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent("No compound");
+    expect(screen.queryByText(/^structure/)).not.toBeInTheDocument();
+    act(() => handlers().onUnhover({}));
+    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
   });
 
   it("drops its lasso outline when the selection changes elsewhere, keeping zoom", () => {

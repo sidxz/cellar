@@ -1,10 +1,9 @@
 import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { tooltipText } from "../appearance";
 import { isComparedValue, missingReason, pairCounts } from "../cross-protocol";
 import { numberAt } from "../dataset";
-import { type Figure, axisTitle } from "./common";
+import type { Figure } from "./common";
 import { WEBGL_ABOVE, plottedX, plottedY } from "./scatter";
 
 const NO_VALUE = "No value";
@@ -29,18 +28,16 @@ type Side = "x" | "y";
 
 /** The strip of ``side``'s missing values: passing rows with a value on the other axis but
  * none on ``side``, in one slot per kind of reason ("Not tested" before "No value"; the
- * protocol stays in each point's hover), jittered across the slot. */
+ * hover card names the protocol), jittered across the slot. */
 function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, dark: boolean) {
   const onX = side === "x";
   const key = (onX ? cfg.x : cfg.y) as string;
   const otherAt = onX ? plottedY(ds, cfg) : plottedX(ds, cfg);
-  const reasons = new Map<number, string>();
   const bySlot = new Map<string, number[]>();
   for (let i = 0; i < ds.row_count; i++) {
     if (!mask[i] || numberAt(ds, key, i) !== null || otherAt(i) === null) continue;
     const reason = missingReason(ds, key, i) ?? NO_VALUE;
     const slot = reason.startsWith(NOT_TESTED) ? NOT_TESTED : NO_VALUE;
-    reasons.set(i, reason);
     const rows = bySlot.get(slot);
     if (rows) rows.push(i);
     else bySlot.set(slot, [i]);
@@ -52,9 +49,6 @@ function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, da
   const rows = points.map((p) => p.i);
   const across = points.map((p) => p.k + jitter(p.i));
   const along = rows.map(otherAt);
-  const otherTitle = onX
-    ? axisTitle(ds, cfg.y, cfg.logY)
-    : axisTitle(ds, cfg.x, cfg.logX && cfg.x !== "run_date");
   const trace = {
     type: rows.length > WEBGL_ABOVE ? "scattergl" : "scatter",
     mode: "markers",
@@ -66,8 +60,8 @@ function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, da
     x: onX ? across : along,
     y: onX ? along : across,
     customdata: rows,
-    text: rows.map((i) => `${tooltipText(ds, i, cfg.appearance.tooltip)}<br>${reasons.get(i)}`),
-    hovertemplate: `%{text}<br>${otherTitle}: %{${onX ? "y" : "x"}}<extra></extra>`,
+    // The panel's hover card says why the value is missing.
+    hoverinfo: "none",
     marker: {
       symbol: onX ? "line-ns-open" : "line-ew-open",
       size: 10,

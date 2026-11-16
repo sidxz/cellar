@@ -146,12 +146,19 @@ describe("buildScatterFigure", () => {
     expect(fig.layout.legend).toMatchObject({ y: 0, yanchor: "bottom", yref: "container" });
   });
 
-  it("sizes points by a numeric field and adds tooltip fields to the hover", () => {
+  it("sizes points by a numeric field", () => {
     const ds = dataset({ well_order: [1, 2], y: [10, 30], plate: ["Plate 1", "Plate 2"] });
     const fig = buildScatterFigure(ds, panel({ sizeBy: "y", tooltip: ["plate"] }), pass(2), NONE);
-    const [t] = plotted(fig);
-    expect(t.marker.size).toEqual([5, 16]);
-    expect(t.text?.[1]).toBe("No compound · Plate 2<br>plate: Plate 2");
+    expect(plotted(fig)[0].marker.size).toEqual([5, 16]);
+  });
+
+  it("leaves the hover to the panel's card: no Plotly label, no hover text built per point", () => {
+    const fig = buildScatterFigure(four(), panel({ tooltip: ["well_order"] }), pass(4), NONE);
+    for (const t of plotted(fig)) {
+      expect(t).toMatchObject({ hoverinfo: "none", customdata: [0, 1, 2, 3] });
+      expect(t).not.toHaveProperty("text");
+      expect(t).not.toHaveProperty("hovertemplate");
+    }
   });
 
   it("gives traces uids that are valid CSS class names", () => {
@@ -270,7 +277,7 @@ describe("buildScatterFigure", () => {
 });
 
 describe("selectScatter", () => {
-  it("marks a selection without rebuilding coordinates, colors or hover text", () => {
+  it("marks a selection without rebuilding coordinates or colors", () => {
     const ds = dataset({ well_order: [1, 2, 3, 4], y: [10, 20, 30, 40] });
     const base = buildScatterBase(ds, panel({ colorBy: "y" }), pass(4));
     const one = selectScatter(base, ds, new Set(["w1"]));
@@ -279,7 +286,6 @@ describe("selectScatter", () => {
     for (const s of [s1, s2]) {
       expect(s.x).toBe(b.x);
       expect(s.y).toBe(b.y);
-      expect(s.text).toBe(b.text);
       expect(s.customdata).toBe(b.customdata);
       expect(s.marker.color).toBe(b.marker.color);
     }

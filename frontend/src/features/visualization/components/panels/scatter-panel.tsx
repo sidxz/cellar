@@ -20,6 +20,7 @@ import {
 import { useWorkbench } from "../../store/workbench-context";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
+import { useHoverCard } from "./hover-card";
 
 const CONFIG = { displaylogo: false };
 
@@ -53,6 +54,7 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === "dark";
   const { revision, own } = useSelectionRevision(selection);
+  const hover = useHoverCard(ds, [panel.x, panel.y, ...panel.appearance.tooltip]);
 
   // The costly part (coordinates, colors, hover text, untested strip, overlays) waits for a data or
   // settings change; a selection only lays its marks on top.
@@ -92,7 +94,7 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
   };
 
   return (
-    <div className="flex h-full flex-col">
+    <div ref={hover.ref} className="relative flex h-full flex-col">
       <div className="min-h-0 flex-1">
         <Plot
           data={fig.data}
@@ -101,9 +103,11 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
           style={{ width: "100%", height: "100%" }}
           useResizeHandler
           {...handlers}
+          {...hover.handlers}
         />
       </div>
       {fig.note && <p className="px-2 pb-1 text-xs text-muted-foreground">{fig.note}</p>}
+      {hover.card}
     </div>
   );
 }

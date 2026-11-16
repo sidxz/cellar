@@ -11,7 +11,6 @@ import {
   categoryColor,
   edgeColor,
   groupsOf,
-  hoverText,
   isCensored,
   lackNote,
   panelNote,
@@ -60,7 +59,9 @@ export function buildBoxFigure(
         showlegend: false,
         x: rows[k].map(() => label),
         y: rows[k].map((i) => numberAt(ds, cfg.y as string, i)),
-        text: rows[k].map((i) => hoverText(ds, i)),
+        // The panel's hover card replaces Plotly's labels: a point's row, a box's quartiles.
+        customdata: rows[k],
+        hoverinfo: "none",
         boxpoints: shown > ALL_POINTS_UP_TO ? "outliers" : "all",
         jitter: 0.4,
         pointpos: 0,

@@ -1,7 +1,7 @@
 import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { Appearance, PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { colorFor, colorGroups, numericRange, shapeFor, sizeFor, tooltipText } from "../appearance";
+import { colorFor, colorGroups, numericRange, shapeFor, sizeFor } from "../appearance";
 import { categoryLabel, column, numberAt } from "../dataset";
 import {
   type Figure,
@@ -214,8 +214,8 @@ export function buildScatterBase(
       x: xs(g.rows),
       y: ys(g.rows),
       customdata: g.rows,
-      text: g.rows.map((i) => tooltipText(ds, i, a.tooltip)),
-      hovertemplate: `%{text}<br>${xTitle}: %{x}<br>${yTitle}: %{y}<extra></extra>`,
+      // The panel's hover card (structure and all) replaces Plotly's label.
+      hoverinfo: "none",
       marker: {
         color: range ? colors.slice(start, end) : uniform(colors.slice(start, end)),
         symbol: uniform(symbols.slice(start, end)),

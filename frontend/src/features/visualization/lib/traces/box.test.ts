@@ -21,6 +21,14 @@ describe("buildBoxFigure", () => {
     expect(fig.layout.xaxis).toMatchObject({ type: "category" });
   });
 
+  it("hands point and box hovers to the panel's card, each point carrying its row", () => {
+    const fig = buildBoxFigure(ds(), cfg(), pass(5));
+    expect(fig.data.map((t) => [t.hoverinfo, t.customdata, t.text])).toEqual([
+      ["none", [2, 4], undefined],
+      ["none", [0, 1, 3], undefined],
+    ]);
+  });
+
   it("leaves out rows that fail the filters", () => {
     const fig = buildBoxFigure(ds(), cfg(), Uint8Array.from([1, 0, 1, 1, 0]));
     expect(traces(fig).map((t) => t.y)).toEqual([[3], [1, 0]]);

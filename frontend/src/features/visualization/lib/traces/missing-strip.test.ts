@@ -28,8 +28,9 @@ describe("addMissingStrip", () => {
     expect(x2.domain).toEqual([0, 0.08]);
     expect(x2.tickvals).toEqual([0, 1]);
     expect(x2.ticktext).toEqual(["Not tested (1)", "No value (1)"]);
-    // The protocol is named in the hover, not on the tick.
-    expect((t.text as string[])[0]).toMatch(/Not tested in Counter$/);
+    // The hover card names the protocol (not the tick): Plotly's own label is off.
+    expect(t).toMatchObject({ hoverinfo: "none" });
+    expect(t.text).toBeUndefined();
     // Jittered within each slot, the same on every build.
     const xs = t.x as number[];
     expect(Math.abs(xs[0])).toBeLessThanOrEqual(0.3);
@@ -103,7 +104,7 @@ describe("addMissingStrip", () => {
     expect(stripped).toBe(2);
     const t = fig.data.find((d) => d.yaxis === "y2") as Record<string, unknown>;
     expect(t).toMatchObject({ xaxis: "x", customdata: [1, 2], x: [6, 6.5] });
-    expect((t.text as string[])[0]).toMatch(/Not tested in Counter$/);
+    expect(t).toMatchObject({ hoverinfo: "none" });
     const ys = t.y as number[];
     expect(Math.abs(ys[0])).toBeLessThanOrEqual(0.3);
     expect(Math.abs(ys[1] - 1)).toBeLessThanOrEqual(0.3);
