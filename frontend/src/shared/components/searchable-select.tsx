@@ -17,6 +17,8 @@ import { useState } from "react";
 export interface SearchableSelectOption {
   value: string;
   label: string;
+  /** Heading the option is listed under; groups appear in first-seen order. */
+  group?: string;
 }
 
 interface SearchableSelectProps {
@@ -29,6 +31,8 @@ interface SearchableSelectProps {
   className?: string;
   /** Id of the trigger, so a `<Label htmlFor>` names the combobox. */
   id?: string;
+  /** Offer a "None" entry that clears the value (default true). */
+  clearable?: boolean;
 }
 
 export function SearchableSelect({
@@ -40,9 +44,16 @@ export function SearchableSelect({
   emptyMessage = "No results found.",
   className,
   id,
+  clearable = true,
 }: SearchableSelectProps) {
   const [open, setOpen] = useState(false);
   const selectedLabel = options.find((o) => o.value === value)?.label;
+  const groups = new Map<string, SearchableSelectOption[]>();
+  for (const o of options) {
+    const list = groups.get(o.group ?? "");
+    if (list) list.push(o);
+    else groups.set(o.group ?? "", [o]);
+  }
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -58,7 +69,7 @@ export function SearchableSelect({
             className,
           )}
         >
-          {selectedLabel ?? placeholder}
+          <span className="truncate">{selectedLabel ?? placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
@@ -70,8 +81,8 @@ export function SearchableSelect({
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
-            <CommandGroup>
-              {value && (
+            {clearable && value && (
+              <CommandGroup>
                 <CommandItem
                   value="__clear__"
                   onSelect={() => {
@@ -81,26 +92,30 @@ export function SearchableSelect({
                 >
                   <span className="text-muted-foreground">None</span>
                 </CommandItem>
-              )}
-              {options.map((option) => (
-                <CommandItem
-                  key={option.value}
-                  value={option.label}
-                  onSelect={() => {
-                    onValueChange(option.value);
-                    setOpen(false);
-                  }}
-                >
-                  <Check
-                    className={cn(
-                      "mr-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0",
-                    )}
-                  />
-                  {option.label}
-                </CommandItem>
-              ))}
-            </CommandGroup>
+              </CommandGroup>
+            )}
+            {[...groups].map(([heading, group]) => (
+              <CommandGroup key={heading} heading={heading || undefined}>
+                {group.map((option) => (
+                  <CommandItem
+                    key={option.value}
+                    value={option.label}
+                    onSelect={() => {
+                      onValueChange(option.value);
+                      setOpen(false);
+                    }}
+                  >
+                    <Check
+                      className={cn(
+                        "mr-2 h-4 w-4",
+                        value === option.value ? "opacity-100" : "opacity-0",
+                      )}
+                    />
+                    {option.label}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
           </CommandList>
         </Command>
       </PopoverContent>

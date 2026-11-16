@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
-import { defaultPanels, panelDefaults } from "./default-panels";
+import { defaultPanels, panelDefaults, retypePanel } from "./default-panels";
+import { panel } from "./traces/test-fixtures";
 
 const col = (key: string, kind: DatasetColumn["kind"]): DatasetColumn => ({
   key,
@@ -86,5 +87,56 @@ describe("panelDefaults", () => {
     const plain = ds([col("compound", "category"), col("rd:sig:raw", "number")]);
     expect(panelDefaults(plain, "bar")).toEqual({ agg: "count", category: "compound" });
     expect(panelDefaults(plain, "histogram")).toEqual({ x: "rd:sig:raw", appearance: {} });
+  });
+});
+
+describe("retypePanel", () => {
+  const d = ds([
+    col("plate", "category"),
+    col("well_type", "category"),
+    col("well_order", "number"),
+    col("rd:a:raw", "number"),
+    col("rd:b:raw", "number"),
+  ]);
+  const scatter = panel("scatter", { x: "rd:a:raw", y: "rd:b:raw", logX: true, logY: true });
+
+  it("keeps the measured field and fills the group from the defaults", () => {
+    expect(retypePanel(d, scatter, "box")).toMatchObject({
+      type: "box",
+      x: undefined,
+      y: "rd:b:raw",
+      logX: undefined,
+      logY: true,
+      category: "well_type",
+    });
+  });
+
+  it("moves the measured field onto a histogram's X and back", () => {
+    expect(retypePanel(d, scatter, "histogram")).toMatchObject({
+      type: "histogram",
+      x: "rd:b:raw",
+      y: undefined,
+      logY: undefined,
+    });
+    const hist = panel("histogram", { x: "rd:b:raw" });
+    expect(retypePanel(d, hist, "scatter")).toMatchObject({
+      x: "well_order",
+      y: "rd:b:raw",
+      appearance: { colorBy: "well_type", shapeBy: "well_type" },
+    });
+  });
+
+  it("keeps a bar or box group and never overrides appearance already set", () => {
+    const box = panel("box", {
+      category: "plate",
+      y: "rd:a:raw",
+      appearance: { colorBy: "plate" },
+    });
+    expect(retypePanel(d, box, "bar")).toMatchObject({
+      category: "plate",
+      agg: "count",
+      y: "rd:a:raw",
+    });
+    expect(retypePanel(d, box, "scatter").appearance).toEqual({ shapeBy: "well_type" });
   });
 });

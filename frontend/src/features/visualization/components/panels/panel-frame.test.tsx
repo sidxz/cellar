@@ -38,10 +38,10 @@ const panel: PanelConfig = {
   },
 };
 
-const show = (onEdit = vi.fn()) => {
+const show = (onEdit = vi.fn(), p = panel) => {
   render(
-    <WorkbenchProvider initialPanels={[panel]}>
-      <PanelFrame panel={panel} ds={ds} onEdit={onEdit}>
+    <WorkbenchProvider initialPanels={[p]}>
+      <PanelFrame panel={p} ds={ds} onEdit={onEdit}>
         <p>plot</p>
       </PanelFrame>
     </WorkbenchProvider>,
@@ -61,5 +61,11 @@ describe("PanelFrame", () => {
     expect(onEdit).toHaveBeenLastCalledWith("p1", "splitBy");
     fireEvent.click(screen.getByRole("button", { name: "Color + shape Well type" }));
     expect(onEdit).toHaveBeenLastCalledWith("p1", "colorBy");
+  });
+
+  it("shows chips only for the fields the plot type draws", () => {
+    show(vi.fn(), { ...panel, type: "bar", agg: "count", category: "plate" });
+    expect(screen.getByRole("button", { name: "Group Plate" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^(Y|X|Split|Color)/ })).not.toBeInTheDocument();
   });
 });

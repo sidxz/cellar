@@ -1,4 +1,4 @@
-import type { PanelPatch, PanelType } from "../store/workbench-store";
+import type { Appearance, PanelConfig, PanelPatch, PanelType } from "../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../types";
 import { categoryColumns, column, valueColumns } from "./dataset";
 
@@ -27,6 +27,39 @@ export function panelDefaults(ds: Dataset, type: PanelType): PanelPatch {
       return { agg: "count", category };
     case "box":
       return { y: value, category };
+  }
+}
+
+/** The patch that turns panel ``p`` into a ``type`` panel. The measured field carries over
+ * (a scatter/bar/box Y is a histogram's X), as do a bar/box group and a scatter's X; fields
+ * still missing come from panelDefaults (appearance only where unset), and data fields the
+ * new type does not draw are cleared. */
+export function retypePanel(ds: Dataset, p: PanelConfig, type: PanelType): PanelPatch {
+  const d = panelDefaults(ds, type);
+  const value = p.type === "histogram" ? p.x : p.y;
+  const appearance = Object.fromEntries(
+    Object.entries(d.appearance ?? {}).filter(
+      ([k]) => p.appearance[k as keyof Appearance] === undefined,
+    ),
+  );
+  const base: PanelPatch = {
+    type,
+    x: undefined,
+    y: undefined,
+    category: undefined,
+    logX: undefined,
+    logY: undefined,
+    appearance,
+  };
+  switch (type) {
+    case "scatter":
+      return { ...base, x: p.type === "scatter" ? p.x : d.x, y: value ?? d.y, logY: p.logY };
+    case "histogram":
+      return { ...base, x: value ?? d.x };
+    case "bar":
+      return { ...base, category: p.category ?? d.category, agg: p.agg ?? d.agg, y: value };
+    case "box":
+      return { ...base, category: p.category ?? d.category, y: value ?? d.y, logY: p.logY };
   }
 }
 

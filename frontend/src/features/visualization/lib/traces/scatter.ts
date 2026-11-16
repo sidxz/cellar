@@ -1,33 +1,14 @@
-import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { categoryLabel, column, numberAt } from "../dataset";
-import {
-  type Figure,
-  GRID,
-  axisTitle,
-  baseLayout,
-  categoryColor,
-  facetsOf,
-  hoverText,
-  lackNote,
-  levels,
-} from "./common";
+import { colorFor, colorGroups, numericRange, shapeFor, sizeFor, tooltipText } from "../appearance";
+import { column, numberAt } from "../dataset";
+import { type Figure, GRID, axisTitle, baseLayout, facetsOf, lackNote } from "./common";
 
 /** Name of the trace holding rows the filters hide (drawn as faint ×, never selectable). */
 export const FILTERED = "Filtered";
 const FILTERED_COLOR = "#a1a1aa";
 /** SVG draws crisper and is plenty fast below this; WebGL above it. */
 const WEBGL_ABOVE = 5000;
-
-export const WELL_TYPE_SYMBOLS: Record<string, string> = {
-  sample: "circle",
-  negative_control: "square",
-  positive_control: "diamond",
-  blank: "triangle-up",
-  reference: "star",
-};
-const SYMBOLS = ["circle", "square", "diamond", "triangle-up", "star", "cross", "pentagon"];
 
 /** 0 up to 1k points, 1 from 50k, linear in log n. */
 const crowding = (n: number) => Math.min(1, Math.max(0, Math.log(n / 1000) / Math.log(50)));
@@ -38,13 +19,7 @@ const opacityScale = (n: number) => 1 - (0.35 / 0.8) * crowding(n);
 
 const axisId = (axis: "x" | "y", facet: number) => (facet === 0 ? axis : `${axis}${facet + 1}`);
 
-function symbolFor(ds: Dataset, key: string, i: number, order: string[]): string {
-  const v = ds.values[key]?.[i];
-  if (key === "well_type") return WELL_TYPE_SYMBOLS[String(v)] ?? "circle";
-  return SYMBOLS[Math.max(0, order.indexOf(categoryLabel(key, v))) % SYMBOLS.length];
-}
-
-/** A scatter of ``cfg.x`` × ``cfg.y``: one trace per (facet, color category), failing rows
+/** A scatter of ``cfg.x`` × ``cfg.y``: one trace per (facet, color group), failing rows
  * as faint × in a separate trace, selection shown by ``selectedpoints`` + outline. Each
  * point's ``customdata`` is its row index, so selections resolve to stable row ids. */
 export function buildScatterFigure(
@@ -58,11 +33,11 @@ export function buildScatterFigure(
   const xTitle = axisTitle(ds, cfg.x, cfg.logX);
   const yTitle = axisTitle(ds, cfg.y, cfg.logY);
   const facets = facetsOf(ds, a.splitBy);
+  // Named groups (categories, bins) get a trace each and a legend entry; a number on a
+  // continuous scale colors points through a colorscale instead.
+  const groupsOf = colorGroups(ds, a);
   const colorCol = a.colorBy ? column(ds, a.colorBy) : undefined;
-  const numericColor = colorCol?.kind === "number";
-  const colorKey = colorCol && !numericColor ? colorCol.key : undefined;
-  const colorOrder = colorKey ? levels(ds, colorKey) : [];
-  const shapeOrder = a.shapeBy ? levels(ds, a.shapeBy) : [];
+  const range = !groupsOf && colorCol?.kind === "number" ? numericRange(ds, colorCol.key) : null;
 
   const value = (key: string | undefined, i: number, log?: boolean) => {
     const v = key ? numberAt(ds, key, i) : null;
@@ -90,7 +65,7 @@ export function buildScatterFigure(
     }
     n += 1;
     const facet = facets.of(i);
-    const label = colorKey ? categoryLabel(colorKey, ds.values[colorKey]?.[i]) : "";
+    const label = groupsOf ? groupsOf.labelOf(i) : "";
     const k = `${facet}|${label}`;
     let g = groups.get(k);
     if (!g) {
@@ -108,26 +83,13 @@ export function buildScatterFigure(
   const ys = (rows: number[]) => rows.map((i) => numberAt(ds, cfg.y as string, i));
   const place = (facet: number) => ({ xaxis: axisId("x", facet), yaxis: axisId("y", facet) });
 
-  let colorRange: [number, number] | null = null;
-  if (numericColor && colorCol) {
-    let lo = Number.POSITIVE_INFINITY;
-    let hi = Number.NEGATIVE_INFINITY;
-    for (let i = 0; i < ds.row_ids.length; i++) {
-      const v = numberAt(ds, colorCol.key, i);
-      if (v === null) continue;
-      lo = Math.min(lo, v);
-      hi = Math.max(hi, v);
-    }
-    if (lo <= hi) colorRange = [lo, hi];
-  }
-
   const data: Record<string, unknown>[] = [];
   filtered.forEach((rows, facet) => {
     if (rows.length === 0) return;
     data.push({
       type,
       mode: "markers",
-      uid: `${facet}|${FILTERED}`,
+      uid: `f${facet}-filtered`,
       name: FILTERED,
       legendgroup: FILTERED,
       showlegend: !data.length,
@@ -147,62 +109,60 @@ export function buildScatterFigure(
     });
   });
 
+  const order = groupsOf?.order ?? [];
   const ordered = [...groups.values()].sort(
-    (p, q) => p.facet - q.facet || colorOrder.indexOf(p.label) - colorOrder.indexOf(q.label),
+    (p, q) => p.facet - q.facet || order.indexOf(p.label) - order.indexOf(q.label),
   );
+  // Per-point appearance for every plotted row at once; each trace takes its slice.
+  const rows = ordered.flatMap((g) => g.rows);
+  const colors = colorFor(ds, a, rows);
+  const symbols = shapeFor(ds, a, rows);
+  const sizes = sizeFor(ds, a, rows, size);
   const inLegend = new Set<string>();
   let scaleShown = false;
+  let end = 0;
   for (const g of ordered) {
+    const start = end;
+    end += g.rows.length;
     const selected: number[] = [];
     const lineWidth = g.rows.map((i, k) => {
       if (!selection.has(ds.row_ids[i])) return 0;
       selected.push(k);
       return 1.5;
     });
-    const symbols = a.shapeBy
-      ? g.rows.map((i) => symbolFor(ds, a.shapeBy as string, i, shapeOrder))
-      : [];
-    const color = colorKey
-      ? categoryColor(colorKey, g.label, colorOrder)
-      : numericColor && colorCol
-        ? g.rows.map((i) => numberAt(ds, colorCol.key, i))
-        : CHART_COLORS.primary;
     data.push({
       type,
       mode: "markers",
-      uid: `${g.facet}|${g.label}`,
-      name: colorKey ? g.label : yTitle,
+      // Stable per (facet, group) and a valid CSS class: Plotly selects `.cb<uid>`.
+      uid: `f${g.facet}-g${order.indexOf(g.label) + 1}`,
+      name: groupsOf ? g.label : yTitle,
       legendgroup: g.label,
-      showlegend: Boolean(colorKey) && !inLegend.has(g.label),
+      showlegend: Boolean(groupsOf) && !inLegend.has(g.label),
       ...place(g.facet),
       x: xs(g.rows),
       y: ys(g.rows),
       customdata: g.rows,
-      text: g.rows.map((i) => hoverText(ds, i)),
+      text: g.rows.map((i) => tooltipText(ds, i, a.tooltip)),
       hovertemplate: `%{text}<br>${xTitle}: %{x}<br>${yTitle}: %{y}<extra></extra>`,
       marker: {
-        color,
-        symbol:
-          symbols.length === 0
-            ? "circle"
-            : symbols.every((s) => s === symbols[0])
-              ? symbols[0]
-              : symbols,
-        size,
+        color: range ? colors.slice(start, end) : uniform(colors.slice(start, end)),
+        symbol: uniform(symbols.slice(start, end)),
+        size: uniform(sizes.slice(start, end)),
         opacity,
         line: { color: outline, width: lineWidth },
-        ...(Array.isArray(color) && colorRange
+        ...(range
           ? {
               colorscale: "Viridis",
-              cmin: colorRange[0],
-              cmax: colorRange[1],
+              cmin: range[0],
+              cmax: range[1],
               showscale: !scaleShown,
               colorbar: { title: { text: colorCol?.label }, thickness: 10 },
             }
           : {}),
       },
       selectedpoints: selection.size > 0 ? selected : undefined,
-      selected: { marker: { opacity: 1, size: size + 2 } },
+      // A size-by keeps each point's own size; the outline marks the selection.
+      selected: { marker: { opacity: 1, ...(a.sizeBy ? {} : { size: size + 2 }) } },
       unselected: { marker: { opacity: opacity * 0.35 } },
     });
     inLegend.add(g.label);
@@ -219,6 +179,10 @@ export function buildScatterFigure(
     hovermode: "closest",
     margin: { l: 56, r: 12, t: split ? 52 : 32, b: 44 },
   };
+  if (groupsOf?.title) {
+    const legend = baseLayout(cfg.id).legend as Record<string, unknown>;
+    layout.legend = { ...legend, title: { text: groupsOf.title } };
+  }
   for (let f = 0; f < count; f++) {
     const bottom = f >= (gridRows - 1) * gridCols;
     const left = f % gridCols === 0;
@@ -262,6 +226,11 @@ export function buildScatterFigure(
   const what = lackX && lackY ? `${xTitle} or ${yTitle}` : lackX ? xTitle : yTitle;
   const note = lackNote(skipped, what);
   return { data, layout, skipped, note };
+}
+
+/** One value when every entry is the same (Plotly draws it faster), else the array. */
+function uniform(values: unknown[]): unknown {
+  return values.length > 0 && values.every((v) => v === values[0]) ? values[0] : values;
 }
 
 /** The part of a Plotly selection or click event we read. */

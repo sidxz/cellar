@@ -5,7 +5,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { AlertTriangle, ChartScatter, Database, Rows3 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
 import { resolveUserColumns } from "../lib/dataset";
@@ -16,7 +16,8 @@ import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level } from "../types";
 import { AddPlotMenu } from "./add-plot-menu";
 import { PanelGrid } from "./panel-grid";
-import type { OnEditPanel } from "./panels/panel-frame";
+import type { EditField } from "./panels/panel-frame";
+import { PlotSettingsSheet } from "./plot-settings-sheet";
 import { RunPickerDialog } from "./run-picker-dialog";
 import { SelectionStrip } from "./selection-strip";
 import { WorkbenchBody } from "./workbench-body";
@@ -52,6 +53,8 @@ function Workbench({ source }: { source: DatasetSource }) {
   const protocolId = source.kind === "protocol" ? source.protocolId : null;
   const { data: rowCounts } = useRunRowCounts(protocolId);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [editing, setEditing] = useState<{ panelId: string; focusField?: EditField } | null>(null);
+  const closeEditor = useCallback(() => setEditing(null), []);
 
   const ds = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
@@ -108,7 +111,12 @@ function Workbench({ source }: { source: DatasetSource }) {
         <WorkbenchProvider key={ds.revision} initialPanels={initialPanels(ds)}>
           <WorkbenchHeader source={source} ds={ds} addPlotMenu={<AddPlotMenu ds={ds} />} />
           <WorkbenchBody
-            plots={<PanelGrid ds={ds} onEdit={noEdit} />}
+            plots={
+              <PanelGrid
+                ds={ds}
+                onEdit={(panelId, focusField) => setEditing({ panelId, focusField })}
+              />
+            }
             table={
               <div className="flex h-full flex-col">
                 <SelectionStrip ds={ds} />
@@ -116,6 +124,16 @@ function Workbench({ source }: { source: DatasetSource }) {
               </div>
             }
             rail={<SlotNote>No filters yet.</SlotNote>}
+            editor={
+              editing && (
+                <PlotSettingsSheet
+                  ds={ds}
+                  panelId={editing.panelId}
+                  focusField={editing.focusField}
+                  onClose={closeEditor}
+                />
+              )
+            }
           />
         </WorkbenchProvider>
       )}
@@ -130,9 +148,6 @@ function Workbench({ source }: { source: DatasetSource }) {
     </div>
   );
 }
-
-// The plot editor arrives with the settings drawer, which passes the real handler here.
-const noEdit: OnEditPanel = () => {};
 
 // The provider reads this once (its store is created on mount), so the ids made here stick.
 const initialPanels = (ds: Dataset) => defaultPanels(ds).map((p) => makePanel(p.type, p.defaults));

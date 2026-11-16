@@ -1,4 +1,4 @@
-import { WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_COLORS, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { type Appearance, DEFAULT_APPEARANCE, type PanelConfig } from "../../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../../types";
@@ -11,7 +11,8 @@ interface Trace {
   x: unknown[];
   xaxis?: string;
   selectedpoints?: number[];
-  marker: { symbol?: unknown; color?: unknown };
+  text?: string[];
+  marker: { symbol?: unknown; color?: unknown; size?: unknown };
 }
 
 function dataset(values: Record<string, unknown[]>, kinds: Record<string, Kind> = {}): Dataset {
@@ -83,6 +84,45 @@ describe("buildScatterFigure", () => {
       Blank: ["triangle-up", WELL_TYPE_COLORS.blank],
       Reference: ["star", WELL_TYPE_COLORS.reference],
     });
+  });
+
+  it("groups numeric color bins into legend entries titled by the field", () => {
+    const ds = dataset({ well_order: [1, 2, 3], y: [0.2, 0.4, 0.6] });
+    const a = { colorBy: "y", colorMode: "bins" as const, colorBins: [0.3, 0.5] };
+    const fig = buildScatterFigure(ds, panel(a), pass(3), NONE);
+    expect(plotted(fig).map((t) => [t.name, t.marker.color])).toEqual([
+      ["< 0.3", CHART_COLORS.success],
+      ["0.3 to 0.5", CHART_COLORS.warning],
+      ["≥ 0.5", CHART_COLORS.error],
+    ]);
+    expect(fig.layout.legend).toMatchObject({ title: { text: "Signal" } });
+  });
+
+  it("sizes points by a numeric field and adds tooltip fields to the hover", () => {
+    const ds = dataset({ well_order: [1, 2], y: [10, 30], plate: ["1", "2"] });
+    const fig = buildScatterFigure(ds, panel({ sizeBy: "y", tooltip: ["plate"] }), pass(2), NONE);
+    const [t] = plotted(fig);
+    expect(t.marker.size).toEqual([5, 16]);
+    expect(t.text?.[1]).toBe("No compound · Plate 2<br>plate: 2");
+  });
+
+  it("gives traces uids that are valid CSS class names", () => {
+    // Plotly removes a vanished trace's colorbar by selecting `.cb<uid>`; a space or "|"
+    // there throws and leaves the plot frozen on its old drawing.
+    const ds = dataset({
+      well_order: [1, 2, 3],
+      y: [1, 2, 3],
+      well_type: ["sample", "negative_control", "sample"],
+    });
+    const fig = buildScatterFigure(
+      ds,
+      panel({ colorBy: "well_type", splitBy: "well_type" }),
+      Uint8Array.from([1, 1, 0]),
+      NONE,
+    );
+    const uids = fig.data.map((t) => t.uid as string);
+    expect(new Set(uids).size).toBe(uids.length);
+    for (const uid of uids) expect(uid).toMatch(/^[A-Za-z][\w-]*$/);
   });
 
   it("marks the selected rows by their position in each trace", () => {

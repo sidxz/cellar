@@ -30,22 +30,32 @@ export function panelTitle(ds: Dataset, p: PanelConfig): string {
   }
 }
 
-/** The header chips: one per configured field, each a shortcut into the editor. */
+/** The header chips: one per field the plot draws with, each a shortcut into the editor.
+ * Settings a type ignores (kept so switching back restores them) get no chip. */
 function chips(ds: Dataset, p: PanelConfig): { field: EditField; name: string; text: string }[] {
   const a = p.appearance;
+  const scatter = p.type === "scatter";
   const text = (key: string, log?: boolean) => `${labelOf(ds, key)}${log ? " (log)" : ""}`;
+  const y = p.type === "box" || scatter || (p.type === "bar" && (p.agg ?? "count") !== "count");
+  // Histograms stack by a category color only.
+  const color =
+    scatter || (p.type === "histogram" && a.colorBy && column(ds, a.colorBy)?.kind !== "number");
+  const shape = scatter ? a.shapeBy : undefined;
   const out: { field: EditField; name: string; text: string }[] = [];
-  if (p.y) out.push({ field: "y", name: "Y", text: text(p.y, p.logY) });
-  if (p.x) out.push({ field: "x", name: "X", text: text(p.x, p.logX) });
-  if (p.category) out.push({ field: "category", name: "Group", text: text(p.category) });
-  if (a.splitBy) out.push({ field: "splitBy", name: "Split", text: text(a.splitBy) });
-  if (a.colorBy) {
-    const name = a.shapeBy === a.colorBy ? "Color + shape" : "Color";
+  if (y && p.y) out.push({ field: "y", name: "Y", text: text(p.y, p.logY) });
+  if (p.x && p.type !== "bar" && p.type !== "box") {
+    out.push({ field: "x", name: "X", text: text(p.x, scatter && p.logX) });
+  }
+  if (p.category && (p.type === "bar" || p.type === "box")) {
+    out.push({ field: "category", name: "Group", text: text(p.category) });
+  }
+  if (scatter && a.splitBy) out.push({ field: "splitBy", name: "Split", text: text(a.splitBy) });
+  if (color && a.colorBy) {
+    const name = shape === a.colorBy ? "Color + shape" : scatter ? "Color" : "Stack";
     out.push({ field: "colorBy", name, text: text(a.colorBy) });
   }
-  if (a.shapeBy && a.shapeBy !== a.colorBy) {
-    out.push({ field: "shapeBy", name: "Shape", text: text(a.shapeBy) });
-  }
+  if (shape && shape !== a.colorBy)
+    out.push({ field: "shapeBy", name: "Shape", text: text(shape) });
   return out;
 }
 
