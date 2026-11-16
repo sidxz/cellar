@@ -402,6 +402,21 @@ class GetSavedVisualization(_SavedVisualizationUseCase):
         return Success(OpenedView(view, source, unresolved))
 
 
+@dataclass(frozen=True)
+class ProtocolRef:
+    id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True)
+class ListedView:
+    """A view with the protocols it reads that still exist: its own first, then the
+    compared ones."""
+
+    view: SavedVisualization
+    protocols: list[ProtocolRef]
+
+
 @dataclass(frozen=True, kw_only=True)
 class ListSavedVisualizationsQuery(Query):
     workspace_id: uuid.UUID
@@ -411,7 +426,7 @@ class ListSavedVisualizationsQuery(Query):
 class ListSavedVisualizations(_SavedVisualizationUseCase):
     async def __call__(
         self, input: ListSavedVisualizationsQuery, auth: AuthContext | None = None
-    ) -> Result[list[SavedVisualization], DomainError]:
+    ) -> Result[list[ListedView], DomainError]:
         require_authenticated(auth)
         require_workspace_role(auth, "viewer")
         require_same_workspace(auth, input.workspace_id)
@@ -431,4 +446,12 @@ class ListSavedVisualizations(_SavedVisualizationUseCase):
                 project_ids=project_ids,
                 protocol_id=input.protocol_id,
             )
-        return Success(views)
+        names = await self._reader.protocol_names(
+            input.workspace_id, list({p for v in views for p in v.protocol_ids})
+        )
+        return Success(
+            [
+                ListedView(v, [ProtocolRef(p, names[p]) for p in v.protocol_ids if p in names])
+                for v in views
+            ]
+        )

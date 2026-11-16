@@ -336,6 +336,39 @@ async def test_list_a_protocols_views(as_user, session_factory, workspace_id):
     assert [(v["name"], v["can_edit"]) for v in theirs.json()] == [("Shared", False)]
 
 
+async def test_the_list_names_each_views_protocols(client, session_factory, fake_auth):
+    """Same-named views of different protocols are told apart by their protocols: the
+    view's own first, then the compared ones; a protocol deleted since is left out."""
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    for key in ("p", "q"):
+        await _sql(
+            session_factory, "UPDATE protocols SET name = :n WHERE id = :p", n=key, p=w[key]
+        )
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        gone = await seed.protocol(uow.session, fake_auth.workspace_id)
+        await uow.commit()
+    compared = _protocol(w["q"]) | {
+        "compare": [{"protocol_id": str(w["p"])}, {"protocol_id": str(gone)}]
+    }
+    await _create(client, _protocol(w["p"]), name="Same")
+    await _create(client, compared, name="Same", level="compounds")
+    await _create(client, {"kind": "run", "run_id": str(w["runs"][0])}, name="Run")
+    await _sql(session_factory, "DELETE FROM runs WHERE protocol_id = :p", p=gone)
+    await _sql(session_factory, "DELETE FROM protocols WHERE id = :p", p=gone)
+
+    listed = await client.get(URL)
+
+    assert listed.status_code == 200, listed.text
+    by = [(v["name"], v["protocols"]) for v in listed.json()]
+    ref = lambda k: {"id": str(w[k]), "name": k}  # noqa: E731
+    assert sorted(by, key=lambda v: ([p["name"] for p in v[1]], v[0])) == [
+        ("Run", [ref("p")]),
+        ("Same", [ref("p")]),
+        ("Same", [ref("q"), ref("p")]),
+    ]
+
+
 async def test_an_unreadable_view_is_left_out_of_the_list_and_says_why_on_open(
     client, session_factory, fake_auth, monkeypatch
 ):

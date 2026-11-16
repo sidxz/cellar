@@ -14,6 +14,7 @@ from cellar.application.research_organization.saved_visualizations import (
     CreateSavedVisualizationCommand,
     DeleteSavedVisualizationCommand,
     GetSavedVisualizationQuery,
+    ListedView,
     ListSavedVisualizationsQuery,
     UpdateSavedVisualizationCommand,
 )
@@ -39,7 +40,7 @@ from cellar.interface.routes.visualization import DatasetRequest
 router = APIRouter(prefix="/api/v1/saved-visualizations", tags=["saved-visualizations"])
 
 
-class SavedVisualizationSummaryResponse(BaseModel):
+class _SavedVisualizationFields(BaseModel):
     id: uuid.UUID
     name: str
     description: str | None = None
@@ -51,25 +52,42 @@ class SavedVisualizationSummaryResponse(BaseModel):
     version: int
     updated_at: datetime | None = None
 
+    @staticmethod
+    def fields_of(view: SavedVisualization, auth: AuthContext) -> dict[str, Any]:
+        return {
+            "id": view.id,
+            "name": view.name,
+            "description": view.description,
+            "level": cast(DatasetLevel, view.level),
+            "visibility": view.visibility,
+            "project_id": view.project_id,
+            "created_by": view.created_by,
+            "can_edit": view.can_be_edited_by(auth.user_id, is_admin=auth.is_admin),
+            "version": view.version,
+            "updated_at": view.updated_at,
+        }
+
+
+class ProtocolRefResponse(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+class SavedVisualizationSummaryResponse(_SavedVisualizationFields):
+    # The protocols the view reads that still exist: its own first, then the compared ones.
+    protocols: list[ProtocolRefResponse]
+
     @classmethod
-    def from_domain(
-        cls, view: SavedVisualization, auth: AuthContext
+    def from_listed(
+        cls, listed: ListedView, auth: AuthContext
     ) -> SavedVisualizationSummaryResponse:
         return cls(
-            id=view.id,
-            name=view.name,
-            description=view.description,
-            level=cast(DatasetLevel, view.level),
-            visibility=view.visibility,
-            project_id=view.project_id,
-            created_by=view.created_by,
-            can_edit=view.can_be_edited_by(auth.user_id, is_admin=auth.is_admin),
-            version=view.version,
-            updated_at=view.updated_at,
+            **cls.fields_of(listed.view, auth),
+            protocols=[ProtocolRefResponse(id=p.id, name=p.name) for p in listed.protocols],
         )
 
 
-class SavedVisualizationResponse(SavedVisualizationSummaryResponse):
+class SavedVisualizationResponse(_SavedVisualizationFields):
     # The dataset request to load: the saved one less what no longer exists; null when its
     # run or protocol is gone.
     dataset: DatasetRequest | None
@@ -85,14 +103,13 @@ class SavedVisualizationResponse(SavedVisualizationSummaryResponse):
         unresolved: list[str],
         auth: AuthContext,
     ) -> SavedVisualizationResponse:
-        summary = SavedVisualizationSummaryResponse.from_domain(view, auth)
         dataset = (
             None
             if source is None
             else DatasetRequest.model_validate({"source": source, "level": view.level})
         )
         return cls(
-            **summary.model_dump(), dataset=dataset, config=view.config, unresolved=unresolved
+            **cls.fields_of(view, auth), dataset=dataset, config=view.config, unresolved=unresolved
         )
 
 
@@ -131,7 +148,7 @@ async def list_saved_visualizations(
     """Views the caller can see, by name; only those reading ``protocol_id`` when given."""
     query = ListSavedVisualizationsQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id)
     views = result_to_response(await uc(query, auth=auth))
-    return [SavedVisualizationSummaryResponse.from_domain(v, auth) for v in views]
+    return [SavedVisualizationSummaryResponse.from_listed(v, auth) for v in views]
 
 
 @router.get("/{view_id}", response_model=SavedVisualizationResponse)
