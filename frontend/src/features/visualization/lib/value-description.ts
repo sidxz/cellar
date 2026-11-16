@@ -135,8 +135,9 @@ export function inactiveBadge(ds: Dataset, key: string, i: number): string | nul
   return inactive && tested ? `Inactive ${inactive}/${tested} curves` : null;
 }
 
-/** A Runs row's fitted curve for the dose-response value ``key``, from the value and its fit
- * siblings, ready for the shared curve renderer; null without measured points. */
+/** A Runs row's fitted curve for the dose-response value ``key``, from its fit siblings
+ * (midpoint, top, bottom, Hill slope …), ready for the shared curve renderer; null without
+ * measured points. */
 export function curveSnapshotAt(ds: Dataset, key: string, i: number): CurveSnapshot | null {
   const points = siblingAt(ds, key, "points", i);
   if (!Array.isArray(points) || points.length === 0) return null;
@@ -147,10 +148,11 @@ export function curveSnapshotAt(ds: Dataset, key: string, i: number): CurveSnaps
   if (top === null || bottom === null || hill === null) return null;
   const curveClass = siblingAt(ds, key, "curve_class", i);
   return {
-    // An inactive curve has no value; the renderer draws its points only, and any positive
-    // scalar satisfies the shape.
+    // The renderer centres the 4PL on fitted_value: the midpoint, which the headline value
+    // (a primary intercept at 90 %, say) is not. An inactive curve has none; the renderer draws its points
+    // only, and any positive scalar satisfies the shape.
     fitted_value:
-      numberAt(ds, key, i) ?? (curveClass === "inactive" ? at("max_dose") : null) ?? Number.NaN,
+      at("midpoint") ?? (curveClass === "inactive" ? at("max_dose") : null) ?? Number.NaN,
     fitted_unit: column(ds, key)?.unit ?? null,
     top,
     bottom,

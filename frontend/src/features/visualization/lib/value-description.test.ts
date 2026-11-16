@@ -78,7 +78,8 @@ const runs: Dataset = {
   columns: [
     col("rd:s:raw", "Signal (%)", numericProv("replicate_mean"), { unit: "%" }),
     col("rd:s:raw:n", "Signal (%) n", numericProv("replicate_mean", "n")),
-    col("dr:e", "Enzyme · IC50", drProv("fit"), { unit: "µM" }),
+    col("dr:e", "Enzyme · IC90", drProv("fit"), { unit: "µM" }),
+    col("dr:e:midpoint", "4PL midpoint", drProv("fit", "midpoint"), { unit: "µM", hidden: true }),
     col("dr:e:top", "top", drProv("fit", "top")),
     col("dr:e:bottom", "bottom", drProv("fit", "bottom")),
     col("dr:e:hill_slope", "Hill slope", drProv("fit", "hill_slope")),
@@ -92,6 +93,7 @@ const runs: Dataset = {
     "rd:s:raw": [42, null],
     "rd:s:raw:n": [3, null],
     "dr:e": [0.3, 0.8],
+    "dr:e:midpoint": [0.1, 0.4],
     "dr:e:top": [100, 98],
     "dr:e:bottom": [0, 2],
     "dr:e:hill_slope": [1.23456, 1],
@@ -214,9 +216,9 @@ describe("inactiveBadge", () => {
 });
 
 describe("curveSnapshotAt", () => {
-  it("builds the run's curve from its fit siblings and points", () => {
+  it("builds the run's curve around its 4PL midpoint, not the headline intercept", () => {
     expect(curveSnapshotAt(runs, "dr:e", 0)).toEqual({
-      fitted_value: 0.3,
+      fitted_value: 0.1,
       fitted_unit: "µM",
       top: 100,
       bottom: 0,
