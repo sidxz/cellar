@@ -36,6 +36,13 @@ class CurveRow:
     excluded_points: Any | None
 
 
+@dataclass(frozen=True)
+class CompoundCurveRow(CurveRow):
+    """A curve with its batch's number (``None`` when the batch is not the workspace's)."""
+
+    batch_number: str | None = None
+
+
 @runtime_checkable
 class CompoundCurvesReader(Protocol):
     """Application-layer protocol for compound curves read-model queries."""
@@ -45,4 +52,4 @@ class CompoundCurvesReader(Protocol):
         workspace_id: uuid.UUID,
         protocol_id: uuid.UUID,
         molecule_id: uuid.UUID,
-    ) -> list[CurveRow]: ...
+    ) -> list[CompoundCurveRow]: ...
