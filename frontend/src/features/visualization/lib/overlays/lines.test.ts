@@ -145,6 +145,14 @@ describe("control limits", () => {
     expect(notes).toEqual(["Control limits need at least 2 plotted points"]);
   });
 
+  it("rings a censored value only when its bound proves it outside the limits", () => {
+    const limits = { mode: "entered" as const, lower: 6, upper: 8 };
+    // >5 could be 7 and <9 could be 7: unknown. >8 is above 8; <6 is below 6; >=8 could be 8.
+    const ds = runs([5, 9, 8, 6, 8, 9], { "y:q": [">", "<", ">", "<", ">=", null] });
+    const { traces } = draw(ds, { limits }, onDates);
+    expect(traces.map((t) => [t.name, t.y])).toEqual([["Outside limits (3)", [8, 6, 9]]]);
+  });
+
   it("leaves censored values out of the math and says so", () => {
     const ds = runs([7, 8, 3], { "y:q": [null, null, "<"] });
     const { shapes, notes } = draw(ds, { limits: { mode: "plotted" } }, onDates);

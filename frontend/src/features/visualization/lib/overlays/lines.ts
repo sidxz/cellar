@@ -76,7 +76,8 @@ export function drawRefLine(
 }
 
 /** Control-chart limits per facet — mean ± 3 SD of the plotted points (censored values left
- * out) or the entered pair — with the points beyond them ringed in the warning color. */
+ * out) or the entered pair — with the points beyond them ringed in the warning color (a
+ * censored value only when its bound proves it beyond). */
 export function drawLimits(
   ds: Dataset,
   p: PanelConfig,
@@ -131,7 +132,11 @@ export function drawLimits(
     const hi = Math.max(...ys);
     const out = rows.filter((i) => {
       const y = yAt(i) as number;
-      return y < lo || y > hi;
+      if (!isCensored(ds, p.y as string, i)) return y < lo || y > hi;
+      // A bound is outside only when every value it allows is: ">8" above 8, not ">=8".
+      const q = String(ds.values[`${p.y}:q`]?.[i]);
+      const strict = !q.endsWith("=");
+      return q.startsWith(">") ? y > hi || (strict && y === hi) : y < lo || (strict && y === lo);
     });
     if (out.length) outside.push({ f, rows: out });
   });
