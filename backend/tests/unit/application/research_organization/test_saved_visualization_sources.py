@@ -50,13 +50,13 @@ async def test_saving_names_every_compared_protocol():
     reader = _Reader({P: [], C1: [], C2: []})
     data = _source({"protocol_id": str(C1), "run_ids": None}, {"protocol_id": str(C2)})
 
-    assert await check_saved_source(reader, WS, data) == [P, C1, C2]
+    assert await check_saved_source(reader, WS, data, "compounds") == [P, C1, C2]
 
 
 async def test_saving_with_an_unknown_compared_protocol_is_not_found():
     reader = _Reader({P: []})
 
-    result = await check_saved_source(reader, WS, _source({"protocol_id": str(C1)}))
+    result = await check_saved_source(reader, WS, _source({"protocol_id": str(C1)}), "compounds")
 
     assert isinstance(result, NotFoundError)
 

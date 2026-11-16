@@ -211,6 +211,26 @@ async def test_a_source_outside_the_workspace_is_not_found(client, session_facto
     assert foreign_run.status_code == 404
 
 
+async def test_a_source_the_dataset_would_refuse_is_not_saved(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    compared = _protocol(w["p"]) | {"compare": [{"protocol_id": str(w["q"])}]}
+    twice = _protocol(w["p"]) | {"compare": [{"protocol_id": str(w["p"])}]}
+    view = await _create(client, _protocol(w["p"]))
+
+    at_wells = await client.post(URL, json=_body(compared, level="wells"))
+    loaded_twice = await client.post(URL, json=_body(twice, level="compounds"))
+    changed_to_wells = await client.patch(
+        f"{URL}/{view['id']}",
+        json={"expected_version": 1, "dataset": {"source": compared, "level": "wells"}},
+    )
+
+    for resp in (at_wells, changed_to_wells):
+        assert resp.status_code == 422, resp.text
+        assert resp.json()["message"] == "Comparing protocols works at the Compounds level only."
+    assert loaded_twice.status_code == 422, loaded_twice.text
+    assert loaded_twice.json()["message"] == "Each protocol can be loaded once."
+
+
 @pytest.mark.parametrize(
     ("config", "message"),
     [

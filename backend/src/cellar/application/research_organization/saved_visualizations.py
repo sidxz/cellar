@@ -28,6 +28,7 @@ from cellar.application.shared.query import Query
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.application.visualization.dataset_reader import VisualizationDatasetReader
+from cellar.application.visualization.get_dataset import compare_error
 from cellar.domain.research_organization.enums import SearchVisibility
 from cellar.domain.research_organization.repository import (
     ProjectMemberRepository,
@@ -58,10 +59,18 @@ def _protocol_parts(source: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def check_saved_source(
-    reader: VisualizationDatasetReader, workspace_id: uuid.UUID, source: dict[str, Any]
-) -> list[uuid.UUID] | NotFoundError:
-    """The protocols ``source`` reads, or NotFound for any protocol or run outside the
-    workspace (or a run of another protocol)."""
+    reader: VisualizationDatasetReader,
+    workspace_id: uuid.UUID,
+    source: dict[str, Any],
+    level: str,
+) -> list[uuid.UUID] | DomainError:
+    """The protocols ``source`` reads; or why the dataset would refuse it at ``level``, or
+    NotFound for any protocol or run outside the workspace (or a run of another protocol)."""
+    if source["kind"] == "protocol":
+        ids = [uuid.UUID(str(part["protocol_id"])) for part in _protocol_parts(source)]
+        refused = compare_error(ids, level)
+        if refused is not None:
+            return refused
     if source["kind"] == "run":
         run_id = uuid.UUID(str(source["run_id"]))
         found = await reader.runs_by_ids(workspace_id, [run_id])
@@ -217,8 +226,10 @@ class CreateSavedVisualization(_SavedVisualizationUseCase):
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
 
-        protocol_ids = await check_saved_source(self._reader, input.workspace_id, input.source)
-        if isinstance(protocol_ids, NotFoundError):
+        protocol_ids = await check_saved_source(
+            self._reader, input.workspace_id, input.source, input.level
+        )
+        if isinstance(protocol_ids, DomainError):
             return Failure(protocol_ids)
         async with self._uow:
             if input.visibility == SearchVisibility.PROJECT and input.project_id is not None:
@@ -288,8 +299,10 @@ class UpdateSavedVisualization(_SavedVisualizationUseCase):
                 return Failure(view)
             protocol_ids: list[uuid.UUID] | None = None
             if input.source is not None:
-                checked = await check_saved_source(self._reader, input.workspace_id, input.source)
-                if isinstance(checked, NotFoundError):
+                checked = await check_saved_source(
+                    self._reader, input.workspace_id, input.source, input.level or view.level
+                )
+                if isinstance(checked, DomainError):
                     return Failure(checked)
                 protocol_ids = checked
             visibility = input.visibility or view.visibility

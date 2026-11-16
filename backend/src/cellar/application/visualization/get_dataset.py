@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -102,6 +103,18 @@ def _too_many_columns(
     )
 
 
+def compare_error(protocol_ids: Sequence[uuid.UUID], level: str) -> ValidationError | None:
+    """Why this source can't be loaded: protocols after the first are compared, which works
+    at the Compounds level only and with each protocol once. Saving a view asks the same."""
+    if len(protocol_ids) < 2:
+        return None
+    if level != "compounds":
+        return ValidationError("Comparing protocols works at the Compounds level only.")
+    if len(set(protocol_ids)) < len(protocol_ids):
+        return ValidationError("Each protocol can be loaded once.")
+    return None
+
+
 class GetVisualizationDataset:
     def __init__(
         self, reader: VisualizationDatasetReader, activity_reader: ProtocolActivityReader
@@ -133,14 +146,12 @@ class GetVisualizationDataset:
         require_same_workspace(auth, input.workspace_id)
         ws, src = input.workspace_id, input.source
         compare = src.compare if isinstance(src, ProtocolSource) else ()
-        if isinstance(src, ProtocolSource) and compare:
-            if input.level != "compounds":
-                return Failure(
-                    ValidationError("Comparing protocols works at the Compounds level only.")
-                )
-            ids = [src.protocol_id, *(c.protocol_id for c in compare)]
-            if len(set(ids)) < len(ids):
-                return Failure(ValidationError("Each protocol can be loaded once."))
+        if isinstance(src, ProtocolSource):
+            refused = compare_error(
+                [src.protocol_id, *(c.protocol_id for c in compare)], input.level
+            )
+            if refused is not None:
+                return Failure(refused)
 
         runs = await self._resolve_runs(ws, src)
         if isinstance(runs, NotFoundError):
