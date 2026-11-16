@@ -95,10 +95,11 @@ describe("selectivity guides", () => {
       xanchor: "right",
       yanchor: "bottom",
     });
-    // X (Counter) selective: below-right of the lower guide, from its lower end.
+    // X (Counter) selective: below-right of the lower guide's midpoint, so it never hangs
+    // under the pairs onto the X ticks or a missing-Y strip.
     expect(annotations[2]).toMatchObject({
-      x: lower.x0,
-      y: lower.y0,
+      x: (lower.x0 + lower.x1) / 2,
+      y: (lower.y0 + lower.y1) / 2,
       xanchor: "left",
       yanchor: "top",
     });

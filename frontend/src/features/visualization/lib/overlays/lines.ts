@@ -196,7 +196,7 @@ function pointsBox(ds: Dataset, p: PanelConfig, mask: Uint8Array, f: Facet): Box
 }
 
 /** A diagonal guide: ``y = x + offset``, labeled ``text`` (``hover`` in full); ``key`` names
- * the value it draws; ``below`` labels it below-right of its lower end instead of above-left
+ * the value it draws; ``below`` labels it below-right of its midpoint instead of above-left
  * of its upper end. */
 type Diagonal = {
   offset: number;
@@ -235,7 +235,13 @@ function drawDiagonals(
       const place = { xref: f.xaxis, yref: f.yaxis };
       shapes.push(mark(name, shown, { ...place, x0, y0, x1, y1 }, g.line));
       annotations.push({
-        ...label(g.text, { ...place, x: g.below ? x0 : x1, y: g.below ? y0 : y1 }, g.line),
+        // A lower guide's end sits on the pairs' bottom edge, above the X ticks and any
+        // missing-Y strip: its label hangs from the midpoint instead.
+        ...label(
+          g.text,
+          { ...place, x: g.below ? (x0 + x1) / 2 : x1, y: g.below ? (y0 + y1) / 2 : y1 },
+          g.line,
+        ),
         ...(g.below && { xanchor: "left", yanchor: "top" }),
         ...(g.hover && { hovertext: g.hover }),
       });
