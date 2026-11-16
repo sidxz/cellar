@@ -131,7 +131,7 @@ export function PanelFrame({
           </Button>
         </div>
       </header>
-      <div className="relative min-h-0 flex-1">{children}</div>
+      <div className="relative min-h-0 flex-1 overflow-hidden">{children}</div>
     </section>
   );
 }

@@ -64,6 +64,15 @@ describe("PanelFrame", () => {
     expect(onEdit).toHaveBeenLastCalledWith("p1", "colorBy");
   });
 
+  it("keeps the plot inside the panel however far the header chips wrap", () => {
+    show();
+    // jsdom has no layout: the plot area must take only the height the header leaves and
+    // clip there, so a plot never spills onto the panel below and covers its buttons.
+    const area = screen.getByText("plot").parentElement;
+    expect(area).toHaveClass("min-h-0", "flex-1", "overflow-hidden");
+    expect(area?.parentElement).toHaveClass("flex", "flex-col", "h-full");
+  });
+
   it("shows chips only for the fields the plot type draws", () => {
     show(vi.fn(), { ...panel, type: "bar", agg: "count", category: "plate" });
     expect(screen.getByRole("button", { name: "Group Plate" })).toBeInTheDocument();
