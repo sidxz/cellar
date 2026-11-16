@@ -16,7 +16,7 @@ import uuid
 from collections import Counter, defaultdict
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Literal
+from typing import Any, Literal, NamedTuple
 
 from cellar.application.screening import _condense_raw_data
 from cellar.application.screening.compound_curves_reader import CurveRow
@@ -228,21 +228,30 @@ def _dr_labels(rd: ReadoutDefInfo, cs: str) -> tuple[str, str]:
     return value + suffix, p + suffix
 
 
-def build_aggregated_dataset(
+_Record = NumericReadoutRow | DRAggRow | CurveRow
+_Ident = tuple[uuid.UUID, uuid.UUID | None, uuid.UUID | None]  # (molecule, batch, run)
+
+
+class _Rows(NamedTuple):
+    defs: dict[uuid.UUID | None, ReadoutDefInfo]
+    records: list[_Record]
+    idents: dict[str, _Ident]  # row key → its identity
+    keyed: list[tuple[str, str]]  # per record: (row key, condition set)
+    sets: dict[str, dict[str, Any]]  # canonical JSON → set
+
+
+def _rows(
     level: AggLevel,
-    runs: list[RunInfo],
     defs: list[ReadoutDefInfo],
     aggregates: ActivityAggregates,
     curves: list[CurveRow],
-    molecules: dict[uuid.UUID, CompoundInfo],
-    batches: dict[uuid.UUID, str],
-) -> Dataset:
+) -> _Rows:
+    """The records' row keys and condition sets (Runs has the run's conditions as columns)."""
     # Only numbers are averaged: a pick-list or text readout never is.
     defs_by_id: dict[uuid.UUID | None, ReadoutDefInfo] = {
         d.id: d for d in defs if d.data_type in NUMERIC_DATA_TYPES
     }
-    runs_by_id = {r.id: r for r in runs}
-    records: list[NumericReadoutRow | DRAggRow | CurveRow] = [
+    records: list[_Record] = [
         r
         for r in (
             *aggregates.numeric_rows,
@@ -251,14 +260,12 @@ def build_aggregated_dataset(
         )
         if r.readout_definition_id in defs_by_id
     ]
-
-    # Pass 1: row keys, and condition sets (Runs has the run's conditions as columns).
-    idents: dict[str, tuple[uuid.UUID, uuid.UUID | None, uuid.UUID | None]] = {}
+    idents: dict[str, _Ident] = {}
     keyed: list[tuple[str, str]] = []
     sets: dict[str, dict[str, Any]] = {}
     for r in records:
         batch = str(r.batch_id) if r.batch_id is not None else "-"
-        ident: tuple[uuid.UUID, uuid.UUID | None, uuid.UUID | None]
+        ident: _Ident
         if level == "compounds":
             key, ident = str(r.molecule_id), (r.molecule_id, None, None)
         elif level == "batches":
@@ -274,6 +281,61 @@ def build_aggregated_dataset(
             cs, canonical = _condition_set(r.conditions)
             sets.setdefault(cs, canonical)
         keyed.append((key, cs))
+    return _Rows(defs_by_id, records, idents, keyed, sets)
+
+
+def _identity_keys(level: AggLevel) -> list[str]:
+    keys = ["compound", "structure", "molecule_id"]
+    if level != "compounds":
+        keys += ["batch", "batch_id"]
+    if level == "runs":
+        keys += ["run", "run_date", "operator", "run_status"]
+    return keys
+
+
+def plan_aggregated(
+    level: AggLevel,
+    runs: list[RunInfo],
+    defs: list[ReadoutDefInfo],
+    aggregates: ActivityAggregates,
+) -> tuple[int, int]:
+    """(rows, columns) of the dataset from the aggregation alone, so an oversized
+    selection is refused before curves, compounds and the build are loaded.
+
+    Rows are exact: every curve of the runs has its aggregation row. Columns are a
+    floor — identity and condition columns, each value column with its p column and
+    its count siblings (n; n tested / inactive / used) — the build adds the optional
+    siblings (qualifiers, SD, fit parameters…) and descriptors, and is checked again.
+    """
+    rows = _rows(level, defs, aggregates, [])
+    counts: dict[tuple[uuid.UUID, str | None, str], int] = {}
+    for r, (_, cs) in zip(rows.records, rows.keyed, strict=True):
+        rd = rows.defs[r.readout_definition_id]
+        if isinstance(r, NumericReadoutRow):
+            layer = r.layer or RAW_LAYER
+            spec = _ValueColumn(rd, layer, cs, unit_for_normalization(r.layer, rd.unit))
+            siblings = 1
+        else:
+            spec = _ValueColumn(rd, None, cs, canonical_unit(rd.dose_unit))
+            siblings = 0 if level == "runs" else 3
+        counts[(rd.id, spec.layer, cs)] = 1 + spec.molar + siblings
+    conditions = {name for run in runs for name in (run.conditions or {})}
+    columns = len(_identity_keys(level)) + (len(conditions) if level == "runs" else 0)
+    return len(rows.idents), columns + sum(counts.values())
+
+
+def build_aggregated_dataset(
+    level: AggLevel,
+    runs: list[RunInfo],
+    defs: list[ReadoutDefInfo],
+    aggregates: ActivityAggregates,
+    curves: list[CurveRow],
+    molecules: dict[uuid.UUID, CompoundInfo],
+    batches: dict[uuid.UUID, str],
+) -> Dataset:
+    runs_by_id = {r.id: r for r in runs}
+    # Pass 1: row keys and condition sets.
+    defs_by_id, records, idents, keyed, sets = _rows(level, defs, aggregates, curves)
 
     def _order(key: str) -> tuple[Any, ...]:
         mol, batch, run_id = idents[key]
@@ -375,14 +437,9 @@ def build_aggregated_dataset(
         cells[f"{vk}:points"][i] = points or None
 
     # Identity columns.
-    identity_keys = ["compound", "structure", "molecule_id"]
-    if level != "compounds":
-        identity_keys += ["batch", "batch_id"]
-    if level == "runs":
-        identity_keys += ["run", "run_date", "operator", "run_status"]
     columns = [
         DatasetColumn(key=k, label=label, kind=kind, hidden=hidden)
-        for k, label, kind, hidden in (_IDENTITY_BY_KEY[k] for k in identity_keys)
+        for k, label, kind, hidden in (_IDENTITY_BY_KEY[k] for k in _identity_keys(level))
     ]
     mol_ids = [idents[k][0] for k in row_ids]
     infos = [molecules.get(m) for m in mol_ids]

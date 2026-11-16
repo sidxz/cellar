@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import threading
 import uuid
+from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
@@ -317,19 +318,6 @@ async def test_a_protocol_without_runs_gives_an_empty_aggregated_dataset():
     assert activity.calls == [(P, AggregateScope(VALID_STATUSES, (), "batch", by_conditions=True))]
 
 
-async def test_aggregated_row_cap_counts_the_built_rows(monkeypatch):
-    from cellar.application.visualization import get_dataset
-
-    monkeypatch.setattr(get_dataset, "MAX_DATASET_ROWS", 1)
-    activity = FakeActivity((uuid.uuid4(), uuid.uuid4()))
-    q = GetVisualizationDatasetQuery(
-        workspace_id=WS, source=ProtocolSource(protocol_id=P), level="compounds"
-    )
-    result = await GetVisualizationDataset(_reader(), activity)(q, auth=FakeAuth(workspace_id=WS))
-    assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)
-    assert "2 rows" in str(result.failure()) and "limit is 1" in str(result.failure())
-
-
 async def test_wells_carry_compound_descriptors():
     q = GetVisualizationDatasetQuery(workspace_id=WS, source=RunSource(run_id=A), level="wells")
     result = await GetVisualizationDataset(_reader(), FakeActivity())(
@@ -349,3 +337,68 @@ async def test_run_row_counts_unknown_protocol():
     q = GetRunRowCountsQuery(workspace_id=WS, protocol_id=uuid.uuid4())
     result = await GetRunRowCounts(_reader())(q, auth=FakeAuth(workspace_id=WS))
     assert isinstance(result, Failure) and isinstance(result.failure(), NotFoundError)
+
+
+class SetsActivity(FakeActivity):
+    """One molecule measured under ``n_sets`` condition sets."""
+
+    def __init__(self, n_sets: int) -> None:
+        super().__init__((uuid.uuid4(),))
+        self.n_sets = n_sets
+
+    async def get_aggregates(self, workspace_id, protocol_id, scope):
+        row = (await super().get_aggregates(workspace_id, protocol_id, scope)).numeric_rows[0]
+        rows = [replace(row, conditions={"pH": i}) for i in range(self.n_sets)]
+        return ActivityAggregates(numeric_rows=rows, dr_agg_rows=[])
+
+
+def _loaded_nothing(reader: FakeReader) -> bool:
+    return not any(hasattr(reader, a) for a in ("curves_for", "molecules_asked", "batches_asked"))
+
+
+@pytest.mark.parametrize("level", ["runs", "batches", "compounds"])
+async def test_aggregated_row_cap_refuses_before_loading_curves_or_compounds(monkeypatch, level):
+    from cellar.application.visualization import get_dataset
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_ROWS", 1)
+    reader = _reader()
+    q = GetVisualizationDatasetQuery(
+        workspace_id=WS, source=ProtocolSource(protocol_id=P), level=level
+    )
+    result = await GetVisualizationDataset(reader, FakeActivity((uuid.uuid4(), uuid.uuid4())))(
+        q, auth=FakeAuth(workspace_id=WS)
+    )
+    assert "2 rows" in str(result.failure()) and "limit is 1" in str(result.failure())
+    assert _loaded_nothing(reader)
+
+
+async def test_aggregated_column_cap_refuses_before_loading_and_names_condition_sets(
+    monkeypatch,
+):
+    from cellar.application.visualization import get_dataset
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_COLUMNS", 10)
+    reader = _reader()
+    q = GetVisualizationDatasetQuery(
+        workspace_id=WS, source=ProtocolSource(protocol_id=P), level="compounds"
+    )
+    result = await GetVisualizationDataset(reader, SetsActivity(500))(
+        q, auth=FakeAuth(workspace_id=WS)
+    )
+    err = str(result.failure())
+    assert isinstance(result.failure(), ValidationError) and "limit is 10" in err
+    assert "condition set" in err and "Choose fewer runs" not in err
+    assert _loaded_nothing(reader)
+
+
+async def test_a_selection_under_both_caps_is_built(monkeypatch):
+    from cellar.application.visualization import get_dataset
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_COLUMNS", 20)
+    q = GetVisualizationDatasetQuery(
+        workspace_id=WS, source=ProtocolSource(protocol_id=P), level="compounds"
+    )
+    result = await GetVisualizationDataset(_reader(), SetsActivity(2))(
+        q, auth=FakeAuth(workspace_id=WS)
+    )
+    assert isinstance(result, Success)

@@ -22,6 +22,7 @@ from cellar.application.shared.query import Query
 from cellar.application.visualization.aggregated_dataset import (
     AggLevel,
     build_aggregated_dataset,
+    plan_aggregated,
 )
 from cellar.application.visualization.dataset import Dataset, build_wells_dataset
 from cellar.application.visualization.dataset_reader import RunInfo, VisualizationDatasetReader
@@ -57,6 +58,22 @@ class GetVisualizationDatasetQuery(Query):
 def _too_many_rows(total: int) -> ValidationError:
     return ValidationError(
         f"This selection has {total:,} rows; the limit is {MAX_DATASET_ROWS:,}. Choose fewer runs."
+    )
+
+
+def _too_many_columns(
+    total: int, level: DatasetLevel, *, at_least: bool = False
+) -> ValidationError:
+    # Aggregated columns multiply with condition sets and layers, not with runs.
+    hint = (
+        "Choose fewer runs."
+        if level == "wells"
+        else "Each condition set and normalization layer adds its own columns: "
+        "choose runs with fewer condition sets."
+    )
+    has = "at least " if at_least else ""
+    return ValidationError(
+        f"This selection has {has}{total:,} columns; the limit is {MAX_DATASET_COLUMNS:,}. {hint}"
     )
 
 
@@ -106,12 +123,7 @@ class GetVisualizationDataset:
         if isinstance(dataset, ValidationError):
             return Failure(dataset)
         if len(dataset.columns) > MAX_DATASET_COLUMNS:
-            return Failure(
-                ValidationError(
-                    f"This selection has {len(dataset.columns):,} columns; the limit is "
-                    f"{MAX_DATASET_COLUMNS:,}. Choose fewer runs."
-                )
-            )
+            return Failure(_too_many_columns(len(dataset.columns), input.level))
         return Success(dataset)
 
     async def _wells(self, ws: uuid.UUID, runs: list[RunInfo]) -> Dataset | ValidationError:
@@ -145,13 +157,19 @@ class GetVisualizationDataset:
             )
         )
         aggregates = await self._activity_reader.get_aggregates(ws, protocol_id, scope)
+        defs = await self._reader.readout_definitions(ws, [protocol_id])
+        # Refused before curves, compounds and the dense columns are loaded.
+        rows, columns = plan_aggregated(level, runs, defs, aggregates)
+        if rows > MAX_DATASET_ROWS:
+            return _too_many_rows(rows)
+        if columns > MAX_DATASET_COLUMNS:
+            return _too_many_columns(columns, level, at_least=True)
         curves = await self._reader.fetch_curves(ws, list(run_ids)) if level == "runs" else []
         records: list[NumericReadoutRow | DRAggRow | CurveRow] = [
             *aggregates.numeric_rows,
             *aggregates.dr_agg_rows,
             *curves,
         ]
-        defs = await self._reader.readout_definitions(ws, [protocol_id])
         molecules = await self._reader.compound_info(ws, list({r.molecule_id for r in records}))
         batches = await self._reader.batch_numbers(
             ws, list({r.batch_id for r in records if r.batch_id is not None})

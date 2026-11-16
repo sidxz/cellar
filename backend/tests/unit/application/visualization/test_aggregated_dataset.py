@@ -15,7 +15,10 @@ from cellar.application.screening.protocol_activity_reader import (
     DRAggRow,
     NumericReadoutRow,
 )
-from cellar.application.visualization.aggregated_dataset import build_aggregated_dataset
+from cellar.application.visualization.aggregated_dataset import (
+    build_aggregated_dataset,
+    plan_aggregated,
+)
 from cellar.application.visualization.dataset_reader import CompoundInfo, ReadoutDefInfo, RunInfo
 
 P = uuid.uuid4()
@@ -700,3 +703,29 @@ def test_runs_level_carries_the_4pl_midpoint(primary, fitted, midpoint):
     assert ds.values[f"{DRK}:midpoint"] == [pytest.approx(midpoint)]
     col = _col(ds, f"{DRK}:midpoint")
     assert (col.hidden, col.unit, col.provenance.stat) == (True, "µM", "midpoint")
+
+
+@pytest.mark.parametrize("level", ["runs", "batches", "compounds"])
+def test_the_plan_counts_the_rows_and_a_floor_of_the_columns(level):
+    run_a, run_b = _run(12, conditions={"NADP": "+"}), _run(13, conditions={"NADP": "-"})
+    mol, batch = uuid.uuid4(), uuid.uuid4()
+    runs = [run_a, run_b]
+    numeric = [
+        _num(mol, batch_id=batch, run_id=run_a.id, conditions=run_a.conditions),
+        _num(mol, rd=POT, batch_id=batch, run_id=run_b.id, conditions=run_b.conditions),
+    ]
+    dr = [_dr(mol, batch_id=batch, run_id=run_a.id, conditions=run_a.conditions)]
+    if level == "runs":
+        numeric = [replace(r, conditions=None) for r in numeric]
+        dr = [replace(r, conditions=None) for r in dr]
+    else:
+        numeric = [replace(r, run_id=None) for r in numeric]
+        dr = [replace(r, run_id=None) for r in dr]
+    curves = [_curve(run_a, mol, batch)] if level == "runs" else []
+    aggregates = ActivityAggregates(numeric_rows=numeric, dr_agg_rows=dr)
+
+    rows, columns = plan_aggregated(level, runs, DEFS, aggregates)
+    ds = build_aggregated_dataset(level, runs, DEFS, aggregates, curves, {}, {})
+
+    assert rows == len(ds.row_ids)
+    assert columns <= len(ds.columns)
