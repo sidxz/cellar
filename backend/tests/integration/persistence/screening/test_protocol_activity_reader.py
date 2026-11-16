@@ -437,3 +437,54 @@ async def test_blank_condition_values_count_as_absent(uow, session_factory, work
 
     by_set = {json.dumps(r.conditions, sort_keys=True): r.n for r in agg.numeric_rows}
     assert by_set == {'{"NADP": "+"}': 2, "{}": 2, '{"pH": 7}': 1}
+
+
+# --- A compound's results: sample wells and well-less rows only ------------------------
+
+
+async def test_activity_reads_sample_wells_and_wellless_rows_only(
+    uow, session_factory, workspace_id
+):
+    """Rifampicin titrated on sample wells and used as the positive control on the same
+    plate: its Activity n/mean come from the samples (and the summary row) alone. A compound
+    that is only ever a control is not listed."""
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        org = await seed.org(s, ws)
+        rif = await seed.molecule(s, ws, org, "rifampicin")
+        ref = await seed.molecule(s, ws, org, "reference-only")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="Signal", normalizations=["percent_inhibition"])
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        plate = await seed.plate(s, run, 1)
+        rows = [
+            ("sample", rif, 40.0),
+            ("sample", rif, 60.0),
+            ("positive_control", rif, 100.0),
+            ("negative_control", rif, 0.0),
+            ("reference", ref, 90.0),
+            ("blank", ref, 5.0),
+        ]
+        for col, (role, mol, value) in enumerate(rows, start=1):
+            w = await seed.well(s, plate, "A", col, well_type=role)
+            await seed.readout(
+                s, ws, run, rd, mol, value, well_id=w, normalization="percent_inhibition"
+            )
+        await seed.readout(
+            s, ws, run, rd, rif, 80.0, wellless=True, normalization="percent_inhibition"
+        )
+        await uow.commit()
+
+    result = await GetProtocolActivitySummary(SQLAlchemyProtocolActivityReader(session_factory))(
+        GetProtocolActivityQuery(workspace_id=ws, protocol_id=p),
+        auth=FakeAuth(role="viewer", workspace_id=ws),
+    )
+
+    [item] = result.unwrap().items
+    assert item.molecule_id == rif
+    signal = item.readouts["Signal"]
+    assert (signal.mean, signal.n, signal.best) == (60.0, 3, 80.0)
+    for grain in ("compound", "batch", "run"):
+        agg = await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, grain=grain)
+        assert [(r.molecule_id, r.n, r.mean) for r in agg.numeric_rows] == [(rif, 3, 60.0)], grain

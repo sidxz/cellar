@@ -47,6 +47,9 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
     BatchModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     PlateModel,
@@ -132,7 +135,8 @@ def _scope_filters(scope: AggregateScope) -> list[ColumnElement[bool]]:
 def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any]:
     """Non-dose-response readout values per (molecule, readout, layer) + scope keys.
 
-    Outlier wells never count. Censored values are counted with their bounds;
+    Sample wells and well-less rows only (``COMPOUND_RESULT``); outlier wells never
+    count. Censored values are counted with their bounds;
     unless the scope keeps them, they stay out of best/low/mean/n/sd, and the
     median and geomean (positive values only, the others counted) are added as
     find_run_stats computes them, with the strict bounds that tell whether a
@@ -180,6 +184,7 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
             _rd.workspace_id == ws,
             ReadoutDefinitionModel.data_type != "dose_response",
             _rd.molecule_id.isnot(None),
+            COMPOUND_RESULT,
             v.isnot(None),
             _rd.is_outlier == False,  # noqa: E712
             *_scope_filters(scope),
@@ -370,6 +375,7 @@ class SQLAlchemyProtocolActivityReader:
                     RunModel.workspace_id == ws,
                     RunModel.status.in_(valid_statuses),
                     ReadoutDataModel.molecule_id.isnot(None),
+                    COMPOUND_RESULT,
                 )
                 .group_by(ReadoutDataModel.molecule_id)
             )
