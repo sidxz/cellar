@@ -16,6 +16,8 @@ type CategoryFilter = Extract<Filter, { kind: "category" }>;
 const SEARCH_FROM = 10;
 const SHOWN = 100;
 const MISSING = "\u0000missing";
+// Buckets, not values: listed after the named values, before "(none)".
+const LAST = new Set(["Other", "No value", "Not tested"]);
 
 /** A checklist of a category column's values, each with its count among the rows the
  * other filters keep; "(none)" stands for rows without a value. One undo entry per click. */
@@ -49,7 +51,9 @@ export function CategoryFilterCard({
 
   const kept = new Set(filter.values);
   const items = [
-    ...all.values.map((v) => ({ value: v, label: categoryLabel(filter.key, v), on: kept.has(v) })),
+    ...[...all.values]
+      .sort((a, b) => Number(LAST.has(a)) - Number(LAST.has(b)))
+      .map((v) => ({ value: v, label: categoryLabel(filter.key, v), on: kept.has(v) })),
     ...(all.hasMissing
       ? [{ value: MISSING, label: categoryLabel(filter.key, null), on: filter.includeMissing }]
       : []),

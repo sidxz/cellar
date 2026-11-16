@@ -162,6 +162,22 @@ describe("FilterRail", () => {
     expect(state().history).toBe(1);
   });
 
+  it("lists the Other, No value and Not tested buckets after the named values", () => {
+    const series: Dataset = {
+      ...ds,
+      columns: [...ds.columns, { key: "s", label: "Series", kind: "category", provenance: {} }],
+      values: { ...ds.values, s: ["Other", "Not tested", "Amides", "No value", "Zeta", null] },
+    };
+    const filter: Filter = { ...types([]), key: "s", values: [] };
+    show([filter], <FilterRail ds={series} />);
+    const card = screen.getByRole("group", { name: "Series" });
+    expect(
+      within(card)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["Amides1", "Zeta1", "No value1", "Not tested1", "Other1", "(none)1"]);
+  });
+
   it("names a filter on a removed column by its last label, inert and removable", () => {
     const r1: Filter = {
       id: "f-r1",
