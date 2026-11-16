@@ -69,6 +69,7 @@ _IDENTITY: list[tuple[str, str, ColumnKind, bool]] = [
     ("operator", "Operator", "user", False),
     ("run_status", "Run status", "category", False),
     ("plate", "Plate", "category", False),
+    ("plate_id", "Plate id", "text", True),
     ("well", "Well", "text", False),
     ("well_row", "Row", "category", False),
     ("well_column", "Column", "number", False),
@@ -103,7 +104,7 @@ def _finite(v: float | None) -> float | None:
 
 
 def _identity_values(
-    row: WellValueRow, run: RunInfo | None, run_label: str | None
+    row: WellValueRow, run: RunInfo | None, run_label: str | None, multi_run: bool
 ) -> dict[str, Any]:
     order = None
     if row.well_row is not None and row.well_column is not None:
@@ -113,6 +114,8 @@ def _identity_values(
     plate = None
     if row.plate_id is not None:
         plate = row.plate_barcode or f"Plate {row.plate_number}"
+        if multi_run:  # every run has a "Plate 1"
+            plate = f"{run_label} · {plate}"
     well = None
     if row.well_row is not None and row.well_column is not None:
         well = f"{row.well_row}{row.well_column:02d}"
@@ -126,6 +129,7 @@ def _identity_values(
         "operator": str(run.operator_id) if run else None,
         "run_status": run.status if run else None,
         "plate": plate,
+        "plate_id": str(row.plate_id) if row.plate_id else None,
         "well": well,
         "well_row": row.well_row,
         "well_column": row.well_column,
@@ -141,6 +145,7 @@ def build_wells_dataset(
 ) -> Dataset:
     runs_by_id = {r.id: r for r in runs}
     run_labels = _run_labels(runs)
+    multi_run = len(runs) > 1
     defs_by_id = {d.id: d for d in defs}
 
     # Row identity follows the reader's order; values resolve latest-created-wins.
@@ -151,7 +156,9 @@ def build_wells_dataset(
         if key not in index:
             index[key] = len(identity)
             identity.append(
-                _identity_values(row, runs_by_id.get(row.run_id), run_labels.get(row.run_id))
+                _identity_values(
+                    row, runs_by_id.get(row.run_id), run_labels.get(row.run_id), multi_run
+                )
             )
 
     n = len(identity)

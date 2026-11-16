@@ -116,6 +116,16 @@ def test_well_order_on_a_384_plate():
     assert ds.values["plate"] == ["Plate 1"]
 
 
+def test_plates_of_different_runs_are_told_apart_by_run():
+    a, b = _run(12), _run(13)
+    pa, pb = uuid.uuid4(), uuid.uuid4()
+    rows = [_row(a, plate_id=pa), _row(b, plate_id=pb, plate_barcode="BC-9")]
+    ds = build_wells_dataset([a, b], DEFS, rows)
+    assert ds.values["plate"] == ["2026-11-12 · Plate 1", "2026-11-13 · BC-9"]
+    assert ds.values["plate_id"] == [str(pa), str(pb)]
+    assert _col(ds, "plate_id").hidden is True
+
+
 def test_wellless_row_has_null_plate_and_well():
     run = _run()
     mol = uuid.uuid4()
@@ -217,7 +227,7 @@ def test_identity_columns_carry_no_uuids():
     b = _run(12, minutes=5)  # same date → disambiguated
     ds = build_wells_dataset([a, b], DEFS, [_row(a), _row(b, plate_barcode="BC-9")])
     assert ds.values["run"] == ["2026-11-12 #1", "2026-11-12 #2"]
-    assert ds.values["plate"] == ["Plate 1", "BC-9"]
+    assert ds.values["plate"] == ["2026-11-12 #1 · Plate 1", "2026-11-12 #2 · BC-9"]
     assert ds.values["compound"] == ["CEL-000001", "CEL-000001"]
     for key in ("run", "plate", "compound", "well", "well_type"):
         for v in ds.values[key]:
