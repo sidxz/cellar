@@ -234,7 +234,7 @@ def _apply_selection_rule(
     rep = result.representative_run or max(candidates, key=lambda c: c.run_date or date.min)
     is_aggregate = rule in _AGGREGATE_RULES
 
-    if is_aggregate and result.value is not None:
+    if is_aggregate and result.qualifier == ValueQualifier.EQ:
         snapshot = build_aggregate_curve_snapshot(
             candidates,
             aggregate_value=result.value,

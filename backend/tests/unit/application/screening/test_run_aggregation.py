@@ -37,6 +37,7 @@ def _run(
     curve_class: str | None = "active",
     intercept_values: list[dict] | None = None,
     r_squared: float | None = 0.95,
+    raw_data: list[dict] | None = None,
 ) -> ResolvedRun:
     return ResolvedRun(
         run_id=uuid.uuid4(),
@@ -55,7 +56,9 @@ def _run(
         curve_bottom=0.0,
         curve_hill_slope=-1.0,
         curve_r_squared=r_squared,
-        curve_raw_data=[{"x": 0.001, "y": 0}, {"x": 100.0, "y": 100}],
+        curve_raw_data=(
+            [{"x": 0.001, "y": 0}, {"x": 100.0, "y": 100}] if raw_data is None else raw_data
+        ),
         intercept_values=intercept_values
         or [
             {"spec": {"kind": "ic", "level": 50.0}, "value": value, "at_bound": False}
@@ -66,11 +69,62 @@ def _run(
 # ---- resolve_intercept ----
 
 
-def test_resolve_intercept_inactive_curve_returns_nd():
+def test_resolve_intercept_inactive_curve_reads_above_the_top_dose():
+    """No response within the tested doses: the potency lies above the top one."""
     run = _run(curve_class="inactive")
     value, q = resolve_intercept(run, None)
-    assert value is None
-    assert q is ValueQualifier.ND
+    assert value == 100.0
+    assert q is ValueQualifier.GT
+
+
+def test_resolve_intercept_inactive_curve_on_any_intercept_reads_above_the_top_dose():
+    run = _run(
+        curve_class="inactive",
+        intercept_values=[{"spec": {"kind": "ic", "level": 90.0}, "value": 0.01}],
+    )
+    assert resolve_intercept(run, InterceptKey(kind="ic", level=90.0)) == (
+        100.0,
+        ValueQualifier.GT,
+    )
+
+
+def test_resolve_intercept_inactive_curve_without_doses_is_nd():
+    run = _run(curve_class="inactive", raw_data=[])
+    assert resolve_intercept(run, None) == (None, ValueQualifier.ND)
+
+
+def test_resolve_intercept_fitted_above_the_top_dose_reads_as_that_bound():
+    """An extrapolated 823 on a 0.001-100 series reads "> 100", not 823."""
+    run = _run(value=823.0)
+    assert resolve_intercept(run, None) == (100.0, ValueQualifier.GT)
+
+
+def test_resolve_intercept_fitted_below_the_lowest_dose_reads_as_that_bound():
+    run = _run(value=0.0002)
+    assert resolve_intercept(run, None) == (0.001, ValueQualifier.LT)
+
+
+def test_resolve_intercept_keyed_value_outside_the_doses_reads_as_a_bound():
+    run = _run(
+        intercept_values=[
+            {"spec": {"kind": "ec", "level": 50.0}, "value": 1.0, "at_bound": False},
+            {"spec": {"kind": "ec", "level": 90.0}, "value": 450.0, "at_bound": False},
+            {"spec": {"kind": "ec", "level": 10.0}, "value": 1e-5, "at_bound": False},
+        ]
+    )
+    assert resolve_intercept(run, InterceptKey(kind="ec", level=90.0)) == (
+        100.0,
+        ValueQualifier.GT,
+    )
+    assert resolve_intercept(run, InterceptKey(kind="ec", level=10.0)) == (
+        0.001,
+        ValueQualifier.LT,
+    )
+
+
+def test_resolve_intercept_value_on_a_tested_dose_is_exact():
+    assert resolve_intercept(_run(value=100.0), None) == (100.0, ValueQualifier.EQ)
+    assert resolve_intercept(_run(value=0.001), None) == (0.001, ValueQualifier.EQ)
 
 
 def test_resolve_intercept_at_bound_returns_gt_max_dose():
@@ -187,8 +241,9 @@ def test_latest_run_picks_max_run_date_among_eq():
     assert out.contributing_run_ids[0] == out.representative_run.run_id
 
 
-def test_latest_run_skips_inactive_under_exclude_qualified():
-    """Latest is the latest *EQ* run when EXCLUDE_QUALIFIED."""
+def test_latest_run_that_is_inactive_reads_above_its_top_dose():
+    """An inactive curve is a measurement ("> top dose"), so the latest run wins
+    as it does for any censored fit."""
     runs = [
         _run(value=0.10, run_date=date(2026, 1, 1)),
         _run(value=0.20, run_date=date(2026, 2, 1)),
@@ -197,16 +252,57 @@ def test_latest_run_skips_inactive_under_exclude_qualified():
     out = apply_selection_rule(
         runs, SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
-    assert out.value == 0.20  # the most recent EQ run, not the most recent overall
+    assert (out.value, out.qualifier) == (100.0, ValueQualifier.GT)
+    assert out.representative_run is not None
+    assert out.representative_run.run_date == date(2026, 4, 1)
 
 
-def test_all_inactive_returns_nd():
+def test_all_inactive_reads_above_the_top_dose():
     runs = [_run(value=None, curve_class="inactive") for _ in range(3)]
+    out = apply_selection_rule(
+        runs, SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
+    )
+    assert (out.value, out.qualifier) == (100.0, ValueQualifier.GT)
+
+
+def test_all_inactive_without_doses_returns_nd():
+    runs = [_run(value=None, curve_class="inactive", raw_data=[]) for _ in range(2)]
     out = apply_selection_rule(
         runs, SelectionRule.LATEST_RUN, QualifierHandling.EXCLUDE_QUALIFIED, None
     )
     assert out.value is None
     assert out.qualifier is ValueQualifier.ND
+
+
+@pytest.mark.parametrize("rule", [SelectionRule.GEOMETRIC_MEAN, SelectionRule.MEAN_ACROSS_RUNS])
+def test_average_of_only_censored_runs_keeps_the_tightest_bound(rule):
+    """No exact value to average: every run inactive reads "> the largest top
+    dose", as combine_replicates keeps censored replicates — never ND."""
+    top_500 = [{"x": 0.5, "y": 0}, {"x": 500.0, "y": 2}]
+    runs = [
+        _run(value=None, curve_class="inactive", run_date=date(2026, 1, 1)),
+        _run(value=None, curve_class="inactive", raw_data=top_500, run_date=date(2026, 2, 1)),
+    ]
+    out = apply_selection_rule(runs, rule, QualifierHandling.INCLUDE_QUALIFIED, None)
+    assert (out.value, out.qualifier) == (500.0, ValueQualifier.GT)
+    assert len(out.contributing_run_ids) == 2
+
+
+def test_average_of_only_below_range_runs_keeps_the_smallest_bound():
+    runs = [_run(value=1e-5), _run(value=1e-6, raw_data=[{"x": 0.0001}, {"x": 1.0}])]
+    out = apply_selection_rule(
+        runs, SelectionRule.GEOMETRIC_MEAN, QualifierHandling.INCLUDE_QUALIFIED, None
+    )
+    assert (out.value, out.qualifier) == (0.0001, ValueQualifier.LT)
+
+
+def test_average_of_bounds_on_both_sides_is_nd():
+    runs = [_run(value=None, curve_class="inactive"), _run(value=1e-5)]
+    out = apply_selection_rule(
+        runs, SelectionRule.GEOMETRIC_MEAN, QualifierHandling.INCLUDE_QUALIFIED, None
+    )
+    assert (out.value, out.qualifier) == (None, ValueQualifier.ND)
+    assert out.representative_run is not None
 
 
 def test_geometric_mean_log_space_average_of_eq_only():

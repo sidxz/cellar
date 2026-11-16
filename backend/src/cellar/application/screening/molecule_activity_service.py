@@ -27,6 +27,7 @@ from cellar.application.screening.run_aggregation import (
     compute_aggregate_stats,
     detect_disagreement,
     effective_rule,
+    reported_intercept_values,
 )
 from cellar.application.screening.search_column_plan import (
     ANY_COLUMN,
@@ -885,7 +886,7 @@ class MoleculeActivityService:
             SelectionRule.MEAN_ACROSS_RUNS,
             SelectionRule.GEOMETRIC_MEAN,
         }
-        if is_aggregate and primary_result.value is not None and not lean:
+        if is_aggregate and primary_result.qualifier == ValueQualifier.EQ and not lean:
             marker_label = "gmean" if selection_rule == SelectionRule.GEOMETRIC_MEAN else "mean"
             snap = build_aggregate_curve_snapshot(
                 resolved_runs,
@@ -1151,7 +1152,7 @@ def _to_run_summary(run: ResolvedRun) -> RunSummary:
         curve_id=run.curve_id,
         curve_class=run.curve_class,
         r_squared=run.curve_r_squared,
-        intercept_values=list(run.intercept_values or []),
+        intercept_values=reported_intercept_values(run),
     )
 
 

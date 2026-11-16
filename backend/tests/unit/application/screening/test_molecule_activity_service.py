@@ -515,6 +515,54 @@ class TestEnrichMoleculesMultiRunAggregation:
     """The new aggregator-driven path replaces best-R² cherry-picking."""
 
     @pytest.mark.asyncio
+    async def test_potency_outside_the_doses_reads_as_a_bound_in_cell_and_run_history(
+        self,
+    ) -> None:
+        """Parity with the run tab: an inactive curve reads "> top dose", an
+        extrapolated fit the dose it lies beyond — the cell, its intercept
+        aggregate, and each run's row in the run-history tooltip."""
+        doses = [
+            {"concentration": 0.5, "response": 1.0},
+            {"concentration": 500.0, "response": 3.0},
+        ]
+        inactive_run, extrapolated_run = uuid.uuid4(), uuid.uuid4()
+        ic50 = {"kind": InterceptKind.IC, "level": 50.0, "label": "IC50"}
+        curves = [
+            _make_curve(
+                fitted_value=3.0,
+                curve_class=CurveClass.INACTIVE,
+                raw_data=doses,
+                run_id=inactive_run,
+                intercept_values=[_make_intercept_value(**ic50, value=3.0)],
+            ),
+            _make_curve(
+                fitted_value=823.4,
+                raw_data=doses,
+                run_id=extrapolated_run,
+                intercept_values=[_make_intercept_value(**ic50, value=823.4)],
+            ),
+        ]
+        runs = {
+            inactive_run: _make_run(run_id=inactive_run, run_date=date(2026, 4, 1)),
+            extrapolated_run: _make_run(run_id=extrapolated_run, run_date=date(2026, 1, 1)),
+        }
+        service = _make_service(curve_repo=_curve_repo_for(curves), run_repo=_run_repo_for(runs))
+        col_spec = f"drc:{RD_ID}"
+
+        av = (await service.enrich_molecules(WS, [MOL_ID], [col_spec]))[MOL_ID][col_spec]
+
+        assert (av.value, av.qualifier) == (500.0, ">")
+        assert av.intercept_aggregates is not None
+        assert (
+            av.intercept_aggregates[0].selected_value,
+            av.intercept_aggregates[0].selected_qualifier,
+        ) == (500.0, ">")
+        assert av.runs is not None
+        firsts = [r.intercept_values[0] for r in av.runs]
+        rows = [(iv["value"], iv["qualifier"]) for iv in firsts]
+        assert rows == [(500.0, ">"), (500.0, ">")]
+
+    @pytest.mark.asyncio
     async def test_default_uses_latest_run(self) -> None:
         """3 runs: latest fitted IC50 = 0.20 wins under the default rule."""
         # Order matches what the SQL repo returns: newest first.

@@ -6,7 +6,7 @@ import pytest
 
 from cellar.application.sar_analysis.activity_channel import ActivityChannelSpec
 from cellar.application.sar_analysis.activity_enrichment import enrich_to_scalars
-from cellar.domain.screening_assay.activity_types import ActivityValue
+from cellar.domain.screening_assay.activity_types import ActivityValue, InterceptAggregate
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
 from cellar.domain.shared.hit_criterion import InterceptKey
 
@@ -75,6 +75,24 @@ async def test_enrich_to_scalars_uses_intercept_key():
         channel=_channel(intercept_key=InterceptKey(kind="ic", level=90.0)),
     )
     assert out[0].scalar == 3.2
+
+
+@pytest.mark.asyncio
+async def test_enrich_to_scalars_keyed_channel_keeps_that_intercepts_bound():
+    ws, a = uuid.uuid4(), uuid.uuid4()
+    table = {a: {_COLUMN: ActivityValue(
+        value=0.5, qualifier=None, unit="uM", source="dose_response",
+        intercept_values=[{"spec": {"kind": "ic", "level": 90.0}, "value": 823.4}],
+        intercept_aggregates=[InterceptAggregate(
+            spec={"kind": "ic", "level": 90.0}, selected_value=500.0, selected_qualifier=">",
+            aggregate_stats=None, disagreement_flag=False,
+        )],
+    )}}
+    out = await enrich_to_scalars(
+        FakeEnricher(table), workspace_id=ws, molecule_ids=[a],
+        channel=_channel(intercept_key=InterceptKey(kind="ic", level=90.0)),
+    )
+    assert (out[0].scalar, out[0].qualifier) == (500.0, ">")
 
 
 @pytest.mark.asyncio

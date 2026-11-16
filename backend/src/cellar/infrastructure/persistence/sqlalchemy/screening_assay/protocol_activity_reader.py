@@ -7,14 +7,11 @@ from typing import Any
 
 from sqlalchemy import (
     ColumnElement,
-    Float,
     Row,
-    ScalarSelect,
     Select,
     Subquery,
     and_,
     case,
-    cast,
     column,
     distinct,
     false,
@@ -49,6 +46,7 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
     COMPOUND_RESULT,
+    curve_doses,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
@@ -201,22 +199,16 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
     return _scoped(stmt, ws, pid, scope, batch=batch, run=_rd.run_id)
 
 
-def _max_dose() -> ScalarSelect[Any]:
-    """The curve's largest positive dose: the bound of an at-bound intercept, read
-    from its points as ``run_aggregation._max_dose_from_raw`` reads them."""
-    raw = DoseResponseCurveModel.raw_data
-    pt = (
-        func.jsonb_array_elements(case((func.jsonb_typeof(raw) == "array", raw)))
-        .table_valued(column("value", JSONB))
-        .alias("pt")
+def _doses() -> Subquery:
+    """Per curve, its lowest (``lo``) and highest (``hi``) positive dose — the bounds a
+    censored potency is quoted at. Lateral: join it on true."""
+    pt, dose = curve_doses(DoseResponseCurveModel)
+    return (
+        select(func.min(dose).label("lo"), func.max(dose).label("hi"))
+        .select_from(pt)
+        .where(dose > 0)
+        .lateral("doses")
     )
-    x = case(
-        (pt.c.value.has_key("concentration"), pt.c.value["concentration"]), else_=pt.c.value["x"]
-    )
-    dose = case(
-        (func.jsonb_typeof(x) == "number", cast(x.op("#>>")(literal_column("'{}'")), Float))
-    )
-    return select(func.max(dose)).select_from(pt).where(dose > 0).scalar_subquery()
 
 
 def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any]:
@@ -225,22 +217,33 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
     Grouped by readout-def, never curve_type (two DR readouts can share one).
     Active = not inactive and fitted value > 0 (a NULL class is not active);
     best and geo_mean read active curves only, and every curve is counted.
-    When the scope excludes censored values, a fit whose primary intercept is at
-    the bound is censored at its max dose (the intercept resolver's rule): it is
-    counted, kept out of best/geo_mean, and its bound kept. Activity reads none of this.
+    When the scope excludes censored values, a curve is censored at its doses (the
+    intercept resolver's rule): inactive, at the bound or fitted above them reads
+    "> top dose", fitted below them "< lowest dose". It is counted, kept out of
+    best/geo_mean, and its bound kept. Activity reads none of this.
     """
     c = DoseResponseCurveModel
     active = and_(c.curve_class != "inactive", c.fitted_value > 0)
     censored: list[ColumnElement[Any]] = []
+    doses = None
     if scope.exclude_censored:
+        doses = _doses()
         at_bound = func.coalesce(
             c.intercept_values[0]["at_bound"] == literal_column("'true'::jsonb"), false()
         )
-        active = and_(active, ~at_bound)
-        bound = case((and_(at_bound, c.curve_class.is_distinct_from("inactive")), _max_dose()))
+        above = or_(
+            c.curve_class.is_not_distinct_from("inactive"),
+            at_bound,
+            func.coalesce(c.fitted_value > doses.c.hi, false()),
+        )
+        below = and_(~above, func.coalesce(c.fitted_value < doses.c.lo, false()))
+        active = and_(active, ~above, ~below)
+        gt = case((above, doses.c.hi))
+        lt = case((below, doses.c.lo))
         censored = [
-            func.count(bound).label("n_censored"),
-            func.max(bound).label("censored_bound"),
+            (func.count(gt) + func.count(lt)).label("n_censored"),
+            func.max(gt).label("censored_bound"),
+            func.min(lt).label("censored_below"),
         ]
     used = case((active, c.fitted_value))
     keys: dict[str, ColumnElement[Any]] = {
@@ -267,6 +270,8 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
         )
         .group_by(*keys.values())
     )
+    if doses is not None:
+        stmt = stmt.outerjoin(doses, true())
     return _scoped(stmt, ws, pid, scope, batch=c.batch_id, run=c.run_id)
 
 
@@ -321,6 +326,7 @@ def _dr_row(r: Row[Any]) -> DRAggRow:
         n_used=r.n_used,
         n_censored=m.get("n_censored", 0),
         censored_bound=m.get("censored_bound"),
+        censored_below=m.get("censored_below"),
     )
 
 

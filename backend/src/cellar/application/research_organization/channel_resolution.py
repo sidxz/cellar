@@ -323,7 +323,8 @@ class ChannelResolver:
         # overlay the curves muted and draw a single vertical line at the
         # cell value. Non-aggregate cells keep the legacy single-snapshot
         # shape (additional_curves / aggregate absent).
-        if is_aggregate:
+        # A bound (no exact run to average) has no aggregate to mark.
+        if is_aggregate and result.qualifier == ValueQualifier.EQ:
             marker_label = (
                 "gmean" if channel.selection_rule == SelectionRule.GEOMETRIC_MEAN else "mean"
             )

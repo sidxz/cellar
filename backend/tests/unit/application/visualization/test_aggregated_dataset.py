@@ -377,16 +377,36 @@ def test_runs_level_reads_the_runs_fit():
     assert ds.level == "runs"
 
 
-def test_runs_level_inactive_curve_has_no_value():
+def test_runs_level_inactive_curve_reads_above_its_top_dose():
     run = _run()
     ds = _build(
         "runs",
         curves=[_curve(run, uuid.uuid4(), uuid.uuid4(), curve_class="inactive")],
         runs=[run],
     )
-    assert ds.values[DRK] == [None]
+    assert ds.values[DRK] == [10.0]
+    assert ds.values[f"{DRK}:q"] == [">"]
     assert ds.values[f"{DRK}:curve_class"] == ["inactive"]
     assert _col(ds, f"{DRK}:curve_class").kind == "category"
+
+
+def test_runs_level_inactive_curve_without_doses_has_no_value():
+    run = _run()
+    curve = _curve(run, uuid.uuid4(), uuid.uuid4(), curve_class="inactive", raw_data=[])
+    ds = _build("runs", curves=[curve], runs=[run])
+    assert ds.values[DRK] == [None]
+
+
+@pytest.mark.parametrize(
+    ("fitted", "value", "q", "pq"),
+    [(42.0, 10.0, ">", "<"), (0.004, 0.1, "<", ">"), (0.1, 0.1, None, None)],
+)
+def test_runs_level_fit_outside_the_doses_reads_as_the_dose_bound(fitted, value, q, pq):
+    run = _run()
+    ds = _build("runs", curves=[_curve(run, uuid.uuid4(), uuid.uuid4(), fitted_value=fitted)])
+    assert ds.values[DRK] == [value]
+    assert ds.values.get(f"{DRK}:q", [None]) == [q]
+    assert ds.values.get(f"{DRK}:p:q", [None]) == [pq]
 
 
 def test_runs_level_numeric_is_a_replicate_mean():
@@ -608,6 +628,28 @@ def test_all_censored_fits_report_the_bound():
     assert ds.values[f"{DRK}:q"] == [">"]
     assert ds.values[f"{DRK}:p"] == [pytest.approx(5.0)]
     assert ds.values[f"{DRK}:p:q"] == ["<"]
+
+
+def test_all_fits_below_the_doses_report_the_lowest_bound():
+    mol = uuid.uuid4()
+    ds = _build(
+        "compounds",
+        dr=[_dr(mol, best=None, geo_mean=None, n_tested=2, n_inactive=0, n_used=0,
+                n_censored=2, censored_below=0.01)],
+    )  # fmt: skip
+    assert ds.values[DRK] == [0.01]
+    assert ds.values[f"{DRK}:q"] == ["<"]
+
+
+def test_fits_censored_both_ways_give_no_value():
+    mol = uuid.uuid4()
+    ds = _build(
+        "compounds",
+        dr=[_dr(mol, best=None, geo_mean=None, n_tested=2, n_inactive=1, n_used=0,
+                n_censored=2, censored_bound=500.0, censored_below=0.01)],
+    )  # fmt: skip
+    assert ds.values[DRK] == [None]
+    assert f"{DRK}:q" not in _keys(ds)
 
 
 def test_blank_condition_values_are_absent():

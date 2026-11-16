@@ -8,10 +8,10 @@ Both adapt their domain rows into a ``ResolvedRun`` value object, then
 call into pure functions here. Selection rules, intercept resolution,
 and chemistry-honest variance statistics live in one place.
 
-The intercept-resolution rules (Inactive -> ND, at_bound -> GT max_dose)
-match industry convention (CDD / Genedata / ChEMBL); see
-``feedback_drc_identity.md`` and ``feedback_chemistry_industry_practice.md``
-in long-lived memory for context.
+The intercept-resolution rule reports a potency the way the run tab and the
+external platform do: an inactive curve, an at-bound intercept, or a fit above
+the tested doses reads "> top dose"; a fit below them "< lowest dose"; ND only
+when there is no dose to quote (or no intercept). See ``resolve_intercept``.
 """
 
 from __future__ import annotations
@@ -97,27 +97,24 @@ class AggregateResult:
 # ---------------------------------------------------------------------------
 
 
-def _max_dose_from_raw(raw_data: list[dict] | None) -> float | None:
-    """Largest positive concentration on a candidate's raw_data.
+def _dose_range_from_raw(raw_data: list[dict] | None) -> tuple[float | None, float | None]:
+    """(lowest, highest) positive concentration on a candidate's raw_data.
 
-    Used to phrase the upper-bound qualifier on at_bound rows
-    (``> {max_dose}``). Accepts the persisted ``{concentration, response}``
-    shape as well as the chart-normalized ``{x, y}`` shape; ignores
-    non-positive / non-finite x.
+    The bounds a censored potency is quoted at (``> {max}`` / ``< {min}``).
+    Accepts the persisted ``{concentration, response}`` shape as well as the
+    chart-normalized ``{x, y}`` shape; ignores non-positive / non-finite x.
     """
-    if not raw_data:
-        return None
-    best: float | None = None
-    for pt in raw_data:
+    doses = []
+    for pt in raw_data or []:
         raw = pt.get("concentration") if "concentration" in pt else pt.get("x")
-        if not isinstance(raw, (int, float)):
-            continue
-        x = float(raw)
-        if not math.isfinite(x) or x <= 0:
-            continue
-        if best is None or x > best:
-            best = x
-    return best
+        if isinstance(raw, (int, float)) and math.isfinite(raw) and raw > 0:
+            doses.append(float(raw))
+    return (min(doses), max(doses)) if doses else (None, None)
+
+
+def _max_dose_from_raw(raw_data: list[dict] | None) -> float | None:
+    """Largest positive concentration on a candidate's raw_data."""
+    return _dose_range_from_raw(raw_data)[1]
 
 
 def resolve_intercept(
@@ -125,10 +122,11 @@ def resolve_intercept(
 ) -> tuple[float | None, ValueQualifier]:
     """Resolve one run's intercept to a (value, qualifier) cell.
 
-    See ``channel_resolution._resolve_intercept`` (now removed) for the
-    historical docstring. Three outcomes: (value, EQ), (max_dose, GT) for
-    at_bound, (None, ND) for Inactive / missing intercept / at_bound
-    without max_dose.
+    A fitted value is reported only inside the tested doses. An inactive curve,
+    an at-bound intercept, or a value above the top dose reads (top dose, GT);
+    a value below the lowest dose reads (lowest dose, LT); otherwise (value,
+    EQ). ND only when there is no dose to quote or no such intercept — the
+    frontend's ``formatInterceptDisplay`` applies the same rule to one curve.
     """
     # A readout row has no curve, so there is no intercept to resolve — its
     # value IS the reported endpoint, qualifier and all (a CRO's ">50"). It
@@ -142,38 +140,44 @@ def resolve_intercept(
                 return None, ValueQualifier.ND
         return run.value, run.qualifier
 
-    if run.curve_class == "inactive":
-        return None, ValueQualifier.ND
-
+    ivs = run.intercept_values or []
     if intercept_key is None:
-        ivs = run.intercept_values
-        if ivs:
-            primary = ivs[0]
-            if primary.get("at_bound") is True:
-                max_dose = _max_dose_from_raw(run.curve_raw_data)
-                if max_dose is not None:
-                    return max_dose, ValueQualifier.GT
-                return None, ValueQualifier.ND
-        return run.value, ValueQualifier.EQ
-
-    ivs = run.intercept_values
-    if not ivs:
-        return None, ValueQualifier.ND
-    target_kind = intercept_key.kind
-    target_level = intercept_key.level
+        # The primary intercept: ``run.value`` (the curve's fitted_value), with
+        # the at-bound flag of intercept_values[0] when the curve carries one.
+        return _report(run, ivs[0] if ivs else {}, run.value)
     for iv in ivs:
         spec = iv.get("spec") or {}
-        if spec.get("kind") == target_kind and spec.get("level") == target_level:
-            if iv.get("at_bound") is True:
-                max_dose = _max_dose_from_raw(run.curve_raw_data)
-                if max_dose is not None:
-                    return max_dose, ValueQualifier.GT
-                return None, ValueQualifier.ND
-            val = iv.get("value")
-            if isinstance(val, (int, float)):
-                return float(val), ValueQualifier.EQ
-            return None, ValueQualifier.ND
+        if (spec.get("kind"), spec.get("level")) == (intercept_key.kind, intercept_key.level):
+            return _report(run, iv, iv.get("value"))
     return None, ValueQualifier.ND
+
+
+def _report(run: ResolvedRun, iv: dict, value: object) -> tuple[float | None, ValueQualifier]:
+    """One curve intercept censored at the curve's tested doses (``resolve_intercept``)."""
+    low, top = _dose_range_from_raw(run.curve_raw_data)
+    if run.curve_class == "inactive" or iv.get("at_bound") is True:
+        return (top, ValueQualifier.GT) if top is not None else (None, ValueQualifier.ND)
+    if not isinstance(value, (int, float)):
+        return None, ValueQualifier.ND
+    if top is not None and value > top:
+        return top, ValueQualifier.GT
+    if low is not None and value < low:
+        return low, ValueQualifier.LT
+    return float(value), ValueQualifier.EQ
+
+
+def reported_intercept_values(run: ResolvedRun) -> list[dict]:
+    """The run's intercept_values with each ``value`` and ``qualifier`` as
+    ``resolve_intercept`` reports it — the per-run rows a run-history table shows.
+    A readout row's values are already reported ones."""
+    ivs = list(run.intercept_values or [])
+    if run.curve_id is None:
+        return ivs
+    out = []
+    for iv in ivs:
+        value, qualifier = _report(run, iv, iv.get("value"))
+        out.append({**iv, "value": value, "qualifier": qualifier.value})
+    return out
 
 
 def intercept_scalar(run: ResolvedRun, intercept_key: InterceptKey | None) -> float | None:
@@ -214,8 +218,9 @@ def _resolvable_runs(
 ) -> list[ResolvedRun]:
     """Subset of runs whose intercept resolves to a numeric value.
 
-    Includes both EQ (healthy fit) and GT (at_bound → >max_dose) outcomes;
-    excludes ND (inactive, missing intercept, at_bound with no max_dose).
+    Includes EQ (a fit inside the tested doses) and GT/LT (a potency censored
+    at the dose range, inactive curves included); excludes ND (no intercept,
+    or no dose to quote).
 
     Used by the "pick one" rules (LATEST_RUN, BEST_R_SQUARED)
     where an at_bound row IS a real measurement and should surface as a
@@ -242,8 +247,8 @@ def _pick_one_resolvable(
     (key_fn = curve_r_squared). Both EQ and GT-from-at_bound runs are
     eligible (hence the "resolvable" — not "eq" — name) — an at_bound run
     carries a real upper-bound measurement and should win on date / r²
-    over an EQ run if it sorts that way. Only ND-resolving runs (Inactive,
-    missing intercept) are filtered.
+    over an EQ run if it sorts that way. Only ND-resolving runs (missing
+    intercept, no dose to quote) are filtered.
     """
     resolvable = _resolvable_runs(runs, intercept_key)
     if not resolvable:
@@ -283,16 +288,15 @@ def _aggregate_eq(
     contributed to the aggregate value, rather than an unrelated curve
     that happened to be the most recent. Surfaces only on aggregate
     channels with mixed EQ/Inactive runs.
+
+    Censored runs (``>``/``<``) never enter the average. With no exact run
+    left, the cell keeps a bound as ``combine_replicates`` does (see
+    ``_censored_only``).
     """
     pairs = [(r, intercept_scalar(r, intercept_key)) for r in runs]
     qualifying = [(r, s) for r, s in pairs if s is not None and (s > 0 or not require_positive)]
     if not qualifying:
-        return AggregateResult(
-            value=None,
-            qualifier=ValueQualifier.ND,
-            contributing_run_ids=[],
-            representative_run=_latest_by_date(runs),
-        )
+        return _censored_only(runs, intercept_key)
     eq_runs = [r for r, _ in qualifying]
     scalars = [s for _, s in qualifying]
     return AggregateResult(
@@ -300,6 +304,28 @@ def _aggregate_eq(
         qualifier=ValueQualifier.EQ,
         contributing_run_ids=[r.run_id for r in eq_runs],
         representative_run=_latest_by_date(eq_runs),
+    )
+
+
+def _censored_only(runs: list[ResolvedRun], intercept_key: InterceptKey | None) -> AggregateResult:
+    """An average with no exact run: only ``>`` bounds keep the largest, only ``<``
+    bounds the smallest (``combine_replicates``' rule); a mix, or nothing, is ND."""
+    resolved = [(r, *resolve_intercept(r, intercept_key)) for r in runs]
+    gt = [(r, v) for r, v, q in resolved if q == ValueQualifier.GT and v is not None]
+    lt = [(r, v) for r, v, q in resolved if q == ValueQualifier.LT and v is not None]
+    if bool(gt) == bool(lt):
+        return AggregateResult(
+            value=None,
+            qualifier=ValueQualifier.ND,
+            contributing_run_ids=[],
+            representative_run=_latest_by_date(runs),
+        )
+    bounds, qualifier, pick = (gt, ValueQualifier.GT, max) if gt else (lt, ValueQualifier.LT, min)
+    return AggregateResult(
+        value=pick(v for _, v in bounds),
+        qualifier=qualifier,
+        contributing_run_ids=[r.run_id for r, _ in bounds],
+        representative_run=_latest_by_date([r for r, _ in bounds]),
     )
 
 

@@ -45,7 +45,7 @@ def _protocol_query(protocol_id, **criterion) -> dict:
 
 @pytest.fixture
 async def ic50s(session_factory, workspace_id):
-    """Protocol with IC50s: a=30, b=5, c=100 (Jan run); d: inactive curve (ND);
+    """Protocol with IC50s: a=30, b=5, c=100 (Jan run); d: inactive curve ("> 1000");
     e: in the protocol (readout only, no curve). ATP condition on two runs."""
     async with session_factory() as s:
         o = await seed.org(s, workspace_id)
@@ -142,9 +142,10 @@ async def test_sort_by_an_activity_column_ranks_the_whole_result_set(client, ic5
     body = {"query": _protocol_query(ic50s["p"]), "protocol_columns": [token]}
     asc, _ = await _pages(client, body, limit=2, sort_by=token, sort_dir="asc")
     desc, _ = await _pages(client, body, limit=2, sort_by=token, sort_dir="desc")
-    # b=5 < c=100 < a=210 (latest run); d is ND; e has no curve — both last.
+    # b=5 < c=100 < a=210 (latest run) < d, inactive: "> 1000" (its top dose);
+    # e has no curve — last both ways.
     assert asc == [m["b"], m["c"], m["a"], m["d"], m["e"]]
-    assert desc == [m["a"], m["c"], m["b"], m["d"], m["e"]]
+    assert desc == [m["d"], m["a"], m["c"], m["b"], m["e"]]
 
 
 async def test_sort_by_a_split_group_column(client, ic50s):

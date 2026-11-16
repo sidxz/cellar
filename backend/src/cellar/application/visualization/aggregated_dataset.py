@@ -130,8 +130,8 @@ def _qualifier(q: ValueQualifier, r: NumericReadoutRow) -> str | None:
 
 
 def _resolve_fit(r: CurveRow) -> tuple[float | None, str | None]:
-    """The fit's value as the intercept resolver reads it: none when inactive, the
-    max dose as ">" when the primary intercept is at the bound (none without doses)."""
+    """The fit's value as the intercept resolver reports it: "> top dose" when inactive,
+    at the bound or above the doses, "< lowest dose" below them (none without doses)."""
     run = ResolvedRun(
         run_id=r.run_id,
         run_date=None,
@@ -149,7 +149,7 @@ def _resolve_fit(r: CurveRow) -> tuple[float | None, str | None]:
         intercept_values=r.intercept_values if isinstance(r.intercept_values, list) else None,
     )
     value, q = resolve_intercept(run, None)
-    return value, ">" if q == ValueQualifier.GT else None
+    return value, q.value if q in (ValueQualifier.GT, ValueQualifier.LT) else None
 
 
 def _condition_set(conditions: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
@@ -421,8 +421,12 @@ def build_aggregated_dataset(
         if isinstance(r, DRAggRow):
             if r.n_used or not r.n_censored:
                 put(vk, spec, i, finite(r.geo_mean), None)
-            else:  # every fit censored: the bound, as combine_replicates keeps it
-                put(vk, spec, i, finite(r.censored_bound), ">")
+            elif (r.censored_bound is None) != (r.censored_below is None):
+                # every fit censored one way: the bound, as combine_replicates keeps it
+                if r.censored_bound is not None:
+                    put(vk, spec, i, finite(r.censored_bound), ">")
+                else:
+                    put(vk, spec, i, finite(r.censored_below), "<")
             cells[f"{vk}:n_censored"][i] = r.n_censored
             cells[f"{vk}:best"][i] = finite(r.best)
             cells[f"{vk}:n_tested"][i] = r.n_tested

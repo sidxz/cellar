@@ -242,13 +242,19 @@ async def curve(
     curve_class: str | None = "full",
     with_well: bool = True,
     intercept_values: list[dict[str, Any]] | None = None,
-    max_dose: float = 1.0,
+    max_dose: float | None = None,
     batch_id: uuid.UUID | None = None,
     top: float = 100.0,
+    min_dose: float | None = None,
 ) -> uuid.UUID:
     """A fitted curve, plus (``with_well``) one per-well response reading on the
     same readout — real dose-response runs always carry their well data, and
-    search matching finds tested compounds through it."""
+    search matching finds tested compounds through it.
+
+    Its points sit at ``min_dose`` and ``max_dose``: 0.001 and 1000 by default, so a
+    fitted value is reported as is; a lone ``max_dose`` keeps one point."""
+    if max_dose is None:
+        min_dose, max_dose = min_dose or 0.001, 1000.0
     cid = uuid.uuid4()
     if with_well:
         await readout(s, ws, run_id, rd_id, molecule_id, 50.0, batch_id=batch_id)
@@ -272,7 +278,12 @@ async def curve(
             "top": top,
             "r2": r_squared,
             "cc": curve_class,
-            "raw": json.dumps([{"concentration": max_dose, "response": 50.0}]),
+            "raw": json.dumps(
+                [
+                    {"concentration": d, "response": 50.0}
+                    for d in ([min_dose] if min_dose is not None else []) + [max_dose]
+                ]
+            ),
             "ivs": json.dumps(intercept_values) if intercept_values is not None else None,
         },
     )

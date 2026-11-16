@@ -300,7 +300,8 @@ async def test_batches_leave_out_a_draft_run_and_runs_show_it(client, session_fa
     assert len(set(runs["row_ids"])) == runs["row_count"]
     assert all(r.split(":")[0] in {str(w["a"]), str(w["b"]), str(w["d"])} for r in runs["row_ids"])
     points = [p for p in _cell(runs, f"dr:{w['ic50']}:points", w["m1"]) if p is not None]
-    assert len(points) == 3 and points[0] == [{"x": 1.0, "y": 50.0}]
+    assert len(points) == 3
+    assert points[0] == [{"x": 0.001, "y": 50.0}, {"x": 1000.0, "y": 50.0}]
 
 
 async def test_a_run_source_aggregates_that_run(client, session_factory, fake_auth):

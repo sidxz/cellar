@@ -8,7 +8,11 @@ from cellar.application.sar_analysis.activity_channel import (
     channel_hash,
     pick_scalar,
 )
-from cellar.domain.screening_assay.activity_types import ActivityValue, RunSummary
+from cellar.domain.screening_assay.activity_types import (
+    ActivityValue,
+    InterceptAggregate,
+    RunSummary,
+)
 from cellar.domain.shared.aggregation_types import QualifierHandling, SelectionRule
 from cellar.domain.shared.hit_criterion import InterceptKey
 
@@ -30,7 +34,7 @@ def _spec(**over) -> ActivityChannelSpec:
 
 def test_pick_scalar_primary_returns_value_when_no_intercept_key():
     av = ActivityValue(value=0.5, qualifier=None, unit="uM", source="dose_response")
-    assert pick_scalar(av, None) == 0.5
+    assert pick_scalar(av, None) == (0.5, None)
 
 
 def test_pick_scalar_intercept_matches_by_kind_and_level():
@@ -44,7 +48,7 @@ def test_pick_scalar_intercept_matches_by_kind_and_level():
             {"spec": {"kind": "ic", "level": 90.0}, "value": 3.2},
         ],
     )
-    assert pick_scalar(av, InterceptKey(kind="ic", level=90.0)) == 3.2
+    assert pick_scalar(av, InterceptKey(kind="ic", level=90.0)) == (3.2, None)
 
 
 def test_pick_scalar_intercept_miss_returns_none():
@@ -55,12 +59,50 @@ def test_pick_scalar_intercept_miss_returns_none():
         source="dose_response",
         intercept_values=[{"spec": {"kind": "ic", "level": 50.0}, "value": 0.5}],
     )
-    assert pick_scalar(av, InterceptKey(kind="ec", level=50.0)) is None
+    assert pick_scalar(av, InterceptKey(kind="ec", level=50.0)) == (None, None)
 
 
 def test_pick_scalar_primary_none_value():
     av = ActivityValue(value=None, qualifier="nd", unit="uM", source="dose_response")
-    assert pick_scalar(av, None) is None
+    assert pick_scalar(av, None) == (None, "nd")
+
+
+def test_pick_scalar_primary_keeps_the_cells_bound():
+    av = ActivityValue(value=500.0, qualifier=">", unit="uM", source="dose_response")
+    assert pick_scalar(av, None) == (500.0, ">")
+
+
+def test_pick_scalar_intercept_reads_the_resolved_aggregate_not_the_fitted_number():
+    """The keyed cell is what the grid shows ("> 500" for an inactive or
+    extrapolated fit), never the representative curve's raw intercept."""
+    av = ActivityValue(
+        value=1.0,
+        qualifier=None,
+        unit="uM",
+        source="dose_response",
+        intercept_values=[
+            {"spec": {"kind": "ic", "level": 50.0}, "value": 1.0},
+            {"spec": {"kind": "ic", "level": 90.0}, "value": 823.4},
+        ],
+        intercept_aggregates=[
+            InterceptAggregate(
+                spec={"kind": "ic", "level": 90.0},
+                selected_value=500.0,
+                selected_qualifier=">",
+                aggregate_stats=None,
+                disagreement_flag=False,
+            ),
+            InterceptAggregate(
+                spec={"kind": "ic", "level": 99.0},
+                selected_value=None,
+                selected_qualifier="nd",
+                aggregate_stats=None,
+                disagreement_flag=False,
+            ),
+        ],
+    )
+    assert pick_scalar(av, InterceptKey(kind="ic", level=90.0)) == (500.0, ">")
+    assert pick_scalar(av, InterceptKey(kind="ic", level=99.0)) == (None, "nd")
 
 
 def test_channel_hash_ignores_label():

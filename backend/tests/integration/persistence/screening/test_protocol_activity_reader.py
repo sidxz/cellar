@@ -244,9 +244,12 @@ async def test_dose_response_counts_tested_inactive_and_used(uow, session_factor
         p = await seed.protocol(s, ws)
         rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
         run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
-        await seed.curve(s, ws, p, run, mol, rd, fitted_value=0.1)
-        await seed.curve(s, ws, p, run, mol, rd, fitted_value=1.0)
-        await seed.curve(s, ws, p, run, mol, rd, fitted_value=5.0, curve_class="inactive")
+        doses = {"min_dose": 0.01, "max_dose": 10.0}
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=0.1, **doses)
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=1.0, **doses)
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=5.0, curve_class="inactive", **doses
+        )
         await uow.commit()
 
     agg = await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES)
@@ -402,7 +405,7 @@ async def test_workbench_counts_an_at_bound_fit_as_censored_at_the_max_dose(
         p = await seed.protocol(s, ws)
         rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
         run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
-        await seed.curve(s, ws, p, run, mol, rd, fitted_value=4.0)
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=4.0, min_dose=0.01, max_dose=10.0)
         await seed.curve(
             s, ws, p, run, mol, rd, fitted_value=1.0, top=40.0, max_dose=10.0,
             intercept_values=AT_BOUND,
@@ -418,6 +421,61 @@ async def test_workbench_counts_an_at_bound_fit_as_censored_at_the_max_dose(
     assert (row.geo_mean, row.best) == (pytest.approx(4.0), 4.0)
     # Activity is unchanged: the at-bound fit's stored value still counts.
     assert (act.n_used, act.n_censored, act.geo_mean) == (2, 0, pytest.approx(2.0))
+
+
+async def test_workbench_censors_inactive_and_out_of_range_fits_at_their_doses(
+    uow, session_factory, workspace_id
+):
+    """The intercept resolver's rule: an inactive curve or a fit above the doses reads
+    "> top dose", a fit below them "< lowest dose"; only fits inside are averaged."""
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        doses = {"min_dose": 0.01, "max_dose": 10.0}
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=1.0, **doses)
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=50.0, **doses)
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=0.001, **doses)
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=3.0, curve_class="inactive", min_dose=0.5,
+            max_dose=500.0,
+        )  # fmt: skip
+        await uow.commit()
+
+    [row] = (await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES)).dr_agg_rows
+    [act] = (
+        await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, exclude_censored=False)
+    ).dr_agg_rows
+
+    assert (row.n_tested, row.n_inactive, row.n_used, row.n_censored) == (4, 1, 1, 3)
+    assert (row.censored_bound, row.censored_below) == (500.0, 0.01)
+    assert (row.geo_mean, row.best) == (pytest.approx(1.0), 1.0)
+    # Activity is unchanged: every active fit's stored value still counts.
+    assert (act.n_used, act.n_censored, act.censored_below) == (3, 0, None)
+
+
+async def test_workbench_all_inactive_curves_keep_the_largest_top_dose(
+    uow, session_factory, workspace_id
+):
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        for top in (100.0, 500.0):
+            await seed.curve(
+                s, ws, p, run, mol, rd, fitted_value=3.0, curve_class="inactive", min_dose=0.5,
+                max_dose=top,
+            )  # fmt: skip
+        await uow.commit()
+
+    [row] = (await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES)).dr_agg_rows
+    assert (row.n_used, row.n_censored, row.censored_bound, row.geo_mean) == (0, 2, 500.0, None)
 
 
 async def test_blank_condition_values_count_as_absent(uow, session_factory, workspace_id):

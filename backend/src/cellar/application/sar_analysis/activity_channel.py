@@ -1,12 +1,11 @@
 """The activity color channel: spec, scalar selection, cache hash, snapshot.
 
-``pick_scalar`` is the server-side port of the FE ``colorSpecScalar``
-(``frontend/.../sar-analysis/lib/sar-color-spec.ts``). It does NOT aggregate —
-``MoleculeActivityService.enrich_molecules`` already applied the selection rule
-and returns a per-cell ``ActivityValue``. The port only *picks* one scalar:
-``intercept_key`` set ⇒ match ``av.intercept_values`` by ``(kind, level)`` →
-``.value``; else ⇒ ``av.value``. This guarantees parity with what the FE used to
-compute client-side.
+``pick_scalar`` does NOT aggregate — ``MoleculeActivityService.enrich_molecules``
+already applied the selection rule and returns a per-cell ``ActivityValue``. It
+only *picks* the value the search grid shows, with its qualifier:
+``intercept_key`` set ⇒ the matching ``av.intercept_aggregates`` entry (the
+resolved "> top dose" for an inactive or extrapolated fit), falling back to
+``av.intercept_values`` for a cell without aggregates; else ⇒ ``av.value``.
 
 ``channel_hash`` is the cache key's channel half. It normalizes over the
 SEMANTIC fields only — what actually determines the scalar — so two channels that
@@ -110,21 +109,30 @@ def channel_hash(spec: ActivityChannelSpec) -> str:
     return sha256_hex(json.dumps(semantic, sort_keys=True, separators=(",", ":")))
 
 
-def pick_scalar(av: ActivityValue, intercept_key: InterceptKey | None) -> float | None:
-    """Port of FE ``colorSpecScalar``. Pre-aggregated ``av`` in, one scalar out."""
-    if intercept_key is not None:
-        for iv in av.intercept_values or []:
-            spec = iv.get("spec") or {}
-            level = spec.get("level")
-            if (
-                spec.get("kind") == intercept_key.kind
-                and isinstance(level, (int, float))
-                and float(level) == intercept_key.level
-            ):
-                val = iv.get("value")
-                return float(val) if isinstance(val, (int, float)) else None
-        return None
-    return av.value
+def pick_scalar(
+    av: ActivityValue, intercept_key: InterceptKey | None
+) -> tuple[float | None, str | None]:
+    """(value, qualifier) of the cell as the grid shows it; qualifier None when exact."""
+    if intercept_key is None:
+        return av.value, av.qualifier
+
+    def matches(spec: dict[str, Any] | None) -> bool:
+        level = (spec or {}).get("level")
+        return (
+            (spec or {}).get("kind") == intercept_key.kind
+            and isinstance(level, (int, float))
+            and float(level) == intercept_key.level
+        )
+
+    for agg in av.intercept_aggregates or []:
+        if matches(agg.spec):
+            q = agg.selected_qualifier
+            return agg.selected_value, None if q == "=" else q
+    for iv in av.intercept_values or []:
+        if matches(iv.get("spec")):
+            val = iv.get("value")
+            return (float(val) if isinstance(val, (int, float)) else None), iv.get("qualifier")
+    return None, None
 
 
 def _json_default(o: Any) -> Any:

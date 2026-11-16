@@ -199,7 +199,8 @@ async def test_a_reported_greater_than_stays_qualified(uow, workspace_id, dr):
     assert (av.value, av.qualifier) == (pytest.approx(50.0), ">")
 
 
-async def test_mean_of_only_qualified_runs_is_nd(uow, workspace_id, dr):
+async def test_mean_of_only_qualified_runs_keeps_the_bound(uow, workspace_id, dr):
+    """Nothing exact to average: the cell keeps the bound, as combine_replicates does."""
     async with uow:
         s = uow.session
         for d in (JAN, FEB):
@@ -211,7 +212,7 @@ async def test_mean_of_only_qualified_runs_is_nd(uow, workspace_id, dr):
     av = (await _enrich(uow, workspace_id, [dr["token"]], rule=SelectionRule.MEAN_ACROSS_RUNS))[
         dr["token"]
     ]
-    assert (av.value, av.qualifier) == (None, "nd")
+    assert (av.value, av.qualifier) == (50.0, ">")
 
 
 # --- splits ---------------------------------------------------------------------------

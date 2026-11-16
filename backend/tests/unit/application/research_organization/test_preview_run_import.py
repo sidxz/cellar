@@ -160,7 +160,10 @@ def _dr_curve_candidate(
         curve_bottom=0.0,
         curve_hill_slope=-1.0,
         curve_r_squared=0.9,
-        curve_raw_data=[{"concentration": 0.1, "response": 10}],
+        curve_raw_data=[
+            {"concentration": 0.01, "response": 10},
+            {"concentration": 1000.0, "response": 90},
+        ],
         intercept_values=[{"spec": {"kind": "ec", "level": 50}, "value": value}],
     )
 
@@ -1048,10 +1051,12 @@ class TestPreviewRunImport:
         assert picked.curve_snapshot["aggregate"]["marker_x"] == pytest.approx(100.0)
 
     @pytest.mark.asyncio
-    async def test_mean_aggregate_cell_falls_back_to_rep_snapshot_on_nd(self) -> None:
-        """When all candidates are Inactive (value=None), the snapshot still
-        carries the latest curve's shape so the curve column renders SOMETHING
-        — just without the additional_curves / aggregate fields."""
+    async def test_mean_aggregate_cell_of_inactive_curves_is_a_bound_on_the_rep_snapshot(
+        self,
+    ) -> None:
+        """When all candidates are Inactive, the cell reads "> top dose" (nothing
+        exact to average) and the snapshot is the latest curve's own shape —
+        no aggregate marker at a bound."""
         from cellar.application.research_organization.preview_run_import import (
             _apply_selection_rule,
         )
@@ -1074,7 +1079,7 @@ class TestPreviewRunImport:
             candidates, SelectionRule.MEAN_ACROSS_RUNS, intercept_key=None
         )
         assert picked is not None
-        assert picked.value is None  # all inactive -> ND aggregate
+        assert (picked.value, picked.qualifier) == (1000.0, ValueQualifier.GT)
         # Snapshot falls back to the legacy single-curve shape (the rep) so
         # the curve column still renders.
         assert picked.curve_snapshot is not None
