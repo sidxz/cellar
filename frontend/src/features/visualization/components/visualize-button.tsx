@@ -7,9 +7,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import { ChartScatter, ChevronDown } from "lucide-react";
+import { ChartScatter, Check, ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { useSavedViews } from "../hooks/use-saved-views";
@@ -65,7 +66,27 @@ export function VisualizeButton({ protocolId, runId }: { protocolId?: string; ru
   );
 }
 
-function SavedViewItems({ protocolId }: { protocolId: string }) {
+/** The workbench's "Views" menu: the saved views of ``protocolId`` (``current`` marked)
+ * and a link to every saved view. */
+export function SavedViewsMenu({ protocolId, current }: { protocolId: string; current?: string }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" className="h-8">
+          Views
+          <ChevronDown className="h-3.5 w-3.5" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72">
+        <DropdownMenuLabel>Saved views of this protocol</DropdownMenuLabel>
+        <SavedViewItems protocolId={protocolId} current={current} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** The views of ``protocolId`` (fetched once the menu opens), then "All saved views". */
+function SavedViewItems({ protocolId, current }: { protocolId: string; current?: string }) {
   const { data: views, isLoading, isError } = useSavedViews(protocolId);
   const { data: projects } = useProjects();
   const note = isLoading
@@ -75,17 +96,35 @@ function SavedViewItems({ protocolId }: { protocolId: string }) {
       : !views?.length
         ? "No saved views for this protocol yet"
         : null;
-  if (note) return <p className="px-2 py-1.5 text-sm text-muted-foreground">{note}</p>;
-  return views?.map((v) => (
-    <DropdownMenuItem key={v.id} asChild>
-      <Link href={`/assays/visualize/${v.id}`} className="flex items-center gap-2">
-        <span className="min-w-0 flex-1 truncate">{v.name}</span>
-        <span className="shrink-0 text-xs text-muted-foreground">
-          {v.visibility === "private"
-            ? "Private"
-            : (projects?.find((p) => p.id === v.project_id)?.name ?? "Project")}
-        </span>
-      </Link>
-    </DropdownMenuItem>
-  ));
+  return (
+    <>
+      {note ? (
+        <p className="px-2 py-1.5 text-sm text-muted-foreground">{note}</p>
+      ) : (
+        views?.map((v) => (
+          <DropdownMenuItem key={v.id} asChild>
+            <Link
+              href={`/assays/visualize/${v.id}`}
+              aria-current={v.id === current ? "page" : undefined}
+              className="flex items-center gap-2"
+            >
+              {current !== undefined && (
+                <Check className={v.id === current ? "h-4 w-4" : "invisible h-4 w-4"} />
+              )}
+              <span className="min-w-0 flex-1 truncate">{v.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">
+                {v.visibility === "private"
+                  ? "Private"
+                  : (projects?.find((p) => p.id === v.project_id)?.name ?? "Project")}
+              </span>
+            </Link>
+          </DropdownMenuItem>
+        ))
+      )}
+      <DropdownMenuSeparator />
+      <DropdownMenuItem asChild>
+        <Link href="/assays/visualize">All saved views</Link>
+      </DropdownMenuItem>
+    </>
+  );
 }

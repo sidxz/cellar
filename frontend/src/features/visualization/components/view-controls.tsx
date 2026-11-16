@@ -1,5 +1,6 @@
 "use client";
 
+import { useRun } from "@/features/screening-assay/hooks/use-runs";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -32,20 +33,29 @@ import { useWorkbench } from "../store/workbench-context";
 import { type PanelConfig, isDirty } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level } from "../types";
 import { DeleteViewDialog, SaveViewDialog } from "./save-view-dialog";
+import { SavedViewsMenu } from "./visualize-button";
 
 type Dialog = "create" | "details" | "delete" | "stale";
 /** ``derived``: how the workbench's chemistry columns were computed (saved with the view). */
 type Props = { source: DatasetSource; level: Level; ds: Dataset; derived: DerivedSpec[] };
 
-/** Header controls for saving the workbench as a named view. No view open: "Save view…".
- * A view open: its name, a dot while there are unsaved changes, and — for its owner or an
- * admin — Save plus a menu (save as new, edit name and sharing, delete); anyone else can
- * save it as a new view. Viewers see the name only. Nothing is saved without a click. */
+/** Header controls for saved views: the "Views" menu (the protocol's saved views and a link
+ * to all of them), then saving. No view open: "Save view…". A view open: its name, a dot
+ * while there are unsaved changes, and — for its owner or an admin — Save plus a menu (save
+ * as new, edit name and sharing, delete); anyone else can save it as a new view. Viewers see
+ * the name only. Nothing is saved without a click. */
 export function ViewControls(props: Props) {
   const open = useOpenView();
   const canEdit = useCanEdit();
-  if (!open) return canEdit ? <Controls {...props} open={null} /> : null;
-  return <Controls {...props} open={open} readOnly={!canEdit} />;
+  const { source } = props;
+  const { data: run } = useRun(source.kind === "run" ? source.runId : undefined);
+  const protocolId = source.kind === "protocol" ? source.protocolId : run?.protocol_id;
+  return (
+    <div className="ml-auto flex min-w-0 items-center gap-2">
+      {protocolId && <SavedViewsMenu protocolId={protocolId} current={open?.view.id} />}
+      {(open || canEdit) && <Controls {...props} open={open} readOnly={!canEdit} />}
+    </div>
+  );
 }
 
 function Controls({
@@ -98,7 +108,7 @@ function Controls({
   );
 
   return (
-    <div className="ml-auto flex min-w-0 items-center gap-2">
+    <div className="flex min-w-0 items-center gap-2">
       {view && (
         <span className="flex min-w-0 items-center gap-1.5 text-sm font-medium">
           <span className="truncate" title={view.name}>

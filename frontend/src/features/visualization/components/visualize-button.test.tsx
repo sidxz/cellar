@@ -18,7 +18,7 @@ vi.mock("@/features/research-organization/hooks/use-projects", () => ({
   useProjects: () => ({ data: [{ id: "proj-1", name: "NadD lead series" }] }),
 }));
 
-import { VisualizeButton } from "./visualize-button";
+import { SavedViewsMenu, VisualizeButton } from "./visualize-button";
 
 const view = (over: Partial<SavedViewSummary>): SavedViewSummary => ({
   id: "v1",
@@ -63,6 +63,28 @@ describe("VisualizeButton", () => {
     render(<VisualizeButton protocolId="p1" />);
     openMenu();
     expect(screen.getByText("No saved views for this protocol yet")).toBeInTheDocument();
+  });
+
+  it("links to every saved view the chemist can see", () => {
+    state.views = [view({ id: "v1", name: "Plate QC" })];
+    render(<VisualizeButton protocolId="p1" />);
+    openMenu();
+    expect(screen.getByRole("menuitem", { name: "All saved views" })).toHaveAttribute(
+      "href",
+      "/assays/visualize",
+    );
+  });
+
+  it("marks the view that is open", () => {
+    state.views = [view({ id: "v1", name: "Plate QC" }), view({ id: "v2", name: "Potency" })];
+    render(<SavedViewsMenu protocolId="p1" current="v2" />);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Views" }), { key: "Enter" });
+    expect(screen.getByRole("menuitem", { name: /Potency/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("menuitem", { name: /Plate QC/ })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("menuitem", { name: "All saved views" })).toBeInTheDocument();
   });
 
   it("on a run, is a plain link with no menu", () => {

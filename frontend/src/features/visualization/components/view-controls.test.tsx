@@ -141,6 +141,30 @@ beforeEach(() => {
 });
 
 describe("ViewControls", () => {
+  it("lists the protocol's saved views under Views, the open one marked, for viewers too", async () => {
+    state.canEdit = false;
+    vi.mocked(customInstance).mockResolvedValue([
+      savedView(),
+      savedView({ id: "v2", name: "Potency" }),
+    ]);
+    show();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Views" }), { key: "Enter" });
+    expect(await screen.findByRole("menuitem", { name: /Plate drift/ })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(screen.getByRole("menuitem", { name: /Potency/ })).not.toHaveAttribute("aria-current");
+    expect(vi.mocked(customInstance)).toHaveBeenCalledWith({
+      url: "/api/v1/saved-visualizations",
+      method: "GET",
+      params: { protocol_id: P1 },
+    });
+    expect(screen.getByRole("menuitem", { name: "All saved views" })).toHaveAttribute(
+      "href",
+      "/assays/visualize",
+    );
+  });
+
   it("without a view, offers Save view…", () => {
     show({ view: null });
     expect(screen.getByRole("button", { name: "Save view…" })).toBeEnabled();
