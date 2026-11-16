@@ -183,10 +183,17 @@ function Workbench({
   // keep their ids, so the selected rows still there stay selected. Not an undo step.
   const shown = viewKey(source, level);
   const carry = switched?.to === shown ? switched.carry : null;
+  // Each level's plots and filters as last left: a level visited before reopens on them
+  // (fitted to its columns then), so Wells → Runs → Wells gets the Wells plots back.
+  const left = useRef(new Map<Level, Carry>()).current;
   const changeView = (next: View, take: Carry | null) => {
     // A change before the last one's data arrived keeps the level that one left.
     const from = switched && take === switched.carry ? switched.from : level;
-    setSwitched(take && { to: viewKey(next.source, next.level), from, carry: take });
+    if (take) left.set(level, take);
+    const back = next.level !== level ? left.get(next.level) : undefined;
+    // The selection is the one left behind: it is what the note says was cleared.
+    const brought = back && take ? { ...back, selectedIds: take.selectedIds } : take;
+    setSwitched(brought && { to: viewKey(next.source, next.level), from, carry: brought });
     onMove(next.source);
     router.replace(visualizeHref(next.source, next.level, view?.view.id), { scroll: false });
   };

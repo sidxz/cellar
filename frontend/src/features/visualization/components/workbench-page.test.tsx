@@ -313,6 +313,28 @@ describe("WorkbenchPage", () => {
     expect(screen.queryByText(/Switched to Compounds/)).not.toBeInTheDocument();
   });
 
+  it("returning to a level visited before restores its plots and filters, not the carried ones", () => {
+    const run = { kind: "run", runId: R1 } as const;
+    const { rerender } = render(<WorkbenchPage level="wells" source={run} />);
+    fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+    fireEvent.click(screen.getByRole("option", { name: "well_order" }));
+    expect(screen.getByRole("heading", { name: "rd:s:raw by well_order" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
+    state.query = ready(aggregated("runs"));
+    rerender(<WorkbenchPage level="runs" source={run} />);
+    expect(screen.getByRole("heading", { name: "Distribution of rd:s:raw" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Wells" }));
+    state.query = ready(dataset());
+    rerender(<WorkbenchPage level="wells" source={run} />);
+    expect(screen.getByRole("heading", { name: "rd:s:raw by well_order" })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "well_order" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent(/Not available/);
+    // Still not an undo step.
+    expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
+  });
+
   it("says the selection was cleared only when rows were selected", async () => {
     const run = { kind: "run", runId: R1 } as const;
     const { rerender } = render(<WorkbenchPage level="wells" source={run} />);
