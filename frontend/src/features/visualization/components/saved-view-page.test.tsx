@@ -278,12 +278,12 @@ describe("SavedViewPage", () => {
     expect(crumbs.result.current.has("v1")).toBe(false);
   });
 
-  it("links Visualize in the breadcrumb to the list of saved views", () => {
+  it("leads back to the list of saved views from the breadcrumb", () => {
     const { unmount } = show();
     const trail = renderHook(() => useBreadcrumbTrailValue());
     expect(trail.result.current).toEqual([
       { label: "Protocols", href: "/assays" },
-      { label: "Visualize", href: "/assays/visualize" },
+      { label: "Saved views", href: "/assays/visualize" },
       { label: "Potency by compound" },
     ]);
     unmount();

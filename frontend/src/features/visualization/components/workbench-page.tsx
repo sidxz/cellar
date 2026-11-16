@@ -120,7 +120,7 @@ function Workbench({
 }) {
   const query = useDataset(source, level);
   const nameOf = useMemberNames();
-  // A saved view's "Visualize" crumb leads to the list of saved views.
+  // A saved view's middle crumb leads back to the list of saved views.
   const viewName = view?.view.name;
   useBreadcrumbTrail(
     useMemo(
@@ -128,7 +128,7 @@ function Workbench({
         viewName
           ? [
               { label: "Protocols", href: "/assays" },
-              { label: "Visualize", href: "/assays/visualize" },
+              { label: "Saved views", href: "/assays/visualize" },
               { label: viewName },
             ]
           : [],
