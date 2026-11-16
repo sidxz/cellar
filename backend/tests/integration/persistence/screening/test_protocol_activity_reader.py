@@ -334,3 +334,26 @@ async def test_workbench_rows_carry_median_and_geomean_of_unqualified_values(
     # The Activity statement is unchanged: no median / geomean columns.
     [act] = activity.numeric_rows
     assert (act.median, act.geomean, act.nonpositive_count) == (None, None, 0)
+
+
+async def test_a_well_on_another_runs_plate_gives_no_batch(uow, session_factory, workspace_id):
+    ws, other_ws = workspace_id, uuid.uuid4()
+    foreign_batch = uuid.uuid4()
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="Signal")
+        run = await seed.run(s, ws, p, date(2026, 11, 1), status="completed")
+        other_run = await seed.run(
+            s, other_ws, await seed.protocol(s, other_ws), date(2026, 11, 1)
+        )
+        foreign = await seed.well(
+            s, await seed.plate(s, other_run, 1), "A", 1, batch_id=foreign_batch
+        )
+        await seed.readout(s, ws, run, rd, mol, 10.0, well_id=foreign)
+        await uow.commit()
+
+    for grain in ("batch", "run"):
+        agg = await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, grain=grain)
+        assert [r.batch_id for r in agg.numeric_rows] == [None], grain

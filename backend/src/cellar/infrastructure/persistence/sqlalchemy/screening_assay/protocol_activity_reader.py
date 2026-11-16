@@ -13,6 +13,7 @@ from sqlalchemy import (
     case,
     distinct,
     func,
+    join,
     literal_column,
     or_,
     select,
@@ -41,6 +42,7 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
+    PlateModel,
     ProtocolModel,
     ReadoutDataModel,
     ReadoutDefinitionModel,
@@ -147,7 +149,11 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
         .group_by(*keys.values())
     )
     if scope.grain != "compound":
-        stmt = stmt.outerjoin(WellModel, WellModel.id == _rd.well_id)
+        # Only a well on a plate of the readout's own run lends its batch.
+        stmt = stmt.outerjoin(
+            join(WellModel, PlateModel, PlateModel.id == WellModel.plate_id),
+            and_(WellModel.id == _rd.well_id, PlateModel.run_id == _rd.run_id),
+        )
     return stmt
 
 
