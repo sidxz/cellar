@@ -10,20 +10,23 @@ import type { Dataset } from "../../types";
 
 /** An aggregated value: its qualifier in front ("> 80", "≥ 10"), "—" when there is none, an
  * "Inactive k/n curves" badge, and a popover (a native button: Tab, Enter, Space) that says
- * how the value was computed. */
+ * how the value was computed. A compared protocol's blank says briefly why ("not tested",
+ * "no value"), the full reason ("Not tested in Counter") on hover and to screen readers. */
 export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; i: number }) {
   const v = numberAt(ds, valueKey, i);
   const q = qualifierText(siblingAt(ds, valueKey, "q", i));
-  // A compared protocol's blank says why: "not tested in Counter", "no value".
   const missing =
     v === null && isComparedValue(ds, valueKey) ? missingReason(ds, valueKey, i) : null;
   const text =
     v !== null
       ? `${q ? `${q} ` : ""}${cellText(v)}`
       : missing
-        ? missing[0].toLowerCase() + missing.slice(1)
+        ? missing === "No value"
+          ? "no value"
+          : "not tested"
         : "—";
-  const muted = missing && "text-xs text-muted-foreground";
+  // Too long for the column: an ellipsis at the end, never a right-aligned fragment.
+  const shown = cn("min-w-0 truncate", missing && "text-xs text-muted-foreground");
   const about = describeValue(ds, valueKey, i);
   const badge = inactiveBadge(ds, valueKey, i);
   return (
@@ -34,10 +37,11 @@ export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; 
           <PopoverTrigger asChild>
             <button
               type="button"
-              aria-label={`${text}, how ${about.title} was computed`}
+              title={missing ?? undefined}
+              aria-label={`${missing ?? text}, how ${about.title} was computed`}
               className={cn(
                 "rounded-sm px-0.5 tabular-nums underline decoration-dotted underline-offset-4 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                muted,
+                shown,
               )}
             >
               {text}
@@ -52,8 +56,15 @@ export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; 
             </ul>
           </PopoverContent>
         </Popover>
+      ) : missing ? (
+        <>
+          <span aria-hidden="true" title={missing} className={shown}>
+            {text}
+          </span>
+          <span className="sr-only">{missing}</span>
+        </>
       ) : (
-        <span className={cn(muted)}>{text}</span>
+        <span className={shown}>{text}</span>
       )}
     </div>
   );

@@ -271,7 +271,7 @@ describe("WorkbenchTable", () => {
       "Δ (Primary · pIC50) − (Counter · pIC50)",
     ]);
     // C2 in Counter and its Δ.
-    expect(screen.getAllByText("not tested in Counter")).toHaveLength(2);
+    expect(screen.getAllByTitle("Not tested in Counter")).toHaveLength(2);
     const sel = container.querySelector('.ag-header-cell[col-id="sel:dr:x:p|dr:y:p"]');
     const order = () => screen.getAllByText(/^C\d$/).map((c) => c.textContent);
     fireEvent.click(sel?.querySelector(".ag-header-cell-label") as Element);

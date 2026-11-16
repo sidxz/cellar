@@ -90,11 +90,15 @@ describe("ValueCell", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("says why a compared protocol's value is missing", () => {
+  it("says briefly why a compared protocol's value is missing, the full reason on hover", () => {
     const { rerender } = render(<ValueCell ds={crossProtocol} valueKey="dr:y:p" i={1} />);
-    expect(screen.getByText("not tested in Counter")).toBeInTheDocument();
+    // Short enough for a value column, so a right-aligned cell never clips it into a fragment.
+    const short = screen.getByText("not tested");
+    expect(short).toHaveClass("truncate");
+    expect(short).toHaveAttribute("title", "Not tested in Counter");
+    expect(screen.getByText("Not tested in Counter")).toHaveClass("sr-only");
     rerender(<ValueCell ds={crossProtocol} valueKey="sel:dr:x:p|dr:y:p" i={2} />);
-    expect(screen.getByText("no value")).toBeInTheDocument();
+    expect(screen.getByText("no value")).toHaveAttribute("title", "No value");
     rerender(<ValueCell ds={crossProtocol} valueKey="sel:dr:x:p|dr:y:p" i={0} />);
     expect(
       screen.getByRole("button", {
