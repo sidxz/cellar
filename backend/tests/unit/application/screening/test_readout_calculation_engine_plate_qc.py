@@ -4,14 +4,19 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from returns.result import Success
 
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from cellar.domain.screening_assay.curve_fitting import FittedCurveResult
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
+    CurveClass,
+    CurveType,
     PlateFormat,
+    PosControlSignal,
     ProtocolType,
     ReadoutDataType,
     ReadoutNormalization,
@@ -73,7 +78,7 @@ class _Plate:
         return well
 
 
-async def _compute(protocol: Protocol, p: _Plate) -> Run:
+async def _compute(protocol: Protocol, p: _Plate, curve_fitter=None) -> Run:
     readout_repo, run_repo, protocol_repo = AsyncMock(), AsyncMock(), AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=p.run)
     protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
@@ -88,6 +93,7 @@ async def _compute(protocol: Protocol, p: _Plate) -> Run:
         protocol_repo=protocol_repo,
         dispatcher=AsyncMock(),
         plate_quality=PlateQualityCalculator(),
+        curve_fitter=curve_fitter,
     )
     assert isinstance(await engine.compute_for_run(p.run.id, workspace_id=WS), Success)
     return p.run
@@ -167,3 +173,76 @@ async def test_one_well_per_control_stores_means_without_a_z_prime() -> None:
     assert raw["classification"] == "insufficient_data"
     assert (raw["pos_mean"], raw["pos_sd"], raw["pos_n"]) == (100.0, None, 1)
     assert (raw["neg_mean"], raw["neg_n"]) == (11.0, 2)
+
+
+@pytest.mark.asyncio
+async def test_a_control_compound_dose_series_is_fitted_per_plate_as_qc() -> None:
+    signal = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Signal",
+        data_type=ReadoutDataType.NUMERIC,
+        normalizations=frozenset({PI}),
+    )
+    potency = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Potency",
+        data_type=ReadoutDataType.DOSE_RESPONSE,
+        dose_response_config=DoseResponseConfig(
+            curve_type=CurveType.IC50, y_readout_name="Signal", y_normalization=PI
+        ),
+    )
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="QC",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[signal, potency],
+        pos_control_signal=PosControlSignal.LOW,  # POS = the known inhibitor
+    )
+    p = _Plate(protocol)
+    rif, ref = uuid.uuid4(), uuid.uuid4()
+    doses = (0.01, 0.1, 1.0, 10.0, 100.0, 100.0)
+    for i, d in enumerate(doses):
+        p.add(signal, WellType.POSITIVE_CONTROL, 100.0 - 10 * i, dose=d, molecule=rif)
+    for v in (100.0, 102.0, 98.0):
+        p.add(signal, WellType.NEGATIVE_CONTROL, v)
+    for d in (1.0, 10.0, 100.0):  # three doses: too few for a curve
+        p.add(signal, WellType.REFERENCE, 50.0, dose=d, molecule=ref)
+    fitter = MagicMock()
+    fitter.fit.return_value = Success(
+        FittedCurveResult(
+            fitted_value=0.45,
+            hill_slope=1.0,
+            top=100.0,
+            bottom=0.0,
+            r_squared=0.98,
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            curve_class=CurveClass.FULL,
+            num_points=6,
+            raw_data=[],
+        )
+    )
+
+    run = await _compute(protocol, p, fitter)
+
+    fitter.fit.assert_called_once()
+    points, config = fitter.fit.call_args.args
+    assert config is potency.dose_response_config
+    assert sorted(pt.concentration for pt in points) == sorted(doses)
+    # The fit reads the % inhibition layer, as the samples' fits do.
+    neg_mean = 100.0
+    assert sorted(pt.response for pt in points) == pytest.approx(
+        sorted(100 * (neg_mean - w) / (neg_mean - 75.0) for w in (100, 90, 80, 70, 60, 50))
+    )
+    entry = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["percent_inhibition"]
+    assert entry["control_fits"] == [
+        {
+            "role": "positive_control",
+            "molecule_id": str(rif),
+            "label": "IC50",
+            "value": 0.45,
+            "curve_class": "full",
+        }
+    ]
+    assert "control_fits" not in run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]

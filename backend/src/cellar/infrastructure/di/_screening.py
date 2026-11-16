@@ -903,6 +903,7 @@ def register_screening(container: Container) -> None:
             melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
             measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
+            curve_fitter=c[CurveFittingService],
         )
 
     container.define(ReadoutCalculationEngine, _readout_calc_engine)

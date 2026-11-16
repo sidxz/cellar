@@ -14,6 +14,7 @@ Pipeline steps (in order):
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections import defaultdict
@@ -29,9 +30,15 @@ from cellar.application.screening.fit_dose_response import (
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import BatchRepository
+from cellar.domain.screening_assay.curve_fitting import (
+    ConcentrationResponsePoint,
+    CurveFittingService,
+)
 from cellar.domain.screening_assay.enums import (
     ReadoutAggregation,
+    ReadoutDataType,
     WellType,
+    primary_normalization,
 )
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from cellar.domain.screening_assay.melt_series import series_points, series_values
@@ -59,6 +66,9 @@ from cellar.domain.shared.value_objects import QualifiedValue
 
 RAW_LAYER = "raw"
 _CONTROL_TYPES = frozenset({WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL})
+# Control roles whose compound gets a per-plate potency, and the doses a curve needs.
+_FITTED_CONTROL_TYPES = (WellType.POSITIVE_CONTROL, WellType.REFERENCE)
+_MIN_FIT_DOSES = 4
 
 # Regex to detect cross-protocol references: @ProtocolName.ReadoutName or @{Protocol Name}.Readout
 _CROSS_PROTOCOL_RE = re.compile(r"@\{?[A-Z]{2,8}-\d+\}?\.")
@@ -102,6 +112,7 @@ class ReadoutCalculationEngine:
         melting_step_repo: MeltingStepRepository | None = None,
         measured_curve_repo: MeasuredCurveRepository | None = None,
         batch_repo: BatchRepository | None = None,
+        curve_fitter: CurveFittingService | None = None,
     ) -> None:
         self._uow = uow
         self._formula_evaluator = formula_evaluator
@@ -116,6 +127,7 @@ class ReadoutCalculationEngine:
         self._melting_step_repo = melting_step_repo
         self._measured_curve_repo = measured_curve_repo
         self._batch_repo = batch_repo
+        self._curve_fitter = curve_fitter
 
     async def compute_for_run(
         self,
@@ -253,6 +265,7 @@ class ReadoutCalculationEngine:
         # ------------------------------------------------------------------
         if self._plate_quality is not None and run.plates:
             plates = self._plate_qc(run, protocol, raw_data + computed)
+            self._add_control_fits(plates, run, protocol, raw_data + computed, fit_overrides)
             if plates:
                 # Re-bind to a fresh dict so SQLAlchemy detects the change
                 # (in-place mutation on a JSONB column is not auto-tracked).
@@ -436,6 +449,88 @@ class ReadoutCalculationEngine:
             }
             out.setdefault(str(plate_id), {}).setdefault(str(rd_id), {})[layer] = entry
         return out
+
+    def _add_control_fits(
+        self,
+        plates: dict[str, dict[str, dict[str, dict[str, Any]]]],
+        run: Run,
+        protocol: Protocol,
+        rows: list[ReadoutData],
+        fit_overrides: FitOverrides | None,
+    ) -> None:
+        """Fit each positive-control and reference compound with a dose series of
+        at least four doses, per plate, on the layer the samples' curves read; the
+        primary intercept and curve class go into that layer's plate QC as
+        ``control_fits`` — QC, never the compound's curve."""
+        if self._curve_fitter is None:
+            return
+        wells = {w.id: w for w in run.wells}
+        rd_by_name = {rd.name: rd for rd in protocol.readout_definitions}
+        for dr_def in protocol.readout_definitions:
+            base = dr_def.dose_response_config
+            if dr_def.data_type != ReadoutDataType.DOSE_RESPONSE or base is None:
+                continue
+            config = fit_overrides.apply(base) if fit_overrides is not None else base
+            y_rd = rd_by_name.get(config.y_readout_name)
+            if y_rd is None or y_rd.is_calculated:
+                continue  # formula values are per compound, not per well
+            layer = (
+                str(config.y_normalization or primary_normalization(y_rd.normalizations))
+                if y_rd.normalizations
+                else RAW_LAYER
+            )
+            # (plate, role, molecule) -> well -> (dose, value)
+            series: dict[
+                tuple[uuid.UUID, WellType, uuid.UUID], dict[uuid.UUID, tuple[float, float]]
+            ] = defaultdict(dict)
+            for r in rows:
+                if (
+                    r.readout_definition_id != y_rd.id
+                    or str(r.normalization_applied or RAW_LAYER) != layer
+                ):
+                    continue
+                if r.is_computed and r.normalization_applied is None:
+                    continue
+                well = wells.get(r.well_id) if r.well_id is not None else None
+                if (
+                    well is None
+                    or well.well_type not in _FITTED_CONTROL_TYPES
+                    or well.dose is None
+                    or r.molecule_id is None
+                    or r.value is None
+                ):
+                    continue
+                series[(well.plate_id, well.well_type, r.molecule_id)][well.id] = (
+                    well.dose,
+                    r.value.value,
+                )
+            for (plate_id, role, molecule_id), by_well in series.items():
+                if len({dose for dose, _ in by_well.values()}) < _MIN_FIT_DOSES:
+                    continue
+                points = [
+                    ConcentrationResponsePoint(concentration=d, response=v)
+                    for d, v in by_well.values()
+                ]
+                fit = self._curve_fitter.fit(points, config)
+                if isinstance(fit, Failure):
+                    continue
+                fitted = fit.unwrap()
+                entry = (
+                    plates.setdefault(str(plate_id), {})
+                    .setdefault(str(y_rd.id), {})
+                    .setdefault(layer, {})
+                )
+                entry.setdefault("control_fits", []).append(
+                    {
+                        "role": str(role),
+                        "molecule_id": str(molecule_id),
+                        "label": config.intercepts[0].display_label,
+                        "value": fitted.fitted_value
+                        if math.isfinite(fitted.fitted_value)
+                        else None,
+                        "curve_class": str(fitted.curve_class),
+                    }
+                )
 
     async def _window_rows(
         self, run: Run, protocol: Protocol, workspace_id: uuid.UUID
