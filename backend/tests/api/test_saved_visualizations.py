@@ -181,6 +181,21 @@ async def test_sharing_with_a_project(as_user, client, session_factory, workspac
     assert by_admin.status_code == 201 and by_admin.json()["project_id"] == str(w["x"])
 
 
+async def test_a_private_view_keeps_no_project(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    foreign = await _seed(session_factory, uuid.uuid4())
+
+    for project in (foreign["x"], uuid.uuid4()):  # another workspace's, and none at all
+        resp = await client.post(URL, json=_body(_protocol(w["p"]), project_id=str(project)))
+        assert resp.status_code == 201, resp.text
+        view = resp.json()
+        assert view["visibility"] == "private" and view["project_id"] is None
+        patched = await client.patch(
+            f"{URL}/{view['id']}", json={"expected_version": 1, "project_id": str(project)}
+        )
+        assert patched.status_code == 200 and patched.json()["project_id"] is None
+
+
 async def test_a_source_outside_the_workspace_is_not_found(client, session_factory, fake_auth):
     w = await _seed(session_factory, fake_auth.workspace_id)
     foreign = await _seed(session_factory, uuid.uuid4())

@@ -83,6 +83,16 @@ class TestCreate:
         with pytest.raises(ValidationError):
             _view(visibility=SearchVisibility.PROJECT)
 
+    def test_a_private_view_keeps_no_project(self) -> None:
+        assert _view(project_id=uuid.uuid4()).project_id is None
+        project = uuid.uuid4()
+        shared = _view(visibility=SearchVisibility.PROJECT, project_id=project)
+        shared.clear_events()
+        shared.update(expected_version=1, visibility=SearchVisibility.PRIVATE)
+        assert shared.project_id is None
+        [event] = shared.collect_events()
+        assert ("project_id", str(project), None) in event.audit_changes()
+
 
 # The workbench's own definition of a plot's settings.
 FRONTEND_CONFIG_SCHEMA = (

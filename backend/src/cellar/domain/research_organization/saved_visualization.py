@@ -179,6 +179,11 @@ def _check_visibility(visibility: SearchVisibility, project_id: uuid.UUID | None
         raise ValidationError("Sharing a view with a project needs the project.")
 
 
+def _project_of(visibility: SearchVisibility, project_id: uuid.UUID | None) -> uuid.UUID | None:
+    """A private view belongs to no project."""
+    return project_id if visibility == SearchVisibility.PROJECT else None
+
+
 def _text(value: object) -> str | None:
     return None if value is None else str(value)
 
@@ -190,8 +195,8 @@ _AUDITED = ("name", "description", "visibility", "project_id", "level")
 
 class SavedVisualization(AggregateRoot):
     """Invariants: name stripped, 1 to 255 chars; description ≤ 2,000; PROJECT visibility needs a
-    project; ``config`` passes ``validate_view_config``. Only the owner or a workspace admin
-    edits; private views are the owner's alone."""
+    project, PRIVATE has none; ``config`` passes ``validate_view_config``. Only the owner or a
+    workspace admin edits; private views are the owner's alone."""
 
     def __init__(
         self,
@@ -221,7 +226,7 @@ class SavedVisualization(AggregateRoot):
         self.level = level
         self.config = validate_view_config(config)
         self.visibility = visibility
-        self.project_id = project_id
+        self.project_id = _project_of(visibility, project_id)
         self.created_by = created_by
 
     @classmethod
@@ -268,6 +273,7 @@ class SavedVisualization(AggregateRoot):
             "config": self.config if config is None else validate_view_config(config),
         }
         _check_visibility(after["visibility"], after["project_id"])
+        after["project_id"] = _project_of(after["visibility"], after["project_id"])
 
         changed = {field for field, value in after.items() if value != getattr(self, field)}
         changes = [(f, _text(getattr(self, f)), _text(after[f])) for f in _AUDITED if f in changed]
