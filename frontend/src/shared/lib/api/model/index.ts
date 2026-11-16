@@ -581,6 +581,7 @@ export * from './protocolFormReadoutTemplateDoseResponseConfig';
 export * from './protocolFormResponse';
 export * from './protocolReferenceRequest';
 export * from './protocolReferenceResponse';
+export * from './protocolRefResponse';
 export * from './protocolResponse';
 export * from './protocolResponseControlLayouts';
 export * from './protocolResponseOntologyAnnotations';

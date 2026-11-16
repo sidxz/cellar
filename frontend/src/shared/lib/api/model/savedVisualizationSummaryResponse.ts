@@ -4,6 +4,7 @@
  * Cellar
  * OpenAPI spec version: 0.0.0+dev
  */
+import type { ProtocolRefResponse } from './protocolRefResponse';
 import type { SavedVisualizationSummaryResponseLevel } from './savedVisualizationSummaryResponseLevel';
 import type { SearchVisibility } from './searchVisibility';
 
@@ -18,4 +19,5 @@ export interface SavedVisualizationSummaryResponse {
   can_edit: boolean;
   version: number;
   updated_at?: string | null;
+  protocols: ProtocolRefResponse[];
 }
