@@ -1,5 +1,6 @@
 """Screening & Assay context enums."""
 
+from collections.abc import Iterable
 from enum import StrEnum
 
 
@@ -80,6 +81,14 @@ class ReadoutNormalization(StrEnum):
     PERCENT_ACTIVATION = "percent_activation"
     PERCENT_CONTROL = "percent_control"
     Z_SCORE = "z_score"
+
+
+def primary_normalization(
+    normalizations: Iterable[str | ReadoutNormalization] | None,
+) -> str | None:
+    """A readout's primary normalization layer: its first declared formula other than
+    ``none``. ``None`` when it declares none (the raw layer is all there is)."""
+    return next((str(n) for n in normalizations or () if n != ReadoutNormalization.NONE), None)
 
 
 def unit_for_normalization(normalization_applied: str | None, raw_unit: str | None) -> str | None:

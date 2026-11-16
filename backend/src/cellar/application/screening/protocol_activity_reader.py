@@ -43,6 +43,7 @@ class NumericReadoutRow:
     n: int | None
     sd: float | None
     low: float | None = None  # the group's minimum
+    layer: str | None = None  # normalization_applied; None = the raw layer
 
 
 @dataclass(frozen=True)

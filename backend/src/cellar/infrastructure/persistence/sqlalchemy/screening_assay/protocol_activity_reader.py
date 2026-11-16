@@ -161,12 +161,15 @@ class SQLAlchemyProtocolActivityReader:
                 )
 
             # ----------------------------------------------------------
-            # Query 2: Numeric readout aggregation (non-DR)
+            # Query 2: Numeric readout aggregation (non-DR), one row per
+            # normalization layer — layers are never pooled; the use case
+            # picks which layer each readout shows.
             # ----------------------------------------------------------
             numeric_stmt = (
                 select(
                     ReadoutDataModel.molecule_id,
                     ReadoutDefinitionModel.name.label("readout_name"),
+                    ReadoutDataModel.normalization_applied.label("layer"),
                     func.max(ReadoutDataModel.value_numeric).label("best"),
                     func.min(ReadoutDataModel.value_numeric).label("low"),
                     func.avg(ReadoutDataModel.value_numeric).label("mean"),
@@ -188,7 +191,11 @@ class SQLAlchemyProtocolActivityReader:
                     ReadoutDataModel.value_numeric.isnot(None),
                     ReadoutDataModel.is_outlier == False,  # noqa: E712
                 )
-                .group_by(ReadoutDataModel.molecule_id, ReadoutDefinitionModel.name)
+                .group_by(
+                    ReadoutDataModel.molecule_id,
+                    ReadoutDefinitionModel.name,
+                    ReadoutDataModel.normalization_applied,
+                )
             )
             raw_numeric_rows = (await session.execute(numeric_stmt)).all()
 
@@ -201,6 +208,7 @@ class SQLAlchemyProtocolActivityReader:
                     n=r.n,
                     sd=r.sd,
                     low=r.low,
+                    layer=r.layer,
                 )
                 for r in raw_numeric_rows
             ]

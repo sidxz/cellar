@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
 
@@ -75,13 +76,15 @@ async def readout_def(
     data_type: str = "numeric",
     unit: str | None = None,
     aggregation: str = "mean",
+    normalizations: Sequence[str] = (),
 ) -> uuid.UUID:
     rid = uuid.uuid4()
     await s.execute(
         sa.text(
             "INSERT INTO readout_definitions (id, protocol_id, name, data_type, unit, "
-            "aggregation, display_order, is_calculated, dose_response_config) "
-            "VALUES (:id, :p, :name, :dt, :unit, :agg, 0, false, cast(:cfg as jsonb))"
+            "aggregation, display_order, is_calculated, dose_response_config, normalizations) "
+            "VALUES (:id, :p, :name, :dt, :unit, :agg, 0, false, cast(:cfg as jsonb), "
+            "cast(:norms as jsonb))"
         ),
         {
             "id": rid,
@@ -91,6 +94,7 @@ async def readout_def(
             "unit": unit,
             "agg": aggregation,
             "cfg": json.dumps(DR_CONFIG) if data_type == "dose_response" else None,
+            "norms": json.dumps(list(normalizations)),
         },
     )
     return rid
