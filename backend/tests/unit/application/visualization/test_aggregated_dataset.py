@@ -605,3 +605,18 @@ def test_all_censored_fits_report_the_bound():
     assert ds.values[f"{DRK}:q"] == [">"]
     assert ds.values[f"{DRK}:p"] == [pytest.approx(5.0)]
     assert ds.values[f"{DRK}:p:q"] == ["<"]
+
+
+def test_blank_condition_values_are_absent():
+    a, b = uuid.uuid4(), uuid.uuid4()
+    ds = _build("compounds", numeric=[_num(a, conditions={"NADP": " "}), _num(b, conditions={})])
+    assert not any("@" in k for k in _keys(ds))
+
+
+def test_sets_differing_only_by_json_type_get_distinct_labels():
+    mol = uuid.uuid4()
+    rows = [_num(mol, conditions={"pH": 7}), _num(mol, conditions={"pH": "7"})]
+    ds = _build("compounds", numeric=rows)
+    labels = [c.provenance.condition_set for c in ds.columns if c.key.startswith(f"{SIG}@")]
+    labels = sorted({label for label in labels})
+    assert labels == ['pH: "7"', "pH: 7"]

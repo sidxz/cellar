@@ -418,3 +418,22 @@ async def test_workbench_counts_an_at_bound_fit_as_censored_at_the_max_dose(
     assert (row.geo_mean, row.best) == (pytest.approx(4.0), 4.0)
     # Activity is unchanged: the at-bound fit's stored value still counts.
     assert (act.n_used, act.n_censored, act.geo_mean) == (2, 0, pytest.approx(2.0))
+
+
+async def test_blank_condition_values_count_as_absent(uow, session_factory, workspace_id):
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="Signal")
+        conditions = [{"NADP": "+", "pH": ""}, {"NADP": "+"}, {"NADP": " "}, {}, {"pH": 7}]
+        for i, c in enumerate(conditions):
+            run = await seed.run(s, ws, p, date(2026, 11, i + 1), status="completed", conditions=c)
+            await seed.readout(s, ws, run, rd, mol, float(i))
+        await uow.commit()
+
+    agg = await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, by_conditions=True)
+
+    by_set = {json.dumps(r.conditions, sort_keys=True): r.n for r in agg.numeric_rows}
+    assert by_set == {'{"NADP": "+"}': 2, "{}": 2, '{"pH": 7}': 1}

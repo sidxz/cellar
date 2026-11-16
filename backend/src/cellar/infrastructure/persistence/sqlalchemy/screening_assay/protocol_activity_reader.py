@@ -11,6 +11,7 @@ from sqlalchemy import (
     Row,
     ScalarSelect,
     Select,
+    Subquery,
     and_,
     case,
     cast,
@@ -22,6 +23,7 @@ from sqlalchemy import (
     literal_column,
     or_,
     select,
+    true,
     union_all,
 )
 from sqlalchemy.dialects.postgresql import JSONB
@@ -63,30 +65,61 @@ _GT = _rd.value_qualifier.in_((">", ">="))
 _LT = _rd.value_qualifier.in_(("<", "<="))
 
 
-def _condition_set() -> ColumnElement[Any]:
-    """The run's condition set: SQL NULL, JSON null, {} and {"NADP": null} are all {}."""
-    return func.jsonb_strip_nulls(
-        func.coalesce(
-            func.nullif(RunModel.conditions, literal_column("'null'::jsonb")),
-            literal_column("'{}'::jsonb"),
-        ),
-        type_=JSONB,
+def _run_condition_sets(ws: uuid.UUID, pid: uuid.UUID) -> Subquery:
+    """Each run's condition set (run_id, conditions), computed once per run. Null and
+    blank values count as absent, so SQL NULL, JSON null, {}, {"NADP": null} and
+    {"NADP": " "} are all {} (``aggregated_dataset._condition_set`` reads runs alike)."""
+    conds = RunModel.conditions
+    e = (
+        func.jsonb_each(case((func.jsonb_typeof(conds) == "object", conds)))
+        .table_valued("key", column("value", JSONB))
+        .lateral("e")
+    )
+    blank = and_(
+        func.jsonb_typeof(e.c.value) == "string",
+        e.c.value.op("#>>")(literal_column("'{}'")).op("~")(literal_column(r"'^\s*$'")),
+    )
+    kept = and_(func.jsonb_typeof(e.c.value) != "null", ~blank)
+    return (
+        select(
+            RunModel.id.label("run_id"),
+            func.coalesce(
+                func.jsonb_object_agg(e.c.key, e.c.value).filter(kept),
+                literal_column("'{}'::jsonb"),
+                type_=JSONB,
+            ).label("conditions"),
+        )
+        .select_from(RunModel)
+        .outerjoin(e, true())
+        .where(RunModel.workspace_id == ws, RunModel.protocol_id == pid)
+        .group_by(RunModel.id)
+        .subquery("run_sets")
     )
 
 
-def _scope_keys(
-    scope: AggregateScope, *, batch: ColumnElement[Any], run: ColumnElement[Any]
-) -> dict[str, ColumnElement[Any]]:
-    """Group keys the scope adds, by output name (never an input column's name:
-    Postgres resolves an ambiguous GROUP BY name to the input column)."""
+def _scoped(
+    stmt: Select[Any],
+    ws: uuid.UUID,
+    pid: uuid.UUID,
+    scope: AggregateScope,
+    *,
+    batch: ColumnElement[Any],
+    run: ColumnElement[Any],
+) -> Select[Any]:
+    """Add the group keys the scope asks for, by output name (never an input column's
+    name: Postgres resolves an ambiguous GROUP BY name to the input column)."""
     keys: dict[str, ColumnElement[Any]] = {}
     if scope.grain != "compound":
         keys["batch_key"] = batch
     if scope.grain == "run":
         keys["run_key"] = run
     if scope.by_conditions:
-        keys["condition_set"] = _condition_set()
-    return keys
+        sets = _run_condition_sets(ws, pid)
+        stmt = stmt.join(sets, sets.c.run_id == RunModel.id)
+        keys["condition_set"] = sets.c.conditions
+    return stmt.add_columns(*(expr.label(name) for name, expr in keys.items())).group_by(
+        *keys.values()
+    )
 
 
 def _scope_filters(scope: AggregateScope) -> list[ColumnElement[bool]]:
@@ -123,9 +156,6 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
         "readout_definition_id": _rd.readout_definition_id,
         "readout_name": ReadoutDefinitionModel.name,
         "layer": _rd.normalization_applied,
-        **_scope_keys(
-            scope, batch=func.coalesce(_rd.batch_id, WellModel.batch_id), run=_rd.run_id
-        ),
     }
     stmt = (
         select(
@@ -162,7 +192,8 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
             join(WellModel, PlateModel, PlateModel.id == WellModel.plate_id),
             and_(WellModel.id == _rd.well_id, PlateModel.run_id == _rd.run_id),
         )
-    return stmt
+    batch = func.coalesce(_rd.batch_id, WellModel.batch_id)
+    return _scoped(stmt, ws, pid, scope, batch=batch, run=_rd.run_id)
 
 
 def _max_dose() -> ScalarSelect[Any]:
@@ -210,9 +241,8 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
     keys: dict[str, ColumnElement[Any]] = {
         "molecule_id": c.molecule_id,
         "readout_definition_id": c.readout_definition_id,
-        **_scope_keys(scope, batch=c.batch_id, run=c.run_id),
     }
-    return (
+    stmt = (
         select(
             *(expr.label(name) for name, expr in keys.items()),
             func.min(used).label("best"),
@@ -232,6 +262,7 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
         )
         .group_by(*keys.values())
     )
+    return _scoped(stmt, ws, pid, scope, batch=c.batch_id, run=c.run_id)
 
 
 def _inclusive(bound: float | None, strict: float | None, *, above: bool) -> bool:

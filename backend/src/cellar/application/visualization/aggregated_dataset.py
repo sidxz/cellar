@@ -13,7 +13,8 @@ from __future__ import annotations
 import hashlib
 import json
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
@@ -145,23 +146,35 @@ def _resolve_fit(r: CurveRow) -> tuple[float | None, str | None]:
 
 
 def _condition_set(conditions: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
-    """(canonical JSON, set): None values dropped, so {} and {"NADP": None} are one set."""
-    if not conditions:
+    """(canonical JSON, set): null and blank values dropped, so {}, {"NADP": None} and
+    {"NADP": " "} are one set — as the aggregation's SQL groups runs."""
+    if not isinstance(conditions, dict):
         return "{}", {}
-    kept = {k: v for k, v in conditions.items() if v is not None}
+    kept = {
+        k: v
+        for k, v in conditions.items()
+        if v is not None and not (isinstance(v, str) and not v.strip())
+    }
     return json.dumps(kept, sort_keys=True, default=str), kept
 
 
 def _set_labels(sets: dict[str, dict[str, Any]]) -> dict[str, str]:
-    """Each set named by the keys whose value differs across the sets present."""
+    """Each set named by the keys whose value differs across the sets present. Sets
+    that would read alike (7 and "7") show their values as JSON instead."""
     names = {k for s in sets.values() for k in s}
     varying = sorted(
         k
         for k in names
         if len({(k in s, json.dumps(s.get(k), default=str)) for s in sets.values()}) > 1
     )
+
+    def label(s: dict[str, Any], fmt: Callable[[Any], str]) -> str:
+        return ", ".join(f"{k}: {fmt(s[k])}" for k in varying if k in s) or "no conditions"
+
+    plain = {cs: label(s, str) for cs, s in sets.items()}
+    seen = Counter(plain.values())
     return {
-        cs: ", ".join(f"{k}: {s[k]}" for k in varying if k in s) or "no conditions"
+        cs: label(s, lambda v: json.dumps(v, default=str)) if seen[plain[cs]] > 1 else plain[cs]
         for cs, s in sets.items()
     }
 
