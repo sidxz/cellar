@@ -37,7 +37,11 @@ const protocols = [
   { id: P2, name: "MMP2 counter", status: "published", protocol_type: "x", run_count: 2 },
 ];
 
-const state = vi.hoisted(() => ({ query: {} as Record<string, unknown>, replace: vi.fn() }));
+const state = vi.hoisted(() => ({
+  query: {} as Record<string, unknown>,
+  replace: vi.fn(),
+  protocolReads: 0,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: state.replace }),
@@ -50,7 +54,10 @@ vi.mock("@/features/screening-assay/hooks/use-runs", () => ({
   useRun: (id: string) => ({ data: runsA.find((r) => r.id === id) }),
 }));
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
-  useProtocol: (id?: string) => ({ data: protocols.find((p) => p.id === id) }),
+  useProtocol: (id?: string) => {
+    state.protocolReads += 1;
+    return { data: protocols.find((p) => p.id === id) };
+  },
   useProtocolSummaries: () => ({ data: protocols, isLoading: false }),
 }));
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
@@ -272,6 +279,15 @@ describe("WorkbenchHeader comparing protocols", () => {
       "Not available now: Filter: MMP2 counter · b.",
     );
     expect(screen.getByText(/selected ·/).textContent).toMatch(/^1 compound selected/);
+  });
+
+  it("selecting rows leaves the header as it is", async () => {
+    page("compounds", compared);
+    const boxes = await screen.findAllByRole("checkbox", { name: "Select row" });
+    const before = state.protocolReads;
+    fireEvent.click(boxes[0]);
+    expect(screen.getByText(/selected ·/).textContent).toMatch(/^1 compound selected/);
+    expect(state.protocolReads).toBe(before);
   });
 
   it("changing runs keeps the compared protocols", () => {

@@ -23,7 +23,7 @@ import { column, uniqueCompounds } from "../lib/dataset";
 import type { Carry } from "../lib/level-switch";
 import { LEVELS, LEVEL_ORDER } from "../lib/levels";
 import { conditionsText, newestFirst, runLabel } from "../lib/runs";
-import { useWorkbench } from "../store/workbench-context";
+import { useWorkbench, useWorkbenchStore } from "../store/workbench-context";
 import { canRedo, canUndo } from "../store/workbench-store";
 import type { ComparedProtocol, Dataset, DatasetSource, Level } from "../types";
 import { AddProtocolDialog } from "./add-protocol-dialog";
@@ -372,9 +372,7 @@ export function WorkbenchHeader({
   viewControls,
 }: WorkbenchHeaderProps) {
   const mask = usePassMask(ds);
-  const panels = useWorkbench((s) => s.panels);
-  const filters = useWorkbench((s) => s.filters);
-  const selection = useWorkbench((s) => s.selection);
+  const store = useWorkbenchStore();
   const undoable = useWorkbench(canUndo);
   const redoable = useWorkbench(canRedo);
   const undo = useWorkbench((s) => s.undo);
@@ -386,12 +384,11 @@ export function WorkbenchHeader({
     return { passing: rows.length, compounds: uniqueCompounds(ds, rows).length };
   }, [ds, mask]);
 
-  const take = (): Carry => ({
-    panels,
-    filters,
-    selectedIds: [...selection],
-    columns: ds.columns,
-  });
+  // Read when the view changes, so selecting rows doesn't re-render the header.
+  const take = (): Carry => {
+    const { panels, filters, selection } = store.getState();
+    return { panels, filters, selectedIds: [...selection], columns: ds.columns };
+  };
 
   const { one, many } = LEVELS[level];
   return (

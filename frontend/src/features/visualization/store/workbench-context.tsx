@@ -38,8 +38,13 @@ export function WorkbenchProvider({
   return <WorkbenchContext.Provider value={store}>{children}</WorkbenchContext.Provider>;
 }
 
-export function useWorkbench<T>(selector: (s: WorkbenchState) => T): T {
+/** The store itself: read it at event time, without re-rendering on every change. */
+export function useWorkbenchStore(): WorkbenchStore {
   const store = useContext(WorkbenchContext);
   if (!store) throw new Error("useWorkbench must be used inside <WorkbenchProvider>");
-  return useStore(store, selector);
+  return store;
+}
+
+export function useWorkbench<T>(selector: (s: WorkbenchState) => T): T {
+  return useStore(useWorkbenchStore(), selector);
 }
