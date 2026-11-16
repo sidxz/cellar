@@ -5,6 +5,12 @@ import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { EntityLink } from "@/shared/components/entity-link";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import { saveText } from "@/shared/lib/api/download";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
@@ -18,7 +24,7 @@ import {
   type RowHeightParams,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
 import {
   type ReactNode,
   type Ref,
@@ -49,6 +55,16 @@ const ROW_HEIGHT: Record<Density, number> = { compact: 28, chemistry: 108 };
 const NUMERIC = "text-right tabular-nums";
 const SIBLING = /:(q|outlier)$/;
 const OWN_COLUMNS = new Set(["compound", "structure"]);
+const LEADING = new Set(["well", "well_type"]);
+/** Shown only on request: Run date repeats Run; the rest matter for plate QC. */
+const HIDDEN_BY_DEFAULT = new Set([
+  "run_date",
+  "run_status",
+  "well_row",
+  "well_column",
+  "well_order",
+]);
+const isValue = (c: DatasetColumn) => c.key.startsWith("rd:");
 const isData = (row: Row | undefined): row is Row => !!row && row.i >= 0;
 const fmt = (n: number) => n.toLocaleString();
 const NO_ROWS = { noRowsToShow: "No rows match the filters" };
@@ -152,9 +168,63 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
   };
 }
 
-/** Select + compound pinned left, structure in chemistry density, then every visible
- * column grouped by its dataset group (qualifier/outlier siblings render inside values). */
-function tableColumns(ds: Dataset, chemistry: boolean): Col[] {
+/** Columns the chooser offers, in table order: well and well type, the readout values,
+ * then the rest (run, plate, conditions …) in dataset order. Compound and structure have
+ * their own columns; qualifier/outlier siblings render inside their values. */
+function tableFields(ds: Dataset): DatasetColumn[] {
+  const rank = (c: DatasetColumn) => (LEADING.has(c.key) ? 0 : isValue(c) ? 1 : 2);
+  return ds.columns
+    .filter((c) => !c.hidden && !SIBLING.test(c.key) && !OWN_COLUMNS.has(c.key))
+    .sort((a, b) => rank(a) - rank(b));
+}
+
+/** Hidden until chosen: the redundant identity columns and any that hold no value. */
+function defaultHidden(ds: Dataset): Set<string> {
+  const empty = (key: string) => (ds.values[key] ?? []).every((v) => v == null || v === "");
+  return new Set(
+    tableFields(ds)
+      .filter((c) => HIDDEN_BY_DEFAULT.has(c.key) || (!isValue(c) && empty(c.key)))
+      .map((c) => c.key),
+  );
+}
+
+function ColumnChooser({
+  fields,
+  hidden,
+  onToggle,
+}: {
+  fields: DatasetColumn[];
+  hidden: Set<string>;
+  onToggle: (key: string) => void;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" className="h-7">
+          <Columns3 className="h-3.5 w-3.5" />
+          Columns
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-80 w-60 overflow-y-auto">
+        {fields.map((c) => (
+          <DropdownMenuCheckboxItem
+            key={c.key}
+            checked={!hidden.has(c.key)}
+            onCheckedChange={() => onToggle(c.key)}
+            // Stay open so several columns can be toggled in a row.
+            onSelect={(e) => e.preventDefault()}
+          >
+            <span className="truncate">{c.label}</span>
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Select + compound pinned left, structure in chemistry density, then the shown fields
+ * grouped by their dataset group. */
+function tableColumns(ds: Dataset, chemistry: boolean, hidden: Set<string>): Col[] {
   const cols: Col[] = [
     {
       colId: "__select__",
@@ -188,8 +258,8 @@ function tableColumns(ds: Dataset, chemistry: boolean): Col[] {
       cellRenderer: StructureCell,
     });
   }
-  for (const c of ds.columns) {
-    if (c.hidden || SIBLING.test(c.key) || OWN_COLUMNS.has(c.key)) continue;
+  for (const c of tableFields(ds)) {
+    if (hidden.has(c.key)) continue;
     const leaf = leafColumn(ds, c);
     const last = cols.at(-1);
     if (c.group && last && "children" in last && last.headerName === c.group) {
@@ -208,7 +278,7 @@ export interface WorkbenchTableHandle {
 }
 
 /** The linked table: passing rows (all rows on request), selected rows pinned on top
- * under a collapsible "Selected (n)" row, compact or chemistry density.
+ * under a collapsible "Selected (n)" row, compact or chemistry density, a Columns chooser.
  * `actions` (Save…) sit at the right end of the toolbar; `ref` exposes the CSV export. */
 export function WorkbenchTable({
   ds,
@@ -225,6 +295,17 @@ export function WorkbenchTable({
   const [density, setDensity] = useState<Density>("chemistry");
   const [showAll, setShowAll] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [hidden, setHidden] = useState(() => defaultHidden(ds));
+  const fields = useMemo(() => tableFields(ds), [ds]);
+  const toggleColumn = useCallback(
+    (key: string) =>
+      setHidden((h) => {
+        const next = new Set(h);
+        if (!next.delete(key)) next.add(key);
+        return next;
+      }),
+    [],
+  );
 
   // One stable object per dataset row, so the grid diffs re-orderings by id.
   const rows = useMemo<Row[]>(() => ds.row_ids.map((_, i) => ({ i })), [ds]);
@@ -243,7 +324,10 @@ export function WorkbenchTable({
           ],
     [pinned, rows, collapsed],
   );
-  const columnDefs = useMemo(() => tableColumns(ds, density === "chemistry"), [ds, density]);
+  const columnDefs = useMemo(
+    () => tableColumns(ds, density === "chemistry", hidden),
+    [ds, density, hidden],
+  );
   const toggleGroup = useCallback(() => setCollapsed((c) => !c), []);
   const groupParams = useMemo(() => ({ onToggle: toggleGroup }), [toggleGroup]);
   // The label row stays compact whatever the density.
@@ -305,6 +389,7 @@ export function WorkbenchTable({
             </Button>
           ))}
         </fieldset>
+        <ColumnChooser fields={fields} hidden={hidden} onToggle={toggleColumn} />
         <Button
           size="sm"
           variant={showAll ? "secondary" : "outline"}

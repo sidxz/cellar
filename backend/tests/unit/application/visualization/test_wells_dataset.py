@@ -94,6 +94,20 @@ def test_two_layers_of_one_readout_pivot_onto_one_row():
     assert _col(ds, RAW).group == "Signal" and _col(ds, RAW).kind == "number"
 
 
+def test_raw_label_skips_the_unit_when_the_name_already_ends_with_it():
+    run = _run()
+    rd_ids = [uuid.uuid4(), uuid.uuid4()]
+    defs = [
+        ReadoutDefInfo(
+            id=i, protocol_id=P, name=name, data_type="numeric", unit="AU", display_order=0
+        )
+        for i, name in zip(rd_ids, ["raw AU", "Raw au"], strict=True)
+    ]
+    rows = [_row(run, readout_definition_id=i) for i in rd_ids]
+    ds = build_wells_dataset([run], defs, rows)
+    assert [_col(ds, f"rd:{i}:raw").label for i in rd_ids] == ["raw AU", "Raw au"]
+
+
 def test_well_order_on_a_384_plate():
     run = _run()
     ds = build_wells_dataset([run], DEFS, [_row(run, well_row="B", well_column=3)])

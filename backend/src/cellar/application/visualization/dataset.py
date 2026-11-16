@@ -208,7 +208,8 @@ def build_wells_dataset(
         rd = defs_by_id[uuid.UUID(rd_id)]
         unit = unit_for_normalization(None if layer == RAW_LAYER else layer, rd.unit)
         if layer == RAW_LAYER:
-            label = f"{rd.name} ({unit})" if unit else rd.name
+            named = not unit or rd.name.lower().endswith(unit.lower())  # "raw AU" + "AU"
+            label = rd.name if named else f"{rd.name} ({unit})"
         else:
             label = f"{rd.name} · {_LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
         prov = ColumnProvenance(

@@ -71,7 +71,102 @@ const show = (
     </TooltipProvider>,
   );
 
+/** Lines of the table's CSV export (the displayed columns, in order). */
+async function exportedCsv(ref: React.RefObject<WorkbenchTableHandle | null>): Promise<string[]> {
+  const blobs: Blob[] = [];
+  URL.createObjectURL = vi.fn((b: Blob) => {
+    blobs.push(b);
+    return "blob:csv";
+  });
+  URL.revokeObjectURL = vi.fn();
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  act(() => ref.current?.exportCsv("wells.csv"));
+  expect(blobs).toHaveLength(1);
+  expect(click).toHaveBeenCalledTimes(1);
+  click.mockRestore();
+  // jsdom's Blob has no text(); FileReader reads it.
+  const csv = await new Promise<string>((resolve) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.readAsText(blobs[0]);
+  });
+  return csv.split(/\r?\n/);
+}
+
+// Identity columns in dataset order, readout values last (as the backend sends them).
+const wide: Dataset = {
+  revision: "w",
+  level: "wells",
+  row_count: 1,
+  row_ids: ["w0"],
+  columns: [
+    col("compound", "category", { label: "Compound" }),
+    col("structure", "structure", { label: "Structure" }),
+    col("molecule_id", "text", { hidden: true }),
+    col("batch", "category", { label: "Batch" }),
+    col("run", "category", { label: "Run" }),
+    col("run_date", "category", { label: "Run date" }),
+    col("run_status", "category", { label: "Run status" }),
+    col("plate", "category", { label: "Plate" }),
+    col("well", "text", { label: "Well" }),
+    col("well_row", "category", { label: "Row" }),
+    col("well_column", "number", { label: "Column" }),
+    col("well_order", "number", { label: "Well order" }),
+    col("well_type", "category", { label: "Well type" }),
+    col("dose", "number", { label: "Dose" }),
+    col("label", "text", { label: "Well label" }),
+    col("cond:NADP", "category", { label: "NADP", group: "Conditions" }),
+    col("rd:s:raw", "number", { label: "Signal (AU)", group: "Signal" }),
+  ],
+  values: {
+    compound: ["CEL-1"],
+    structure: ["CCO"],
+    molecule_id: ["m1"],
+    batch: [null],
+    run: ["2026-11-12"],
+    run_date: ["2026-11-12"],
+    run_status: ["approved"],
+    plate: ["Plate 1"],
+    well: ["B03"],
+    well_row: ["B"],
+    well_column: [3],
+    well_order: [27],
+    well_type: ["sample"],
+    dose: [null],
+    label: [""],
+    "cond:NADP": ["+"],
+    "rd:s:raw": [12],
+  },
+};
+
 describe("WorkbenchTable", () => {
+  it("puts readout values after well and well type; hides redundant and empty columns", async () => {
+    const ref = createRef<WorkbenchTableHandle>();
+    show([], { table: wide, ref });
+    await screen.findByRole("link", { name: "CEL-1" });
+    expect((await exportedCsv(ref))[0]).toBe(
+      '"Compound","Structure","Well","Well type","Signal (AU)","Run","Plate","NADP"',
+    );
+  });
+
+  it("shows and hides columns from the Columns menu", async () => {
+    const ref = createRef<WorkbenchTableHandle>();
+    show([], { table: wide, ref });
+    await screen.findByRole("link", { name: "CEL-1" });
+    fireEvent.keyDown(screen.getByRole("button", { name: "Columns" }), { key: "Enter" });
+    const runDate = screen.getByRole("menuitemcheckbox", { name: "Run date" });
+    expect(runDate).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByRole("menuitemcheckbox", { name: "Plate" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    fireEvent.click(runDate);
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Plate" }));
+    expect((await exportedCsv(ref))[0]).toBe(
+      '"Compound","Structure","Well","Well type","Signal (AU)","Run","Run date","NADP"',
+    );
+  });
+
   it("links compounds, leaves control wells blank, and shows qualifiers and outliers", async () => {
     show();
     expect(await screen.findByRole("link", { name: "CEL-1" })).toHaveAttribute(
@@ -103,13 +198,6 @@ describe("WorkbenchTable", () => {
   });
 
   it("exports visible columns and passing rows as CSV, numbers unrounded", async () => {
-    const blobs: Blob[] = [];
-    URL.createObjectURL = vi.fn((b: Blob) => {
-      blobs.push(b);
-      return "blob:csv";
-    });
-    URL.revokeObjectURL = vi.fn();
-    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
     const ref = createRef<WorkbenchTableHandle>();
     const precise = { ...ds, values: { ...ds.values, "rd:s:raw": [12.3456, 40, 3] } };
     const controls: Filter = {
@@ -122,18 +210,7 @@ describe("WorkbenchTable", () => {
     show(["w1"], { filters: [controls], table: precise, ref });
     // The collapsed Selected group still exports its rows.
     fireEvent.click(await screen.findByRole("button", { name: "Selected (1)" }));
-    act(() => ref.current?.exportCsv("wells.csv"));
-    expect(blobs).toHaveLength(1);
-    expect(click).toHaveBeenCalledTimes(1);
-    click.mockRestore();
-    // jsdom's Blob has no text(); FileReader reads it.
-    const csv = await new Promise<string>((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result));
-      reader.readAsText(blobs[0]);
-    });
-    const lines = csv.split(/\r?\n/);
-    expect(lines).toEqual([
+    expect(await exportedCsv(ref)).toEqual([
       '"Compound","Structure","well_type","rd:s:raw"',
       '"CEL-2","c1ccccc1","Sample","40"',
       '"CEL-1","CCO","Sample",">12.3456"',
