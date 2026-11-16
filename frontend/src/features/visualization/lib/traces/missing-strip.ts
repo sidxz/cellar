@@ -9,6 +9,17 @@ import { WEBGL_ABOVE, plottedX, plottedY } from "./scatter";
 const NO_VALUE = "No value";
 const NOT_TESTED = "Not tested";
 const STRIP_FILL = "rgba(113,113,122,0.08)";
+/** Room a strip gives each reason's label (10 px font), in px across the strip. */
+const SLOT_PX = 16;
+/** What the figure's margins and axis titles take from its width and height, about. */
+const MARGIN_PX = { x: 80, y: 90 };
+/** The plot's size when not measured yet: strips of up to two reasons take 8 %. */
+const DEFAULT_SIZE = { width: 400 + MARGIN_PX.x, height: 400 + MARGIN_PX.y };
+
+/** The share of the plot a strip of ``slots`` reasons takes along ``px`` of plot: SLOT_PX
+ * per reason, at least 8 %, at most a third. */
+const stripShare = (slots: number, px: number) =>
+  Math.min(0.33, Math.max(0.08, (slots * SLOT_PX) / Math.max(px, 1)));
 
 /** Where row ``i`` sits around its slot: within ±0.3, the same on every build. */
 const jitter = (i: number) => (((i * 0.6180339887) % 1) - 0.5) * 0.6;
@@ -29,7 +40,14 @@ type Side = "x" | "y";
 /** The strip of ``side``'s missing values: passing rows with a value on the other axis but
  * none on ``side``, in one slot per kind of reason ("Not tested" before "No value"; the
  * hover card names the protocol), jittered across the slot. */
-function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, dark: boolean) {
+function stripOf(
+  ds: Dataset,
+  cfg: PanelConfig,
+  mask: Uint8Array,
+  side: Side,
+  dark: boolean,
+  size: { width: number; height: number },
+) {
   const onX = side === "x";
   const key = (onX ? cfg.x : cfg.y) as string;
   const otherAt = onX ? plottedY(ds, cfg) : plottedX(ds, cfg);
@@ -72,8 +90,12 @@ function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, da
     unselected: { marker: { opacity: 0.35 } },
   };
   // Free at the plot's edge, beside the main axis's ticks, so the two strips never collide.
+  // Rotated, a left strip's labels stack across the width; a bottom strip's, the height.
+  const share = onX
+    ? stripShare(slots.length, size.width - MARGIN_PX.x)
+    : stripShare(slots.length, size.height - MARGIN_PX.y);
   const axis = {
-    domain: [0, 0.08],
+    domain: [0, share],
     anchor: "free",
     position: 0,
     range: [-0.5, slots.length - 0.5],
@@ -98,7 +120,7 @@ function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, da
     line: { width: 0 },
     layer: "below",
   };
-  return { trace, axis, shape, count: rows.length };
+  return { trace, axis, shape, share, count: rows.length };
 }
 
 /** A cross-protocol scatter's untested compounds, kept apart from the measured pairs: the
@@ -112,6 +134,8 @@ export function addMissingStrip(
   cfg: PanelConfig,
   mask: Uint8Array,
   dark = false,
+  /** The plot's measured size, px; strips take room per reason from it. */
+  size = DEFAULT_SIZE,
 ): { fig: Figure; stripped: number } {
   const { x, y } = cfg;
   if (!x || !y || (!isComparedValue(ds, x) && !isComparedValue(ds, y))) {
@@ -121,7 +145,7 @@ export function addMissingStrip(
   if (cfg.appearance.splitBy) return { fig: counted, stripped: 0 };
 
   const strips = (["x", "y"] as const).map((side) =>
-    isComparedValue(ds, side === "x" ? x : y) ? stripOf(ds, cfg, mask, side, dark) : null,
+    isComparedValue(ds, side === "x" ? x : y) ? stripOf(ds, cfg, mask, side, dark, size) : null,
   );
   const [xs, ys] = strips;
   if (!xs && !ys) return { fig: counted, stripped: 0 };
@@ -138,12 +162,12 @@ export function addMissingStrip(
         // Each main axis makes room for the other's strip and stands beyond it.
         xaxis: {
           ...(layout.xaxis as object),
-          ...(xs && { domain: [0.11, 1] }),
+          ...(xs && { domain: [xs.share + 0.03, 1] }),
           ...(ys && { anchor: "free", position: 0 }),
         },
         yaxis: {
           ...(layout.yaxis as object),
-          ...(ys && { domain: [0.11, 1] }),
+          ...(ys && { domain: [ys.share + 0.03, 1] }),
           ...(xs && { anchor: "free", position: 0 }),
         },
         ...(xs && { xaxis2: xs.axis }),

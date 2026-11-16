@@ -10,8 +10,13 @@ import { panel, pass } from "./test-fixtures";
 const onCounter = (patch: PanelPatch = {}) =>
   panel("scatter", { x: "dr:y:p", y: "dr:x:p", ...patch });
 
-function strip(ds: Dataset, p = onCounter(), mask = pass(ds.row_count)) {
-  return addMissingStrip(buildScatterBase(ds, p, mask), ds, p, mask);
+function strip(
+  ds: Dataset,
+  p = onCounter(),
+  mask = pass(ds.row_count),
+  size?: { width: number; height: number },
+) {
+  return addMissingStrip(buildScatterBase(ds, p, mask), ds, p, mask, false, size);
 }
 
 const onX2 = (fig: { data: Record<string, unknown>[] }) => fig.data.filter((t) => t.xaxis === "x2");
@@ -96,6 +101,22 @@ describe("addMissingStrip", () => {
       "Not tested (1)",
       "No value (1)",
     ]);
+  });
+
+  it("gives each strip reason enough pixels that its labels never overlap", () => {
+    const onPrimary = panel("scatter", { x: "dr:x:p", y: "dr:y:p" });
+    // A short panel: two stacked labels (10 px font) need their own room below the X axis.
+    const short = strip(crossProtocol, onPrimary, undefined, { width: 500, height: 240 }).fig;
+    const [, top] = (short.layout.yaxis2 as { domain: number[] }).domain;
+    const plotPx = 240 - 90; // the panel less the plot's top and bottom margins
+    expect((top * plotPx) / 2).toBeGreaterThanOrEqual(14);
+    expect((short.layout.yaxis as { domain: number[] }).domain[0]).toBeCloseTo(top + 0.03);
+    // A tall one keeps the strip slim.
+    const tall = strip(crossProtocol, onPrimary, undefined, { width: 500, height: 900 }).fig;
+    expect(tall.layout.yaxis2).toMatchObject({ domain: [0, 0.08] });
+    // Rotated labels of a strip left of the axis take width the same way, never past a third.
+    const narrow = strip(crossProtocol, onCounter(), undefined, { width: 150, height: 400 }).fig;
+    expect(narrow.layout.xaxis2).toMatchObject({ domain: [0, 0.33] });
   });
 
   it("puts rows with an X but no Y on a strip below the X axis", () => {

@@ -6,9 +6,10 @@ import {
 } from "@/features/sar-analysis/lib/lasso-math";
 import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
-import { useMemo, useRef } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
 import { usePassMask } from "../../hooks/use-pass-mask";
+import { isComparedValue } from "../../lib/cross-protocol";
 import { buildOverlays, mergeOverlays } from "../../lib/overlays/build";
 import { addMissingStrip } from "../../lib/traces/missing-strip";
 import {
@@ -46,6 +47,25 @@ function useSelectionRevision(selection: ReadonlySet<string>) {
   };
 }
 
+type Size = { width: number; height: number };
+
+/** ``ref``'s box in 10 px steps while ``on`` (so a drag re-renders rarely), else undefined. */
+function useBoxSize(ref: RefObject<HTMLElement | null>, on: boolean): Size | undefined {
+  const [size, setSize] = useState<Size>();
+  useEffect(() => {
+    const el = ref.current;
+    if (!on || !el || typeof ResizeObserver === "undefined") return;
+    const step = (v: number) => Math.round(v / 10) * 10;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = { width: step(entry.contentRect.width), height: step(entry.contentRect.height) };
+      setSize((s) => (s?.width === next.width && s.height === next.height ? s : next));
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [ref, on]);
+  return on ? size : undefined;
+}
+
 export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset }) {
   const mask = usePassMask(ds);
   const selection = useWorkbench((s) => s.selection);
@@ -55,13 +75,20 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
   const dark = resolvedTheme === "dark";
   const { revision, own } = useSelectionRevision(selection);
   const hover = useHoverCard(ds, [panel.x, panel.y, ...panel.appearance.tooltip]);
+  // Untested strips take room per reason from the plot's real size; other plots never
+  // rebuild on a resize.
+  const plotBox = useRef<HTMLDivElement>(null);
+  const strips =
+    !panel.appearance.splitBy && (isComparedValue(ds, panel.x) || isComparedValue(ds, panel.y));
+  const size = useBoxSize(plotBox, strips);
 
   // The costly part (coordinates, colors, hover text, untested strip, overlays) waits for a data or
   // settings change; a selection only lays its marks on top.
   const base = useMemo(() => {
-    const { fig } = addMissingStrip(buildScatterBase(ds, panel, mask, dark), ds, panel, mask, dark);
+    const base = buildScatterBase(ds, panel, mask, dark);
+    const { fig } = addMissingStrip(base, ds, panel, mask, dark, size);
     return mergeOverlays(fig, buildOverlays(ds, panel, mask, fig.facets ?? []));
-  }, [ds, panel, mask, dark]);
+  }, [ds, panel, mask, dark, size]);
   const fig = useMemo(() => selectScatter(base, ds, selection), [base, ds, selection]);
   // The constant uirevision (in the figure) keeps zoom; selectionrevision governs the lasso.
   const layout = useMemo(
@@ -95,7 +122,7 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
 
   return (
     <div ref={hover.ref} className="relative flex h-full flex-col">
-      <div className="min-h-0 flex-1">
+      <div ref={plotBox} className="min-h-0 flex-1">
         <Plot
           data={fig.data}
           layout={layout}

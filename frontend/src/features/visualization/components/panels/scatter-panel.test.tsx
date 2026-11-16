@@ -151,6 +151,37 @@ describe("ScatterPanel", () => {
     expect(drawn().layout.selectionrevision).toBe(after);
   });
 
+  it("sizes its untested strips from the plot's measured box", () => {
+    let report: ResizeObserverCallback = () => {};
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(cb: ResizeObserverCallback) {
+          report = cb;
+        }
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const pair = { ...panel, x: "dr:x:p", y: "dr:y:p" };
+    render(
+      <WorkbenchProvider initialPanels={[pair]}>
+        <ScatterPanel panel={pair} ds={crossProtocol} />
+      </WorkbenchProvider>,
+    );
+    const top = () =>
+      (drawn().layout as unknown as { yaxis2: { domain: number[] } }).yaxis2.domain[1];
+    expect(top()).toBe(0.08);
+    act(() =>
+      report(
+        [{ contentRect: { width: 500, height: 240 } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      ),
+    );
+    expect(top()).toBeGreaterThan(0.18);
+    vi.unstubAllGlobals();
+  });
+
   it("keeps untested compounds on a selectable strip and counts measured pairs", () => {
     const pair = { ...panel, x: "dr:y:p", y: "dr:x:p" };
     render(
