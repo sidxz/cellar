@@ -85,6 +85,17 @@ describe("PanelGrid and AddPlotMenu", () => {
     expect(screen.getAllByRole("region")).toHaveLength(1);
   });
 
+  it("gives every plot a definite height, taller when maximized", () => {
+    // The page scrolls, so the plots size from the viewport, not from a split pane.
+    show(3);
+    const grid = screen.getAllByRole("region")[0].parentElement as HTMLElement;
+    expect(grid.className).toContain("auto-rows-[max(320px,45dvh)]");
+    expect(grid).toHaveClass("lg:grid-cols-2");
+    fireEvent.click(screen.getAllByRole("button", { name: "Maximize plot" })[0]);
+    expect(grid.className).toContain("auto-rows-[max(420px,75dvh)]");
+    expect(grid).not.toHaveClass("lg:grid-cols-2");
+  });
+
   it("offers only the count bar when nothing is numeric", () => {
     show(1, dataset(false));
     openMenu(/Add plot/);

@@ -19,6 +19,7 @@ import {
   type ColGroupDef,
   type ICellRendererParams,
   ModuleRegistry,
+  type PaginationChangedEvent,
   type RowClassParams,
   type RowHeightParams,
 } from "ag-grid-community";
@@ -29,6 +30,7 @@ import {
   type Ref,
   useCallback,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -76,6 +78,16 @@ const isData = (row: Row | undefined): row is Row => !!row && row.i >= 0;
 const fmt = (n: number) => n.toLocaleString();
 const NO_ROWS = { noRowsToShow: "No rows match the filters" };
 const MORE = -2;
+const PAGE_SIZE = 100;
+const PAGE_SIZES = [50, 100, 250, 500];
+/** The grid is as tall as its page and the viewport scrolls it (see WorkbenchBody), so the
+ * grid's own clipping goes: the header sticks to the viewport's top and the sideways
+ * scrollbar to its bottom while the table is in view. */
+const STICKY = [
+  ".viz-table .ag-root-wrapper,.viz-table .ag-root.ag-layout-auto-height{overflow:visible}",
+  ".viz-table .ag-header{position:sticky;top:0;z-index:3}",
+  ".viz-table .ag-body-horizontal-scroll{position:sticky;bottom:0;z-index:3;background:var(--background)}",
+].join("");
 
 function SelectCell({ data, rowIds }: ICellRendererParams<Row> & { rowIds: string[] }) {
   const selection = useWorkbench((s) => s.selection);
@@ -358,8 +370,9 @@ export interface WorkbenchTableHandle {
   exportCsv: (fileName: string) => void;
 }
 
-/** The linked table: passing rows (all rows on request), selected rows pinned on top
- * under a collapsible "Selected (n)" row, compact or chemistry density, a Columns chooser.
+/** The linked table: passing rows (all rows on request) in pages of 100 that flow with the
+ * page, selected rows pinned on top under a collapsible "Selected (n)" row, compact or
+ * chemistry density, a Columns chooser.
  * `actions` (Save…) sit at the right end of the toolbar; `ref` exposes the CSV export;
  * `onOpenCurves` opens the curves behind a dose-response value. */
 export function WorkbenchTable({
@@ -374,6 +387,7 @@ export function WorkbenchTable({
   onOpenCurves: OpenCurves;
 }) {
   const grid = useRef<AgGridReact<Row>>(null);
+  const root = useRef<HTMLDivElement>(null);
   const mask = usePassMask(ds);
   const selection = useWorkbench((s) => s.selection);
   const filterToSelection = useWorkbench((s) => s.filterToSelection);
@@ -468,9 +482,24 @@ export function WorkbenchTable({
       isData(p.data) && !mask[p.data.i] ? "text-muted-foreground opacity-60" : undefined,
     [mask],
   );
+  // New rows that no longer reach the current page: the grid would fall back to the last page;
+  // start over instead. A layout effect, so it runs before the grid takes the rows (an effect).
+  useLayoutEffect(() => {
+    const api = grid.current?.api;
+    if (api && api.paginationGetCurrentPage() * api.paginationGetPageSize() >= rowData.length) {
+      api.paginationGoToFirstPage();
+    }
+  }, [rowData]);
+  // Paged at the foot of a long page: show the new page from its top.
+  const onPaginationChanged = useCallback((e: PaginationChangedEvent<Row>) => {
+    const el = root.current;
+    if (e.newPage && el && el.getBoundingClientRect().top < 0)
+      el.scrollIntoView({ block: "start" });
+  }, []);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={root} className="viz-table flex flex-col">
+      <style>{STICKY}</style>
       <div className="flex shrink-0 items-center gap-2 px-2 py-1 text-xs">
         <span className="text-muted-foreground">{fmt(pinned.length + rest.length)} rows</span>
         <fieldset aria-label="Row density" className="ml-auto flex items-center gap-0.5">
@@ -499,29 +528,32 @@ export function WorkbenchTable({
         </Button>
         {actions}
       </div>
-      <div className="min-h-0 flex-1">
-        <AgGridReact<Row>
-          ref={grid}
-          theme={cellarTheme}
-          rowData={rowData}
-          pinnedTopRowData={pinnedRows}
-          columnDefs={columnDefs}
-          defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
-          getRowId={(p) => (p.data.i < 0 ? `selected-${p.data.i}` : ds.row_ids[p.data.i])}
-          isFullWidthRow={(p) => (p.rowNode.data?.i ?? 0) < 0}
-          fullWidthCellRenderer={SelectedGroupRow}
-          fullWidthCellRendererParams={groupParams}
-          getRowClass={getRowClass}
-          rowHeight={ROW_HEIGHT[density]}
-          getRowHeight={getRowHeight}
-          suppressCellFocus
-          // Rows stay in the DOM in their shown order, so Tab through the cell buttons follows
-          // a sort or a re-pin.
-          ensureDomOrder
-          animateRows={false}
-          localeText={NO_ROWS}
-        />
-      </div>
+      <AgGridReact<Row>
+        ref={grid}
+        theme={cellarTheme}
+        domLayout="autoHeight"
+        pagination
+        paginationPageSize={PAGE_SIZE}
+        paginationPageSizeSelector={PAGE_SIZES}
+        onPaginationChanged={onPaginationChanged}
+        rowData={rowData}
+        pinnedTopRowData={pinnedRows}
+        columnDefs={columnDefs}
+        defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
+        getRowId={(p) => (p.data.i < 0 ? `selected-${p.data.i}` : ds.row_ids[p.data.i])}
+        isFullWidthRow={(p) => (p.rowNode.data?.i ?? 0) < 0}
+        fullWidthCellRenderer={SelectedGroupRow}
+        fullWidthCellRendererParams={groupParams}
+        getRowClass={getRowClass}
+        rowHeight={ROW_HEIGHT[density]}
+        getRowHeight={getRowHeight}
+        suppressCellFocus
+        // Rows stay in the DOM in their shown order, so Tab through the cell buttons follows
+        // a sort or a re-pin.
+        ensureDomOrder
+        animateRows={false}
+        localeText={NO_ROWS}
+      />
     </div>
   );
 }

@@ -328,7 +328,7 @@ function Workbench({
   }
 
   return (
-    <div className="flex h-[calc(100dvh-4.5rem)] min-h-[560px] flex-col gap-2">
+    <div className="flex flex-col gap-2">
       {/* Always mounted, so screen readers announce the notes when they appear. */}
       <output className="sr-only">{[note, removedNote].filter(Boolean).join(" ")}</output>
       {runnable(entries).map((e) => (
@@ -414,7 +414,7 @@ function Workbench({
               </NoRowsMatch>
             }
             table={
-              <div className="flex h-full flex-col">
+              <>
                 <SelectionStrip ds={ds} />
                 <WorkbenchTable
                   ref={tableRef}
@@ -422,7 +422,7 @@ function Workbench({
                   actions={<SaveCollectionButton ds={ds} />}
                   onOpenCurves={openCurves}
                 />
-              </div>
+              </>
             }
             rail={<FilterRail ds={ds} labels={seenLabels} />}
             editor={
@@ -673,14 +673,14 @@ const initialPanels = (ds: Dataset) => defaultPanels(ds).map((p) => makePanel(p.
 
 export function LoadingSkeleton() {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2" aria-busy="true" aria-label="Loading">
+    <div className="flex flex-col gap-2" aria-busy="true" aria-label="Loading">
       <Skeleton className="h-8 w-full" />
-      <div className="flex min-h-0 flex-1 gap-3">
+      <div className="flex gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <Skeleton className="flex-[3]" />
-          <Skeleton className="flex-[2]" />
+          <Skeleton className="h-[max(320px,45dvh)]" />
+          <Skeleton className="h-64" />
         </div>
-        <Skeleton className="hidden w-72 xl:block" />
+        <Skeleton className="hidden h-96 w-72 xl:block" />
       </div>
     </div>
   );

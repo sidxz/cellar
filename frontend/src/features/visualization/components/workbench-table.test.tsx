@@ -1,6 +1,6 @@
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { createRef, useEffect } from "react";
+import { type ReactNode, createRef, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { crossProtocol } from "../lib/cross-protocol-fixture";
 import type { Filter } from "../lib/filters";
@@ -60,11 +60,14 @@ const show = (
     table = ds,
     ref,
     onOpenCurves = vi.fn(),
+    extra,
   }: {
     filters?: Filter[];
     table?: Dataset;
     ref?: React.Ref<WorkbenchTableHandle>;
     onOpenCurves?: (key: string, i: number) => void;
+    /** Rendered inside the provider, beside the table. */
+    extra?: ReactNode;
   } = {},
 ) =>
   render(
@@ -72,12 +75,43 @@ const show = (
     <TooltipProvider>
       <WorkbenchProvider initialPanels={[]} initialFilters={filters}>
         <Seed ids={selected} />
-        <div style={{ height: 600 }}>
-          <WorkbenchTable ds={table} ref={ref} onOpenCurves={onOpenCurves} />
-        </div>
+        {extra}
+        <WorkbenchTable ds={table} ref={ref} onOpenCurves={onOpenCurves} />
       </WorkbenchProvider>
     </TooltipProvider>,
   );
+
+function ApplyFilters({ filters }: { filters: Filter[] }) {
+  const setFilters = useWorkbench((s) => s.setFilters);
+  return (
+    <button type="button" onClick={() => setFilters(filters)}>
+      Apply filters
+    </button>
+  );
+}
+
+/** ``n`` sample wells: the first 150 samples, the rest blanks. */
+const many = (n: number): Dataset => {
+  const rowIds = Array.from({ length: n }, (_, i) => `w${i}`);
+  return {
+    ...ds,
+    row_count: n,
+    row_ids: rowIds,
+    columns: [
+      col("compound", "category"),
+      col("molecule_id", "text", { hidden: true }),
+      col("well_type", "category"),
+    ],
+    values: {
+      compound: rowIds.map((_, i) => `CEL-${i}`),
+      molecule_id: rowIds.map((_, i) => `m${i}`),
+      well_type: rowIds.map((_, i) => (i < 150 ? "sample" : "blank")),
+    },
+  };
+};
+
+const pageSummary = () =>
+  document.querySelector(".ag-paging-row-summary-panel")?.textContent?.replace(/\s+/g, " ").trim();
 
 /** Lines of the table's CSV export (the displayed columns, in order). */
 async function exportedCsv(ref: React.RefObject<WorkbenchTableHandle | null>): Promise<string[]> {
@@ -248,6 +282,56 @@ describe("WorkbenchTable", () => {
     expect((await exportedCsv(ref))[0]).toBe(
       '"Compound","Primary · pIC50","Counter · pIC50","Tested in Counter","Δ (Primary · pIC50) − (Counter · pIC50)"',
     );
+  });
+
+  it("flows with the page in pages of 100 rows, 50 to 500 on offer", async () => {
+    const { container } = show([], { table: many(250) });
+    // No inner scroll box: the grid is as tall as its rows.
+    expect(container.querySelector(".ag-root-wrapper")).toHaveClass("ag-layout-auto-height");
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
+    fireEvent.mouseDown(screen.getByRole("combobox", { name: "Page Size" }));
+    expect(screen.getAllByRole("option").map((o) => o.textContent?.trim())).toEqual([
+      "50",
+      "100",
+      "250",
+      "500",
+    ]);
+  });
+
+  const samples: Filter = {
+    id: "s",
+    kind: "category",
+    key: "well_type",
+    values: ["sample"],
+    includeMissing: false,
+  };
+
+  it("starts over at page 1 when the filters take the current page away", async () => {
+    show([], { table: many(250), extra: <ApplyFilters filters={[samples]} /> });
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
+    fireEvent.click(screen.getByRole("button", { name: "Last Page" }));
+    await vi.waitFor(() => expect(pageSummary()).toBe("201 to 250 of 250"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 150"));
+  });
+
+  it("keeps the current page while it still exists", async () => {
+    show([], { table: many(250), extra: <ApplyFilters filters={[samples]} /> });
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
+    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
+    await vi.waitFor(() => expect(pageSummary()).toBe("101 to 200 of 250"));
+    fireEvent.click(screen.getByRole("button", { name: "Apply filters" }));
+    await vi.waitFor(() => expect(pageSummary()).toBe("101 to 150 of 150"));
+  });
+
+  it("brings the top of the table into view when the page changes below it", async () => {
+    const { container } = show([], { table: many(250) });
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
+    const table = container.querySelector(".viz-table") as HTMLElement;
+    table.scrollIntoView = vi.fn();
+    vi.spyOn(table, "getBoundingClientRect").mockReturnValue({ top: -800 } as DOMRect);
+    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
+    await vi.waitFor(() => expect(table.scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
   });
 
   it("drops structures in compact density", async () => {

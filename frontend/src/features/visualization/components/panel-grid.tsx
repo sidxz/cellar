@@ -11,14 +11,15 @@ import { RGroupMatrixPanel } from "./panels/rgroup-matrix-panel";
 import { ScatterPanel } from "./panels/scatter-panel";
 
 /** The plots area: up to four panels in a 2×2 grid (a lone or odd last panel spans the
- * width), only the maximized one while one is, or an "Add plot" call to action. */
+ * width), only the maximized one — taller — while one is, or an "Add plot" call to action.
+ * The page scrolls, so each row takes a share of the viewport's height. */
 export function PanelGrid({ ds, onEdit }: { ds: Dataset; onEdit: OnEditPanel }) {
   const panels = useWorkbench((s) => s.panels);
   const maximized = useWorkbench((s) => s.maximized);
   const shown = maximized ? panels.filter((p) => p.id === maximized) : panels;
 
   return (
-    <div className="flex h-full flex-col gap-2 p-2">
+    <div className="flex flex-col gap-2 p-2">
       {!numericValueColumn(ds) && (
         <p className="rounded-md border border-dashed p-2 text-sm text-muted-foreground">
           No numeric fields to plot — showing well counts by category. The table still lists every
@@ -26,14 +27,15 @@ export function PanelGrid({ ds, onEdit }: { ds: Dataset; onEdit: OnEditPanel }) 
         </p>
       )}
       {shown.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-3">
+        <div className="flex flex-col items-center justify-center gap-3 py-12">
           <p className="text-sm text-muted-foreground">No plots yet</p>
           <AddPlotMenu ds={ds} />
         </div>
       ) : (
         <div
           className={cn(
-            "grid min-h-0 flex-1 auto-rows-fr gap-2",
+            "grid gap-2",
+            maximized ? "auto-rows-[max(420px,75dvh)]" : "auto-rows-[max(320px,45dvh)]",
             shown.length > 1 && "lg:grid-cols-2 lg:[&>:last-child:nth-child(odd)]:col-span-2",
           )}
         >
