@@ -1,7 +1,7 @@
 import type { OverlayConfig, PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 import type { Facet, Figure } from "../traces/common";
-import { drawLimits, drawLipe, drawRefLine } from "./lines";
+import { drawLimits, drawLipe, drawRefLine, drawSelectivity } from "./lines";
 import { type OverlayKind, overlayOptions } from "./options";
 import { drawBands, drawDriftBands, drawTrends, drawZPrime } from "./qc";
 
@@ -27,6 +27,7 @@ const DRAW: Partial<Record<OverlayKind, Draw>> = {
   refLine: drawRefLine,
   limits: drawLimits,
   lipe: drawLipe,
+  selectivity: drawSelectivity,
 };
 
 /** The kinds ``o`` switches on (empty lists and unset values are off). */

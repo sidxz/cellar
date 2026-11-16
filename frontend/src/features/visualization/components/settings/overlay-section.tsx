@@ -128,30 +128,61 @@ export function OverlaySection({ ds, panelId }: { ds: Dataset; panelId: string }
         />
       )}
 
-      {options.lipe && (
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <Label htmlFor={id("lipe")} className="text-xs font-normal">
-              LipE guides
-            </Label>
-            <CommitInput
-              id={id("lipe")}
-              placeholder="e.g. 3, 5"
-              value={(o.lipe ?? []).join(", ")}
-              disabled={Boolean(reason("lipe"))}
-              aria-describedby={reason("lipe") ? id("lipe-reason") : undefined}
-              onCommit={(text) => {
-                const lipe = parseNumberList(text);
-                if (lipe.join() !== (o.lipe ?? []).join()) {
-                  set({ lipe: lipe.length ? lipe : undefined });
-                }
-              }}
+      {(["lipe", "selectivity"] as const).map(
+        (kind) =>
+          options[kind] && (
+            <NumberList
+              key={kind}
+              id={id(kind)}
+              label={kind === "lipe" ? "LipE guides" : "Selectivity folds"}
+              placeholder={kind === "lipe" ? "e.g. 3, 5" : "e.g. 10, 100"}
+              values={o[kind]}
+              reason={reason(kind)}
+              onChange={(values) => set({ [kind]: values })}
             />
-          </div>
-          {reason("lipe") && <Hint id={id("lipe-reason")}>{reason("lipe")}</Hint>}
-        </div>
+          ),
       )}
     </section>
+  );
+}
+
+/** A list of values typed comma or space separated (LipE values, selectivity folds); an
+ * unchanged list commits nothing, an empty one turns the overlay off. */
+function NumberList({
+  id,
+  label,
+  placeholder,
+  values = [],
+  reason,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  values?: number[];
+  reason?: string;
+  onChange: (values: number[] | undefined) => void;
+}) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2">
+        <Label htmlFor={id} className="text-xs font-normal">
+          {label}
+        </Label>
+        <CommitInput
+          id={id}
+          placeholder={placeholder}
+          value={values.join(", ")}
+          disabled={Boolean(reason)}
+          aria-describedby={reason ? `${id}-reason` : undefined}
+          onCommit={(text) => {
+            const next = parseNumberList(text);
+            if (next.join() !== values.join()) onChange(next.length ? next : undefined);
+          }}
+        />
+      </div>
+      {reason && <Hint id={`${id}-reason`}>{reason}</Hint>}
+    </div>
   );
 }
 

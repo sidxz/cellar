@@ -1,5 +1,6 @@
 import type { OverlayConfig, PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
+import { isCrossProtocol } from "../cross-protocol";
 import { column } from "../dataset";
 
 /** An overlay a plot can draw: a config key, or one of the two drift modes. */
@@ -43,6 +44,14 @@ export function overlayOptions(
       : p.x !== "logp"
         ? "Set X to logP"
         : linear(p.logX, p.logY);
+  }
+  if (scatter && isCrossProtocol(ds)) {
+    const twoProtocols =
+      // isP() with no column reads Y, so X is checked to exist first.
+      !!xCol && isP(xCol) && isP() && xCol.provenance.protocol_id !== yCol?.provenance.protocol_id;
+    out.selectivity = twoProtocols
+      ? linear(p.logX, p.logY)
+      : "Plot a p-potency from each protocol on X and Y";
   }
   return out;
 }

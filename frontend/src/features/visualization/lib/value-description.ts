@@ -1,6 +1,7 @@
 import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
 import { formatCount, formatMeasurementValue } from "@/shared/lib/format-number";
 import type { Dataset } from "../types";
+import { protocolName, selectivityKeys } from "./cross-protocol";
 import { column, numberAt, siblingAt } from "./dataset";
 
 /** A table cell's number: integers as they are, the rest at 3 significant figures. */
@@ -47,7 +48,12 @@ export function describeValue(
   const withUnit = (v: number) => (c.unit ? `${sig4(v)} ${c.unit}` : sig4(v));
   const lines: string[] = [];
 
-  if (aggregation === "p") {
+  if (aggregation === "selectivity") {
+    const pair = selectivityKeys(key);
+    if (value === null || !pair) return null;
+    const [a, b] = pair.map((k) => protocolName(ds, column(ds, k)?.provenance.protocol_id ?? ""));
+    lines.push(`Δ of p-values: 1 = 10× more potent in ${a} than ${b}`);
+  } else if (aggregation === "p") {
     if (value === null) return null;
     lines.push("−log10 of the value in M");
   } else if (aggregation === "fit") {

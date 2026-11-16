@@ -2,6 +2,7 @@ import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import { formatMeasurementValue as sig } from "@/shared/lib/format-number";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
+import { protocolName } from "../cross-protocol";
 import { column } from "../dataset";
 import { type Facet, isCensored } from "../traces/common";
 import { WEBGL_ABOVE, plottedX, plottedY } from "../traces/scatter";
@@ -16,6 +17,8 @@ const REFERENCE: Line = { color: CHART_COLORS.purple, width: 1.5, dash: "solid" 
 const MEAN: Line = { color: CHART_COLORS.neutral, width: 1.2, dash: "solid" };
 const LIMIT: Line = { color: CHART_COLORS.warning, width: 1.2, dash: "dash" };
 const LIPE: Line = { color: CHART_COLORS.neutral, width: 1, dash: "dot" };
+const PARITY: Line = { color: CHART_COLORS.neutral, width: 1, dash: "dot" };
+const FOLD: Line = { color: CHART_COLORS.primary, width: 1, dash: "dash" };
 const OUTSIDE = "outside-limits";
 
 /** A line shape in ``line``'s style; the first of each ``name`` takes the legend. */
@@ -161,8 +164,69 @@ export function drawLimits(
   return parts({ traces, shapes, annotations, notes });
 }
 
-/** Dotted LipE guides (pIC50 = logP + LipE) clipped to each facet's plotted points, so
- * they never stretch the axes. */
+type Box = { x0: number; x1: number; y0: number; y1: number };
+
+/** The box around the points the scatter plots in ``f``; null when it plots none. */
+function pointsBox(ds: Dataset, p: PanelConfig, mask: Uint8Array, f: Facet): Box | null {
+  const rows = plottedRows(ds, p, mask, f);
+  if (rows.length === 0) return null;
+  const xAt = plottedX(ds, p);
+  const yAt = plottedY(ds, p);
+  // A loop, not Math.min(...xs): a spread of 100k rows overflows the stack.
+  const box = {
+    x0: Number.POSITIVE_INFINITY,
+    x1: Number.NEGATIVE_INFINITY,
+    y0: Number.POSITIVE_INFINITY,
+    y1: Number.NEGATIVE_INFINITY,
+  };
+  for (const i of rows) {
+    const x = xAt(i) as number;
+    const y = yAt(i) as number;
+    box.x0 = Math.min(box.x0, x);
+    box.x1 = Math.max(box.x1, x);
+    box.y0 = Math.min(box.y0, y);
+    box.y1 = Math.max(box.y1, y);
+  }
+  return box;
+}
+
+/** A diagonal guide: ``y = x + offset``, labeled ``text``; ``key`` names the value it draws. */
+type Diagonal = { offset: number; text: string; line: Line; key: number };
+
+/** ``guides`` clipped to each facet's plotted points (so they never stretch the axes), each
+ * labeled at its upper end, one legend entry ``name``; ``hit`` holds the keys drawn anywhere
+ * and ``plotted`` whether any facet plots a point. */
+function drawDiagonals(
+  ds: Dataset,
+  p: PanelConfig,
+  mask: Uint8Array,
+  facets: Facet[],
+  name: string,
+  guides: Diagonal[],
+) {
+  const shown = new Set<string>();
+  const hit = new Set<number>();
+  const shapes: Mark[] = [];
+  const annotations: Mark[] = [];
+  let plotted = false;
+  for (const f of facets) {
+    const box = pointsBox(ds, p, mask, f);
+    if (!box) continue;
+    plotted = true;
+    for (const g of guides) {
+      const seg = clipDiagonal(g.offset, box);
+      if (!seg) continue;
+      hit.add(g.key);
+      const [x0, y0, x1, y1] = seg;
+      const place = { xref: f.xaxis, yref: f.yaxis };
+      shapes.push(mark(name, shown, { ...place, x0, y0, x1, y1 }, g.line));
+      annotations.push(label(g.text, { ...place, x: x1, y: y1 }, g.line));
+    }
+  }
+  return { shapes, annotations, hit, plotted };
+}
+
+/** Dotted LipE guides (pIC50 = logP + LipE) clipped to each facet's plotted points. */
 export function drawLipe(
   ds: Dataset,
   p: PanelConfig,
@@ -170,45 +234,58 @@ export function drawLipe(
   facets: Facet[],
 ): OverlayParts {
   const values = [...new Set(p.overlays?.lipe ?? [])];
-  const xAt = plottedX(ds, p);
-  const yAt = plottedY(ds, p);
-  const name = "LipE guides";
-  const shown = new Set<string>();
-  const hit = new Set<number>();
-  const shapes: Mark[] = [];
-  const annotations: Mark[] = [];
-  let plotted = false;
-  for (const f of facets) {
-    const rows = plottedRows(ds, p, mask, f);
-    if (rows.length === 0) continue;
-    plotted = true;
-    // A loop, not Math.min(...xs): a spread of 100k rows overflows the stack.
-    const box = {
-      x0: Number.POSITIVE_INFINITY,
-      x1: Number.NEGATIVE_INFINITY,
-      y0: Number.POSITIVE_INFINITY,
-      y1: Number.NEGATIVE_INFINITY,
-    };
-    for (const i of rows) {
-      const x = xAt(i) as number;
-      const y = yAt(i) as number;
-      box.x0 = Math.min(box.x0, x);
-      box.x1 = Math.max(box.x1, x);
-      box.y0 = Math.min(box.y0, y);
-      box.y1 = Math.max(box.y1, y);
-    }
-    for (const v of values) {
-      const seg = clipDiagonal(v, box);
-      if (!seg) continue;
-      hit.add(v);
-      const [x0, y0, x1, y1] = seg;
-      const place = { xref: f.xaxis, yref: f.yaxis };
-      shapes.push(mark(name, shown, { ...place, x0, y0, x1, y1 }, LIPE));
-      annotations.push(label(`LipE ${sig(v)}`, { ...place, x: x1, y: y1 }, LIPE));
-    }
-  }
+  const guides = values.map((v) => ({ offset: v, text: `LipE ${sig(v)}`, line: LIPE, key: v }));
+  const { shapes, annotations, hit, plotted } = drawDiagonals(
+    ds,
+    p,
+    mask,
+    facets,
+    "LipE guides",
+    guides,
+  );
   const notes = plotted
     ? values.filter((v) => !hit.has(v)).map((v) => `LipE ${sig(v)} lies outside the plotted points`)
     : [];
+  return parts({ shapes, annotations, notes });
+}
+
+/** Selectivity guides on a p-potency × p-potency scatter of two protocols: parity (1×) and,
+ * per fold k, y = x ± log10 k, each saying for which protocol the points beyond it are at
+ * least k× selective. Clipped to the measured pairs. */
+export function drawSelectivity(
+  ds: Dataset,
+  p: PanelConfig,
+  mask: Uint8Array,
+  facets: Facet[],
+): OverlayParts {
+  const values = [...new Set(p.overlays?.selectivity ?? [])];
+  const folds = values.filter((k) => k > 1);
+  const protocolOf = (key?: string) =>
+    protocolName(ds, (key && column(ds, key)?.provenance.protocol_id) || "");
+  const guides: Diagonal[] = [{ offset: 0, text: "1×", line: PARITY, key: 1 }];
+  for (const k of folds) {
+    const offset = Math.log10(k);
+    const text = (side?: string) => `≥${sig(k)}× selective for ${protocolOf(side)}`;
+    guides.push({ offset, text: text(p.y), line: FOLD, key: k });
+    guides.push({ offset: -offset, text: text(p.x), line: FOLD, key: k });
+  }
+  const { shapes, annotations, hit, plotted } = drawDiagonals(
+    ds,
+    p,
+    mask,
+    facets,
+    "Selectivity guides",
+    guides,
+  );
+  const notes = [
+    ...values
+      .filter((k) => !(k > 1))
+      .map((k) => `Selectivity fold ${sig(k)} left out: folds start above 1`),
+    ...(plotted
+      ? folds
+          .filter((k) => !hit.has(k))
+          .map((k) => `${sig(k)}× guides lie outside the measured pairs`)
+      : []),
+  ];
   return parts({ shapes, annotations, notes });
 }

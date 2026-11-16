@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { crossProtocol } from "../../lib/cross-protocol-fixture";
 import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
 import { DEFAULT_APPEARANCE, type PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
@@ -115,5 +116,21 @@ describe("ScatterPanel", () => {
     lasso(0, 2);
     expect(screen.getByTestId("sel")).toHaveTextContent("w0,w2");
     expect(drawn().layout.selectionrevision).toBe(after);
+  });
+
+  it("keeps untested compounds on a selectable strip and counts measured pairs", () => {
+    const pair = { ...panel, x: "dr:y:p", y: "dr:x:p" };
+    render(
+      <WorkbenchProvider initialPanels={[pair]}>
+        <ScatterPanel panel={pair} ds={crossProtocol} />
+        <Selection />
+      </WorkbenchProvider>,
+    );
+    expect(
+      screen.getByText("1 measured pair · 1 not tested in Counter · 1 no value"),
+    ).toBeInTheDocument();
+    expect(drawn().data.at(-1)).toMatchObject({ xaxis: "x2", customdata: [1, 2] });
+    lasso(1);
+    expect(screen.getByTestId("sel")).toHaveTextContent("m2");
   });
 });

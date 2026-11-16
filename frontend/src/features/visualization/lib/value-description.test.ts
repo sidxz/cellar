@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
+import { crossProtocol } from "./cross-protocol-fixture";
 import { curveSnapshotAt, describeValue, inactiveBadge } from "./value-description";
 
 const numericProv = (aggregation: string, stat?: string) => ({
@@ -183,6 +184,15 @@ describe("describeValue", () => {
       title: "Enzyme · pIC50",
       lines: ["−log10 of the value in M"],
     });
+  });
+
+  it("explains a selectivity Δ by the protocols it compares", () => {
+    const key = "sel:dr:x:p|dr:y:p";
+    expect(describeValue(crossProtocol, key, 0)).toEqual({
+      title: "Δ (Primary · pIC50) − (Counter · pIC50)",
+      lines: ["Δ of p-values: 1 = 10× more potent in Primary than Counter"],
+    });
+    expect(describeValue(crossProtocol, key, 1)).toBeNull();
   });
 
   it("explains one run's fit with its 95% CI, and its replicate mean", () => {

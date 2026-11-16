@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset } from "../types";
-import { MAX_PINNED, orderTableRows, pinnedBlock } from "./table-rows";
+import { MAX_PINNED, nullsLast, orderTableRows, pinnedBlock } from "./table-rows";
 
 const ds: Dataset = {
   revision: "r",
@@ -42,5 +42,17 @@ describe("pinnedBlock", () => {
 
   it("shows nothing while collapsed", () => {
     expect(pinnedBlock(many, true)).toEqual({ shown: [], more: 0 });
+  });
+});
+
+describe("nullsLast", () => {
+  /** Sorts as the grid does: descending negates the comparator's answer. */
+  const sorted = (values: (number | null)[], desc: boolean) =>
+    [...values].sort((a, b) => (desc ? -1 : 1) * nullsLast(a, b, undefined, undefined, desc));
+
+  it("ranks values and keeps missing ones last in both directions", () => {
+    expect(sorted([3, null, 1], false)).toEqual([1, 3, null]);
+    expect(sorted([3, null, 1], true)).toEqual([3, 1, null]);
+    expect(sorted([null, 2, null, -1], true)).toEqual([2, -1, null, null]);
   });
 });

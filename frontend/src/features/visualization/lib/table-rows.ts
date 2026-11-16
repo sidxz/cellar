@@ -32,3 +32,19 @@ export function pinnedBlock(
   const shown = collapsed ? [] : pinned.slice(0, MAX_PINNED);
   return { shown, more: collapsed ? 0 : pinned.length - shown.length };
 }
+
+/** A grid comparator ranking numbers with missing values last whichever way the column is
+ * sorted (the grid negates the answer when sorting descending). */
+export function nullsLast(
+  a: number | null,
+  b: number | null,
+  _nodeA: unknown,
+  _nodeB: unknown,
+  descending: boolean,
+): number {
+  if (a === null || b === null) {
+    if (a === b) return 0;
+    return (a === null ? 1 : -1) * (descending ? -1 : 1);
+  }
+  return a - b;
+}

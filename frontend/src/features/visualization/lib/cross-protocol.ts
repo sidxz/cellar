@@ -18,6 +18,13 @@ export function selectivityKeys(key: string): [string, string] | null {
   return bar < 0 ? null : [key.slice(4, bar), key.slice(bar + 1)];
 }
 
+/** Whether ``key`` is a number a loaded protocol measured, or a Δ between two, in a
+ * cross-protocol dataset: a value whose absence has a reason ("Not tested in …"). */
+export function isComparedValue(ds: Dataset, key: string | undefined): boolean {
+  const c = key && isCrossProtocol(ds) ? column(ds, key) : undefined;
+  return c?.kind === "number" && (!!c.provenance.readout_definition_id || !!selectivityKeys(c.key));
+}
+
 /** "Not tested in {protocol}" when row ``i`` was not tested in a protocol column ``key``
  * reads (for a Δ: either of its inputs), else null. */
 function notTested(ds: Dataset, key: string, i: number): string | null {

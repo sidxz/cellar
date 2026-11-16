@@ -2,6 +2,7 @@ import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { crossProtocol } from "../lib/cross-protocol-fixture";
 import type { Filter } from "../lib/filters";
 import { provenanceOf } from "../lib/traces/test-fixtures";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
@@ -208,6 +209,44 @@ describe("WorkbenchTable", () => {
         "CEL-2",
         "CEL-3",
       ]),
+    );
+  });
+
+  it("ranks compared values with missing ones last both ways, saying why they are missing", async () => {
+    const ranked: Dataset = {
+      ...crossProtocol,
+      values: {
+        ...crossProtocol.values,
+        "dr:y:p": [5, null, 6],
+        "sel:dr:x:p|dr:y:p": [2, null, 0.5],
+      },
+    };
+    const ref = createRef<WorkbenchTableHandle>();
+    const { container } = show([], { table: ranked, ref });
+    await screen.findByText("C1");
+    // Protocol names head their groups; the columns under them drop the prefix.
+    const headers = [...container.querySelectorAll(".ag-header-group-text, .ag-header-cell-text")];
+    expect(headers.map((h) => h.textContent).filter(Boolean)).toEqual([
+      "Compound",
+      "Primary",
+      "Counter",
+      "Selectivity",
+      "pIC50",
+      "pIC50",
+      "Tested in Counter",
+      "Δ (Primary · pIC50) − (Counter · pIC50)",
+    ]);
+    // C2 in Counter and its Δ.
+    expect(screen.getAllByText("not tested in Counter")).toHaveLength(2);
+    const sel = container.querySelector('.ag-header-cell[col-id="sel:dr:x:p|dr:y:p"]');
+    const order = () => screen.getAllByText(/^C\d$/).map((c) => c.textContent);
+    fireEvent.click(sel?.querySelector(".ag-header-cell-label") as Element);
+    await vi.waitFor(() => expect(order()).toEqual(["C3", "C1", "C2"]));
+    fireEvent.click(sel?.querySelector(".ag-header-cell-label") as Element);
+    await vi.waitFor(() => expect(order()).toEqual(["C1", "C3", "C2"]));
+    // The export keeps each column's full label.
+    expect((await exportedCsv(ref))[0]).toBe(
+      '"Compound","Primary · pIC50","Counter · pIC50","Tested in Counter","Δ (Primary · pIC50) − (Counter · pIC50)"',
     );
   });
 

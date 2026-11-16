@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { crossProtocol, singleProtocol } from "../../lib/cross-protocol-fixture";
 import { dataset, panel } from "../../lib/traces/test-fixtures";
 import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
 import type { PanelConfig, PanelPatch } from "../../store/workbench-store";
@@ -168,6 +169,28 @@ describe("OverlaySection", () => {
     const lipe = screen.getByRole("textbox", { name: "LipE guides" });
     expect(lipe).toBeDisabled();
     expect(lipe).toHaveAccessibleDescription("Set X to logP");
+  });
+
+  it("takes selectivity folds when protocols are compared, starting empty", () => {
+    show(scatter({ x: "dr:y:p", y: "dr:x:p" }), crossProtocol);
+    const folds = screen.getByRole("textbox", { name: "Selectivity folds" });
+    expect(folds).toHaveValue("");
+    expect(folds).toHaveAttribute("placeholder", "e.g. 10, 100");
+    enter(folds, "10, 100");
+    expect(state().panel.overlays).toEqual({ selectivity: [10, 100] });
+    expect(state().history).toBe(1);
+  });
+
+  it("says why selectivity guides cannot be drawn yet", () => {
+    show(scatter({ x: "sel:dr:x:p|dr:y:p", y: "dr:x:p" }), crossProtocol);
+    const folds = screen.getByRole("textbox", { name: "Selectivity folds" });
+    expect(folds).toBeDisabled();
+    expect(folds).toHaveAccessibleDescription("Plot a p-potency from each protocol on X and Y");
+  });
+
+  it("offers no selectivity folds for one protocol", () => {
+    show(scatter({ x: "dr:y:p", y: "dr:x:p" }), singleProtocol);
+    expect(screen.queryByRole("textbox", { name: "Selectivity folds" })).not.toBeInTheDocument();
   });
 
   it("draws control limits from plotted points or entered ones, refusing Lower ≥ Upper", () => {

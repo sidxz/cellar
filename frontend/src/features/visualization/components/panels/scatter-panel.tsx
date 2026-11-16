@@ -10,6 +10,7 @@ import { useMemo, useRef } from "react";
 import { flushSync } from "react-dom";
 import { usePassMask } from "../../hooks/use-pass-mask";
 import { buildOverlays, mergeOverlays } from "../../lib/overlays/build";
+import { addMissingStrip } from "../../lib/traces/missing-strip";
 import {
   type PointEvent,
   buildScatterBase,
@@ -53,10 +54,10 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
   const dark = resolvedTheme === "dark";
   const { revision, own } = useSelectionRevision(selection);
 
-  // The costly part (coordinates, colors, hover text, overlays) waits for a data or
+  // The costly part (coordinates, colors, hover text, untested strip, overlays) waits for a data or
   // settings change; a selection only lays its marks on top.
   const base = useMemo(() => {
-    const fig = buildScatterBase(ds, panel, mask, dark);
+    const { fig } = addMissingStrip(buildScatterBase(ds, panel, mask, dark), ds, panel, mask, dark);
     return mergeOverlays(fig, buildOverlays(ds, panel, mask, fig.facets ?? []));
   }, [ds, panel, mask, dark]);
   const fig = useMemo(() => selectScatter(base, ds, selection), [base, ds, selection]);

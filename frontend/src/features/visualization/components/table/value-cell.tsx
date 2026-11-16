@@ -2,6 +2,8 @@
 
 import { Badge } from "@/shared/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { cn } from "@/shared/lib/utils";
+import { isComparedValue, missingReason } from "../../lib/cross-protocol";
 import { numberAt, siblingAt } from "../../lib/dataset";
 import { cellText, describeValue, inactiveBadge, qualifierText } from "../../lib/value-description";
 import type { Dataset } from "../../types";
@@ -12,7 +14,16 @@ import type { Dataset } from "../../types";
 export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; i: number }) {
   const v = numberAt(ds, valueKey, i);
   const q = qualifierText(siblingAt(ds, valueKey, "q", i));
-  const text = v === null ? "—" : `${q ? `${q} ` : ""}${cellText(v)}`;
+  // A compared protocol's blank says why: "not tested in Counter", "no value".
+  const missing =
+    v === null && isComparedValue(ds, valueKey) ? missingReason(ds, valueKey, i) : null;
+  const text =
+    v !== null
+      ? `${q ? `${q} ` : ""}${cellText(v)}`
+      : missing
+        ? missing[0].toLowerCase() + missing.slice(1)
+        : "—";
+  const muted = missing && "text-xs text-muted-foreground";
   const about = describeValue(ds, valueKey, i);
   const badge = inactiveBadge(ds, valueKey, i);
   return (
@@ -24,7 +35,10 @@ export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; 
             <button
               type="button"
               aria-label={`${text}, how ${about.title} was computed`}
-              className="rounded-sm px-0.5 tabular-nums underline decoration-dotted underline-offset-4 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn(
+                "rounded-sm px-0.5 tabular-nums underline decoration-dotted underline-offset-4 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                muted,
+              )}
             >
               {text}
             </button>
@@ -39,7 +53,7 @@ export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; 
           </PopoverContent>
         </Popover>
       ) : (
-        <span>{text}</span>
+        <span className={cn(muted)}>{text}</span>
       )}
     </div>
   );

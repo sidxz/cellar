@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { Dataset, DatasetColumn } from "../types";
 import {
+  isComparedValue,
   isCrossProtocol,
   isTestedInAll,
   missingReason,
@@ -11,60 +11,11 @@ import {
   testedInAllFilters,
   testedKey,
 } from "./cross-protocol";
+import { crossProtocol, singleProtocol } from "./cross-protocol-fixture";
 import { newFilter } from "./filters";
 
-const p = (key: string, label: string, protocolId: string): DatasetColumn => ({
-  key,
-  label,
-  kind: "number",
-  group: label.split(" · ")[0],
-  provenance: {
-    protocol_id: protocolId,
-    readout_definition_id: key.split(":")[1],
-    aggregation: "p",
-  },
-});
-
-/** Protocol A ("Primary") owns the rows; B ("Counter") is compared: m1 tested in both with
- * values, m2 not tested in B, m3 tested in B without a value. */
-const ds: Dataset = {
-  revision: "r",
-  level: "compounds",
-  row_count: 3,
-  row_ids: ["m1", "m2", "m3"],
-  protocols: [
-    { protocol_id: "A", name: "Primary" },
-    { protocol_id: "B", name: "Counter" },
-  ],
-  columns: [
-    { key: "compound", label: "Compound", kind: "text", provenance: {} },
-    p("dr:x:p", "Primary · pIC50", "A"),
-    {
-      key: "tested:B",
-      label: "Tested in Counter",
-      kind: "category",
-      group: "Counter",
-      provenance: { protocol_id: "B" },
-    },
-    p("dr:y:p", "Counter · pIC50", "B"),
-    {
-      key: "sel:dr:x:p|dr:y:p",
-      label: "Δ (Primary · pIC50) − (Counter · pIC50)",
-      kind: "number",
-      unit: "log units",
-      group: "Selectivity",
-      provenance: { aggregation: "selectivity" },
-    },
-  ],
-  values: {
-    compound: ["C1", "C2", "C3"],
-    "dr:x:p": [7, 6, 6.5],
-    "tested:B": ["Tested", "Not tested", "Tested"],
-    "dr:y:p": [5, null, null],
-    "sel:dr:x:p|dr:y:p": [2, null, null],
-  },
-};
-const single: Dataset = { ...ds, protocols: [{ protocol_id: "A", name: "Primary" }] };
+const ds = crossProtocol;
+const single = singleProtocol;
 const all = new Uint8Array(3).fill(1);
 
 describe("cross-protocol datasets", () => {
@@ -72,6 +23,14 @@ describe("cross-protocol datasets", () => {
     expect(isCrossProtocol(ds)).toBe(true);
     expect(isCrossProtocol(single)).toBe(false);
     expect(isCrossProtocol({ ...ds, protocols: undefined })).toBe(false);
+  });
+
+  it("knows the values whose absence has a reason", () => {
+    expect(isComparedValue(ds, "dr:y:p")).toBe(true);
+    expect(isComparedValue(ds, "sel:dr:x:p|dr:y:p")).toBe(true);
+    expect(isComparedValue(ds, "tested:B")).toBe(false);
+    expect(isComparedValue(ds, "compound")).toBe(false);
+    expect(isComparedValue(single, "dr:y:p")).toBe(false);
   });
 
   it("names protocols, never by id", () => {

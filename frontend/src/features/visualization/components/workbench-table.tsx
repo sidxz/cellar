@@ -34,8 +34,9 @@ import {
   useState,
 } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
+import { isComparedValue } from "../lib/cross-protocol";
 import { categoryLabel, column, numberAt } from "../lib/dataset";
-import { orderTableRows, pinnedBlock } from "../lib/table-rows";
+import { nullsLast, orderTableRows, pinnedBlock } from "../lib/table-rows";
 import { cellText, qualifierText } from "../lib/value-description";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset, DatasetColumn } from "../types";
@@ -159,8 +160,19 @@ function SelectedGroupRow({
   );
 }
 
+/** A column's header under its group: the group says what the "{group} · " prefix would. */
+const shortLabel = (c: DatasetColumn) =>
+  c.group && c.label.startsWith(`${c.group} · `) ? c.label.slice(c.group.length + 3) : c.label;
+
 function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
-  const base = { colId: c.key, headerName: c.label, headerTooltip: c.label, width: 120 };
+  const base = {
+    colId: c.key,
+    headerName: shortLabel(c),
+    headerTooltip: c.label,
+    width: 120,
+    // Compared values rank measured compounds only: untested ones stay last both ways.
+    ...(isComparedValue(ds, c.key) && { comparator: nullsLast }),
+  };
   if (c.kind !== "number") {
     return {
       ...base,
@@ -268,7 +280,7 @@ function curveColumn(
   if (!fit && !(aggregation === "geomean" && !layer)) return null;
   return {
     colId: `${OWN_PREFIX}curve:${c.key}`,
-    headerName: `${fit ? "Curve" : "Curves"} · ${c.label}`,
+    headerName: `${fit ? "Curve" : "Curves"} · ${shortLabel(c)}`,
     headerTooltip: `${fit ? "Curve" : "Curves"} · ${c.label}`,
     width: fit && chemistry ? 160 : 120,
     sortable: false,
@@ -426,6 +438,11 @@ export function WorkbenchTable({
           );
         const csv = api.getDataAsCsv({
           skipColumnGroupHeaders: true,
+          // Without the group row, each column keeps its full label ("Counter · pIC50").
+          processHeaderCallback: (p) =>
+            p.column.getColDef().headerTooltip ??
+            p.api.getDisplayNameForColumn(p.column, "csv") ??
+            "",
           columnKeys: api
             .getAllDisplayedColumns()
             .filter((c) => !c.getColId().startsWith(OWN_PREFIX)),

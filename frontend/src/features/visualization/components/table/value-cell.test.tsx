@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { crossProtocol } from "../../lib/cross-protocol-fixture";
 import type { Dataset, DatasetColumn } from "../../types";
 import { ValueCell } from "./value-cell";
 
@@ -87,5 +88,18 @@ describe("ValueCell", () => {
     render(<ValueCell ds={ds} valueKey="rd:s:raw" i={1} />);
     expect(screen.getByText("—")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("says why a compared protocol's value is missing", () => {
+    const { rerender } = render(<ValueCell ds={crossProtocol} valueKey="dr:y:p" i={1} />);
+    expect(screen.getByText("not tested in Counter")).toBeInTheDocument();
+    rerender(<ValueCell ds={crossProtocol} valueKey="sel:dr:x:p|dr:y:p" i={2} />);
+    expect(screen.getByText("no value")).toBeInTheDocument();
+    rerender(<ValueCell ds={crossProtocol} valueKey="sel:dr:x:p|dr:y:p" i={0} />);
+    expect(
+      screen.getByRole("button", {
+        name: "2, how Δ (Primary · pIC50) − (Counter · pIC50) was computed",
+      }),
+    ).toBeInTheDocument();
   });
 });
