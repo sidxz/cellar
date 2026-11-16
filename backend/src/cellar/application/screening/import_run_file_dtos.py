@@ -51,6 +51,8 @@ class PlatePreview:
     positive_count: int = 0
     negative_count: int = 0
     reference_count: int = 0
+    # Where the roles come from, e.g. 'this run's layout "NadD 384"'; None = nowhere.
+    roles_from: str | None = None
 
 
 @dataclass(frozen=True)
@@ -108,8 +110,11 @@ class PreviewRunFileResult:
     # Number of placeholder batches auto-created during this preview pass.
     # Always 0 when auto_create_unmatched_batches=False on the query.
     auto_created_batches: int = 0
-    # Non-blocking notes, e.g. file roles that differ from the protocol layout.
+    # Non-blocking notes, e.g. role sources that differ from one another.
     warnings: tuple[str, ...] = ()
+    # Plates whose controls read the wrong way round for the protocol's
+    # pos_control_signal — the chemist must acknowledge before importing.
+    swapped_controls: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)

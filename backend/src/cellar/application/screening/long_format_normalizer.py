@@ -180,6 +180,8 @@ class NormalizedTable:
     # Role-column values no WellType matches — the import refuses until they
     # are fixed (never read as samples). First spelling of each, in file order.
     unknown_well_roles: tuple[str, ...] = ()
+    # The mapped role column's header; None = roles come from the layouts.
+    well_role_column: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -572,6 +574,7 @@ def normalize(
             plate_formats=plate_formats,
             skipped_rows=skipped,
             unknown_well_roles=tuple(unknown_roles.values()),
+            well_role_column=mapping.well_role,
         )
     )
 

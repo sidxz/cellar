@@ -17,7 +17,9 @@ import can point it at the physical plate. Misses are silent.
 from __future__ import annotations
 
 import uuid
+from collections import Counter
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from cellar.application.auth import AuthContext
 from cellar.application.inventory.plate_reference import resolve_plate_reference
@@ -32,8 +34,14 @@ from cellar.domain.inventory.repository import RegisteredPlateRepository
 from cellar.domain.screening_assay.enums import WellType
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.run import Plate, Run, Well
-from cellar.domain.shared.enums import PlateFormat, Qualifier
+from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.value_objects import QualifiedValue
+
+if TYPE_CHECKING:
+    from cellar.application.screening.import_run_file_validator import (
+        LayoutsByFormat,
+        PlateLayout,
+    )
 
 # ---------------------------------------------------------------------------
 # Conflict reporting
@@ -99,8 +107,8 @@ class _ImportPlan:
     controls_from_template: int = 0
     controls_from_file: int = 0
     controls_unclassified: int = 0
-    # Wells whose role from the file's role column differs from the protocol layout.
-    layout_disagreements: int = 0
+    # (rank, source used, rank, lower-precedence source) -> wells whose roles differ.
+    role_disagreements: Counter[tuple[int, str, int, str]] = field(default_factory=Counter)
     create_plate_count: int = 0
     create_well_count: int = 0
     create_readout_count: int = 0
@@ -115,7 +123,7 @@ def _scan_conflicts(
     normalized: NormalizedTable,
     run: Run,
     existing_readouts: list[ReadoutData],
-    templates_by_format: dict[PlateFormat, dict[str, WellType]],
+    layouts: LayoutsByFormat,
     *,
     resolutions: Resolutions | None = None,
     rd_name_by_id: dict[uuid.UUID, str] | None = None,
@@ -179,8 +187,8 @@ def _scan_conflicts(
             continue  # defensive; plate_formats covered all names
         plate_format = normalized.plate_formats.get(row.plate_name)
 
-        per_well = templates_by_format.get(plate_format) if plate_format is not None else None
-        role = _row_role(row, per_well)
+        plate_layouts = layouts.get(plate_format, ()) if plate_format is not None else ()
+        role = _row_role(row, plate_layouts[0].roles if plate_layouts else None)
         file_well_type = role or WellType.SAMPLE
         if role is None:
             plan.controls_unclassified += 1
@@ -189,12 +197,7 @@ def _scan_conflicts(
                 plan.controls_from_file += 1
             else:
                 plan.controls_from_template += 1
-        if (
-            row.well_role is not None
-            and per_well
-            and per_well.get(_well_key(row.well), WellType.SAMPLE) != row.well_role
-        ):
-            plan.layout_disagreements += 1
+        _count_disagreements(plan, row, plate_layouts, normalized.well_role_column)
 
         # Apply the resolver's per-row decision.
         file_batch_id: uuid.UUID | None = None
@@ -371,6 +374,37 @@ def _well_metadata_mismatch(
 
 def _well_key(well: WellPosition) -> str:
     return f"{well.row}{well.column}"
+
+
+def _count_disagreements(
+    plan: _ImportPlan,
+    row: LongFormatRow,
+    plate_layouts: tuple[PlateLayout, ...],
+    role_column: str | None,
+) -> None:
+    """Count the row against every lower-precedence source that disagrees.
+
+    Sources, highest first: the file's role column, then each layout. A well a
+    layout does not mention is a sample in that layout.
+    """
+    key = _well_key(row.well)
+    # (precedence rank, phrase, role): file 0, run layout 1, protocol default 2.
+    sources = [
+        (1 if layout.of_run else 2, layout.phrase, layout.roles.get(key, WellType.SAMPLE))
+        for layout in plate_layouts
+    ]
+    if row.well_role is not None and role_column is not None:
+        sources.insert(0, (0, file_roles_phrase(role_column), row.well_role))
+    if not sources:
+        return
+    used_rank, used, used_role = sources[0]
+    for other_rank, other, other_role in sources[1:]:
+        if other_role != used_role:
+            plan.role_disagreements[(used_rank, used, other_rank, other)] += 1
+
+
+def file_roles_phrase(header: str) -> str:
+    return f'the file\'s "{header}" column'
 
 
 def _row_role(row: LongFormatRow, per_well: dict[str, WellType] | None) -> WellType | None:

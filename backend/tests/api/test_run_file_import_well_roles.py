@@ -87,10 +87,12 @@ async def test_the_files_control_state_column_beats_the_protocol_layout(
         "reference_count": 0,
         "blank_count": 0,
     }
+    assert plate["roles_from"] == 'the file\'s "Control State" column'
     assert preview["validation_errors"] == []
+    assert preview["swapped_controls"] == []
     assert preview["warnings"] == [
         'Control roles from the file\'s "Control State" column differ from the '
-        "protocol layout on 2 wells."
+        'protocol default "Layout" on 2 wells.'
     ]
 
     mapping = {

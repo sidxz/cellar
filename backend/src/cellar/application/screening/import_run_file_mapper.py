@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from cellar.application.auth import AuthContext
 from cellar.application.screening.compound_ref_resolver import (
@@ -32,16 +33,20 @@ from cellar.application.screening.compound_ref_resolver import (
     BatchSummary,
     CompoundCandidate,
 )
-from cellar.application.screening.import_plan import _row_role
+from cellar.application.screening.import_plan import _row_role, file_roles_phrase
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     LongFormatRow,
+    NormalizedTable,
     ReadoutColumn,
     SuggestedMapping,
 )
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.enums import PlateFormat, WellType
+
+if TYPE_CHECKING:
+    from cellar.application.screening.import_run_file_validator import LayoutsByFormat
 
 
 def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
@@ -235,36 +240,47 @@ def _to_ambiguous_dto(amb: AmbiguousCompound):
 
 
 def _summarize_plates(
-    rows: Iterable[LongFormatRow],
-    plate_formats: dict[str, PlateFormat],
-    templates_by_format: dict[PlateFormat, dict[str, WellType]],
+    normalized: NormalizedTable,
+    layouts: LayoutsByFormat,
 ):
-    """Per-plate well counts by role for the preview panel.
+    """Per-plate well counts by role, and where the roles come from.
 
-    Roles as the import writes them (file role column, else protocol layout);
-    a well nothing classifies counts as a blank. Returns a tuple of
-    ``PlatePreview`` — imported lazily to keep DTO definitions in one place.
+    Roles as the import writes them (file role column, else the run's own
+    layout, else the protocol default); a well nothing classifies counts as a
+    blank. Returns a tuple of ``PlatePreview`` — imported lazily to keep DTO
+    definitions in one place.
     """
     from cellar.application.screening.import_run_file_dtos import PlatePreview
 
     by_plate: dict[str, list[WellType]] = {}
-    for r in rows:
-        fmt = plate_formats.get(r.plate_name)
-        per_well = templates_by_format.get(fmt) if fmt is not None else None
-        by_plate.setdefault(r.plate_name, []).append(_row_role(r, per_well) or WellType.BLANK)
+    for r in normalized.rows:
+        plate_layouts = _plate_layouts(normalized, layouts, r.plate_name)
+        role = _row_role(r, plate_layouts[0].roles if plate_layouts else None)
+        by_plate.setdefault(r.plate_name, []).append(role or WellType.BLANK)
 
     out: list[PlatePreview] = []
     for plate, roles in sorted(by_plate.items()):
+        plate_layouts = _plate_layouts(normalized, layouts, plate)
+        if normalized.well_role_column is not None:
+            roles_from: str | None = file_roles_phrase(normalized.well_role_column)
+        else:
+            roles_from = plate_layouts[0].phrase if plate_layouts else None
         out.append(
             PlatePreview(
                 plate_name=plate,
-                plate_format=plate_formats.get(plate, PlateFormat.F96).value,
+                plate_format=normalized.plate_formats.get(plate, PlateFormat.F96).value,
                 well_count=len(roles),
                 sample_count=roles.count(WellType.SAMPLE),
                 blank_count=roles.count(WellType.BLANK),
                 positive_count=roles.count(WellType.POSITIVE_CONTROL),
                 negative_count=roles.count(WellType.NEGATIVE_CONTROL),
                 reference_count=roles.count(WellType.REFERENCE),
+                roles_from=roles_from,
             )
         )
     return tuple(out)
+
+
+def _plate_layouts(normalized: NormalizedTable, layouts: LayoutsByFormat, plate: str):
+    fmt = normalized.plate_formats.get(plate)
+    return layouts.get(fmt, ()) if fmt is not None else ()

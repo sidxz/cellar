@@ -88,7 +88,7 @@ from cellar.application.screening.import_run_file_preview_store import (
     _StoredPreview,
 )
 from cellar.application.screening.import_run_file_validator import (
-    _load_templates_by_format,
+    _load_layouts,
     _validate_well_roles,
 )
 from cellar.application.screening.long_format_normalizer import (
@@ -297,15 +297,14 @@ class ImportRunFile:
 
         # 5. Pre-flight: control-layout coverage, or known values in the
         # file's role column when it supplies the roles.
-        templates_by_format = await _load_templates_by_format(
+        layouts = await _load_layouts(
             protocol,
+            run,
             normalized.plate_formats,
             cmd.workspace_id,
             self._plate_template_repo,
         )
-        control_errors = _validate_well_roles(
-            protocol, normalized, typed_mapping, templates_by_format
-        )
+        control_errors = _validate_well_roles(protocol, normalized, layouts)
         if control_errors:
             return Failure(ValidationError("; ".join(control_errors)))
 
@@ -398,7 +397,7 @@ class ImportRunFile:
             normalized,
             run,
             existing_readouts,
-            templates_by_format,
+            layouts,
             resolutions=resolutions,
             rd_name_by_id=rd_name_by_id,
             pick_list_allowed=pick_list_allowed,

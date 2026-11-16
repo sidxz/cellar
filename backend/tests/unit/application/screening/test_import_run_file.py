@@ -22,13 +22,17 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFile,
     RepreviewRunFileQuery,
 )
+from cellar.application.screening.import_run_file_validator import _swapped_controls
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
+    NormalizedTable,
     ReadoutColumn,
     infer_mapping,
+    normalize,
 )
 from cellar.domain.screening_assay.enums import (
     HolderKind,
+    PosControlSignal,
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
@@ -2275,9 +2279,10 @@ class TestWellRoleColumn:
             plate.blank_count,
         ) == (2, 1, 1, 0, 1)
         assert preview.validation_errors == ()
+        assert plate.roles_from == 'the file\'s "Control State" column'
         assert preview.warnings == (
             'Control roles from the file\'s "Control State" column differ from the '
-            "protocol layout on 3 wells.",
+            'protocol default "Test Layout" on 3 wells.',
         )
 
     @pytest.mark.asyncio
@@ -2319,6 +2324,7 @@ class TestWellRoleColumn:
             plate.reference_count,
             plate.blank_count,
         ) == (2, 1, 1, 0, 1)
+        assert plate.roles_from == 'the protocol default "Test Layout"'
         assert preview.warnings == ()
 
     @pytest.mark.asyncio
@@ -2458,3 +2464,236 @@ class TestWellRoleColumn:
         assert isinstance(result.failure(), ValidationError)
         assert '"vehicle"' in str(result.failure())
         assert not uow.committed and run.wells == []
+
+
+# ---------------------------------------------------------------------------
+# The run's own layout (runs.plate_template_id) comes before the protocol default
+# ---------------------------------------------------------------------------
+
+
+def _run_layout(auth: FakeAuth, fmt: PlateFormat = PlateFormat.F96) -> PlateTemplate:
+    """The run's own layout: the protocol default turned around (A1 neg, A2 pos)."""
+    tmpl = _make_plate_template(
+        auth.workspace_id,
+        fmt=fmt,
+        template_map={"A1": "negative_control", "A2": "positive_control"},
+    )
+    tmpl.name = "Run Layout"
+    return tmpl
+
+
+class TestRunLayoutPrecedence:
+    async def _repreview(self, run: Run, protocol: Protocol, templates, *, well_role=None):
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(
+            run=run,
+            protocol=protocol,
+            store=store,
+            batches_by_ref={"LG-1": FakeBatch()},
+            plate_templates={t.id: t for t in templates},
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=run.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id, well_role=well_role),
+            ),
+            auth=FakeAuth(workspace_id=run.workspace_id),
+        )
+        return result.unwrap()
+
+    @pytest.mark.asyncio
+    async def test_the_runs_layout_beats_the_protocol_default(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)
+        own = _run_layout(auth)
+        run.plate_template_id = own.id
+        preview = await self._repreview(run, protocol, [default, own])
+        (plate,) = preview.plates
+        assert plate.roles_from == 'this run\'s layout "Run Layout"'
+        assert (plate.positive_count, plate.negative_count) == (1, 1)
+        assert preview.warnings == (
+            'Control roles from this run\'s layout "Run Layout" differ from the '
+            'protocol default "Test Layout" on 2 wells.',
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_run_layout_of_another_plate_format_is_passed_over(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)
+        own = _run_layout(auth, fmt=PlateFormat.F384)
+        run.plate_template_id = own.id
+        preview = await self._repreview(run, protocol, [default, own])
+        assert preview.plates[0].roles_from == 'the protocol default "Test Layout"'
+        assert preview.warnings == ()
+
+    @pytest.mark.asyncio
+    async def test_the_file_column_is_compared_with_every_layout(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)
+        own = _run_layout(auth)
+        run.plate_template_id = own.id
+        preview = await self._repreview(
+            run, protocol, [default, own], well_role="Control State"
+        )
+        assert preview.plates[0].roles_from == 'the file\'s "Control State" column'
+        # The file agrees with the run's layout on A1/A2; only its blank (A4) differs there.
+        assert preview.warnings == (
+            'Control roles from the file\'s "Control State" column differ from '
+            'this run\'s layout "Run Layout" on 1 well.',
+            'Control roles from the file\'s "Control State" column differ from the '
+            'protocol default "Test Layout" on 3 wells.',
+        )
+
+    @pytest.mark.asyncio
+    async def test_import_writes_the_runs_layout_and_needs_no_protocol_default(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        )
+        own = _run_layout(auth)
+        run.plate_template_id = own.id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            plate_templates={own.id: own},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id, well_role=None),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        types = {f"{w.row}{w.column}": w.well_type for w in run.wells}
+        assert (types["A1"], types["A2"]) == (
+            WellType.NEGATIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+        )
+        assert result.unwrap().controls_from_template == 2
+
+
+# ---------------------------------------------------------------------------
+# Swap guard: controls whose raw signal reads the wrong way round
+# ---------------------------------------------------------------------------
+
+
+def _controls_table(pos: list[float], neg: list[float]) -> tuple[NormalizedTable, uuid.UUID]:
+    rd_id = uuid.uuid4()
+    lines = ["Plate Name,Well,Control State,Raw Data"]
+    lines += [f"P1,A{i + 1},positive control,{v}" for i, v in enumerate(pos)]
+    lines += [f"P1,B{i + 1},negative control,{v}" for i, v in enumerate(neg)]
+    lines += ["P1,C1,,0.5"]
+    table = parse_tabular("\n".join(lines).encode(), "x.csv")
+    mapping = ColumnMapping(
+        well="Well",
+        plate_name="Plate Name",
+        well_role="Control State",
+        readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+    )
+    return normalize(table, mapping).unwrap(), rd_id
+
+
+class TestSwappedControls:
+    def test_positive_reading_low_when_the_protocol_expects_high(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
+        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == (
+            "Controls look swapped on plate P1 (positive mean 0.11 vs negative mean 0.91; "
+            "this protocol's positive controls read the higher signal).",
+        )
+
+    def test_positive_reading_high_when_the_protocol_expects_low(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
+        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.LOW) == (
+            "Controls look swapped on plate P1 (positive mean 0.91 vs negative mean 0.11; "
+            "this protocol's positive controls read the lower signal).",
+        )
+
+    def test_controls_the_right_way_round_pass(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
+        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == ()
+
+    def test_no_clear_separation_says_nothing(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.2, 0.8], neg=[0.3, 0.9])
+        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == ()
+
+    def test_one_well_per_group_says_nothing(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.1], neg=[0.9])
+        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == ()
+
+    def test_readouts_not_normalized_against_controls_are_not_checked(self) -> None:
+        norm, _ = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
+        assert _swapped_controls(norm, {}, set(), PosControlSignal.HIGH) == ()
+
+    @pytest.mark.asyncio
+    async def test_the_preview_flags_a_layout_that_swaps_the_controls(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)  # A1 pos, A2 neg; signal HIGH
+        default.template_map = {
+            "A1": "positive_control",
+            "A2": "positive_control",
+            "B1": "negative_control",
+            "B2": "negative_control",
+        }
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=(
+                b"Plate Name,Well,Raw Data\n"
+                b"P1,A1,0.1\nP1,A2,0.12\nP1,B1,0.9\nP1,B2,0.92\nP1,H12,0.5\n"
+            ),
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(
+            run=run, protocol=protocol, store=store, plate_templates={default.id: default}
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        swapped = result.unwrap().swapped_controls
+        assert len(swapped) == 1 and swapped[0].startswith("Controls look swapped on plate P1")

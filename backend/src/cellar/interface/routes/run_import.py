@@ -160,13 +160,16 @@ class PlatePreviewModel(BaseModel):
     plate_name: str
     plate_format: str
     well_count: int
-    # Wells by role, as the import would write them (file role column, else
-    # the protocol layout; a well nothing classifies counts as a blank).
+    # Wells by role, as the import would write them (file role column, else the
+    # run's own layout, else the protocol default; a well nothing classifies
+    # counts as a blank).
     sample_count: int
     positive_count: int
     negative_count: int
     reference_count: int
     blank_count: int
+    # Where the roles come from, e.g. 'this run's layout "NadD 384"'; null = nowhere.
+    roles_from: str | None = None
 
 
 class WellConflictModel(BaseModel):
@@ -220,8 +223,12 @@ class PreviewRunFileResponse(ImportForecastModel):
     # auto_create_unmatched_batches=True is passed to the import step.
     # Always 0 when the preview query doesn't set that flag.
     auto_created_batches: int = 0
-    # Non-blocking notes, e.g. the file's well roles differ from the protocol layout.
+    # Non-blocking notes, e.g. role sources (file column, run layout, protocol
+    # default) that differ from one another.
     warnings: list[str] = Field(default_factory=list)
+    # Plates whose controls read the wrong way round for the protocol's
+    # pos_control_signal. The wizard makes the chemist acknowledge them.
+    swapped_controls: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -324,6 +331,7 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
                 negative_count=p.negative_count,
                 reference_count=p.reference_count,
                 blank_count=p.blank_count,
+                roles_from=p.roles_from,
             )
             for p in preview.plates
         ],
@@ -378,6 +386,7 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
         rows_skipped=preview.rows_skipped,
         auto_created_batches=preview.auto_created_batches,
         warnings=list(preview.warnings),
+        swapped_controls=list(preview.swapped_controls),
     )
 
 
