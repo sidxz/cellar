@@ -22,6 +22,9 @@ from cellar.domain.shared.units import canonical_unit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
     not_in_rejected_run,
@@ -220,10 +223,11 @@ def _activity_where_clause(
         base_filters = [
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.readout_definition_id == rd_id,
-            # Control / blank wells carry molecule_id NULL; one NULL in a
-            # NOT IN subquery ("every run" counterexamples, negated filters)
-            # makes it match nothing.
+            # One NULL in a NOT IN subquery ("every run" counterexamples,
+            # negated filters) makes it match nothing.
             ReadoutDataModel.molecule_id.is_not(None),
+            # A compound's results only: its control/reference wells are plate QC.
+            COMPOUND_RESULT,
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied == normalization
             if normalization
@@ -435,7 +439,8 @@ def _readout_name_any_protocol_clause(
         )
         .where(
             ReadoutDataModel.workspace_id == workspace_id,
-            ReadoutDataModel.molecule_id.is_not(None),  # control wells; see per-protocol path
+            ReadoutDataModel.molecule_id.is_not(None),  # see the per-protocol path
+            COMPOUND_RESULT,
             not_in_rejected_run(ReadoutDataModel.run_id, workspace_id),
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied.is_(None),
@@ -459,8 +464,9 @@ def _activity_presence_clause(
     # data point ultimately attaches to a run, and run carries protocol.
     conds: list[ColumnElement] = [
         ReadoutDataModel.workspace_id == workspace_id,
-        # Control wells (molecule_id NULL) would poison a negated NOT IN.
+        # A NULL molecule would poison a negated NOT IN.
         ReadoutDataModel.molecule_id.is_not(None),
+        COMPOUND_RESULT,  # a compound used only as a control has no results here
         RunModel.workspace_id == workspace_id,
         NOT_REJECTED,
     ]

@@ -179,6 +179,36 @@ async def test_run_stats_wellless_only_and_normalization(uow, workspace_id):
     ]
 
 
+async def test_compound_readouts_are_its_sample_wells_and_wellless_rows(uow, workspace_id):
+    """The search grid, compound exports, SAR and the molecule page read a compound's
+    sample wells and well-less rows; its control and reference wells are plate QC."""
+    mol = uuid.uuid4()
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, workspace_id)
+        rd = await seed.readout_def(s, p)
+        r = await seed.run(s, workspace_id, p, JAN)
+        plate = await seed.plate(s, r, 1)
+        roles = [("sample", 40.0), ("positive_control", 100.0), ("reference", 95.0)]
+        for col, (role, value) in enumerate(roles, start=1):
+            w = await seed.well(s, plate, "A", col, well_type=role)
+            await seed.readout(s, workspace_id, r, rd, mol, value, well_id=w)
+        await seed.readout(s, workspace_id, r, rd, mol, 60.0, wellless=True)
+        await uow.commit()
+
+    repo = SQLAlchemyReadoutDataRepository(uow)
+    async with uow:
+        [stats] = await repo.find_run_stats(
+            workspace_id, [mol], [(rd, None)], run_scope=RunScope.all()
+        )
+        aggregated = await repo.find_aggregated_by_molecules(workspace_id, [mol], [(rd, None)])
+        rows = await repo.find_by_molecule(workspace_id, mol)
+
+    assert (stats.stats.eq_count, stats.stats.eq_mean) == (2, 50.0)
+    assert aggregated[mol][(rd, None)].data_point_count == 2
+    assert sorted(row.value.value for row in rows) == [40.0, 60.0]
+
+
 # --- curves --------------------------------------------------------------------
 
 

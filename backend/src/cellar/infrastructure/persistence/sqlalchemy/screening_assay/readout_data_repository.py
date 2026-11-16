@@ -24,6 +24,9 @@ from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.value_objects import QualifiedValue
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
     run_scope_filters,
@@ -75,13 +78,15 @@ class SQLAlchemyReadoutDataRepository:
     async def find_by_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[ReadoutData]:
-        """All non-outlier readout data for a molecule, ordered by created_at desc."""
+        """The molecule's non-outlier results (sample wells and well-less rows), newest
+        first."""
         stmt = (
             select(ReadoutDataModel)
             .where(
                 ReadoutDataModel.workspace_id == workspace_id,
                 ReadoutDataModel.molecule_id == molecule_id,
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
+                COMPOUND_RESULT,
             )
             .order_by(ReadoutDataModel.created_at.desc())
         )
@@ -146,6 +151,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.molecule_id.in_(molecule_ids),
                 ReadoutDataModel.readout_definition_id.in_(rd_def_ids),
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
+                COMPOUND_RESULT,
                 *([ReadoutDataModel.well_id.is_(None)] if wellless_only else []),
             )
             .group_by(
@@ -207,7 +213,7 @@ class SQLAlchemyReadoutDataRepository:
         The SQL only counts and summarises; ``run_aggregation.combine_replicates``
         decides what a run's value is. Unqualified = no qualifier, ``=`` or ``~``;
         ``>``/``>=`` and ``<``/``<=`` contribute their bounds. Rejected runs,
-        outlier wells and non-numeric rows never appear.
+        outlier wells, control/reference wells and non-numeric rows never appear.
         """
         if not molecule_ids or not specs:
             return []
@@ -249,6 +255,7 @@ class SQLAlchemyReadoutDataRepository:
                 any_id(rd.molecule_id, molecule_ids),
                 any_id(rd.readout_definition_id, list({rd_id for rd_id, _ in specs})),
                 rd.is_outlier.is_(False),
+                COMPOUND_RESULT,
                 v.is_not(None),
                 NOT_REJECTED,
                 *run_scope_filters(run_scope, workspace_id),
