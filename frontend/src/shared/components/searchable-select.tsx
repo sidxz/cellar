@@ -19,6 +19,8 @@ export interface SearchableSelectOption {
   label: string;
   /** Heading the option is listed under; groups appear in first-seen order. */
   group?: string;
+  /** Shown under the label of an option that cannot be chosen, saying why. */
+  disabledReason?: string;
 }
 
 interface SearchableSelectProps {
@@ -100,6 +102,7 @@ export function SearchableSelect({
                   <CommandItem
                     key={option.value}
                     value={option.label}
+                    disabled={Boolean(option.disabledReason)}
                     onSelect={() => {
                       onValueChange(option.value);
                       setOpen(false);
@@ -111,7 +114,16 @@ export function SearchableSelect({
                         value === option.value ? "opacity-100" : "opacity-0",
                       )}
                     />
-                    {option.label}
+                    {option.disabledReason ? (
+                      <span className="flex flex-col">
+                        {option.label}
+                        <span className="text-xs text-muted-foreground">
+                          {option.disabledReason}
+                        </span>
+                      </span>
+                    ) : (
+                      option.label
+                    )}
                   </CommandItem>
                 ))}
               </CommandGroup>

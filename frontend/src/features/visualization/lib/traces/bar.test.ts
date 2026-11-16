@@ -1,6 +1,7 @@
 import { CHART_COLORS, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { buildBarFigure } from "./bar";
+import { MAX_CATEGORIES } from "./common";
 import { dataset, panel, pass, traces } from "./test-fixtures";
 
 const ds = () =>
@@ -43,6 +44,35 @@ describe("buildBarFigure", () => {
       pass(6),
     );
     expect(traces(mean)[0].y).toEqual([2, 7, null]);
+  });
+
+  it("leaves censored values out of the mean and says how many", () => {
+    const d = dataset({
+      plate: ["1", "1", "1", "2"],
+      y: [10, 20, 100, 5],
+      "y:q": [null, null, ">", "<"],
+    });
+    const fig = buildBarFigure(
+      d,
+      panel("bar", { category: "plate", agg: "mean", y: "y" }),
+      pass(4),
+    );
+    expect(traces(fig)[0].y).toEqual([15, null]);
+    expect(fig.note).toBe("2 censored values not included");
+    const count = buildBarFigure(d, panel("bar", { category: "plate" }), pass(4));
+    expect([traces(count)[0].y, count.note]).toEqual([[3, 1], null]);
+  });
+
+  it("caps a 100k-compound group at the category limit, pooling the rest as Other", () => {
+    const N = 100_000;
+    const d = dataset({ compound: Array.from({ length: N }, (_, i) => `CEL-${i}`) });
+    const start = performance.now();
+    const fig = buildBarFigure(d, panel("bar", { category: "compound" }), pass(N));
+    expect(performance.now() - start).toBeLessThan(2000);
+    const [t] = traces(fig);
+    expect(t.x).toHaveLength(MAX_CATEGORIES + 1);
+    expect(t.x.at(-1)).toBe("Other");
+    expect(t.y.at(-1)).toBe(N - MAX_CATEGORIES);
   });
 
   it("colors well-type bars and labels a log axis", () => {

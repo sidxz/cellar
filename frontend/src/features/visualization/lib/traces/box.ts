@@ -1,25 +1,29 @@
 import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { categoryLabel, numberAt } from "../dataset";
+import { numberAt } from "../dataset";
 import {
   type Figure,
+  MAX_CATEGORIES,
   axis,
   axisTitle,
   baseLayout,
   categoryColor,
   edgeColor,
+  groupsOf,
   hoverText,
+  isCensored,
   lackNote,
-  levels,
+  panelNote,
 } from "./common";
 
 // ponytail: SVG box points stall the page past a few thousand; above this only outliers
 // are drawn. Raise it if a WebGL box trace ever lands in plotly.js.
 const ALL_POINTS_UP_TO = 5000;
 
-/** One box of ``cfg.y`` per ``cfg.category`` value (natural order), passing rows only,
- * with the points drawn over it. */
+/** One box of ``cfg.y`` per ``cfg.category`` value (up to MAX_CATEGORIES, natural order),
+ * passing rows only, with the points drawn over it; censored values are left out and
+ * counted in the note. */
 export function buildBoxFigure(
   ds: Dataset,
   cfg: PanelConfig,
@@ -28,10 +32,11 @@ export function buildBoxFigure(
 ): Figure {
   const key = cfg.category;
   const yTitle = axisTitle(ds, cfg.y, cfg.logY);
-  const labels = key ? levels(ds, key) : [yTitle];
-  const index = new Map(labels.map((label, k) => [label, k]));
+  const groups = key ? groupsOf(ds, key, MAX_CATEGORIES) : { labels: [yTitle], of: () => 0 };
+  const labels = groups.labels;
   const rows: number[][] = labels.map(() => []);
   let skipped = 0;
+  let censored = 0;
   for (let i = 0; i < mask.length; i++) {
     if (!mask[i]) continue;
     const v = cfg.y ? numberAt(ds, cfg.y, i) : null;
@@ -39,13 +44,14 @@ export function buildBoxFigure(
       skipped += 1;
       continue;
     }
-    rows[key ? (index.get(categoryLabel(key, ds.values[key]?.[i])) ?? 0) : 0].push(i);
+    if (isCensored(ds, cfg.y as string, i)) censored += 1;
+    else rows[groups.of(i)].push(i);
   }
 
   const shown = rows.reduce((n, r) => n + r.length, 0);
   const data = labels.flatMap((label, k) => {
     if (rows[k].length === 0) return [];
-    const color = key ? categoryColor(key, label, labels) : CHART_COLORS.primary;
+    const color = key ? categoryColor(key, label, k) : CHART_COLORS.primary;
     return [
       {
         type: "box",
@@ -75,6 +81,6 @@ export function buildBoxFigure(
       yaxis: axis(yTitle, { type: cfg.logY ? "log" : "linear" }),
     },
     skipped,
-    note: lackNote(skipped, axisTitle(ds, cfg.y)),
+    note: panelNote(lackNote(skipped, axisTitle(ds, cfg.y)), censored),
   };
 }

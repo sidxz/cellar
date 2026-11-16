@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
+import { MAX_CATEGORIES } from "../lib/traces/common";
 import { dataset, panel } from "../lib/traces/test-fixtures";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import type { PanelConfig, PanelPatch } from "../store/workbench-store";
@@ -44,11 +45,11 @@ function Probe() {
 const state = (): { history: number; panel: PanelConfig } =>
   JSON.parse(screen.getByTestId("state").textContent ?? "{}");
 
-function show(p: PanelConfig, focusField?: EditField) {
+function show(p: PanelConfig, focusField?: EditField, data = ds) {
   const onClose = vi.fn();
   render(
     <WorkbenchProvider initialPanels={[p]}>
-      <PlotSettingsSheet ds={ds} panelId={p.id} focusField={focusField} onClose={onClose} />
+      <PlotSettingsSheet ds={data} panelId={p.id} focusField={focusField} onClose={onClose} />
       <Probe />
     </WorkbenchProvider>,
   );
@@ -112,5 +113,21 @@ describe("PlotSettingsSheet", () => {
     fireEvent.click(screen.getByRole("button", { name: "Box" }));
     expect(screen.queryByRole("checkbox", { name: "Log X" })).not.toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Log Y" })).toBeInTheDocument();
+  });
+
+  it("disables a group field with more values than bars or boxes can show, saying why", () => {
+    const rows = Array.from({ length: MAX_CATEGORIES + 1 }, (_, i) => i);
+    const many = dataset({
+      [Y]: rows,
+      plate: rows.map((i) => String(i % 2)),
+      compound: rows.map((i) => `CEL-${i}`),
+    });
+    show(panel("bar", { category: "plate" }), undefined, many);
+    fireEvent.click(screen.getByRole("combobox", { name: "Group" }));
+    const compound = screen.getByRole("option", { name: /compound/ });
+    expect(compound).toHaveAttribute("aria-disabled", "true");
+    expect(compound).toHaveTextContent("501 values; at most 500 groups can be shown");
+    fireEvent.click(compound);
+    expect(state().panel.category).toBe("plate");
   });
 });

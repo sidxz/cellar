@@ -19,14 +19,48 @@ const opacityScale = (n: number) => 1 - (0.35 / 0.8) * crowding(n);
 
 const axisId = (axis: "x" | "y", facet: number) => (facet === 0 ? axis : `${axis}${facet + 1}`);
 
-/** A scatter of ``cfg.x`` × ``cfg.y``: one trace per (facet, color group), failing rows
- * as faint × in a separate trace, selection shown by ``selectedpoints`` + outline. Each
- * point's ``customdata`` is its row index, so selections resolve to stable row ids. */
+/** A scatter with ``selection`` marked: the base figure plus the selection overlay. */
 export function buildScatterFigure(
   ds: Dataset,
   cfg: PanelConfig,
   mask: Uint8Array,
   selection: ReadonlySet<string>,
+  dark = false,
+): Figure {
+  return selectScatter(buildScatterBase(ds, cfg, mask, dark), ds, selection);
+}
+
+/** ``fig`` with ``selection`` marked: selected points outlined, the others dimmed through
+ * ``selectedpoints``. Only the selection arrays are new; coordinates, colors and hover
+ * text stay ``fig``'s own, so a selection change never rebuilds them. */
+export function selectScatter(fig: Figure, ds: Dataset, selection: ReadonlySet<string>): Figure {
+  if (selection.size === 0) return fig;
+  const data = fig.data.map((t) => {
+    const rows = t.customdata as number[] | undefined;
+    if (!rows) return t;
+    const selected: number[] = [];
+    const width = rows.map((i, k) => {
+      if (!selection.has(ds.row_ids[i])) return 0;
+      selected.push(k);
+      return 1.5;
+    });
+    const marker = t.marker as { line: Record<string, unknown> };
+    return {
+      ...t,
+      selectedpoints: selected,
+      marker: { ...marker, line: { ...marker.line, width } },
+    };
+  });
+  return { ...fig, data };
+}
+
+/** A scatter of ``cfg.x`` × ``cfg.y`` without selection: one trace per (facet, color
+ * group), failing rows as faint × in a separate trace. Each point's ``customdata`` is its
+ * row index, so selections resolve to stable row ids. */
+export function buildScatterBase(
+  ds: Dataset,
+  cfg: PanelConfig,
+  mask: Uint8Array,
   dark = false,
 ): Figure {
   const a = cfg.appearance;
@@ -35,16 +69,18 @@ export function buildScatterFigure(
   const facets = facetsOf(ds, a.splitBy);
   // Named groups (categories, bins) get a trace each and a legend entry; a number on a
   // continuous scale colors points through a colorscale instead.
-  const groupsOf = colorGroups(ds, a);
+  const coloring = colorGroups(ds, a);
   const colorCol = a.colorBy ? column(ds, a.colorBy) : undefined;
-  const range = !groupsOf && colorCol?.kind === "number" ? numericRange(ds, colorCol.key) : null;
+  const range = !coloring && colorCol?.kind === "number" ? numericRange(ds, colorCol.key) : null;
+  const groupCount = coloring?.order.length ?? 1;
 
   const value = (key: string | undefined, i: number, log?: boolean) => {
     const v = key ? numberAt(ds, key, i) : null;
     return v === null || (log && v <= 0) ? null : v;
   };
 
-  const groups = new Map<string, { facet: number; label: string; rows: number[] }>();
+  // Keyed facet-major, so sorting the keys orders traces by facet, then group.
+  const groups = new Map<number, { facet: number; group: number; rows: number[] }>();
   const filtered: number[][] = facets.labels.map(() => []);
   let skipped = 0;
   let lackX = 0;
@@ -65,17 +101,19 @@ export function buildScatterFigure(
     }
     n += 1;
     const facet = facets.of(i);
-    const label = groupsOf ? groupsOf.labelOf(i) : "";
-    const k = `${facet}|${label}`;
+    const group = coloring ? coloring.of(i) : 0;
+    const k = facet * groupCount + group;
     let g = groups.get(k);
     if (!g) {
-      g = { facet, label, rows: [] };
+      g = { facet, group, rows: [] };
       groups.set(k, g);
     }
     g.rows.push(i);
   }
 
-  const type = n > WEBGL_ABOVE ? "scattergl" : "scatter";
+  // The filtered × are drawn too, so they count toward the WebGL switch.
+  const drawn = filtered.reduce((sum, rows) => sum + rows.length, n);
+  const type = drawn > WEBGL_ABOVE ? "scattergl" : "scatter";
   const size = markerSize(n);
   const opacity = a.opacity * opacityScale(n);
   const outline = dark ? "#f1f5f9" : "#111827";
@@ -109,35 +147,27 @@ export function buildScatterFigure(
     });
   });
 
-  const order = groupsOf?.order ?? [];
-  const ordered = [...groups.values()].sort(
-    (p, q) => p.facet - q.facet || order.indexOf(p.label) - order.indexOf(q.label),
-  );
+  const ordered = [...groups.entries()].sort((p, q) => p[0] - q[0]).map(([, g]) => g);
   // Per-point appearance for every plotted row at once; each trace takes its slice.
   const rows = ordered.flatMap((g) => g.rows);
   const colors = colorFor(ds, a, rows);
   const symbols = shapeFor(ds, a, rows);
   const sizes = sizeFor(ds, a, rows, size);
-  const inLegend = new Set<string>();
+  const inLegend = new Set<number>();
   let scaleShown = false;
   let end = 0;
   for (const g of ordered) {
     const start = end;
     end += g.rows.length;
-    const selected: number[] = [];
-    const lineWidth = g.rows.map((i, k) => {
-      if (!selection.has(ds.row_ids[i])) return 0;
-      selected.push(k);
-      return 1.5;
-    });
+    const label = coloring ? coloring.order[g.group] : "";
     data.push({
       type,
       mode: "markers",
       // Stable per (facet, group) and a valid CSS class: Plotly selects `.cb<uid>`.
-      uid: `f${g.facet}-g${order.indexOf(g.label) + 1}`,
-      name: groupsOf ? g.label : yTitle,
-      legendgroup: g.label,
-      showlegend: Boolean(groupsOf) && !inLegend.has(g.label),
+      uid: `f${g.facet}-g${coloring ? g.group + 1 : 0}`,
+      name: coloring ? label : yTitle,
+      legendgroup: label,
+      showlegend: Boolean(coloring) && !inLegend.has(g.group),
       ...place(g.facet),
       x: xs(g.rows),
       y: ys(g.rows),
@@ -149,7 +179,7 @@ export function buildScatterFigure(
         symbol: uniform(symbols.slice(start, end)),
         size: uniform(sizes.slice(start, end)),
         opacity,
-        line: { color: outline, width: lineWidth },
+        line: { color: outline, width: 0 },
         ...(range
           ? {
               colorscale: "Viridis",
@@ -160,12 +190,11 @@ export function buildScatterFigure(
             }
           : {}),
       },
-      selectedpoints: selection.size > 0 ? selected : undefined,
       // A size-by keeps each point's own size; the outline marks the selection.
       selected: { marker: { opacity: 1, ...(a.sizeBy ? {} : { size: size + 2 }) } },
       unselected: { marker: { opacity: opacity * 0.35 } },
     });
-    inLegend.add(g.label);
+    inLegend.add(g.group);
     scaleShown = true;
   }
 
@@ -179,9 +208,9 @@ export function buildScatterFigure(
     hovermode: "closest",
     margin: { l: 56, r: 12, t: split ? 52 : 32, b: 44 },
   };
-  if (groupsOf?.title) {
+  if (coloring?.title) {
     const legend = baseLayout(cfg.id).legend as Record<string, unknown>;
-    layout.legend = { ...legend, title: { text: groupsOf.title } };
+    layout.legend = { ...legend, title: { text: coloring.title } };
   }
   for (let f = 0; f < count; f++) {
     const bottom = f >= (gridRows - 1) * gridCols;

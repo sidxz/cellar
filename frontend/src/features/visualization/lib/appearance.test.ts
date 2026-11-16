@@ -1,7 +1,7 @@
 import { CHART_COLORS, GROUP_PALETTE, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { type Appearance, DEFAULT_APPEARANCE } from "../store/workbench-store";
-import { colorBins, colorFor, shapeFor, sizeFor, tooltipText } from "./appearance";
+import { colorBins, colorFor, colorGroups, shapeFor, sizeFor, tooltipText } from "./appearance";
 import { dataset } from "./traces/test-fixtures";
 
 const look = (a: Partial<Appearance>): Appearance => ({ ...DEFAULT_APPEARANCE, ...a });
@@ -51,6 +51,17 @@ describe("colorFor", () => {
     expect(all).toEqual([GROUP_PALETTE[2], GROUP_PALETTE[0], GROUP_PALETTE[1], GROUP_PALETTE[0]]);
     expect(colorFor(ds, a, [2])).toEqual([all[2]]);
     expect(colorFor(ds, a, [0, 1, 2, 3])).toEqual(all);
+  });
+
+  it("pools categories past the palette into Other, keeping the most frequent", () => {
+    // 13 plates: plate 1 once, plates 2–12 twice, plate 13 four times.
+    const plates = Array.from({ length: 13 }, (_, k) => String(k + 1));
+    const ds = dataset({ plate: [...plates, ...plates.slice(1), "13", "13"] });
+    const a = look({ colorBy: "plate" });
+    expect(colorGroups(ds, a)?.order).toEqual([...plates.slice(1), "Other"]);
+    const [other, twelfth] = colorFor(ds, a, [0, 12]);
+    expect(GROUP_PALETTE).not.toContain(other);
+    expect(twelfth).toBe(GROUP_PALETTE[11]);
   });
 
   it("uses the primary color when nothing colors the plot", () => {

@@ -13,6 +13,7 @@ export function FieldSelect({
   id,
   clearable = false,
   placeholder = "None",
+  disabledReason,
 }: {
   ds: Dataset;
   kinds: DatasetColumn["kind"][];
@@ -22,10 +23,17 @@ export function FieldSelect({
   /** Offer "None" (for optional settings such as color or split). */
   clearable?: boolean;
   placeholder?: string;
+  /** Why a field cannot be chosen here, if it cannot (it stays listed, disabled). */
+  disabledReason?: (c: DatasetColumn) => string | undefined;
 }) {
   const options = ds.columns
     .filter((c) => !c.hidden && kinds.includes(c.kind))
-    .map((c) => ({ value: c.key, label: c.label, group: c.group ?? "Details" }));
+    .map((c) => ({
+      value: c.key,
+      label: c.label,
+      group: c.group ?? "Details",
+      disabledReason: disabledReason?.(c),
+    }));
   return (
     <SearchableSelect
       id={id}

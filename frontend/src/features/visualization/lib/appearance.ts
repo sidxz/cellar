@@ -1,9 +1,9 @@
-import { CHART_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { Appearance } from "../store/workbench-store";
 import type { Dataset } from "../types";
 import { categoryLabel, column, numberAt } from "./dataset";
-import { NONE, categoryColor, hoverText, levels } from "./traces/common";
+import { NONE, categoryColor, groupsOf, hoverText } from "./traces/common";
 
 export const WELL_TYPE_SYMBOLS: Record<string, string> = {
   sample: "circle",
@@ -83,13 +83,18 @@ export function colorBins(ds: Dataset, key: string, cuts?: number[]) {
   return { cuts: c, colors: rampColors(c.length + 1), labels, binOf };
 }
 
+/** Most named color groups (one palette color each); rarer categories pool as "Other". */
+export const MAX_COLOR_GROUPS = GROUP_PALETTE.length;
+
 /** Coloring as named groups (legend entries) — a category, or a binned number — or null
  * when nothing colors the plot or a number colors it on a continuous scale. */
 export interface ColorGroups {
-  /** Every group in legend order, "(none)" last. */
+  /** Every group in legend order: "(none)" after the named ones, "Other" last. */
   order: string[];
-  labelOf: (i: number) => string;
-  color: (label: string) => string;
+  /** Index into ``order`` of row ``i``'s group. */
+  of: (i: number) => number;
+  /** Color of each group, parallel to ``order``. */
+  colors: string[];
   /** Legend title (binned numbers only; categories name themselves). */
   title?: string;
 }
@@ -102,19 +107,19 @@ export function colorGroups(ds: Dataset, a: Appearance): ColorGroups | null {
     const b = colorBins(ds, col.key, a.colorBins);
     return {
       order: [...b.labels, NONE],
-      labelOf: (i) => {
+      of: (i) => {
         const v = numberAt(ds, col.key, i);
-        return v === null ? NONE : b.labels[b.binOf(v)];
+        return v === null ? b.labels.length : b.binOf(v);
       },
-      color: (label) => b.colors[b.labels.indexOf(label)] ?? CHART_COLORS.neutral,
+      colors: [...b.colors, CHART_COLORS.neutral],
       title: col.label,
     };
   }
-  const order = levels(ds, col.key);
+  const g = groupsOf(ds, col.key, MAX_COLOR_GROUPS);
   return {
-    order,
-    labelOf: (i) => categoryLabel(col.key, ds.values[col.key]?.[i]),
-    color: (label) => categoryColor(col.key, label, order),
+    order: g.labels,
+    of: g.of,
+    colors: g.labels.map((label, k) => categoryColor(col.key, label, k)),
   };
 }
 
@@ -123,22 +128,22 @@ export function colorGroups(ds: Dataset, a: Appearance): ColorGroups | null {
  * so a row's color never depends on which rows are asked for. */
 export function colorFor(ds: Dataset, a: Appearance, rows: number[]): string[] | (number | null)[] {
   const groups = colorGroups(ds, a);
-  if (groups) return rows.map((i) => groups.color(groups.labelOf(i)));
+  if (groups) return rows.map((i) => groups.colors[groups.of(i)]);
   const key = a.colorBy;
   if (key && column(ds, key)?.kind === "number") return rows.map((i) => numberAt(ds, key, i));
   return rows.map(() => CHART_COLORS.primary);
 }
 
-/** Marker symbol of each of ``rows``: well types keep fixed shapes, other categories cycle. */
+/** Marker symbol of each of ``rows``: well types keep fixed shapes; other categories take
+ * one symbol each, the rarest sharing the last one as "Other". */
 export function shapeFor(ds: Dataset, a: Appearance, rows: number[]): string[] {
   const key = a.shapeBy;
   if (!key) return rows.map(() => "circle");
-  const order = levels(ds, key);
-  return rows.map((i) => {
-    const v = ds.values[key]?.[i];
-    if (key === "well_type") return WELL_TYPE_SYMBOLS[String(v)] ?? "circle";
-    return SYMBOLS[Math.max(0, order.indexOf(categoryLabel(key, v))) % SYMBOLS.length];
-  });
+  if (key === "well_type") {
+    return rows.map((i) => WELL_TYPE_SYMBOLS[String(ds.values[key]?.[i])] ?? "circle");
+  }
+  const g = groupsOf(ds, key, SYMBOLS.length - 1);
+  return rows.map((i) => SYMBOLS[g.of(i)]);
 }
 
 /** Marker size of each of ``rows``: a numeric size-by mapped onto 5–16 px over the whole

@@ -1,6 +1,7 @@
 import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
+import { MAX_COLOR_GROUPS } from "../appearance";
 import { column, numberAt } from "../dataset";
 import { binCounts, fixedBins } from "../filters";
 import {
@@ -10,14 +11,14 @@ import {
   baseLayout,
   categoryColor,
   edgeColor,
-  facetsOf,
+  groupsOf,
   lackNote,
 } from "./common";
 
 const fmt = (v: number) => v.toLocaleString(undefined, { maximumSignificantDigits: 4 });
 
 /** Counts of ``cfg.x`` over bins fixed on the whole column (so bars never shift as filters
- * change), stacked by ``appearance.colorBy`` when it is a category (≤ 6 + "Other"). */
+ * change), stacked by ``appearance.colorBy`` when it is a category (capped like scatter colors). */
 export function buildHistogramFigure(
   ds: Dataset,
   cfg: PanelConfig,
@@ -28,7 +29,8 @@ export function buildHistogramFigure(
   const title = axisTitle(ds, key);
   const stackCol = cfg.appearance.colorBy ? column(ds, cfg.appearance.colorBy) : undefined;
   const stackKey = stackCol && stackCol.kind !== "number" ? stackCol.key : undefined;
-  const stacks = facetsOf(ds, stackKey);
+  // Same groups (and so colors) as a scatter colored by the field.
+  const stacks = groupsOf(ds, stackKey, MAX_COLOR_GROUPS);
 
   // One mask per stack: passing rows of that group that have a value.
   const masks = stacks.labels.map(() => new Uint8Array(mask.length));
@@ -53,7 +55,7 @@ export function buildHistogramFigure(
     hovertext: ranges,
     hovertemplate: `%{hovertext}: %{y}<extra>${stackKey ? "%{fullData.name}" : ""}</extra>`,
     marker: {
-      color: stackKey ? categoryColor(stackKey, label, stacks.labels) : CHART_COLORS.primary,
+      color: stackKey ? categoryColor(stackKey, label, g) : CHART_COLORS.primary,
       line: { color: edgeColor(dark), width: 0.5 },
     },
   }));

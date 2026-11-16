@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
 import { DEFAULT_APPEARANCE, type PanelConfig } from "../../store/workbench-store";
@@ -43,12 +43,35 @@ function Selection() {
   return <p data-testid="sel">{[...selection].join(",")}</p>;
 }
 
+/** A selection made outside the plot (table checkbox, strip, another panel). */
+function External() {
+  const setSelection = useWorkbench((s) => s.setSelection);
+  return (
+    <button type="button" onClick={() => setSelection(["w0"])}>
+      external
+    </button>
+  );
+}
+
 const show = () =>
   render(
     <WorkbenchProvider initialPanels={[panel]}>
       <ScatterPanel panel={panel} ds={ds} />
       <Selection />
+      <External />
     </WorkbenchProvider>,
+  );
+const drawn = () =>
+  plot.last as {
+    data: { x: unknown; text: unknown; selectedpoints?: number[] }[];
+    layout: { uirevision: string; selectionrevision: string };
+  };
+const lasso = (...rows: number[]) =>
+  act(() =>
+    handlers().onSelected({
+      lassoPoints: { x: [], y: [] },
+      points: rows.map((customdata) => ({ customdata })),
+    }),
   );
 
 describe("ScatterPanel", () => {
@@ -69,5 +92,28 @@ describe("ScatterPanel", () => {
     act(() => handlers().onClick({ points: [{ customdata: 0 }] }));
     expect(screen.getByTestId("sel")).toHaveTextContent("w0");
     expect(screen.getByText("1 row lacks Signal")).toBeInTheDocument();
+  });
+
+  it("reuses the plotted arrays when only the selection changes", () => {
+    show();
+    const { x, text } = drawn().data[0];
+    fireEvent.click(screen.getByRole("button", { name: "external" }));
+    expect(drawn().data[0].selectedpoints).toEqual([0]);
+    expect(drawn().data[0].x).toBe(x);
+    expect(drawn().data[0].text).toBe(text);
+  });
+
+  it("drops its lasso outline when the selection changes elsewhere, keeping zoom", () => {
+    show();
+    lasso(2);
+    const own = drawn().layout.selectionrevision;
+    fireEvent.click(screen.getByRole("button", { name: "external" }));
+    const after = drawn().layout.selectionrevision;
+    expect(after).not.toBe(own);
+    expect(drawn().layout.uirevision).toBe("p1");
+    // The plot's own lasso keeps its outline.
+    lasso(0, 2);
+    expect(screen.getByTestId("sel")).toHaveTextContent("w0,w2");
+    expect(drawn().layout.selectionrevision).toBe(after);
   });
 });

@@ -9,7 +9,12 @@ import { useTheme } from "next-themes";
 import { useMemo, useRef } from "react";
 import { flushSync } from "react-dom";
 import { usePassMask } from "../../hooks/use-pass-mask";
-import { type PointEvent, buildScatterFigure, rowIdsFromEvent } from "../../lib/traces/scatter";
+import {
+  type PointEvent,
+  buildScatterBase,
+  rowIdsFromEvent,
+  selectScatter,
+} from "../../lib/traces/scatter";
 import { useWorkbench } from "../../store/workbench-context";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
@@ -19,13 +24,23 @@ const CONFIG = { displaylogo: false };
 const sameSet = (ids: string[], set: ReadonlySet<string>) =>
   ids.length === set.size && ids.every((id) => set.has(id));
 
-/** Counts selection clears, so the plot drops its own lasso outline when the selection
- * is cleared from elsewhere (strip, table) — the count is the plot's selectionrevision. */
-function useClearCount(selection: ReadonlySet<string>): number {
-  const ref = useRef({ had: false, clears: 0 });
-  if (ref.current.had && selection.size === 0) ref.current.clears += 1;
-  ref.current.had = selection.size > 0;
-  return ref.current.clears;
+/** The plot's selectionrevision: it moves whenever the selection changes from anywhere
+ * but this plot (table, strip, another panel), so Plotly drops its own lasso outline and
+ * ``selectedpoints`` decides what is highlighted. ``own`` records a change this plot makes. */
+function useSelectionRevision(selection: ReadonlySet<string>) {
+  const ref = useRef({ seen: selection, own: null as string[] | null, revision: 0 });
+  const r = ref.current;
+  if (r.seen !== selection) {
+    if (!r.own || !sameSet(r.own, selection)) r.revision += 1;
+    r.seen = selection;
+    r.own = null;
+  }
+  return {
+    revision: r.revision,
+    own: (ids: string[]) => {
+      ref.current.own = ids;
+    },
+  };
 }
 
 export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset }) {
@@ -35,22 +50,24 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
   const clearSelection = useWorkbench((s) => s.clearSelection);
   const { resolvedTheme } = useTheme();
   const dark = resolvedTheme === "dark";
-  const clears = useClearCount(selection);
+  const { revision, own } = useSelectionRevision(selection);
 
-  const fig = useMemo(
-    () => buildScatterFigure(ds, panel, mask, selection, dark),
-    [ds, panel, mask, selection, dark],
-  );
-  // Constant uirevision (in the figure) keeps zoom and the lasso across redraws.
+  // The costly part (coordinates, colors, hover text) waits for a data or settings change;
+  // a selection only lays its overlay on top.
+  const base = useMemo(() => buildScatterBase(ds, panel, mask, dark), [ds, panel, mask, dark]);
+  const fig = useMemo(() => selectScatter(base, ds, selection), [base, ds, selection]);
+  // The constant uirevision (in the figure) keeps zoom; selectionrevision governs the lasso.
   const layout = useMemo(
-    () => ({ ...fig.layout, selectionrevision: `${panel.id}:${clears}` }),
-    [fig.layout, panel.id, clears],
+    () => ({ ...fig.layout, selectionrevision: `${panel.id}:${revision}` }),
+    [fig.layout, panel.id, revision],
   );
 
   // Plotly fires these from its own emitter, outside React's batching: flushSync makes
   // the store change render now. Same pattern as the SAR cluster map.
   const select = (ids: string[]) => {
-    if (!sameSet(ids, selection)) flushSync(() => setSelection(ids));
+    if (sameSet(ids, selection)) return;
+    own(ids);
+    flushSync(() => setSelection(ids));
   };
   const handlers = {
     onSelected: (ev: unknown) => {
@@ -59,7 +76,9 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
       select(rowIdsFromEvent(ds, ev as PointEvent));
     },
     onDeselect: () => {
-      if (selection.size > 0) flushSync(() => clearSelection());
+      if (selection.size === 0) return;
+      own([]);
+      flushSync(() => clearSelection());
     },
     onClick: (ev: unknown) => {
       const [id] = rowIdsFromEvent(ds, ev as PointEvent);

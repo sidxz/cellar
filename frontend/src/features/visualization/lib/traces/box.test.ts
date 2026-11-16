@@ -1,6 +1,7 @@
 import { WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { buildBoxFigure } from "./box";
+import { MAX_CATEGORIES } from "./common";
 import { dataset, panel, pass, traces } from "./test-fixtures";
 
 const ds = () =>
@@ -23,6 +24,28 @@ describe("buildBoxFigure", () => {
   it("leaves out rows that fail the filters", () => {
     const fig = buildBoxFigure(ds(), cfg(), Uint8Array.from([1, 0, 1, 1, 0]));
     expect(traces(fig).map((t) => t.y)).toEqual([[3], [1, 0]]);
+  });
+
+  it("leaves censored values out of the boxes and says how many", () => {
+    const d = dataset({
+      well_type: ["sample", "sample", "sample"],
+      y: [1, 2, 50],
+      "y:q": [null, null, ">"],
+    });
+    const fig = buildBoxFigure(d, cfg(), pass(3));
+    expect(traces(fig).map((t) => t.y)).toEqual([[1, 2]]);
+    expect(fig.note).toBe("1 censored value not included");
+  });
+
+  it("caps a 100k-compound group at the category limit", () => {
+    const N = 100_000;
+    const rows = Array.from({ length: N }, (_, i) => i);
+    const d = dataset({ compound: rows.map((i) => `CEL-${i}`), y: rows });
+    const start = performance.now();
+    const fig = buildBoxFigure(d, cfg({ category: "compound" }), pass(N));
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(fig.data).toHaveLength(MAX_CATEGORIES + 1);
+    expect(traces(fig).at(-1)?.name).toBe("Other");
   });
 
   it("labels a log axis and notes values it cannot show", () => {

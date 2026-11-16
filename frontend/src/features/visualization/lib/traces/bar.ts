@@ -1,16 +1,19 @@
 import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { categoryLabel, numberAt } from "../dataset";
+import { numberAt } from "../dataset";
 import {
   type Figure,
+  MAX_CATEGORIES,
   axis,
   axisTitle,
   baseLayout,
   categoryColor,
   edgeColor,
+  groupsOf,
+  isCensored,
   lackNote,
-  levels,
+  panelNote,
 } from "./common";
 
 const mean = (vs: number[]) => vs.reduce((a, b) => a + b, 0) / vs.length;
@@ -20,8 +23,9 @@ function median(vs: number[]): number {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
-/** One bar per ``cfg.category`` value (every value, natural order, so bars stay put as
- * filters change): the count of passing rows, or the mean/median of their ``cfg.y``. */
+/** One bar per ``cfg.category`` value (every value up to MAX_CATEGORIES, natural order, so
+ * bars stay put as filters change): the count of passing rows, or the mean/median of their
+ * ``cfg.y`` — censored values left out and counted in the note. */
 export function buildBarFigure(
   ds: Dataset,
   cfg: PanelConfig,
@@ -30,18 +34,20 @@ export function buildBarFigure(
 ): Figure {
   const key = cfg.category;
   const agg = cfg.agg ?? "count";
-  const labels = key ? levels(ds, key) : [];
-  const index = new Map(labels.map((label, k) => [label, k]));
+  const groups = key ? groupsOf(ds, key, MAX_CATEGORIES) : { labels: [], of: () => 0 };
+  const labels = groups.labels;
   const counts = labels.map(() => 0);
   const values: number[][] = labels.map(() => []);
   let skipped = 0;
+  let censored = 0;
   for (let i = 0; key && i < mask.length; i++) {
     if (!mask[i]) continue;
-    const k = index.get(categoryLabel(key, ds.values[key]?.[i])) ?? 0;
+    const k = groups.of(i);
     counts[k] += 1;
     if (agg === "count") continue;
     const v = cfg.y ? numberAt(ds, cfg.y, i) : null;
     if (v === null) skipped += 1;
+    else if (isCensored(ds, cfg.y as string, i)) censored += 1;
     else values[k].push(v);
   }
 
@@ -66,7 +72,7 @@ export function buildBarFigure(
         marker: {
           color:
             key === "well_type"
-              ? labels.map((label) => categoryColor(key, label, labels))
+              ? labels.map((label, k) => categoryColor(key, label, k))
               : CHART_COLORS.primary,
           line: { color: edgeColor(dark), width: 0.5 },
         },
@@ -82,6 +88,6 @@ export function buildBarFigure(
       yaxis: axis(cfg.logY ? `${yTitle} (log)` : yTitle, { type: cfg.logY ? "log" : "linear" }),
     },
     skipped,
-    note: lackNote(skipped, yLabel),
+    note: panelNote(lackNote(skipped, yLabel), censored),
   };
 }

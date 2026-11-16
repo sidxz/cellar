@@ -11,6 +11,7 @@ import { Fragment, type ReactNode, useEffect } from "react";
 import { colorBins, numericRange } from "../lib/appearance";
 import { column } from "../lib/dataset";
 import { numericValueColumn, retypePanel } from "../lib/default-panels";
+import { MAX_CATEGORIES, levels } from "../lib/traces/common";
 import { useWorkbench } from "../store/workbench-context";
 import type { Appearance, PanelConfig, PanelPatch, PanelType } from "../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../types";
@@ -29,6 +30,13 @@ const TYPES: { value: PanelType; label: string; numeric: boolean }[] = [
   { value: "bar", label: "Bar", numeric: false },
   { value: "box", label: "Box", numeric: true },
 ];
+
+/** Why a field cannot group bars or boxes: more values than one bar or box each. */
+function tooManyGroups(ds: Dataset, key: string): string | undefined {
+  const n = levels(ds, key).length;
+  if (n <= MAX_CATEGORIES) return undefined;
+  return `${n.toLocaleString()} values; at most ${MAX_CATEGORIES.toLocaleString()} groups can be shown`;
+}
 
 /** The plot editor: Data, Appearance and Tooltip settings of one panel, shown in place of
  * the filter rail so the plot stays in view and redraws as settings change. Every change
@@ -128,6 +136,7 @@ export function PlotSettingsSheet({
                 kinds={CATEGORY}
                 value={p.category}
                 onChange={(category) => set({ category })}
+                disabledReason={(c) => tooManyGroups(ds, c.key)}
               />
             </Row>
           )}

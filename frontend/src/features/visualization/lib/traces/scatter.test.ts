@@ -2,13 +2,22 @@ import { CHART_COLORS, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { type Appearance, DEFAULT_APPEARANCE, type PanelConfig } from "../../store/workbench-store";
 import type { Dataset, DatasetColumn } from "../../types";
-import { FILTERED, buildScatterFigure, markerSize, rowIdsFromEvent } from "./scatter";
+import { MAX_COLOR_GROUPS } from "../appearance";
+import {
+  FILTERED,
+  buildScatterBase,
+  buildScatterFigure,
+  markerSize,
+  rowIdsFromEvent,
+  selectScatter,
+} from "./scatter";
 
 type Kind = DatasetColumn["kind"];
 interface Trace {
   name?: string;
   customdata?: number[];
   x: unknown[];
+  y: unknown[];
   xaxis?: string;
   selectedpoints?: number[];
   text?: string[];
@@ -165,6 +174,60 @@ describe("buildScatterFigure", () => {
     const other = plotted(fig).find((t) => t.xaxis === "x7");
     expect(other?.customdata).toEqual([6, 7]);
     expect(fig.layout.yaxis7).toMatchObject({ matches: "y" });
+  });
+});
+
+describe("selectScatter", () => {
+  it("marks a selection without rebuilding coordinates, colors or hover text", () => {
+    const ds = dataset({ well_order: [1, 2, 3, 4], y: [10, 20, 30, 40] });
+    const base = buildScatterBase(ds, panel({ colorBy: "y" }), pass(4));
+    const one = selectScatter(base, ds, new Set(["w1"]));
+    const two = selectScatter(base, ds, new Set(["w2", "w3"]));
+    const [b, s1, s2] = [base, one, two].map((f) => plotted(f)[0]);
+    for (const s of [s1, s2]) {
+      expect(s.x).toBe(b.x);
+      expect(s.y).toBe(b.y);
+      expect(s.text).toBe(b.text);
+      expect(s.customdata).toBe(b.customdata);
+      expect(s.marker.color).toBe(b.marker.color);
+    }
+    expect([s1.selectedpoints, s2.selectedpoints]).toEqual([[1], [2, 3]]);
+    expect(selectScatter(base, ds, new Set())).toBe(base);
+  });
+});
+
+describe("large datasets", () => {
+  const N = 100_000;
+  const big = () => {
+    const rows = Array.from({ length: N }, (_, i) => i);
+    return dataset({
+      well_order: rows,
+      y: rows.map((i) => i % 97),
+      compound: rows.map((i) => `CEL-${i}`),
+    });
+  };
+
+  it("colors and shapes 100k distinct compounds as capped groups plus Other, quickly", () => {
+    const ds = big();
+    const mask = pass(N);
+    mask[0] = 0;
+    const start = performance.now();
+    const fig = buildScatterFigure(
+      ds,
+      panel({ colorBy: "compound", shapeBy: "compound" }),
+      mask,
+      NONE,
+    );
+    expect(performance.now() - start).toBeLessThan(2000);
+    expect(fig.data.length).toBeLessThanOrEqual(MAX_COLOR_GROUPS + 2);
+    expect(plotted(fig).at(-1)?.name).toBe("Other");
+  });
+
+  it("draws with WebGL when the filtered points alone are over the SVG limit", () => {
+    const mask = new Uint8Array(N);
+    mask[0] = 1;
+    const fig = buildScatterFigure(big(), panel(), mask, NONE);
+    expect(fig.data.map((t) => t.type)).toEqual(["scattergl", "scattergl"]);
   });
 });
 
