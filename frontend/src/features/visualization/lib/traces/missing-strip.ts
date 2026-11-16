@@ -5,9 +5,10 @@ import { tooltipText } from "../appearance";
 import { isComparedValue, missingReason, pairCounts } from "../cross-protocol";
 import { numberAt } from "../dataset";
 import { type Figure, axisTitle } from "./common";
-import { WEBGL_ABOVE, plottedY } from "./scatter";
+import { WEBGL_ABOVE, plottedX, plottedY } from "./scatter";
 
 const NO_VALUE = "No value";
+const NOT_TESTED = "Not tested";
 const STRIP_FILL = "rgba(113,113,122,0.08)";
 
 /** Where row ``i`` sits around its slot: within ±0.3, the same on every build. */
@@ -24,11 +25,93 @@ function pairNote(ds: Dataset, x: string, y: string, mask: Uint8Array): string {
   ].join(" · ");
 }
 
+type Side = "x" | "y";
+
+/** The strip of ``side``'s missing values: passing rows with a value on the other axis but
+ * none on ``side``, in one slot per kind of reason ("Not tested" before "No value"; the
+ * protocol stays in each point's hover), jittered across the slot. */
+function stripOf(ds: Dataset, cfg: PanelConfig, mask: Uint8Array, side: Side, dark: boolean) {
+  const onX = side === "x";
+  const key = (onX ? cfg.x : cfg.y) as string;
+  const otherAt = onX ? plottedY(ds, cfg) : plottedX(ds, cfg);
+  const reasons = new Map<number, string>();
+  const bySlot = new Map<string, number[]>();
+  for (let i = 0; i < ds.row_count; i++) {
+    if (!mask[i] || numberAt(ds, key, i) !== null || otherAt(i) === null) continue;
+    const reason = missingReason(ds, key, i) ?? NO_VALUE;
+    const slot = reason.startsWith(NOT_TESTED) ? NOT_TESTED : NO_VALUE;
+    reasons.set(i, reason);
+    const rows = bySlot.get(slot);
+    if (rows) rows.push(i);
+    else bySlot.set(slot, [i]);
+  }
+  if (bySlot.size === 0) return null;
+
+  const slots = [...bySlot.keys()].sort((a, b) => +(a === NO_VALUE) - +(b === NO_VALUE));
+  const points = slots.flatMap((s, k) => (bySlot.get(s) ?? []).map((i) => ({ i, k })));
+  const rows = points.map((p) => p.i);
+  const across = points.map((p) => p.k + jitter(p.i));
+  const along = rows.map(otherAt);
+  const otherTitle = onX
+    ? axisTitle(ds, cfg.y, cfg.logY)
+    : axisTitle(ds, cfg.x, cfg.logX && cfg.x !== "run_date");
+  const trace = {
+    type: rows.length > WEBGL_ABOVE ? "scattergl" : "scatter",
+    mode: "markers",
+    uid: onX ? "strip" : "strip-y",
+    name: onX ? "No X value" : "No Y value",
+    showlegend: false,
+    xaxis: onX ? "x2" : "x",
+    yaxis: onX ? "y" : "y2",
+    x: onX ? across : along,
+    y: onX ? along : across,
+    customdata: rows,
+    text: rows.map((i) => `${tooltipText(ds, i, cfg.appearance.tooltip)}<br>${reasons.get(i)}`),
+    hovertemplate: `%{text}<br>${otherTitle}: %{${onX ? "y" : "x"}}<extra></extra>`,
+    marker: {
+      symbol: onX ? "line-ns-open" : "line-ew-open",
+      size: 10,
+      color: CHART_COLORS.neutral,
+      line: { color: CHART_COLORS.neutral, width: 0 },
+    },
+    selected: { marker: { opacity: 1, color: dark ? "#f1f5f9" : "#111827" } },
+    unselected: { marker: { opacity: 0.35 } },
+  };
+  // Free at the plot's edge, beside the main axis's ticks, so the two strips never collide.
+  const axis = {
+    domain: [0, 0.08],
+    anchor: "free",
+    position: 0,
+    range: [-0.5, slots.length - 0.5],
+    tickvals: slots.map((_, k) => k),
+    ticktext: slots.map((s) => `${s} (${(bySlot.get(s) ?? []).length.toLocaleString()})`),
+    ...(onX ? { tickangle: -90 } : {}),
+    tickfont: { size: 10 },
+    showgrid: false,
+    zeroline: false,
+    fixedrange: true,
+    automargin: true,
+  };
+  const shape = {
+    type: "rect",
+    xref: onX ? "x2 domain" : "x domain",
+    x0: 0,
+    x1: 1,
+    yref: onX ? "y domain" : "y2 domain",
+    y0: 0,
+    y1: 1,
+    fillcolor: STRIP_FILL,
+    line: { width: 0 },
+    layer: "below",
+  };
+  return { trace, axis, shape, count: rows.length };
+}
+
 /** A cross-protocol scatter's untested compounds, kept apart from the measured pairs: the
- * footer counts pairs and why the other rows have none; on an unsplit plot whose X a protocol
- * measured, passing rows with a Y but no X sit on a categorical strip left of the numeric axis
- * (one slot per reason, "Not tested in …" before "No value"), selectable like any point.
- * Overlays stay on the main axis, so guides stop at the strip. */
+ * footer counts pairs and why the other rows have none; on an unsplit plot, passing rows
+ * with a Y but no X (a protocol's X) sit on a categorical strip left of the X axis, and
+ * rows with an X but no Y (a protocol's Y) on one below it, selectable like any point.
+ * Overlays stay on the main axes, so guides stop at the strips. */
 export function addMissingStrip(
   fig: Figure,
   ds: Dataset,
@@ -41,84 +124,37 @@ export function addMissingStrip(
     return { fig, stripped: 0 };
   }
   const counted = { ...fig, note: pairNote(ds, x, y, mask) };
-  if (!isComparedValue(ds, x) || cfg.appearance.splitBy) return { fig: counted, stripped: 0 };
+  if (cfg.appearance.splitBy) return { fig: counted, stripped: 0 };
 
-  const yAt = plottedY(ds, cfg);
-  const bySlot = new Map<string, number[]>();
-  for (let i = 0; i < ds.row_count; i++) {
-    if (!mask[i] || numberAt(ds, x, i) !== null || yAt(i) === null) continue;
-    const reason = missingReason(ds, x, i) ?? NO_VALUE;
-    const slot = bySlot.get(reason);
-    if (slot) slot.push(i);
-    else bySlot.set(reason, [i]);
-  }
-  if (bySlot.size === 0) return { fig: counted, stripped: 0 };
+  const strips = (["x", "y"] as const).map((side) =>
+    isComparedValue(ds, side === "x" ? x : y) ? stripOf(ds, cfg, mask, side, dark) : null,
+  );
+  const [xs, ys] = strips;
+  if (!xs && !ys) return { fig: counted, stripped: 0 };
 
-  const slots = [...bySlot.keys()].sort((a, b) => +(a === NO_VALUE) - +(b === NO_VALUE));
-  const points = slots.flatMap((s, k) => (bySlot.get(s) ?? []).map((i) => ({ i, k, s })));
-  const rows = points.map((p) => p.i);
-  const yTitle = axisTitle(ds, y, cfg.logY);
-  const strip = {
-    type: rows.length > WEBGL_ABOVE ? "scattergl" : "scatter",
-    mode: "markers",
-    uid: "strip",
-    name: "No X value",
-    showlegend: false,
-    xaxis: "x2",
-    yaxis: "y",
-    x: points.map((p) => p.k + jitter(p.i)),
-    y: rows.map((i) => numberAt(ds, y, i)),
-    customdata: rows,
-    text: points.map((p) => `${tooltipText(ds, p.i, cfg.appearance.tooltip)}<br>${p.s}`),
-    hovertemplate: `%{text}<br>${yTitle}: %{y}<extra></extra>`,
-    marker: {
-      symbol: "line-ns-open",
-      size: 10,
-      color: CHART_COLORS.neutral,
-      line: { color: CHART_COLORS.neutral, width: 0 },
-    },
-    selected: { marker: { opacity: 1, color: dark ? "#f1f5f9" : "#111827" } },
-    unselected: { marker: { opacity: 0.35 } },
-  };
   const layout = fig.layout;
+  const shapes = (layout.shapes as Record<string, unknown>[] | undefined) ?? [];
   return {
-    stripped: rows.length,
+    stripped: (xs?.count ?? 0) + (ys?.count ?? 0),
     fig: {
       ...counted,
-      data: [...fig.data, strip],
+      data: [...fig.data, ...(xs ? [xs.trace] : []), ...(ys ? [ys.trace] : [])],
       layout: {
         ...layout,
-        xaxis: { ...(layout.xaxis as object), domain: [0.11, 1] },
-        // The Y axis stands left of the strip, which shares it.
-        yaxis: { ...(layout.yaxis as object), anchor: "free", position: 0 },
-        xaxis2: {
-          domain: [0, 0.08],
-          anchor: "y",
-          range: [-0.5, slots.length - 0.5],
-          tickvals: slots.map((_, k) => k),
-          ticktext: slots.map((s) => `${s} (${(bySlot.get(s) ?? []).length.toLocaleString()})`),
-          tickangle: -90,
-          tickfont: { size: 10 },
-          showgrid: false,
-          zeroline: false,
-          fixedrange: true,
-          automargin: true,
+        // Each main axis makes room for the other's strip and stands beyond it.
+        xaxis: {
+          ...(layout.xaxis as object),
+          ...(xs && { domain: [0.11, 1] }),
+          ...(ys && { anchor: "free", position: 0 }),
         },
-        shapes: [
-          ...((layout.shapes as Record<string, unknown>[] | undefined) ?? []),
-          {
-            type: "rect",
-            xref: "x2 domain",
-            x0: 0,
-            x1: 1,
-            yref: "y domain",
-            y0: 0,
-            y1: 1,
-            fillcolor: STRIP_FILL,
-            line: { width: 0 },
-            layer: "below",
-          },
-        ],
+        yaxis: {
+          ...(layout.yaxis as object),
+          ...(ys && { domain: [0.11, 1] }),
+          ...(xs && { anchor: "free", position: 0 }),
+        },
+        ...(xs && { xaxis2: xs.axis }),
+        ...(ys && { yaxis2: ys.axis }),
+        shapes: [...shapes, ...(xs ? [xs.shape] : []), ...(ys ? [ys.shape] : [])],
       },
     },
   };

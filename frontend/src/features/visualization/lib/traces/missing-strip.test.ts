@@ -27,7 +27,9 @@ describe("addMissingStrip", () => {
     const x2 = fig.layout.xaxis2 as Record<string, unknown>;
     expect(x2.domain).toEqual([0, 0.08]);
     expect(x2.tickvals).toEqual([0, 1]);
-    expect(x2.ticktext).toEqual(["Not tested in Counter (1)", "No value (1)"]);
+    expect(x2.ticktext).toEqual(["Not tested (1)", "No value (1)"]);
+    // The protocol is named in the hover, not on the tick.
+    expect((t.text as string[])[0]).toMatch(/Not tested in Counter$/);
     // Jittered within each slot, the same on every build.
     const xs = t.x as number[];
     expect(Math.abs(xs[0])).toBeLessThanOrEqual(0.3);
@@ -76,9 +78,45 @@ describe("addMissingStrip", () => {
     const { fig, stripped } = strip(none);
     expect(stripped).toBe(3);
     expect(fig.data.filter((t) => t.xaxis === "x")).toEqual([]);
-    expect((fig.layout.xaxis2 as { ticktext: string[] }).ticktext).toEqual([
-      "Not tested in Counter (3)",
-    ]);
+    expect((fig.layout.xaxis2 as { ticktext: string[] }).ticktext).toEqual(["Not tested (3)"]);
     expect(fig.note).toBe("0 measured pairs · 3 not tested in Counter");
+  });
+
+  it("keeps the tick short however long the protocol's name", () => {
+    const long: Dataset = {
+      ...crossProtocol,
+      protocols: [
+        { protocol_id: "A", name: "Primary" },
+        { protocol_id: "B", name: "Mtb_WCA_mc2-7000_Resazurin counter-screen, second site" },
+      ],
+    };
+    const { fig } = strip(long);
+    expect((fig.layout.xaxis2 as { ticktext: string[] }).ticktext).toEqual([
+      "Not tested (1)",
+      "No value (1)",
+    ]);
+  });
+
+  it("puts rows with an X but no Y on a strip below the X axis", () => {
+    const onPrimary = panel("scatter", { x: "dr:x:p", y: "dr:y:p" });
+    const { fig, stripped } = strip(crossProtocol, onPrimary);
+    expect(stripped).toBe(2);
+    const t = fig.data.find((d) => d.yaxis === "y2") as Record<string, unknown>;
+    expect(t).toMatchObject({ xaxis: "x", customdata: [1, 2], x: [6, 6.5] });
+    expect((t.text as string[])[0]).toMatch(/Not tested in Counter$/);
+    const ys = t.y as number[];
+    expect(Math.abs(ys[0])).toBeLessThanOrEqual(0.3);
+    expect(Math.abs(ys[1] - 1)).toBeLessThanOrEqual(0.3);
+    expect(fig.layout.yaxis2).toMatchObject({
+      domain: [0, 0.08],
+      tickvals: [0, 1],
+      ticktext: ["Not tested (1)", "No value (1)"],
+    });
+    expect((fig.layout.yaxis as { domain: number[] }).domain).toEqual([0.11, 1]);
+    // The X axis stands below the strip, which shares it.
+    expect(fig.layout.xaxis).toMatchObject({ anchor: "free", position: 0 });
+    expect(fig.layout.shapes).toEqual([
+      expect.objectContaining({ type: "rect", yref: "y2 domain", layer: "below" }),
+    ]);
   });
 });
