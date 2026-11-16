@@ -81,8 +81,8 @@ async def _build_batch_lookup(
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
     """Resolve every distinct ``batch_ref`` to ``(batch_id, molecule_id)``.
 
-    A bare lot number next to a compound ref is looked up as
-    ``"<compound ref>-<lot>"`` (``qualified_lot_ref``) and keyed that way.
+    A bare lot number next to a compound ref is looked up both as itself and
+    as ``"<compound ref>-<lot>"`` (``qualified_lot_ref``), keyed each way.
 
     Lookup order per ref:
       1. canonical batch_number (find_by_batch_number)
@@ -94,13 +94,13 @@ async def _build_batch_lookup(
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
     seen: set[str] = set()
     for r in rows:
-        ref = qualified_lot_ref(r.batch_ref, r.compound_ref) or r.batch_ref
-        if not ref or ref in seen:
-            continue
-        seen.add(ref)
-        batch = await resolve_batch_ref(batch_repo, workspace_id, ref)
-        if batch is not None:
-            out[ref] = (batch.id, batch.molecule_id)
+        for ref in (r.batch_ref, qualified_lot_ref(r.batch_ref, r.compound_ref)):
+            if not ref or ref in seen:
+                continue
+            seen.add(ref)
+            batch = await resolve_batch_ref(batch_repo, workspace_id, ref)
+            if batch is not None:
+                out[ref] = (batch.id, batch.molecule_id)
     return out
 
 

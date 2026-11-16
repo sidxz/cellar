@@ -303,3 +303,50 @@ class TestBareLotNumbers:
         )
         assert out.unmatched_batch_refs == frozenset({"CC-0001-002"})
         assert out.lot_fallback_rows == 0
+
+    def test_an_all_digit_batch_id_of_the_compound_is_read_as_itself(self) -> None:
+        batch_id, molecule_id = uuid.uuid4(), uuid.uuid4()
+        out = resolve_rows(
+            [_row(batch_ref="100234", compound_ref="CPD-1")],
+            batch_index={"100234": (batch_id, molecule_id)},
+            compound_index={"CPD-1": _candidate(molecule_id, batches=(_summary(1), _summary(2)))},
+        )
+        assert (out.per_row[0].batch_id, out.per_row[0].error) == (batch_id, None)
+        assert out.lot_fallback_rows == 0
+
+    def test_an_all_digit_batch_id_of_another_compound_is_read_as_a_lot(self) -> None:
+        lot_batch, molecule_id = uuid.uuid4(), uuid.uuid4()
+        out = resolve_rows(
+            [_row(batch_ref="001", compound_ref="CPD-1")],
+            batch_index={
+                "001": (uuid.uuid4(), uuid.uuid4()),  # some other compound's batch
+                "CPD-1-001": (lot_batch, molecule_id),
+            },
+            compound_index={"CPD-1": _candidate(molecule_id, batches=(_summary(1), _summary(2)))},
+        )
+        assert (out.per_row[0].batch_id, out.per_row[0].error) == (lot_batch, None)
+
+
+async def test_the_batch_lookup_reads_a_bare_number_both_as_itself_and_as_a_lot() -> None:
+    from unittest.mock import AsyncMock
+
+    from cellar.application.screening.import_run_file_mapper import _build_batch_lookup
+
+    ws, own, lot = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    batches = {"100234": own, "CPD-1-001": lot}
+    repo = AsyncMock()
+    repo.find_by_batch_number.side_effect = lambda _ws, ref: (
+        AsyncMock(id=batches[ref], molecule_id=uuid.UUID(int=7)) if ref in batches else None
+    )
+    repo.find_by_external_identifier.return_value = None
+
+    index = await _build_batch_lookup(
+        [
+            _row(batch_ref="100234", compound_ref="CPD-1"),
+            _row(batch_ref="001", compound_ref="CPD-1"),
+        ],
+        ws,
+        repo,
+    )
+
+    assert index == {"100234": (own, uuid.UUID(int=7)), "CPD-1-001": (lot, uuid.UUID(int=7))}

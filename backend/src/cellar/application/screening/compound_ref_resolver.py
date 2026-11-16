@@ -23,9 +23,10 @@ Per-row precedence (matches design spec):
   4. Neither set → resolution is empty (caller decides whether to drop
      the row based on well type — sample rows drop, control rows keep).
 
-A bare lot number ("001") in the batch column next to a compound ref is read
-as ``"<compound ref>-<lot>"``; when no batch carries that, the row resolves
-by its compound ref alone (rule 2) and counts in ``lot_fallback_rows``.
+An all-digit batch cell next to a compound ref is first read as itself, kept
+when that batch is the compound's; else as the lot ``"<compound ref>-<lot>"``;
+when no batch carries that, the row resolves by its compound ref alone (rule 2)
+and counts in ``lot_fallback_rows``.
 """
 
 from __future__ import annotations
@@ -300,6 +301,10 @@ def _resolve_one(
     compound_ref = row.compound_ref
 
     lot_ref = qualified_lot_ref(batch_ref, compound_ref)
+    own = batch_index.get(batch_ref) if lot_ref is not None and batch_ref else None
+    candidate = compound_index.get(compound_ref) if compound_ref else None
+    if own is not None and candidate is not None and own[1] == candidate.molecule_id:
+        lot_ref = None  # an all-digit batch id of the row's own compound reads as itself
     if lot_ref is not None:
         if lot_ref not in batch_index:
             # The file's lot numbers aren't Cellar's: the compound's batch stands in.
