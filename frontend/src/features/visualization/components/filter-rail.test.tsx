@@ -168,7 +168,13 @@ describe("FilterRail", () => {
       columns: [...ds.columns, { key: "s", label: "Series", kind: "category", provenance: {} }],
       values: { ...ds.values, s: ["Other", "Not tested", "Amides", "No value", "Zeta", null] },
     };
-    const filter: Filter = { ...types([]), key: "s", values: [] };
+    const filter: Filter = {
+      id: "f-s",
+      kind: "category",
+      key: "s",
+      values: [],
+      includeMissing: true,
+    };
     show([filter], <FilterRail ds={series} />);
     const card = screen.getByRole("group", { name: "Series" });
     expect(
