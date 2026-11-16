@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   view: {} as Record<string, unknown>,
   datasetCalls: [] as [unknown, unknown][],
   replace: vi.fn(),
+  remove: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -44,7 +45,11 @@ vi.mock("../hooks/use-dataset", () => ({
     };
   },
 }));
-vi.mock("../hooks/use-saved-views", () => ({ useSavedView: () => state.view }));
+vi.mock("../hooks/use-saved-views", () => ({
+  useSavedView: () => state.view,
+  useUpdateSavedView: () => ({ mutate: vi.fn(), isPending: false }),
+  useDeleteSavedView: () => ({ mutate: state.remove, isPending: false }),
+}));
 
 import { SavedViewPage } from "./saved-view-page";
 
@@ -113,6 +118,7 @@ beforeAll(() => {
 beforeEach(() => {
   state.datasetCalls = [];
   state.replace.mockReset();
+  state.remove.mockReset();
   state.view = loaded(savedView());
 });
 
@@ -175,6 +181,30 @@ describe("SavedViewPage", () => {
     show();
     expect(screen.getByText(gone)).toBeInTheDocument();
     expect(state.datasetCalls.every(([source]) => source === null)).toBe(true);
+  });
+
+  it("lets the owner delete a view whose protocol is gone", () => {
+    state.remove.mockImplementation((_id: string, opts: { onSuccess: () => void }) =>
+      opts.onSuccess(),
+    );
+    state.view = loaded(savedView({ dataset: null, unresolved: ["Gone."] }));
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "Delete view" }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete view" }));
+    expect(state.remove).toHaveBeenCalledWith("v1", expect.anything());
+    expect(state.replace).toHaveBeenCalledWith("/assays");
+  });
+
+  it("offers no delete on a dead view someone else owns", () => {
+    state.view = loaded(savedView({ dataset: null, unresolved: ["Gone."], can_edit: false }));
+    show();
+    expect(screen.queryByRole("button", { name: "Delete view" })).not.toBeInTheDocument();
+  });
+
+  it("opens with the view's name and Save in the header", () => {
+    show();
+    expect(screen.getByText("Potency by compound")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
   it("says so when the view doesn't exist or isn't shared with the viewer", () => {

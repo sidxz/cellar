@@ -130,6 +130,31 @@ describe("SubstructureFilterCard", () => {
     expect(screen.getByText("Contains c1ccccc1")).toBeInTheDocument();
   });
 
+  it("opened from a saved view: shows the query unmatched and matches it again on request", async () => {
+    vi.mocked(customInstance).mockResolvedValueOnce({
+      matched_ids: ["m1"],
+      searched: 3,
+      without_structure: 1,
+    });
+    const { moleculeIds: _, ...saved } = benzene(["m9"]);
+    show(saved);
+    expect(screen.getByTestId("query-structure")).toHaveAttribute("data-smiles", "c1ccccc1");
+    expect(
+      screen.getByText("Not matched against this data yet — it filters nothing until matched."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/compounds match/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Match again" }));
+
+    await waitFor(() => expect(state().filters).toEqual([benzene(["m1"])]));
+    expect(vi.mocked(customInstance)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { query: "c1ccccc1", query_kind: "smiles", molecule_ids: ["m1", "m2", "m3"] },
+      }),
+    );
+    expect(screen.getByText("1 of 3 compounds match")).toBeInTheDocument();
+  });
+
   it("edits the query: re-matches and keeps the filter's id, in one undo step", async () => {
     vi.mocked(customInstance).mockResolvedValueOnce({
       matched_ids: ["m2"],

@@ -1,15 +1,19 @@
 "use client";
 
 import { EmptyState } from "@/shared/components/empty-state";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { AlertTriangle, ChartScatter } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useSavedView } from "../hooks/use-saved-views";
+import { errorText } from "../lib/api-errors";
 import { migrateViewConfig } from "../lib/saved-view";
 import { fromDatasetRequest } from "../lib/source-url";
 import { OpenViewContext } from "../store/open-view-context";
 import type { DatasetSource, Level } from "../types";
-import { LoadingSkeleton, WorkbenchPage, errorText } from "./workbench-page";
+import { DeleteViewDialog } from "./save-view-dialog";
+import { LoadingSkeleton, WorkbenchPage } from "./workbench-page";
 
 /** A saved view at `/assays/visualize/<viewId>`: its source and level (each overridable by
  * the URL) opened on live data, with its plots and filters. */
@@ -23,6 +27,9 @@ export function SavedViewPage({
   levelOverride: Level | null;
 }) {
   const query = useSavedView(viewId);
+  const router = useRouter();
+  const canEdit = useCanEdit();
+  const [deleting, setDeleting] = useState(false);
   // Bumped by "Reload view": the workbench remounts on the view as saved now.
   const [reloads, setReloads] = useState(0);
   const view = query.data;
@@ -62,11 +69,26 @@ export function SavedViewPage({
   const source = sourceOverride ?? (view.dataset && fromDatasetRequest(view.dataset).source);
   if (!source) {
     return (
-      <EmptyState
-        icon={AlertTriangle}
-        title="This view can't be opened"
-        description={view.unresolved?.join(" ")}
-      />
+      <>
+        <EmptyState
+          icon={AlertTriangle}
+          title="This view can't be opened"
+          description={view.unresolved?.join(" ")}
+          action={
+            view.can_edit && canEdit
+              ? { label: "Delete view", onClick: () => setDeleting(true) }
+              : undefined
+          }
+        />
+        {deleting && (
+          <DeleteViewDialog
+            view={view}
+            open
+            onOpenChange={setDeleting}
+            onDeleted={() => router.replace("/assays")}
+          />
+        )}
+      </>
     );
   }
   return (

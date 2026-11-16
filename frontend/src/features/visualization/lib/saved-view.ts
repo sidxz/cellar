@@ -1,6 +1,11 @@
 import type { PanelConfig } from "../store/workbench-store";
 import type { Dataset } from "../types";
-import { VIEW_CONFIG_VERSION, type ViewConfig, viewConfigSchema } from "./config-schema";
+import {
+  MAX_VIEW_CONFIG_BYTES,
+  VIEW_CONFIG_VERSION,
+  type ViewConfig,
+  viewConfigSchema,
+} from "./config-schema";
 import { column } from "./dataset";
 import type { Filter } from "./filters";
 import { carryConfig } from "./level-switch";
@@ -13,25 +18,51 @@ const panelKeys = (p: PanelConfig) => {
   return [p.x, p.y, p.category, a.colorBy, a.shapeBy, a.sizeBy, a.splitBy, ...a.tooltip];
 };
 
-/** What a saved view stores of the workbench: its plots and its range and category filters
- * ("Filter to selection" names rows of this dataset, so it stays behind), with the label of
- * every column they reference. */
-export function buildViewConfig(
-  state: { panels: PanelConfig[]; filters: Filter[] },
-  ds: Dataset,
-): ViewConfig {
-  const filters = state.filters.filter((f): f is SavedFilter => f.kind !== "rows");
+type Settings = { panels: PanelConfig[]; filters: Filter[] };
+
+/** The filters a view stores: "Filter to selection" names rows of this dataset, so it stays
+ * behind, and a substructure filter keeps its query without the compounds it matched. */
+function savedFilters(filters: Filter[]): SavedFilter[] {
+  return filters.flatMap((f): SavedFilter[] => {
+    if (f.kind === "rows") return [];
+    if (f.kind === "substructure") {
+      return [{ id: f.id, kind: f.kind, query: f.query, queryKind: f.queryKind }];
+    }
+    return [f];
+  });
+}
+
+/** What a saved view stores of the workbench: its plots and its saved filters, with the
+ * label of every column they reference. */
+export function buildViewConfig(state: Settings, ds: Dataset): ViewConfig {
+  const filters = savedFilters(state.filters);
+  const filterKeys = filters.map((f) => ("key" in f ? f.key : undefined));
   const labels: Record<string, string> = {};
-  for (const key of [...state.panels.flatMap(panelKeys), ...filters.map((f) => f.key)]) {
+  for (const key of [...state.panels.flatMap(panelKeys), ...filterKeys]) {
     const label = key === undefined ? undefined : column(ds, key)?.label;
     if (key !== undefined && label !== undefined) labels[key] = label;
   }
   return { config_version: VIEW_CONFIG_VERSION, panels: state.panels, filters, labels };
 }
 
+/** Whether ``a`` and ``b`` save as the same view (a selection or a query's matches never
+ * tell them apart). */
+export const sameSaved = (a: Settings, b: Settings) =>
+  (a.panels === b.panels && a.filters === b.filters) ||
+  JSON.stringify([a.panels, savedFilters(a.filters)]) ===
+    JSON.stringify([b.panels, savedFilters(b.filters)]);
+
 /** The config's size as stored: UTF-8 bytes of its compact JSON. */
 export const configBytes = (cfg: ViewConfig) =>
   new TextEncoder().encode(JSON.stringify(cfg)).length;
+
+/** Why ``cfg`` can't be saved for its size (the server's limit), or null. */
+export function tooLargeToSave(cfg: ViewConfig): string | null {
+  const bytes = configBytes(cfg);
+  if (bytes <= MAX_VIEW_CONFIG_BYTES) return null;
+  const kb = (n: number) => Math.ceil(n / 1024);
+  return `These settings are too large to save (${kb(bytes)} KB of ${kb(MAX_VIEW_CONFIG_BYTES)} KB). Remove some category filter values.`;
+}
 
 /** ``MIGRATIONS[v]`` turns a version-``v`` config into a version-``v + 1`` one. */
 // biome-ignore lint/suspicious/noExplicitAny: a step reads a config of an older shape

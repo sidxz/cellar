@@ -5,12 +5,12 @@ import { Alert } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
-import { ApiError } from "@/shared/lib/api/custom-instance";
 import { AlertTriangle, ChartScatter, Database, Info, Rows3, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
+import { errorText } from "../lib/api-errors";
 import type { ViewConfig } from "../lib/config-schema";
 import { resolveUserColumns } from "../lib/dataset";
 import { defaultPanels } from "../lib/default-panels";
@@ -32,6 +32,7 @@ import { PlotSettingsSheet } from "./plot-settings-sheet";
 import { RunPickerDialog } from "./run-picker-dialog";
 import { SaveCollectionButton } from "./save-collection-dialog";
 import { SelectionStrip } from "./selection-strip";
+import { ViewControls } from "./view-controls";
 import { WorkbenchBody } from "./workbench-body";
 import {
   LevelSwitcher,
@@ -41,13 +42,6 @@ import {
   useSourceRuns,
 } from "./workbench-header";
 import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
-
-/** The server's own sentence when it sent one (`{message}`), else the error text. */
-export function errorText(error: unknown): string {
-  const body = error instanceof ApiError ? (error.body as { message?: unknown } | null) : null;
-  if (typeof body?.message === "string") return body.message;
-  return error instanceof Error ? error.message : "Something went wrong.";
-}
 
 /** A saved view the workbench opens: its plots and filters, fitted to today's data. */
 type OpenedView = { view: SavedView; config: ViewConfig };
@@ -265,6 +259,7 @@ function Workbench({
             onViewChange={changeView}
             exportMenu={<ExportMenu ds={ds} table={tableRef} />}
             addPlotMenu={<AddPlotMenu ds={ds} />}
+            viewControls={<ViewControls source={source} level={level} ds={ds} />}
           />
           {viewNote}
           {note && (

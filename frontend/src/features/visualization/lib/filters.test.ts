@@ -8,6 +8,7 @@ import {
   filterCondition,
   filterSummary,
   fixedBins,
+  isFilterActive,
   substructureSummary,
 } from "./filters";
 
@@ -142,6 +143,13 @@ describe("substructure filter", () => {
 
   it("counts the dataset compounds it keeps", () => {
     expect(filterCondition(wells(), sub(["m1", "m9"]))).toBe("1 of 2 compounds");
+  });
+
+  it("filters nothing until it is matched against this data", () => {
+    const { moleculeIds: _, ...unmatched } = sub(["m1"]);
+    expect(mask(computePassMask(wells(), [unmatched]))).toEqual([1, 1, 1, 1, 1]);
+    expect(isFilterActive(wells(), unmatched)).toBe(false);
+    expect(filterCondition(wells(), unmatched)).toBe("not matched");
   });
 });
 

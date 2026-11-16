@@ -46,8 +46,9 @@ export interface WorkbenchState extends Snapshot {
   setMaximized: (id: string | null) => void;
   undo: () => void;
   redo: () => void;
-  /** The current panels and filters are now the saved ones. */
-  markSaved: () => void;
+  /** ``saved`` (the panels and filters sent, by default the current ones) is now the view
+   * as stored. */
+  markSaved: (saved?: Snapshot) => void;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -168,7 +169,8 @@ export function createWorkbenchStore(initial: {
           future: future.slice(1),
         });
       },
-      markSaved: () => set({ baseline: { panels: get().panels, filters: get().filters } }),
+      markSaved: (saved) =>
+        set({ baseline: saved ?? { panels: get().panels, filters: get().filters } }),
     };
   });
 }

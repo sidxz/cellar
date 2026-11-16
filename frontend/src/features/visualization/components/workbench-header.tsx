@@ -353,9 +353,12 @@ interface WorkbenchHeaderProps {
   exportMenu?: ReactNode;
   /** "+ Add plot (n/4)" menu. */
   addPlotMenu?: ReactNode;
+  /** The saved view's name and its Save controls, at the end of row 1. */
+  viewControls?: ReactNode;
 }
 
-/** Two rows: the source (row 1), then grain, counts, history and the plot/export menus. */
+/** Two rows: the source and the saved view's controls (row 1), then grain, counts, history
+ * and the plot/export menus. */
 export function WorkbenchHeader({
   source,
   ds,
@@ -363,6 +366,7 @@ export function WorkbenchHeader({
   onViewChange,
   exportMenu,
   addPlotMenu,
+  viewControls,
 }: WorkbenchHeaderProps) {
   const mask = usePassMask(ds);
   const panels = useWorkbench((s) => s.panels);
@@ -389,12 +393,17 @@ export function WorkbenchHeader({
   const { one, many } = LEVELS[level];
   return (
     <header className="space-y-2">
-      <SourceBar
-        source={source}
-        level={level}
-        ds={ds}
-        onChange={(next) => onViewChange({ source: next, level }, take())}
-      />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="min-w-0 flex-1">
+          <SourceBar
+            source={source}
+            level={level}
+            ds={ds}
+            onChange={(next) => onViewChange({ source: next, level }, take())}
+          />
+        </div>
+        {viewControls}
+      </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <LevelSwitcher
           level={level}

@@ -25,6 +25,11 @@ describe("onMutationError", () => {
     expect(mockShowError).not.toHaveBeenCalled();
   });
 
+  it("stays silent on a stale edit — the caller explains it and offers a reload", () => {
+    onMutationError(new ApiError("API error: 409", 409, { error: "StaleEditError" }));
+    expect(mockShowError).not.toHaveBeenCalled();
+  });
+
   it("toasts a plain mutation error as before", () => {
     onMutationError(new Error("boom"));
     expect(mockShowError).toHaveBeenCalledWith("boom");

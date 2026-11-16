@@ -3,7 +3,14 @@ import { makePanel } from "../store/workbench-store";
 import type { Dataset } from "../types";
 import { MAX_VIEW_CONFIG_BYTES, VIEW_CONFIG_VERSION, type ViewConfig } from "./config-schema";
 import type { Filter } from "./filters";
-import { buildViewConfig, configBytes, migrateViewConfig, resolveViewConfig } from "./saved-view";
+import {
+  buildViewConfig,
+  configBytes,
+  migrateViewConfig,
+  resolveViewConfig,
+  sameSaved,
+  tooLargeToSave,
+} from "./saved-view";
 
 const X = "rd:X:percent_inhibition";
 const Y = "rd:Y:raw";
@@ -59,6 +66,22 @@ describe("buildViewConfig", () => {
     expect(JSON.stringify(cfg)).not.toContain(ds.row_ids[0]);
   });
 
+  it("keeps a substructure filter's query, never its matched compounds", () => {
+    const sub: Filter = {
+      id: "sub-1",
+      kind: "substructure",
+      query: "c1ccccc1",
+      queryKind: "smiles",
+      moleculeIds: ["m-matched"],
+    };
+    const out = buildViewConfig({ panels: [], filters: [sub] }, ds);
+    expect(out.filters).toEqual([
+      { id: "sub-1", kind: "substructure", query: "c1ccccc1", queryKind: "smiles" },
+    ]);
+    expect(JSON.stringify(out)).not.toContain("m-matched");
+    expect(out.labels).toEqual({});
+  });
+
   it("labels every key the panels and filters reference", () => {
     expect(cfg.labels).toEqual({
       well_order: "Well order",
@@ -85,6 +108,47 @@ describe("configBytes", () => {
       new TextEncoder().encode('{"config_version":1,"panels":[],"filters":[],"labels":{"a":"é"}}')
         .length,
     );
+  });
+});
+
+describe("tooLargeToSave", () => {
+  it("names the size and the limit, and what to remove", () => {
+    const values = Array.from({ length: 4_000 }, (_, i) => `compound-value-${i}`);
+    const big = buildViewConfig(
+      {
+        panels: [],
+        filters: [{ id: "c", kind: "category", key: "plate", values, includeMissing: true }],
+      },
+      ds,
+    );
+    const kb = Math.ceil(configBytes(big) / 1024);
+    expect(kb).toBeGreaterThan(64);
+    expect(tooLargeToSave(big)).toBe(
+      `These settings are too large to save (${kb} KB of 64 KB). Remove some category filter values.`,
+    );
+    expect(tooLargeToSave(buildViewConfig({ panels: [scatter], filters: [] }, ds))).toBeNull();
+  });
+});
+
+describe("sameSaved", () => {
+  const sub: Filter = {
+    id: "sub-1",
+    kind: "substructure",
+    query: "c1ccccc1",
+    queryKind: "smiles",
+  };
+
+  it("ignores what a view never stores: the selection and a query's matches", () => {
+    const saved = { panels: [scatter], filters: [sub] };
+    const matched: Filter = { ...sub, moleculeIds: ["m1"] };
+    const rows: Filter = { id: "selection", kind: "rows", rowIds: ["w2"] };
+    expect(sameSaved(saved, { panels: [scatter], filters: [matched, rows] })).toBe(true);
+  });
+
+  it("sees a changed plot or filter", () => {
+    const saved = { panels: [scatter], filters: [sub] };
+    expect(sameSaved(saved, { panels: [{ ...scatter, logY: true }], filters: [sub] })).toBe(false);
+    expect(sameSaved(saved, { panels: [scatter], filters: [] })).toBe(false);
   });
 });
 
@@ -120,6 +184,45 @@ describe("migrateViewConfig", () => {
     const out = migrateViewConfig(v1, 2, steps);
     expect(out.ok && out.config.config_version).toBe(2);
     expect(out.ok && out.config.panels[0].bins).toBe(20);
+  });
+});
+
+describe("a saved view opened again", () => {
+  it("keeps every plot's overlays", () => {
+    const withOverlays = makePanel("scatter", {
+      x: "well_order",
+      y: X,
+      overlays: {
+        bands: true,
+        drift: "band",
+        zPrime: true,
+        refLine: 50,
+        limits: { mode: "entered", lower: 10, upper: 90 },
+        lipe: [3, 5],
+      },
+    });
+    const stored = JSON.parse(
+      JSON.stringify(buildViewConfig({ panels: [withOverlays], filters: [] }, ds)),
+    );
+    const read = migrateViewConfig(stored);
+    if (!read.ok) throw new Error(read.reason);
+    expect(resolveViewConfig(read.config, ds).panels).toEqual([withOverlays]);
+  });
+
+  it("opens a substructure filter unmatched, without any compound ids", () => {
+    const sub: Filter = {
+      id: "sub-1",
+      kind: "substructure",
+      query: "c1ccccc1",
+      queryKind: "smiles",
+      moleculeIds: ["m1"],
+    };
+    const stored = JSON.parse(JSON.stringify(buildViewConfig({ panels: [], filters: [sub] }, ds)));
+    const read = migrateViewConfig(stored);
+    if (!read.ok) throw new Error(read.reason);
+    expect(resolveViewConfig(read.config, ds).filters).toEqual([
+      { id: "sub-1", kind: "substructure", query: "c1ccccc1", queryKind: "smiles" },
+    ]);
   });
 });
 

@@ -37,17 +37,14 @@ describe("config schemas", () => {
     expect(filterSchema.safeParse(rows).success).toBe(true);
   });
 
-  it("a substructure filter is live only: a saved view never stores its matched ids", () => {
-    const sub = {
-      id: "sub-1",
-      kind: "substructure",
-      query: "c1ccccc1",
-      queryKind: "smiles",
-      moleculeIds: ["m1"],
-    };
+  it("a saved substructure filter is its query: matched ids are never read back", () => {
+    const query = { id: "sub-1", kind: "substructure", query: "c1ccccc1", queryKind: "smiles" };
+    const sub = { ...query, moleculeIds: ["m1"] };
     expect(filterSchema.parse(sub)).toEqual(sub);
     expect(filterSchema.safeParse({ ...sub, queryKind: "inchi" }).success).toBe(false);
-    expect(savedFilterSchema.safeParse(sub).success).toBe(false);
+    expect(savedFilterSchema.parse(sub)).toEqual(query);
+    // Opened from a view: not matched against this data yet.
+    expect(filterSchema.parse(query)).toEqual(query);
   });
 
   it("a view config holds at most 4 panels", () => {

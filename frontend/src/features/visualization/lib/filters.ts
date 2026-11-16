@@ -27,6 +27,7 @@ function predicate(ds: Dataset, f: Filter): Predicate {
     };
   }
   if (f.kind === "substructure") {
+    if (!f.moleculeIds) return () => true;
     const ids = new Set(f.moleculeIds);
     const molecules = ds.values.molecule_id ?? [];
     return (i) => ids.has(molecules[i] as string);
@@ -156,6 +157,7 @@ export function substructureCounts(
 export function filterCondition(ds: Dataset, f: Filter): string {
   if (f.kind === "rows") return `${f.rowIds.length.toLocaleString()} rows`;
   if (f.kind === "substructure") {
+    if (!f.moleculeIds) return "not matched";
     const { matched, total } = substructureCounts(ds, f);
     return `${matched.toLocaleString()} of ${total.toLocaleString()} compounds`;
   }

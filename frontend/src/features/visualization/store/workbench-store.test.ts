@@ -103,6 +103,17 @@ describe("workbench store", () => {
     expect(isDirty(store.getState())).toBe(true);
   });
 
+  it("markSaved takes the panels and filters that were saved, not later edits", () => {
+    const store = createWorkbenchStore({ panels: [], filters: [range("a", 1)], saved: true });
+    store.getState().upsertFilter(range("a", 10));
+    const sent = { panels: store.getState().panels, filters: store.getState().filters };
+    store.getState().upsertFilter(range("a", 20));
+    store.getState().markSaved(sent);
+    expect(isDirty(store.getState())).toBe(true);
+    store.getState().undo();
+    expect(isDirty(store.getState())).toBe(false);
+  });
+
   it("an unsaved store is never dirty", () => {
     const store = createWorkbenchStore({ panels: [] });
     store.getState().upsertFilter(range("a", 10));
