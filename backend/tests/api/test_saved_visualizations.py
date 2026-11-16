@@ -336,6 +336,30 @@ async def test_list_a_protocols_views(as_user, session_factory, workspace_id):
     assert [(v["name"], v["can_edit"]) for v in theirs.json()] == [("Shared", False)]
 
 
+async def test_an_unreadable_view_is_left_out_of_the_list_and_says_why_on_open(
+    client, session_factory, fake_auth, capsys
+):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    good = await _create(client, _protocol(w["p"]), name="Good")
+    bad = await _create(client, _protocol(w["p"]), name="From a newer version")
+    newer = '{"config_version": 99, "panels": [], "filters": []}'
+    await _sql(
+        session_factory,
+        "UPDATE saved_visualizations SET config = cast(:c as jsonb) WHERE id = :v",
+        c=newer,
+        v=bad["id"],
+    )
+
+    listed = await client.get(URL, params={"protocol_id": str(w["p"])})
+    opened = await client.get(f"{URL}/{bad['id']}")
+
+    assert listed.status_code == 200, listed.text
+    assert [v["id"] for v in listed.json()] == [good["id"]]
+    assert "saved_visualization.list_skipped" in capsys.readouterr().out
+    assert opened.status_code == 422
+    assert "saved by a newer version" in opened.json()["message"]
+
+
 # --- update
 
 

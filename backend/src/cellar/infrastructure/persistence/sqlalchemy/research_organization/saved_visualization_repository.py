@@ -5,10 +5,12 @@ from __future__ import annotations
 import uuid
 from collections.abc import Sequence
 
+import structlog
 from sqlalchemy import delete, false, or_, select
 
 from cellar.domain.research_organization.enums import SearchVisibility
 from cellar.domain.research_organization.saved_visualization import SavedVisualization
+from cellar.domain.shared.errors import ValidationError
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import SQLAlchemyRepository
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
@@ -16,6 +18,7 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
 )
 
 M = SavedVisualizationModel
+log = structlog.get_logger(__name__)
 
 
 class SQLAlchemySavedVisualizationRepository(
@@ -96,7 +99,19 @@ class SQLAlchemySavedVisualizationRepository(
         if protocol_id is not None:
             stmt = stmt.where(M.protocol_ids.contains([protocol_id]))  # @>, uses the GIN index
         result = await self._session.execute(stmt.order_by(M.name, M.id))
-        return [self._to_domain_tracked(m) for m in result.scalars()]
+        views: list[SavedVisualization] = []
+        for model in result.scalars():
+            try:
+                views.append(self._to_domain_tracked(model))
+            except ValidationError as exc:
+                # One unreadable view must not hide the others; opening it says why.
+                log.warning(
+                    "saved_visualization.list_skipped",
+                    view_id=str(model.id),
+                    workspace_id=str(model.workspace_id),
+                    reason=exc.message,
+                )
+        return views
 
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None:
         await self._session.execute(delete(M).where(M.workspace_id == workspace_id, M.id == id))
