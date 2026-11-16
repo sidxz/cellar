@@ -70,6 +70,18 @@ export const canRedo = (s: WorkbenchState) => s.future.length > 0;
 
 let panelSeq = 0;
 
+/** A panel of ``type`` with caller-computed ``defaults`` over the default appearance. */
+export function makePanel(type: PanelType, defaults: PanelPatch = {}): PanelConfig {
+  panelSeq += 1;
+  const { appearance, ...rest } = defaults;
+  return {
+    id: `panel-${Date.now().toString(36)}-${panelSeq}`,
+    type,
+    ...rest,
+    appearance: { ...DEFAULT_APPEARANCE, ...appearance },
+  };
+}
+
 export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?: Filter[] }) {
   return createStore<WorkbenchState>()((set, get) => {
     /** Apply a panels/filters change as one undoable step. */
@@ -90,19 +102,11 @@ export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?:
       past: [],
       future: [],
 
-      addPanel: (type, defaults = {}) => {
+      addPanel: (type, defaults) => {
         if (get().panels.length >= MAX_PANELS) return null;
-        panelSeq += 1;
-        const id = `panel-${Date.now().toString(36)}-${panelSeq}`;
-        const { appearance, ...rest } = defaults;
-        const panel: PanelConfig = {
-          id,
-          type,
-          ...rest,
-          appearance: { ...DEFAULT_APPEARANCE, ...appearance },
-        };
+        const panel = makePanel(type, defaults);
         commit({ panels: [...get().panels, panel] });
-        return id;
+        return panel.id;
       },
       updatePanel: (id, patch) => {
         const { appearance, ...rest } = patch;

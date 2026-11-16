@@ -128,6 +128,13 @@ describe("ProtocolDetail actions", () => {
       screen.queryByRole("menuitem", { name: "New protocol from this" }),
     ).not.toBeInTheDocument();
   });
+
+  it("offers Visualize beside the primary action", () => {
+    state.protocol = protocol({ status: "active" } as Partial<Protocol>);
+    render();
+    const visualize = screen.getByRole("button", { name: "Visualize" });
+    expect(visualize.nextElementSibling).toHaveTextContent("New Run");
+  });
 });
 
 describe("ProtocolDetail Curves tab", () => {

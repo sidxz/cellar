@@ -1,5 +1,6 @@
 "use client";
 
+import { VisualizeButton } from "@/features/visualization/components/visualize-button";
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { ConfirmDeleteDialog } from "@/shared/components/confirm-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
@@ -223,6 +224,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           const hasMore = canLockToggle || hasDestructive;
           return (
             <>
+              <VisualizeButton runId={r.id} />
               {status === "draft" && (
                 <Button
                   size="sm"

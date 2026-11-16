@@ -1,5 +1,6 @@
 "use client";
 
+import { VisualizeButton } from "@/features/visualization/components/visualize-button";
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { Button } from "@/shared/components/ui/button";
@@ -279,6 +280,7 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
           return (
             <>
+              <VisualizeButton protocolId={p.id} />
               {primary}
               {hasMore && (
                 <DropdownMenu>
