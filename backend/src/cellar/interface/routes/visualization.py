@@ -16,10 +16,15 @@ from cellar.application.visualization.get_dataset import (
     RunSource,
 )
 from cellar.application.visualization.get_run_row_counts import GetRunRowCountsQuery
+from cellar.application.visualization.match_substructure import (
+    MatchSubstructureQuery,
+    SubstructureMatchResult,
+)
 from cellar.interface.dependencies import (
     AuthDep,
     GetRunRowCountsDep,
     GetVisualizationDatasetDep,
+    MatchSubstructureDep,
 )
 from cellar.interface.error_handlers import result_to_response
 
@@ -139,3 +144,37 @@ async def get_run_row_counts(
     query = GetRunRowCountsQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id)
     counts = result_to_response(await uc(query, auth=auth))
     return RunRowCountsResponse(counts={str(k): v for k, v in counts.items()})
+
+
+class SubstructureMatchRequest(BaseModel):
+    query: str
+    # How the editor exported the query; untagged queries are aromatized when they
+    # parse as SMILES (a Kekulé SMARTS from the editor), else read as SMARTS.
+    query_kind: Literal["smiles", "smarts"] | None = None
+    molecule_ids: list[uuid.UUID]
+
+
+class SubstructureMatchResponse(BaseModel):
+    matched_ids: list[uuid.UUID]
+    searched: int
+    without_structure: int
+
+    @classmethod
+    def from_domain(cls, r: SubstructureMatchResult) -> SubstructureMatchResponse:
+        return cls(
+            matched_ids=r.matched_ids, searched=r.searched, without_structure=r.without_structure
+        )
+
+
+@router.post("/substructure-match", response_model=SubstructureMatchResponse)
+async def match_substructure(
+    body: SubstructureMatchRequest, auth: AuthDep, uc: MatchSubstructureDep
+) -> SubstructureMatchResponse:
+    """Which of the given molecules contain the substructure (Search's strict match)."""
+    query = MatchSubstructureQuery(
+        workspace_id=auth.workspace_id,
+        molecule_ids=tuple(body.molecule_ids),
+        query=body.query,
+        query_kind=body.query_kind,
+    )
+    return SubstructureMatchResponse.from_domain(result_to_response(await uc(query, auth=auth)))

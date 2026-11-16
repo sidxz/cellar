@@ -27,7 +27,9 @@ import type {
   DatasetRequest,
   DatasetResponse,
   HTTPValidationError,
-  RunRowCountsResponse
+  RunRowCountsResponse,
+  SubstructureMatchRequest,
+  SubstructureMatchResponse
 } from '../model';
 
 import { customInstance } from '.././custom-instance';
@@ -224,3 +226,72 @@ export function useGetRunRowCountsApiV1VisualizationProtocolsProtocolIdRunRowCou
 
 
 
+/**
+ * Which of the given molecules contain the substructure (Search's strict match).
+ * @summary Match Substructure
+ */
+export const matchSubstructureApiV1VisualizationSubstructureMatchPost = (
+    substructureMatchRequest: SubstructureMatchRequest,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<SubstructureMatchResponse>(
+      {url: `/api/v1/visualization/substructure-match`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: substructureMatchRequest, signal
+    },
+      );
+    }
+
+
+
+
+export const getMatchSubstructureApiV1VisualizationSubstructureMatchPostMutationKey = () => ['matchSubstructureApiV1VisualizationSubstructureMatchPost'] as const;
+
+export const getMatchSubstructureApiV1VisualizationSubstructureMatchPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof matchSubstructureApiV1VisualizationSubstructureMatchPost>>, TError,MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof matchSubstructureApiV1VisualizationSubstructureMatchPost>>, TError,MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationVariables, TContext> => {
+
+const mutationKey = getMatchSubstructureApiV1VisualizationSubstructureMatchPostMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof matchSubstructureApiV1VisualizationSubstructureMatchPost>>, MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  matchSubstructureApiV1VisualizationSubstructureMatchPost(data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationResult = NonNullable<Awaited<ReturnType<typeof matchSubstructureApiV1VisualizationSubstructureMatchPost>>>
+    export type MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationBody = SubstructureMatchRequest
+    export type MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationError = HTTPValidationError
+    export type MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationVariables = {data: SubstructureMatchRequest}
+
+    /**
+ * Which of the given molecules contain the substructure (Search's strict match).
+ * @summary Match Substructure
+ */
+export const useMatchSubstructureApiV1VisualizationSubstructureMatchPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof matchSubstructureApiV1VisualizationSubstructureMatchPost>>, TError,MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof matchSubstructureApiV1VisualizationSubstructureMatchPost>>,
+        TError,
+        MatchSubstructureApiV1VisualizationSubstructureMatchPostMutationVariables,
+        TContext
+      > => {
+      return useMutation(getMatchSubstructureApiV1VisualizationSubstructureMatchPostMutationOptions(options), queryClient);
+    }

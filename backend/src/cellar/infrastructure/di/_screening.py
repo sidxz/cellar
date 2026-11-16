@@ -218,6 +218,7 @@ from cellar.application.shared.parsers import TabularParser
 from cellar.application.visualization.dataset_reader import VisualizationDatasetReader
 from cellar.application.visualization.get_dataset import GetVisualizationDataset
 from cellar.application.visualization.get_run_row_counts import GetRunRowCounts
+from cellar.application.visualization.match_substructure import MatchSubstructure
 from cellar.domain.audit_compliance.repository import AuditRepository
 from cellar.domain.screening_assay.curve_derivative import CurveDerivativeService
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
@@ -316,6 +317,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.target_reposit
 )
 from cellar.infrastructure.persistence.sqlalchemy.visualization.dataset_reader import (
     SQLAlchemyVisualizationDatasetReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.visualization.substructure_matcher import (
+    SQLAlchemySubstructureMatcher,
 )
 from cellar.infrastructure.persistence.sqlalchemy.workspace_config.naming_label_repository import (
     SQLAlchemyNamingLabelRepository,
@@ -1306,6 +1310,10 @@ def register_screening(container: Container) -> None:
     container.define(
         GetRunRowCounts,
         lambda c: GetRunRowCounts(reader=c[VisualizationDatasetReader]),
+    )
+    container.define(
+        MatchSubstructure,
+        lambda c: MatchSubstructure(SQLAlchemySubstructureMatcher(c[async_sessionmaker])),
     )
 
     # --- Screening Read Models ---
