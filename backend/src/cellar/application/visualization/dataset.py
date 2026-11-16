@@ -75,6 +75,8 @@ class Dataset:
     values: dict[str, list[Any]]
     # Wells only: each plate's Z′ as stored by the run's QC (plate id → value).
     plate_z_prime: dict[str, float] = field(default_factory=dict)
+    # Wells only: Z′ per value column (``rd:<readout>:<layer>``), then plate id.
+    plate_z_prime_by_column: dict[str, dict[str, float]] = field(default_factory=dict)
     # The protocols the columns come from, the first one owning the rows.
     protocols: list[DatasetProtocol] = field(default_factory=list)
 
@@ -162,6 +164,13 @@ def readout_label(
     return f"{rd.name}{cs} · {_LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
 
 
+def _finite_z(entry: Any) -> float | None:
+    z = entry.get("z_prime") if isinstance(entry, dict) else None
+    if isinstance(z, int | float) and not isinstance(z, bool) and math.isfinite(z):
+        return float(z)
+    return None
+
+
 def stored_plate_z_prime(runs: list[RunInfo], plate_ids: set[str]) -> dict[str, float]:
     """Z′ of the given plates as the runs' QC stored it (``qc_metrics.z_prime`` keyed
     by plate id, as the Heat Map reads it); a plate without a finite stored number is
@@ -172,15 +181,32 @@ def stored_plate_z_prime(runs: list[RunInfo], plate_ids: set[str]) -> dict[str, 
         if not isinstance(per_plate, dict):  # absent, or a legacy run-level scalar
             continue
         for plate_id, entry in per_plate.items():
-            z = entry.get("z_prime") if isinstance(entry, dict) else None
-            if (
-                plate_id in plate_ids
-                and isinstance(z, int | float)
-                and not isinstance(z, bool)
-                and math.isfinite(z)
-            ):
-                stored[plate_id] = float(z)
+            z = _finite_z(entry)
+            if plate_id in plate_ids and z is not None:
+                stored[plate_id] = z
     return stored
+
+
+def stored_plate_z_prime_by_column(
+    runs: list[RunInfo], plate_ids: set[str]
+) -> dict[str, dict[str, float]]:
+    """Z′ per readout x layer as the runs' plate QC stored it
+    (``qc_metrics.plates[plate][readout][layer]``), keyed by the value column
+    (``rd:<readout>:<layer>``) and then plate id; finite numbers only."""
+    stored: dict[str, dict[str, float]] = defaultdict(dict)
+    for run in runs:
+        plates = (run.qc_metrics or {}).get("plates")
+        if not isinstance(plates, dict):
+            continue
+        for plate_id, readouts in plates.items():
+            if plate_id not in plate_ids or not isinstance(readouts, dict):
+                continue
+            for rd_id, layers in readouts.items():
+                for layer, entry in (layers or {}).items() if isinstance(layers, dict) else ():
+                    z = _finite_z(entry)
+                    if z is not None:
+                        stored[f"rd:{rd_id}:{layer}"][plate_id] = z
+    return dict(stored)
 
 
 def run_labels(runs: list[RunInfo]) -> dict[uuid.UUID, str]:
@@ -374,4 +400,5 @@ def build_wells_dataset(
         columns=columns,
         values=values,
         plate_z_prime=stored_plate_z_prime(runs, plate_ids),
+        plate_z_prime_by_column=stored_plate_z_prime_by_column(runs, plate_ids),
     )

@@ -6,7 +6,11 @@ import math
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from cellar.application.visualization.dataset import build_wells_dataset, stored_plate_z_prime
+from cellar.application.visualization.dataset import (
+    build_wells_dataset,
+    stored_plate_z_prime,
+    stored_plate_z_prime_by_column,
+)
 from cellar.application.visualization.dataset_reader import (
     CompoundInfo,
     ReadoutDefInfo,
@@ -314,6 +318,31 @@ def test_plate_z_prime_needs_a_finite_number_per_plate():
     assert stored({"z_prime": {str(p): {"z_prime": "0.7"}}}) == {}
     assert stored({"z_prime": {str(p): 0.7}}) == {}
     assert stored({"z_prime": {str(p): {"z_prime": -1}}}) == {str(p): -1.0}
+
+
+def test_stored_plate_z_prime_per_readout_column():
+    p1, p9 = uuid.uuid4(), uuid.uuid4()
+    qc = {
+        "plates": {
+            str(p1): {
+                str(RD): {
+                    "raw": {"z_prime": 0.71},
+                    "percent_inhibition": {"z_prime": 0.84},
+                    "z_score": {"z_prime": None},  # too few controls
+                }
+            },
+            str(p9): {str(RD): {"raw": {"z_prime": 0.5}}},  # a plate with no rows here
+        }
+    }
+    run = _run(qc_metrics=qc)
+    ds = build_wells_dataset([run], DEFS, [_row(run, plate_id=p1)])
+    assert ds.plate_z_prime_by_column == {
+        f"rd:{RD}:raw": {str(p1): 0.71},
+        f"rd:{RD}:percent_inhibition": {str(p1): 0.84},
+    }
+    plates = {str(p1)}
+    for junk in (None, {"plates": "[object Object]"}, {"plates": {str(p1): 0.7}}):
+        assert stored_plate_z_prime_by_column([_run(qc_metrics=junk)], plates) == {}
 
 
 def _looks_like_uuid(s: str) -> bool:

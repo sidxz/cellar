@@ -111,6 +111,8 @@ class DatasetResponse(BaseModel):
     # Wells only: each plate's Z′ as the run's QC stored it, keyed by the plate id
     # that values["plate_id"] carries.
     plate_z_prime: dict[str, float] = {}
+    # Wells only: each plate's stored Z′ per value column (rd:<readout>:<layer>).
+    plate_z_prime_by_column: dict[str, dict[str, float]] = {}
     # The protocols the columns come from; the first one owns the rows.
     protocols: list[DatasetProtocolResponse] = []
 
@@ -124,6 +126,7 @@ class DatasetResponse(BaseModel):
             columns=[DatasetColumnResponse.from_domain(c) for c in d.columns],
             values=d.values,
             plate_z_prime=d.plate_z_prime,
+            plate_z_prime_by_column=d.plate_z_prime_by_column,
             protocols=[
                 DatasetProtocolResponse(protocol_id=p.id, name=p.name) for p in d.protocols
             ],

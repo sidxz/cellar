@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import date
 
@@ -64,7 +65,15 @@ async def test_wells_carry_the_stored_z_prime_of_their_plates(client, session_fa
         )
         await uow.session.execute(
             sa.text("UPDATE runs SET qc_metrics = cast(:q as jsonb) WHERE id = :r"),
-            {"r": w["a"], "q": f'{{"z_prime": {{"{plate}": {{"z_prime": 0.712}}}}}}'},
+            {
+                "r": w["a"],
+                "q": json.dumps(
+                    {
+                        "z_prime": {str(plate): {"z_prime": 0.712}},
+                        "plates": {str(plate): {str(w["rd"]): {"raw": {"z_prime": 0.7}}}},
+                    }
+                ),
+            },
         )
         await uow.commit()
 
@@ -79,6 +88,7 @@ async def test_wells_carry_the_stored_z_prime_of_their_plates(client, session_fa
     body = wells.json()
     assert body["values"]["plate_id"] == [str(plate), str(plate)]
     assert body["plate_z_prime"] == {str(plate): 0.712}
+    assert body["plate_z_prime_by_column"] == {f"rd:{w['rd']}:raw": {str(plate): 0.7}}
     assert compounds.json()["plate_z_prime"] == {}
 
 
