@@ -58,3 +58,24 @@ export function generate4PLFromData(
   const { x, y } = generate4PLPoints(params, xMin, xMax, n);
   return { x, y };
 }
+
+/** The backend's note of points left out of a fit for a dose <= 0 (no place on a log axis),
+ *  suffixed with how many: `dose_zero_left_out:2`. */
+const DOSE_ZERO_LEFT_OUT = "dose_zero_left_out:";
+
+/** A fit-quality code worded for a chemist where cellar owns the wording; any other code
+ *  passes through (the suite's summary card labels its own). */
+export function fitNoteLabel(code: string): string {
+  if (!code.startsWith(DOSE_ZERO_LEFT_OUT)) return code;
+  const n = Number(code.slice(DOSE_ZERO_LEFT_OUT.length));
+  return `${n} point${n === 1 ? "" : "s"} at dose 0 left out of the fit`;
+}
+
+/** The curve with its fit notes worded (the same object when there is nothing to word). */
+export function withFitNotes<T extends { fit_quality_warnings?: readonly string[] | null }>(
+  curve: T,
+): T {
+  const codes = curve.fit_quality_warnings;
+  if (!codes?.some((c) => c.startsWith(DOSE_ZERO_LEFT_OUT))) return curve;
+  return { ...curve, fit_quality_warnings: codes.map(fitNoteLabel) };
+}

@@ -14,7 +14,6 @@ import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colo
 import { groupBy } from "@/shared/lib/group-by";
 import { Plot } from "@/shared/lib/plotly";
 import { shortId } from "@/shared/lib/utils";
-import { DoseResponseChartView } from "@structflo/components/dose-response";
 import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
@@ -23,6 +22,7 @@ import type { CompoundActivity, CurveClass, Protocol } from "../../types";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
 import { CurveNavigator } from "../curve-navigator";
+import { DoseResponseChartView } from "../dose-response-figure";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import { Segmented } from "../segmented";
 import { ActivityColumnsMenu, useColumnChoices } from "./activity-columns-menu";
@@ -465,7 +465,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                     <Skeleton className="h-[300px] w-full" />
                   ) : compoundCurves && compoundCurves.length > 0 ? (
                     <>
-                      <DoseResponseChartView curves={compoundCurves} plot={Plot} />
+                      <DoseResponseChartView curves={compoundCurves} />
                       <div className="rounded-lg border">
                         <table className="w-full text-sm">
                           <thead>

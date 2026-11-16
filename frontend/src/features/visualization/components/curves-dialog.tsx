@@ -1,6 +1,7 @@
 "use client";
 
 import { CurveClassBadge } from "@/features/screening-assay/components/curve-class-badge";
+import { DoseResponseChartView } from "@/features/screening-assay/components/dose-response-figure";
 import { useCompoundCurves } from "@/features/screening-assay/hooks/use-compound-curves";
 import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
 import {
@@ -13,8 +14,6 @@ import {
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { formatCount, formatMeasurementValue } from "@/shared/lib/format-number";
-import { Plot } from "@/shared/lib/plotly";
-import { DoseResponseChartView } from "@structflo/components/dose-response";
 import { useMemo } from "react";
 import { column } from "../lib/dataset";
 import { runLabel } from "../lib/runs";
@@ -124,7 +123,7 @@ export function CurvesDialog({
           // A plain block: straight in the dialog's grid, the chart would be stretched to its row
           // and its full-height plot box would fill it, leaving a gap over the table.
           <div className="min-w-0 space-y-4">
-            <DoseResponseChartView curves={curves} plot={Plot} />
+            <DoseResponseChartView curves={curves} />
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">

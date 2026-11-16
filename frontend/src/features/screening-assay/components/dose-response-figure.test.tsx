@@ -20,8 +20,8 @@ vi.mock("@/shared/lib/chart-colors", () => ({
   CURVE_QUALITY_COLORS: { inactive: "#999", full: "#000" } as Record<string, string>,
 }));
 
-import { render } from "@testing-library/react";
-import { DoseResponseFigure } from "./dose-response-figure";
+import { render, screen } from "@testing-library/react";
+import { DoseResponseChartView, DoseResponseFigure } from "./dose-response-figure";
 
 function reset() {
   plotCalls.length = 0;
@@ -299,5 +299,21 @@ describe("<DoseResponseFigure /> — aggregate-mode overlay", () => {
     expect(layout.xaxis?.range).toBeDefined();
     const [, hi] = layout.xaxis!.range!;
     expect(hi).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("<DoseResponseChartView /> — cellar's fit notes", () => {
+  it("says on each curve's card how many points at dose 0 sat out of the fit", () => {
+    const curve = { fitted_value: 0.0013, top: 100, bottom: 0, hill_slope: 1, r_squared: 0.99 };
+    render(
+      <DoseResponseChartView
+        curves={[
+          { ...curve, id: "a", label: "A", fit_quality_warnings: ["dose_zero_left_out:1"] },
+          { ...curve, id: "b", label: "B", fit_quality_warnings: ["dose_zero_left_out:2"] },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/1 point at dose 0 left out of the fit/)).toBeInTheDocument();
+    expect(screen.getByText(/2 points at dose 0 left out of the fit/)).toBeInTheDocument();
   });
 });

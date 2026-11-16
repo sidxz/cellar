@@ -155,6 +155,12 @@ describe("compound drawer evidence", () => {
     fireEvent.keyDown(picker, { key: "ArrowDown" });
     expect(navigate).not.toHaveBeenCalled();
   });
+  it("says how many points at dose 0 sat out of the fit", () => {
+    setup([{ ...curve, fit_quality_warnings: ["low_r_squared", "dose_zero_left_out:1"] }]);
+    expect(
+      screen.getByText("Fit quality: low r squared · 1 point at dose 0 left out of the fit"),
+    ).toBeInTheDocument();
+  });
   it("keeps reported results visible when fetching source curves fails", () => {
     setup([], true);
     expect(

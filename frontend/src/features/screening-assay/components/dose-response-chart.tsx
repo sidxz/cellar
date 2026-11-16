@@ -27,11 +27,9 @@ import {
   refitDoseResponseCurveApiV1DoseResponseCurvesCurveIdRefitPost,
   useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet,
 } from "@/shared/lib/api/readout-data/readout-data";
-import { Plot } from "@/shared/lib/plotly";
 import { useAuthz } from "@duar-auth/nextjs";
 import {
   type CapturedPoint,
-  DoseResponseChartView,
   type EditOverlay,
   buildCapturedPoints,
 } from "@structflo/components/dose-response";
@@ -50,6 +48,7 @@ import {
 import type { DoseResponseConfig, DoseResponseCurve } from "../types";
 import { CurveControls } from "./curve-controls";
 import { CurveEditHistory } from "./curve-edit-history";
+import { DoseResponseChartView } from "./dose-response-figure";
 import { DoseResponsePointInventory } from "./dose-response-point-inventory";
 import {
   type ExclusionReason as SaveExclusionReason,
@@ -421,7 +420,6 @@ export function DoseResponseChart({
   return (
     <DoseResponseChartView
       curves={curves}
-      plot={Plot}
       className={className}
       interactive={isInteractive}
       edit={edit}

@@ -12,11 +12,15 @@
  */
 
 import {
+  type DoseResponseChartViewProps,
   type DoseResponseFigureProps,
+  DoseResponseChartView as SharedDoseResponseChartView,
   DoseResponseFigure as SharedDoseResponseFigure,
 } from "@structflo/components/dose-response";
+import { useMemo } from "react";
 
 import { Plot } from "@/shared/lib/plotly";
+import { withFitNotes } from "../lib/dose-response-display";
 
 export type {
   AdditionalCurve,
@@ -28,4 +32,14 @@ export type {
 
 export function DoseResponseFigure(props: Omit<DoseResponseFigureProps, "plot">) {
   return <SharedDoseResponseFigure {...props} plot={Plot} />;
+}
+
+/** The suite's whole chart (toggles, export, plot, a summary card per curve) on cellar's
+ *  Plotly, with cellar's fit notes worded on the cards. */
+export function DoseResponseChartView({
+  curves,
+  ...props
+}: Omit<DoseResponseChartViewProps, "plot">) {
+  const worded = useMemo(() => curves.map(withFitNotes), [curves]);
+  return <SharedDoseResponseChartView {...props} curves={worded} plot={Plot} />;
 }
