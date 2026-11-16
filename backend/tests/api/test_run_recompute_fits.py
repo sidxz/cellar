@@ -118,3 +118,49 @@ async def test_a_locked_or_approved_run_is_not_recomputed(
     async with session_factory() as s:
         q = sa.text("SELECT count(*) FROM readout_data WHERE run_id = :r AND is_computed")
         assert (await s.execute(q, {"r": run})).scalar_one() == 0
+
+
+async def test_a_recompute_says_how_many_edited_curves_it_reset(
+    client, session_factory, fake_auth
+):
+    ws = fake_auth.workspace_id
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        s = uow.session
+        org = await seed.org(s, ws)
+        p = await seed.protocol(s, ws)
+        signal = await seed.readout_def(s, p, name="Signal", normalizations=["percent_inhibition"])
+        await seed.readout_def(s, p, name="IC50", data_type="dose_response")
+        run = await seed.run(s, ws, p, date(2026, 10, 8))
+        plate = await seed.plate(s, run, 1)
+        for col, (well_type, v) in enumerate(
+            [("positive_control", 100.0)] * 2 + [("negative_control", 0.0)] * 2, start=1
+        ):
+            w = await seed.well(s, plate, "P", col, well_type=well_type)
+            await seed.readout(s, ws, run, signal, None, v, well_id=w)  # type: ignore[arg-type]
+        mol = await seed.molecule(s, ws, org, "titrated")
+        b = await seed.batch(s, ws, mol, "B-1")
+        for col, (dose, v) in enumerate(
+            [(0.01, 98.0), (0.1, 90.0), (1.0, 60.0), (10.0, 25.0), (100.0, 8.0)], start=1
+        ):
+            w = await seed.well(s, plate, "A", col, dose=dose, batch_id=b)
+            await seed.readout(s, ws, run, signal, mol, v, well_id=w, batch_id=b)
+        await uow.commit()
+    assert (await client.post(f"/api/v1/runs/{run}/recompute")).json()["fit_notes"] == []
+    async with session_factory() as s:
+        q = sa.text("SELECT id, raw_data FROM dose_response_curves WHERE run_id = :r")
+        curve = (await s.execute(q, {"r": run})).one()
+    point = sorted(curve.raw_data, key=lambda p: p["concentration"])[0]
+    edit = {"idx": 0, "source": "manual", "excluded": True, "reason": "other", **point}
+    resp = await client.post(
+        f"/api/v1/dose-response-curves/{curve.id}/refit",
+        json={"exclusions": [edit], "save_reason": "other"},
+    )
+    assert resp.status_code == 200, resp.text
+
+    resp = await client.post(f"/api/v1/runs/{run}/recompute")
+
+    assert resp.json()["fit_notes"] == [
+        "1 curve with excluded points or fit settings of their own refitted with these "
+        "settings; those edits were reset"
+    ]
