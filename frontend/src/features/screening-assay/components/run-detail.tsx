@@ -67,6 +67,7 @@ import {
 import type { RunStatus } from "../types";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
 import { RunDataPanel } from "./run-data-panel";
+import { RunDataSummary } from "./run-data-summary";
 import { RunSummaryCard } from "./run-summary-card";
 
 interface RunDetailProps {
@@ -557,6 +558,9 @@ export function RunDetail({ runId }: RunDetailProps) {
               canEditMeta={canEditTags && !run.is_locked}
               canEditTags={canEditTags}
             />
+
+            {/* Plate QC per readout x layer, with the protocol's averages */}
+            <RunDataSummary run={run} protocol={protocol} />
 
             {/* Data visualizations + files */}
             <RunDataPanel run={run} />

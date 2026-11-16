@@ -51,8 +51,11 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
   const plateIds = Object.keys(perPlate);
   const worstZp = worstZPrime(qcMetrics);
 
-  // Anything else on qc_metrics that isn't the per-plate z_prime block.
-  const genericEntries = Object.entries(qcMetrics).filter(([k]) => k !== "z_prime");
+  // Anything else on qc_metrics that isn't a per-plate block (z_prime here; plates in
+  // the Data summary).
+  const genericEntries = Object.entries(qcMetrics).filter(
+    ([k]) => k !== "z_prime" && k !== "plates",
+  );
 
   return (
     <div className="space-y-4">
