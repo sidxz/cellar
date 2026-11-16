@@ -113,7 +113,7 @@ def test_primary_normalization_skips_none():
 
 
 # --- Regression guard: Activity keeps today's treatment of qualified values --------------
-# Written against the reader before the shared aggregation (Task 2) and run there first.
+# Written against the reader before the shared aggregation and run there first.
 
 
 async def test_activity_still_averages_qualified_values(uow, session_factory, workspace_id):

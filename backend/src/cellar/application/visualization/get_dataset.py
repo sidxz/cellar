@@ -28,7 +28,7 @@ from cellar.application.visualization.dataset import Dataset, build_wells_datase
 from cellar.application.visualization.dataset_reader import RunInfo, VisualizationDatasetReader
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 
-# From the stage-1 benchmark (384-well plates, raw + one normalized layer): 100k rows
+# Benchmarked on 384-well plates (raw + one normalized layer): 100k rows
 # build and serialize in about 1.8 s, 200k in about 3.4 s. Cost follows readout values
 # (rows x value columns); the column cap guards payload size, not latency.
 MAX_DATASET_ROWS = 100_000
