@@ -263,3 +263,42 @@ async def test_save_collection_unknown_run_404(client):
         f"/api/v1/sar/decomposition/{uuid.uuid4()}/save-collection", json={"name": "x"}
     )
     assert res.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_assignments_carry_every_matched_molecule(client, api_app, workspace_id):
+    ids = await _seed_two_molecules(api_app, workspace_id)
+    run_id = await _ready_run_id(client, ids)
+    header = (await client.get(f"/api/v1/sar/decomposition/jobs/{run_id}")).json()
+
+    res = await client.get(f"/api/v1/sar/decomposition/{run_id}/assignments")
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["core_smiles"] == "c1ccccc1"
+    assert body["labels"] == header["rgroup_labels"]
+    assert {uuid.UUID(k) for k in body["assignments"]} == set(ids)
+    assert all("R1" in rgroups for rgroups in body["assignments"].values())
+
+
+@pytest.mark.asyncio
+async def test_assignments_of_a_nonexistent_run_404(client):
+    res = await client.get(f"/api/v1/sar/decomposition/{uuid.uuid4()}/assignments")
+    assert (res.status_code, res.json().get("error")) == (404, "NotFoundError")
+
+
+@pytest.mark.asyncio
+async def test_assignments_of_another_workspaces_run_404(client, api_app, workspace_id):
+    from cellar.interface.dependencies import get_auth
+    from tests.fakes.fake_auth import FakeAuth
+
+    run_id = await _ready_run_id(client, await _seed_two_molecules(api_app, workspace_id))
+    outsider = FakeAuth(role="admin", workspace_id=uuid.uuid4())
+
+    async def _outsider_auth():
+        return outsider
+
+    api_app.dependency_overrides[get_auth] = _outsider_auth
+    res = await client.get(f"/api/v1/sar/decomposition/{run_id}/assignments")
+
+    assert (res.status_code, res.json().get("error")) == (404, "NotFoundError")

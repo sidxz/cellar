@@ -12,6 +12,9 @@ from cellar.application.sar_analysis.cancel_decomposition_run import CancelDecom
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
 from cellar.application.sar_analysis.compute_mcs import ComputeMcs
+from cellar.application.sar_analysis.decomposition_assignments import (
+    FetchDecompositionAssignments,
+)
 from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
 from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
 from cellar.application.sar_analysis.get_decomposition_run import GetDecompositionRun
@@ -34,6 +37,7 @@ __all__ = [
     "CancelUmapClusterJobDep",
     "ComputeMcsDep",
     "FetchActivityHeatmapDep",
+    "FetchDecompositionAssignmentsDep",
     "FetchDecompositionRowsDep",
     "GetActivityProjectionDep",
     "GetDecompositionRunDep",
@@ -78,6 +82,9 @@ CancelDecompositionRunDep = Annotated[
 ]
 FetchDecompositionRowsDep = Annotated[
     FetchDecompositionRows, Depends(_get_use_case(FetchDecompositionRows))
+]
+FetchDecompositionAssignmentsDep = Annotated[
+    FetchDecompositionAssignments, Depends(_get_use_case(FetchDecompositionAssignments))
 ]
 SaveDecompositionCollectionDep = Annotated[
     SaveDecompositionCollection, Depends(_get_use_case(SaveDecompositionCollection))

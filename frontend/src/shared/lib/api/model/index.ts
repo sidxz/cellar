@@ -251,6 +251,8 @@ export * from './datasetResponsePlateZPrime';
 export * from './datasetResponseValues';
 export * from './dataSourceResponse';
 export * from './dataSourceResponseConfig';
+export * from './decompositionAssignmentsResponse';
+export * from './decompositionAssignmentsResponseAssignments';
 export * from './decompositionRowsRequest';
 export * from './decompositionRowsRequestFilter';
 export * from './decompositionRowsResponse';

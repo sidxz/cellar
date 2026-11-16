@@ -27,6 +27,7 @@ import type {
   ActivityProjectionResponse,
   ComputeMcsBody,
   ComputeMcsResponse,
+  DecompositionAssignmentsResponse,
   DecompositionRowsRequest,
   DecompositionRowsResponse,
   DecompositionRunResponse,
@@ -348,6 +349,111 @@ export const useDecompositionRowsApiV1SarDecompositionRunIdRowsPost = <TError = 
       return useMutation(getDecompositionRowsApiV1SarDecompositionRunIdRowsPostMutationOptions(options), queryClient);
     }
     /**
+ * Every matched molecule's R-groups in one response (no page cap).
+ * @summary Decomposition Assignments
+ */
+export const decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet = (
+    runId: string,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<DecompositionAssignmentsResponse>(
+      {url: `/api/v1/sar/decomposition/${runId}/assignments`, method: 'GET', signal
+    },
+      );
+    }
+
+
+
+
+export const getDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGetQueryKey = (runId: string,) => {
+    return [
+    `/api/v1/sar/decomposition/${runId}/assignments`
+    ] as const;
+    }
+
+
+export const getDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGetQueryOptions = <TData = Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError = HTTPValidationError>(runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGetQueryKey(runId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>> = ({ signal }) => decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet(runId, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type DecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGetQueryResult = NonNullable<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>>
+export type DecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGetQueryError = HTTPValidationError
+
+
+/**
+ * Every matched molecule's R-groups in one response (no page cap).
+ * @summary Decomposition Assignments
+ */
+export function useDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet<TData = Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError = HTTPValidationError>(
+ runId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Every matched molecule's R-groups in one response (no page cap).
+ * @summary Decomposition Assignments
+ */
+export function useDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet<TData = Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError = HTTPValidationError>(
+ runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>,
+          TError,
+          Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Every matched molecule's R-groups in one response (no page cap).
+ * @summary Decomposition Assignments
+ */
+export function useDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet<TData = Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError = HTTPValidationError>(
+ runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Every matched molecule's R-groups in one response (no page cap).
+ * @summary Decomposition Assignments
+ */
+export function useDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet<TData = Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError = HTTPValidationError>(
+ runId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof decompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getDecompositionAssignmentsApiV1SarDecompositionRunIdAssignmentsGetQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
  * @summary Save Decomposition Collection
  */
 export const saveDecompositionCollectionApiV1SarDecompositionRunIdSaveCollectionPost = (
