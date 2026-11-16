@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { type CSSProperties, type ComponentType, useMemo } from "react";
+import { type CSSProperties, type ComponentType, useEffect, useMemo, useRef } from "react";
 
 /** Loose Plotly props.
  *
@@ -19,6 +19,8 @@ export interface PlotProps {
   onClick?: (event: unknown) => void;
   onHover?: (event: unknown) => void;
   onUnhover?: (event: unknown) => void;
+  /** Called once the graph is first drawn, with the graph div. */
+  onInitialized?: (figure: unknown, graphDiv: HTMLElement) => void;
   className?: string;
 }
 
@@ -32,16 +34,36 @@ const PlotlyPlot = dynamic(() => import("react-plotly.js"), {
  *
  * plotly.js 4 shows a modebar button by default that uploads the figure, and
  * with it the compound data, to cloud.plotly.com. Every chart goes through
- * here, so it is switched off once for all of them. */
-export function Plot({ config, ...props }: PlotProps) {
+ * here, so it is switched off once for all of them.
+ *
+ * `useResizeHandler` in react-plotly.js follows window resizes only; a graph
+ * whose box changes for any other reason (a panel added, closed or maximized,
+ * a side sheet opening) would keep its old size. A ResizeObserver on the graph
+ * div re-fits it whenever its box changes. */
+export function Plot({ config, onInitialized, ...props }: PlotProps) {
   const safeConfig = useMemo(() => ({ ...config, showSendToCloud: false }), [config]);
-  return <PlotlyPlot {...props} config={safeConfig} />;
+  const observer = useRef<ResizeObserver | null>(null);
+  useEffect(() => () => observer.current?.disconnect(), []);
+  const initialized = (figure: unknown, gd: HTMLElement) => {
+    onInitialized?.(figure, gd);
+    if (!props.useResizeHandler || typeof ResizeObserver === "undefined") return;
+    observer.current?.disconnect();
+    // Plots.resize debounces itself; it rejects for a hidden graph, which needs no fit.
+    observer.current = new ResizeObserver(() => {
+      getPlotlyGlobal()
+        ?.Plots?.resize(gd)
+        .catch(() => {});
+    });
+    observer.current.observe(gd);
+  };
+  return <PlotlyPlot {...props} config={safeConfig} onInitialized={initialized} />;
 }
 
 /** Subset of the runtime Plotly namespace exposed on `window` after the
  * react-plotly.js bundle loads. Used for imperative side-channel calls
  * (downloadImage etc.) that aren't wrapped by react-plotly.js props. */
 interface PlotlyGlobal {
+  Plots?: { resize: (el: HTMLElement) => Promise<unknown> };
   /** Takes a drawn graph element, or a figure object to render off-screen. */
   downloadImage?: (
     el:
