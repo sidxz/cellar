@@ -98,6 +98,21 @@ describe("DerivedRunner", () => {
     expect(set.byMolecule.get("m1")["chem:rg1:R1"]).toBe("Cl");
   });
 
+  it("builds the columns over the compounds its job ran over, not ones added since", () => {
+    const grown: Dataset = {
+      ...ds,
+      row_count: 3,
+      row_ids: ["m1", "m2", "m3"],
+      values: { molecule_id: ["m1", "m2", "m3"], structure: ["c1ccccc1Cl", "c1ccccc1", "CCO"] },
+    };
+    const dispatch = vi.fn();
+    render(<DerivedRunner entry={rg1} ds={grown} readySets={[]} dispatch={dispatch} />, {
+      wrapper,
+    });
+    const { set } = dispatch.mock.calls[0][0];
+    expect([...set.byMolecule.keys()]).toEqual(["m1", "m2"]);
+  });
+
   it("fails when no compound matches the core, without reading assignments", () => {
     state.decomposition = decomposition({ counts: { matched: 0, unmatched: 2, total: 2 } });
     state.assignments = { data: undefined, error: new Error("must not be read") };

@@ -36,7 +36,8 @@ const plain = (error: unknown) =>
   (typeof error === "string" ? error : errorText(error)).replace(/^.*API error: \d+ — /, "");
 
 /** Runs one entry's job and reports its columns or its failure; renders nothing. Mounted
- * while the entry runs, so unmounting is the cancel. */
+ * while the entry runs, so unmounting is the cancel. The columns cover the compounds the job
+ * ran over: any added to the dataset since stay blank, and the bar offers Recompute. */
 export function DerivedRunner(props: Props) {
   if (props.entry.moleculeIds.length === 0) return <NoCompounds {...props} />;
   switch (props.entry.spec.kind) {
@@ -104,8 +105,11 @@ function RGroupsRunner(props: Of<"rgroups">) {
   else if (none) failure = "No compound in this dataset matches the core.";
   else if (run.isCancelled) failure = "The job was cancelled.";
   const set = useMemo(
-    () => (assignments.data && ds ? rgroupSet(entry.spec, ds, assignments.data) : null),
-    [assignments.data, ds, entry.spec],
+    () =>
+      assignments.data && ds
+        ? rgroupSet(entry.spec, ds, assignments.data, entry.moleculeIds)
+        : null,
+    [assignments.data, ds, entry.spec, entry.moleculeIds],
   );
   useOutcome(props, run.cancel, failure, set);
   return null;
@@ -121,8 +125,8 @@ function ClustersRunner(props: Of<"clusters">) {
     nonce: nonceOf(entry),
   });
   const set = useMemo(
-    () => (umap.result && ds ? clusterSet(entry.spec, ds, umap.result) : null),
-    [umap.result, ds, entry.spec],
+    () => (umap.result && ds ? clusterSet(entry.spec, ds, umap.result, entry.moleculeIds) : null),
+    [umap.result, ds, entry.spec, entry.moleculeIds],
   );
   useOutcome(props, umap.cancel, umap.error && plain(umap.error), set);
   return null;
@@ -138,8 +142,11 @@ function SeriesRunner(props: Of<"series">) {
     nonce: nonceOf(entry),
   });
   const set = useMemo(
-    () => (ds && (!needsTree || tree) ? seriesSet(entry.spec, ds, tree, readySets) : null),
-    [ds, needsTree, tree, entry.spec, readySets],
+    () =>
+      ds && (!needsTree || tree)
+        ? seriesSet(entry.spec, ds, tree, readySets, entry.moleculeIds)
+        : null,
+    [ds, needsTree, tree, entry.spec, readySets, entry.moleculeIds],
   );
   useOutcome(props, () => {}, needsTree && error ? plain(error) : null, set);
   return null;

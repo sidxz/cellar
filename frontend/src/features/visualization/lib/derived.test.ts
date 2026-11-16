@@ -73,19 +73,13 @@ describe("rgroupSet", () => {
     });
   });
 
-  it("gives a compound without a structure null everywhere, match included", () => {
-    expect(Object.values(set.byMolecule.get("m3") ?? { x: 1 })).toEqual([
-      null,
-      null,
-      null,
-      null,
-      null,
-    ]);
+  it("leaves a compound without a structure out (null everywhere, match included)", () => {
+    expect(set.byMolecule.has("m3")).toBe(false);
   });
 
-  it("summarizes matches and the compounds without a structure, and warns under half", () => {
-    expect(set.summary).toBe("R1–R2 · 1 of 4 match · 1 without a structure");
-    expect(set.warning).toBe("Only 1 of 4 compounds match this core");
+  it("summarizes matches among the analysed compounds, notes those without a structure, and warns under half", () => {
+    expect(set.summary).toBe("R1–R2 · 1 of 3 match · 1 without a structure");
+    expect(set.warning).toBe("Only 1 of 3 compounds match this core");
   });
 
   it("does not warn when at least half match", () => {
@@ -94,7 +88,7 @@ describe("rgroupSet", () => {
       assignments: { ...assignments.assignments, m2: { R1: "C[*:1]" }, m4: { R1: "C[*:1]" } },
     });
     expect(all.warning).toBeUndefined();
-    expect(all.summary).toBe("R1–R2 · 3 of 4 match · 1 without a structure");
+    expect(all.summary).toBe("R1–R2 · 3 of 3 match · 1 without a structure");
     // A position the decomposition left out stays blank.
     expect(all.byMolecule.get("m2")?.["chem:rg1:R2"]).toBeNull();
   });
@@ -141,7 +135,7 @@ describe("clusterSet", () => {
       "chem:clusters:x": null,
       "chem:clusters:y": null,
     });
-    expect(set.byMolecule.get("m3")?.["chem:clusters:id"]).toBeNull();
+    expect(set.byMolecule.has("m3")).toBe(false);
   });
 
   it("counts clusters, unclustered and structureless compounds", () => {
@@ -184,7 +178,7 @@ describe("seriesSet", () => {
     expect(of("m1")).toBe("Series A"); // R-group match and S1 subtree: first wins
     expect(of("m2")).toBe("Series B"); // S1 subtree via S2
     expect(of("m4")).toBe("Other");
-    expect(of("m3")).toBeNull(); // no structure
+    expect(of("m3")).toBeUndefined(); // no structure
   });
 
   it("summarizes every member and warns about an absent scaffold and overlaps", () => {
@@ -261,6 +255,47 @@ describe("coverage", () => {
       { structure: "structure" },
     );
     expect(coverage(larger, set)).toEqual({ covered: 2, total: 3 });
+  });
+});
+
+describe("a set whose job started before the dataset grew", () => {
+  // The job ran over m1 and m2; m4 was added to the dataset since.
+  const ran = ["m1", "m2"];
+
+  it("holds only the compounds its job analysed: a newer one is blank, not No match", () => {
+    const set = rgroupSet(rgSpec, wells(), assignments, ran);
+    expect(set.byMolecule.has("m4")).toBe(false);
+    expect(set.summary).toBe("R1–R2 · 1 of 2 match · 1 without a structure");
+    expect(withDerived(wells(), [set]).values["chem:rg1:match"]).toEqual([
+      "Matches",
+      "Matches",
+      "Matches",
+      "No match",
+      null,
+      null,
+      null,
+    ]);
+    expect(coverage(wells(), set)).toEqual({ covered: 2, total: 3 });
+  });
+
+  it("leaves a newer compound out of clusters and series too", () => {
+    const clusters = clusterSet(
+      { id: "clusters", kind: "clusters", threshold: 0.4 },
+      wells(),
+      umap(),
+      ran,
+    );
+    expect(clusters.byMolecule.has("m4")).toBe(false);
+    expect(coverage(wells(), clusters)).toEqual({ covered: 2, total: 3 });
+    const s = seriesSet(
+      { id: "series", kind: "series", members: [{ name: "Series B", scaffold: "S1" }] },
+      wells(),
+      tree,
+      [],
+      ran,
+    );
+    expect(s.byMolecule.has("m4")).toBe(false);
+    expect(s.summary).toBe("Series B 2 · Other 0 · 1 without a structure");
   });
 });
 

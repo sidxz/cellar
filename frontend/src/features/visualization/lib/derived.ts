@@ -5,7 +5,7 @@ import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
 import type { z } from "zod";
 import type { Dataset, DatasetColumn } from "../types";
 import type { derivedSpecSchema } from "./config-schema";
-import { column, moleculeStructures } from "./dataset";
+import { column, moleculeStructures, noStructureCompounds } from "./dataset";
 
 export type DerivedSpec = z.infer<typeof derivedSpecSchema>;
 export type SeriesMember = Extract<DerivedSpec, { kind: "series" }>["members"][number];
@@ -13,7 +13,8 @@ export type SeriesMember = Extract<DerivedSpec, { kind: "series" }>["members"][n
 type Cell = string | number | null;
 
 /** Compound-level columns keyed by molecule id, joined onto any level by `withDerived`. Every
- * compound of the dataset it was computed on has an entry (all null without a structure). */
+ * compound its job analysed has an entry; any other (without a structure, or added to the
+ * dataset since the job started) has none, so its columns are blank. */
 export interface DerivedSet {
   spec: DerivedSpec;
   columns: DatasetColumn[];
@@ -32,32 +33,24 @@ const col = (
   hidden = false,
 ): DatasetColumn => ({ key, label, kind, group, provenance: {}, ...(hidden && { hidden }) });
 
-/** One record per dataset compound: `valuesOf(id)` for those with a structure, all null for
- * the rest (counted, so summaries can say so). */
-function perCompound(
-  ds: Dataset,
-  columns: DatasetColumn[],
-  valuesOf: (id: string) => Record<string, Cell>,
-) {
-  const nulls = Object.fromEntries(columns.map((c) => [c.key, null]));
-  const byMolecule = new Map<string, Record<string, Cell>>();
-  let without = 0;
-  for (const [id, structured] of moleculeStructures(ds)) {
-    if (!structured) without++;
-    byMolecule.set(id, structured ? valuesOf(id) : nulls);
-  }
-  return { byMolecule, total: byMolecule.size, without };
+/** One record per compound the job analysed (``ids``), and how many of the dataset's
+ * compounds lack a structure, so summaries can say so. */
+function perCompound(ds: Dataset, ids: string[], valuesOf: (id: string) => Record<string, Cell>) {
+  const byMolecule = new Map(ids.map((id) => [id, valuesOf(id)]));
+  return { byMolecule, total: ids.length, without: noStructureCompounds(ds) };
 }
 
 const withoutNote = (n: number) => (n ? ` · ${fmt(n)} without a structure` : "");
 
 const plural = (n: number, one: string, many: string) => `${fmt(n)} ${n === 1 ? one : many}`;
 
-/** R1…Rn (chemist labels, raw fragments in hidden `:smiles` siblings) + "Matches core". */
+/** R1…Rn (chemist labels, raw fragments in hidden `:smiles` siblings) + "Matches core", for
+ * the compounds ``ids`` the job ran over (by default every one with a structure). */
 export function rgroupSet(
   spec: Extract<DerivedSpec, { kind: "rgroups" }>,
   ds: Dataset,
   a: DecompositionAssignmentsResponse,
+  ids = jobMoleculeIds(ds),
 ): DerivedSet {
   const p = `chem:${spec.id}`;
   const group = `R-groups · ${spec.name}`;
@@ -69,7 +62,7 @@ export function rgroupSet(
     col(`${p}:match`, "Matches core", "category", group),
   ];
   let matched = 0;
-  const { byMolecule, total, without } = perCompound(ds, columns, (id) => {
+  const { byMolecule, total, without } = perCompound(ds, ids, (id) => {
     const frags = a.assignments[id];
     if (frags) matched++;
     const row: Record<string, Cell> = { [`${p}:match`]: frags ? "Matches" : "No match" };
@@ -93,11 +86,12 @@ export function rgroupSet(
   };
 }
 
-/** "Cluster {n}" (1-based) + the cluster map's X/Y. */
+/** "Cluster {n}" (1-based) + the cluster map's X/Y, for the compounds ``ids`` the job ran over. */
 export function clusterSet(
   spec: Extract<DerivedSpec, { kind: "clusters" }>,
   ds: Dataset,
   r: UmapResult,
+  ids = jobMoleculeIds(ds),
 ): DerivedSet {
   const group = "Cluster";
   const columns = [
@@ -108,7 +102,7 @@ export function clusterSet(
   const cluster = new Map(r.clusters.map((c) => [c.moleculeId, c.clusterId]));
   const point = new Map(r.points.map((pt) => [pt.moleculeId, pt]));
   let unclustered = 0;
-  const { byMolecule, without } = perCompound(ds, columns, (id) => {
+  const { byMolecule, without } = perCompound(ds, ids, (id) => {
     const c = cluster.get(id);
     if (c === undefined) unclustered++;
     return {
@@ -126,12 +120,13 @@ export function clusterSet(
   };
 }
 
-/** One "Series" column: the first member a compound belongs to, else "Other". */
+/** One "Series" column: the first member a compound of ``ids`` belongs to, else "Other". */
 export function seriesSet(
   spec: Extract<DerivedSpec, { kind: "series" }>,
   ds: Dataset,
   tree: ScaffoldTreeResult | null,
   rgroupSets: DerivedSet[],
+  ids = jobMoleculeIds(ds),
 ): DerivedSet {
   const subtrees = spec.members.some((m) => m.scaffold) && tree ? buildSubtreeMolIdMap(tree) : null;
   const problems: string[] = [];
@@ -152,7 +147,7 @@ export function seriesSet(
   const columns = [col("chem:series", "Series", "category", "Series")];
   const counts = new Map<string, number>();
   let overlaps = 0;
-  const { byMolecule, without } = perCompound(ds, columns, (id) => {
+  const { byMolecule, without } = perCompound(ds, ids, (id) => {
     const hits = spec.members.filter((_, k) => memberIds[k].has(id));
     if (hits.length > 1) overlaps++;
     const name = hits[0]?.name ?? "Other";
@@ -193,19 +188,20 @@ export function withDerived(ds: Dataset, sets: DerivedSet[]): Dataset {
   return { ...ds, columns: [...ds.columns, ...sets.flatMap((s) => s.columns)], values };
 }
 
-/** How many of the dataset's compounds the set was computed for. */
-export function coverage(ds: Dataset, set: DerivedSet): { covered: number; total: number } {
-  const ids = [...moleculeStructures(ds).keys()];
-  return { covered: ids.filter((id) => set.byMolecule.has(id)).length, total: ids.length };
-}
-
 /** The compounds a derived job runs over: every dataset compound with a structure (never only
  * the filtered ones), sorted. */
-export const jobMoleculeIds = (ds: Dataset): string[] =>
-  [...moleculeStructures(ds)]
+export function jobMoleculeIds(ds: Dataset): string[] {
+  return [...moleculeStructures(ds)]
     .filter(([, structured]) => structured)
     .map(([id]) => id)
     .sort();
+}
+
+/** How many of the dataset's compounds with a structure the set's job analysed. */
+export function coverage(ds: Dataset, set: DerivedSet): { covered: number; total: number } {
+  const ids = jobMoleculeIds(ds);
+  return { covered: ids.filter((id) => set.byMolecule.has(id)).length, total: ids.length };
+}
 
 /** R-group position columns (R1, R2, … of every R-groups set): the visible columns whose
  * ``:smiles`` sibling holds the raw fragment. */
