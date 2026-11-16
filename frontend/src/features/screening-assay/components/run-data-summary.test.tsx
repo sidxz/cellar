@@ -102,6 +102,7 @@ describe("RunDataSummary", () => {
     expect(plate2.getByText("0.62 uM")).toBeInTheDocument();
 
     const averages = within(rowOf("Protocol averages"));
+    expect(averages.getByText("all runs except rejected")).toBeInTheDocument();
     expect(averages.getByText("0.91 ± 0.01 (2 plates)")).toBeInTheDocument();
     expect(averages.getByText("0 ± 3.8 (116 plates)")).toBeInTheDocument();
     expect(averages.getByText("0.45 ± 0.3 uM (2 plates)")).toBeInTheDocument();

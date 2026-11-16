@@ -181,6 +181,9 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
               <tr className="bg-muted/20">
                 <th scope="row" className="px-3 py-1.5 text-left text-xs font-medium">
                   Protocol averages
+                  <span className="block font-normal text-muted-foreground">
+                    all runs except rejected
+                  </span>
                 </th>
                 {groups.map((g) =>
                   averageCells(g).map((text, i) => (
