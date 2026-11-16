@@ -75,11 +75,14 @@ export const MEASURED_CURVE_COLORS = {
 } as const;
 
 /* ── Plate well types ──────────────────────────────────────── */
+/** Positive control (the "hit" end) red, negative control blue: the screening platform
+ * chemists know, and the ends of its blue → red activity scale. Never a red/green pair
+ * (the pair colour-blind readers confuse most). Samples stay neutral. */
 export const WELL_TYPE_COLORS: Record<string, string> = {
-  sample: "#3b6fb6",
-  positive_control: "#18974c",
-  negative_control: "#d41645",
-  blank: "#707372",
+  sample: "#64748b",
+  positive_control: "#dc2626",
+  negative_control: "#2563eb",
+  blank: "#a3a3a3",
   reference: "#734595",
 };
 export const WELL_EMPTY_COLOR = "#1e293b";
