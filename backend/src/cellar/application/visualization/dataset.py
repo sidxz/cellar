@@ -67,6 +67,8 @@ class Dataset:
     row_ids: list[str]
     columns: list[DatasetColumn]
     values: dict[str, list[Any]]
+    # Wells only: each plate's Z′ as stored by the run's QC (plate id → value).
+    plate_z_prime: dict[str, float] = field(default_factory=dict)
 
 
 # Identity columns, in display order: (key, label, kind, hidden).
@@ -150,6 +152,27 @@ def readout_label(
         named = not unit or rd.name.lower().endswith(unit.lower())  # "raw AU" + "AU"
         return (rd.name if named else f"{rd.name} ({unit})") + cs
     return f"{rd.name}{cs} · {_LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
+
+
+def stored_plate_z_prime(runs: list[RunInfo], plate_ids: set[str]) -> dict[str, float]:
+    """Z′ of the given plates as the runs' QC stored it (``qc_metrics.z_prime`` keyed
+    by plate id, as the Heat Map reads it); a plate without a finite stored number is
+    left out. Never recomputed here."""
+    stored: dict[str, float] = {}
+    for run in runs:
+        per_plate = (run.qc_metrics or {}).get("z_prime")
+        if not isinstance(per_plate, dict):  # absent, or a legacy run-level scalar
+            continue
+        for plate_id, entry in per_plate.items():
+            z = entry.get("z_prime") if isinstance(entry, dict) else None
+            if (
+                plate_id in plate_ids
+                and isinstance(z, int | float)
+                and not isinstance(z, bool)
+                and math.isfinite(z)
+            ):
+                stored[plate_id] = float(z)
+    return stored
 
 
 def run_labels(runs: list[RunInfo]) -> dict[uuid.UUID, str]:
@@ -335,6 +358,12 @@ def build_wells_dataset(
         ).encode(),
         usedforsecurity=False,
     ).hexdigest()
+    plate_ids = {p for p in values["plate_id"] if p is not None}
     return Dataset(
-        revision=digest, level="wells", row_ids=list(index), columns=columns, values=values
+        revision=digest,
+        level="wells",
+        row_ids=list(index),
+        columns=columns,
+        values=values,
+        plate_z_prime=stored_plate_z_prime(runs, plate_ids),
     )

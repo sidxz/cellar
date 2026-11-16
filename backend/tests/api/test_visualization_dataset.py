@@ -6,6 +6,7 @@ import uuid
 from datetime import date
 
 import pytest
+import sqlalchemy as sa
 
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests.integration import _screening_seed as seed
@@ -52,6 +53,33 @@ async def test_dataset_for_a_run(client, session_factory, fake_auth):
         for v in body["values"][key]:
             with pytest.raises(ValueError):
                 uuid.UUID(str(v))
+
+
+async def test_wells_carry_the_stored_z_prime_of_their_plates(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        plate = await uow.session.scalar(
+            sa.text("SELECT id FROM plates WHERE run_id = :r"), {"r": w["a"]}
+        )
+        await uow.session.execute(
+            sa.text("UPDATE runs SET qc_metrics = cast(:q as jsonb) WHERE id = :r"),
+            {"r": w["a"], "q": f'{{"z_prime": {{"{plate}": {{"z_prime": 0.712}}}}}}'},
+        )
+        await uow.commit()
+
+    wells = await client.post(
+        URL, json={"source": {"kind": "run", "run_id": str(w["a"])}, "level": "wells"}
+    )
+    compounds = await client.post(
+        URL, json={"source": {"kind": "run", "run_id": str(w["a"])}, "level": "compounds"}
+    )
+
+    assert wells.status_code == 200, wells.text
+    body = wells.json()
+    assert body["values"]["plate_id"] == [str(plate), str(plate)]
+    assert body["plate_z_prime"] == {str(plate): 0.712}
+    assert compounds.json()["plate_z_prime"] == {}
 
 
 async def test_dataset_for_a_protocol_run_subset(client, session_factory, fake_auth):

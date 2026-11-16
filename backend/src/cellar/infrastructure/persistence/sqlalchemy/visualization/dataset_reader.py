@@ -36,6 +36,7 @@ _RUN_COLUMNS = (
     RunModel.status,
     RunModel.conditions,
     RunModel.created_at,
+    RunModel.qc_metrics,
 )
 
 
@@ -48,6 +49,7 @@ def _run_info(r) -> RunInfo:  # SQLAlchemy Row
         status=r.status,
         conditions=r.conditions,
         created_at=r.created_at,
+        qc_metrics=r.qc_metrics,
     )
 
 

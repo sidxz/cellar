@@ -90,6 +90,9 @@ class DatasetResponse(BaseModel):
     row_ids: list[str]
     columns: list[DatasetColumnResponse]
     values: dict[str, list[Any]]
+    # Wells only: each plate's Z′ as the run's QC stored it, keyed by the plate id
+    # that values["plate_id"] carries.
+    plate_z_prime: dict[str, float] = {}
 
     @classmethod
     def from_domain(cls, d: Dataset) -> DatasetResponse:
@@ -100,6 +103,7 @@ class DatasetResponse(BaseModel):
             row_ids=d.row_ids,
             columns=[DatasetColumnResponse.from_domain(c) for c in d.columns],
             values=d.values,
+            plate_z_prime=d.plate_z_prime,
         )
 
 

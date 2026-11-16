@@ -6,7 +6,7 @@ import math
 import uuid
 from datetime import UTC, date, datetime, timedelta
 
-from cellar.application.visualization.dataset import build_wells_dataset
+from cellar.application.visualization.dataset import build_wells_dataset, stored_plate_z_prime
 from cellar.application.visualization.dataset_reader import (
     CompoundInfo,
     ReadoutDefInfo,
@@ -21,7 +21,7 @@ OP = uuid.uuid4()
 T0 = datetime(2026, 11, 12, 9, 0, tzinfo=UTC)
 
 
-def _run(day: int = 12, *, conditions=None, minutes: int = 0) -> RunInfo:
+def _run(day: int = 12, *, conditions=None, minutes: int = 0, qc_metrics=None) -> RunInfo:
     return RunInfo(
         id=uuid.uuid4(),
         protocol_id=P,
@@ -30,6 +30,7 @@ def _run(day: int = 12, *, conditions=None, minutes: int = 0) -> RunInfo:
         status="approved",
         conditions=conditions,
         created_at=T0 + timedelta(minutes=minutes),
+        qc_metrics=qc_metrics,
     )
 
 
@@ -148,6 +149,7 @@ def test_wellless_row_has_null_plate_and_well():
     ds = build_wells_dataset([run], DEFS, [row])
     assert ds.row_ids == [f"{run.id}:m:{mol}:-"]
     assert ds.values["plate"] == [None]
+    assert ds.values["plate_id"] == [None]
     assert ds.values["well"] == [None]
     assert ds.values["well_order"] == [None]
 
@@ -282,6 +284,36 @@ def test_descriptor_columns_follow_each_wells_compound():
     assert "molecular_weight" not in {
         c.key for c in build_wells_dataset([run], DEFS, [control]).columns
     }
+
+
+def test_stored_plate_z_prime_of_the_datasets_plates():
+    p1, p2, p9 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    qc = {
+        "z_prime": {
+            str(p1): {"z_prime": 0.712, "classification": "excellent"},
+            str(p2): {"classification": "poor"},  # no number stored
+            str(p9): {"z_prime": 0.5},  # a plate with no rows here
+        }
+    }
+    run = _run(qc_metrics=qc)
+    ds = build_wells_dataset([run], DEFS, [_row(run, plate_id=p1), _row(run, plate_id=p2)])
+    assert ds.plate_z_prime == {str(p1): 0.712}
+
+
+def test_plate_z_prime_needs_a_finite_number_per_plate():
+    p = uuid.uuid4()
+    plates = {str(p)}
+
+    def stored(qc_metrics):
+        return stored_plate_z_prime([_run(qc_metrics=qc_metrics)], plates)
+
+    assert stored(None) == {}
+    assert stored({"z_prime": 0.6}) == {}  # legacy run-level scalar: no plate to name
+    assert stored({"z_prime": {str(p): {"z_prime": math.nan}}}) == {}
+    assert stored({"z_prime": {str(p): {"z_prime": True}}}) == {}
+    assert stored({"z_prime": {str(p): {"z_prime": "0.7"}}}) == {}
+    assert stored({"z_prime": {str(p): 0.7}}) == {}
+    assert stored({"z_prime": {str(p): {"z_prime": -1}}}) == {str(p): -1.0}
 
 
 def _looks_like_uuid(s: str) -> bool:

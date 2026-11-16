@@ -6,6 +6,7 @@
  */
 import type { DatasetColumnResponse } from './datasetColumnResponse';
 import type { DatasetResponseLevel } from './datasetResponseLevel';
+import type { DatasetResponsePlateZPrime } from './datasetResponsePlateZPrime';
 import type { DatasetResponseValues } from './datasetResponseValues';
 
 export interface DatasetResponse {
@@ -15,4 +16,5 @@ export interface DatasetResponse {
   row_ids: string[];
   columns: DatasetColumnResponse[];
   values: DatasetResponseValues;
+  plate_z_prime?: DatasetResponsePlateZPrime;
 }

@@ -141,6 +141,22 @@ async def test_runs_and_readout_definitions(uow, session_factory, workspace_id):
     assert await reader.runs_for_protocol(workspace_id, uuid.uuid4()) is None
 
 
+async def test_runs_carry_their_stored_qc_metrics(uow, session_factory, workspace_id):
+    qc = {"z_prime": {"plate-1": {"z_prime": 0.712, "classification": "excellent"}}}
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, workspace_id)
+        run = await seed.run(s, workspace_id, p, date(2026, 11, 12), qc_metrics=qc)
+        bare = await seed.run(s, workspace_id, p, date(2026, 11, 13))
+        await uow.commit()
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    runs = await reader.runs_for_protocol(workspace_id, p)
+    assert runs is not None and [(r.id, r.qc_metrics) for r in runs] == [(run, qc), (bare, None)]
+    [by_id] = await reader.runs_by_ids(workspace_id, [run])
+    assert by_id.qc_metrics == qc
+
+
 async def _dr_world(uow, ws: uuid.UUID) -> dict[str, uuid.UUID]:
     """A dose-response readout with one fitted curve on a batch, in workspace ``ws``."""
     async with uow:

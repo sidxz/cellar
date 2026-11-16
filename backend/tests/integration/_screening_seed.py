@@ -109,14 +109,15 @@ async def run(
     status: str = "draft",
     conditions: dict[str, Any] | None = None,
     created_at: datetime | None = None,
+    qc_metrics: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     rid = uuid.uuid4()
     await s.execute(
         sa.text(
             "INSERT INTO runs (id, workspace_id, protocol_id, run_date, operator, status, "
-            "is_locked, version, conditions, created_at) "
+            "is_locked, version, conditions, created_at, qc_metrics) "
             "VALUES (:id, :ws, :p, :d, :user, :status, false, 1, cast(:c as jsonb), "
-            "coalesce(:created, now()))"
+            "coalesce(:created, now()), cast(:qc as jsonb))"
         ),
         {
             "id": rid,
@@ -127,6 +128,7 @@ async def run(
             "status": status,
             "c": json.dumps(conditions) if conditions is not None else None,
             "created": created_at,
+            "qc": json.dumps(qc_metrics) if qc_metrics is not None else None,
         },
     )
     return rid

@@ -23,6 +23,7 @@ class RunInfo:
     status: str
     conditions: dict[str, Any] | None
     created_at: datetime
+    qc_metrics: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
