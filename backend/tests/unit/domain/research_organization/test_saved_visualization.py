@@ -276,3 +276,21 @@ def test_mark_deleted_registers_deleted_with_name() -> None:
     [event] = view.collect_events()
     assert isinstance(event, SavedVisualizationDeleted)
     assert event.name == "Old"
+
+
+def test_creation_and_deletion_are_audited_with_name_visibility_and_project() -> None:
+    project = uuid.uuid4()
+    private = _view()
+    shared = _view(visibility=SearchVisibility.PROJECT, project_id=project)
+    shared.clear_events()
+    shared.mark_deleted()
+
+    [created] = private.collect_events()
+    [deleted] = shared.collect_events()
+
+    assert created.audit_changes() == [("name", None, "Old"), ("visibility", None, "private")]
+    assert deleted.audit_changes() == [
+        ("name", "Old", None),
+        ("visibility", "project", None),
+        ("project_id", str(project), None),
+    ]

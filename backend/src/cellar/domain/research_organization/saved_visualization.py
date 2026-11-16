@@ -239,6 +239,7 @@ class SavedVisualization(AggregateRoot):
                 workspace_id=view.workspace_id,
                 name=view.name,
                 visibility=view.visibility.value,
+                project_id=view.project_id,
             )
         )
         return view
@@ -312,5 +313,7 @@ class SavedVisualization(AggregateRoot):
                 aggregate_type="SavedVisualization",
                 workspace_id=self.workspace_id,
                 name=self.name,
+                visibility=self.visibility.value,
+                project_id=self.project_id,
             )
         )
