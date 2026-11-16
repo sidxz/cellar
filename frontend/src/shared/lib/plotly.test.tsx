@@ -56,10 +56,34 @@ describe("Plot", () => {
 
     const [observer] = FakeObserver.all;
     expect(observer.watched).toEqual([gd]);
-    observer.fire([], observer as unknown as ResizeObserver);
+    observer.fire(sized(300, 200), observer as unknown as ResizeObserver);
     expect(resize).toHaveBeenCalledWith(gd);
 
     unmount();
     expect(observer.disconnect).toHaveBeenCalled();
   });
+
+  it("skips the observer's first report and any other that keeps the drawn size", () => {
+    vi.stubGlobal("ResizeObserver", FakeObserver);
+    const resize = vi.fn(() => Promise.resolve());
+    (window as { Plotly?: unknown }).Plotly = { Plots: { resize } };
+    render(<Plot data={[]} layout={{}} useResizeHandler />);
+    const gd = document.createElement("div");
+    gd.getBoundingClientRect = () => ({ width: 300, height: 200 }) as DOMRect;
+    act(() => (received.at(-1)?.onInitialized as (f: unknown, el: HTMLElement) => void)({}, gd));
+
+    const [observer] = FakeObserver.all;
+    const fire = (w: number, h: number) =>
+      observer.fire(sized(w, h), observer as unknown as ResizeObserver);
+    fire(300, 200);
+    fire(300.4, 199.7);
+    expect(resize).not.toHaveBeenCalled();
+    fire(150, 200);
+    expect(resize).toHaveBeenCalledTimes(1);
+    fire(150, 200);
+    expect(resize).toHaveBeenCalledTimes(1);
+  });
 });
+
+const sized = (width: number, height: number) =>
+  [{ contentRect: { width, height } }] as unknown as ResizeObserverEntry[];

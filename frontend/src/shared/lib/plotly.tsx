@@ -48,8 +48,16 @@ export function Plot({ config, onInitialized, ...props }: PlotProps) {
     onInitialized?.(figure, gd);
     if (!props.useResizeHandler || typeof ResizeObserver === "undefined") return;
     observer.current?.disconnect();
+    // The graph was just drawn to its box: only a different (whole-pixel) size needs a fit.
+    // That also skips the report every observer makes on observe().
+    const px = (r: { width: number; height: number }) =>
+      `${Math.round(r.width)}x${Math.round(r.height)}`;
+    let drawn = px(gd.getBoundingClientRect());
     // Plots.resize debounces itself; it rejects for a hidden graph, which needs no fit.
-    observer.current = new ResizeObserver(() => {
+    observer.current = new ResizeObserver(([entry]) => {
+      const size = px(entry.contentRect);
+      if (size === drawn) return;
+      drawn = size;
       getPlotlyGlobal()
         ?.Plots?.resize(gd)
         .catch(() => {});
