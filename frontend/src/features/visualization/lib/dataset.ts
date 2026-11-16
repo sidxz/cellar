@@ -1,7 +1,15 @@
 import type { Dataset, DatasetColumn } from "../types";
 
+/** key → column per dataset, built on first lookup (cells look columns up per row). */
+const byKey = new WeakMap<DatasetColumn[], Map<string, DatasetColumn>>();
+
 export function column(ds: Dataset, key: string): DatasetColumn | undefined {
-  return ds.columns.find((c) => c.key === key);
+  let map = byKey.get(ds.columns);
+  if (!map) {
+    map = new Map(ds.columns.map((c) => [c.key, c]));
+    byKey.set(ds.columns, map);
+  }
+  return map.get(key);
 }
 
 /** The value at row ``i`` as a finite number, else null (missing, NaN, text). */

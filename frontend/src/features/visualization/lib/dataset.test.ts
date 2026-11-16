@@ -119,6 +119,23 @@ describe("dataset helpers", () => {
     expect(column(d, "molecule_id")?.hidden).toBe(true);
   });
 
+  it("column looks keys up in a map built once per dataset, not by a scan per call", () => {
+    const d = ds();
+    let reads = 0;
+    const columns = new Proxy(d.columns, {
+      get(target, p, receiver) {
+        if (typeof p === "string" && /^\d+$/.test(p)) reads++;
+        return Reflect.get(target, p, receiver);
+      },
+    });
+    const counted = { ...d, columns };
+    for (let k = 0; k < 50; k++) expect(column(counted, RAW)?.key).toBe(RAW);
+    expect(column(counted, "missing")).toBeUndefined();
+    expect(reads).toBeLessThanOrEqual(d.columns.length);
+    // A new dataset (new columns) gets its own map.
+    expect(column({ ...d, columns: d.columns.slice(0, 1) }, RAW)).toBeUndefined();
+  });
+
   it("isSampleRow: sample wells and well-less rows with a compound", () => {
     const d = ds();
     expect([0, 1, 2, 3, 4].map((i) => isSampleRow(d, i))).toEqual([true, true, false, true, true]);
