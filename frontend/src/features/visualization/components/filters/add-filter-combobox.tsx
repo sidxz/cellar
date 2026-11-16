@@ -13,7 +13,7 @@ export function AddFilterCombobox({ ds }: { ds: Dataset }) {
   const upsertFilter = useWorkbench((s) => s.upsertFilter);
   const id = useId();
   const add = (key: string | undefined) => {
-    if (!key || filters.some((f) => f.kind !== "rows" && f.key === key)) return;
+    if (!key || filters.some((f) => "key" in f && f.key === key)) return;
     const filter = newFilter(ds, key);
     if (filter) upsertFilter(filter);
   };

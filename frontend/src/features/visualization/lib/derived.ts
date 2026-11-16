@@ -3,6 +3,7 @@ import { buildSubtreeMolIdMap } from "@/features/sar-analysis/lib/scaffold-tree-
 import type { ScaffoldTreeResult, UmapResult } from "@/features/sar-analysis/types";
 import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
 import type { Dataset, DatasetColumn } from "../types";
+import { moleculeStructures } from "./dataset";
 
 /** One series: compounds under a scaffold-tree node, or matching an R-groups set's core
  * (exactly one of the two). */
@@ -37,18 +38,6 @@ const col = (
   hidden = false,
 ): DatasetColumn => ({ key, label, kind, group, provenance: {}, ...(hidden && { hidden }) });
 
-/** Each distinct molecule of the dataset → whether any of its rows carries a structure. */
-function compounds(ds: Dataset): Map<string, boolean> {
-  const out = new Map<string, boolean>();
-  const smiles = ds.values.structure ?? [];
-  (ds.values.molecule_id ?? []).forEach((id, i) => {
-    if (typeof id !== "string") return;
-    const s = smiles[i];
-    out.set(id, out.get(id) || (typeof s === "string" && s !== ""));
-  });
-  return out;
-}
-
 /** One record per dataset compound: `valuesOf(id)` for those with a structure, all null for
  * the rest (counted, so summaries can say so). */
 function perCompound(
@@ -59,7 +48,7 @@ function perCompound(
   const nulls = Object.fromEntries(columns.map((c) => [c.key, null]));
   const byMolecule = new Map<string, Record<string, Cell>>();
   let without = 0;
-  for (const [id, structured] of compounds(ds)) {
+  for (const [id, structured] of moleculeStructures(ds)) {
     if (!structured) without++;
     byMolecule.set(id, structured ? valuesOf(id) : nulls);
   }
@@ -212,6 +201,6 @@ export function withDerived(ds: Dataset, sets: DerivedSet[]): Dataset {
 
 /** How many of the dataset's compounds the set was computed for. */
 export function coverage(ds: Dataset, set: DerivedSet): { covered: number; total: number } {
-  const ids = [...compounds(ds).keys()];
+  const ids = [...moleculeStructures(ds).keys()];
   return { covered: ids.filter((id) => set.byMolecule.has(id)).length, total: ids.length };
 }

@@ -64,6 +64,19 @@ describe("carryConfig", () => {
     expect(out.dropped).toEqual(["Filter: Well order", "Filter: Selection"]);
   });
 
+  it("keeps a substructure filter at every level: molecule ids do not change between levels", () => {
+    const sub: Filter = {
+      id: "sub-1",
+      kind: "substructure",
+      query: "c1ccccc1",
+      queryKind: "smiles",
+      moleculeIds: ["m1"],
+    };
+    const out = carryConfig(carry([], [sub]), compounds);
+    expect(out.filters).toEqual([sub]);
+    expect(out.dropped).toEqual([]);
+  });
+
   it("turns a well-order scatter into a histogram of its value, keeping the panel id", () => {
     const scatter = { ...panel("scatter", { x: "well_order", y: X }), id: "keep-me" };
     const out = carryConfig(carry([scatter]), compounds);

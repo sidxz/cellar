@@ -5,7 +5,12 @@ import { cn } from "@/shared/lib/utils";
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { column } from "../../lib/dataset";
-import { type Filter, filterCondition, filterSummary } from "../../lib/filters";
+import {
+  type Filter,
+  filterCondition,
+  filterSummary,
+  substructureSummary,
+} from "../../lib/filters";
 import { useWorkbench } from "../../store/workbench-context";
 import type { Dataset } from "../../types";
 
@@ -25,7 +30,11 @@ export function FilterCard({
   const removeFilter = useWorkbench((s) => s.removeFilter);
   const [open, setOpen] = useState(true);
   const label =
-    filter.kind === "rows" ? "Selection" : (column(ds, filter.key)?.label ?? filter.key);
+    filter.kind === "rows"
+      ? "Selection"
+      : filter.kind === "substructure"
+        ? substructureSummary(filter)
+        : (column(ds, filter.key)?.label ?? filter.key);
   const { condition, summary } = useMemo(
     () => ({ condition: filterCondition(ds, filter), summary: filterSummary(ds, filter) }),
     [ds, filter],

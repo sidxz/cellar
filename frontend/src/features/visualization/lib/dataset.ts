@@ -57,6 +57,26 @@ export function uniqueCompounds(ds: Dataset, rows: Iterable<number>): string[] {
   return [...seen];
 }
 
+/** Each distinct molecule of the dataset → whether any of its rows carries a structure. */
+export function moleculeStructures(ds: Dataset): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  const smiles = ds.values.structure ?? [];
+  (ds.values.molecule_id ?? []).forEach((id, i) => {
+    if (typeof id !== "string") return;
+    const s = smiles[i];
+    out.set(id, out.get(id) || (typeof s === "string" && s !== ""));
+  });
+  return out;
+}
+
+/** The dataset's distinct molecule ids, sorted. */
+export const datasetMoleculeIds = (ds: Dataset): string[] =>
+  [...moleculeStructures(ds).keys()].sort();
+
+/** How many of the dataset's compounds have no structure on any of their rows. */
+export const noStructureCompounds = (ds: Dataset): number =>
+  [...moleculeStructures(ds).values()].filter((has) => !has).length;
+
 /** Replace user-id values with display names and retype those columns as categories,
  * so no raw user id ever reaches a legend, filter or table cell. */
 export function resolveUserColumns(ds: Dataset, nameOf: (userId: string) => string): Dataset {

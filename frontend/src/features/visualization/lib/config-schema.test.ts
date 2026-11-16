@@ -37,6 +37,19 @@ describe("config schemas", () => {
     expect(filterSchema.safeParse(rows).success).toBe(true);
   });
 
+  it("a substructure filter is live only: a saved view never stores its matched ids", () => {
+    const sub = {
+      id: "sub-1",
+      kind: "substructure",
+      query: "c1ccccc1",
+      queryKind: "smiles",
+      moleculeIds: ["m1"],
+    };
+    expect(filterSchema.parse(sub)).toEqual(sub);
+    expect(filterSchema.safeParse({ ...sub, queryKind: "inchi" }).success).toBe(false);
+    expect(savedFilterSchema.safeParse(sub).success).toBe(false);
+  });
+
   it("a view config holds at most 4 panels", () => {
     const panels = Array.from({ length: 5 }, () => makePanel("histogram", { x: "a" }));
     const cfg = { config_version: 1, panels, filters: [], labels: {} };

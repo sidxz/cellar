@@ -3,7 +3,9 @@ import type { Dataset } from "../types";
 import {
   categoryColumns,
   column,
+  datasetMoleculeIds,
   isSampleRow,
+  noStructureCompounds,
   numberAt,
   numericColumns,
   resolveUserColumns,
@@ -146,6 +148,19 @@ describe("dataset helpers", () => {
     expect(uniqueCompounds(d, [0, 1, 2, 3])).toEqual(["m1", "m2"]);
     d.values.molecule_id[4] = null;
     expect(uniqueCompounds(d, [4])).toEqual([]);
+  });
+
+  it("datasetMoleculeIds and noStructureCompounds count each compound once across its rows", () => {
+    const d = {
+      ...ds(),
+      values: {
+        molecule_id: ["m2", "m1", null, "m2", "m3"],
+        structure: [null, "CCO", null, "", ""],
+      },
+    };
+    expect(datasetMoleculeIds(d)).toEqual(["m1", "m2", "m3"]);
+    expect(noStructureCompounds(d)).toBe(2);
+    expect(noStructureCompounds({ ...d, values: { ...d.values, structure: [] } })).toBe(3);
   });
 
   it("resolveUserColumns replaces user ids with names and never leaves an id behind", () => {

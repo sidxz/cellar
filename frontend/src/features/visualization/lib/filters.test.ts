@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset } from "../types";
-import { type Filter, binCounts, computePassMask, fixedBins } from "./filters";
+import {
+  type Filter,
+  type SubstructureFilter,
+  binCounts,
+  computePassMask,
+  filterCondition,
+  filterSummary,
+  fixedBins,
+  substructureSummary,
+} from "./filters";
 
 function ds(): Dataset {
   const col = (key: string, kind: "number" | "category") => ({
@@ -89,6 +98,50 @@ describe("computePassMask", () => {
 
   it("no filters → everything passes", () => {
     expect(mask(computePassMask(ds(), []))).toEqual([1, 1, 1, 1, 1, 1]);
+  });
+});
+
+describe("substructure filter", () => {
+  /** Three wells of m1, a control without a compound, one well of m2. */
+  const wells = (): Dataset => ({
+    ...ds(),
+    row_count: 5,
+    row_ids: ["w1", "w2", "w3", "c1", "w4"],
+    values: {
+      inh: [10, 50, 90, 50, 50],
+      type: ["sample", "sample", "sample", "negative_control", "sample"],
+      molecule_id: ["m1", "m1", "m1", null, "m2"],
+    },
+  });
+  const sub = (moleculeIds: string[], query = "c1ccccc1"): SubstructureFilter => ({
+    id: "sub-1",
+    kind: "substructure",
+    query,
+    queryKind: "smiles",
+    moleculeIds,
+  });
+
+  it("keeps the rows of matched compounds; rows without a compound never pass", () => {
+    expect(mask(computePassMask(wells(), [sub(["m1"])]))).toEqual([1, 1, 1, 0, 0]);
+    expect(mask(computePassMask(wells(), [sub([])]))).toEqual([0, 0, 0, 0, 0]);
+  });
+
+  it("ANDs with other filters, and exceptId ignores it", () => {
+    expect(mask(computePassMask(wells(), [sub(["m1"]), range(30, null)]))).toEqual([0, 1, 1, 0, 0]);
+    expect(mask(computePassMask(wells(), [sub(["m1"]), range(30, null)], "sub-1"))).toEqual([
+      0, 1, 1, 1, 1,
+    ]);
+  });
+
+  it("reads as the query it contains, cut at 24 characters", () => {
+    expect(substructureSummary(sub(["m1"]))).toBe("Contains c1ccccc1");
+    expect(substructureSummary(sub([], "C".repeat(24)))).toBe(`Contains ${"C".repeat(24)}`);
+    expect(substructureSummary(sub([], "C".repeat(25)))).toBe(`Contains ${"C".repeat(23)}…`);
+    expect(filterSummary(wells(), sub(["m1"]))).toBe("Contains c1ccccc1");
+  });
+
+  it("counts the dataset compounds it keeps", () => {
+    expect(filterCondition(wells(), sub(["m1", "m9"]))).toBe("1 of 2 compounds");
   });
 });
 

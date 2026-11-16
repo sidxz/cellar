@@ -73,7 +73,23 @@ const rowsFilter = z.object({
   rowIds: z.array(z.string()),
 });
 
-export const filterSchema = z.discriminatedUnion("kind", [rangeFilter, categoryFilter, rowsFilter]);
+/** Rows whose compound contains a structure: ``moleculeIds`` are the dataset compounds the
+ * query matched. Matches are data, so never saved; molecule ids are the same at every
+ * level, so a level switch keeps it. */
+const substructureFilter = z.object({
+  id: z.string(),
+  kind: z.literal("substructure"),
+  query: z.string(),
+  queryKind: z.enum(["smiles", "smarts"]),
+  moleculeIds: z.array(z.string()),
+});
+
+export const filterSchema = z.discriminatedUnion("kind", [
+  rangeFilter,
+  categoryFilter,
+  rowsFilter,
+  substructureFilter,
+]);
 export const savedFilterSchema = z.discriminatedUnion("kind", [rangeFilter, categoryFilter]);
 
 /** How a saved view looks — never its data. ``labels`` names each referenced column key, so

@@ -29,9 +29,10 @@ function drawable(p: PanelConfig): boolean {
 }
 
 /** The plots and filters of ``prev`` fitted to the new level's dataset ``ds``: filters on
- * columns ``ds`` lacks (and any rows filter) are dropped, panel fields on such columns are
- * cleared, and a panel left without a field its type needs becomes the level's default plot
- * type (same id), keeping the value it measured when that survives. ``dropped`` names each
+ * columns ``ds`` lacks (and any rows filter) are dropped, while substructure filters, on
+ * molecule ids, always carry; panel fields on such columns are cleared, and a panel left
+ * without a field its type needs becomes the level's default plot type (same id), keeping
+ * the value it measured when that survives. ``dropped`` names each
  * loss for the chemist: "Filter: Well order", "Plot 1: X (Well order)" — by ``labels`` when
  * it names the key, else by ``prev.columns``. */
 export function carryConfig(
@@ -45,6 +46,7 @@ export function carryConfig(
   const dropped: string[] = [];
 
   const filters = prev.filters.filter((f) => {
+    if (f.kind === "substructure") return true;
     if (f.kind !== "rows" && has.has(f.key)) return true;
     dropped.push(`Filter: ${f.kind === "rows" ? "Selection" : label(f.key)}`);
     return false;

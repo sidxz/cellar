@@ -2,9 +2,10 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { z } from "zod";
 import type { Dataset } from "../types";
 import type { filterSchema } from "./config-schema";
-import { categoryLabel, column, numberAt } from "./dataset";
+import { categoryLabel, column, datasetMoleculeIds, numberAt } from "./dataset";
 
 export type Filter = z.infer<typeof filterSchema>;
+export type SubstructureFilter = Extract<Filter, { kind: "substructure" }>;
 
 type Predicate = (i: number) => boolean;
 
@@ -24,6 +25,11 @@ function predicate(ds: Dataset, f: Filter): Predicate {
       if (v === null || v === undefined) return f.includeMissing;
       return allowed.has(String(v));
     };
+  }
+  if (f.kind === "substructure") {
+    const ids = new Set(f.moleculeIds);
+    const molecules = ds.values.molecule_id ?? [];
+    return (i) => ids.has(molecules[i] as string);
   }
   const ids = new Set(f.rowIds);
   return (i) => ids.has(ds.row_ids[i]);
@@ -129,10 +135,22 @@ export function newFilter(ds: Dataset, key: string): Filter | null {
 /** A filter is active when, on its own, it leaves out at least one row. */
 export const isFilterActive = (ds: Dataset, f: Filter) => computePassMask(ds, [f]).includes(0);
 
-/** What a filter keeps, without its field: "≥ 30", "30 … 80", "2 of 3", "12 rows".
- * An untouched range shows the column's span. */
+/** "Contains c1ccccc1", the query cut to 24 characters. */
+export function substructureSummary(f: SubstructureFilter): string {
+  const q = f.query.length > 24 ? `${f.query.slice(0, 23)}…` : f.query;
+  return `Contains ${q}`;
+}
+
+/** What a filter keeps, without its field: "≥ 30", "30 … 80", "2 of 3", "12 rows",
+ * "3 of 40 compounds". An untouched range shows the column's span. */
 export function filterCondition(ds: Dataset, f: Filter): string {
   if (f.kind === "rows") return `${f.rowIds.length.toLocaleString()} rows`;
+  if (f.kind === "substructure") {
+    const all = datasetMoleculeIds(ds);
+    const kept = new Set(f.moleculeIds);
+    const n = all.filter((id) => kept.has(id)).length;
+    return `${n.toLocaleString()} of ${all.length.toLocaleString()} compounds`;
+  }
   if (f.kind === "category") {
     const { values, hasMissing } = categoryValues(ds, f.key);
     const kept = new Set(f.values);
@@ -152,8 +170,9 @@ export function filterCondition(ds: Dataset, f: Filter): string {
   return f.includeMissing ? text : `${text}, no missing`;
 }
 
-/** The field and its condition: "% inhibition ≥ 30", "Well type: 2 of 3". */
+/** The field and its condition: "% inhibition ≥ 30", "Well type: 2 of 3", "Contains c1ccccc1". */
 export function filterSummary(ds: Dataset, f: Filter): string {
+  if (f.kind === "substructure") return substructureSummary(f);
   const label = f.kind === "rows" ? "Selection" : (column(ds, f.key)?.label ?? f.key);
   const sep = f.kind === "range" ? " " : ": ";
   return `${label}${sep}${filterCondition(ds, f)}`;
