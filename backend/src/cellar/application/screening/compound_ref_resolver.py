@@ -22,19 +22,40 @@ Per-row precedence (matches design spec):
      use the batch; if they disagree, row conflict.
   4. Neither set → resolution is empty (caller decides whether to drop
      the row based on well type — sample rows drop, control rows keep).
+
+A bare lot number ("001") in the batch column next to a compound ref is read
+as ``"<compound ref>-<lot>"``; when no batch carries that, the row resolves
+by its compound ref alone (rule 2) and counts in ``lot_fallback_rows``.
 """
 
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Literal
 
 from cellar.application.screening.long_format_normalizer import (
     LongFormatRow,
 )
+
+LOTS_UNMATCHED_NOTE = (
+    "Lot numbers from the file didn't match Cellar batches; used each compound's batch"
+)
+
+_BARE_LOT = re.compile(r"[0-9]+")
+
+
+def qualified_lot_ref(batch_ref: str | None, compound_ref: str | None) -> str | None:
+    """``"<compound ref>-<lot>"`` when the batch column holds a bare lot number
+    ("001") next to a compound ref, else ``None``. A bare number can't name one
+    batch across compounds, so it is only ever read against its compound."""
+    if batch_ref and compound_ref and _BARE_LOT.fullmatch(batch_ref):
+        return f"{compound_ref}-{batch_ref}"
+    return None
+
 
 # ---------------------------------------------------------------------------
 # Inputs
@@ -103,6 +124,8 @@ class RowResolution:
     # row's compound ref missed too. Resolution is unchanged (batch stays
     # authoritative); this just keeps ``unmatched_compound_refs`` truthful.
     also_unmatched_compound: bool = False
+    # The row's bare lot number named no batch; its compound ref decided.
+    lot_fallback: bool = False
 
 
 @dataclass(frozen=True)
@@ -148,6 +171,8 @@ class Resolutions:
     ambiguous_compounds: tuple[AmbiguousCompound, ...]
     row_conflicts: tuple[RowConflict, ...]
     matched_compound_count: int
+    # Rows whose bare lot number matched no batch (see ``LOTS_UNMATCHED_NOTE``).
+    lot_fallback_rows: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -248,6 +273,7 @@ def resolve_rows(
         ambiguous_compounds=ambiguous,
         row_conflicts=tuple(row_conflicts),
         matched_compound_count=len(matched_compounds),
+        lot_fallback_rows=sum(r.lot_fallback for r in per_row),
     )
 
 
@@ -272,6 +298,19 @@ def _resolve_one(
 ) -> RowResolution:
     batch_ref = row.batch_ref
     compound_ref = row.compound_ref
+
+    lot_ref = qualified_lot_ref(batch_ref, compound_ref)
+    if lot_ref is not None:
+        if lot_ref not in batch_index:
+            # The file's lot numbers aren't Cellar's: the compound's batch stands in.
+            fallback = _resolve_one(
+                replace(row, batch_ref=None),
+                batch_index=batch_index,
+                compound_index=compound_index,
+                overrides=overrides,
+            )
+            return replace(fallback, lot_fallback=True)
+        batch_ref = lot_ref
 
     # Pre-resolve each ref independently. Batch ref is binary
     # (resolves or doesn't); compound ref has three outcomes

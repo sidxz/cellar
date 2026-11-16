@@ -19,7 +19,11 @@ import uuid
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor
-from cellar.application.screening.compound_ref_resolver import Resolutions, resolve_rows
+from cellar.application.screening.compound_ref_resolver import (
+    LOTS_UNMATCHED_NOTE,
+    Resolutions,
+    resolve_rows,
+)
 from cellar.application.screening.import_plan import (
     ReadoutConflict,
     WellConflict,
@@ -113,6 +117,10 @@ def _readout_def_refs(protocol: AssayProtocol | None) -> tuple[ReadoutDefRef, ..
         )
         for rd in protocol.readout_definitions
     )
+
+
+def _lot_notes(resolutions: Resolutions) -> tuple[str, ...]:
+    return (LOTS_UNMATCHED_NOTE,) if resolutions.lot_fallback_rows else ()
 
 
 def _conflict_errors(resolutions: Resolutions) -> tuple[dict[str, str], ...]:
@@ -313,6 +321,7 @@ class PreviewRunFile:
                     readout_conflicts = plan.readout_conflicts
                     warnings = _role_disagreement_warnings(plan.role_disagreements)
                     swapped_controls = _swap_check(protocol, norm, layouts)
+                warnings += _lot_notes(resolutions)
                 plates = _summarize_plates(norm, layouts)
 
         preview_id = uuid.uuid4()
@@ -495,6 +504,7 @@ class RepreviewRunFile:
             readout_conflicts = plan.readout_conflicts
             warnings = _role_disagreement_warnings(plan.role_disagreements)
             swapped_controls = _swap_check(protocol, norm, layouts)
+        warnings += _lot_notes(resolutions)
 
         plates = _summarize_plates(norm, layouts)
         ambiguous_dto = tuple(_to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds)

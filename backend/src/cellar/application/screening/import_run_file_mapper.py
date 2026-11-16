@@ -32,6 +32,7 @@ from cellar.application.screening.compound_ref_resolver import (
     AmbiguousCompound,
     BatchSummary,
     CompoundCandidate,
+    qualified_lot_ref,
 )
 from cellar.application.screening.import_plan import _row_role, file_roles_phrase
 from cellar.application.screening.long_format_normalizer import (
@@ -80,6 +81,9 @@ async def _build_batch_lookup(
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
     """Resolve every distinct ``batch_ref`` to ``(batch_id, molecule_id)``.
 
+    A bare lot number next to a compound ref is looked up as
+    ``"<compound ref>-<lot>"`` (``qualified_lot_ref``) and keyed that way.
+
     Lookup order per ref:
       1. canonical batch_number (find_by_batch_number)
       2. external alias (find_by_external_identifier)
@@ -90,12 +94,13 @@ async def _build_batch_lookup(
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
     seen: set[str] = set()
     for r in rows:
-        if not r.batch_ref or r.batch_ref in seen:
+        ref = qualified_lot_ref(r.batch_ref, r.compound_ref) or r.batch_ref
+        if not ref or ref in seen:
             continue
-        seen.add(r.batch_ref)
-        batch = await resolve_batch_ref(batch_repo, workspace_id, r.batch_ref)
+        seen.add(ref)
+        batch = await resolve_batch_ref(batch_repo, workspace_id, ref)
         if batch is not None:
-            out[r.batch_ref] = (batch.id, batch.molecule_id)
+            out[ref] = (batch.id, batch.molecule_id)
     return out
 
 

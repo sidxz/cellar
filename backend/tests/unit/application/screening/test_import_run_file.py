@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
+from cellar.application.screening.compound_ref_resolver import LOTS_UNMATCHED_NOTE
 from cellar.application.screening.import_run_file import (
     ImportRunFile,
     ImportRunFileCommand,
@@ -1629,6 +1630,123 @@ class TestConflictAwareReimport:
         assert upload_cmd.file_name == "run-data.csv"
         assert upload_cmd.attachable_id == run.id
         assert result.unwrap().attachment_id is not None
+
+
+# ---------------------------------------------------------------------------
+# Bare lot numbers in the batch column, next to a compound ref
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeBatchNumber:
+    value: str
+
+
+@dataclass
+class _FakeInventoryBatch:
+    id: uuid.UUID
+    batch_number: _FakeBatchNumber
+    salt_name: str | None = None
+    purity: float | None = None
+    created_at: object = None
+
+
+class TestBareLotNumbers:
+    """CPD-1's lot "001" is registered as "CPD-1-001"; CPD-2's lot "002" is not."""
+
+    CSV = (
+        b"Molecule Name,Batch Name,Plate,Well,Raw Data\nCPD-1,001,P1,A1,0.5\nCPD-2,002,P1,A2,0.4\n"
+    )
+
+    def _world(self):
+        mol1, mol2 = FakeMolecule(name="CPD-1"), FakeMolecule(name="CPD-2")
+        b1, b2 = FakeBatch(molecule_id=mol1.id), FakeBatch(molecule_id=mol2.id)
+        inventory = {
+            mol1.id: [_FakeInventoryBatch(b1.id, _FakeBatchNumber("CC-1-001"))],
+            mol2.id: [_FakeInventoryBatch(b2.id, _FakeBatchNumber("CC-2-001"))],
+        }
+
+        async def _batches_of(_ws, molecule_id):
+            return inventory[molecule_id]
+
+        return {"CPD-1": mol1, "CPD-2": mol2}, {"CPD-1-001": b1}, _batches_of, (b1, b2)
+
+    @pytest.mark.asyncio
+    async def test_preview_resolves_lots_and_notes_the_fallback(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        molecules, batches, batches_of, _ = self._world()
+        uc, _ = _build_preview_uc(
+            run=run,
+            batches_by_ref=batches,
+            molecules_by_synonym=molecules,
+            protocol=_make_protocol(auth.workspace_id, ["Raw Data"]),
+        )
+        uc._batch_repo.find_by_molecule = batches_of
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=self.CSV,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        assert preview.unmatched_batch_refs == ()
+        assert preview.unmatched_compound_refs == ()
+        assert preview.errors == ()
+        assert LOTS_UNMATCHED_NOTE in preview.warnings
+
+    @pytest.mark.asyncio
+    async def test_import_writes_the_lots_batch_or_the_compounds_batch(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        molecules, batches, batches_of, (b1, b2) = self._world()
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=self.CSV,
+            filename="x.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref=batches,
+            store=store,
+            save_bulk=saved,
+            molecules_by_synonym=molecules,
+        )
+        uc._batch_repo.find_by_molecule = batches_of
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate",
+                    batch_ref="Batch Name",
+                    compound_ref="Molecule Name",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        assert sorted((r.value.value, r.batch_id) for r in saved) == [
+            (0.4, b2.id),
+            (0.5, b1.id),
+        ]
 
 
 # ---------------------------------------------------------------------------
