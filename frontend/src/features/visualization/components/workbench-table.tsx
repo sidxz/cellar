@@ -25,7 +25,7 @@ import {
   type RowHeightParams,
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
-import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Columns3 } from "lucide-react";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -517,6 +517,8 @@ export function WorkbenchTable({
   const [density, setDensity] = useState<Density>("chemistry");
   const [showAll, setShowAll] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  // The grid's page, mirrored for the toolbar's pager.
+  const [page, setPage] = useState({ current: 0, total: 1 });
   const [hidden, setHidden] = useState(() => defaultHidden(ds));
   const fields = useMemo(() => tableFields(ds), [ds]);
   const toggleColumn = useCallback(
@@ -615,11 +617,17 @@ export function WorkbenchTable({
       api.paginationGoToFirstPage();
     }
   }, [rowData]);
-  // Paged at the foot of a long page: show the new page from its top.
+  // A new page starts at its first row, just under the (sticky) header — not at the table's
+  // top, where the pinned Selected block sits — unless that row is already in view.
   const onPaginationChanged = useCallback((e: PaginationChangedEvent<Row>) => {
-    const el = root.current;
-    if (e.newPage && el && el.getBoundingClientRect().top < 0)
-      el.scrollIntoView({ block: "start" });
+    const current = e.api.paginationGetCurrentPage();
+    const total = e.api.paginationGetTotalPages();
+    setPage((p) => (p.current === current && p.total === total ? p : { current, total }));
+    const body = root.current?.querySelector<HTMLElement>(".ag-body");
+    const header = root.current?.querySelector<HTMLElement>(".ag-header")?.getBoundingClientRect();
+    if (!e.newPage || !body || !header || body.getBoundingClientRect().top >= header.bottom) return;
+    body.style.scrollMarginTop = `${header.height}px`;
+    body.scrollIntoView({ block: "start" });
   }, []);
 
   return (
@@ -630,7 +638,37 @@ export function WorkbenchTable({
     >
       <style>{STICKY}</style>
       <div className="flex shrink-0 items-center gap-2 px-2 py-1 text-xs">
-        <span className="text-muted-foreground">{fmt(pinned.length + rest.length)} rows</span>
+        {/* The pager counts the paged rows; the pinned selected ones are counted apart. */}
+        <span className="text-muted-foreground">
+          {fmt(rest.length)} rows{pinned.length > 0 && ` + ${fmt(pinned.length)} selected`}
+        </span>
+        {page.total > 1 && (
+          <fieldset aria-label="Pages" className="flex items-center gap-0.5">
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              aria-label="Previous page"
+              disabled={page.current === 0}
+              onClick={() => grid.current?.api.paginationGoToPreviousPage()}
+            >
+              <ChevronLeft className="h-3.5 w-3.5" />
+            </Button>
+            <span className="tabular-nums text-muted-foreground">
+              Page {fmt(page.current + 1)} of {fmt(page.total)}
+            </span>
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-7 w-7"
+              aria-label="Next page"
+              disabled={page.current >= page.total - 1}
+              onClick={() => grid.current?.api.paginationGoToNextPage()}
+            >
+              <ChevronRight className="h-3.5 w-3.5" />
+            </Button>
+          </fieldset>
+        )}
         <fieldset aria-label="Row density" className="ml-auto flex items-center gap-0.5">
           {(["compact", "chemistry"] as const).map((d) => (
             <Button

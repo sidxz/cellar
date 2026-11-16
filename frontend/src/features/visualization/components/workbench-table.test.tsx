@@ -355,14 +355,66 @@ describe("WorkbenchTable", () => {
     await vi.waitFor(() => expect(pageSummary()).toBe("101 to 150 of 150"));
   });
 
-  it("brings the top of the table into view when the page changes below it", async () => {
+  it("lands on the new page's first row, under the header, not on the Selected block", async () => {
+    const { container } = show(["w0"], { table: many(250) });
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 249"));
+    const table = container.querySelector(".viz-table") as HTMLElement;
+    const body = container.querySelector(".ag-body") as HTMLElement;
+    const header = container.querySelector(".ag-header") as HTMLElement;
+    table.scrollIntoView = vi.fn();
+    body.scrollIntoView = vi.fn();
+    // Scrolled to the foot of the page: the header sticks at the top, the rows began far above.
+    vi.spyOn(header, "getBoundingClientRect").mockReturnValue({
+      bottom: 64,
+      height: 64,
+    } as DOMRect);
+    vi.spyOn(body, "getBoundingClientRect").mockReturnValue({ top: -9000 } as DOMRect);
+    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
+    await vi.waitFor(() => expect(body.scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
+    expect(body.style.scrollMarginTop).toBe("64px");
+    expect(table.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("stays put when the new page's first row is already in view", async () => {
     const { container } = show([], { table: many(250) });
     await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
-    const table = container.querySelector(".viz-table") as HTMLElement;
-    table.scrollIntoView = vi.fn();
-    vi.spyOn(table, "getBoundingClientRect").mockReturnValue({ top: -800 } as DOMRect);
-    fireEvent.click(screen.getByRole("button", { name: "Next Page" }));
-    await vi.waitFor(() => expect(table.scrollIntoView).toHaveBeenCalledWith({ block: "start" }));
+    const body = container.querySelector(".ag-body") as HTMLElement;
+    const header = container.querySelector(".ag-header") as HTMLElement;
+    body.scrollIntoView = vi.fn();
+    vi.spyOn(header, "getBoundingClientRect").mockReturnValue({
+      bottom: 300,
+      height: 64,
+    } as DOMRect);
+    vi.spyOn(body, "getBoundingClientRect").mockReturnValue({ top: 300 } as DOMRect);
+    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    await vi.waitFor(() => expect(pageSummary()).toBe("101 to 200 of 250"));
+    expect(body.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("pages from the toolbar too, in step with the pager below", async () => {
+    show([], { table: many(250) });
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
+    const pages = screen.getByRole("group", { name: "Pages" });
+    expect(pages).toHaveTextContent("Page 1 of 3");
+    expect(within(pages).getByRole("button", { name: "Previous page" })).toBeDisabled();
+    fireEvent.click(within(pages).getByRole("button", { name: "Next page" }));
+    await vi.waitFor(() => expect(pageSummary()).toBe("101 to 200 of 250"));
+    await vi.waitFor(() => expect(pages).toHaveTextContent("Page 2 of 3"));
+    fireEvent.click(screen.getByRole("button", { name: "Last Page" }));
+    await vi.waitFor(() => expect(pages).toHaveTextContent("Page 3 of 3"));
+    expect(within(pages).getByRole("button", { name: "Next page" })).toBeDisabled();
+  });
+
+  it("offers no toolbar pager for a single page", async () => {
+    show();
+    await screen.findByRole("link", { name: "CEL-1" });
+    expect(screen.queryByRole("group", { name: "Pages" })).toBeNull();
+  });
+
+  it("counts the rows as the pager does, the pinned selected ones apart", async () => {
+    show(["w0", "w1"], { table: many(250) });
+    await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 248"));
+    expect(screen.getByText("248 rows + 2 selected")).toBeInTheDocument();
   });
 
   it("drops structures in compact density", async () => {
