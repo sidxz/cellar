@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from cellar.application.visualization.dataset import Dataset, DatasetColumn
 from cellar.application.visualization.get_dataset import (
+    ComparedProtocol,
     DatasetLevel,
     GetVisualizationDatasetQuery,
     ProtocolSource,
@@ -31,10 +32,17 @@ from cellar.interface.error_handlers import result_to_response
 router = APIRouter(prefix="/api/v1/visualization", tags=["visualization"])
 
 
+class ComparedProtocolBody(BaseModel):
+    protocol_id: uuid.UUID
+    run_ids: list[uuid.UUID] | None = None
+
+
 class ProtocolSourceBody(BaseModel):
     kind: Literal["protocol"]
     protocol_id: uuid.UUID
     run_ids: list[uuid.UUID] | None = None
+    # Compounds level only: further protocols joined onto this one's compounds.
+    compare: list[ComparedProtocolBody] = Field(default_factory=list, max_length=4)
 
 
 class RunSourceBody(BaseModel):
@@ -88,6 +96,11 @@ class DatasetColumnResponse(BaseModel):
         )
 
 
+class DatasetProtocolResponse(BaseModel):
+    protocol_id: uuid.UUID
+    name: str
+
+
 class DatasetResponse(BaseModel):
     revision: str
     level: DatasetLevel
@@ -98,6 +111,8 @@ class DatasetResponse(BaseModel):
     # Wells only: each plate's Z′ as the run's QC stored it, keyed by the plate id
     # that values["plate_id"] carries.
     plate_z_prime: dict[str, float] = {}
+    # The protocols the columns come from; the first one owns the rows.
+    protocols: list[DatasetProtocolResponse] = []
 
     @classmethod
     def from_domain(cls, d: Dataset) -> DatasetResponse:
@@ -109,11 +124,18 @@ class DatasetResponse(BaseModel):
             columns=[DatasetColumnResponse.from_domain(c) for c in d.columns],
             values=d.values,
             plate_z_prime=d.plate_z_prime,
+            protocols=[
+                DatasetProtocolResponse(protocol_id=p.id, name=p.name) for p in d.protocols
+            ],
         )
 
 
 class RunRowCountsResponse(BaseModel):
     counts: dict[str, int]
+
+
+def _run_ids(run_ids: list[uuid.UUID] | None) -> tuple[uuid.UUID, ...] | None:
+    return tuple(run_ids) if run_ids is not None else None
 
 
 @router.post("/dataset", response_model=DatasetResponse)
@@ -127,7 +149,10 @@ async def get_dataset(
         if isinstance(src, RunSourceBody)
         else ProtocolSource(
             protocol_id=src.protocol_id,
-            run_ids=tuple(src.run_ids) if src.run_ids is not None else None,
+            run_ids=_run_ids(src.run_ids),
+            compare=tuple(
+                ComparedProtocol(c.protocol_id, _run_ids(c.run_ids)) for c in src.compare
+            ),
         )
     )
     query = GetVisualizationDatasetQuery(

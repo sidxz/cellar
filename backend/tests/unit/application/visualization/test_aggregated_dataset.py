@@ -724,8 +724,12 @@ def test_the_plan_counts_the_rows_and_a_floor_of_the_columns(level):
     curves = [_curve(run_a, mol, batch)] if level == "runs" else []
     aggregates = ActivityAggregates(numeric_rows=numeric, dr_agg_rows=dr)
 
-    rows, columns = plan_aggregated(level, runs, DEFS, aggregates)
+    plan = plan_aggregated(level, runs, DEFS, aggregates)
     ds = build_aggregated_dataset(level, runs, DEFS, aggregates, curves, {}, {})
 
-    assert rows == len(ds.row_ids)
-    assert columns <= len(ds.columns)
+    assert plan.rows == len(ds.row_ids)
+    assert plan.columns <= len(ds.columns)
+    owned = [c.provenance for c in ds.columns if c.provenance.readout_definition_id is not None]
+    p_columns = [c for c in owned if c.stat is None and c.aggregation == "p"]
+    assert plan.p == len(p_columns) > 0
+    assert plan.values == len([c for c in owned if c.stat is None]) - len(p_columns)

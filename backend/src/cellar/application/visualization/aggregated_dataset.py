@@ -293,14 +293,21 @@ def _identity_keys(level: AggLevel) -> list[str]:
     return keys
 
 
+class AggregatedPlan(NamedTuple):
+    rows: int
+    columns: int
+    values: int  # value columns (always emitted, like their p columns)
+    p: int  # p columns
+
+
 def plan_aggregated(
     level: AggLevel,
     runs: list[RunInfo],
     defs: list[ReadoutDefInfo],
     aggregates: ActivityAggregates,
-) -> tuple[int, int]:
-    """(rows, columns) of the dataset from the aggregation alone, so an oversized
-    selection is refused before curves, compounds and the build are loaded.
+) -> AggregatedPlan:
+    """Sizes of the dataset from the aggregation alone, so an oversized selection is
+    refused before curves, compounds and the build are loaded.
 
     Rows are exact: every curve of the runs has its aggregation row. Columns are a
     floor — identity and condition columns, each value column with its p column and
@@ -309,6 +316,7 @@ def plan_aggregated(
     """
     rows = _rows(level, defs, aggregates, [])
     counts: dict[tuple[uuid.UUID, str | None, str], int] = {}
+    molar: set[tuple[uuid.UUID, str | None, str]] = set()
     for r, (_, cs) in zip(rows.records, rows.keyed, strict=True):
         rd = rows.defs[r.readout_definition_id]
         if isinstance(r, NumericReadoutRow):
@@ -319,9 +327,13 @@ def plan_aggregated(
             spec = _ValueColumn(rd, None, cs, canonical_unit(rd.dose_unit))
             siblings = 0 if level == "runs" else 3
         counts[(rd.id, spec.layer, cs)] = 1 + spec.molar + siblings
+        if spec.molar:
+            molar.add((rd.id, spec.layer, cs))
     conditions = {name for run in runs for name in (run.conditions or {})}
     columns = len(_identity_keys(level)) + (len(conditions) if level == "runs" else 0)
-    return len(rows.idents), columns + sum(counts.values())
+    return AggregatedPlan(
+        len(rows.idents), columns + sum(counts.values()), len(counts), len(molar)
+    )
 
 
 def build_aggregated_dataset(

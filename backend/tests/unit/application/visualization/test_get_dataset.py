@@ -16,6 +16,7 @@ from cellar.application.screening.protocol_activity_reader import (
     AggregateScope,
     NumericReadoutRow,
 )
+from cellar.application.visualization.dataset import DatasetProtocol
 from cellar.application.visualization.dataset_reader import (
     CompoundInfo,
     ReadoutDefInfo,
@@ -24,6 +25,7 @@ from cellar.application.visualization.dataset_reader import (
 )
 from cellar.application.visualization.get_dataset import (
     MAX_DATASET_ROWS,
+    ComparedProtocol,
     GetVisualizationDataset,
     GetVisualizationDatasetQuery,
     ProtocolSource,
@@ -40,13 +42,16 @@ pytestmark = pytest.mark.asyncio
 
 WS = uuid.uuid4()
 P = uuid.uuid4()
+Q = uuid.uuid4()  # a second protocol, to compare with P
 RD = uuid.uuid4()
+RD_OF = {P: RD, Q: uuid.uuid4()}
+NAMES = {P: "Primary", Q: "Counter"}
 
 
-def _run(rid: uuid.UUID) -> RunInfo:
+def _run(rid: uuid.UUID, protocol_id: uuid.UUID = P) -> RunInfo:
     return RunInfo(
         id=rid,
-        protocol_id=P,
+        protocol_id=protocol_id,
         run_date=date(2026, 11, 1),
         operator_id=uuid.uuid4(),
         status="approved",
@@ -86,13 +91,20 @@ def _value(run_id: uuid.UUID) -> WellValueRow:
 
 
 class FakeReader:
-    def __init__(self, runs: list[RunInfo], counts: dict[uuid.UUID, int]) -> None:
+    """Protocol P with ``runs``; protocol Q with one run C. One "Signal" readout each."""
+
+    def __init__(
+        self, runs: list[RunInfo], counts: dict[uuid.UUID, int], unit: str | None = None
+    ) -> None:
         self.runs = runs
         self.counts = counts
+        self.unit = unit
         self.fetched: list[uuid.UUID] | None = None
 
     async def runs_for_protocol(self, workspace_id, protocol_id):
-        return self.runs if (workspace_id, protocol_id) == (WS, P) else None
+        if workspace_id != WS:
+            return None
+        return {P: self.runs, Q: [_run(C, Q)]}.get(protocol_id)
 
     async def runs_by_ids(self, workspace_id, run_ids):
         return [r for r in self.runs if r.id in run_ids] if workspace_id == WS else []
@@ -100,13 +112,14 @@ class FakeReader:
     async def readout_definitions(self, workspace_id, protocol_ids):
         return [
             ReadoutDefInfo(
-                id=RD,
-                protocol_id=P,
+                id=RD_OF[pid],
+                protocol_id=pid,
                 name="Signal",
                 data_type="numeric",
-                unit=None,
+                unit=self.unit,
                 display_order=0,
             )
+            for pid in protocol_ids
         ]
 
     async def count_wells_rows(self, workspace_id, run_ids):
@@ -127,6 +140,10 @@ class FakeReader:
     async def batch_numbers(self, workspace_id, batch_ids):
         self.batches_asked = set(batch_ids)
         return {b: "B-1" for b in batch_ids}
+
+    async def protocol_names(self, workspace_id, protocol_ids):
+        self.names_asked = list(protocol_ids)
+        return {p: NAMES[p] for p in protocol_ids if p in NAMES and workspace_id == WS}
 
 
 def _info(reg: str) -> CompoundInfo:
@@ -151,7 +168,7 @@ class FakeActivity:
                 mean=1.0,
                 n=1,
                 sd=None,
-                readout_definition_id=RD,
+                readout_definition_id=RD_OF[protocol_id],
                 batch_id=BATCH if scope.grain != "compound" else None,
                 run_id=A if scope.grain == "run" else None,
             )
@@ -160,11 +177,11 @@ class FakeActivity:
         return ActivityAggregates(numeric_rows=rows, dr_agg_rows=[])
 
 
-A, B, FOREIGN, BATCH = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+A, B, C, FOREIGN, BATCH = uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
 
-def _reader(count_a: int = 1, count_b: int = 1) -> FakeReader:
-    return FakeReader([_run(A), _run(B)], {A: count_a, B: count_b})
+def _reader(count_a: int = 1, count_b: int = 1, unit: str | None = None) -> FakeReader:
+    return FakeReader([_run(A), _run(B)], {A: count_a, B: count_b}, unit)
 
 
 async def test_protocol_source_loads_every_run():
@@ -402,3 +419,124 @@ async def test_a_selection_under_both_caps_is_built(monkeypatch):
         q, auth=FakeAuth(workspace_id=WS)
     )
     assert isinstance(result, Success)
+
+
+# --- compare: further protocols joined at the Compounds level ----------------------
+
+
+def _compare(*compare: ComparedProtocol, level="compounds") -> GetVisualizationDatasetQuery:
+    return GetVisualizationDatasetQuery(
+        workspace_id=WS, source=ProtocolSource(protocol_id=P, compare=compare), level=level
+    )
+
+
+@pytest.mark.parametrize(
+    ("source", "level"),
+    [(RunSource(run_id=A), "wells"), (ProtocolSource(protocol_id=P), "compounds")],
+)
+async def test_every_source_names_its_protocol(source, level):
+    q = GetVisualizationDatasetQuery(workspace_id=WS, source=source, level=level)
+    result = await GetVisualizationDataset(_reader(), FakeActivity((uuid.uuid4(),)))(
+        q, auth=FakeAuth(workspace_id=WS)
+    )
+    ds = result.unwrap()
+    assert ds.protocols == [DatasetProtocol(P, "Primary")]
+    assert not any(k.startswith("tested:") for k in ds.values)
+
+
+async def test_compare_joins_each_protocols_compounds_onto_the_first():
+    reader, activity = _reader(), FakeActivity((uuid.uuid4(),))
+    result = await GetVisualizationDataset(reader, activity)(
+        _compare(ComparedProtocol(Q, run_ids=(C,))), auth=FakeAuth(workspace_id=WS)
+    )
+    ds = result.unwrap()
+    assert ds.protocols == [DatasetProtocol(P, "Primary"), DatasetProtocol(Q, "Counter")]
+    assert ds.values[f"tested:{Q}"] == ["Tested"]
+    assert [(pid, scope.run_ids, scope.grain) for pid, scope in activity.calls] == [
+        (P, (A, B), "compound"),
+        (Q, (C,), "compound"),
+    ]
+    assert reader.names_asked == [P, Q]  # once, for every protocol
+
+
+@pytest.mark.parametrize("level", ["wells", "runs", "batches"])
+async def test_compare_works_at_the_compounds_level_only(level):
+    reader, activity = _reader(), FakeActivity()
+    result = await GetVisualizationDataset(reader, activity)(
+        _compare(ComparedProtocol(Q), level=level), auth=FakeAuth(workspace_id=WS)
+    )
+    err = result.failure()
+    assert isinstance(err, ValidationError)
+    assert str(err) == "Comparing protocols works at the Compounds level only."
+    assert activity.calls == [] and reader.fetched is None
+
+
+@pytest.mark.parametrize("compared", [(P,), (Q, Q)])
+async def test_each_protocol_can_be_loaded_once(compared):
+    activity = FakeActivity()
+    result = await GetVisualizationDataset(_reader(), activity)(
+        _compare(*(ComparedProtocol(pid) for pid in compared)), auth=FakeAuth(workspace_id=WS)
+    )
+    err = result.failure()
+    assert isinstance(err, ValidationError) and str(err) == "Each protocol can be loaded once."
+    assert activity.calls == []  # refused before anything is read
+
+
+async def test_an_unknown_compared_protocol_or_run_is_not_found():
+    uc = GetVisualizationDataset(_reader(), FakeActivity())
+    # A foreign protocol id, and a run of P asked for as a run of Q.
+    for compared in (ComparedProtocol(FOREIGN), ComparedProtocol(Q, run_ids=(A,))):
+        result = await uc(_compare(compared), auth=FakeAuth(workspace_id=WS))
+        assert isinstance(result.failure(), NotFoundError)
+
+
+async def test_the_column_cap_counts_the_joined_columns_before_loading(monkeypatch):
+    """Two condition sets of a molar readout per protocol: 9 planned columns alone; the
+    join adds Q's 2 values, 2 p columns, its tested column and 2 x 2 selectivity
+    columns: at least 18."""
+    from cellar.application.visualization import get_dataset
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_COLUMNS", 17)
+    alone = await GetVisualizationDataset(_reader(unit="uM"), SetsActivity(2))(
+        _compare(), auth=FakeAuth(workspace_id=WS)
+    )
+    reader = _reader(unit="uM")
+    joined = await GetVisualizationDataset(reader, SetsActivity(2))(
+        _compare(ComparedProtocol(Q)), auth=FakeAuth(workspace_id=WS)
+    )
+
+    assert isinstance(alone, Success)
+    err = str(joined.failure())
+    assert "at least 18 columns" in err and "limit is 17" in err and "protocol" in err
+    assert _loaded_nothing(reader)
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_COLUMNS", 1000)
+    built = await GetVisualizationDataset(_reader(unit="uM"), SetsActivity(2))(
+        _compare(ComparedProtocol(Q)), auth=FakeAuth(workspace_id=WS)
+    )
+    assert len(built.unwrap().columns) >= 18  # the plan is a floor
+
+
+class PerProtocolActivity(FakeActivity):
+    def __init__(self, molecules: dict[uuid.UUID, tuple[uuid.UUID, ...]]) -> None:
+        super().__init__()
+        self.by_protocol = molecules
+
+    async def get_aggregates(self, workspace_id, protocol_id, scope):
+        self.molecules = self.by_protocol[protocol_id]
+        return await super().get_aggregates(workspace_id, protocol_id, scope)
+
+
+async def test_the_row_cap_applies_to_a_compared_protocol_before_loading(monkeypatch):
+    """Each protocol's compounds are built before the join: Q's 2 rows are over a cap
+    of 1 even though the joined dataset keeps P's single row."""
+    from cellar.application.visualization import get_dataset
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_ROWS", 1)
+    reader = _reader()
+    activity = PerProtocolActivity({P: (uuid.uuid4(),), Q: (uuid.uuid4(), uuid.uuid4())})
+    result = await GetVisualizationDataset(reader, activity)(
+        _compare(ComparedProtocol(Q)), auth=FakeAuth(workspace_id=WS)
+    )
+    assert "2 rows" in str(result.failure()) and "limit is 1" in str(result.failure())
+    assert _loaded_nothing(reader)

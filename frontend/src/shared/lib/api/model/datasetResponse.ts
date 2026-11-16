@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.4.0-38-gba3012c2-dirty
  */
 import type { DatasetColumnResponse } from './datasetColumnResponse';
+import type { DatasetProtocolResponse } from './datasetProtocolResponse';
 import type { DatasetResponseLevel } from './datasetResponseLevel';
 import type { DatasetResponsePlateZPrime } from './datasetResponsePlateZPrime';
 import type { DatasetResponseValues } from './datasetResponseValues';
@@ -17,4 +18,5 @@ export interface DatasetResponse {
   columns: DatasetColumnResponse[];
   values: DatasetResponseValues;
   plate_z_prime?: DatasetResponsePlateZPrime;
+  protocols?: DatasetProtocolResponse[];
 }

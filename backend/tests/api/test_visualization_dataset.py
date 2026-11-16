@@ -342,3 +342,111 @@ async def test_value_columns_name_their_runs(client, session_factory, fake_auth)
 
     col = next(c for c in body["columns"] if c["key"] == f"dr:{w['ic50']}")
     assert col["provenance"]["run_ids"] == [str(w["a"]), str(w["b"]), str(w["d"])]
+
+
+# --- compare: a second protocol joined at the Compounds level ------------------------
+
+
+async def _seed_compare(session_factory, ws: uuid.UUID) -> dict[str, uuid.UUID]:
+    """Protocol "Primary" measures m1 (IC50 0.1 µM) and m2, "Counter" m1 (1 µM) and m3:
+    both with a readout named "IC50", each in one completed run."""
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        s = uow.session
+        o = await seed.org(s, ws)
+        w = {m: await seed.molecule(s, ws, o, m) for m in ("m1", "m2", "m3")}
+        measures = {"Primary": (("m1", 0.1), ("m2", 2.0)), "Counter": (("m1", 1.0), ("m3", 5.0))}
+        for name, measured in measures.items():
+            p = await seed.protocol(s, ws, name=name)
+            ic50 = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+            run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+            for m, fitted in measured:
+                await seed.curve(s, ws, p, run, w[m], ic50, fitted_value=fitted, with_well=False)
+            w |= {name: p, f"{name} IC50": ic50, f"{name} run": run}
+        await uow.commit()
+    return w
+
+
+def _compared(w, level: str = "compounds", *compare: dict) -> dict:
+    return {
+        "source": {"kind": "protocol", "protocol_id": str(w["Primary"]), "compare": list(compare)},
+        "level": level,
+    }
+
+
+async def test_compounds_compare_a_second_protocol(client, session_factory, fake_auth):
+    w = await _seed_compare(session_factory, fake_auth.workspace_id)
+    counter = {"protocol_id": str(w["Counter"]), "run_ids": [str(w["Counter run"])]}
+
+    resp = await client.post(URL, json=_compared(w, "compounds", counter))
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["row_count"] == 2  # Primary's compounds; m3 was never tested there
+    tested = f"tested:{w['Counter']}"
+    assert body["values"][tested] == [
+        {str(w["m1"]): "Tested", str(w["m2"]): "Not tested"}[m]
+        for m in body["values"]["molecule_id"]
+    ]
+    sel = f"sel:dr:{w['Primary IC50']}:p|dr:{w['Counter IC50']}:p"
+    assert _cell(body, sel, w["m1"]) == [pytest.approx(1.0)]  # pIC50 7 - 6
+    assert _cell(body, sel, w["m2"]) == [None]
+    assert [(p["protocol_id"], p["name"]) for p in body["protocols"]] == [
+        (str(w["Primary"]), "Primary"),
+        (str(w["Counter"]), "Counter"),
+    ]
+    labels = {c["key"]: c["label"] for c in body["columns"]}
+    assert labels[f"dr:{w['Primary IC50']}"].startswith("Primary · ")
+    assert labels[f"dr:{w['Counter IC50']}"].startswith("Counter · ")
+
+
+async def test_without_compare_the_dataset_names_its_one_protocol(
+    client, session_factory, fake_auth
+):
+    w = await _seed_compare(session_factory, fake_auth.workspace_id)
+
+    body = (await client.post(URL, json=_compared(w))).json()
+
+    assert [p["name"] for p in body["protocols"]] == ["Primary"]
+    assert not any(k.startswith("tested:") or k.startswith("sel:") for k in body["values"])
+    assert body["row_count"] == 2
+
+
+@pytest.mark.parametrize(
+    ("level", "repeat", "message"),
+    [
+        ("wells", False, "Comparing protocols works at the Compounds level only."),
+        ("runs", False, "Comparing protocols works at the Compounds level only."),
+        ("compounds", True, "Each protocol can be loaded once."),
+    ],
+)
+async def test_compare_is_refused_off_compounds_or_for_a_repeated_protocol(
+    client, session_factory, fake_auth, level, repeat, message
+):
+    w = await _seed_compare(session_factory, fake_auth.workspace_id)
+    compare = [{"protocol_id": str(w["Primary" if repeat else "Counter"])}]
+
+    resp = await client.post(URL, json=_compared(w, level, *compare))
+
+    assert resp.status_code == 422, resp.text
+    assert message in resp.text
+
+
+async def test_a_compared_protocol_of_another_workspace_is_404(client, session_factory, fake_auth):
+    w = await _seed_compare(session_factory, fake_auth.workspace_id)
+    other = await _seed_compare(session_factory, uuid.uuid4())
+
+    resp = await client.post(
+        URL, json=_compared(w, "compounds", {"protocol_id": str(other["Counter"])})
+    )
+
+    assert resp.status_code == 404, resp.text
+
+
+async def test_at_most_four_protocols_are_compared(client, session_factory, fake_auth):
+    w = await _seed_compare(session_factory, fake_auth.workspace_id)
+    five = [{"protocol_id": str(uuid.uuid4())} for _ in range(5)]
+
+    resp = await client.post(URL, json=_compared(w, "compounds", *five))
+
+    assert resp.status_code == 422, resp.text
