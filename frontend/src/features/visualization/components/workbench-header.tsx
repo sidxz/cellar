@@ -353,12 +353,14 @@ interface WorkbenchHeaderProps {
   exportMenu?: ReactNode;
   /** "+ Add plot (n/4)" menu. */
   addPlotMenu?: ReactNode;
+  /** "Add columns" menu (chemistry column sets), quieter than Add plot. */
+  addColumnsMenu?: ReactNode;
   /** The saved view's name and its Save controls, at the end of row 1. */
   viewControls?: ReactNode;
 }
 
 /** Two rows: the source and the saved view's controls (row 1), then grain, counts, history
- * and the plot/export menus. */
+ * and the export, column and plot menus. */
 export function WorkbenchHeader({
   source,
   ds,
@@ -366,6 +368,7 @@ export function WorkbenchHeader({
   onViewChange,
   exportMenu,
   addPlotMenu,
+  addColumnsMenu,
   viewControls,
 }: WorkbenchHeaderProps) {
   const mask = usePassMask(ds);
@@ -442,6 +445,7 @@ export function WorkbenchHeader({
             <Redo2 className="h-4 w-4" />
           </Button>
           {exportMenu}
+          {addColumnsMenu}
           {addPlotMenu}
         </div>
       </div>

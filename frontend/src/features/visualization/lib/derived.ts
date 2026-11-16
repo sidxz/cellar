@@ -223,3 +223,7 @@ export function rgroupPositions(ds: Dataset): string[] {
 
 /** The R-groups set a position column belongs to: "chem:rg1:R2" → "chem:rg1". */
 export const rgroupSetOf = (key: string) => key.slice(0, key.lastIndexOf(":"));
+
+/** Spreadsheet-style letters for the n-th name (1-based): A … Z, AA, AB … */
+export const letters = (n: number): string =>
+  n <= 0 ? "" : letters(Math.floor((n - 1) / 26)) + String.fromCharCode(65 + ((n - 1) % 26));

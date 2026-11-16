@@ -21,7 +21,13 @@ import { errorText } from "../lib/api-errors";
 import type { ViewConfig } from "../lib/config-schema";
 import { resolveUserColumns } from "../lib/dataset";
 import { defaultPanels, panelDefaults } from "../lib/default-panels";
-import { jobMoleculeIds, rgroupPositions, rgroupSetOf, withDerived } from "../lib/derived";
+import {
+  type DerivedSpec,
+  jobMoleculeIds,
+  rgroupPositions,
+  rgroupSetOf,
+  withDerived,
+} from "../lib/derived";
 import { type Carry, carryConfig, switchNote } from "../lib/level-switch";
 import { countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
@@ -30,10 +36,14 @@ import { visualizeHref } from "../lib/source-url";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import { MAX_PANELS, type PanelPatch, makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level, SavedView } from "../types";
+import { AddColumnsMenu } from "./add-columns-menu";
 import { AddPlotMenu } from "./add-plot-menu";
 import { CurvesDialog, type CurvesTarget, curvesTarget } from "./curves-dialog";
 import { DerivedColumnsBar, derivedTitle } from "./derived-columns-bar";
 import { DerivedRunner } from "./derived-runner";
+import { ClustersDialog } from "./derived/clusters-dialog";
+import { RGroupsDialog } from "./derived/rgroups-dialog";
+import { SeriesDialog } from "./derived/series-dialog";
 import { ExportMenu } from "./export-menu";
 import { FilterRail, NoRowsMatch } from "./filter-rail";
 import { PanelGrid } from "./panel-grid";
@@ -107,7 +117,8 @@ function Workbench({
   const [curves, setCurves] = useState<CurvesTarget | null>(null);
   const [viewNoteOpen, setViewNoteOpen] = useState(true);
   const [removedNote, setRemovedNote] = useState<string | null>(null);
-  const { entries, readySets, dispatch } = useDerived();
+  const { entries, readySets, dispatch, newRGroups } = useDerived();
+  const [adding, setAdding] = useState<DerivedSpec["kind"] | null>(null);
 
   const base = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
@@ -115,6 +126,17 @@ function Workbench({
   );
   // Chemistry columns, computed per compound, joined onto whatever level is loaded.
   const ds = useMemo(() => base && withDerived(base, readySets), [base, readySets]);
+  // The compounds a new chemistry job runs over: every one with a structure.
+  const moleculeIds = useMemo(() => (base ? jobMoleculeIds(base) : []), [base]);
+  const addSet = (spec: DerivedSpec) => dispatch({ type: "add", spec, moleculeIds });
+  const specOf = <K extends DerivedSpec["kind"]>(kind: K) =>
+    entries.find((e) => e.spec.kind === kind)?.spec as
+      | Extract<DerivedSpec, { kind: K }>
+      | undefined;
+  // Every column label shown here, so a filter that undo brings back onto a removed
+  // chemistry column still reads by name.
+  const seenLabels = useRef(new Map<string, string>()).current;
+  for (const c of ds?.columns ?? []) seenLabels.set(c.key, c.label);
   // A row above Runs pools the source runs that count at its level; its curves come from those.
   const countedRunIds = useMemo(
     () => runs.filter((r) => countsAtLevel(level, r.status)).map((r) => r.id),
@@ -286,6 +308,14 @@ function Workbench({
             onViewChange={changeView}
             exportMenu={<ExportMenu ds={ds} table={tableRef} />}
             addPlotMenu={<AddPlotMenu ds={ds} />}
+            addColumnsMenu={
+              <AddColumnsMenu
+                onPick={setAdding}
+                disabledReason={
+                  moleculeIds.length ? undefined : "No compound in this dataset has a structure"
+                }
+              />
+            }
             viewControls={<ViewControls source={source} level={level} ds={ds} />}
           />
           {entries.length > 0 && base && (
@@ -325,7 +355,7 @@ function Workbench({
                 />
               </div>
             }
-            rail={<FilterRail ds={ds} />}
+            rail={<FilterRail ds={ds} labels={seenLabels} />}
             editor={
               editing && (
                 <PlotSettingsSheet
@@ -340,6 +370,34 @@ function Workbench({
         </WorkbenchProvider>
       )}
       {curves && <CurvesDialog {...curves} open onOpenChange={() => setCurves(null)} />}
+      {adding === "rgroups" && (
+        <RGroupsDialog
+          open
+          onOpenChange={() => setAdding(null)}
+          moleculeIds={moleculeIds}
+          onApply={(core) => addSet(newRGroups(core))}
+        />
+      )}
+      {adding === "clusters" && (
+        <ClustersDialog
+          open
+          onOpenChange={() => setAdding(null)}
+          compoundCount={moleculeIds.length}
+          initialThreshold={specOf("clusters")?.threshold}
+          onApply={(threshold) => addSet({ id: "clusters", kind: "clusters", threshold })}
+        />
+      )}
+      {adding === "series" && base && (
+        <SeriesDialog
+          open
+          onOpenChange={() => setAdding(null)}
+          ds={base}
+          moleculeIds={moleculeIds}
+          rgroupSets={readySets.filter((s) => s.spec.kind === "rgroups")}
+          initial={specOf("series")?.members}
+          onApply={(members) => addSet({ id: "series", kind: "series", members })}
+        />
+      )}
       {pickerOpen && source.kind === "protocol" && (
         <RunPickerDialog
           protocolId={source.protocolId}

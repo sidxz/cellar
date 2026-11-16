@@ -15,29 +15,40 @@ import { useWorkbench } from "../../store/workbench-context";
 import type { Dataset } from "../../types";
 
 /** A rail card: a header that collapses the card to its summary (highlighted while the
- * filter leaves rows out) and removes the filter, over the card's controls. */
+ * filter leaves rows out) and removes the filter, over the card's controls. A filter on a
+ * column the data no longer has (undo past a removed chemistry set) filters nothing and
+ * reads by ``lastLabel``, the label its column last had. */
 export function FilterCard({
   ds,
   filter,
   active,
+  lastLabel,
   children,
 }: {
   ds: Dataset;
   filter: Filter;
   active: boolean;
+  lastLabel?: string;
   children?: ReactNode;
 }) {
   const removeFilter = useWorkbench((s) => s.removeFilter);
   const [open, setOpen] = useState(true);
-  const label =
-    filter.kind === "rows"
+  const gone = "key" in filter && !column(ds, filter.key);
+  const label = gone
+    ? lastLabel
+      ? `${lastLabel} (removed column)`
+      : "Removed column"
+    : filter.kind === "rows"
       ? "Selection"
       : filter.kind === "substructure"
         ? substructureSummary(filter)
         : (column(ds, filter.key)?.label ?? filter.key);
   const { condition, summary } = useMemo(
-    () => ({ condition: filterCondition(ds, filter), summary: filterSummary(ds, filter) }),
-    [ds, filter],
+    () =>
+      gone
+        ? { condition: "not applied", summary: `${label}: not applied` }
+        : { condition: filterCondition(ds, filter), summary: filterSummary(ds, filter) },
+    [ds, filter, gone, label],
   );
   const Icon = open ? ChevronDown : ChevronRight;
   return (

@@ -4,6 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { FilterX } from "lucide-react";
 import { type ReactNode, memo, useMemo } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
+import { column } from "../lib/dataset";
 import { filterSummary, isFilterActive } from "../lib/filters";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset } from "../types";
@@ -16,7 +17,14 @@ import { SubstructureFilterCard } from "./filters/substructure-filter-card";
 /** The filter rail: "Filters (n active)" + Reset all (one undo step), the fixed-bins note,
  * the field search, then one card per filter. Memoized: it redraws only on filter or
  * dataset changes, not on selection or panel edits. */
-export const FilterRail = memo(function FilterRail({ ds }: { ds: Dataset }) {
+export const FilterRail = memo(function FilterRail({
+  ds,
+  labels,
+}: {
+  ds: Dataset;
+  /** Column labels seen in this workbench, naming a filter whose column has gone since. */
+  labels?: ReadonlyMap<string, string>;
+}) {
   const filters = useWorkbench((s) => s.filters);
   const setFilters = useWorkbench((s) => s.setFilters);
   const active = useMemo(
@@ -47,6 +55,17 @@ export const FilterRail = memo(function FilterRail({ ds }: { ds: Dataset }) {
         <AddFilterCombobox ds={ds} />
         {filters.map((f) => {
           const on = active.has(f.id);
+          if ("key" in f && !column(ds, f.key)) {
+            return (
+              <FilterCard
+                key={f.id}
+                ds={ds}
+                filter={f}
+                active={on}
+                lastLabel={labels?.get(f.key)}
+              />
+            );
+          }
           if (f.kind === "range")
             return <RangeFilterCard key={f.id} ds={ds} filter={f} active={on} />;
           if (f.kind === "category") {

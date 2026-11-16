@@ -62,6 +62,29 @@ vi.mock("../hooks/use-derived", async (importOriginal) => {
   return { ...mod, useDerived: () => mod.useDerived(state.derived) };
 });
 vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
+// Jobs never start here; the bar shows what was asked for.
+vi.mock("./derived-runner", () => ({ DerivedRunner: () => null }));
+vi.mock("./derived/rgroups-dialog", () => ({
+  RGroupsDialog: ({
+    moleculeIds,
+    onApply,
+    onOpenChange,
+  }: {
+    moleculeIds: string[];
+    onApply: (core: string) => void;
+    onOpenChange: (open: boolean) => void;
+  }) => (
+    <button
+      type="button"
+      onClick={() => {
+        onApply("c1ccncc1[*:1]");
+        onOpenChange(false);
+      }}
+    >
+      Use pyridine core for {moleculeIds.join(", ")}
+    </button>
+  ),
+}));
 vi.mock("../hooks/use-run-row-counts", () => ({
   useRunRowCounts: (id: string | null) => ({
     data: id && state.counts ? { counts: state.counts } : undefined,
@@ -431,6 +454,19 @@ describe("WorkbenchPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Undo" }));
       expect(screen.getByText("3 / 3 wells · 2 compounds")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+      // The filter undo brought back reads by its column's last label, never its key.
+      expect(screen.getByRole("group", { name: "R1 (removed column)" })).toBeInTheDocument();
+    });
+
+    it("numbers a new R-groups set past a removed one, over the compounds with a structure", () => {
+      render(<WorkbenchPage level="wells" source={{ kind: "run", runId: R1 }} />);
+      fireEvent.click(screen.getByRole("button", { name: "Remove R-groups · Core A" }));
+      fireEvent.keyDown(screen.getByRole("button", { name: "Add columns" }), { key: "Enter" });
+      fireEvent.click(screen.getByRole("menuitem", { name: "R-groups…" }));
+      fireEvent.click(screen.getByRole("button", { name: "Use pyridine core for m1, m2" }));
+      expect(screen.getByText("R-groups · Core B")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel R-groups · Core B" })).toBeInTheDocument();
+      expect(screen.queryByText("R-groups · Core A")).not.toBeInTheDocument();
     });
   });
 });

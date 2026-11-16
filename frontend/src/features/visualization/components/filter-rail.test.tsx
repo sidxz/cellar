@@ -162,6 +162,36 @@ describe("FilterRail", () => {
     expect(state().history).toBe(1);
   });
 
+  it("names a filter on a removed column by its last label, inert and removable", () => {
+    const r1: Filter = {
+      id: "f-r1",
+      kind: "category",
+      key: "chem:rg1:R1",
+      values: ["Cl"],
+      includeMissing: false,
+    };
+    const x: Filter = {
+      id: "f-x",
+      kind: "range",
+      key: "chem:clusters:x",
+      min: 1,
+      max: null,
+      includeMissing: true,
+    };
+    show([r1, x], <FilterRail ds={ds} labels={new Map([["chem:rg1:R1", "R1"]])} />);
+    expect(screen.getByRole("heading", { name: "Filters (0 active)" })).toBeInTheDocument();
+    const card = screen.getByRole("group", { name: "R1 (removed column)" });
+    expect(card.textContent).not.toMatch(/chem:/);
+    expect(within(card).queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "R1 (removed column): not applied" }),
+    ).toHaveAttribute("data-active", "false");
+    // Never seen here: no label to show, still no raw key.
+    expect(screen.getByRole("group", { name: "Removed column" }).textContent).not.toMatch(/chem:/);
+    fireEvent.click(screen.getByRole("button", { name: "Remove filter R1 (removed column)" }));
+    expect(state().filters.map((f) => f.id)).toEqual(["f-x"]);
+  });
+
   it("shows Filter to selection as a removable card", () => {
     show([{ id: "selection", kind: "rows", rowIds: ["w0", "w1"] }]);
     expect(screen.getByRole("button", { name: "Selection: 2 rows" })).toBeInTheDocument();
