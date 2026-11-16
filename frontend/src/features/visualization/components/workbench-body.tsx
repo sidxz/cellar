@@ -39,11 +39,6 @@ export function WorkbenchBody({ plots, table, rail, editor }: WorkbenchBodyProps
     setRailOpen(false);
     tabRef.current?.focus();
   };
-  // Plotly resizes on window resize only; the plots column just changed width.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the editor opens or closes
-  useEffect(() => {
-    window.dispatchEvent(new Event("resize"));
-  }, [editing]);
   return (
     <div className="viz-workbench flex items-start gap-3">
       <style>{PAGE_SCROLLS}</style>
