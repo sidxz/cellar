@@ -99,6 +99,8 @@ class DatasetColumnResponse(BaseModel):
 class DatasetProtocolResponse(BaseModel):
     protocol_id: uuid.UUID
     name: str
+    # "high" / "low": which control is the full effect (controls are coloured by effect).
+    pos_control_signal: str = "high"
 
 
 class DatasetResponse(BaseModel):
@@ -128,7 +130,10 @@ class DatasetResponse(BaseModel):
             plate_z_prime=d.plate_z_prime,
             plate_z_prime_by_column=d.plate_z_prime_by_column,
             protocols=[
-                DatasetProtocolResponse(protocol_id=p.id, name=p.name) for p in d.protocols
+                DatasetProtocolResponse(
+                    protocol_id=p.id, name=p.name, pos_control_signal=p.pos_control_signal
+                )
+                for p in d.protocols
             ],
         )
 

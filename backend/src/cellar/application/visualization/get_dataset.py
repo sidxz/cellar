@@ -173,10 +173,12 @@ class GetVisualizationDataset:
         )
         if isinstance(datasets, ValidationError):
             return Failure(datasets)
-        names = await self._reader.protocol_names(ws, [pid for pid, _ in parts])
+        pids = [pid for pid, _ in parts]
+        names = await self._reader.protocol_names(ws, pids)
+        signals = await self._reader.pos_control_signals(ws, pids)
         dataset = join_protocol_datasets(
             [
-                (DatasetProtocol(pid, names[pid]), part)
+                (DatasetProtocol(pid, names[pid], signals.get(pid, "high")), part)
                 for (pid, _), part in zip(parts, datasets, strict=True)
             ]
         )

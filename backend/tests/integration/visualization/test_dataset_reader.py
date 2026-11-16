@@ -265,6 +265,23 @@ async def test_empty_ids_read_nothing_without_a_query():
     assert await reader.batch_numbers(uuid.uuid4(), []) == {}
 
 
+async def test_pos_control_signals_are_workspace_scoped(uow, session_factory, workspace_id):
+    async with uow:
+        s = uow.session
+        low = await seed.protocol(s, workspace_id)
+        await s.execute(
+            sa.text("UPDATE protocols SET pos_control_signal = 'low' WHERE id = :id"), {"id": low}
+        )
+        high = await seed.protocol(s, workspace_id)
+        foreign = await seed.protocol(s, uuid.uuid4())
+        await uow.commit()
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    signals = await reader.pos_control_signals(workspace_id, [low, high, foreign])
+
+    assert signals == {low: "low", high: "high"}
+
+
 async def test_protocol_names_are_workspace_scoped(uow, session_factory, workspace_id):
     async with uow:
         s = uow.session

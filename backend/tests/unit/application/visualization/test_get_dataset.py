@@ -46,6 +46,7 @@ Q = uuid.uuid4()  # a second protocol, to compare with P
 RD = uuid.uuid4()
 RD_OF = {P: RD, Q: uuid.uuid4()}
 NAMES = {P: "Primary", Q: "Counter"}
+SIGNALS = {P: "high", Q: "low"}
 
 
 def _run(rid: uuid.UUID, protocol_id: uuid.UUID = P) -> RunInfo:
@@ -147,6 +148,9 @@ class FakeReader:
     async def protocol_names(self, workspace_id, protocol_ids):
         self.names_asked = list(protocol_ids)
         return {p: NAMES[p] for p in protocol_ids if p in NAMES and workspace_id == WS}
+
+    async def pos_control_signals(self, workspace_id, protocol_ids):
+        return {p: SIGNALS[p] for p in protocol_ids if p in SIGNALS and workspace_id == WS}
 
 
 def _info(reg: str) -> CompoundInfo:
@@ -453,7 +457,11 @@ async def test_compare_joins_each_protocols_compounds_onto_the_first():
         _compare(ComparedProtocol(Q, run_ids=(C,))), auth=FakeAuth(workspace_id=WS)
     )
     ds = result.unwrap()
-    assert ds.protocols == [DatasetProtocol(P, "Primary"), DatasetProtocol(Q, "Counter")]
+    # Each with its control convention: the workbench colours controls by effect.
+    assert ds.protocols == [
+        DatasetProtocol(P, "Primary", "high"),
+        DatasetProtocol(Q, "Counter", "low"),
+    ]
     assert ds.values[f"tested:{Q}"] == ["Tested"]
     assert [(pid, scope.run_ids, scope.grain) for pid, scope in activity.calls] == [
         (P, (A, B), "compound"),

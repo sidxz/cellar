@@ -64,6 +64,9 @@ class DatasetColumn:
 class DatasetProtocol:
     id: uuid.UUID
     name: str
+    # What raw signal its positive controls give ("high" / "low"): which control is
+    # the full effect, for colouring controls by effect.
+    pos_control_signal: str = "high"
 
 
 @dataclass(frozen=True)

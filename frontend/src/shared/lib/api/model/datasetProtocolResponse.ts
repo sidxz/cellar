@@ -8,4 +8,5 @@
 export interface DatasetProtocolResponse {
   protocol_id: string;
   name: string;
+  pos_control_signal?: string;
 }

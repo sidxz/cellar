@@ -286,3 +286,13 @@ class SQLAlchemyVisualizationDatasetReader:
         async with self._session_factory() as session:
             rows = (await (await session.connection()).execute(stmt)).all()
         return {r[0]: r[1] for r in rows}
+
+    async def pos_control_signals(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        stmt = select(ProtocolModel.id, ProtocolModel.pos_control_signal).where(
+            ProtocolModel.workspace_id == workspace_id, any_id(ProtocolModel.id, protocol_ids)
+        )
+        async with self._session_factory() as session:
+            rows = (await (await session.connection()).execute(stmt)).all()
+        return {r[0]: r[1] for r in rows}

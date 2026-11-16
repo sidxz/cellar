@@ -145,3 +145,9 @@ class VisualizationDatasetReader(Protocol):
     ) -> dict[uuid.UUID, str]:
         """Names of the workspace's protocols among ``protocol_ids``."""
         ...
+
+    async def pos_control_signals(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """``pos_control_signal`` of the workspace's protocols among ``protocol_ids``."""
+        ...
