@@ -125,12 +125,36 @@ async def test_create_echoes_the_view_and_is_audited(api_app, client, session_fa
     assert view["version"] == 1 and view["can_edit"] is True
     assert view["name"] == "Plate drift" and view["description"] == "Edge wells"
     assert view["visibility"] == "private" and view["level"] == "compounds"
-    assert view["dataset"] == {"source": source, "level": "compounds"}
+    assert view["dataset"] == {"source": source | {"compare": []}, "level": "compounds"}
     assert view["config"] == CONFIG and view["unresolved"] == []
     audit = await client.get(
         "/api/v1/audit", params={"entity_type": "SavedVisualization", "entity_id": view["id"]}
     )
     assert audit.status_code == 200 and len(audit.json()["items"]) == 1
+
+
+async def test_every_plot_and_filter_kind_reopens_as_saved(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    overlays = {
+        "bands": True,
+        "refLine": 50,
+        "limits": {"mode": "entered", "lower": 1, "upper": 9},
+    }
+    config = CONFIG | {
+        "panels": [
+            CONFIG["panels"][0] | {"overlays": overlays},
+            {"id": "p2", "type": "rgroup-matrix", "x": "chem:rg1:R2", "category": "chem:rg1:R1"},
+        ],
+        "filters": [
+            *CONFIG["filters"],
+            {"id": "sub-1", "kind": "substructure", "query": "c1ccccc1", "queryKind": "smiles"},
+        ],
+    }
+    view = await _create(client, _protocol(w["p"]), config=config)
+
+    opened = await client.get(f"{URL}/{view['id']}")
+
+    assert opened.status_code == 200 and opened.json()["config"] == config
 
 
 async def test_viewer_cannot_save_a_view(as_user, session_factory, workspace_id):
@@ -182,13 +206,28 @@ async def test_a_source_outside_the_workspace_is_not_found(client, session_facto
             CONFIG
             | {
                 "filters": [
+                    {
+                        "id": "sub-1",
+                        "kind": "substructure",
+                        "query": "c1ccccc1",
+                        "queryKind": "smiles",
+                        "moleculeIds": [str(uuid.uuid4())],
+                    }
+                ]
+            },
+            "moleculeIds",
+        ),
+        (
+            CONFIG
+            | {
+                "filters": [
                     {"id": "f1", "kind": "category", "key": "compound", "values": ["x" * 70_000]}
                 ]
             },
             "64 KB",
         ),
     ],
-    ids=["selection", "five-panels", "newer-version", "too-large"],
+    ids=["selection", "five-panels", "newer-version", "substructure-matches", "too-large"],
 )
 async def test_unsavable_settings_are_refused(client, session_factory, fake_auth, config, message):
     w = await _seed(session_factory, fake_auth.workspace_id)

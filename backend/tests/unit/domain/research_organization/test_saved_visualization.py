@@ -1,6 +1,9 @@
 """Tests for the SavedVisualization aggregate and its config envelope."""
 
+import re
 import uuid
+from pathlib import Path
+from typing import get_args
 
 import pytest
 
@@ -12,6 +15,7 @@ from cellar.domain.research_organization.events import (
 )
 from cellar.domain.research_organization.saved_visualization import (
     SavedVisualization,
+    ViewPanel,
     validate_view_config,
 )
 from cellar.domain.shared.errors import StaleEditError, ValidationError
@@ -79,10 +83,44 @@ class TestCreate:
             _view(visibility=SearchVisibility.PROJECT)
 
 
+# The workbench's own definition of a plot's settings.
+FRONTEND_CONFIG_SCHEMA = (
+    Path(__file__).resolve().parents[5]
+    / "frontend/src/features/visualization/lib/config-schema.ts"
+)
+SUBSTRUCTURE = {"id": "sub-1", "kind": "substructure", "query": "c1ccccc1", "queryKind": "smiles"}
+
+
 class TestConfig:
     def test_unknown_panel_keys_survive_round_trip(self) -> None:
-        cfg = _config(panels=[_panel(logX=True, overlay={"kind": "band", "sd": 3})])
+        overlays = {"bands": True, "limits": {"mode": "entered", "lower": 10, "upper": 90}}
+        cfg = _config(panels=[_panel(logX=True, overlays=overlays)])
         assert validate_view_config(cfg) == cfg
+
+    def test_panel_types_are_the_workbenchs(self) -> None:
+        text = FRONTEND_CONFIG_SCHEMA.read_text()
+        panel_schema = text[text.index("export const panelSchema") :]
+        enum = re.search(r"type: z\.enum\(\[([^\]]*)\]\)", panel_schema)
+        assert enum is not None, "panelSchema's type enum not found"
+        workbench = set(re.findall(r'"([^"]+)"', enum.group(1)))
+        assert workbench == set(get_args(ViewPanel.model_fields["type"].annotation))
+
+    def test_rgroup_matrix_panel_accepted(self) -> None:
+        cfg = _config(panels=[_panel(type="rgroup-matrix", category="chem:rg1:R1")])
+        assert validate_view_config(cfg) == cfg
+
+    def test_substructure_filter_saved_as_its_query(self) -> None:
+        cfg = _config(filters=[SUBSTRUCTURE])
+        assert validate_view_config(cfg) == cfg
+
+    def test_substructure_matches_never_saved(self) -> None:
+        cfg = _config(filters=[SUBSTRUCTURE | {"moleculeIds": ["m1"]}])
+        with pytest.raises(ValidationError, match="moleculeIds"):
+            validate_view_config(cfg)
+
+    def test_substructure_filter_needs_a_query(self) -> None:
+        with pytest.raises(ValidationError, match="query"):
+            validate_view_config(_config(filters=[SUBSTRUCTURE | {"query": ""}]))
 
     def test_more_than_four_panels_rejected(self) -> None:
         with pytest.raises(ValidationError):

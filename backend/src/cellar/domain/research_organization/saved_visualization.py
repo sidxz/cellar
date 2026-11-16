@@ -12,7 +12,7 @@ import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from types import EllipsisType
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic import ValidationError as PydanticValidationError
@@ -36,16 +36,17 @@ STALE_VIEW_MESSAGE = (
 
 
 class ViewPanel(BaseModel):
-    """A plot; its settings beyond id and type pass through untouched."""
+    """A plot; its settings beyond id and type pass through untouched. The types are the
+    workbench's own (its panel schema), one for one."""
 
     model_config = ConfigDict(extra="allow")
 
     id: str = Field(min_length=1, max_length=64)
-    type: Literal["scatter", "histogram", "bar", "box"]
+    type: Literal["scatter", "histogram", "bar", "box", "rgroup-matrix"]
 
 
 class ViewFilter(BaseModel):
-    """A range or category filter; a selection (``rows``) is never part of a view."""
+    """A range or category filter on a column."""
 
     model_config = ConfigDict(extra="allow")
 
@@ -54,12 +55,28 @@ class ViewFilter(BaseModel):
     key: str = Field(min_length=1, max_length=256)
 
 
+class ViewSubstructureFilter(BaseModel):
+    """A substructure query. Its matches are data, so a view keeps the query alone and the
+    workbench matches it again on open."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(min_length=1, max_length=64)
+    kind: Literal["substructure"]
+    query: str = Field(min_length=1)
+    queryKind: Literal["smiles", "smarts"]
+
+
 class ViewConfig(BaseModel):
+    """A selection (``rows`` filter) is never part of a view."""
+
     model_config = ConfigDict(extra="forbid")
 
     config_version: int = Field(ge=1, le=VIEW_CONFIG_VERSION)
     panels: list[ViewPanel] = Field(max_length=4)
-    filters: list[ViewFilter] = Field(max_length=100)
+    filters: list[Annotated[ViewFilter | ViewSubstructureFilter, Field(discriminator="kind")]] = (
+        Field(max_length=100)
+    )
     labels: dict[str, str] = {}
 
 
@@ -80,7 +97,7 @@ def validate_view_config(config: dict[str, Any]) -> dict[str, Any]:
 def _readable(exc: PydanticValidationError) -> str:
     error = exc.errors()[0]
     loc = error["loc"]
-    if loc[:1] == ("filters",) and loc[-1:] == ("kind",) and error.get("input") == "rows":
+    if error["type"] == "union_tag_invalid" and error.get("ctx", {}).get("tag") == "rows":
         return "Selections aren't saved in a view."
     if loc == ("config_version",) and error["type"] == "less_than_equal":
         return "This view was saved by a newer version of ChemCellar. Reload the page to open it."
