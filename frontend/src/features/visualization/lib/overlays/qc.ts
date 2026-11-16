@@ -1,9 +1,13 @@
 import { Z_PRIME_BADGE } from "@/features/screening-assay/components/z-prime-badge";
 import { type ZPrimeQuality, classifyZPrime } from "@/features/screening-assay/lib/qc-metrics";
+import {
+  READOUT_NORMALIZATION_LABELS,
+  type ReadoutNormalization,
+} from "@/features/screening-assay/types";
 import { CHART_COLORS, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { categoryLabel } from "../dataset";
+import { categoryLabel, column } from "../dataset";
 import type { Facet } from "../traces/common";
 import { plottedX, plottedY } from "../traces/scatter";
 import type { OverlayParts } from "./build";
@@ -274,8 +278,9 @@ const lowest = (values: Array<number | null>) =>
   values.reduce<number | null>((lo, v) => (v === null || (lo !== null && lo <= v) ? lo : v), null);
 
 /** "Z′ 0.712 · Excellent · stored": the stored per-plate values of a facet with the Heat
- * Map's precision and class (of the lowest value), a range and plate count for several. */
-export function zPrimeLabel(values: Array<number | null>): string {
+ * Map's precision and class (of the lowest value), a range and plate count for several;
+ * ``layer`` ("% Inhibition") follows the value when the Z′ is the plotted layer's own. */
+export function zPrimeLabel(values: Array<number | null>, layer?: string): string {
   const lo = lowest(values);
   if (lo === null) return "Z′ not stored";
   const hi = values.reduce<number>((h, v) => (v !== null && v > h ? v : h), lo);
@@ -288,18 +293,30 @@ export function zPrimeLabel(values: Array<number | null>): string {
       : stored === values.length
         ? ` (${stored} plates)`
         : ` (${stored} of ${values.length} plates)`;
-  return `Z′ ${range} · ${Z_PRIME_BADGE[classifyZPrime(lo)].label} · stored${count}`;
+  const of = layer ? ` · ${layer}` : "";
+  return `Z′ ${range}${of} · ${Z_PRIME_BADGE[classifyZPrime(lo)].label} · stored${count}`;
+}
+
+/** The layer of value column ``key`` in words: "Raw", "% Inhibition". */
+function layerName(ds: Dataset, key: string): string {
+  const layer = column(ds, key)?.provenance?.layer;
+  if (!layer || layer === "raw") return "Raw";
+  return READOUT_NORMALIZATION_LABELS[layer as ReadoutNormalization] ?? layer;
 }
 
 /** Each facet's stored plate Z′, top right inside the facet, colored by its class. */
 export function drawZPrime(
   ds: Dataset,
-  _p: PanelConfig,
+  p: PanelConfig,
   _mask: Uint8Array,
   facets: Facet[],
 ): OverlayParts {
   const ids = ds.values.plate_id ?? [];
-  const stored = ds.plate_z_prime ?? {};
+  // The plotted readout layer's own Z′ when its plates stored one (the plate QC per
+  // readout x layer); otherwise the run's stored Z′, as before.
+  const own = p.y ? ds.plate_z_prime_by_column?.[p.y] : undefined;
+  const stored = own ?? ds.plate_z_prime ?? {};
+  const layer = own && p.y ? layerName(ds, p.y) : undefined;
   const annotations: Record<string, unknown>[] = [];
   for (const f of facets) {
     const plates = new Set<string>();
@@ -311,7 +328,7 @@ export function drawZPrime(
     const values = [...plates].map((id) => stored[id] ?? null);
     const lo = lowest(values);
     annotations.push({
-      text: zPrimeLabel(values),
+      text: zPrimeLabel(values, layer),
       xref: `${f.xaxis} domain`,
       yref: `${f.yaxis} domain`,
       x: 1,

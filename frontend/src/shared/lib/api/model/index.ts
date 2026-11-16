@@ -250,6 +250,7 @@ export * from './datasetRequestLevel';
 export * from './datasetResponse';
 export * from './datasetResponseLevel';
 export * from './datasetResponsePlateZPrime';
+export * from './datasetResponsePlateZPrimeByColumn';
 export * from './datasetResponseValues';
 export * from './dataSourceResponse';
 export * from './dataSourceResponseConfig';

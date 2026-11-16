@@ -8,6 +8,7 @@ import type { DatasetColumnResponse } from './datasetColumnResponse';
 import type { DatasetProtocolResponse } from './datasetProtocolResponse';
 import type { DatasetResponseLevel } from './datasetResponseLevel';
 import type { DatasetResponsePlateZPrime } from './datasetResponsePlateZPrime';
+import type { DatasetResponsePlateZPrimeByColumn } from './datasetResponsePlateZPrimeByColumn';
 import type { DatasetResponseValues } from './datasetResponseValues';
 
 export interface DatasetResponse {
@@ -18,5 +19,6 @@ export interface DatasetResponse {
   columns: DatasetColumnResponse[];
   values: DatasetResponseValues;
   plate_z_prime?: DatasetResponsePlateZPrime;
+  plate_z_prime_by_column?: DatasetResponsePlateZPrimeByColumn;
   protocols?: DatasetProtocolResponse[];
 }

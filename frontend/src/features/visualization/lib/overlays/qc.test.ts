@@ -263,6 +263,29 @@ describe("stored Z′", () => {
   it("shows no Z′ unless split by plate", () => {
     expect(draw(zp, { zPrime: true }).annotations).toEqual([]);
   });
+
+  it("takes the plotted readout layer's own Z′ and names the layer", () => {
+    const Y = "rd:R:percent_inhibition";
+    const ds = {
+      ...dataset({
+        well_order: [1, 2, 3, 4],
+        [Y]: [1, 2, 3, 4],
+        plate: ["Plate 1", "Plate 1", "Plate 2", "Plate 2"],
+        plate_id: ["a", "a", "b", "b"],
+        well_type: [NEG, "sample", NEG, "sample"],
+      }),
+      plate_z_prime: { a: 0.712, b: 0.7 },
+      plate_z_prime_by_column: { [Y]: { a: 0.84 }, "rd:R:raw": { a: 0.71, b: 0.7 } },
+    };
+    const texts = (y: string) =>
+      draw(ds, { zPrime: true }, { ...byPlate, y }).annotations.map((a) => a.text);
+    expect(texts(Y)).toEqual(["Z′ 0.840 · % Inhibition · Excellent · stored", "Z′ not stored"]);
+    // A Y without its own stored Z′ keeps the run's stored value.
+    expect(texts("well_order")).toEqual([
+      "Z′ 0.712 · Excellent · stored",
+      "Z′ 0.700 · Excellent · stored",
+    ]);
+  });
 });
 
 describe("zPrimeLabel", () => {
@@ -276,5 +299,11 @@ describe("zPrimeLabel", () => {
     [[0.5, 0.5], "Z′ 0.500 · Excellent · stored (2 plates)"],
   ] as [Array<number | null>, string][])("%j → %s", (values, label) => {
     expect(zPrimeLabel(values)).toBe(label);
+  });
+
+  it("names the layer after the value", () => {
+    expect(zPrimeLabel([0.84, 0.5], "Raw")).toBe(
+      "Z′ 0.500–0.840 · Raw · Excellent · stored (2 plates)",
+    );
   });
 });
