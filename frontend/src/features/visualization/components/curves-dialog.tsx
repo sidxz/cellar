@@ -121,7 +121,9 @@ export function CurvesDialog({
             No curves for {compound} in the chosen runs.
           </p>
         ) : (
-          <>
+          // A plain block: straight in the dialog's grid, the chart would be stretched to its row
+          // and its full-height plot box would fill it, leaving a gap over the table.
+          <div className="min-w-0 space-y-4">
             <DoseResponseChartView curves={curves} plot={Plot} />
             <table className="w-full text-sm">
               <thead>
@@ -149,7 +151,7 @@ export function CurvesDialog({
                 ))}
               </tbody>
             </table>
-          </>
+          </div>
         )}
       </DialogContent>
     </Dialog>
