@@ -53,11 +53,11 @@ describe("WorkbenchBody", () => {
     );
   });
 
-  it("keeps the plot editor beside the page, sticky, at the viewport's height", () => {
+  it("keeps the plot editor beside the page, sticky, as tall as its content up to the viewport", () => {
     show(<p>editor</p>);
-    expect(screen.getByRole("complementary", { name: "Edit plot" })).toHaveClass(
-      "sticky",
-      "h-[calc(100dvh-1rem)]",
-    );
+    const editor = screen.getByRole("complementary", { name: "Edit plot" });
+    expect(editor).toHaveClass("sticky", "max-h-[calc(100dvh-1rem)]", "flex-col");
+    // A fixed height would stretch a short page to the viewport and scroll for nothing.
+    expect(editor).not.toHaveClass("h-[calc(100dvh-1rem)]");
   });
 });

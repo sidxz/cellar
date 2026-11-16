@@ -88,7 +88,7 @@ export function WorkbenchBody({ plots, table, rail, editor }: WorkbenchBodyProps
       {editing && (
         <aside
           aria-label="Edit plot"
-          className="sticky top-2 flex h-[calc(100dvh-1rem)] w-80 shrink-0 flex-col overflow-hidden rounded-md border bg-background"
+          className="sticky top-2 flex max-h-[calc(100dvh-1rem)] w-80 shrink-0 flex-col overflow-hidden rounded-md border bg-background"
         >
           {editor}
         </aside>
