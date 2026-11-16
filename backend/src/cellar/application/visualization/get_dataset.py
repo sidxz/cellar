@@ -206,19 +206,23 @@ class GetVisualizationDataset:
         self, ws: uuid.UUID, parts: list[tuple[uuid.UUID, list[RunInfo]]], level: AggLevel
     ) -> list[Dataset] | ValidationError:
         """One dataset per (protocol, runs), to be joined on the first one's rows."""
-        planned = [await self._plan(ws, protocol_id, runs, level) for protocol_id, runs in parts]
-        # Refused before curves, compounds and the dense columns are loaded. Every
-        # protocol is built in full; the join keeps the first one's rows and columns, every
-        # added value and p column, a tested column per added protocol and one
-        # selectivity column per pair of p columns.
-        plans = [plan for _, _, plan in planned]
-        first, *added = plans
-        rows = max(p.rows for p in plans)
-        columns = first.columns + sum(p.values + p.p + 1 + first.p * p.p for p in added)
-        if rows > MAX_DATASET_ROWS:
-            return _too_many_rows(rows)
-        if columns > MAX_DATASET_COLUMNS:
-            return _too_many_columns(columns, level, at_least=True, compared=bool(added))
+        # Refused before curves, compounds and the dense columns are loaded, and before the
+        # next protocol is read. Every protocol is built in full; the join keeps the first
+        # one's rows and columns, every added value and p column, a tested column per added
+        # protocol and one selectivity column per pair of p columns.
+        planned: list[tuple[ActivityAggregates, list[ReadoutDefInfo], AggregatedPlan]] = []
+        rows = columns = 0
+        for protocol_id, runs in parts:
+            planned.append(await self._plan(ws, protocol_id, runs, level))
+            plan, first = planned[-1][2], planned[0][2]
+            rows = max(rows, plan.rows)
+            columns += (
+                plan.columns if plan is first else plan.values + plan.p + 1 + first.p * plan.p
+            )
+            if rows > MAX_DATASET_ROWS:
+                return _too_many_rows(rows)
+            if columns > MAX_DATASET_COLUMNS:
+                return _too_many_columns(columns, level, at_least=True, compared=len(parts) > 1)
         return [
             await self._build(ws, runs, defs, aggregates, level)
             for (_, runs), (aggregates, defs, _) in zip(parts, planned, strict=True)

@@ -540,3 +540,15 @@ async def test_the_row_cap_applies_to_a_compared_protocol_before_loading(monkeyp
     )
     assert "2 rows" in str(result.failure()) and "limit is 1" in str(result.failure())
     assert _loaded_nothing(reader)
+
+
+async def test_a_protocol_over_a_cap_is_refused_before_the_next_is_read(monkeypatch):
+    from cellar.application.visualization import get_dataset
+
+    monkeypatch.setattr(get_dataset, "MAX_DATASET_ROWS", 1)
+    activity = PerProtocolActivity({P: (uuid.uuid4(), uuid.uuid4()), Q: (uuid.uuid4(),)})
+    result = await GetVisualizationDataset(_reader(), activity)(
+        _compare(ComparedProtocol(Q)), auth=FakeAuth(workspace_id=WS)
+    )
+    assert "2 rows" in str(result.failure()) and "limit is 1" in str(result.failure())
+    assert [pid for pid, _ in activity.calls] == [P]
