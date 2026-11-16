@@ -35,6 +35,7 @@ from cellar.domain.screening_assay.curve_fitting import (
     CurveFittingService,
 )
 from cellar.domain.screening_assay.enums import (
+    CurveClass,
     ReadoutAggregation,
     ReadoutDataType,
     WellType,
@@ -276,15 +277,16 @@ class ReadoutCalculationEngine:
         if self._plate_quality is not None and run.plates:
             plates = self._plate_qc(run, protocol, raw_data + computed)
             self._add_control_fits(plates, run, protocol, raw_data + computed, fit_overrides)
-            if plates:
-                # Re-bind to a fresh dict so SQLAlchemy detects the change
-                # (in-place mutation on a JSONB column is not auto-tracked).
-                run.qc_metrics = {
-                    **(run.qc_metrics or {}),
-                    "z_prime": _legacy_z_prime(plates),
-                    "plates": plates,
-                }
-                await self._run_repo.save(run)
+            # The engine owns both blocks: replaced even when no plate qualifies, so
+            # flags or roles that leave a plate without controls drop its stale QC.
+            # Re-bind to a fresh dict so SQLAlchemy detects the change
+            # (in-place mutation on a JSONB column is not auto-tracked).
+            run.qc_metrics = {
+                **(run.qc_metrics or {}),
+                "z_prime": _legacy_z_prime(plates),
+                "plates": plates,
+            }
+            await self._run_repo.save(run)
 
         # ------------------------------------------------------------------
         # 4.6. Tm and ΔTm per temperature window
@@ -295,8 +297,14 @@ class ReadoutCalculationEngine:
         computed.extend(window_rows + series_rows)
         # Per-position window rows aggregate like raw rows, so formulas can name
         # them. Series rows do not: the in-run aggregator ignores qualifiers, and
-        # a censored "> 50" from one lot would be averaged as 50.
-        source_rows = raw_data + window_rows
+        # a censored "> 50" from one lot would be averaged as 50. A formula reads a
+        # compound's results only: unflagged sample wells and well-less rows.
+        plate_qc_wells = {w.id for w in run.wells if w.well_type != WellType.SAMPLE}
+        source_rows = [
+            r
+            for r in raw_data + window_rows
+            if not r.is_outlier and r.well_id not in plate_qc_wells
+        ]
 
         # ------------------------------------------------------------------
         # 5. Aggregate replicates (in-memory)
@@ -545,8 +553,10 @@ class ReadoutCalculationEngine:
                         "role": str(role),
                         "molecule_id": str(molecule_id),
                         "label": config.intercepts[0].display_label,
+                        # An inactive series has no potency (the fitter reports 0).
                         "value": fitted.fitted_value
                         if math.isfinite(fitted.fitted_value)
+                        and fitted.curve_class != CurveClass.INACTIVE
                         else None,
                         "curve_class": str(fitted.curve_class),
                     }

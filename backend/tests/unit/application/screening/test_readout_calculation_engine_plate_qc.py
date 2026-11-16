@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.enums import (
     PlateFormat,
     PosControlSignal,
     ProtocolType,
+    ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
     WellType,
@@ -312,3 +313,97 @@ async def test_outlier_wells_leave_plate_qc_and_the_anchors_but_keep_a_value() -
     assert a01.is_outlier and not by_well[neg[2].id].is_outlier
     assert a01.value.value == pytest.approx(100 * (neg9 - 0.40) / (neg9 - sum(_POS) / 11))
     assert p.run.qc_metrics["z_prime"][str(p.plate.id)]["z_prime"] == 0.688
+
+
+def _raw_only(*readouts: ReadoutDefinition) -> Protocol:
+    return Protocol.create(
+        workspace_id=WS,
+        name="QC",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=list(readouts),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_recompute_with_no_qualifying_plate_replaces_the_stale_qc_blocks() -> None:
+    signal = ReadoutDefinition(protocol_id=_PH, name="Signal", data_type=ReadoutDataType.NUMERIC)
+    protocol = _raw_only(signal)
+    p = _Plate(protocol)
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 10.0, outlier=True)  # every negative flagged
+    p.add(signal, WellType.NEGATIVE_CONTROL, 12.0, outlier=True)
+    stale = {str(p.plate.id): {str(signal.id): {"raw": {"neg_n": 2}}}}
+    p.run.qc_metrics = {"plates": stale, "z_prime": {str(p.plate.id): {}}, "edited": 1}
+
+    run = await _compute(protocol, p)
+
+    assert run.qc_metrics == {"plates": {}, "z_prime": {}, "edited": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_formula_reads_only_the_compounds_unflagged_sample_wells() -> None:
+    signal = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Signal",
+        data_type=ReadoutDataType.NUMERIC,
+        aggregation=ReadoutAggregation.MEAN,
+    )
+    doubled = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Doubled",
+        data_type=ReadoutDataType.NUMERIC,
+        is_calculated=True,
+        calculation_formula="Signal * 2",
+    )
+    protocol = _raw_only(signal, doubled)
+    p = _Plate(protocol)
+    mol = uuid.uuid4()
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0, molecule=mol)  # the compound as a control
+    p.add(signal, WellType.SAMPLE, 10.0, molecule=mol)
+    p.add(signal, WellType.SAMPLE, 1000.0, molecule=mol, outlier=True)
+
+    await _compute(protocol, p)
+
+    [row] = [r for r in p.computed if r.readout_definition_id == doubled.id]
+    assert (row.molecule_id, row.value.value) == (mol, 20.0)
+
+
+@pytest.mark.asyncio
+async def test_an_inactive_control_fit_stores_no_potency() -> None:
+    signal = ReadoutDefinition(protocol_id=_PH, name="Signal", data_type=ReadoutDataType.NUMERIC)
+    potency = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Potency",
+        data_type=ReadoutDataType.DOSE_RESPONSE,
+        dose_response_config=DoseResponseConfig(
+            curve_type=CurveType.IC50, y_readout_name="Signal"
+        ),
+    )
+    protocol = _raw_only(signal, potency)
+    p = _Plate(protocol)
+    ref = uuid.uuid4()
+    for d in (0.1, 1.0, 10.0, 100.0):
+        p.add(signal, WellType.REFERENCE, 5.0, dose=d, molecule=ref)
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 10.0)
+    fitter = MagicMock()
+    fitter.fit.return_value = Success(
+        FittedCurveResult(
+            fitted_value=0.0,  # what the fitter's inactive path reports
+            hill_slope=0.0,
+            top=5.0,
+            bottom=5.0,
+            r_squared=0.0,
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            curve_class=CurveClass.INACTIVE,
+            num_points=4,
+            raw_data=[],
+        )
+    )
+
+    run = await _compute(protocol, p, fitter)
+
+    [fit] = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]["control_fits"]
+    assert (fit["value"], fit["curve_class"]) == (None, "inactive")
