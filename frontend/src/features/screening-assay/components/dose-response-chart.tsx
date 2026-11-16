@@ -28,11 +28,7 @@ import {
   useGetCurveEditHistoryApiV1DoseResponseCurvesCurveIdEditHistoryGet,
 } from "@/shared/lib/api/readout-data/readout-data";
 import { useAuthz } from "@duar-auth/nextjs";
-import {
-  type CapturedPoint,
-  type EditOverlay,
-  buildCapturedPoints,
-} from "@structflo/components/dose-response";
+import type { CapturedPoint, EditOverlay } from "@structflo/components/dose-response";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Redo2, RotateCcw, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -45,6 +41,7 @@ import {
   constraintsValid,
   defaultConstraintsFor,
 } from "../lib/curve-constraints";
+import { editablePoints } from "../lib/dose-response-display";
 import type { DoseResponseConfig, DoseResponseCurve } from "../types";
 import { CurveControls } from "./curve-controls";
 import { CurveEditHistory } from "./curve-edit-history";
@@ -54,6 +51,8 @@ import {
   type ExclusionReason as SaveExclusionReason,
   SaveExclusionsDialog,
 } from "./save-exclusions-dialog";
+
+const NO_POINTS: CapturedPoint[] = [];
 
 interface DoseResponseChartProps {
   curves: DoseResponseCurve[];
@@ -112,18 +111,19 @@ export function DoseResponseChart({
   // follow-up. The run-page comparison view + the search detail drawer both
   // pass a single curve in the common interactive case.
   const editCurve = curves[0];
-  // The wire type for `excluded_points` is a loose Record<string, unknown>[]
-  // so per-bounded-context (search-grid, campaign, etc.) consumers can re-shape;
-  // the BE owns the canonical `DraftExclusion` JSONB shape (migration 041) and
-  // the FE seeds the session by trusting that shape.
+  // Captured-set view of the edit curve — keyed by capturedIdx, the order every
+  // point index addresses (the chart's clicks, the inventory rows, the preview's
+  // and the save's indices). The session is seeded with each entry at its point's
+  // position there. The wire type for `excluded_points` is a loose
+  // Record<string, unknown>[]; the BE owns the canonical `DraftExclusion` JSONB
+  // shape (migration 041). The mutation handler enriches outgoing exclusions with
+  // concentration/response from this view.
+  const editPoints = useMemo(() => (editCurve ? editablePoints(editCurve) : null), [editCurve]);
+  const editCurveCaptured = editPoints?.captured ?? NO_POINTS;
   const editSeed = useMemo(
     () =>
-      editCurve
-        ? {
-            excluded_points: (editCurve.excluded_points as DraftExclusion[] | null) ?? null,
-          }
-        : null,
-    [editCurve],
+      editPoints ? { excluded_points: editPoints.exclusions as unknown as DraftExclusion[] } : null,
+    [editPoints],
   );
   const editSession = useEditSession(editSeed, {
     authorId,
@@ -131,15 +131,6 @@ export function DoseResponseChart({
   });
   const refitPreview = useRefitPreview({ previewFn });
 
-  // Captured-set view of the edit curve — keyed by capturedIdx. Used by
-  // the inventory side panel + the mutation handler (which enriches
-  // outgoing exclusions with concentration/response so the BE persists
-  // them on excluded_points; otherwise the BE writes null coords and the
-  // next reload has nothing to render the X marker from).
-  const editCurveCaptured = useMemo<CapturedPoint[]>(() => {
-    if (!editCurve) return [];
-    return buildCapturedPoints(editCurve.raw_data, editCurve.excluded_points);
-  }, [editCurve]);
   const editCurveCapturedByIdx = useMemo<Map<number, CapturedPoint>>(() => {
     const m = new Map<number, CapturedPoint>();
     for (const p of editCurveCaptured) m.set(p.capturedIdx, p);

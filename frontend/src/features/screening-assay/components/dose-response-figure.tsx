@@ -20,7 +20,7 @@ import {
 import { useMemo } from "react";
 
 import { Plot } from "@/shared/lib/plotly";
-import { withFitNotes } from "../lib/dose-response-display";
+import { placeExclusions, withFitNotes } from "../lib/dose-response-display";
 
 export type {
   AdditionalCurve,
@@ -35,11 +35,12 @@ export function DoseResponseFigure(props: Omit<DoseResponseFigureProps, "plot">)
 }
 
 /** The suite's whole chart (toggles, export, plot, a summary card per curve) on cellar's
- *  Plotly, with cellar's fit notes worded on the cards. */
+ *  Plotly, with cellar's fit notes worded on the cards and every excluded-points entry on
+ *  its own point. */
 export function DoseResponseChartView({
   curves,
   ...props
 }: Omit<DoseResponseChartViewProps, "plot">) {
-  const worded = useMemo(() => curves.map(withFitNotes), [curves]);
+  const worded = useMemo(() => curves.map((c) => withFitNotes(placeExclusions(c))), [curves]);
   return <SharedDoseResponseChartView {...props} curves={worded} plot={Plot} />;
 }

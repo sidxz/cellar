@@ -60,6 +60,42 @@ describe("DoseResponsePointInventory", () => {
     expect(screen.getByText("Excluded (outlier well)")).toBeInTheDocument();
   });
 
+  it("does not offer to include a flagged well's point, and says where the flag comes off", () => {
+    const onToggle = vi.fn();
+    render(
+      <DoseResponsePointInventory
+        rawData={rawData}
+        exclusions={[
+          {
+            idx: 2,
+            source: "well_flag",
+            excluded: true,
+            reason: "outlier_well",
+            note: null,
+            author_id: null,
+            ts: "2026-11-16T10:00:00Z",
+            concentration: 1e-7,
+            response: 18.0,
+          },
+        ]}
+        onToggle={onToggle}
+      />,
+    );
+    const row = screen.getByText("Excluded (outlier well)").closest("tr") as HTMLElement;
+    fireEvent.click(row);
+
+    expect(onToggle).not.toHaveBeenCalled();
+    expect(
+      screen.getByText(
+        "Points of outlier wells stay out of the fit. Remove the flag on the plate to include one.",
+      ),
+    ).toBeInTheDocument();
+    expect(row).toHaveAttribute(
+      "title",
+      "Its well is flagged as an outlier. Remove the flag on the plate to include it.",
+    );
+  });
+
   it("renders suggestion with warning styling", () => {
     render(
       <DoseResponsePointInventory

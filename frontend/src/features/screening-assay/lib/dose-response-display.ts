@@ -9,8 +9,10 @@
  */
 
 import {
+  type CapturedPoint,
   type CurveLike,
   X_AXIS_FLOOR,
+  buildCapturedPoints,
   generate4PLPoints,
 } from "@structflo/components/dose-response";
 import { curvePotency, curvePotencyText } from "./intercept-label";
@@ -85,4 +87,47 @@ export function withFitNotes<T extends CurveLike>(curve: T): T {
     curvePotency(curve).kind === "qualifier" ? [`Reported as ${curvePotencyText(curve)}`] : [];
   if (!reported.length && !codes.some((c) => c.startsWith(DOSE_ZERO_LEFT_OUT))) return curve;
   return { ...curve, fit_quality_warnings: [...reported, ...codes.map(fitNoteLabel)] };
+}
+
+type Row = Record<string, unknown>;
+const coords = (p: Row) => [p.concentration ?? p.x, p.response ?? p.y];
+
+/**
+ * The curve with its `excluded_points` placed for the shared chart.
+ *
+ * Every point index of a curve (an entry's `idx`, the editor's exclusions) counts positions in
+ * one captured set: `raw_data` plus the excluded entries, stably sorted by dose (the backend's
+ * `captured_set`). The shared chart builds that set too, but pins an entry with coordinates on
+ * `raw_data[idx]`, its own point only while no excluded point sorts below it. So an excluded
+ * entry gets an idx that pins nowhere (it is its own point), and a suggestion, one of the
+ * raw_data points, the raw_data index of the point with its coordinates.
+ */
+export function placeExclusions<T extends CurveLike>(curve: T): T {
+  if (!curve.excluded_points?.length) return curve;
+  const raw = (curve.raw_data ?? []) as Row[];
+  const excluded_points = (curve.excluded_points as Row[]).map((e) => {
+    const [c, r] = coords(e);
+    if (typeof e.idx !== "number" || typeof c !== "number" || typeof r !== "number") return e;
+    if (e.excluded !== false) return { ...e, idx: -1 };
+    const at = raw.findIndex((p) => coords(p)[0] === c && coords(p)[1] === r);
+    return at < 0 ? e : { ...e, idx: at };
+  });
+  return { ...curve, excluded_points };
+}
+
+/** The curve's captured set as the chart draws it, and its entries as the curve editor edits
+ *  them: each idx set to its point's position there, the index the editor toggles, previews
+ *  and saves. Entries without a place (legacy, idx-less) follow as they are. */
+export function editablePoints(curve: CurveLike): { captured: CapturedPoint[]; exclusions: Row[] } {
+  const placed = placeExclusions(curve);
+  const captured = buildCapturedPoints(placed.raw_data, placed.excluded_points);
+  return {
+    captured,
+    exclusions: [
+      ...captured.flatMap((p) =>
+        p.exclusionEntry ? [{ ...p.exclusionEntry, idx: p.capturedIdx }] : [],
+      ),
+      ...((curve.excluded_points ?? []) as Row[]).filter((e) => typeof e.idx !== "number"),
+    ],
+  };
 }

@@ -161,11 +161,21 @@ export function DoseResponsePointInventory({
           <TableBody>
             {resolvedRows.map((row) => {
               const isSuggestion = row.status === "suggested_3sigma";
+              // Only removing the well's outlier flag on the plate brings its point back.
+              const isWellFlag = row.status === "excluded_well";
               return (
                 <TableRow
                   key={row.idx}
-                  onClick={() => onToggle(row.idx)}
-                  className={cn("cursor-pointer", isSuggestion && "bg-amber-50 hover:bg-amber-100")}
+                  onClick={isWellFlag ? undefined : () => onToggle(row.idx)}
+                  title={
+                    isWellFlag
+                      ? "Its well is flagged as an outlier. Remove the flag on the plate to include it."
+                      : undefined
+                  }
+                  className={cn(
+                    isWellFlag ? "cursor-default" : "cursor-pointer",
+                    isSuggestion && "bg-amber-50 hover:bg-amber-100",
+                  )}
                 >
                   <TableCell className="text-xs font-mono text-muted-foreground">
                     {row.idx + 1}
@@ -187,6 +197,11 @@ export function DoseResponsePointInventory({
             })}
           </TableBody>
         </Table>
+      )}
+      {resolvedRows.some((row) => row.status === "excluded_well") && (
+        <p className="text-xs text-muted-foreground">
+          Points of outlier wells stay out of the fit. Remove the flag on the plate to include one.
+        </p>
       )}
       {legacyEntries.length > 0 && (
         <div>

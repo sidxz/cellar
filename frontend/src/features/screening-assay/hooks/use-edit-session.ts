@@ -84,6 +84,9 @@ function applyToggle(
 
   const existing = current[existingPos];
 
+  // A point of a well flagged as an outlier comes back only when the flag comes off the plate.
+  if (existing.source === "well_flag") return current;
+
   if (existing.source === "manual" && existing.excluded) {
     // Re-include: remove the manual exclusion entry entirely.
     const next = current.slice();
