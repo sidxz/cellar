@@ -6,7 +6,7 @@ import { curveSnapshotAt, describeValue, inactiveBadge } from "./value-descripti
 const numericProv = (aggregation: string, stat?: string) => ({
   protocol_id: "P1",
   readout_definition_id: "s",
-  layer: "raw",
+  layer: "percent_inhibition",
   aggregation,
   ...(stat && { stat }),
 });
@@ -126,6 +126,20 @@ describe("describeValue", () => {
     expect(describeValue(geo, "rd:s:raw", 0)?.lines).toEqual([
       "Geometric mean of 2 values",
       "Best 20 %",
+      "1 censored value not averaged",
+    ]);
+  });
+
+  it("gives a raw signal no Best: a raw reading has no better direction", () => {
+    const raw: Dataset = {
+      ...compounds,
+      columns: compounds.columns.map((c) =>
+        c.key.startsWith("rd:s:raw") ? { ...c, provenance: { ...c.provenance, layer: "raw" } } : c,
+      ),
+    };
+    expect(describeValue(raw, "rd:s:raw", 0)?.lines).toEqual([
+      "Mean of 2 values",
+      "SD 7.071",
       "1 censored value not averaged",
     ]);
   });

@@ -33,8 +33,9 @@ const AGGREGATION_NAMES: Record<string, string> = {
 };
 
 /** How an aggregated value came about, for its popover: the column label and one line per
- * fact (aggregation and contributing n, SD, best, censored and inactive counts, the run's fit
- * and CI). Null for a Wells value and for a cell with no data behind it. */
+ * fact (aggregation and contributing n, SD, best — not for a raw signal —, censored and
+ * inactive counts, the run's fit and CI). Null for a Wells value and for a cell with no data
+ * behind it. */
 export function describeValue(
   ds: Dataset,
   key: string,
@@ -111,7 +112,9 @@ export function describeValue(
       // An arithmetic SD says nothing about a geometric mean's spread.
       const sd = name === "geomean" ? null : at("sd");
       if (sd !== null) lines.push(`SD ${sig4(sd)}`);
-      const best = at("best");
+      // A raw signal has no better direction: its "best" would only be its highest reading.
+      // ponytail: no range instead — the dataset sends no min/max siblings yet.
+      const best = c.provenance.layer === "raw" ? null : at("best");
       if (best !== null) lines.push(`Best ${withUnit(best)}`);
       if (censored > 0) {
         const set = name === "mean" || name === "geomean" ? "not averaged" : "left out";
