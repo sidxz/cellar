@@ -357,3 +357,24 @@ async def test_a_well_on_another_runs_plate_gives_no_batch(uow, session_factory,
     for grain in ("batch", "run"):
         agg = await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, grain=grain)
         assert [r.batch_id for r in agg.numeric_rows] == [None], grain
+
+
+@pytest.mark.parametrize(
+    ("values", "gt_inclusive", "lt_inclusive"),
+    [
+        ([(10.0, ">="), (1.0, "<=")], True, True),
+        ([(10.0, ">="), (10.0, ">"), (1.0, "<"), (1.0, "<=")], False, False),
+        ([(10.0, ">="), (5.0, ">"), (1.0, "<="), (2.0, "<")], True, True),
+        ([(10.0, ">"), (20.0, ">="), (1.0, "<")], True, False),
+    ],
+)
+async def test_workbench_rows_say_whether_the_bound_is_inclusive(
+    uow, session_factory, workspace_id, values, gt_inclusive, lt_inclusive
+):
+    p, _, _ = await _numeric_world(uow, workspace_id, values)
+
+    [row] = (
+        await _aggregates(session_factory, workspace_id, p, statuses=VALID_STATUSES)
+    ).numeric_rows
+
+    assert (row.gt_inclusive, row.lt_inclusive) == (gt_inclusive, lt_inclusive)

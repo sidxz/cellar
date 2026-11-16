@@ -97,7 +97,8 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
     Outlier wells never count. Censored values are counted with their bounds;
     unless the scope keeps them, they stay out of best/low/mean/n/sd, and the
     median and geomean (positive values only, the others counted) are added as
-    find_run_stats computes them. The Activity scope's statement has neither.
+    find_run_stats computes them, with the strict bounds that tell whether a
+    bound is inclusive. The Activity scope's statement has none of these.
     """
     v = _rd.value_numeric
     counted = case((_UNQUALIFIED, v)) if scope.exclude_censored else v
@@ -106,6 +107,8 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
             func.percentile_cont(0.5).within_group(counted).label("median"),
             func.exp(func.avg(func.ln(case((and_(_UNQUALIFIED, v > 0), v))))).label("geomean"),
             func.count(v).filter(and_(_UNQUALIFIED, v <= 0)).label("nonpositive_count"),
+            func.max(v).filter(_rd.value_qualifier == ">").label("gt_strict_bound"),
+            func.min(v).filter(_rd.value_qualifier == "<").label("lt_strict_bound"),
         ]
         if scope.exclude_censored
         else []
@@ -193,6 +196,13 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
     )
 
 
+def _inclusive(bound: float | None, strict: float | None, *, above: bool) -> bool:
+    """A ">="/"<=" bound unless a strict value sits on (or beyond) it."""
+    if bound is None:
+        return False
+    return strict is None or (strict < bound if above else strict > bound)
+
+
 def _numeric_row(r: Row[Any]) -> NumericReadoutRow:
     m = r._mapping
     return NumericReadoutRow(
@@ -215,6 +225,10 @@ def _numeric_row(r: Row[Any]) -> NumericReadoutRow:
         median=m.get("median"),
         geomean=m.get("geomean"),
         nonpositive_count=m.get("nonpositive_count", 0),
+        gt_inclusive="gt_strict_bound" in m
+        and _inclusive(r.gt_bound, m["gt_strict_bound"], above=True),
+        lt_inclusive="lt_strict_bound" in m
+        and _inclusive(r.lt_bound, m["lt_strict_bound"], above=False),
     )
 
 

@@ -540,3 +540,20 @@ def _looks_like_uuid(s: str) -> bool:
         return True
     except ValueError:
         return False
+
+
+@pytest.mark.parametrize(
+    ("bound", "q", "p_q"),
+    [
+        (dict(gt_count=1, gt_bound=10.0, gt_inclusive=True), ">=", "<="),
+        (dict(lt_count=1, lt_bound=10.0, lt_inclusive=True), "<=", ">="),
+        (dict(gt_count=1, gt_bound=10.0), ">", "<"),
+    ],
+)
+def test_an_inclusive_bound_stays_inclusive_and_flips_inclusive(bound, q, p_q):
+    row = _num(uuid.uuid4(), rd=POT, n=0, mean=None, sd=None, best=None, low=None, **bound)
+    ds = _build("compounds", numeric=[row])
+    assert ds.values[POTK] == [10.0]
+    assert ds.values[f"{POTK}:q"] == [q]
+    assert ds.values[f"{POTK}:p"] == [pytest.approx(5.0)]
+    assert ds.values[f"{POTK}:p:q"] == [p_q]

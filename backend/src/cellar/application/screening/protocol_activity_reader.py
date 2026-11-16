@@ -84,6 +84,9 @@ class NumericReadoutRow:
     median: float | None = None
     geomean: float | None = None  # over the unqualified values > 0
     nonpositive_count: int = 0  # unqualified values <= 0, left out of the geomean
+    # The bound is ">=" / "<=" (no strict ">" / "<" value sits on it).
+    gt_inclusive: bool = False
+    lt_inclusive: bool = False
 
     def stats(self) -> ReplicateStats:
         """The group as replicate stats for ``combine_replicates``."""

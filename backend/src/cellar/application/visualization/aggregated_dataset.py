@@ -47,7 +47,6 @@ from cellar.domain.shared.units import canonical_unit, is_concentration_unit, p_
 AggLevel = Literal["runs", "batches", "compounds"]
 
 _FLIP = {">": "<", ">=": "<=", "<": ">", "<=": ">="}
-_CENSORED = (ValueQualifier.GT, ValueQualifier.LT)
 
 # Sibling columns after a value column: (stat = key suffix, label, kind, in the value's
 # unit, hidden). CI and points stay hidden: no CI columns in a grid.
@@ -106,6 +105,15 @@ class _ValueColumn:
         if agg == "geometric_mean" and not is_concentration_unit(self.unit):
             agg = "mean"  # combine_replicates' rule: a geomean needs a concentration
         self.aggregation = agg if agg in _AGGREGATION_NAMES else "mean"
+
+
+def _qualifier(q: ValueQualifier, r: NumericReadoutRow) -> str | None:
+    """The cell's qualifier: a censored bound keeps its inclusivity (">=10" stays ">=")."""
+    if q == ValueQualifier.GT:
+        return ">=" if r.gt_inclusive else ">"
+    if q == ValueQualifier.LT:
+        return "<=" if r.lt_inclusive else "<"
+    return None
 
 
 def _condition_set(conditions: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
@@ -232,7 +240,7 @@ def build_aggregated_dataset(
                 vk, _ValueColumn(rd, layer, cs, unit_for_normalization(r.layer, rd.unit))
             )
             value, q = combine_replicates(r.stats(), spec.aggregation, unit=spec.unit)
-            put(vk, spec, i, finite(value), q.value if q in _CENSORED else None)
+            put(vk, spec, i, finite(value), _qualifier(q, r))
             if spec.aggregation == "geometric_mean":
                 cells[f"{vk}:n_nonpositive"][i] = r.nonpositive_count
             cells[f"{vk}:n"][i] = r.n
