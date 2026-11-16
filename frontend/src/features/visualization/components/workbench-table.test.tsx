@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createRef, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { Filter } from "../lib/filters";
+import { provenanceOf } from "../lib/traces/test-fixtures";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import type { Dataset, DatasetColumn } from "../types";
 import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
@@ -15,7 +16,7 @@ const col = (key: string, kind: DatasetColumn["kind"], extra = {}): DatasetColum
   key,
   label: key,
   kind,
-  provenance: {},
+  provenance: provenanceOf(key),
   ...extra,
 });
 
@@ -57,7 +58,13 @@ const show = (
     filters,
     table = ds,
     ref,
-  }: { filters?: Filter[]; table?: Dataset; ref?: React.Ref<WorkbenchTableHandle> } = {},
+    onOpenCurves = vi.fn(),
+  }: {
+    filters?: Filter[];
+    table?: Dataset;
+    ref?: React.Ref<WorkbenchTableHandle>;
+    onOpenCurves?: (key: string, i: number) => void;
+  } = {},
 ) =>
   render(
     // The dashboard layout's sidebar provides tooltips in the app.
@@ -65,7 +72,7 @@ const show = (
       <WorkbenchProvider initialPanels={[]} initialFilters={filters}>
         <Seed ids={selected} />
         <div style={{ height: 600 }}>
-          <WorkbenchTable ds={table} ref={ref} />
+          <WorkbenchTable ds={table} ref={ref} onOpenCurves={onOpenCurves} />
         </div>
       </WorkbenchProvider>
     </TooltipProvider>,
@@ -249,5 +256,103 @@ describe("WorkbenchTable", () => {
       '"CEL-1","CCO","Sample",">12.3456"',
       '"CEL-2","c1ccccc1","Sample","40"',
     ]);
+  });
+
+  // A Compounds dataset as the server sends it: values with their stat siblings.
+  const mean = { protocol_id: "P1", readout_definition_id: "s", layer: "raw", aggregation: "mean" };
+  const geo = {
+    protocol_id: "P1",
+    readout_definition_id: "e",
+    layer: null,
+    aggregation: "geomean",
+  };
+  const compounds: Dataset = {
+    revision: "c",
+    level: "compounds",
+    row_count: 2,
+    row_ids: ["m1", "m2"],
+    columns: [
+      col("compound", "category", { label: "Compound" }),
+      col("structure", "structure", { label: "Structure" }),
+      col("molecule_id", "text", { hidden: true }),
+      col("rd:s:raw", "number", { label: "Signal (%)", group: "Signal", provenance: mean }),
+      col("rd:s:raw:q", "category", {
+        label: "Signal (%) qualifier",
+        group: "Signal",
+        provenance: { ...mean, stat: "qualifier" },
+      }),
+      col("rd:s:raw:n", "number", {
+        label: "Signal (%) n",
+        group: "Signal",
+        provenance: { ...mean, stat: "n" },
+      }),
+      col("rd:s:raw:sd", "number", {
+        label: "Signal (%) SD",
+        group: "Signal",
+        provenance: { ...mean, stat: "sd" },
+      }),
+      col("rd:s:raw:n_censored", "number", {
+        label: "Signal (%) n censored",
+        group: "Signal",
+        provenance: { ...mean, stat: "n_censored" },
+      }),
+      col("dr:e", "number", { label: "Enzyme · IC50", group: "Enzyme", provenance: geo }),
+      col("dr:e:p", "number", {
+        label: "Enzyme · pIC50",
+        group: "Enzyme",
+        provenance: { ...geo, aggregation: "p" },
+      }),
+      ...["n_tested", "n_inactive", "n_used"].map((stat) =>
+        col(`dr:e:${stat}`, "number", {
+          label: `Enzyme · IC50 ${stat}`,
+          group: "Enzyme",
+          provenance: { ...geo, stat },
+        }),
+      ),
+      col("mw", "number", { label: "MW", group: "Descriptors" }),
+    ],
+    values: {
+      compound: ["CEL-1", "CEL-2"],
+      structure: ["CCO", "c1ccccc1"],
+      molecule_id: ["m1", "m2"],
+      "rd:s:raw": [15, 80],
+      "rd:s:raw:q": [null, ">"],
+      "rd:s:raw:n": [2, 0],
+      "rd:s:raw:sd": [7.07, null],
+      "rd:s:raw:n_censored": [1, 2],
+      "dr:e": [0.5, null],
+      "dr:e:p": [6.30103, null],
+      "dr:e:n_tested": [3, null],
+      "dr:e:n_inactive": [1, null],
+      "dr:e:n_used": [2, null],
+      mw: [300.1, 410.2],
+    },
+  };
+
+  it("folds aggregated siblings into their values: not columns, not exported", async () => {
+    const ref = createRef<WorkbenchTableHandle>();
+    show([], { table: compounds, ref });
+    await screen.findByRole("link", { name: "CEL-1" });
+    expect(screen.getByText("Inactive 1/3 runs")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /> 80/ })).toBeInTheDocument();
+    expect(await exportedCsv(ref)).toEqual([
+      '"Compound","Structure","Signal (%)","Enzyme · IC50","Enzyme · pIC50","MW"',
+      '"CEL-1","CCO","15","0.5","6.30103","300.1"',
+      '"CEL-2","c1ccccc1",">80","","","410.2"',
+    ]);
+    fireEvent.keyDown(screen.getByRole("button", { name: "Columns" }), { key: "Enter" });
+    expect(screen.getByRole("menuitemcheckbox", { name: "Enzyme · pIC50" })).toBeInTheDocument();
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Signal \(%\) n|SD|n_tested/ }),
+    ).toBeNull();
+  });
+
+  it("opens a compound's curves from its Curves (n) button", async () => {
+    const onOpenCurves = vi.fn();
+    show([], { table: compounds, onOpenCurves });
+    fireEvent.click(await screen.findByRole("button", { name: "Curves (3)" }));
+    expect(onOpenCurves).toHaveBeenCalledWith("dr:e", 0);
+    // Only rows with curves get the button.
+    expect(screen.getAllByRole("button", { name: /^Curves/ })).toHaveLength(1);
   });
 });

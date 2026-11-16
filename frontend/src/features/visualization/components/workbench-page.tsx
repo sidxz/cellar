@@ -20,6 +20,7 @@ import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level } from "../types";
 import { AddPlotMenu } from "./add-plot-menu";
+import { CurvesDialog, type CurvesTarget, curvesTarget } from "./curves-dialog";
 import { ExportMenu } from "./export-menu";
 import { FilterRail, NoRowsMatch } from "./filter-rail";
 import { PanelGrid } from "./panel-grid";
@@ -68,10 +69,20 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
   const [editing, setEditing] = useState<{ panelId: string; focusField?: EditField } | null>(null);
   const closeEditor = useCallback(() => setEditing(null), []);
   const tableRef = useRef<WorkbenchTableHandle>(null);
+  const [curves, setCurves] = useState<CurvesTarget | null>(null);
 
   const ds = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
     [query.data, nameOf],
+  );
+  // A row above Runs pools the source runs that count at its level; its curves come from those.
+  const countedRunIds = useMemo(
+    () => runs.filter((r) => countsAtLevel(level, r.status)).map((r) => r.id),
+    [runs, level],
+  );
+  const openCurves = useCallback(
+    (key: string, i: number) => ds && setCurves(curvesTarget(ds, key, i, countedRunIds)),
+    [ds, countedRunIds],
   );
 
   // A switch refetches at the new level (the URL carries it); the plots and filters follow
@@ -198,7 +209,12 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
             table={
               <div className="flex h-full flex-col">
                 <SelectionStrip ds={ds} />
-                <WorkbenchTable ref={tableRef} ds={ds} actions={<SaveCollectionButton ds={ds} />} />
+                <WorkbenchTable
+                  ref={tableRef}
+                  ds={ds}
+                  actions={<SaveCollectionButton ds={ds} />}
+                  onOpenCurves={openCurves}
+                />
               </div>
             }
             rail={<FilterRail ds={ds} />}
@@ -215,6 +231,7 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
           />
         </WorkbenchProvider>
       )}
+      {curves && <CurvesDialog {...curves} open onOpenChange={() => setCurves(null)} />}
       {pickerOpen && protocolId && (
         <RunPickerDialog
           protocolId={protocolId}

@@ -1,5 +1,5 @@
 import { ApiError } from "@/shared/lib/api/custom-instance";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { provenanceOf } from "../lib/traces/test-fixtures";
 import type { Dataset, DatasetColumn, DatasetSource } from "../types";
@@ -21,6 +21,7 @@ const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   counts: undefined as Record<string, number> | undefined,
   replace: vi.fn(),
+  curves: [] as Record<string, unknown>[],
 }));
 
 vi.mock("next/navigation", () => ({
@@ -39,6 +40,19 @@ vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
 vi.mock("@/features/research-organization/hooks/use-collections", () => ({
   useCreateCollection: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+vi.mock("@/features/screening-assay/hooks/use-compound-curves", () => ({
+  useCompoundCurves: () => ({ data: state.curves, isLoading: false }),
+}));
+vi.mock("@structflo/components/dose-response", () => ({
+  DoseResponseChartView: ({ curves }: { curves: { label?: string }[] }) => (
+    <ul aria-label="Chart">
+      {curves.map((c) => (
+        <li key={c.label}>{c.label}</li>
+      ))}
+    </ul>
+  ),
+  DoseResponseFigure: () => null,
 }));
 vi.mock("../hooks/use-dataset", () => ({ useDataset: () => state.query }));
 vi.mock("../hooks/use-run-row-counts", () => ({
@@ -304,5 +318,52 @@ describe("WorkbenchPage", () => {
       `/assays/visualize?protocol=${P1}&runs=${R3}&level=runs`,
       { scroll: false },
     );
+  });
+
+  it("at Compounds, Curves (n) opens the compound's curves over the runs that count", async () => {
+    const RD = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
+    const geo = { protocol_id: P1, readout_definition_id: RD, layer: null, aggregation: "geomean" };
+    const base = aggregated("compounds", 1);
+    state.query = ready({
+      ...base,
+      columns: [
+        ...base.columns,
+        { key: "dr:e", label: "Enzyme · IC50", kind: "number", provenance: geo },
+        {
+          key: "dr:e:n_tested",
+          label: "n tested",
+          kind: "number",
+          provenance: { ...geo, stat: "n_tested" },
+        },
+      ],
+      values: { ...base.values, "dr:e": [0.5], "dr:e:n_tested": [2] },
+    });
+    state.curves = [R1, R2, R3].map((run_id, k) => ({
+      id: `c${k}`,
+      run_id,
+      molecule_id: "m1",
+      batch_id: "b1",
+      readout_definition_id: RD,
+      fitted_value: 0.5,
+      fitted_unit: "µM",
+      top: 100,
+      bottom: 0,
+      hill_slope: 1,
+      r_squared: 0.99,
+      curve_class: "active",
+    }));
+    render(<WorkbenchPage level="compounds" source={{ kind: "protocol", protocolId: P1 }} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Curves (2)" }));
+    const chart = within(screen.getByRole("dialog", { name: "CEL-1 · Enzyme · IC50" })).getByRole(
+      "list",
+      { name: "Chart" },
+    );
+    // The draft run (2026-10-29) does not count at Compounds.
+    expect(
+      within(chart)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual(["2026-11-05 · A. Chen", "2026-11-12 · A. Chen"]);
+    expect(document.body.textContent).not.toMatch(UUID);
   });
 });

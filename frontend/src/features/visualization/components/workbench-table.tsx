@@ -13,7 +13,6 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
 import { saveText } from "@/shared/lib/api/download";
-import { formatMeasurementValue } from "@/shared/lib/format-number";
 import {
   AllCommunityModule,
   type ColDef,
@@ -37,8 +36,11 @@ import {
 import { usePassMask } from "../hooks/use-pass-mask";
 import { categoryLabel, column, numberAt } from "../lib/dataset";
 import { orderTableRows, pinnedBlock } from "../lib/table-rows";
+import { cellText } from "../lib/value-description";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset, DatasetColumn } from "../types";
+import { CurveSparklineCell, CurvesCountCell } from "./table/curve-cells";
+import { ValueCell } from "./table/value-cell";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -54,7 +56,6 @@ type Col = ColDef<Row> | ColGroupDef<Row>;
 
 const ROW_HEIGHT: Record<Density, number> = { compact: 28, chemistry: 108 };
 const NUMERIC = "text-right tabular-nums";
-const SIBLING = /:(q|outlier)$/;
 const OWN_COLUMNS = new Set(["compound", "structure"]);
 const LEADING = new Set(["well", "well_type"]);
 /** Shown only on request: Run date repeats Run; the rest matter for plate QC. */
@@ -65,7 +66,11 @@ const HIDDEN_BY_DEFAULT = new Set([
   "well_column",
   "well_order",
 ]);
-const isValue = (c: DatasetColumn) => c.key.startsWith("rd:");
+/** Readout values (p-values included); their siblings (qualifier, n, SD …) carry a stat. */
+const isValue = (c: DatasetColumn) => !!c.provenance.readout_definition_id;
+/** Table-only columns (checkbox, curves): never exported. */
+const OWN_PREFIX = "__";
+type OpenCurves = (valueKey: string, i: number) => void;
 const isData = (row: Row | undefined): row is Row => !!row && row.i >= 0;
 const fmt = (n: number) => n.toLocaleString();
 const NO_ROWS = { noRowsToShow: "No rows match the filters" };
@@ -163,6 +168,17 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
       valueFormatter: (p) => (p.value == null ? "" : categoryLabel(c.key, p.value)),
     };
   }
+  if (c.provenance.aggregation) {
+    // Aggregated levels: qualifier, inactive badge and a popover saying how it was computed.
+    return {
+      ...base,
+      width: ds.values[`${c.key}:n_inactive`] ? 190 : 130,
+      headerClass: "ag-right-aligned-header",
+      valueGetter: (p) => (isData(p.data) ? numberAt(ds, c.key, p.data.i) : null),
+      cellRenderer: (p: ICellRendererParams<Row>) =>
+        isData(p.data) ? <ValueCell ds={ds} valueKey={c.key} i={p.data.i} /> : null,
+    };
+  }
   const qualifier = ds.values[`${c.key}:q`];
   const outlier = ds.values[`${c.key}:outlier`];
   return {
@@ -172,7 +188,7 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
     valueGetter: (p) => (isData(p.data) ? numberAt(ds, c.key, p.data.i) : null),
     valueFormatter: (p) => {
       if (typeof p.value !== "number" || !isData(p.data)) return "";
-      const text = Number.isInteger(p.value) ? String(p.value) : formatMeasurementValue(p.value);
+      const text = cellText(p.value);
       const q = qualifier?.[p.data.i];
       return q ? `${q} ${text}` : text;
     },
@@ -186,11 +202,12 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
 
 /** Columns the chooser offers, in table order: well and well type, the readout values,
  * then the rest (run, plate, conditions …) in dataset order. Compound and structure have
- * their own columns; qualifier/outlier siblings render inside their values. */
+ * their own columns; siblings (qualifier, outlier, n, SD, fit parameters …) render inside
+ * their values, their popover or their curve. */
 function tableFields(ds: Dataset): DatasetColumn[] {
   const rank = (c: DatasetColumn) => (LEADING.has(c.key) ? 0 : isValue(c) ? 1 : 2);
   return ds.columns
-    .filter((c) => !c.hidden && !SIBLING.test(c.key) && !OWN_COLUMNS.has(c.key))
+    .filter((c) => !c.hidden && !c.provenance.stat && !OWN_COLUMNS.has(c.key))
     .sort((a, b) => rank(a) - rank(b));
 }
 
@@ -238,9 +255,43 @@ function ColumnChooser({
   );
 }
 
+/** The curve column after a dose-response value: at Runs this run's curve, above it a
+ * "Curves (n)" button; both open the curves dialog. Null for any other column. */
+function curveColumn(
+  ds: Dataset,
+  c: DatasetColumn,
+  chemistry: boolean,
+  onOpen: OpenCurves,
+): ColDef<Row> | null {
+  const { aggregation, layer } = c.provenance;
+  const fit = aggregation === "fit";
+  if (!fit && !(aggregation === "geomean" && !layer)) return null;
+  return {
+    colId: `${OWN_PREFIX}curve:${c.key}`,
+    headerName: `${fit ? "Curve" : "Curves"} · ${c.label}`,
+    headerTooltip: `${fit ? "Curve" : "Curves"} · ${c.label}`,
+    width: fit && chemistry ? 160 : 120,
+    sortable: false,
+    cellRenderer: (p: ICellRendererParams<Row>) => {
+      if (!isData(p.data)) return null;
+      const props = { ds, valueKey: c.key, i: p.data.i, onOpen };
+      return fit ? (
+        <CurveSparklineCell {...props} compact={!chemistry} />
+      ) : (
+        <CurvesCountCell {...props} />
+      );
+    },
+  };
+}
+
 /** Select + compound pinned left, structure in chemistry density, then the shown fields
- * grouped by their dataset group. */
-function tableColumns(ds: Dataset, chemistry: boolean, hidden: Set<string>): Col[] {
+ * grouped by their dataset group (a dose-response value followed by its curve column). */
+function tableColumns(
+  ds: Dataset,
+  chemistry: boolean,
+  hidden: Set<string>,
+  onOpenCurves: OpenCurves,
+): Col[] {
   const cols: Col[] = [
     {
       colId: "__select__",
@@ -276,12 +327,14 @@ function tableColumns(ds: Dataset, chemistry: boolean, hidden: Set<string>): Col
   }
   for (const c of tableFields(ds)) {
     if (hidden.has(c.key)) continue;
-    const leaf = leafColumn(ds, c);
-    const last = cols.at(-1);
-    if (c.group && last && "children" in last && last.headerName === c.group) {
-      last.children.push(leaf);
-    } else {
-      cols.push(c.group ? { headerName: c.group, children: [leaf] } : leaf);
+    for (const leaf of [leafColumn(ds, c), curveColumn(ds, c, chemistry, onOpenCurves)]) {
+      if (!leaf) continue;
+      const last = cols.at(-1);
+      if (c.group && last && "children" in last && last.headerName === c.group) {
+        last.children.push(leaf);
+      } else {
+        cols.push(c.group ? { headerName: c.group, children: [leaf] } : leaf);
+      }
     }
   }
   return cols;
@@ -295,15 +348,18 @@ export interface WorkbenchTableHandle {
 
 /** The linked table: passing rows (all rows on request), selected rows pinned on top
  * under a collapsible "Selected (n)" row, compact or chemistry density, a Columns chooser.
- * `actions` (Save…) sit at the right end of the toolbar; `ref` exposes the CSV export. */
+ * `actions` (Save…) sit at the right end of the toolbar; `ref` exposes the CSV export;
+ * `onOpenCurves` opens the curves behind a dose-response value. */
 export function WorkbenchTable({
   ds,
   actions,
   ref,
+  onOpenCurves,
 }: {
   ds: Dataset;
   actions?: ReactNode;
   ref?: Ref<WorkbenchTableHandle>;
+  onOpenCurves: OpenCurves;
 }) {
   const grid = useRef<AgGridReact<Row>>(null);
   const mask = usePassMask(ds);
@@ -341,8 +397,8 @@ export function WorkbenchTable({
     ];
   }, [pinned, rows, collapsed]);
   const columnDefs = useMemo(
-    () => tableColumns(ds, density === "chemistry", hidden),
-    [ds, density, hidden],
+    () => tableColumns(ds, density === "chemistry", hidden, onOpenCurves),
+    [ds, density, hidden, onOpenCurves],
   );
   const toggleGroup = useCallback(() => setCollapsed((c) => !c), []);
   const groupParams = useMemo(
@@ -370,7 +426,9 @@ export function WorkbenchTable({
           );
         const csv = api.getDataAsCsv({
           skipColumnGroupHeaders: true,
-          columnKeys: api.getAllDisplayedColumns().filter((c) => c.getColId() !== "__select__"),
+          columnKeys: api
+            .getAllDisplayedColumns()
+            .filter((c) => !c.getColId().startsWith(OWN_PREFIX)),
           shouldRowBeSkipped: (p) =>
             !isData(p.node.data) ||
             !mask[p.node.data.i] ||
