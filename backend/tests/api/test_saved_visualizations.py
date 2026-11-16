@@ -421,6 +421,22 @@ async def test_a_deleted_run_is_left_out(client, session_factory, fake_auth):
     ]
 
 
+async def test_an_edit_answers_with_what_still_exists(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    view = await _create(client, _protocol(w["p"], w["runs"][:2]))
+    await _sql(session_factory, "DELETE FROM runs WHERE id = :r", r=w["runs"][0])
+
+    renamed = await client.patch(
+        f"{URL}/{view['id']}", json={"expected_version": 1, "name": "Renamed"}
+    )
+
+    assert renamed.status_code == 200, renamed.text
+    assert renamed.json()["dataset"]["source"]["run_ids"] == [str(w["runs"][1])]
+    assert renamed.json()["unresolved"] == [
+        "1 of the 2 runs this view was saved with no longer exists; it was left out."
+    ]
+
+
 async def test_all_runs_deleted_opens_every_current_run(client, session_factory, fake_auth):
     w = await _seed(session_factory, fake_auth.workspace_id)
     view = await _create(client, _protocol(w["p"], w["runs"]))

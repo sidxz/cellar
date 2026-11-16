@@ -271,9 +271,12 @@ def _given(value: object) -> Any:
 
 
 class UpdateSavedVisualization(_SavedVisualizationUseCase):
+    """The changed view as it opens: its source resolved against current runs and
+    protocols."""
+
     async def __call__(
         self, input: UpdateSavedVisualizationCommand, auth: AuthContext | None = None
-    ) -> Result[SavedVisualization, DomainError]:
+    ) -> Result[OpenedView, DomainError]:
         require_authenticated(auth)
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
@@ -318,7 +321,10 @@ class UpdateSavedVisualization(_SavedVisualizationUseCase):
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
-        return Success(view)
+        source, unresolved = await resolve_saved_source(
+            self._reader, input.workspace_id, view.source
+        )
+        return Success(OpenedView(view, source, unresolved))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -183,8 +183,8 @@ async def update_saved_visualization(
         visibility=body.visibility,
         project_id=body.project_id if "project_id" in sent else UNSET,
     )
-    view = result_to_response(await uc(command, auth=auth))
-    return SavedVisualizationResponse.opened(view, view.source, [], auth)
+    opened = result_to_response(await uc(command, auth=auth))
+    return SavedVisualizationResponse.opened(opened.view, opened.source, opened.unresolved, auth)
 
 
 @router.delete("/{view_id}", status_code=204)
