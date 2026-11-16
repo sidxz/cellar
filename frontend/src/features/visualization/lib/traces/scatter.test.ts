@@ -215,6 +215,38 @@ describe("buildScatterFigure", () => {
     expect(fig.layout.yaxis7).toMatchObject({ matches: "y" });
   });
 
+  it("gives a slot only to facets with a point to draw, so a lone plate fills the panel", () => {
+    // Two well-less rows (no plate, no well order) would make an empty "(none)" facet.
+    const ds = dataset({
+      well_order: [1, 2, null, null],
+      y: [1, 2, 3, null],
+      plate: ["Plate 1", "Plate 1", null, null],
+    });
+    const fig = buildScatterFigure(ds, panel({ splitBy: "plate" }), pass(4), NONE);
+    expect((fig.layout.annotations as { text: string }[]).map((a) => a.text)).toEqual(["Plate 1"]);
+    expect(fig.layout.grid).toBeUndefined();
+    expect(fig.layout.xaxis2).toBeUndefined();
+    expect(fig.facets).toEqual([{ label: "Plate 1", rows: [0, 1], xaxis: "x", yaxis: "y" }]);
+
+    // A facet drawable only through filtered rows keeps its slot (filters never move slots).
+    const three = dataset({
+      well_order: [1, 2, null, 4],
+      y: [1, 2, 3, 4],
+      plate: ["A", "A", "B", "C"],
+    });
+    const split = buildScatterFigure(
+      three,
+      panel({ splitBy: "plate" }),
+      Uint8Array.from([1, 1, 1, 0]),
+      NONE,
+    );
+    expect(split.facets?.map((f) => [f.label, f.xaxis])).toEqual([
+      ["A", "x"],
+      ["C", "x2"],
+    ]);
+    expect(split.layout.grid).toMatchObject({ rows: 1, columns: 2 });
+  });
+
   it("returns its facets with their axes and every row, filtered or not", () => {
     const ds = dataset({ well_order: [1, 2, 3, 4], y: [1, 2, 3, 4], plate: ["1", "2", "1", "2"] });
     const mask = Uint8Array.from([1, 0, 1, 1]);

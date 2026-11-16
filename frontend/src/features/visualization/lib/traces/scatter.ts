@@ -114,6 +114,8 @@ export function buildScatterBase(
   const groups = new Map<number, { facet: number; group: number; rows: number[] }>();
   const filtered: number[][] = facets.labels.map(() => []);
   const facetRows: number[][] = facets.labels.map(() => []);
+  // A facet with no row to draw, filters aside, gets no slot (filters never move slots).
+  const drawable = facets.labels.map(() => false);
   let skipped = 0;
   let lackX = 0;
   let lackY = 0;
@@ -123,6 +125,7 @@ export function buildScatterBase(
     const y = yAt(i);
     const facet = facets.of(i);
     facetRows[facet].push(i);
+    if (x !== null && y !== null) drawable[facet] = true;
     if (!mask[i]) {
       if (a.showFiltered && x !== null && y !== null) filtered[facet].push(i);
       continue;
@@ -152,7 +155,13 @@ export function buildScatterBase(
   const outline = dark ? "#f1f5f9" : "#111827";
   const xs = (rows: number[]) => rows.map(xAt);
   const ys = (rows: number[]) => rows.map((i) => numberAt(ds, cfg.y as string, i));
-  const place = (facet: number) => ({ xaxis: axisId("x", facet), yaxis: axisId("y", facet) });
+  const kept = facets.labels.map((_, f) => f).filter((f) => drawable[f]);
+  if (kept.length === 0) kept.push(0);
+  const slot = new Map(kept.map((f, s) => [f, s]));
+  const place = (facet: number) => {
+    const s = slot.get(facet) ?? 0;
+    return { xaxis: axisId("x", s), yaxis: axisId("y", s) };
+  };
 
   const data: Record<string, unknown>[] = [];
   filtered.forEach((rows, facet) => {
@@ -233,7 +242,7 @@ export function buildScatterBase(
   const key = shapeKey(ds, a, rows, symbols);
   data.push(...key);
 
-  const count = facets.labels.length;
+  const count = kept.length;
   const gridRows = count > 3 ? 2 : 1;
   const gridCols = Math.ceil(count / gridRows);
   const split = Boolean(a.splitBy);
@@ -276,8 +285,8 @@ export function buildScatterBase(
     };
   }
   if (split) {
-    layout.annotations = facets.labels.map((text, f) => ({
-      text,
+    layout.annotations = kept.map((facet, f) => ({
+      text: facets.labels[facet],
       xref: `${axisId("x", f)} domain`,
       yref: `${axisId("y", f)} domain`,
       x: 0.5,
@@ -290,8 +299,8 @@ export function buildScatterBase(
 
   const what = lackX && lackY ? `${xTitle} or ${yTitle}` : lackX ? xTitle : yTitle;
   const note = lackNote(skipped, what);
-  const facetList = facets.labels.map((label, f) => ({
-    label,
+  const facetList = kept.map((f) => ({
+    label: facets.labels[f],
     rows: facetRows[f],
     ...place(f),
   }));
