@@ -4,6 +4,7 @@ from cellar.application.audit.audit_recording_service import AuditRecordingServi
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.events import (
     FieldChange,
+    FlaggedPosition,
     PositionChange,
     RunInstrumentFileImported,
     RunOutliersFlagged,
@@ -83,7 +84,10 @@ async def test_outlier_flags_are_audited_per_position_with_the_reason():
             aggregate_id=uuid.uuid4(),
             aggregate_type="Run",
             workspace_id=uuid.uuid4(),
-            positions=("A01", "B01"),
+            positions=(
+                FlaggedPosition(uuid.uuid4(), uuid.uuid4(), "Plate 1 · A1"),
+                FlaggedPosition(uuid.uuid4(), uuid.uuid4(), "Plate 2 · A1"),
+            ),
             outlier=True,
             reason="bubble",
         )
@@ -92,6 +96,6 @@ async def test_outlier_flags_are_audited_per_position_with_the_reason():
     assert op.reason == "bubble" and str(op.operation_type) == "data_entry"
     assert [(e.field_name, e.old_value, e.new_value) for e in op.entries] == [
         ("event", None, "RunOutliersFlagged"),
-        ("A01: outlier", "no", "yes"),
-        ("B01: outlier", "no", "yes"),
+        ("Plate 1 · A1: outlier", "no", "yes"),
+        ("Plate 2 · A1: outlier", "no", "yes"),
     ]

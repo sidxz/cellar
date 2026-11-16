@@ -15,6 +15,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.events import (
     FieldChange,
+    FlaggedPosition,
     RunApproved,
     RunCompleted,
     RunCreated,
@@ -1166,6 +1167,11 @@ def P(n: int) -> str:
     return position_label(HolderKind.CASSETTE, "A", n)
 
 
+def Q(n: int) -> str:
+    """The audit trail's name for a position: with its holder."""
+    return f"Cassette 1 · {P(n)}"
+
+
 def test_relabel_changes_fields_and_registers_one_event():
     run, (_, w2, w3) = _instrument_run()
     changes = run.relabel_positions([E(w2, label="y", dose=25.0), E(w3, note="bubble")])
@@ -1173,12 +1179,12 @@ def test_relabel_changes_fields_and_registers_one_event():
     (event,) = [e for e in run.collect_events() if isinstance(e, RunPositionsRelabelled)]
     assert event.positions == changes and len(changes) == 2 and event.aggregate_id == run.id
     assert event.aggregate_type == "Run" and event.workspace_id == run.workspace_id
-    assert changes[0].position_label == P(2)
+    assert (changes[0].position_label, changes[0].plate_id) == (Q(2), w2.plate_id)
     assert changes[0].fields == (
         FieldChange("label", "x", "y"),
         FieldChange("concentration", "10.0", "25.0"),
     )
-    assert event.audit_changes()[0] == (f"{P(2)}: label", "x", "y")
+    assert event.audit_changes()[0] == (f"{Q(2)}: label", "x", "y")
     assert len(event.audit_changes()) == 3
     assert not changes[0].batch_changed and changes[0].touches_calculation
     assert not changes[1].touches_calculation
@@ -1345,37 +1351,67 @@ def test_flag_outliers_names_the_positions_in_plate_order_with_the_reason():
     run.flag_outliers([w3.id, w1.id], outlier=True, reason="  bubble ")
     (event,) = run.collect_events()
     assert isinstance(event, RunOutliersFlagged)
-    assert (event.positions, event.outlier, event.reason) == ((P(1), P(3)), True, "bubble")
+    assert event.positions == (
+        FlaggedPosition(w1.plate_id, w1.id, Q(1)),
+        FlaggedPosition(w3.plate_id, w3.id, Q(3)),
+    )
+    assert (event.outlier, event.reason) == (True, "bubble")
     assert event.audit_reason == "bubble"
     assert event.audit_changes() == [
-        (f"{P(1)}: outlier", "no", "yes"),
-        (f"{P(3)}: outlier", "no", "yes"),
+        (f"{Q(1)}: outlier", "no", "yes"),
+        (f"{Q(3)}: outlier", "no", "yes"),
     ]
 
 
+def test_the_audit_tells_the_same_position_on_two_plates_apart():
+    run, _ = _instrument_run()
+    plates = [Plate(run_id=run.id, plate_number=n, format=PlateFormat.F96) for n in (2, 1)]
+    a1 = [Well(plate_id=p.id, row="A", column=1) for p in plates]
+    run.plates, run.wells = plates, a1
+    run.flag_outliers([w.id for w in a1], outlier=True)
+    (event,) = run.collect_events()
+    assert [p.label for p in event.positions] == ["Plate 1 · A1", "Plate 2 · A1"]
+    assert [p.well_id for p in event.positions] == [a1[1].id, a1[0].id]
+
+
 def test_removing_a_flag_is_audited_yes_to_no_and_a_blank_reason_is_none():
-    run, (_, w2, _) = _instrument_run(status=RunStatus.COMPLETED)
+    run, (_, w2, _) = _instrument_run(status=RunStatus.IN_PROGRESS)
     run.flag_outliers([w2.id], outlier=False, reason="  ")
     (event,) = run.collect_events()
     assert event.reason is None
-    assert event.audit_changes() == [(f"{P(2)}: outlier", "yes", "no")]
+    assert event.audit_changes() == [(f"{Q(2)}: outlier", "yes", "no")]
+
+
+def test_outlier_flags_on_a_completed_run_need_a_reason():
+    run, (w1, _, _) = _instrument_run(status=RunStatus.COMPLETED)
+    for reason in (None, "   "):
+        with pytest.raises(ValidationError, match="reason"):
+            run.check_outlier_flags([w1.id], reason=reason)
+        with pytest.raises(ValidationError, match="reason"):
+            run.flag_outliers([w1.id], outlier=True, reason=reason)
+    run.flag_outliers([w1.id], outlier=True, reason="bubble")
+    assert len(run.collect_events()) == 1
 
 
 @pytest.mark.parametrize(
     ("status", "locked", "match"),
-    [(RunStatus.APPROVED, False, "approved"), (RunStatus.COMPLETED, True, "locked")],
+    [
+        (RunStatus.APPROVED, False, "approved"),
+        (RunStatus.COMPLETED, True, "locked"),
+        (RunStatus.REJECTED, False, "rejected"),
+    ],
 )
-def test_outlier_flags_are_refused_on_a_locked_or_approved_run(status, locked, match):
+def test_outlier_flags_are_refused_on_a_locked_approved_or_rejected_run(status, locked, match):
     run, (w1, _, _) = _instrument_run(status=status, locked=locked)
     with pytest.raises(ConflictError, match=match):
-        run.check_outlier_flags([w1.id])
+        run.check_outlier_flags([w1.id], reason="r")
     with pytest.raises(ConflictError, match=match):
-        run.flag_outliers([w1.id], outlier=True)
+        run.flag_outliers([w1.id], outlier=True, reason="r")
     assert run.collect_events() == []
 
 
-@pytest.mark.parametrize("status", [RunStatus.IN_PROGRESS, RunStatus.REJECTED])
-def test_outlier_flags_change_on_a_run_neither_locked_nor_approved(status):
+@pytest.mark.parametrize("status", [RunStatus.DRAFT, RunStatus.IN_PROGRESS])
+def test_outlier_flags_change_without_a_reason_while_draft_or_in_progress(status):
     run, (w1, _, _) = _instrument_run(status=status)
     run.check_outlier_flags([w1.id])
     run.flag_outliers([w1.id], outlier=True)

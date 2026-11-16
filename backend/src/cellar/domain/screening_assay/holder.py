@@ -23,6 +23,12 @@ def position_label(kind: HolderKind, row: str, column: int) -> str:
     return f"{row}{column}"
 
 
+def holder_position_label(kind: HolderKind, number: int, row: str, column: int) -> str:
+    """A position named with its holder, as the audit trail names it: "Plate 2 · A1"."""
+    holder = "Cassette" if kind is HolderKind.CASSETTE else "Plate"
+    return f"{holder} {number} · {position_label(kind, row, column)}"
+
+
 def holder_label(kind: HolderKind, rows: int | None, columns: int | None) -> str:
     if kind is HolderKind.CASSETTE:
         if columns is None:

@@ -68,7 +68,7 @@ class FlagRunOutliers:
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
             try:
-                run.check_outlier_flags(well_ids)
+                run.check_outlier_flags(well_ids, reason=input.reason)
             except (ValidationError, ConflictError) as exc:
                 return Failure(exc)
 

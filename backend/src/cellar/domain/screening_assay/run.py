@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.events import (
     FieldChange,
+    FlaggedPosition,
     PositionChange,
     RunApproved,
     RunCompleted,
@@ -31,7 +32,7 @@ from cellar.domain.screening_assay.events import (
     RunRejected,
     RunUnlocked,
 )
-from cellar.domain.screening_assay.holder import position_label
+from cellar.domain.screening_assay.holder import holder_position_label, position_label
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import (
     ConflictError,
@@ -63,6 +64,9 @@ _WELL_NOTE_MAX = 1000
 _CALCULATION_EDIT_STATES = {RunStatus.DRAFT, RunStatus.IN_PROGRESS}
 # Label/note edits on these statuses need a reason.
 _REASON_REQUIRED_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
+# Outlier flags move the normalization anchors, so every % value on the plate: they
+# change while the run is worked on, and on a completed run with a reason.
+_OUTLIER_FLAG_STATES = {RunStatus.DRAFT, RunStatus.IN_PROGRESS, RunStatus.COMPLETED}
 
 
 def _clean_label(label: str | None) -> str | None:
@@ -596,10 +600,11 @@ class Run(AggregateRoot):
 
         names = batch_names or {}
         changed: list[tuple[Well, PositionValues, PositionChange]] = []
-        for well, label, _, new in checked:
+        for well, _, _, new in checked:
             fields = _field_changes(well.values, new, names)
             if fields:
-                changed.append((well, new, PositionChange(well.id, label, fields)))
+                change = PositionChange(well.id, self._audit_label(well), fields, well.plate_id)
+                changed.append((well, new, change))
         if not changed:
             return ()
 
@@ -666,12 +671,26 @@ class Run(AggregateRoot):
             )
         return checked
 
-    def check_outlier_flags(self, well_ids: Collection[uuid.UUID]) -> None:
-        """The checks ``flag_outliers`` makes: the run is neither locked nor approved, and
-        names at least one of its wells. Changes nothing."""
+    def _audit_label(self, well: Well) -> str:
+        plate = next(p for p in self.plates if p.id == well.plate_id)
+        return holder_position_label(plate.holder_kind, plate.plate_number, well.row, well.column)
+
+    def check_outlier_flags(
+        self, well_ids: Collection[uuid.UUID], *, reason: str | None = None
+    ) -> None:
+        """The checks ``flag_outliers`` makes: the run is not locked and is draft, in
+        progress or (with a reason) completed — as role edits, a flag changes every %
+        value on its plate — and names at least one of its wells. Changes nothing."""
         self._guard_not_locked()
-        if self.status == RunStatus.APPROVED:
-            raise ConflictError("Outlier flags cannot change on an approved run")
+        if self.status not in _OUTLIER_FLAG_STATES:
+            hint = "; send it back to draft first" if self.status == RunStatus.REJECTED else ""
+            raise ConflictError(
+                f"Outlier flags cannot change on a run that is {self.status.value}{hint}"
+            )
+        if self.status in _REASON_REQUIRED_STATES and not (reason or "").strip():
+            raise ValidationError(
+                "A reason is required to change outlier flags on a completed run"
+            )
         if not well_ids:
             raise ValidationError("Name at least one well")
         on_run = {w.id for w in self.wells}
@@ -686,21 +705,21 @@ class Run(AggregateRoot):
         leaves plate QC and the normalization anchors, and keeps its own value. The flags
         live on the readout rows; this checks the change and registers its audit event,
         naming the positions in plate order."""
-        self.check_outlier_flags(well_ids)
+        self.check_outlier_flags(well_ids, reason=reason)
         named = set(well_ids)
-        plates = {p.id: p for p in self.plates}
         order = {p.id: p.plate_number for p in self.plates}
         wells = sorted(
             (w for w in self.wells if w.id in named),
             key=lambda w: (order[w.plate_id], len(w.row), w.row, w.column),
         )
+        self.updated_at = datetime.now(UTC)
         self.register_event(
             RunOutliersFlagged(
                 workspace_id=self.workspace_id,
                 aggregate_id=self.id,
                 aggregate_type="Run",
                 positions=tuple(
-                    position_label(plates[w.plate_id].holder_kind, w.row, w.column) for w in wells
+                    FlaggedPosition(w.plate_id, w.id, self._audit_label(w)) for w in wells
                 ),
                 outlier=outlier,
                 reason=(reason or "").strip() or None,

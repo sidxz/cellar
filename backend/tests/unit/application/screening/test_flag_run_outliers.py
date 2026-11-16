@@ -79,13 +79,14 @@ async def test_flagging_sets_the_rows_audits_the_changed_positions_and_recalcula
     assert h.uow.committed
     (event,) = h.dispatcher.dispatch_all.await_args.args[0]
     assert isinstance(event, RunOutliersFlagged)
-    assert (event.positions, event.outlier, event.reason) == ((P(3),), True, "bubble")
+    assert ([p.label for p in event.positions], event.outlier) == ([f"Cassette 1 · {P(3)}"], True)
+    assert event.reason == "bubble"
     h.engine.compute_for_run.assert_awaited_once_with(h.run.id, workspace_id=h.ws)
 
 
 async def test_removing_flags_passes_outlier_false():
     h = Harness(status=RunStatus.COMPLETED)
-    out = (await h([h.w2.id], outlier=False)).unwrap()
+    out = (await h([h.w2.id], outlier=False, reason="was fine")).unwrap()
     assert out.wells_changed == 1
     h.readout_repo.set_outlier.assert_awaited_once_with(h.ws, h.run.id, [h.w2.id], outlier=False)
 
