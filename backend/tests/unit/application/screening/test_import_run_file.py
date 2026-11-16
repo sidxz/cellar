@@ -500,25 +500,63 @@ def _seed_preview(
     filename: str,
 ) -> uuid.UUID:
     """Helper: parse a file directly and stash it under a fresh preview_id."""
-    import time
+    preview_id = uuid.uuid4()
+    store.save(preview_id, _stored(workspace_id, run_id, file_content, filename))
+    return preview_id
 
+
+def _stored(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    file_content: bytes = b"Well,Raw\nA1,0.5\n",
+    filename: str = "x.csv",
+):
     from cellar.application.screening.import_run_file import _StoredPreview
 
-    table = parse_tabular(file_content, filename)
-    preview_id = uuid.uuid4()
-    store.save(
-        preview_id,
-        _StoredPreview(
-            workspace_id=workspace_id,
-            run_id=run_id,
-            table=table,
-            raw_bytes=file_content,
-            filename=filename,
-            content_type="text/csv",
-            expires_at=time.monotonic() + 60,
-        ),
+    return _StoredPreview(
+        workspace_id=workspace_id,
+        run_id=run_id,
+        table=parse_tabular(file_content, filename),
+        raw_bytes=file_content,
+        filename=filename,
+        content_type="text/csv",
     )
-    return preview_id
+
+
+class TestInMemoryPreviewStore:
+    """A chemist can spend half an hour on a 60-column mapping."""
+
+    def _store(self, **kw):
+        now = [0.0]
+        return InMemoryPreviewStore(clock=lambda: now[0], **kw), now
+
+    def test_a_preview_lives_thirty_minutes_by_default(self) -> None:
+        store, now = self._store()
+        store.save(key := uuid.uuid4(), _stored(uuid.uuid4(), uuid.uuid4()))
+        now[0] = 29 * 60
+        assert store.peek(key) is not None
+        assert store.ttl_seconds == 30 * 60
+
+    def test_every_use_restarts_the_clock(self) -> None:
+        store, now = self._store()
+        store.save(key := uuid.uuid4(), _stored(uuid.uuid4(), uuid.uuid4()))
+        for minute in (25, 50, 75):
+            now[0] = minute * 60
+            assert store.peek(key) is not None, minute
+        now[0] = 106 * 60
+        assert store.peek(key) is None
+
+    def test_the_least_recently_used_preview_goes_past_the_cap(self) -> None:
+        store, now = self._store(max_items=2)
+        a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        store.save(a, _stored(uuid.uuid4(), uuid.uuid4()))
+        now[0] = 1
+        store.save(b, _stored(uuid.uuid4(), uuid.uuid4()))
+        now[0] = 2
+        store.peek(a)
+        store.save(c, _stored(uuid.uuid4(), uuid.uuid4()))
+        assert store.peek(b) is None
+        assert store.peek(a) is not None and store.peek(c) is not None
 
 
 class TestImportRunFile:

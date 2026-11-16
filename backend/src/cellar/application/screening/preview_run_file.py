@@ -13,7 +13,6 @@ callers and DI wiring keep working unchanged.
 
 from __future__ import annotations
 
-import time
 import uuid
 
 from returns.result import Failure, Result, Success
@@ -325,7 +324,6 @@ class PreviewRunFile:
                 plates = _summarize_plates(norm, layouts)
 
         preview_id = uuid.uuid4()
-        ttl = getattr(self._store, "ttl_seconds", 60.0)
         self._store.save(
             preview_id,
             _StoredPreview(
@@ -335,7 +333,6 @@ class PreviewRunFile:
                 raw_bytes=input.file_content,
                 filename=input.filename,
                 content_type=input.content_type or _guess_content_type(input.filename),
-                expires_at=time.monotonic() + ttl,
             ),
         )
 
@@ -351,7 +348,7 @@ class PreviewRunFile:
                 matched_batch_count=matched_batch_count,
                 unmatched_batch_refs=tuple(sorted(unmatched_set)),
                 total_rows=table.row_count,
-                expires_in_seconds=int(ttl),
+                expires_in_seconds=int(self._store.ttl_seconds),
                 validation_errors=tuple(validation_errors),
                 will_create_plates=will_create_plates,
                 will_create_wells=will_create_wells,
@@ -512,7 +509,6 @@ class RepreviewRunFile:
         sample = tuple(
             {h: (r.get(h) or "") for h in cached.table.headers} for r in cached.table.rows[:5]
         )
-        ttl = getattr(self._store, "ttl_seconds", 60.0)
 
         return Success(
             PreviewRunFileResult(
@@ -524,7 +520,7 @@ class RepreviewRunFile:
                 matched_batch_count=len(batch_index),
                 unmatched_batch_refs=tuple(sorted(resolutions.unmatched_batch_refs)),
                 total_rows=cached.table.row_count,
-                expires_in_seconds=int(ttl),
+                expires_in_seconds=int(self._store.ttl_seconds),
                 validation_errors=tuple(validation_errors),
                 will_create_plates=will_create_plates,
                 will_create_wells=will_create_wells,

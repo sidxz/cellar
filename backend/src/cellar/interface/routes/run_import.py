@@ -245,8 +245,9 @@ async def preview_run_file(
     """Parse a long-format run file and return a preview + ``preview_id``.
 
     Accepts ``.xlsx`` or ``.csv`` uploads. The returned ``preview_id`` is
-    valid for ~60 seconds and must be passed to ``POST /import-file`` to
-    actually persist the data.
+    valid for 30 minutes from its last use (``expires_in_seconds``) and must
+    be passed to ``POST /import-file`` to actually persist the data. A 404
+    for it means the server no longer holds the file: upload it again.
 
     The dose unit is sourced from the run's protocol (``protocol.dose_unit``)
     — the wizard does not need to ask. Wells in the file are interpreted in
