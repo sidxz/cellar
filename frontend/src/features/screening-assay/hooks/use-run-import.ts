@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, ApiError, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   AmbiguousCompoundModel,
   BatchOptionModel,
@@ -126,42 +126,86 @@ export type RunImportTemplate = RunImportTemplateResponse;
 
 // ─── Hooks ─────────────────────────────────────────────────────────────────────
 
-export function usePreviewRunFile(runId: string) {
-  return useMutation({
-    mutationFn: async ({ file }: { file: File }) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return customInstance<PreviewRunFileResponse>({
-        url: `${API_V1}/runs/${runId}/preview-file`,
-        method: "POST",
-        data: formData,
-      });
-    },
+function uploadPreview(runId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return customInstance<PreviewRunFileResponse>({
+    url: `${API_V1}/runs/${runId}/preview-file`,
+    method: "POST",
+    data: formData,
   });
 }
+
+export function usePreviewRunFile(runId: string) {
+  return useMutation({
+    mutationFn: async ({ file }: { file: File }) => uploadPreview(runId, file),
+  });
+}
+
+/** The server keeps a preview 30 minutes from its last use and loses it on a restart. */
+export class PreviewExpiredError extends Error {
+  constructor() {
+    super("The preview expired — upload the file again");
+    this.name = "PreviewExpiredError";
+  }
+}
+
+function isMissingPreview(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 404) return false;
+  const message = (error.body as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message.startsWith("Preview ");
+}
+
+/** Run ``call`` against the preview; when the server no longer holds it, upload the
+ *  file again and retry with the fresh preview — the chemist's mapping and picks
+ *  survive. Only when that fails too is the preview reported expired. */
+async function withLivePreview<T>(
+  runId: string,
+  file: File | null,
+  previewId: string,
+  call: (previewId: string) => Promise<T>,
+): Promise<T> {
+  try {
+    return await call(previewId);
+  } catch (error) {
+    if (!isMissingPreview(error)) throw error;
+  }
+  const fresh = file ? await uploadPreview(runId, file).catch(() => null) : null;
+  if (!fresh) throw new PreviewExpiredError();
+  return call(fresh.preview_id).catch((error: unknown) => {
+    throw isMissingPreview(error) ? new PreviewExpiredError() : error;
+  });
+}
+
+/** The file the wizard still holds, for re-uploading an expired preview. */
+type WithFile<T> = T & { file: File | null };
 
 export type RepreviewRunFilePayload = RepreviewRunFileRequest;
 
 export function useRepreviewRunFile(runId: string) {
   return useMutation({
-    mutationFn: async (payload: RepreviewRunFilePayload) =>
-      customInstance<PreviewRunFileResponse>({
-        url: `${API_V1}/runs/${runId}/repreview-file`,
-        method: "POST",
-        data: payload,
-      }),
+    mutationFn: async ({ file, ...payload }: WithFile<RepreviewRunFilePayload>) =>
+      withLivePreview(runId, file, payload.preview_id, (preview_id) =>
+        customInstance<PreviewRunFileResponse>({
+          url: `${API_V1}/runs/${runId}/repreview-file`,
+          method: "POST",
+          data: { ...payload, preview_id },
+        }),
+      ),
   });
 }
 
 export function useImportRunFile(runId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: ImportRunFilePayload) =>
-      customInstance<ImportRunFileResponse>({
-        url: `${API_V1}/runs/${runId}/import-file`,
-        method: "POST",
-        data: payload,
-      }),
+    mutationFn: async ({ file, ...payload }: WithFile<ImportRunFilePayload>) =>
+      withLivePreview(runId, file, payload.preview_id, (preview_id) =>
+        customInstance<ImportRunFileResponse>({
+          url: `${API_V1}/runs/${runId}/import-file`,
+          method: "POST",
+          data: { ...payload, preview_id },
+        }),
+      ),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: [...PLATE_MAP_KEY, runId] });
       qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });

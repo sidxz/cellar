@@ -13,6 +13,7 @@ import { useProtocol } from "./use-protocols";
 import {
   type ColumnMappingPayload,
   type ImportRole,
+  PreviewExpiredError,
   type PreviewRunFileResponse,
   type ReadoutColumnPayload,
   type RunImportTemplate,
@@ -270,6 +271,7 @@ export function useRunImportWizard({
       {
         preview_id: preview.preview_id,
         mapping,
+        file,
       },
       {
         onSuccess: (data) => {
@@ -282,10 +284,15 @@ export function useRunImportWizard({
           setAcknowledgedSwappedControls(false);
           setStep(3);
         },
-        onError: () => showError("Could not re-resolve with the new mapping"),
+        onError: (e) =>
+          showError(
+            e instanceof PreviewExpiredError
+              ? e.message
+              : "Could not re-resolve with the new mapping",
+          ),
       },
     );
-  }, [preview, buildMapping, repreviewMutation]);
+  }, [preview, file, buildMapping, repreviewMutation]);
 
   // ─── Step 4 — submit ─────────────────────────────────────────────────────────
   const handleSubmit = useCallback(() => {
@@ -304,6 +311,7 @@ export function useRunImportWizard({
           batch_id,
         })),
         auto_create_unmatched_batches: autoCreateUnmatchedBatches,
+        file,
       },
       {
         onSuccess: (data) => {
@@ -325,11 +333,12 @@ export function useRunImportWizard({
           }
           setStep(4);
         },
-        onError: () => showError("Import failed"),
+        onError: (e) => showError(e instanceof PreviewExpiredError ? e.message : "Import failed"),
       },
     );
   }, [
     preview,
+    file,
     buildMapping,
     compoundPicks,
     autoCreateUnmatchedBatches,
