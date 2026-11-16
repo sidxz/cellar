@@ -16,14 +16,17 @@ const WorkbenchContext = createContext<WorkbenchStore | null>(null);
 export function WorkbenchProvider({
   initialPanels,
   initialFilters,
+  saved,
   children,
 }: {
   initialPanels: PanelConfig[];
   initialFilters?: Filter[];
+  /** The initial panels and filters are a saved view's: changes from them read as unsaved. */
+  saved?: boolean;
   children: ReactNode;
 }) {
   const [store] = useState(() =>
-    createWorkbenchStore({ panels: initialPanels, filters: initialFilters }),
+    createWorkbenchStore({ panels: initialPanels, filters: initialFilters, saved }),
   );
   return <WorkbenchContext.Provider value={store}>{children}</WorkbenchContext.Provider>;
 }

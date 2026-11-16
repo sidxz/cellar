@@ -1,47 +1,21 @@
+import type { z } from "zod";
 import { createStore } from "zustand/vanilla";
+import {
+  MAX_PANELS,
+  type appearanceSchema,
+  type overlaySchema,
+  type panelSchema,
+} from "../lib/config-schema";
 import type { Filter } from "../lib/filters";
 
-export const MAX_PANELS = 4;
+export { MAX_PANELS };
 const MAX_HISTORY = 50;
 
-export type PanelType = "scatter" | "histogram" | "bar" | "box";
-
-export interface Appearance {
-  colorBy?: string;
-  colorMode: "range" | "bins";
-  colorBins?: number[];
-  shapeBy?: string;
-  sizeBy?: string;
-  opacity: number;
-  splitBy?: string;
-  tooltip: string[];
-  showFiltered: boolean;
-}
-
+export type PanelType = PanelConfig["type"];
+export type Appearance = z.infer<typeof appearanceSchema>;
 /** Display-only marks drawn over a plot; replaced wholesale through ``updatePanel``. */
-export interface OverlayConfig {
-  bands?: boolean;
-  drift?: "band" | "trend";
-  zPrime?: boolean;
-  refLine?: number;
-  limits?: { mode: "plotted" } | { mode: "entered"; lower: number; upper: number };
-  lipe?: number[];
-  selectivity?: number[];
-}
-
-export interface PanelConfig {
-  id: string;
-  type: PanelType;
-  x?: string;
-  y?: string;
-  category?: string;
-  agg?: "count" | "mean" | "median";
-  logX?: boolean;
-  logY?: boolean;
-  bins?: number;
-  appearance: Appearance;
-  overlays?: OverlayConfig;
-}
+export type OverlayConfig = z.infer<typeof overlaySchema>;
+export type PanelConfig = z.infer<typeof panelSchema>;
 
 export type PanelPatch = Partial<Omit<PanelConfig, "id" | "appearance">> & {
   appearance?: Partial<Appearance>;
@@ -53,6 +27,8 @@ interface Snapshot {
 }
 
 export interface WorkbenchState extends Snapshot {
+  /** The panels and filters as last saved (by identity); null for a workbench with no saved view. */
+  baseline: Snapshot | null;
   selection: ReadonlySet<string>;
   maximized: string | null;
   past: Snapshot[];
@@ -70,6 +46,8 @@ export interface WorkbenchState extends Snapshot {
   setMaximized: (id: string | null) => void;
   undo: () => void;
   redo: () => void;
+  /** The current panels and filters are now the saved ones. */
+  markSaved: () => void;
 }
 
 export const DEFAULT_APPEARANCE: Appearance = {
@@ -81,6 +59,9 @@ export const DEFAULT_APPEARANCE: Appearance = {
 
 export const canUndo = (s: WorkbenchState) => s.past.length > 0;
 export const canRedo = (s: WorkbenchState) => s.future.length > 0;
+/** Changed since the last save; undoing back to it restores the same arrays, so it reads clean. */
+export const isDirty = (s: WorkbenchState) =>
+  s.baseline !== null && (s.panels !== s.baseline.panels || s.filters !== s.baseline.filters);
 
 let panelSeq = 0;
 
@@ -106,7 +87,13 @@ export function patchPanel(p: PanelConfig, patch: PanelPatch): PanelConfig {
 const keepMaximized = (id: string | null, panels: PanelConfig[]) =>
   id && panels.some((p) => p.id === id) ? id : null;
 
-export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?: Filter[] }) {
+export function createWorkbenchStore(initial: {
+  panels: PanelConfig[];
+  filters?: Filter[];
+  saved?: boolean;
+}) {
+  const panels = initial.panels;
+  const filters = initial.filters ?? [];
   return createStore<WorkbenchState>()((set, get) => {
     /** Apply a panels/filters change as one undoable step. */
     const commit = (next: Partial<Snapshot>) => {
@@ -119,8 +106,9 @@ export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?:
     };
 
     return {
-      panels: initial.panels,
-      filters: initial.filters ?? [],
+      panels,
+      filters,
+      baseline: initial.saved ? { panels, filters } : null,
       selection: new Set<string>(),
       maximized: null,
       past: [],
@@ -179,6 +167,7 @@ export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?:
           future: future.slice(1),
         });
       },
+      markSaved: () => set({ baseline: { panels: get().panels, filters: get().filters } }),
     };
   });
 }

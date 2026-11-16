@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Filter } from "../lib/filters";
-import { MAX_PANELS, canRedo, canUndo, createWorkbenchStore } from "./workbench-store";
+import { MAX_PANELS, canRedo, canUndo, createWorkbenchStore, isDirty } from "./workbench-store";
 
 const range = (id: string, min: number): Filter => ({
   id,
@@ -87,6 +87,27 @@ describe("workbench store", () => {
     store.getState().setMaximized(id);
     store.getState().removePanel(id);
     expect(store.getState().maximized).toBeNull();
+  });
+
+  it("a saved store is dirty only while it differs from its last save", () => {
+    const store = createWorkbenchStore({ panels: [], filters: [range("a", 1)], saved: true });
+    expect(isDirty(store.getState())).toBe(false);
+    store.getState().upsertFilter(range("a", 10));
+    expect(isDirty(store.getState())).toBe(true);
+    store.getState().undo();
+    expect(isDirty(store.getState())).toBe(false);
+    store.getState().redo();
+    store.getState().markSaved();
+    expect(isDirty(store.getState())).toBe(false);
+    store.getState().undo();
+    expect(isDirty(store.getState())).toBe(true);
+  });
+
+  it("an unsaved store is never dirty", () => {
+    const store = createWorkbenchStore({ panels: [] });
+    store.getState().upsertFilter(range("a", 10));
+    store.getState().addPanel("scatter");
+    expect(isDirty(store.getState())).toBe(false);
   });
 
   it("undo and redo drop a maximize whose panel no longer exists", () => {

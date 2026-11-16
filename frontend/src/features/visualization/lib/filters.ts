@@ -1,18 +1,10 @@
 import { formatMeasurementValue } from "@/shared/lib/format-number";
+import type { z } from "zod";
 import type { Dataset } from "../types";
+import type { filterSchema } from "./config-schema";
 import { categoryLabel, column, numberAt } from "./dataset";
 
-export type Filter =
-  | {
-      id: string;
-      kind: "range";
-      key: string;
-      min: number | null;
-      max: number | null;
-      includeMissing: boolean;
-    }
-  | { id: string; kind: "category"; key: string; values: string[]; includeMissing: boolean }
-  | { id: string; kind: "rows"; rowIds: string[] };
+export type Filter = z.infer<typeof filterSchema>;
 
 type Predicate = (i: number) => boolean;
 

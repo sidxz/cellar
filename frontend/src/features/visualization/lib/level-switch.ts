@@ -32,13 +32,16 @@ function drawable(p: PanelConfig): boolean {
  * columns ``ds`` lacks (and any rows filter) are dropped, panel fields on such columns are
  * cleared, and a panel left without a field its type needs becomes the level's default plot
  * type (same id), keeping the value it measured when that survives. ``dropped`` names each
- * loss for the chemist: "Filter: Well order", "Plot 1: X (Well order)". */
+ * loss for the chemist: "Filter: Well order", "Plot 1: X (Well order)" — by ``labels`` when
+ * it names the key, else by ``prev.columns``. */
 export function carryConfig(
   prev: Carry,
   ds: Dataset,
+  labels?: Record<string, string>,
 ): { panels: PanelConfig[]; filters: Filter[]; dropped: string[] } {
   const has = new Set(ds.columns.map((c) => c.key));
-  const label = (key: string) => prev.columns.find((c) => c.key === key)?.label ?? key;
+  const label = (key: string) =>
+    labels?.[key] ?? prev.columns.find((c) => c.key === key)?.label ?? key;
   const dropped: string[] = [];
 
   const filters = prev.filters.filter((f) => {
