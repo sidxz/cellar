@@ -37,10 +37,10 @@ const compounds: Dataset = {
   values: { compound: ["CEL-1", "CEL-2"], [X]: [40, 80], [Y]: [1, 2] },
 };
 
-const carry = (panels: PanelConfig[], filters: Filter[] = [], selected = 0): Carry => ({
+const carry = (panels: PanelConfig[], filters: Filter[] = []): Carry => ({
   panels,
   filters,
-  selected,
+  selectedIds: [],
   columns: WELL_COLUMNS,
 });
 

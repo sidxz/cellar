@@ -73,7 +73,7 @@ export function resolveViewConfig(
   ds: Dataset,
 ): { panels: PanelConfig[]; filters: Filter[]; missing: string[] } {
   const { panels, filters, dropped } = carryConfig(
-    { panels: cfg.panels, filters: cfg.filters, selected: 0, columns: [] },
+    { panels: cfg.panels, filters: cfg.filters, selectedIds: [], columns: [] },
     ds,
     cfg.labels,
   );

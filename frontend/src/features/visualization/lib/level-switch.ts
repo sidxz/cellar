@@ -4,13 +4,13 @@ import { defaultPanels, retypePanel } from "./default-panels";
 import type { Filter } from "./filters";
 import { LEVELS } from "./levels";
 
-/** What a level switch takes along: the chemist's plots and filters, how many rows were
- * selected (the selection itself never carries: rows differ between levels) and the old
- * level's columns, to name what the new level lacks. */
+/** What a view change takes along: the chemist's plots and filters, the selected row ids
+ * (kept only at the same level, where rows keep their ids) and the old view's columns, to
+ * name what the new one lacks. */
 export type Carry = {
   panels: PanelConfig[];
   filters: Filter[];
-  selected: number;
+  selectedIds: string[];
   columns: DatasetColumn[];
 };
 

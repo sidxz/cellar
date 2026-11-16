@@ -66,7 +66,7 @@ const comparedIds = (ds: Dataset) =>
     .filter((pid) => column(ds, testedKey(pid)));
 
 /** "Only compounds tested in all": one filter per compared protocol keeping "Tested". */
-export function testedInAllFilters(ds: Dataset): Filter[] {
+export function testedInAllFilters(ds: Dataset): Extract<Filter, { kind: "category" }>[] {
   return comparedIds(ds).map((pid) => ({
     id: `tested-all:${pid}`,
     kind: "category",

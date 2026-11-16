@@ -36,17 +36,23 @@ interface RunPickerDialogProps {
   initialRunIds?: string[];
   /** The level the workbench opens at (kept from the one it was opened from). */
   level?: Level;
+  /** Called with the chosen runs (undefined = every run) instead of opening the workbench. */
+  onConfirm?: (runIds: string[] | undefined) => void;
+  confirmLabel?: string;
 }
 
 /** Choose which runs of a protocol to load, with each run's well count and a running
  * total against the row cap (Wells only). At Batches and Compounds, runs whose status does
- * not count there are marked but stay ticked. Opening navigates to the workbench URL. */
+ * not count there are marked but stay ticked. Opening navigates to the workbench URL, unless
+ * ``onConfirm`` takes the runs. */
 export function RunPickerDialog({
   protocolId,
   open,
   onOpenChange,
   initialRunIds,
   level = "wells",
+  onConfirm,
+  confirmLabel = "Open workbench",
 }: RunPickerDialogProps) {
   const router = useRouter();
   const viewId = useOpenView()?.view.id;
@@ -84,19 +90,14 @@ export function RunPickerDialog({
     else next.delete(id);
     setPicked(next);
   };
-  const openWorkbench = () => {
-    const runIds = selected.map((r) => r.id);
-    router.push(
-      visualizeHref(
-        {
-          kind: "protocol",
-          protocolId,
-          ...(runIds.length < ordered.length ? { runIds } : {}),
-        },
-        level,
-        viewId,
-      ),
-    );
+  const submit = () => {
+    const ids = selected.map((r) => r.id);
+    const runIds = ids.length < ordered.length ? ids : undefined;
+    if (onConfirm) onConfirm(runIds);
+    else
+      router.push(
+        visualizeHref({ kind: "protocol", protocolId, ...(runIds && { runIds }) }, level, viewId),
+      );
     onOpenChange(false);
   };
 
@@ -204,8 +205,8 @@ export function RunPickerDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button onClick={openWorkbench} disabled={reason !== null}>
-              Open workbench
+            <Button onClick={submit} disabled={reason !== null}>
+              {confirmLabel}
             </Button>
           </div>
         </DialogFooter>

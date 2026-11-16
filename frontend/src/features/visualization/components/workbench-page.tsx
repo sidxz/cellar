@@ -33,7 +33,13 @@ import { RunPickerDialog } from "./run-picker-dialog";
 import { SaveCollectionButton } from "./save-collection-dialog";
 import { SelectionStrip } from "./selection-strip";
 import { WorkbenchBody } from "./workbench-body";
-import { LevelSwitcher, SourceBar, WorkbenchHeader, useSourceRuns } from "./workbench-header";
+import {
+  LevelSwitcher,
+  SourceBar,
+  type View,
+  WorkbenchHeader,
+  useSourceRuns,
+} from "./workbench-header";
 import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
 
 /** The server's own sentence when it sent one (`{message}`), else the error text. */
@@ -69,8 +75,8 @@ export function WorkbenchPage({
   return <Workbench source={source} level={level} view={view} />;
 }
 
-/** The last level switch: the view it leads to and what it takes along. */
-type Switch = { to: string; carry: Carry; dismissed?: boolean };
+/** The last view change: the view it leads to, the level it left and what it takes along. */
+type Switch = { to: string; from: Level; carry: Carry; dismissed?: boolean };
 
 function Workbench({
   source,
@@ -109,19 +115,33 @@ function Workbench({
     [ds, countedRunIds],
   );
 
-  // A switch refetches at the new level (the URL carries it); the plots and filters follow
-  // when its data arrives, fitted to that level's columns. Not an undo step.
+  // A change of level, runs or compared protocols refetches (the URL carries it); the plots
+  // and filters follow when its data arrives, fitted to its columns. Within one level rows
+  // keep their ids, so the selected rows still there stay selected. Not an undo step.
   const shown = viewKey(source, level);
   const carry = switched?.to === shown ? switched.carry : null;
-  const switchLevel = (next: Level, take: Carry | null) => {
-    setSwitched(take && { to: viewKey(source, next), carry: take });
-    router.replace(visualizeHref(source, next, view?.view.id), { scroll: false });
+  const changeView = (next: View, take: Carry | null) => {
+    // A change before the last one's data arrived keeps the level that one left.
+    const from = switched && take === switched.carry ? switched.from : level;
+    setSwitched(take && { to: viewKey(next.source, next.level), from, carry: take });
+    router.replace(visualizeHref(next.source, next.level, view?.view.id), { scroll: false });
   };
-  const carried = useMemo(() => (ds && carry ? carryConfig(carry, ds) : null), [ds, carry]);
-  const note =
-    carried && carry && !switched?.dismissed
-      ? switchNote(level, carried.dropped, carry.selected)
-      : null;
+  const switchLevel = (next: Level, take: Carry | null) =>
+    changeView({ source, level: next }, take);
+  const sameLevel = switched?.from === level;
+  const carried = useMemo(() => {
+    if (!ds || !carry) return null;
+    const rows = new Set(ds.row_ids);
+    return { ...carryConfig(carry, ds), selection: carry.selectedIds.filter((id) => rows.has(id)) };
+  }, [ds, carry]);
+  let note: string | null = null;
+  if (carried && carry && !switched?.dismissed) {
+    note = !sameLevel
+      ? switchNote(level, carried.dropped, carry.selectedIds.length)
+      : carried.dropped.length > 0
+        ? `Not available now: ${carried.dropped.join(", ")}.`
+        : null;
+  }
 
   // A saved view opens on its own plots and filters, less what today's data lacks; the note
   // lists that by saved label, after whatever the server could not resolve (removed runs…).
@@ -215,8 +235,16 @@ function Workbench({
       <output className="sr-only">{note}</output>
       {body || !ds ? (
         <>
-          <SourceBar source={source} level={level} />
-          <LevelSwitcher level={level} onChange={(next) => switchLevel(next, carry)} />
+          <SourceBar
+            source={source}
+            level={level}
+            onChange={(next) => changeView({ source: next, level }, carry)}
+          />
+          <LevelSwitcher
+            level={level}
+            source={source}
+            onChange={(next) => switchLevel(next, carry)}
+          />
           {viewNote}
           {body}
         </>
@@ -227,13 +255,14 @@ function Workbench({
           key={view ? `${view.view.id}:${shown}` : shown}
           initialPanels={carried?.panels ?? resolved?.panels ?? initialPanels(ds)}
           initialFilters={carried?.filters ?? resolved?.filters}
+          initialSelection={sameLevel ? carried?.selection : undefined}
           saved={view !== undefined}
         >
           <WorkbenchHeader
             source={source}
             ds={ds}
             level={level}
-            onLevelChange={switchLevel}
+            onViewChange={changeView}
             exportMenu={<ExportMenu ds={ds} table={tableRef} />}
             addPlotMenu={<AddPlotMenu ds={ds} />}
           />
@@ -291,20 +320,22 @@ function Workbench({
         </WorkbenchProvider>
       )}
       {curves && <CurvesDialog {...curves} open onOpenChange={() => setCurves(null)} />}
-      {pickerOpen && protocolId && (
+      {pickerOpen && source.kind === "protocol" && (
         <RunPickerDialog
-          protocolId={protocolId}
-          initialRunIds={source.kind === "protocol" ? source.runIds : undefined}
+          protocolId={source.protocolId}
+          initialRunIds={source.runIds}
           level={level}
           open
           onOpenChange={setPickerOpen}
+          onConfirm={(runIds) => changeView({ source: { ...source, runIds }, level }, carry)}
         />
       )}
     </div>
   );
 }
 
-const viewKey = (source: DatasetSource, level: Level) => JSON.stringify([source, level]);
+// The URL: one spelling per view, whatever order the source's fields were set in.
+const viewKey = (source: DatasetSource, level: Level) => visualizeHref(source, level);
 
 // The provider reads this once (its store is created on mount), so the ids made here stick.
 const initialPanels = (ds: Dataset) => defaultPanels(ds).map((p) => makePanel(p.type, p.defaults));

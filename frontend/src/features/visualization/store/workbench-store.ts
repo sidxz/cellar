@@ -90,6 +90,7 @@ const keepMaximized = (id: string | null, panels: PanelConfig[]) =>
 export function createWorkbenchStore(initial: {
   panels: PanelConfig[];
   filters?: Filter[];
+  selection?: Iterable<string>;
   saved?: boolean;
 }) {
   const panels = initial.panels;
@@ -109,7 +110,7 @@ export function createWorkbenchStore(initial: {
       panels,
       filters,
       baseline: initial.saved ? { panels, filters } : null,
-      selection: new Set<string>(),
+      selection: new Set<string>(initial.selection),
       maximized: null,
       past: [],
       future: [],
