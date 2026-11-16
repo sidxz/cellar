@@ -494,3 +494,44 @@ async def test_at_most_four_protocols_are_compared(client, session_factory, fake
     resp = await client.post(URL, json=_compared(w, "compounds", *five))
 
     assert resp.status_code == 422, resp.text
+
+
+async def test_aggregated_levels_read_a_compounds_sample_wells_and_wells_show_every_well(
+    client, session_factory, fake_auth
+):
+    """Rifampicin titrated on sample wells and used as the positive control on the same
+    plate. After a recompute every well has its % inhibition at Wells; the Runs, Batches and
+    Compounds rows of rifampicin read its two sample wells only (mean 40, not 20)."""
+    ws = fake_auth.workspace_id
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        s = uow.session
+        rif = await seed.molecule(s, ws, await seed.org(s, ws), "rifampicin")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(
+            s, p, name="Signal", unit="AU", normalizations=["percent_inhibition"]
+        )
+        run = await seed.run(s, ws, p, date(2026, 11, 5), status="approved")
+        plate = await seed.plate(s, run, 1)
+        wells = [
+            ("sample", 0.3585, rif),  # 50 %
+            ("sample", 0.4751, rif),  # 30 %
+            ("positive_control", 0.64, rif),
+            ("positive_control", 0.66, rif),
+            ("negative_control", 0.06, None),
+            ("negative_control", 0.074, None),
+        ]
+        for col, (well_type, value, molecule) in enumerate(wells, start=1):
+            w = await seed.well(s, plate, "A", col, well_type=well_type)
+            await seed.readout(s, ws, run, rd, molecule, value, well_id=w)  # type: ignore[arg-type]
+        await uow.commit()
+    recomputed = await client.post(f"/api/v1/runs/{run}/recompute")
+    assert recomputed.status_code == 200, recomputed.text
+    key, source = f"rd:{rd}:percent_inhibition", {"kind": "protocol", "protocol_id": str(p)}
+
+    wells_body = await _level(client, {}, "wells", **source)
+    assert sum(v is not None for v in wells_body["values"][key]) == 6
+    for level in ("runs", "batches", "compounds"):
+        body = await _level(client, {}, level, **source)
+        assert _cell(body, key, rif) == [pytest.approx(40.0, abs=0.01)], level
+        assert _cell(body, f"{key}:n", rif) == [2], level
