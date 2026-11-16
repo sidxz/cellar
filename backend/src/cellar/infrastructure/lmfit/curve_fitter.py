@@ -345,7 +345,8 @@ class LmfitCurveFitter:
 
         curve_class = _classify_curve(
             responses=responses,
-            predicted=predicted,
+            # In dose order: the points arrive in well order, which says nothing about shape.
+            predicted=predicted[np.argsort(log_concentrations, kind="stable")],
             r_squared=r_squared,
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,
