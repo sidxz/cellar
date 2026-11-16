@@ -292,6 +292,30 @@ async def test_runs_measuring_only_non_rejected_runs_with_data_for_the_ids(uow, 
     }
 
 
+async def test_a_run_using_the_compound_only_as_a_control_does_not_measure_it(uow, workspace_id):
+    mol = uuid.uuid4()
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, workspace_id)
+        rd = await seed.readout_def(s, p)
+        as_control = await seed.run(s, workspace_id, p, JAN, conditions={"ATP": "10 uM"})
+        plate = await seed.plate(s, as_control, 1)
+        w = await seed.well(s, plate, "A", 1, well_type="positive_control")
+        await seed.readout(s, workspace_id, as_control, rd, mol, 1.0, well_id=w)
+        as_sample = await seed.run(s, workspace_id, p, FEB, conditions={"ATP": "1 mM"})
+        plate = await seed.plate(s, as_sample, 1)
+        w = await seed.well(s, plate, "A", 1)
+        await seed.readout(s, workspace_id, as_sample, rd, mol, 1.0, well_id=w)
+        await uow.commit()
+
+    async with uow:
+        headers = await SQLAlchemyRunRepository(uow).find_runs_measuring(
+            workspace_id, p, [mol], run_scope=RunScope.all()
+        )
+
+    assert [h.id for h in headers] == [as_sample]
+
+
 async def test_run_headers_carry_status_and_barcodes(uow, workspace_id):
     async with uow:
         s = uow.session

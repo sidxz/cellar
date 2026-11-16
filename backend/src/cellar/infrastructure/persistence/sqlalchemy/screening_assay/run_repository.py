@@ -29,6 +29,9 @@ from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.models import (
     CollectionModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
     run_scope_filters,
@@ -120,6 +123,7 @@ class SQLAlchemyRunRepository(SQLAlchemyRepository[Run, RunModel]):
             .where(
                 ReadoutDataModel.run_id == RunModel.id,
                 any_id(ReadoutDataModel.molecule_id, molecule_ids),
+                COMPOUND_RESULT,  # a compound only used as a control is not measured
             )
             .exists()
         )
