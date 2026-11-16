@@ -235,6 +235,22 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
   };
 }
 
+/** A value's qualifier for the CSV export only (hidden on screen, where the bound stands in
+ * front of its number): ``<``, ``>``, ``≤``, ``≥``; blank for ``=`` and none. Null when the
+ * value has no qualifier sibling. */
+function qualifierColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> | null {
+  const q = ds.values[`${c.key}:q`];
+  if (c.kind !== "number" || !q) return null;
+  return {
+    colId: `${c.key}:q`,
+    headerName: "qualifier",
+    headerTooltip: `${c.label} qualifier`,
+    hide: true,
+    valueGetter: (p) =>
+      isData(p.data) && q[p.data.i] !== "=" ? qualifierText(q[p.data.i]) || null : null,
+  };
+}
+
 /** Columns the chooser offers, in table order: well and well type, the readout values,
  * then the rest (run, plate, conditions …) in dataset order. Compound and structure have
  * their own columns; siblings (qualifier, outlier, n, SD, fit parameters …) render inside
@@ -362,7 +378,11 @@ function tableColumns(
   }
   for (const c of tableFields(ds)) {
     if (hidden.has(c.key)) continue;
-    for (const leaf of [leafColumn(ds, c), curveColumn(ds, c, chemistry, onOpenCurves)]) {
+    for (const leaf of [
+      leafColumn(ds, c),
+      qualifierColumn(ds, c),
+      curveColumn(ds, c, chemistry, onOpenCurves),
+    ]) {
       if (!leaf) continue;
       const last = cols.at(-1);
       if (c.group && last && "children" in last && last.headerName === c.group) {
@@ -377,7 +397,8 @@ function tableColumns(
 
 export interface WorkbenchTableHandle {
   /** Download the rows Save acts on — the selected passing rows, else every passing row —
-   * over the visible columns; numbers unrounded, a qualifier kept in front (">100"). */
+   * over the visible columns; numbers unrounded and bare, a value's qualifier in a
+   * "{label} qualifier" column beside it. */
   exportCsv: (fileName: string) => void;
 }
 
@@ -470,16 +491,18 @@ export function WorkbenchTable({
             "",
           columnKeys: api
             .getAllDisplayedColumns()
-            .filter((c) => !c.getColId().startsWith(OWN_PREFIX)),
+            .filter((c) => !c.getColId().startsWith(OWN_PREFIX))
+            .flatMap((c) => {
+              const q = api.getColumn(`${c.getColId()}:q`);
+              return q ? [c, q] : [c];
+            }),
           shouldRowBeSkipped: (p) =>
             !isData(p.node.data) ||
             !mask[p.node.data.i] ||
             (selection.size > 0 && !selection.has(ds.row_ids[p.node.data.i])),
-          processCellCallback: (p) => {
-            if (typeof p.value !== "number" || !isData(p.node?.data)) return p.formatValue(p.value);
-            const q = ds.values[`${p.column.getColId()}:q`]?.[p.node.data.i];
-            return `${q ?? ""}${p.value}`;
-          },
+          // Numbers as they are: the cells' formatter rounds them and puts the bound in front.
+          processCellCallback: (p) =>
+            typeof p.value === "number" ? String(p.value) : p.formatValue(p.value),
         });
         if (lend) api.setGridOption("pinnedTopRowData", pinnedRows);
         // The byte-order mark makes Excel read the file as UTF-8 (≥, µ).

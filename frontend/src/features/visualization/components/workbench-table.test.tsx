@@ -388,8 +388,8 @@ describe("WorkbenchTable", () => {
     // The collapsed Selected group still exports its rows.
     fireEvent.click(await screen.findByRole("button", { name: "Selected (1)" }));
     expect(await exportedCsv(ref)).toEqual([
-      '"Compound","Structure","well_type","rd:s:raw"',
-      '"CEL-1","CCO","Sample",">12.3456"',
+      '"Compound","Structure","well_type","rd:s:raw","rd:s:raw qualifier"',
+      '"CEL-1","CCO","Sample","12.3456",">"',
     ]);
   });
 
@@ -398,10 +398,27 @@ describe("WorkbenchTable", () => {
     show([], { filters: [controls], table: precise, ref });
     await screen.findByRole("link", { name: "CEL-1" });
     expect(await exportedCsv(ref)).toEqual([
-      '"Compound","Structure","well_type","rd:s:raw"',
-      '"CEL-1","CCO","Sample",">12.3456"',
-      '"CEL-2","c1ccccc1","Sample","40"',
+      '"Compound","Structure","well_type","rd:s:raw","rd:s:raw qualifier"',
+      '"CEL-1","CCO","Sample","12.3456",">"',
+      '"CEL-2","c1ccccc1","Sample","40",""',
     ]);
+  });
+
+  it("exports plain numbers, each bound in a qualifier column beside its value", async () => {
+    // A number with "=" in front reads as a formula in Excel and as text in pandas or R.
+    const ref = createRef<WorkbenchTableHandle>();
+    const bounds = { ...precise, values: { ...precise.values, "rd:s:raw:q": [">", "=", "<="] } };
+    show([], { table: bounds, ref });
+    await screen.findByRole("link", { name: "CEL-1" });
+    expect(await exportedCsv(ref)).toEqual([
+      '"Compound","Structure","well_type","rd:s:raw","rd:s:raw qualifier"',
+      '"CEL-1","CCO","Sample","12.3456",">"',
+      '"CEL-2","c1ccccc1","Sample","40",""',
+      '"","","Negative control","3","≤"',
+    ]);
+    // On screen the bound stays in front of its number, with no column of its own.
+    expect(screen.getByText("> 12.3")).toBeInTheDocument();
+    expect(document.querySelector('.ag-header-cell[col-id="rd:s:raw:q"]')).toBeNull();
   });
 
   // A Compounds dataset as the server sends it: values with their stat siblings.
@@ -482,9 +499,9 @@ describe("WorkbenchTable", () => {
     expect(screen.getByText("Inactive 1/3 curves")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /> 80/ })).toBeInTheDocument();
     expect(await exportedCsv(ref)).toEqual([
-      '"Compound","Structure","Signal (%)","Enzyme · IC50","Enzyme · pIC50","MW"',
-      '"CEL-1","CCO","15","0.5","6.30103","300.1"',
-      '"CEL-2","c1ccccc1",">80","","","410.2"',
+      '"Compound","Structure","Signal (%)","Signal (%) qualifier","Enzyme · IC50","Enzyme · pIC50","MW"',
+      '"CEL-1","CCO","15","","0.5","6.30103","300.1"',
+      '"CEL-2","c1ccccc1","80",">","","","410.2"',
     ]);
     fireEvent.keyDown(screen.getByRole("button", { name: "Columns" }), { key: "Enter" });
     expect(screen.getByRole("menuitemcheckbox", { name: "Enzyme · pIC50" })).toBeInTheDocument();
