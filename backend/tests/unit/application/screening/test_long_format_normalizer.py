@@ -17,7 +17,7 @@ from cellar.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
-from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.enums import PlateFormat, WellType
 from cellar.domain.shared.errors import ValidationError
 from cellar.infrastructure.parsers.tabular_file import ParsedTable, parse_tabular
 
@@ -549,3 +549,77 @@ class TestNadDFixture:
         blank_rows = [r for r in out.rows if not r.batch_ref]
         assert len(sample_rows) > 0
         assert len(blank_rows) > 0
+
+
+# ---------------------------------------------------------------------------
+# Well role column ("Control State")
+# ---------------------------------------------------------------------------
+
+
+class TestWellRoleColumn:
+    def test_role_headers_are_suggested_as_well_role(self) -> None:
+        for header in ("Control State", "control state", "Well Type", "Well Role", "CONTROL"):
+            table = _make_table(["Well", header, "Raw"], [])
+            roles = {s.header: (s.role, s.confidence) for s in infer_mapping(table).suggestions}
+            assert roles[header] == ("well_role", "high"), header
+
+    def _normalize(self, values: list[str]) -> NormalizedTable:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Control State", "Raw"],
+            [
+                {"Well": f"A{i + 1}", "Control State": v, "Raw": "1.0"}
+                for i, v in enumerate(values)
+            ],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            well_role="Control State",
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
+        )
+        return normalize(table, mapping).unwrap()
+
+    def test_values_map_to_well_types(self) -> None:
+        out = self._normalize(
+            [
+                "negative control",
+                "positive control (hit)",
+                "Positive Control",
+                "reference",
+                "Reference Molecule",
+                "blank",
+                "",
+            ]
+        )
+        assert [r.well_role for r in out.rows] == [
+            WellType.NEGATIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+            WellType.REFERENCE,
+            WellType.REFERENCE,
+            WellType.BLANK,
+            WellType.SAMPLE,
+        ]
+        assert out.unknown_well_roles == ()
+
+    def test_unknown_values_are_listed_never_a_sample(self) -> None:
+        out = self._normalize(["negative control", "vehicle", "Vehicle ", "dmso"])
+        assert out.unknown_well_roles == ("vehicle", "dmso")  # first spelling, once each
+        assert out.rows[1].well_role is None
+
+    def test_unmapped_role_column_leaves_role_to_the_layout(self) -> None:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Control State", "Raw"],
+            [{"Well": "A1", "Control State": "negative control", "Raw": "1.0"}],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
+        )
+        assert normalize(table, mapping).unwrap().rows[0].well_role is None
+
+    def test_missing_role_header_fails(self) -> None:
+        table = _make_table(["Well", "Raw"], [{"Well": "A1", "Raw": "1.0"}])
+        result = normalize(table, ColumnMapping(well="Well", well_role="Control State"))
+        assert isinstance(result, Failure)

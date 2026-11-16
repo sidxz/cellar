@@ -1611,6 +1611,7 @@ def _build_repreview_uc(
     store: InMemoryPreviewStore,
     batches_by_ref: dict[str, FakeBatch] | None = None,
     protocol: Protocol | None = None,
+    plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
 ) -> RepreviewRunFile:
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
@@ -1641,7 +1642,7 @@ def _build_repreview_uc(
         molecule_repo=molecule_repo,
         preview_store=store,
         protocol_repo=protocol_repo,
-        plate_template_repo=_make_plate_template_repo(None),
+        plate_template_repo=_make_plate_template_repo(plate_templates),
     )
 
 
@@ -2197,3 +2198,263 @@ class TestImportAutoLinksInventoryPlate:
         auth = FakeAuth()
         run = await self._import(auth, None, None)
         assert all(p.registered_plate_id is None for p in run.plates)
+
+
+# ---------------------------------------------------------------------------
+# The file's well-role column ("Control State") decides control roles
+# ---------------------------------------------------------------------------
+
+
+# The protocol layout says A1 = positive, A2 = negative; the file says the opposite.
+# A3 is a sample, A4 a blank the layout does not mention; H12 forces a 96-well plate.
+_ROLE_CSV = (
+    b"Plate Name,Well,Control State,Batch,Raw Data\n"
+    b"P1,A1,negative control,,0.95\n"
+    b"P1,A2,positive control (hit),,0.07\n"
+    b"P1,A3,,LG-1,0.5\n"
+    b"P1,A4,blank,,0.01\n"
+    b"P1,H12,,LG-1,0.4\n"
+)
+
+
+def _layout_protocol(auth: FakeAuth) -> tuple[Protocol, PlateTemplate]:
+    tmpl = _make_plate_template(
+        auth.workspace_id,
+        fmt=PlateFormat.F96,
+        template_map={"A1": "positive_control", "A2": "negative_control"},
+    )
+    protocol = _make_protocol(
+        auth.workspace_id,
+        ["Raw Data"],
+        normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        control_layouts={PlateFormat.F96.value: tmpl.id},
+    )
+    return protocol, tmpl
+
+
+def _role_mapping(rd_id: uuid.UUID, *, well_role: str | None = "Control State") -> ColumnMapping:
+    return ColumnMapping(
+        well="Well",
+        plate_name="Plate Name",
+        batch_ref="Batch",
+        well_role=well_role,
+        readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+    )
+
+
+class TestWellRoleColumn:
+    @pytest.mark.asyncio
+    async def test_preview_counts_roles_from_the_file_and_says_where_it_differs(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        uc, _ = _build_preview_uc(
+            run=run,
+            batches_by_ref={"LG-1": FakeBatch()},
+            protocol=protocol,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=_ROLE_CSV,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        roles = {s.header: s.role for s in preview.suggestions}
+        assert roles["Control State"] == "well_role"
+        (plate,) = preview.plates
+        assert (
+            plate.sample_count,
+            plate.positive_count,
+            plate.negative_count,
+            plate.reference_count,
+            plate.blank_count,
+        ) == (2, 1, 1, 0, 1)
+        assert preview.validation_errors == ()
+        assert preview.warnings == (
+            'Control roles from the file\'s "Control State" column differ from the '
+            "protocol layout on 3 wells.",
+        )
+
+    @pytest.mark.asyncio
+    async def test_repreview_without_the_role_column_counts_the_layout(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(
+            run=run,
+            protocol=protocol,
+            store=store,
+            batches_by_ref={"LG-1": FakeBatch()},
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id, well_role=None),
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        (plate,) = preview.plates
+        # Layout: A1 positive, A2 negative; A4 (no compound, no layout entry) unclassified.
+        assert (
+            plate.sample_count,
+            plate.positive_count,
+            plate.negative_count,
+            plate.reference_count,
+            plate.blank_count,
+        ) == (2, 1, 1, 0, 1)
+        assert preview.warnings == ()
+
+    @pytest.mark.asyncio
+    async def test_unknown_role_values_block_the_preview(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        csv = _ROLE_CSV.replace(b"P1,A4,blank", b"P1,A4,vehicle")
+        uc, _ = _build_preview_uc(
+            run=run,
+            batches_by_ref={"LG-1": FakeBatch()},
+            protocol=protocol,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        errors = result.unwrap().validation_errors
+        assert len(errors) == 1
+        assert '"Control State"' in errors[0] and '"vehicle"' in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_import_writes_the_file_roles_and_keeps_controls_without_a_compound(
+        self,
+    ) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            save_bulk=saved,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(rd_id),
+            ),
+            auth=auth,
+        )
+        out = result.unwrap()
+        types = {f"{w.row}{w.column}": w.well_type for w in run.wells}
+        assert types == {
+            "A1": WellType.NEGATIVE_CONTROL,
+            "A2": WellType.POSITIVE_CONTROL,
+            "A3": WellType.SAMPLE,
+            "A4": WellType.BLANK,
+            "H12": WellType.SAMPLE,
+        }
+        assert (out.controls_from_file, out.controls_from_template) == (3, 0)
+        assert out.controls_unclassified == 0
+        assert out.values_inserted == 5 and len(saved) == 5
+
+    @pytest.mark.asyncio
+    async def test_roles_from_the_file_need_no_protocol_layout(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        )
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref={"LG-1": FakeBatch()}, store=store
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        assert result.unwrap().controls_from_file == 3
+
+    @pytest.mark.asyncio
+    async def test_import_refuses_unknown_role_values(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV.replace(b"P1,A4,blank", b"P1,A4,vehicle"),
+            filename="x.csv",
+        )
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        assert '"vehicle"' in str(result.failure())
+        assert not uow.committed and run.wells == []

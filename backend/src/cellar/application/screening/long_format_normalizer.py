@@ -12,9 +12,11 @@ This module contains no I/O. It does:
        - well-position canonicalization (``A01`` ↔ ``A1``)
        - per-plate format inference (96 / 384 / 1536)
 
-Well-type classification is NOT done here — the importer derives WellType
-from the protocol's configured ``control_layouts`` (PlateTemplate.template_map)
-since the file format itself can't distinguish positive from negative controls.
+Well roles: when the file carries a role column ("Control State", "Well
+Type", …) and it is mapped, each row's ``well_role`` is read from it and the
+importer writes that role. Otherwise ``well_role`` stays ``None`` and the
+importer derives WellType from the protocol's ``control_layouts``
+(PlateTemplate.template_map).
 """
 
 from __future__ import annotations
@@ -30,7 +32,7 @@ from typing import Literal
 from returns.result import Failure, Result, Success
 
 from cellar.application.shared.parsers import ParsedTable
-from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.enums import PlateFormat, WellType
 from cellar.domain.shared.errors import DomainError, ValidationError
 
 # ---------------------------------------------------------------------------
@@ -44,6 +46,7 @@ Role = Literal[
     "batch_ref",
     "compound_ref",
     "readout",
+    "well_role",
 ]
 
 Confidence = Literal["high", "medium", "low"]
@@ -84,6 +87,8 @@ class ColumnMapping:
     batch_ref: str | None = None
     compound_ref: str | None = None
     readout_columns: tuple[ReadoutColumn, ...] = ()
+    # The file's per-well role column; when set it decides every well's role.
+    well_role: str | None = None
 
 
 @dataclass(frozen=True)
@@ -160,6 +165,9 @@ class LongFormatRow:
     compound_ref: str | None
     concentration: float | None
     readouts: dict[uuid.UUID, float | str]
+    # From the mapped role column (empty cell = sample). None when no role
+    # column is mapped, or the cell holds a value we do not know.
+    well_role: WellType | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +177,9 @@ class NormalizedTable:
     rows: tuple[LongFormatRow, ...]
     plate_formats: dict[str, PlateFormat]
     skipped_rows: int = 0
+    # Role-column values no WellType matches — the import refuses until they
+    # are fixed (never read as samples). First spelling of each, in file order.
+    unknown_well_roles: tuple[str, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -262,7 +273,34 @@ _SYNONYMS: dict[Role, frozenset[str]] = {
             )
         ]
     ),
+    "well_role": frozenset(
+        [_norm(x) for x in ("control state", "well type", "well role", "control")]
+    ),
 }
+
+# Role-column values, compared after ``_norm``. Empty = a sample.
+_WELL_ROLE_VALUES: dict[str, WellType] = {
+    _norm(k): v
+    for k, v in (
+        ("", WellType.SAMPLE),
+        ("sample", WellType.SAMPLE),
+        ("compound", WellType.SAMPLE),
+        ("negative control", WellType.NEGATIVE_CONTROL),
+        ("positive control", WellType.POSITIVE_CONTROL),
+        ("positive control (hit)", WellType.POSITIVE_CONTROL),
+        ("reference", WellType.REFERENCE),
+        ("reference molecule", WellType.REFERENCE),
+        ("blank", WellType.BLANK),
+    )
+}
+
+
+def unknown_well_roles_message(header: str, values: Sequence[str]) -> str:
+    listed = ", ".join(f'"{v}"' for v in values)
+    return (
+        f'Unknown values in the "{header}" column: {listed}. Use negative control, '
+        "positive control, reference or blank, or leave the cell empty for a sample."
+    )
 
 
 _WELL_RE = re.compile(r"^[A-Z]{1,2}\d{1,2}$", re.IGNORECASE)
@@ -451,6 +489,7 @@ def normalize(
         mapping.concentration,
         mapping.batch_ref,
         mapping.compound_ref,
+        mapping.well_role,
     ):
         if col is not None and col not in table.headers:
             return Failure(ValidationError(f"Column '{col}' not found in file headers"))
@@ -462,6 +501,7 @@ def normalize(
 
     rows: list[LongFormatRow] = []
     skipped = 0
+    unknown_roles: dict[str, str] = {}  # _norm(value) -> first spelling
     for raw in table.iter_rows():
         well_str = (raw.get(mapping.well) or "").strip()
         if not well_str:
@@ -488,6 +528,13 @@ def normalize(
 
         conc = _parse_float(raw.get(mapping.concentration)) if mapping.concentration else None
 
+        well_role: WellType | None = None
+        if mapping.well_role:
+            role_cell = (raw.get(mapping.well_role) or "").strip()
+            well_role = _WELL_ROLE_VALUES.get(_norm(role_cell))
+            if well_role is None:
+                unknown_roles.setdefault(_norm(role_cell), role_cell)
+
         readouts: dict[uuid.UUID, float | str] = {}
         for rc in mapping.readout_columns:
             cell = raw.get(rc.header)
@@ -511,6 +558,7 @@ def normalize(
                 compound_ref=compound_ref,
                 concentration=conc,
                 readouts=readouts,
+                well_role=well_role,
             )
         )
 
@@ -523,6 +571,7 @@ def normalize(
             rows=tuple(rows),
             plate_formats=plate_formats,
             skipped_rows=skipped,
+            unknown_well_roles=tuple(unknown_roles.values()),
         )
     )
 

@@ -46,8 +46,9 @@ from cellar.application.screening.import_run_file_preview_store import (
     _StoredPreview,
 )
 from cellar.application.screening.import_run_file_validator import (
+    _layout_disagreement_warning,
     _load_templates_by_format,
-    _validate_controls_required,
+    _validate_well_roles,
 )
 from cellar.application.screening.long_format_normalizer import (
     NormalizedTable,
@@ -70,6 +71,7 @@ from cellar.domain.screening_assay.repository import (
     ReadoutDataRepository,
     RunRepository,
 )
+from cellar.domain.shared.enums import PlateFormat, WellType
 from cellar.domain.shared.errors import (
     DomainError,
     NotFoundError,
@@ -192,13 +194,14 @@ class PreviewRunFile:
         well_conflicts: list[WellConflict] = []
         readout_conflicts: list[ReadoutConflict] = []
         auto_created_batches = 0
+        warnings: tuple[str, ...] = ()
 
         if guessed is not None:
             normalized = normalize(table, guessed)
             if isinstance(normalized, Success):
                 norm: NormalizedTable = normalized.unwrap()
-                plates = _summarize_plates(norm.rows, norm.plate_formats)
                 rows_skipped = norm.skipped_rows
+                templates_by_format: dict[PlateFormat, dict[str, WellType]] = {}
 
                 # Build both indexes, then run the resolver. Dry-run only
                 # — no overrides at preview time.
@@ -265,8 +268,8 @@ class PreviewRunFile:
                         input.workspace_id,
                         self._plate_template_repo,
                     )
-                    validation_errors = _validate_controls_required(
-                        protocol, norm.plate_formats, templates_by_format
+                    validation_errors = _validate_well_roles(
+                        protocol, norm, guessed, templates_by_format
                     )
 
                     # Conflict scan against existing run state. Uses a
@@ -291,6 +294,8 @@ class PreviewRunFile:
                     values_to_insert = plan.create_readout_count
                     well_conflicts = plan.well_conflicts
                     readout_conflicts = plan.readout_conflicts
+                    warnings = _layout_disagreement_warning(guessed, plan.layout_disagreements)
+                plates = _summarize_plates(norm.rows, norm.plate_formats, templates_by_format)
 
         preview_id = uuid.uuid4()
         ttl = getattr(self._store, "ttl_seconds", 60.0)
@@ -332,6 +337,7 @@ class PreviewRunFile:
                 errors=errors,
                 rows_skipped=rows_skipped,
                 auto_created_batches=auto_created_batches,
+                warnings=warnings,
             )
         )
 
@@ -438,7 +444,6 @@ class RepreviewRunFile:
             return normalized
         norm: NormalizedTable = normalized.unwrap()
 
-        plates = _summarize_plates(norm.rows, norm.plate_formats)
         batch_index = await _build_batch_lookup(norm.rows, input.workspace_id, self._batch_repo)
         compound_index = await _build_compound_index(
             norm.rows,
@@ -456,6 +461,8 @@ class RepreviewRunFile:
         values_to_insert = 0
         well_conflicts: list[WellConflict] = []
         readout_conflicts: list[ReadoutConflict] = []
+        warnings: tuple[str, ...] = ()
+        templates_by_format: dict[PlateFormat, dict[str, WellType]] = {}
 
         if protocol is not None:
             templates_by_format = await _load_templates_by_format(
@@ -464,8 +471,8 @@ class RepreviewRunFile:
                 input.workspace_id,
                 self._plate_template_repo,
             )
-            validation_errors = _validate_controls_required(
-                protocol, norm.plate_formats, templates_by_format
+            validation_errors = _validate_well_roles(
+                protocol, norm, input.mapping, templates_by_format
             )
             existing_readouts = await self._readout_data_repo.find_by_run(
                 input.workspace_id, run.id
@@ -482,7 +489,9 @@ class RepreviewRunFile:
             values_to_insert = plan.create_readout_count
             well_conflicts = plan.well_conflicts
             readout_conflicts = plan.readout_conflicts
+            warnings = _layout_disagreement_warning(input.mapping, plan.layout_disagreements)
 
+        plates = _summarize_plates(norm.rows, norm.plate_formats, templates_by_format)
         ambiguous_dto = tuple(_to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds)
 
         sample = tuple(
@@ -512,5 +521,6 @@ class RepreviewRunFile:
                 ambiguous_compounds=ambiguous_dto,
                 errors=_conflict_errors(resolutions),
                 rows_skipped=norm.skipped_rows,
+                warnings=warnings,
             )
         )

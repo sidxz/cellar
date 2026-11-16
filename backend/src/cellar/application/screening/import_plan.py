@@ -24,6 +24,7 @@ from cellar.application.inventory.plate_reference import resolve_plate_reference
 from cellar.application.inventory.plate_visibility import PlateVisibilityService
 from cellar.application.screening.compound_ref_resolver import Resolutions
 from cellar.application.screening.long_format_normalizer import (
+    LongFormatRow,
     NormalizedTable,
     WellPosition,
 )
@@ -96,7 +97,10 @@ class _ImportPlan:
     readout_conflicts: list[ReadoutConflict] = field(default_factory=list)
     pick_list_violations: list[str] = field(default_factory=list)
     controls_from_template: int = 0
+    controls_from_file: int = 0
     controls_unclassified: int = 0
+    # Wells whose role from the file's role column differs from the protocol layout.
+    layout_disagreements: int = 0
     create_plate_count: int = 0
     create_well_count: int = 0
     create_readout_count: int = 0
@@ -175,18 +179,22 @@ def _scan_conflicts(
             continue  # defensive; plate_formats covered all names
         plate_format = normalized.plate_formats.get(row.plate_name)
 
-        # Classify well type from template (canonical) else from data.
         per_well = templates_by_format.get(plate_format) if plate_format is not None else None
-        tmpl_type = per_well.get(_well_key(row.well)) if per_well else None
-        if tmpl_type is not None:
-            file_well_type = tmpl_type
-            if tmpl_type != WellType.SAMPLE:
-                plan.controls_from_template += 1
-        elif row.batch_ref or row.compound_ref or row.concentration is not None:
-            file_well_type = WellType.SAMPLE
-        else:
-            file_well_type = WellType.SAMPLE
+        role = _row_role(row, per_well)
+        file_well_type = role or WellType.SAMPLE
+        if role is None:
             plan.controls_unclassified += 1
+        elif role != WellType.SAMPLE:
+            if row.well_role is not None:
+                plan.controls_from_file += 1
+            else:
+                plan.controls_from_template += 1
+        if (
+            row.well_role is not None
+            and per_well
+            and per_well.get(_well_key(row.well), WellType.SAMPLE) != row.well_role
+        ):
+            plan.layout_disagreements += 1
 
         # Apply the resolver's per-row decision.
         file_batch_id: uuid.UUID | None = None
@@ -363,3 +371,20 @@ def _well_metadata_mismatch(
 
 def _well_key(well: WellPosition) -> str:
     return f"{well.row}{well.column}"
+
+
+def _row_role(row: LongFormatRow, per_well: dict[str, WellType] | None) -> WellType | None:
+    """The role a row's well is written with.
+
+    The file's role column when mapped, else the protocol layout, else a sample
+    when the row names a compound or a dose. ``None`` = nothing says what the
+    well is: it is written as a sample and counted as unclassified.
+    """
+    if row.well_role is not None:
+        return row.well_role
+    layout = per_well.get(_well_key(row.well)) if per_well else None
+    if layout is not None:
+        return layout
+    if row.batch_ref or row.compound_ref or row.concentration is not None:
+        return WellType.SAMPLE
+    return None

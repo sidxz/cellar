@@ -45,8 +45,12 @@ class PlatePreview:
     plate_name: str
     plate_format: str
     well_count: int
+    # Wells by role, as the import would write them.
     sample_count: int
     blank_count: int
+    positive_count: int = 0
+    negative_count: int = 0
+    reference_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -104,6 +108,8 @@ class PreviewRunFileResult:
     # Number of placeholder batches auto-created during this preview pass.
     # Always 0 when auto_create_unmatched_batches=False on the query.
     auto_created_batches: int = 0
+    # Non-blocking notes, e.g. file roles that differ from the protocol layout.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -148,6 +154,7 @@ class ImportRunFileResult:
     unmatched_batch_refs: list[str] = field(default_factory=list)
     unmatched_compound_refs: list[str] = field(default_factory=list)
     controls_from_template: int = 0
+    controls_from_file: int = 0
     controls_unclassified: int = 0
     # Rows dropped at normalization (no parseable well). Same meaning as on preview.
     rows_skipped: int = 0

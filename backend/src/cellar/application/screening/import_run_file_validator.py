@@ -15,12 +15,20 @@ Two layers:
   PERCENT_ACTIVATION / PERCENT_CONTROL / Z_SCORE) requires a control
   layout for every plate format used in the file; missing layouts
   become user-visible validation errors.
+- ``_validate_well_roles`` — the gate the importer runs: the layout check
+  above when roles come from the protocol, the role-value check when they
+  come from the file's role column.
 """
 
 from __future__ import annotations
 
 import uuid
 
+from cellar.application.screening.long_format_normalizer import (
+    ColumnMapping,
+    NormalizedTable,
+    unknown_well_roles_message,
+)
 from cellar.domain.screening_assay.enums import ReadoutNormalization, WellType
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
@@ -110,3 +118,32 @@ def _validate_controls_required(
                 f"protocol's Design tab."
             )
     return errors
+
+
+def _validate_well_roles(
+    protocol: AssayProtocol,
+    normalized: NormalizedTable,
+    mapping: ColumnMapping,
+    templates: dict[PlateFormat, dict[str, WellType]],
+) -> list[str]:
+    """Blocking errors about where the wells' roles come from.
+
+    With the file's role column mapped, the file supplies every role: the
+    protocol needs no control layout, but every value must be one we know.
+    Without it, the protocol layout must cover the file's plate formats.
+    """
+    if mapping.well_role is None:
+        return _validate_controls_required(protocol, normalized.plate_formats, templates)
+    if normalized.unknown_well_roles:
+        return [unknown_well_roles_message(mapping.well_role, normalized.unknown_well_roles)]
+    return []
+
+
+def _layout_disagreement_warning(mapping: ColumnMapping, wells: int) -> tuple[str, ...]:
+    """Non-blocking note when the file's roles differ from the protocol layout."""
+    if mapping.well_role is None or wells == 0:
+        return ()
+    return (
+        f'Control roles from the file\'s "{mapping.well_role}" column differ from the '
+        f"protocol layout on {wells} well{'' if wells == 1 else 's'}.",
+    )

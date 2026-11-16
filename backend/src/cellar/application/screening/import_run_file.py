@@ -89,7 +89,7 @@ from cellar.application.screening.import_run_file_preview_store import (
 )
 from cellar.application.screening.import_run_file_validator import (
     _load_templates_by_format,
-    _validate_controls_required,
+    _validate_well_roles,
 )
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -286,6 +286,7 @@ class ImportRunFile:
             batch_ref=cmd.mapping.batch_ref,
             compound_ref=cmd.mapping.compound_ref,
             readout_columns=tuple(typed_readouts),
+            well_role=cmd.mapping.well_role,
         )
 
         # 4. Normalize.
@@ -294,15 +295,16 @@ class ImportRunFile:
             return normalized_result
         normalized: NormalizedTable = normalized_result.unwrap()
 
-        # 5. Pre-flight: control-layout coverage.
+        # 5. Pre-flight: control-layout coverage, or known values in the
+        # file's role column when it supplies the roles.
         templates_by_format = await _load_templates_by_format(
             protocol,
             normalized.plate_formats,
             cmd.workspace_id,
             self._plate_template_repo,
         )
-        control_errors = _validate_controls_required(
-            protocol, normalized.plate_formats, templates_by_format
+        control_errors = _validate_well_roles(
+            protocol, normalized, typed_mapping, templates_by_format
         )
         if control_errors:
             return Failure(ValidationError("; ".join(control_errors)))
@@ -426,6 +428,7 @@ class ImportRunFile:
             well_conflicts=list(plan.well_conflicts),
             readout_conflicts=list(plan.readout_conflicts),
             controls_from_template=plan.controls_from_template,
+            controls_from_file=plan.controls_from_file,
             controls_unclassified=plan.controls_unclassified,
             matched_compound_count=resolutions.matched_compound_count,
             unmatched_batch_refs=sorted(resolutions.unmatched_batch_refs),

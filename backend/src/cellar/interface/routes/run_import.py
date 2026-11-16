@@ -160,7 +160,12 @@ class PlatePreviewModel(BaseModel):
     plate_name: str
     plate_format: str
     well_count: int
+    # Wells by role, as the import would write them (file role column, else
+    # the protocol layout; a well nothing classifies counts as a blank).
     sample_count: int
+    positive_count: int
+    negative_count: int
+    reference_count: int
     blank_count: int
 
 
@@ -215,6 +220,8 @@ class PreviewRunFileResponse(ImportForecastModel):
     # auto_create_unmatched_batches=True is passed to the import step.
     # Always 0 when the preview query doesn't set that flag.
     auto_created_batches: int = 0
+    # Non-blocking notes, e.g. the file's well roles differ from the protocol layout.
+    warnings: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -267,7 +274,24 @@ class ColumnMappingRequest(BaseModel):
     concentration: str | None = None
     batch_ref: str | None = None
     compound_ref: str | None = None
+    # The file's per-well role column ("Control State"); when set it decides
+    # every well's role instead of the protocol's control layout.
+    well_role: str | None = None
     readout_columns: list[ReadoutColumnRequest] = Field(default_factory=list)
+
+    def to_domain(self) -> ColumnMapping:
+        return ColumnMapping(
+            well=self.well,
+            plate_name=self.plate_name,
+            concentration=self.concentration,
+            batch_ref=self.batch_ref,
+            compound_ref=self.compound_ref,
+            well_role=self.well_role,
+            readout_columns=tuple(
+                ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
+                for rc in self.readout_columns
+            ),
+        )
 
 
 class RepreviewRunFileRequest(BaseModel):
@@ -296,6 +320,9 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
                 plate_format=p.plate_format,
                 well_count=p.well_count,
                 sample_count=p.sample_count,
+                positive_count=p.positive_count,
+                negative_count=p.negative_count,
+                reference_count=p.reference_count,
                 blank_count=p.blank_count,
             )
             for p in preview.plates
@@ -350,6 +377,7 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
         errors=_row_errors(list(preview.errors)),
         rows_skipped=preview.rows_skipped,
         auto_created_batches=preview.auto_created_batches,
+        warnings=list(preview.warnings),
     )
 
 
@@ -371,17 +399,7 @@ async def repreview_run_file(
     is reused without re-uploading the file; the response shape mirrors
     ``preview_run_file`` so the wizard can swap state in place.
     """
-    mapping = ColumnMapping(
-        well=body.mapping.well,
-        plate_name=body.mapping.plate_name,
-        concentration=body.mapping.concentration,
-        batch_ref=body.mapping.batch_ref,
-        compound_ref=body.mapping.compound_ref,
-        readout_columns=tuple(
-            ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
-            for rc in body.mapping.readout_columns
-        ),
-    )
+    mapping = body.mapping.to_domain()
     query = RepreviewRunFileQuery(
         workspace_id=auth.workspace_id,
         run_id=run_id,
@@ -423,6 +441,7 @@ class ImportRunFileResponse(ImportResultModel):
     plates_created: int
     wells_created: int
     controls_from_template: int
+    controls_from_file: int
     controls_unclassified: int
     well_conflicts: list[WellConflictModel] = Field(default_factory=list)
     readout_conflicts: list[ReadoutConflictModel] = Field(default_factory=list)
@@ -445,17 +464,7 @@ async def import_run_file(
     uc: ImportRunFileDep,
 ) -> ImportRunFileResponse:
     """Persist a previously-previewed long-format run file to the run."""
-    mapping = ColumnMapping(
-        well=body.mapping.well,
-        plate_name=body.mapping.plate_name,
-        concentration=body.mapping.concentration,
-        batch_ref=body.mapping.batch_ref,
-        compound_ref=body.mapping.compound_ref,
-        readout_columns=tuple(
-            ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
-            for rc in body.mapping.readout_columns
-        ),
-    )
+    mapping = body.mapping.to_domain()
     overrides = {o.molecule_id: o.batch_id for o in body.compound_batch_overrides}
     cmd = ImportRunFileCommand(
         workspace_id=auth.workspace_id,
@@ -477,6 +486,7 @@ async def import_run_file(
         unmatched_batch_refs=out.unmatched_batch_refs,
         unmatched_compound_refs=out.unmatched_compound_refs,
         controls_from_template=out.controls_from_template,
+        controls_from_file=out.controls_from_file,
         controls_unclassified=out.controls_unclassified,
         rows_skipped=out.rows_skipped,
         well_conflicts=[
