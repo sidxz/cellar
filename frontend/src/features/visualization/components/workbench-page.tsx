@@ -85,7 +85,8 @@ function Workbench({ source }: { source: DatasetSource }) {
     );
   } else if (query.isPending) {
     body = <LoadingSkeleton />;
-  } else if (query.isError) {
+  } else if (query.isError && !ds) {
+    // A failed refetch keeps the data already on screen; only a first load fails here.
     body = (
       <EmptyState
         icon={AlertTriangle}
@@ -112,7 +113,9 @@ function Workbench({ source }: { source: DatasetSource }) {
           {body}
         </>
       ) : (
-        <WorkbenchProvider key={ds.revision} initialPanels={initialPanels(ds)}>
+        // Keyed by the source, not the data revision: new data for the same source never
+        // resets the chemist's plots, filters, selection or history.
+        <WorkbenchProvider key={sourceKey(source)} initialPanels={initialPanels(ds)}>
           <WorkbenchHeader
             source={source}
             ds={ds}
@@ -159,6 +162,8 @@ function Workbench({ source }: { source: DatasetSource }) {
     </div>
   );
 }
+
+const sourceKey = (source: DatasetSource) => JSON.stringify(source);
 
 // The provider reads this once (its store is created on mount), so the ids made here stick.
 const initialPanels = (ds: Dataset) => defaultPanels(ds).map((p) => makePanel(p.type, p.defaults));

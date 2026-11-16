@@ -26,7 +26,11 @@ export function useDataset(source: DatasetSource | null, level: Level) {
         method: "POST",
         data: toRequest(source as DatasetSource, level),
       }),
-    staleTime: 60_000,
+    // A dataset is large and the chemist is mid-analysis: fetch it once per source, never
+    // again behind their back (window focus, reconnect). Reopening the workbench reloads it.
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
     retry: false,
   });
 }

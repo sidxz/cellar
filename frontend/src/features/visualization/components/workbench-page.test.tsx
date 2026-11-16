@@ -161,4 +161,22 @@ describe("WorkbenchPage", () => {
     fireEvent.keyDown(min, { key: "Enter" });
     expect(screen.getByText("2 / 3 wells · 1 compound")).toBeInTheDocument();
   });
+
+  it("keeps the workbench on screen when a background refetch fails", () => {
+    const { rerender } = render(<WorkbenchPage source={{ kind: "run", runId: R1 }} />);
+    state.query = { ...ready(dataset()), isError: true, error: new Error("Network error") };
+    rerender(<WorkbenchPage source={{ kind: "run", runId: R1 }} />);
+    expect(screen.queryByText("Couldn't load the data")).not.toBeInTheDocument();
+    expect(screen.getByText("3 / 3 wells · 2 compounds")).toBeInTheDocument();
+  });
+
+  it("keeps the chemist's plots, filters and history when new data arrives", () => {
+    const { rerender } = render(<WorkbenchPage source={{ kind: "run", runId: R1 }} />);
+    fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+    fireEvent.click(screen.getByRole("option", { name: "rd:s:raw" }));
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    state.query = ready({ ...dataset(), revision: "rev-2" });
+    rerender(<WorkbenchPage source={{ kind: "run", runId: R1 }} />);
+    expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+  });
 });
