@@ -5,7 +5,17 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { VISUALIZATION_DATASET_KEY } from "@/features/visualization/hooks/query-keys";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { FlagOutliersRequest, FlagOutliersResponse } from "@/shared/lib/api/model";
-import { DOSE_RESPONSE_KEY, READOUT_DATA_KEY, RUNS_KEY, RUN_KEY } from "./query-keys";
+import {
+  COMPOUND_CURVES_KEY,
+  DOSE_RESPONSE_KEY,
+  MELTING_ANALYSIS_KEY,
+  MULTI_COMPOUND_CURVES_KEY,
+  PLATE_MAP_KEY,
+  PROTOCOL_ACTIVITY_KEY,
+  READOUT_DATA_KEY,
+  RUNS_KEY,
+  RUN_KEY,
+} from "./query-keys";
 
 export type FlagOutliersInput = FlagOutliersRequest & { runId: string };
 
@@ -20,12 +30,17 @@ export function useFlagOutliers() {
         method: "POST",
         data: body,
       }),
-    // Values, curves, the run's plate QC, the protocol's plate-QC averages and any
-    // workbench dataset holding the run all move.
+    // As after a recompute: values, curves, compound activity, the run's plate QC, the
+    // protocol's plate-QC averages and any workbench dataset holding the run all move.
     onSuccess: (_, { runId }) => {
       for (const queryKey of [
         READOUT_DATA_KEY,
+        PLATE_MAP_KEY,
         DOSE_RESPONSE_KEY,
+        COMPOUND_CURVES_KEY,
+        MULTI_COMPOUND_CURVES_KEY,
+        PROTOCOL_ACTIVITY_KEY,
+        MELTING_ANALYSIS_KEY,
         RUNS_KEY,
         [...RUN_KEY, runId],
         VISUALIZATION_DATASET_KEY,
