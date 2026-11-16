@@ -168,7 +168,8 @@ export function panelNote(lack: string | null, censored: number): string | null 
 /** Hairline between bars and around box points: the card surface of the theme. */
 export const edgeColor = (dark: boolean) => (dark ? "#1e293b" : "#ffffff");
 
-/** Layout keys every panel shares; ``uirevision`` per panel keeps zoom across redraws. */
+/** Layout keys every panel shares; ``uirevision`` per panel keeps zoom across redraws.
+ * The legend sits under the plot: the modebar takes the top-right corner on hover. */
 export function baseLayout(panelId: string): Record<string, unknown> {
   return {
     autosize: true,
@@ -177,7 +178,7 @@ export function baseLayout(panelId: string): Record<string, unknown> {
     plot_bgcolor: "transparent",
     font: { color: CHART_AXIS.tick, size: 11 },
     margin: { l: 56, r: 12, t: 32, b: 44 },
-    legend: { orientation: "h", x: 1, xanchor: "right", y: 1, yanchor: "top", yref: "container" },
+    legend: { orientation: "h", x: 0, xanchor: "left", y: 0, yanchor: "bottom", yref: "container" },
   };
 }
 

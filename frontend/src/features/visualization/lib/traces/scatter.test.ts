@@ -107,6 +107,12 @@ describe("buildScatterFigure", () => {
     expect(fig.layout.legend).toMatchObject({ title: { text: "Signal" } });
   });
 
+  it("puts the legend below the plot, clear of the modebar in the top-right corner", () => {
+    const ds = dataset({ well_order: [1, 2], y: [1, 2], well_type: ["sample", "neg_ctrl"] });
+    const fig = buildScatterFigure(ds, panel({ colorBy: "well_type" }), pass(2), NONE);
+    expect(fig.layout.legend).toMatchObject({ y: 0, yanchor: "bottom", yref: "container" });
+  });
+
   it("sizes points by a numeric field and adds tooltip fields to the hover", () => {
     const ds = dataset({ well_order: [1, 2], y: [10, 30], plate: ["Plate 1", "Plate 2"] });
     const fig = buildScatterFigure(ds, panel({ sizeBy: "y", tooltip: ["plate"] }), pass(2), NONE);
