@@ -152,7 +152,13 @@ describe("DerivedColumnsBar", () => {
 
   it("disables the plot button with four plots open", () => {
     const set = setFor(clusters, ["m1", "m2", "m3"], { summary: "2 clusters" });
-    renderBar([entry(clusters, { status: "ready", set })], true);
-    expect(screen.getByRole("button", { name: "Show map" })).toBeDisabled();
+    const h = renderBar([entry(clusters, { status: "ready", set })], true);
+    const button = screen.getByRole("button", { name: "Show map" });
+    // Unavailable but reachable by keyboard, so its reason can be read.
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toBeEnabled();
+    expect(button).toHaveAccessibleDescription("Up to 4 plots — close one to add another");
+    fireEvent.click(button);
+    expect(h.onPlot).not.toHaveBeenCalled();
   });
 });

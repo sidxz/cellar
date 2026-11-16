@@ -152,18 +152,17 @@ function Line({
             </>
           )}
           {plot && (
-            // A disabled button shows no tooltip of its own; the wrapper carries the reason.
-            <span title={plotsFull ? "Up to 4 plots — close one to add another" : undefined}>
-              <Button
-                size="sm"
-                variant="outline"
-                className={btn}
-                disabled={plotsFull}
-                onClick={() => onPlot?.(id)}
-              >
-                {plot}
-              </Button>
-            </span>
+            <Button
+              size="sm"
+              variant="outline"
+              className={btn}
+              // Unavailable yet focusable, so the title says why to keyboard users too.
+              aria-disabled={plotsFull}
+              title={plotsFull ? "Up to 4 plots — close one to add another" : undefined}
+              onClick={() => !plotsFull && onPlot?.(id)}
+            >
+              {plot}
+            </Button>
           )}
         </>
       )}
