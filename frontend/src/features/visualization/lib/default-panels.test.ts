@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
 import { crossProtocol, pColumn } from "./cross-protocol-fixture";
-import { defaultPanels, panelDefaults, retypePanel } from "./default-panels";
+import { defaultPanels, numericValueColumn, panelDefaults, retypePanel } from "./default-panels";
 import { panel, provenanceOf } from "./traces/test-fixtures";
 
 const col = (key: string, kind: DatasetColumn["kind"]): DatasetColumn => ({
@@ -43,6 +43,46 @@ describe("defaultPanels", () => {
         },
       },
     ]);
+  });
+
+  it("plots a readout's normalized layer, not its raw one, when the dataset has one", () => {
+    const d = ds(
+      [
+        col("plate", "category"),
+        col("well_type", "category"),
+        col("well_order", "number"),
+        col("rd:aux:raw", "number"),
+        col("rd:sig:raw", "number"),
+        col("rd:sig:percent_inhibition", "number"),
+        col("rd:sig:z_score", "number"),
+      ],
+      { well_order: [1, 2] },
+    );
+    expect(defaultPanels(d)[0].defaults).toMatchObject({
+      x: "well_order",
+      y: "rd:sig:percent_inhibition",
+    });
+    expect(panelDefaults(d, "histogram").x).toBe("rd:sig:percent_inhibition");
+    expect(panelDefaults(d, "box").y).toBe("rd:sig:percent_inhibition");
+    expect(numericValueColumn(d)?.key).toBe("rd:sig:percent_inhibition");
+  });
+
+  it("keeps a potency first at aggregated levels, else takes the normalized mean", () => {
+    const of = (key: string, layer: string | undefined, aggregation: string): DatasetColumn => ({
+      key,
+      label: key,
+      kind: "number",
+      provenance: { readout_definition_id: key.split(":")[1], layer, aggregation },
+    });
+    const compounds = (columns: DatasetColumn[]): Dataset => ({
+      ...ds(columns),
+      level: "compounds",
+    });
+    const raw = of("rd:sig:raw", "raw", "mean");
+    const pct = of("rd:sig:percent_control", "percent_control", "mean");
+    expect(panelDefaults(compounds([raw, pct]), "histogram").x).toBe("rd:sig:percent_control");
+    const ic50 = of("dr:ic:fit", undefined, "geomean");
+    expect(panelDefaults(compounds([ic50, raw, pct]), "histogram").x).toBe("dr:ic:fit");
   });
 
   it("opens summary-only runs (no well positions) on a histogram of the first value", () => {
