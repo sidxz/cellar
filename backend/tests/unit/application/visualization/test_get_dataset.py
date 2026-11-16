@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 import uuid
 from datetime import UTC, date, datetime
 
@@ -130,6 +131,32 @@ async def test_protocol_source_with_a_run_subset():
     result = await GetVisualizationDataset(reader)(q, auth=FakeAuth(workspace_id=WS))
     assert isinstance(result, Success)
     assert reader.fetched == [B]
+
+
+async def test_repeated_run_ids_load_the_run_once():
+    reader = _reader()
+    q = GetVisualizationDatasetQuery(
+        workspace_id=WS, source=ProtocolSource(protocol_id=P, run_ids=(B, A, B)), level="wells"
+    )
+    result = await GetVisualizationDataset(reader)(q, auth=FakeAuth(workspace_id=WS))
+    assert reader.fetched == [B, A]
+    assert len(result.unwrap().row_ids) == 2
+
+
+async def test_dataset_is_built_off_the_event_loop_thread(monkeypatch):
+    from cellar.application.visualization import get_dataset
+
+    threads: list[int] = []
+    real = get_dataset.build_wells_dataset
+
+    def spy(*args):
+        threads.append(threading.get_ident())
+        return real(*args)
+
+    monkeypatch.setattr(get_dataset, "build_wells_dataset", spy)
+    q = GetVisualizationDatasetQuery(workspace_id=WS, source=RunSource(run_id=A), level="wells")
+    await GetVisualizationDataset(_reader())(q, auth=FakeAuth(workspace_id=WS))
+    assert threads and threads[0] != threading.get_ident()
 
 
 async def test_run_source():

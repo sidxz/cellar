@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass
 from typing import Literal
@@ -55,10 +56,11 @@ class GetVisualizationDataset:
         if source.run_ids is None:
             return runs
         by_id = {r.id: r for r in runs}
-        missing = [rid for rid in source.run_ids if rid not in by_id]
+        run_ids = list(dict.fromkeys(source.run_ids))
+        missing = [rid for rid in run_ids if rid not in by_id]
         if missing:
             return NotFoundError("Run", str(missing[0]))
-        return [by_id[rid] for rid in source.run_ids]
+        return [by_id[rid] for rid in run_ids]
 
     async def __call__(
         self, input: GetVisualizationDatasetQuery, auth: AuthContext | None = None
@@ -82,7 +84,8 @@ class GetVisualizationDataset:
 
         defs = await self._reader.readout_definitions(ws, sorted({r.protocol_id for r in runs}))
         rows = await self._reader.fetch_well_values(ws, run_ids)
-        dataset = build_wells_dataset(runs, defs, rows)
+        # About 1 s of pure CPU at the row cap: keep it off the event loop.
+        dataset = await asyncio.to_thread(build_wells_dataset, runs, defs, rows)
         if len(dataset.columns) > MAX_DATASET_COLUMNS:
             return Failure(
                 ValidationError(
