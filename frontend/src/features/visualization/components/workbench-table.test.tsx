@@ -1,7 +1,7 @@
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { type ReactNode, createRef, useEffect } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { crossProtocol } from "../lib/cross-protocol-fixture";
 import type { Filter } from "../lib/filters";
 import { provenanceOf } from "../lib/traces/test-fixtures";
@@ -394,7 +394,8 @@ describe("WorkbenchTable", () => {
   it("pages from the toolbar too, in step with the pager below", async () => {
     show([], { table: many(250) });
     await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
-    const pages = screen.getByRole("group", { name: "Pages" });
+    // The toolbar learns the page count a render after the grid's own pager.
+    const pages = await screen.findByRole("group", { name: "Pages" });
     expect(pages).toHaveTextContent("Page 1 of 3");
     expect(within(pages).getByRole("button", { name: "Previous page" })).toBeDisabled();
     fireEvent.click(within(pages).getByRole("button", { name: "Next page" }));
@@ -638,6 +639,59 @@ describe("WorkbenchTable", () => {
     ]);
     // Before the first row: back to the last column's header.
     expect(tab(true)?.closest(".ag-header-cell")?.getAttribute("col-id")).toBe("mw");
+  });
+
+  it("tabs through the controls of columns beyond the visible width, row by row", async () => {
+    // A table wider than its viewport: ten descriptors, then one more value at the far right.
+    const tail = { ...mean, readout_definition_id: "t" };
+    const wideCompounds: Dataset = {
+      ...compounds,
+      columns: [
+        ...compounds.columns.filter((c) => c.key !== "mw"),
+        ...Array.from({ length: 10 }, (_, k) => col(`d${k}`, "number", { group: "Descriptors" })),
+        col("rd:t:raw", "number", { label: "Tail (%)", group: "Tail", provenance: tail }),
+        col("rd:t:raw:n", "number", {
+          label: "Tail (%) n",
+          group: "Tail",
+          provenance: { ...tail, stat: "n" },
+        }),
+      ],
+      values: {
+        ...compounds.values,
+        ...Object.fromEntries(Array.from({ length: 10 }, (_, k) => [`d${k}`, [k, k]])),
+        "rd:t:raw": [42, 7],
+        "rd:t:raw:n": [2, 2],
+      },
+    };
+    // The grid's centre viewport is 300 px wide (jsdom lays nothing out).
+    const real = window.getComputedStyle.bind(window);
+    const spy = vi.spyOn(window, "getComputedStyle").mockImplementation((el, pseudo) => {
+      const style = real(el, pseudo);
+      if (!el.classList.contains("ag-center-cols-viewport")) return style;
+      return new Proxy(style, {
+        get: (t, k) => {
+          if (k === "width") return "300px";
+          const v = Reflect.get(t, k);
+          return typeof v === "function" ? v.bind(t) : v;
+        },
+      });
+    });
+    onTestFinished(() => spy.mockRestore());
+    show([], { table: wideCompounds });
+    await screen.findByRole("link", { name: "CEL-1" });
+    act(() => screen.getAllByRole("checkbox", { name: "Select row" })[0].focus());
+    expect(walk(10)).toEqual([
+      "CEL-1",
+      "15",
+      "0.5",
+      "Curves (3)",
+      "6.3",
+      "42",
+      "Select row",
+      "CEL-2",
+      "> 80",
+      "7",
+    ]);
   });
 
   it("tabs from Selected (n) into the selected rows, then the page", async () => {

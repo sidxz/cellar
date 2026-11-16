@@ -718,6 +718,11 @@ export function WorkbenchTable({
         // Rows stay in the DOM in their shown order, so Tab through the cell buttons follows
         // a sort or a re-pin.
         ensureDomOrder
+        // Every column's cells are rendered, so Tab reaches the buttons of columns scrolled out
+        // of view (the browser scrolls a focused one in).
+        // ponytail: renders page × columns cells (500 rows at most); traverse the logical
+        // column order with ensureColumnVisible instead if wide pages render slowly.
+        suppressColumnVirtualisation
         animateRows={false}
         localeText={NO_ROWS}
       />
