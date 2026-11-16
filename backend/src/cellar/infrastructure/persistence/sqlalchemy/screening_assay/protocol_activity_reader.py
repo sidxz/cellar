@@ -3,11 +3,27 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
-from sqlalchemy import distinct, func, select, union_all
+from sqlalchemy import (
+    ColumnElement,
+    Row,
+    Select,
+    and_,
+    case,
+    distinct,
+    func,
+    literal_column,
+    or_,
+    select,
+    union_all,
+)
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.application.screening.protocol_activity_reader import (
+    ActivityAggregates,
+    AggregateScope,
     BestParamsRow,
     DRAggRow,
     MoleculeBaseRow,
@@ -15,6 +31,7 @@ from cellar.application.screening.protocol_activity_reader import (
     ProtocolActivityData,
     ProtocolRow,
 )
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeIdentifierModel,
     MoleculeModel,
@@ -28,7 +45,172 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     ReadoutDataModel,
     ReadoutDefinitionModel,
     RunModel,
+    WellModel,
 )
+
+# The one aggregation behind the Activity summary and the workbench's Batches /
+# Compounds levels. Qualifier predicates are find_run_stats's: "~" is a value.
+_rd = ReadoutDataModel
+_UNQUALIFIED = or_(_rd.value_qualifier.is_(None), _rd.value_qualifier.in_(("=", "", "~")))
+_GT = _rd.value_qualifier.in_((">", ">="))
+_LT = _rd.value_qualifier.in_(("<", "<="))
+
+
+def _condition_set() -> ColumnElement[Any]:
+    """The run's condition set: SQL NULL, JSON null, {} and {"NADP": null} are all {}."""
+    return func.jsonb_strip_nulls(
+        func.coalesce(
+            func.nullif(RunModel.conditions, literal_column("'null'::jsonb")),
+            literal_column("'{}'::jsonb"),
+        ),
+        type_=JSONB,
+    )
+
+
+def _scope_keys(
+    scope: AggregateScope, *, batch: ColumnElement[Any], run: ColumnElement[Any]
+) -> dict[str, ColumnElement[Any]]:
+    """Group keys the scope adds, by output name (never an input column's name:
+    Postgres resolves an ambiguous GROUP BY name to the input column)."""
+    keys: dict[str, ColumnElement[Any]] = {}
+    if scope.grain != "compound":
+        keys["batch_key"] = batch
+    if scope.grain == "run":
+        keys["run_key"] = run
+    if scope.by_conditions:
+        keys["condition_set"] = _condition_set()
+    return keys
+
+
+def _scope_filters(scope: AggregateScope) -> list[ColumnElement[bool]]:
+    return [
+        *([RunModel.status.in_(scope.statuses)] if scope.statuses is not None else []),
+        *([any_id(RunModel.id, scope.run_ids)] if scope.run_ids is not None else []),
+    ]
+
+
+def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any]:
+    """Non-dose-response readout values per (molecule, readout, layer) + scope keys.
+
+    Outlier wells never count. Censored values are counted with their bounds;
+    unless the scope keeps them, they stay out of best/low/mean/n/sd.
+    """
+    v = _rd.value_numeric
+    counted = case((_UNQUALIFIED, v)) if scope.exclude_censored else v
+    keys: dict[str, ColumnElement[Any]] = {
+        "molecule_id": _rd.molecule_id,
+        "readout_definition_id": _rd.readout_definition_id,
+        "readout_name": ReadoutDefinitionModel.name,
+        "layer": _rd.normalization_applied,
+        **_scope_keys(
+            scope, batch=func.coalesce(_rd.batch_id, WellModel.batch_id), run=_rd.run_id
+        ),
+    }
+    stmt = (
+        select(
+            *(expr.label(name) for name, expr in keys.items()),
+            func.max(counted).label("best"),
+            func.min(counted).label("low"),
+            func.avg(counted).label("mean"),
+            func.count(counted).label("n"),
+            func.stddev_samp(counted).label("sd"),
+            func.count(v).filter(_GT).label("gt_count"),
+            func.max(v).filter(_GT).label("gt_bound"),
+            func.count(v).filter(_LT).label("lt_count"),
+            func.min(v).filter(_LT).label("lt_bound"),
+        )
+        .select_from(_rd)
+        .join(ReadoutDefinitionModel, _rd.readout_definition_id == ReadoutDefinitionModel.id)
+        .join(RunModel, _rd.run_id == RunModel.id)
+        .where(
+            RunModel.protocol_id == pid,
+            RunModel.workspace_id == ws,
+            _rd.workspace_id == ws,
+            ReadoutDefinitionModel.data_type != "dose_response",
+            _rd.molecule_id.isnot(None),
+            v.isnot(None),
+            _rd.is_outlier == False,  # noqa: E712
+            *_scope_filters(scope),
+        )
+        .group_by(*keys.values())
+    )
+    if scope.grain != "compound":
+        stmt = stmt.outerjoin(WellModel, WellModel.id == _rd.well_id)
+    return stmt
+
+
+def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any]:
+    """Dose-response curves per (molecule, readout-def) + scope keys.
+
+    Grouped by readout-def, never curve_type (two DR readouts can share one).
+    Active = not inactive and fitted value > 0 (a NULL class is not active);
+    best and geo_mean read active curves only, and every curve is counted.
+    """
+    c = DoseResponseCurveModel
+    active = and_(c.curve_class != "inactive", c.fitted_value > 0)
+    used = case((active, c.fitted_value))
+    keys: dict[str, ColumnElement[Any]] = {
+        "molecule_id": c.molecule_id,
+        "readout_definition_id": c.readout_definition_id,
+        **_scope_keys(scope, batch=c.batch_id, run=c.run_id),
+    }
+    return (
+        select(
+            *(expr.label(name) for name, expr in keys.items()),
+            func.min(used).label("best"),
+            func.exp(func.avg(func.ln(used))).label("geo_mean"),
+            func.count().label("n_tested"),
+            func.count().filter(c.curve_class == "inactive").label("n_inactive"),
+            func.count().filter(active).label("n_used"),
+        )
+        .select_from(c)
+        .join(RunModel, c.run_id == RunModel.id)
+        .where(
+            c.protocol_id == pid,
+            c.workspace_id == ws,
+            RunModel.workspace_id == ws,
+            *_scope_filters(scope),
+        )
+        .group_by(*keys.values())
+    )
+
+
+def _numeric_row(r: Row[Any]) -> NumericReadoutRow:
+    m = r._mapping
+    return NumericReadoutRow(
+        molecule_id=r.molecule_id,
+        readout_name=r.readout_name,
+        best=r.best,
+        mean=r.mean,
+        n=r.n,
+        sd=r.sd,
+        low=r.low,
+        layer=r.layer,
+        readout_definition_id=r.readout_definition_id,
+        batch_id=m.get("batch_key"),
+        run_id=m.get("run_key"),
+        conditions=m.get("condition_set"),
+        gt_count=r.gt_count,
+        gt_bound=r.gt_bound,
+        lt_count=r.lt_count,
+        lt_bound=r.lt_bound,
+    )
+
+
+def _dr_row(r: Row[Any]) -> DRAggRow:
+    m = r._mapping
+    return DRAggRow(
+        molecule_id=r.molecule_id,
+        readout_definition_id=r.readout_definition_id,
+        best=r.best,
+        geo_mean=r.geo_mean,
+        batch_id=m.get("batch_key"),
+        run_id=m.get("run_key"),
+        conditions=m.get("condition_set"),
+        n_tested=r.n_tested,
+        n_inactive=r.n_inactive,
+        n_used=r.n_used,
+    )
 
 
 class SQLAlchemyProtocolActivityReader:
@@ -161,96 +343,19 @@ class SQLAlchemyProtocolActivityReader:
                 )
 
             # ----------------------------------------------------------
-            # Query 2: Numeric readout aggregation (non-DR), one row per
-            # normalization layer — layers are never pooled; the use case
-            # picks which layer each readout shows.
+            # Query 2 + 3a: the shared aggregation. Numeric rows come one per
+            # normalization layer (the use case picks each readout's layer)
+            # and keep today's averaging of censored values; DR rows carry
+            # geo mean + min over active curves per readout-def.
             # ----------------------------------------------------------
-            numeric_stmt = (
-                select(
-                    ReadoutDataModel.molecule_id,
-                    ReadoutDefinitionModel.name.label("readout_name"),
-                    ReadoutDataModel.normalization_applied.label("layer"),
-                    func.max(ReadoutDataModel.value_numeric).label("best"),
-                    func.min(ReadoutDataModel.value_numeric).label("low"),
-                    func.avg(ReadoutDataModel.value_numeric).label("mean"),
-                    func.count(ReadoutDataModel.value_numeric).label("n"),
-                    func.stddev_samp(ReadoutDataModel.value_numeric).label("sd"),
-                )
-                .select_from(ReadoutDataModel)
-                .join(
-                    ReadoutDefinitionModel,
-                    ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
-                )
-                .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
-                .where(
-                    RunModel.protocol_id == pid,
-                    RunModel.workspace_id == ws,
-                    RunModel.status.in_(valid_statuses),
-                    ReadoutDefinitionModel.data_type != "dose_response",
-                    ReadoutDataModel.molecule_id.isnot(None),
-                    ReadoutDataModel.value_numeric.isnot(None),
-                    ReadoutDataModel.is_outlier == False,  # noqa: E712
-                )
-                .group_by(
-                    ReadoutDataModel.molecule_id,
-                    ReadoutDefinitionModel.name,
-                    ReadoutDataModel.normalization_applied,
-                )
-            )
-            raw_numeric_rows = (await session.execute(numeric_stmt)).all()
-
+            activity_scope = AggregateScope(statuses=valid_statuses, exclude_censored=False)
             numeric_rows = [
-                NumericReadoutRow(
-                    molecule_id=r.molecule_id,
-                    readout_name=r.readout_name,
-                    best=r.best,
-                    mean=r.mean,
-                    n=r.n,
-                    sd=r.sd,
-                    low=r.low,
-                    layer=r.layer,
-                )
-                for r in raw_numeric_rows
+                _numeric_row(r)
+                for r in (await session.execute(_numeric_stmt(ws, pid, activity_scope))).all()
             ]
-
-            # ----------------------------------------------------------
-            # Query 3a: DR aggregation — geo mean + min per readout-def.
-            # Grouping by curve_type would collapse multi-DR protocols
-            # (target IC50 + counter-screen IC50 share curve_type='ic50');
-            # the readout-def is the precise column identity.
-            # ----------------------------------------------------------
-            dr_agg_stmt = (
-                select(
-                    DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.readout_definition_id,
-                    func.min(DoseResponseCurveModel.fitted_value).label("best"),
-                    func.exp(func.avg(func.ln(DoseResponseCurveModel.fitted_value))).label(
-                        "geo_mean"
-                    ),
-                )
-                .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
-                .where(
-                    DoseResponseCurveModel.protocol_id == pid,
-                    RunModel.workspace_id == ws,
-                    RunModel.status.in_(valid_statuses),
-                    DoseResponseCurveModel.curve_class != "inactive",
-                    DoseResponseCurveModel.fitted_value > 0,
-                )
-                .group_by(
-                    DoseResponseCurveModel.molecule_id,
-                    DoseResponseCurveModel.readout_definition_id,
-                )
-            )
-            raw_dr_agg_rows = (await session.execute(dr_agg_stmt)).all()
-
             dr_agg_rows = [
-                DRAggRow(
-                    molecule_id=r.molecule_id,
-                    readout_definition_id=r.readout_definition_id,
-                    best=r.best,
-                    geo_mean=r.geo_mean,
-                )
-                for r in raw_dr_agg_rows
+                _dr_row(r)
+                for r in (await session.execute(_dr_stmt(ws, pid, activity_scope))).all()
             ]
 
             # ----------------------------------------------------------
@@ -317,4 +422,20 @@ class SQLAlchemyProtocolActivityReader:
             numeric_rows=numeric_rows,
             dr_agg_rows=dr_agg_rows,
             best_params_rows=best_params_rows,
+        )
+
+    async def get_aggregates(
+        self,
+        workspace_id: uuid.UUID,
+        protocol_id: uuid.UUID,
+        scope: AggregateScope,
+    ) -> ActivityAggregates:
+        async with self._session_factory() as session:
+            numeric = (
+                await session.execute(_numeric_stmt(workspace_id, protocol_id, scope))
+            ).all()
+            dr = (await session.execute(_dr_stmt(workspace_id, protocol_id, scope))).all()
+        return ActivityAggregates(
+            numeric_rows=[_numeric_row(r) for r in numeric],
+            dr_agg_rows=[_dr_row(r) for r in dr],
         )

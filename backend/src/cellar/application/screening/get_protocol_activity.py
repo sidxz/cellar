@@ -301,7 +301,8 @@ class GetProtocolActivitySummary:
                     dr_row = dr_agg_map.get(dr_key)
                     bp_row = best_params_map.get(dr_key)
 
-                    if dr_row is None:
+                    # No active curve (all inactive) → no value, as before.
+                    if dr_row is None or dr_row.geo_mean is None:
                         continue
 
                     curve_params: CurveParams | None = None
