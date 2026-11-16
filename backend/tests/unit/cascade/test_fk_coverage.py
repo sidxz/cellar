@@ -482,6 +482,7 @@ _SAR_PROJECTION = (
 )
 _FILTER = "a filter on a missing id matches nothing; pruning it would widen results"
 _TIER1_ONLY = "parent is Tier-1 only; see docs/backlog/tier1-only-parents-id-references.md"
+_VIEW = "a saved view names what it shows by id; opening it lists what no longer resolves"
 
 LEFT_ALONE: dict[str, str] = {
     "attachments.uploaded_by": _USER,
@@ -618,6 +619,9 @@ LEFT_ALONE: dict[str, str] = {
     "saved_searches.query": _FILTER,
     "recent_searches.columns": _FILTER,
     "recent_searches.query": _FILTER,
+    "saved_visualizations.config": _VIEW,
+    "saved_visualizations.protocol_ids": _VIEW,
+    "saved_visualizations.source": _VIEW,
     "campaign.project_id": _TIER1_ONLY,
     "collection_import_templates.used_in_collections": _TIER1_ONLY,
     "favorites.entity_id": _TIER1_ONLY,

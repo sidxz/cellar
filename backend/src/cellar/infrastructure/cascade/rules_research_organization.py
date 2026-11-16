@@ -181,6 +181,16 @@ register_rules(
         label_field="name",
         display_label="Saved searches (project scope cleared)",
     ),
+    # SavedVisualizationModel.project_id → projects.id (ondelete=SET NULL); the view
+    # becomes its owner's private view again.
+    CascadeRule(
+        child_table="saved_visualizations",
+        fk_column="project_id",
+        parent_table="projects",
+        action=A.SET_NULL,
+        label_field="name",
+        display_label="Saved views (project sharing cleared)",
+    ),
     # -------------------------------------------------------------------------
     # Campaigns citing force-deleted screening data (ids without an FK)
     # -------------------------------------------------------------------------

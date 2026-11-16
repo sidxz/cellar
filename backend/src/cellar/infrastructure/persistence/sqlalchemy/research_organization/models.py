@@ -161,6 +161,29 @@ class SavedSearchModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     __table_args__ = (Index("ix_saved_searches_ws_creator", "workspace_id", "created_by"),)
 
 
+class SavedVisualizationModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
+    """SavedVisualization — a named workbench view (source, level, plots, filters)."""
+
+    __tablename__ = "saved_visualizations"
+
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text)
+    source: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    protocol_ids: Mapped[list[uuid.UUID]] = mapped_column(PG_ARRAY(Uuid), nullable=False)
+    level: Mapped[str] = mapped_column(String(20), nullable=False)
+    config: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    visibility: Mapped[str] = mapped_column(String(20), nullable=False, default="private")
+    project_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid, ForeignKey("projects.id", ondelete="SET NULL")
+    )
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        Index("ix_saved_visualizations_ws_creator", "workspace_id", "created_by"),
+        Index("ix_saved_visualizations_protocol_ids", "protocol_ids", postgresql_using="gin"),
+    )
+
+
 class ProjectMemberModel(Base):
     """Project membership — who can access a project and at what role."""
 
