@@ -8,7 +8,7 @@ import {
 } from "@/shared/components/ui/resizable";
 import { cn } from "@/shared/lib/utils";
 import { X } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useWorkbench } from "../store/workbench-context";
 
 interface WorkbenchBodyProps {
@@ -28,7 +28,17 @@ interface WorkbenchBodyProps {
 export function WorkbenchBody({ plots, table, rail, editor }: WorkbenchBodyProps) {
   const filterCount = useWorkbench((s) => s.filters.length);
   const [railOpen, setRailOpen] = useState(false);
+  const tabRef = useRef<HTMLButtonElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
   const editing = Boolean(editor);
+  // The overlay (below 1280 px) takes focus when it opens and gives it back when it closes.
+  useEffect(() => {
+    if (railOpen) closeRef.current?.focus();
+  }, [railOpen]);
+  const closeRail = () => {
+    setRailOpen(false);
+    tabRef.current?.focus();
+  };
   // Plotly resizes on window resize only; the plots column just changed width.
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs when the editor opens or closes
   useEffect(() => {
@@ -46,6 +56,7 @@ export function WorkbenchBody({ plots, table, rail, editor }: WorkbenchBodyProps
         </ResizablePanel>
       </ResizablePanelGroup>
       <button
+        ref={tabRef}
         type="button"
         className={cn(
           "shrink-0 rounded-md border px-1.5 py-3 text-xs font-medium [writing-mode:vertical-rl] hover:bg-accent xl:hidden",
@@ -58,6 +69,10 @@ export function WorkbenchBody({ plots, table, rail, editor }: WorkbenchBodyProps
       </button>
       <aside
         aria-label="Filters"
+        onKeyDown={(e) => {
+          // Popovers inside handle (and mark) their own Escape first.
+          if (railOpen && e.key === "Escape" && !e.defaultPrevented) closeRail();
+        }}
         className={cn(
           "w-72 shrink-0 flex-col overflow-auto rounded-md border bg-background xl:static xl:flex xl:shadow-none",
           railOpen ? "absolute inset-y-0 right-0 z-20 flex shadow-lg" : "hidden",
@@ -69,8 +84,9 @@ export function WorkbenchBody({ plots, table, rail, editor }: WorkbenchBodyProps
             size="icon"
             variant="ghost"
             className="h-7 w-7"
+            ref={closeRef}
             aria-label="Close filters"
-            onClick={() => setRailOpen(false)}
+            onClick={closeRail}
           >
             <X className="h-4 w-4" />
           </Button>

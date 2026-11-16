@@ -78,6 +78,12 @@ const show = (filters: Filter[]) =>
   );
 
 describe("RangeFilterCard", () => {
+  it("names both slider thumbs", () => {
+    show([range()]);
+    expect(screen.getByRole("slider", { name: "Minimum % inhibition" })).toBeInTheDocument();
+    expect(screen.getByRole("slider", { name: "Maximum % inhibition" })).toBeInTheDocument();
+  });
+
   it("commits a slider drag once, on release", () => {
     show([range()]);
     const slider = document.querySelector<HTMLElement>("[data-slot=slider]");

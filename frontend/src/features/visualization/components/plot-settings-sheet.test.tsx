@@ -130,4 +130,9 @@ describe("PlotSettingsSheet", () => {
     fireEvent.click(compound);
     expect(state().panel.category).toBe("plate");
   });
+
+  it("names the opacity slider", () => {
+    show(scatter());
+    expect(screen.getByRole("slider", { name: "Opacity" })).toBeInTheDocument();
+  });
 });

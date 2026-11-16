@@ -281,6 +281,7 @@ export function PlotSettingsSheet({
                     min={0.1}
                     max={1}
                     step={0.05}
+                    thumbLabels={["Opacity"]}
                     onValueCommit={([opacity]) => look({ opacity })}
                   />
                   <span className="w-9 text-right text-xs tabular-nums text-muted-foreground">

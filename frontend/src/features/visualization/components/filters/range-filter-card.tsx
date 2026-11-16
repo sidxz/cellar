@@ -44,7 +44,9 @@ export function RangeFilterCard({
 }) {
   const filters = useWorkbench((s) => s.filters);
   const upsertFilter = useWorkbench((s) => s.upsertFilter);
-  const unit = column(ds, filter.key)?.unit;
+  const col = column(ds, filter.key);
+  const unit = col?.unit;
+  const label = col?.label ?? filter.key;
   const [draft, setDraft] = useState<number[] | null>(null);
   const missingId = useId();
 
@@ -110,6 +112,7 @@ export function RangeFilterCard({
         step={s.step}
         value={[lo, hi]}
         minStepsBetweenThumbs={0}
+        thumbLabels={[`Minimum ${label}`, `Maximum ${label}`]}
         onValueChange={setDraft}
         onValueCommit={([a, b]) => {
           setDraft(null);
