@@ -36,9 +36,13 @@ interface Group {
   readoutId: string;
   layer: string;
   title: string;
-  /** "role|label" of each control-compound potency column, e.g. "positive_control|IC50". */
+  /** "role|molecule|label" of each control-compound potency column. */
   fits: string[];
 }
+
+/** One potency column per control compound and intercept. */
+const fitKey = (f: { role: string; molecule_id?: string | null; label: string }) =>
+  `${f.role}|${f.molecule_id ?? ""}|${f.label}`;
 
 /** The run's plate QC like the platform's Data Summary: one row per plate, per readout x
  * layer its Z′ and each control's mean ± SD (n), and each control compound's potency; a
@@ -53,6 +57,11 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
 
   const doseUnit = plateMap?.dose_unit ? ` ${plateMap.dose_unit}` : "";
   const plateNumber = new Map(plateMap?.plates.map((p) => [p.plate_id, p.plate_number]) ?? []);
+  const compoundName = new Map(
+    plateMap?.plates.flatMap((p) =>
+      (p.wells ?? []).map((w) => [w.molecule_id, w.registration_number] as const),
+    ) ?? [],
+  );
   plateIds.sort((a, b) => (plateNumber.get(a) ?? 0) - (plateNumber.get(b) ?? 0));
   const averageOf = new Map(
     (averages?.averages ?? []).map((a) => [`${a.readout_definition_id}:${a.layer}`, a]),
@@ -68,7 +77,7 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
     for (const [rd, layers] of Object.entries(perPlate[pid] ?? {})) {
       for (const [layer, qc] of Object.entries(layers ?? {})) {
         const fits = keys.get(`${rd}:${layer}`) ?? new Set<string>();
-        for (const f of qc?.control_fits ?? []) fits.add(`${f.role}|${f.label}`);
+        for (const f of qc?.control_fits ?? []) fits.add(fitKey(f));
         keys.set(`${rd}:${layer}`, fits);
       }
     }
@@ -76,7 +85,7 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
   const groups: Group[] = [...keys]
     .map(([key, fits]) => {
       const [readoutId, layer] = key.split(":");
-      for (const f of averageOf.get(key)?.control_fits ?? []) fits.add(`${f.role}|${f.label}`);
+      for (const f of averageOf.get(key)?.control_fits ?? []) fits.add(fitKey(f));
       const def = defs.find((d) => d.id === readoutId);
       const name = def?.name ?? "Readout";
       const title =
@@ -93,8 +102,9 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
     );
 
   const fitHeader = (fit: string) => {
-    const [role, label] = fit.split("|");
-    return `${ROLE_LABEL[role] ?? role} ${label}`;
+    const [role, molecule, label] = fit.split("|");
+    const name = compoundName.get(molecule);
+    return `${ROLE_LABEL[role] ?? role} ${label}${name ? ` · ${name}` : ""}`;
   };
   const plateCells = (g: Group, qc: PlateLayerQc | undefined) => [
     qc?.z_prime != null ? qc.z_prime.toFixed(2) : "—",
@@ -102,8 +112,14 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
     meanSd(qc?.neg_mean, qc?.neg_sd, qc?.neg_n),
     ...g.fits.map((fit) => {
       const values = (qc?.control_fits ?? [])
-        .filter((f) => `${f.role}|${f.label}` === fit && f.value != null)
-        .map((f) => `${fmt(f.value as number)}${doseUnit}`);
+        .filter((f) => fitKey(f) === fit)
+        .map((f) =>
+          f.value != null
+            ? `${fmt(f.value)}${doseUnit}`
+            : f.curve_class === "inactive"
+              ? "inactive"
+              : "—",
+        );
       return values.length > 0 ? values.join(", ") : "—";
     }),
   ];
@@ -114,11 +130,7 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
       spread(a?.pos_mean),
       spread(a?.neg_mean),
       ...g.fits.map((fit) =>
-        spread(
-          a?.control_fits?.find((f) => `${f.role}|${f.label}` === fit)?.value,
-          undefined,
-          doseUnit,
-        ),
+        spread(a?.control_fits?.find((f) => fitKey(f) === fit)?.value, undefined, doseUnit),
       ),
     ];
   };

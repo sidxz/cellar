@@ -3,7 +3,8 @@
 Reads each run's ``qc_metrics.plates[plate][readout][layer]`` (written by the
 readout calculation engine) and reports, per readout x layer, the mean ± SD and
 plate count of Z′, of each control's mean, and of each control compound's
-per-plate potency — the "Protocol averages" row of a run's Data summary.
+per-plate potency (per compound; an inactive fit stores none) — the "Protocol
+averages" row of a run's Data summary.
 """
 
 from __future__ import annotations
@@ -43,8 +44,9 @@ class Spread:
 @dataclass(frozen=True)
 class ControlFitAverage:
     role: str  # "positive_control" | "reference"
+    molecule_id: str | None  # the control compound, as plate QC stores it
     label: str  # the primary intercept, e.g. "IC50"
-    value: Spread
+    value: Spread  # over the plates that fitted it; a plate with two fits counts once
 
 
 @dataclass(frozen=True)
@@ -76,7 +78,8 @@ def average_plate_qc(qc_metrics: list[dict[str, Any]]) -> list[PlateQcAverage]:
     """One average per readout x layer that any plate stored; malformed entries
     (a hand-edited ``qc_metrics``) are skipped."""
     metrics: dict[tuple[str, str], dict[str, list[float]]] = defaultdict(lambda: defaultdict(list))
-    fits: dict[tuple[str, str], dict[tuple[str, str], list[float]]] = defaultdict(
+    # (readout, layer) -> (role, molecule, label) -> per-plate mean
+    fits: dict[tuple[str, str], dict[tuple[str, str | None, str], list[float]]] = defaultdict(
         lambda: defaultdict(list)
     )
     for qc in qc_metrics:
@@ -87,10 +90,18 @@ def average_plate_qc(qc_metrics: list[dict[str, Any]]) -> list[PlateQcAverage]:
                     for m in _METRICS:
                         if _number(entry.get(m)):
                             metrics[key][m].append(float(entry[m]))
+                    on_plate: dict[tuple[str, str | None, str], list[float]] = defaultdict(list)
                     for fit in entry.get("control_fits") or []:
                         if isinstance(fit, dict) and _number(fit.get("value")):
-                            role_label = (str(fit.get("role")), str(fit.get("label")))
-                            fits[key][role_label].append(float(fit["value"]))
+                            molecule = fit.get("molecule_id")
+                            compound = (
+                                str(fit.get("role")),
+                                str(molecule) if molecule is not None else None,
+                                str(fit.get("label")),
+                            )
+                            on_plate[compound].append(float(fit["value"]))
+                    for compound, values in on_plate.items():
+                        fits[key][compound].append(statistics.mean(values))
                     metrics.setdefault(key, defaultdict(list))
 
     out: list[PlateQcAverage] = []
@@ -108,8 +119,10 @@ def average_plate_qc(qc_metrics: list[dict[str, Any]]) -> list[PlateQcAverage]:
                 pos_mean=_spread(stats["pos_mean"]),
                 neg_mean=_spread(stats["neg_mean"]),
                 control_fits=[
-                    ControlFitAverage(role=role, label=label, value=s)
-                    for (role, label), values in sorted(fits[(rd_id, layer)].items())
+                    ControlFitAverage(role=role, molecule_id=molecule, label=label, value=s)
+                    for (role, molecule, label), values in sorted(
+                        fits[(rd_id, layer)].items(), key=lambda kv: tuple(map(str, kv[0]))
+                    )
                     if (s := _spread(values)) is not None
                 ],
             )

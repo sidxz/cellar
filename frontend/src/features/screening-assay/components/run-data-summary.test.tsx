@@ -6,8 +6,12 @@ vi.mock("../hooks/use-plate-setup", () => ({
     data: {
       dose_unit: "uM",
       plates: [
-        { plate_id: "pl1", plate_number: 1 },
-        { plate_id: "pl2", plate_number: 2 },
+        { plate_id: "pl1", plate_number: 1, wells: [] },
+        {
+          plate_id: "pl2",
+          plate_number: 2,
+          wells: [{ molecule_id: "m2", registration_number: "CMP-0002" }],
+        },
       ],
     },
   }),
@@ -23,7 +27,12 @@ vi.mock("../hooks/use-protocol-stats", () => ({
           pos_mean: { mean: 100, sd: 0, n: 2 },
           neg_mean: { mean: 0, sd: 3.8, n: 116 },
           control_fits: [
-            { role: "positive_control", label: "IC50", value: { mean: 0.45, sd: 0.3, n: 2 } },
+            {
+              role: "positive_control",
+              molecule_id: "m",
+              label: "IC50",
+              value: { mean: 0.45, sd: 0.3, n: 2 },
+            },
           ],
         },
       ],
@@ -68,6 +77,13 @@ const run = {
                 value: 0.62,
                 curve_class: "full",
               },
+              {
+                role: "positive_control",
+                molecule_id: "m2",
+                label: "IC50",
+                value: null,
+                curve_class: "inactive",
+              },
             ],
           }),
         },
@@ -91,6 +107,10 @@ describe("RunDataSummary", () => {
     expect(screen.getByRole("columnheader", { name: "Signal (AU)" })).toBeInTheDocument();
     expect(screen.getByRole("columnheader", { name: "Signal · % Inhibition" })).toBeInTheDocument();
     expect(screen.getAllByRole("columnheader", { name: "Positive control IC50" })).toHaveLength(1);
+    // A second control compound gets its own column, named.
+    expect(
+      screen.getByRole("columnheader", { name: "Positive control IC50 · CMP-0002" }),
+    ).toBeInTheDocument();
 
     const plate1 = within(rowOf("Plate 1"));
     expect(plate1.getAllByText("0.92")).toHaveLength(2); // raw and % layers
@@ -100,6 +120,7 @@ describe("RunDataSummary", () => {
 
     const plate2 = within(rowOf("Plate 2"));
     expect(plate2.getByText("0.62 uM")).toBeInTheDocument();
+    expect(plate2.getByText("inactive")).toBeInTheDocument();
 
     const averages = within(rowOf("Protocol averages"));
     expect(averages.getByText("all runs except rejected")).toBeInTheDocument();

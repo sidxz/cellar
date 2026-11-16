@@ -28,13 +28,13 @@ def _entry(z, pos, neg, fits=None):
     return e
 
 
-def _fit(value, role="positive_control"):
+def _fit(value, role="positive_control", molecule="m", curve_class="full"):
     return {
         "role": role,
-        "molecule_id": "m",
+        "molecule_id": molecule,
         "label": "IC50",
         "value": value,
-        "curve_class": "full",
+        "curve_class": curve_class,
     }
 
 
@@ -78,9 +78,10 @@ async def test_each_readout_layer_averages_its_plates() -> None:
     assert inh.z_prime == Spread(mean=pytest.approx(0.7), sd=pytest.approx(0.1414, abs=1e-4), n=2)
     assert inh.pos_mean == Spread(mean=100.0, sd=2.0, n=3)
     assert inh.neg_mean == Spread(mean=0.0, sd=4.0, n=3)
-    assert [(f.role, f.label, f.value) for f in inh.control_fits] == [
+    assert [(f.role, f.molecule_id, f.label, f.value) for f in inh.control_fits] == [
         (
             "positive_control",
+            "m",
             "IC50",
             Spread(mean=pytest.approx(0.45), sd=pytest.approx(0.2121, abs=1e-4), n=2),
         )
@@ -88,6 +89,25 @@ async def test_each_readout_layer_averages_its_plates() -> None:
     raw = by_layer[(RD, "raw")]
     assert raw.z_prime == Spread(mean=0.8, sd=None, n=1)
     assert raw.control_fits == []
+
+
+@pytest.mark.asyncio
+async def test_control_potencies_average_per_compound_over_distinct_plates() -> None:
+    p1 = [_fit(1.0, molecule="a"), _fit(100.0, molecule="b"), _fit(3.0, molecule="a")]
+    p2 = [_fit(None, molecule="a", curve_class="inactive"), _fit(200.0, molecule="b")]
+    qc = {
+        "plates": {
+            "p1": {str(RD): {"raw": _entry(0.8, 1.0, 0.0, p1)}},
+            "p2": {str(RD): {"raw": _entry(0.8, 1.0, 0.0, p2)}},
+        }
+    }
+
+    [avg] = (await _call([qc]))[0].unwrap()
+
+    assert [(f.molecule_id, f.value) for f in avg.control_fits] == [
+        ("a", Spread(mean=2.0, sd=None, n=1)),  # p1's two fits are one plate; p2's inactive
+        ("b", Spread(mean=150.0, sd=pytest.approx(70.71, abs=0.01), n=2)),
+    ]
 
 
 @pytest.mark.asyncio

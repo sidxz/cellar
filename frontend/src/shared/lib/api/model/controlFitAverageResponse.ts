@@ -8,6 +8,7 @@ import type { SpreadResponse } from './spreadResponse';
 
 export interface ControlFitAverageResponse {
   role: string;
+  molecule_id?: string | null;
   label: string;
   value: SpreadResponse;
 }

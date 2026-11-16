@@ -136,6 +136,8 @@ class SpreadResponse(BaseModel):
 
 class ControlFitAverageResponse(BaseModel):
     role: str
+    # The control compound; its potency is averaged over the plates that fitted it.
+    molecule_id: str | None = None
     label: str
     value: SpreadResponse
 
@@ -159,6 +161,7 @@ class PlateQcAverageResponse(BaseModel):
             control_fits=[
                 ControlFitAverageResponse(
                     role=f.role,
+                    molecule_id=f.molecule_id,
                     label=f.label,
                     value=SpreadResponse(mean=f.value.mean, sd=f.value.sd, n=f.value.n),
                 )
