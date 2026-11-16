@@ -34,7 +34,7 @@ export interface CurvesTarget {
 }
 
 /** The curves behind dose-response value ``key`` of row ``i``: a Runs row's own run, else
- * ``runIds`` (the source runs that count at the level). */
+ * ``runIds`` (the source runs that count at the level) within the column's condition set. */
 export function curvesTarget(
   ds: Dataset,
   key: string,
@@ -47,6 +47,7 @@ export function curvesTarget(
     c?.provenance ?? {};
   if (!c || !protocolId || !readoutDefinitionId || typeof moleculeId !== "string") return null;
   const batchId = ds.values.batch_id?.[i];
+  const setRuns = c.provenance.run_ids;
   return {
     protocolId,
     readoutDefinitionId,
@@ -54,7 +55,12 @@ export function curvesTarget(
     compound: String(ds.values.compound?.[i] ?? "this compound"),
     readout: c.label,
     // A Runs row id leads with its run id.
-    runIds: ds.level === "runs" ? [ds.row_ids[i].split(":")[0]] : runIds,
+    runIds:
+      ds.level === "runs"
+        ? [ds.row_ids[i].split(":")[0]]
+        : setRuns
+          ? runIds.filter((id) => setRuns.includes(id))
+          : runIds,
     batchId: typeof batchId === "string" ? batchId : null,
   };
 }

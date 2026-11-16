@@ -173,4 +173,29 @@ describe("curvesTarget", () => {
     };
     expect(curvesTarget(ds, "dr:e", 0, [R1, R2])).toEqual({ ...target, runIds: [R1, R2] });
   });
+
+  it("keeps to the runs of the column's condition set that count", () => {
+    const ds: Dataset = {
+      revision: "r",
+      level: "batches",
+      row_count: 1,
+      row_ids: [`${M1}:${B1}`],
+      columns: [
+        col("compound"),
+        col("molecule_id", { hidden: true }),
+        col("batch_id", { hidden: true }),
+        col("dr:e", {
+          kind: "number",
+          provenance: { ...prov, aggregation: "geomean", run_ids: [R1, R3] },
+        }),
+      ],
+      values: { compound: ["CEL-1"], molecule_id: [M1], batch_id: [B1], "dr:e": [0.5] },
+    };
+    // R3 is in the set but does not count (a draft); R2 counts but is the other set's.
+    expect(curvesTarget(ds, "dr:e", 0, [R1, R2])).toEqual({
+      ...target,
+      runIds: [R1],
+      batchId: B1,
+    });
+  });
 });
