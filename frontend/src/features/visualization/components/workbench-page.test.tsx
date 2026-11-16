@@ -303,7 +303,7 @@ describe("WorkbenchPage", () => {
     expect(note).toHaveTextContent(
       "Switched to Compounds. Not available at this level: Filter: well_order, " +
         "Plot 1: X (well_order), Plot 1: Color (well_type), Plot 1: Shape (well_type), " +
-        "Plot 1: Split (plate).",
+        "Plot 1: Split (plate), Plot 1: Scatter (now a histogram).",
     );
     // The switch itself is not an undo step.
     expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
