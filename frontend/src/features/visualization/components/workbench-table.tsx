@@ -36,7 +36,7 @@ import {
 import { usePassMask } from "../hooks/use-pass-mask";
 import { categoryLabel, column, numberAt } from "../lib/dataset";
 import { orderTableRows, pinnedBlock } from "../lib/table-rows";
-import { cellText } from "../lib/value-description";
+import { cellText, qualifierText } from "../lib/value-description";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset, DatasetColumn } from "../types";
 import { CurveSparklineCell, CurvesCountCell } from "./table/curve-cells";
@@ -189,7 +189,7 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
     valueFormatter: (p) => {
       if (typeof p.value !== "number" || !isData(p.data)) return "";
       const text = cellText(p.value);
-      const q = qualifier?.[p.data.i];
+      const q = qualifierText(qualifier?.[p.data.i]);
       return q ? `${q} ${text}` : text;
     },
     cellClassRules: outlier

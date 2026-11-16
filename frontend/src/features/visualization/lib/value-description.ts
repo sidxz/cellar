@@ -10,6 +10,13 @@ export function cellText(v: number): string {
 
 const sig4 = (v: number) => formatMeasurementValue(v, 4);
 
+const QUALIFIER_SYMBOLS: Record<string, string> = { ">=": "≥", "<=": "≤" };
+
+/** A value qualifier as cells show it: inclusive bounds as ≥ / ≤, the rest as sent. */
+export function qualifierText(q: unknown): string {
+  return typeof q === "string" ? (QUALIFIER_SYMBOLS[q] ?? q) : "";
+}
+
 function statAt(ds: Dataset, key: string, stat: string, i: number): number | null {
   const v = siblingAt(ds, key, stat, i);
   return typeof v === "number" && Number.isFinite(v) ? v : null;
@@ -63,9 +70,9 @@ export function describeValue(
     // A dose-response value across runs: the geometric mean of the active curves' fits.
     const tested = at("n_tested");
     if (tested === null) return null;
-    lines.push(`Geometric mean of ${at("n_used") ?? 0} of ${formatCount(tested, "run")}`);
+    lines.push(`Geometric mean of ${at("n_used") ?? 0} of ${formatCount(tested, "curve")}`);
     const inactive = at("n_inactive") ?? 0;
-    if (inactive > 0) lines.push(`${inactive} inactive`);
+    if (inactive > 0) lines.push(formatCount(inactive, "inactive curve"));
     const best = at("best");
     if (best !== null) lines.push(`Best ${withUnit(best)}`);
   } else {
@@ -81,7 +88,8 @@ export function describeValue(
           ? `${label} of ${formatCount(n, "replicate well")} in this run`
           : `${label} of ${formatCount(n, "value")}`,
       );
-      const sd = at("sd");
+      // An arithmetic SD says nothing about a geometric mean's spread.
+      const sd = name === "geomean" ? null : at("sd");
       if (sd !== null) lines.push(`SD ${sig4(sd)}`);
       const best = at("best");
       if (best !== null) lines.push(`Best ${withUnit(best)}`);
@@ -106,11 +114,11 @@ export function describeValue(
   return { title: c.label, lines };
 }
 
-/** "Inactive 1/3 runs" when some of the row's curves for this readout were inactive. */
+/** "Inactive 1/3 curves" when some of the row's curves for this readout were inactive. */
 export function inactiveBadge(ds: Dataset, key: string, i: number): string | null {
   const inactive = statAt(ds, key, "n_inactive", i);
   const tested = statAt(ds, key, "n_tested", i);
-  return inactive && tested ? `Inactive ${inactive}/${tested} runs` : null;
+  return inactive && tested ? `Inactive ${inactive}/${tested} curves` : null;
 }
 
 /** A Runs row's fitted curve for the dose-response value ``key``, from the value and its fit

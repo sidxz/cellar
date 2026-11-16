@@ -60,9 +60,27 @@ describe("ValueCell", () => {
 
   it("shows a dash and the inactive badge for an all-inactive geomean", () => {
     render(<ValueCell ds={ds} valueKey="dr:e" i={0} />);
-    expect(screen.getByText("Inactive 3/3 runs")).toBeInTheDocument();
+    expect(screen.getByText("Inactive 3/3 curves")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /—/ }));
-    expect(screen.getByText("Geometric mean of 0 of 3 runs")).toBeInTheDocument();
+    expect(screen.getByText("Geometric mean of 0 of 3 curves")).toBeInTheDocument();
+  });
+
+  it("shows inclusive qualifiers as ≥ and ≤, in the cell and its name", () => {
+    const inclusive: Dataset = {
+      ...ds,
+      values: {
+        ...ds.values,
+        "rd:s:raw": [80, 5],
+        "rd:s:raw:q": [">=", "<="],
+        "rd:s:raw:n_censored": [2, 1],
+      },
+    };
+    render(<ValueCell ds={inclusive} valueKey="rd:s:raw" i={0} />);
+    expect(
+      screen.getByRole("button", { name: "≥ 80, how Signal (%) was computed" }),
+    ).toHaveTextContent("≥ 80");
+    render(<ValueCell ds={inclusive} valueKey="rd:s:raw" i={1} />);
+    expect(screen.getByRole("button", { name: /^≤ 5,/ })).toBeInTheDocument();
   });
 
   it("shows a plain dash, with nothing to open, when the row has no data", () => {

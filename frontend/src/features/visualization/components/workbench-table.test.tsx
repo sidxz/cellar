@@ -40,7 +40,7 @@ const ds: Dataset = {
     molecule_id: ["m1", "m2", null],
     well_type: ["sample", "sample", "negative_control"],
     "rd:s:raw": [12.5, 40, 3],
-    "rd:s:raw:q": [">", null, null],
+    "rd:s:raw:q": [">", null, "<="],
     "rd:s:raw:outlier": [null, "outlier", null],
   },
 };
@@ -184,6 +184,7 @@ describe("WorkbenchTable", () => {
     expect(screen.getByText("structure CCO")).toBeInTheDocument();
     expect(screen.queryByText(/structure $/)).not.toBeInTheDocument();
     expect(screen.getByText("> 12.5")).toBeInTheDocument();
+    expect(screen.getByText("≤ 3")).toBeInTheDocument();
     expect(screen.getByText("40")).toHaveClass("line-through");
     expect(screen.getByText("Negative control")).toBeInTheDocument();
   });
@@ -333,7 +334,7 @@ describe("WorkbenchTable", () => {
     const ref = createRef<WorkbenchTableHandle>();
     show([], { table: compounds, ref });
     await screen.findByRole("link", { name: "CEL-1" });
-    expect(screen.getByText("Inactive 1/3 runs")).toBeInTheDocument();
+    expect(screen.getByText("Inactive 1/3 curves")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /> 80/ })).toBeInTheDocument();
     expect(await exportedCsv(ref)).toEqual([
       '"Compound","Structure","Signal (%)","Enzyme · IC50","Enzyme · pIC50","MW"',

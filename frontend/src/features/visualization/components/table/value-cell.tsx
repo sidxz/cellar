@@ -3,15 +3,15 @@
 import { Badge } from "@/shared/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { numberAt, siblingAt } from "../../lib/dataset";
-import { cellText, describeValue, inactiveBadge } from "../../lib/value-description";
+import { cellText, describeValue, inactiveBadge, qualifierText } from "../../lib/value-description";
 import type { Dataset } from "../../types";
 
-/** An aggregated value: its qualifier in front ("> 80"), "—" when there is none, an
- * "Inactive k/n runs" badge, and a popover (a native button: Tab, Enter, Space) that says
+/** An aggregated value: its qualifier in front ("> 80", "≥ 10"), "—" when there is none, an
+ * "Inactive k/n curves" badge, and a popover (a native button: Tab, Enter, Space) that says
  * how the value was computed. */
 export function ValueCell({ ds, valueKey, i }: { ds: Dataset; valueKey: string; i: number }) {
   const v = numberAt(ds, valueKey, i);
-  const q = siblingAt(ds, valueKey, "q", i);
+  const q = qualifierText(siblingAt(ds, valueKey, "q", i));
   const text = v === null ? "—" : `${q ? `${q} ` : ""}${cellText(v)}`;
   const about = describeValue(ds, valueKey, i);
   const badge = inactiveBadge(ds, valueKey, i);

@@ -111,6 +111,22 @@ describe("describeValue", () => {
     });
   });
 
+  it("leaves the arithmetic SD out of a geometric mean", () => {
+    const geo: Dataset = {
+      ...compounds,
+      columns: compounds.columns.map((c) =>
+        c.key.startsWith("rd:s:raw")
+          ? { ...c, provenance: { ...c.provenance, aggregation: "geomean" } }
+          : c,
+      ),
+    };
+    expect(describeValue(geo, "rd:s:raw", 0)?.lines).toEqual([
+      "Geometric mean of 2 values",
+      "Best 20 %",
+      "1 censored value not averaged",
+    ]);
+  });
+
   it("says when every value was censored, or censored both ways", () => {
     expect(describeValue(compounds, "rd:s:raw", 1)?.lines).toEqual([
       "All 2 values censored — showing the tightest bound",
@@ -123,10 +139,10 @@ describe("describeValue", () => {
   it("explains a geometric mean over runs with inactive curves", () => {
     expect(describeValue(compounds, "dr:e", 0)).toEqual({
       title: "Enzyme · IC50",
-      lines: ["Geometric mean of 2 of 3 runs", "1 inactive", "Best 0.1 µM"],
+      lines: ["Geometric mean of 2 of 3 curves", "1 inactive curve", "Best 0.1 µM"],
     });
     expect(describeValue(compounds, "dr:e", 1)?.lines).toEqual([
-      "Geometric mean of 1 of 1 run",
+      "Geometric mean of 1 of 1 curve",
       "Best 2 µM",
     ]);
   });
@@ -161,8 +177,8 @@ describe("describeValue", () => {
 });
 
 describe("inactiveBadge", () => {
-  it("counts inactive runs, only when some were inactive", () => {
-    expect(inactiveBadge(compounds, "dr:e", 0)).toBe("Inactive 1/3 runs");
+  it("counts inactive curves, only when some were inactive", () => {
+    expect(inactiveBadge(compounds, "dr:e", 0)).toBe("Inactive 1/3 curves");
     expect(inactiveBadge(compounds, "dr:e", 1)).toBeNull();
     expect(inactiveBadge(compounds, "rd:s:raw", 0)).toBeNull();
   });
