@@ -18,7 +18,7 @@ import {
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { categoryLabel, column, numberAt } from "../lib/dataset";
 import { orderTableRows } from "../lib/table-rows";
@@ -193,7 +193,8 @@ function tableColumns(ds: Dataset, chemistry: boolean): Col[] {
 
 /** The linked table: passing rows (all rows on request), selected rows pinned on top
  * under a collapsible "Selected (n)" row, compact or chemistry density. */
-export function WorkbenchTable({ ds }: { ds: Dataset }) {
+/** `actions` (Save, Export…) sit at the right end of the table toolbar. */
+export function WorkbenchTable({ ds, actions }: { ds: Dataset; actions?: ReactNode }) {
   const mask = usePassMask(ds);
   const selection = useWorkbench((s) => s.selection);
   const [density, setDensity] = useState<Density>("chemistry");
@@ -258,6 +259,7 @@ export function WorkbenchTable({ ds }: { ds: Dataset }) {
         >
           Show filtered rows
         </Button>
+        {actions}
       </div>
       <div className="min-h-0 flex-1">
         <AgGridReact<Row>

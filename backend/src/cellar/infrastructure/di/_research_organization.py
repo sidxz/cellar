@@ -298,7 +298,16 @@ def register_research_organization(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher])
 
-    container.define(CreateCollection, _collection_cmd(CreateCollection))
+    def _create_collection(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateCollection(
+            uow,
+            SQLAlchemyCollectionRepository(uow),
+            c[EventDispatcher],
+            MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]),
+        )
+
+    container.define(CreateCollection, _create_collection)
     container.define(ComposeCollections, _collection_cmd(ComposeCollections))
     container.define(UpdateCollection, _collection_cmd(UpdateCollection))
     container.define(DeleteCollection, _delete_collection)

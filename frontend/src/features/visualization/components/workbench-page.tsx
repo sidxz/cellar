@@ -19,6 +19,7 @@ import { PanelGrid } from "./panel-grid";
 import type { EditField } from "./panels/panel-frame";
 import { PlotSettingsSheet } from "./plot-settings-sheet";
 import { RunPickerDialog } from "./run-picker-dialog";
+import { SaveCollectionButton } from "./save-collection-dialog";
 import { SelectionStrip } from "./selection-strip";
 import { WorkbenchBody } from "./workbench-body";
 import { SourceBar, WorkbenchHeader } from "./workbench-header";
@@ -120,7 +121,7 @@ function Workbench({ source }: { source: DatasetSource }) {
             table={
               <div className="flex h-full flex-col">
                 <SelectionStrip ds={ds} />
-                <WorkbenchTable ds={ds} />
+                <WorkbenchTable ds={ds} actions={<SaveCollectionButton ds={ds} />} />
               </div>
             }
             rail={<SlotNote>No filters yet.</SlotNote>}

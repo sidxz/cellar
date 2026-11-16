@@ -32,6 +32,10 @@ vi.mock("@/features/screening-assay/hooks/use-runs", () => ({
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocol: () => ({ data: { id: P1, name: "NadD HTS" } }),
 }));
+vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
+vi.mock("@/features/research-organization/hooks/use-collections", () => ({
+  useCreateCollection: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 vi.mock("../hooks/use-dataset", () => ({ useDataset: () => state.query }));
 vi.mock("../hooks/use-run-row-counts", () => ({
   useRunRowCounts: (id: string | null) => ({
