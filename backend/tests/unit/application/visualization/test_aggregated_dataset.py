@@ -620,3 +620,29 @@ def test_sets_differing_only_by_json_type_get_distinct_labels():
     labels = [c.provenance.condition_set for c in ds.columns if c.key.startswith(f"{SIG}@")]
     labels = sorted({label for label in labels})
     assert labels == ['pH: "7"', "pH: 7"]
+
+
+# --- provenance.run_ids: the runs behind each value column ----------------------------
+
+
+def test_each_condition_sets_columns_name_the_runs_of_that_set():
+    plus, minus = _run(12, conditions={"NADP": "+", "pH": ""}), _run(13, conditions={"NADP": "-"})
+    plus2 = _run(14, conditions={"NADP": "+"})
+    mol = uuid.uuid4()
+    rows = [_num(mol, conditions={"NADP": "+"}), _num(mol, conditions={"NADP": "-"})]
+    ds = _build("compounds", numeric=rows, runs=[plus, minus, plus2])
+    by_set = {
+        c.provenance.condition_set: c.provenance.run_ids
+        for c in ds.columns
+        if c.key.startswith(f"{SIG}@") and c.provenance.stat is None
+    }
+    assert by_set == {"NADP: +": (plus.id, plus2.id), "NADP: -": (minus.id,)}
+
+
+def test_one_condition_set_names_every_run_on_value_columns_only():
+    a, b = _run(12), _run(13, conditions={"NADP": "+"})
+    mol = uuid.uuid4()
+    ds = _build("batches", numeric=[_num(mol, rd=POT)], dr=[_dr(mol)], runs=[a, b])
+    for key in (POTK, f"{POTK}:p", DRK, f"{DRK}:p"):
+        assert _col(ds, key).provenance.run_ids == (a.id, b.id), key
+    assert _col(ds, f"{POTK}:n").provenance.run_ids is None

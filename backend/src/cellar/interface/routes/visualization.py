@@ -49,6 +49,8 @@ class ColumnProvenanceResponse(BaseModel):
     condition_set: str | None = None
     aggregation: str | None = None
     stat: str | None = None
+    # Aggregated value and p columns: the source runs of the column's condition set.
+    run_ids: list[uuid.UUID] | None = None
 
 
 class DatasetColumnResponse(BaseModel):
@@ -75,6 +77,7 @@ class DatasetColumnResponse(BaseModel):
                 condition_set=c.provenance.condition_set,
                 aggregation=c.provenance.aggregation,
                 stat=c.provenance.stat,
+                run_ids=list(c.provenance.run_ids) if c.provenance.run_ids is not None else None,
             ),
             hidden=c.hidden,
         )

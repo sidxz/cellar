@@ -45,6 +45,8 @@ class ColumnProvenance:
     # "mean" / "median" / "geomean" / "min" / "max" ("replicate_…" at Runs), "fit", "p"
     aggregation: str | None = None
     stat: str | None = None  # what a sibling column holds ("qualifier", "n", "sd" …)
+    # On aggregated value (and p) columns: the source runs of the column's condition set.
+    run_ids: tuple[uuid.UUID, ...] | None = None
 
 
 @dataclass(frozen=True)

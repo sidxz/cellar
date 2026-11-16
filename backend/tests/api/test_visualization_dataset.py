@@ -305,3 +305,12 @@ async def test_an_at_bound_partial_curve_is_greater_than_the_max_dose(
         assert body["values"][f"{key}:q"] == [">"], level
         assert body["values"][f"{key}:p"] == [pytest.approx(5.0)], level
         assert body["values"][f"{key}:p:q"] == ["<"], level
+
+
+async def test_value_columns_name_their_runs(client, session_factory, fake_auth):
+    w = await _seed_activity(session_factory, fake_auth.workspace_id)
+
+    body = await _level(client, w, "compounds")
+
+    col = next(c for c in body["columns"] if c["key"] == f"dr:{w['ic50']}")
+    assert col["provenance"]["run_ids"] == [str(w["a"]), str(w["b"]), str(w["d"])]

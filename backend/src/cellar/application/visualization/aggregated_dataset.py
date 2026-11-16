@@ -254,6 +254,10 @@ def build_aggregated_dataset(
 
     # Several condition sets: one column per set, keyed and labeled by it.
     labels = _set_labels(sets) if len(sets) > 1 else {}
+    # The runs behind each set's columns: every run when there is one set.
+    set_runs: defaultdict[str, list[uuid.UUID]] = defaultdict(list)
+    for run in runs:
+        set_runs[_condition_set(run.conditions)[0] if labels else "{}"].append(run.id)
     suffixes = {
         cs: "@" + hashlib.sha1(cs.encode(), usedforsecurity=False).hexdigest()[:8] for cs in labels
     }
@@ -420,10 +424,11 @@ def build_aggregated_dataset(
             aggregation=aggregation,
         )
         p_prov = replace(prov, aggregation="p")
-        emit(vk, label, "number", s.unit, prov, always=True)
+        run_ids = tuple(set_runs.get(s.condition_set if labels else "{}", ()))
+        emit(vk, label, "number", s.unit, replace(prov, run_ids=run_ids), always=True)
         emit(f"{vk}:q", f"{label} qualifier", "category", None, replace(prov, stat="qualifier"))
         if s.molar:
-            emit(f"{vk}:p", p_label, "number", None, p_prov, always=True)
+            emit(f"{vk}:p", p_label, "number", None, replace(p_prov, run_ids=run_ids), always=True)
         emit(
             f"{vk}:p:q",
             f"{p_label} qualifier",
