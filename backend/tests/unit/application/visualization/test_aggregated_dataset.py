@@ -646,3 +646,15 @@ def test_one_condition_set_names_every_run_on_value_columns_only():
     for key in (POTK, f"{POTK}:p", DRK, f"{DRK}:p"):
         assert _col(ds, key).provenance.run_ids == (a.id, b.id), key
     assert _col(ds, f"{POTK}:n").provenance.run_ids is None
+
+
+def test_pick_list_and_text_readouts_are_never_aggregated():
+    pick = ReadoutDefInfo(
+        id=uuid.uuid4(), protocol_id=P, name="Score", data_type="pick_list", unit=None,
+        display_order=3,
+    )  # fmt: skip
+    a, b = uuid.uuid4(), uuid.uuid4()
+    rows = [_num(a), _num(b, rd=pick.id, mean=2.0)]  # pick-list labels imported as numbers
+    ds = _build("compounds", numeric=rows, defs=[*DEFS, pick])
+    assert ds.row_ids == [str(a)]
+    assert not any(c.provenance.readout_definition_id == pick.id for c in ds.columns)

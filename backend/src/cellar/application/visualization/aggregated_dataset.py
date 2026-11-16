@@ -32,6 +32,7 @@ from cellar.application.screening.run_aggregation import (
 )
 from cellar.application.visualization.dataset import (
     IDENTITY_COLUMNS,
+    NUMERIC_DATA_TYPES,
     RAW_LAYER,
     ColumnKind,
     ColumnProvenance,
@@ -197,7 +198,10 @@ def build_aggregated_dataset(
     molecules: dict[uuid.UUID, CompoundInfo],
     batches: dict[uuid.UUID, str],
 ) -> Dataset:
-    defs_by_id: dict[uuid.UUID | None, ReadoutDefInfo] = {d.id: d for d in defs}
+    # Only numbers are averaged: a pick-list or text readout never is.
+    defs_by_id: dict[uuid.UUID | None, ReadoutDefInfo] = {
+        d.id: d for d in defs if d.data_type in NUMERIC_DATA_TYPES
+    }
     runs_by_id = {r.id: r for r in runs}
     records: list[NumericReadoutRow | DRAggRow | CurveRow] = [
         r

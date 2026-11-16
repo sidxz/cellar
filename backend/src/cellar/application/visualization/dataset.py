@@ -27,7 +27,7 @@ from cellar.domain.screening_assay.plate_geometry import plate_dimensions, well_
 ColumnKind = Literal["number", "category", "text", "structure", "user"]
 
 RAW_LAYER = "raw"
-_NUMERIC_DATA_TYPES = {"numeric", "dose_response"}
+NUMERIC_DATA_TYPES = {"numeric", "dose_response"}
 _LAYER_LABELS = {
     "percent_inhibition": "% Inhibition",
     "percent_activation": "% Activation",
@@ -251,7 +251,7 @@ def build_wells_dataset(
         vkey = f"rd:{rd.id}:{layer}"
         i = index[_row_key(row)]
         col = cells[vkey]
-        if rd.data_type in _NUMERIC_DATA_TYPES:
+        if rd.data_type in NUMERIC_DATA_TYPES:
             value: Any = finite(row.value_numeric)
         else:
             value = (
@@ -291,7 +291,7 @@ def build_wells_dataset(
         prov = ColumnProvenance(
             protocol_id=rd.protocol_id, readout_definition_id=rd.id, layer=layer
         )
-        kind: ColumnKind = "number" if rd.data_type in _NUMERIC_DATA_TYPES else "category"
+        kind: ColumnKind = "number" if rd.data_type in NUMERIC_DATA_TYPES else "category"
         columns.append(
             DatasetColumn(
                 key=vkey, label=label, kind=kind, unit=unit, group=rd.name, provenance=prov
