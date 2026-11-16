@@ -57,6 +57,9 @@ from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
 
+RAW_LAYER = "raw"
+_CONTROL_TYPES = frozenset({WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL})
+
 # Regex to detect cross-protocol references: @ProtocolName.ReadoutName or @{Protocol Name}.Readout
 _CROSS_PROTOCOL_RE = re.compile(r"@\{?[A-Z]{2,8}-\d+\}?\.")
 
@@ -246,50 +249,18 @@ class ReadoutCalculationEngine:
                         )
 
         # ------------------------------------------------------------------
-        # 4.5. Z-prime QC from controls
+        # 4.5. Plate QC from controls, per readout x layer
         # ------------------------------------------------------------------
         if self._plate_quality is not None and run.plates:
-            # Map well_id to its first non-null raw readout once, instead of
-            # rescanning raw_data per well per plate.
-            first_value_by_well: dict[uuid.UUID, ReadoutData] = {}
-            for r in raw_data:
-                if r.well_id is None or r.value is None:
-                    continue
-                if r.well_id not in first_value_by_well:
-                    first_value_by_well[r.well_id] = r
-            wells_by_plate: dict[uuid.UUID, list] = defaultdict(list)
-            for w in run.wells:
-                wells_by_plate[w.plate_id].append(w)
-
-            z_prime_results = {}
-            for plate in run.plates:
-                pos_vals = []
-                neg_vals = []
-                for w in wells_by_plate.get(plate.id, []):
-                    well_readout = first_value_by_well.get(w.id)
-                    if well_readout is None:
-                        continue
-                    if w.well_type == WellType.POSITIVE_CONTROL:
-                        pos_vals.append(well_readout.value.value)
-                    elif w.well_type == WellType.NEGATIVE_CONTROL:
-                        neg_vals.append(well_readout.value.value)
-
-                if pos_vals and neg_vals:
-                    qc = self._plate_quality.compute(pos_vals, neg_vals)
-                    z_prime_results[str(plate.id)] = {
-                        "z_prime": round(qc.z_prime, 3),
-                        "classification": qc.classification,
-                        "pos_mean": round(qc.positive_control_mean, 2),
-                        "pos_sd": round(qc.positive_control_sd, 2),
-                        "neg_mean": round(qc.negative_control_mean, 2),
-                        "neg_sd": round(qc.negative_control_sd, 2),
-                        "s2b": round(qc.signal_to_background, 2),
-                    }
-
-            if z_prime_results:
+            plates = self._plate_qc(run, protocol, raw_data + computed)
+            if plates:
                 # Re-bind to a fresh dict so SQLAlchemy detects the change
                 # (in-place mutation on a JSONB column is not auto-tracked).
-                run.qc_metrics = {**(run.qc_metrics or {}), "z_prime": z_prime_results}
+                run.qc_metrics = {
+                    **(run.qc_metrics or {}),
+                    "z_prime": _legacy_z_prime(plates),
+                    "plates": plates,
+                }
                 await self._run_repo.save(run)
 
         # ------------------------------------------------------------------
@@ -414,6 +385,58 @@ class ReadoutCalculationEngine:
 
         return Success(ComputeRunResult(computed_readouts=computed, fit_warnings=fit_warnings))
 
+    def _plate_qc(
+        self, run: Run, protocol: Protocol, rows: list[ReadoutData]
+    ) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
+        """``plates[plate_id][readout_definition_id][layer]``: Z′, each control's mean,
+        SD and n, and S/B (raw layer only), for every readout x layer whose plate has
+        both control types. Layers are ``raw`` and each normalization."""
+        assert self._plate_quality is not None
+        wells = {w.id: w for w in run.wells}
+        # (plate, readout, layer) -> control type -> well -> value (the last row wins)
+        values: dict[tuple[uuid.UUID, uuid.UUID, str], dict[WellType, dict[uuid.UUID, float]]]
+        values = defaultdict(lambda: defaultdict(dict))
+        for r in rows:
+            if r.well_id is None or r.value is None or r.readout_definition_id is None:
+                continue
+            if r.is_computed and r.normalization_applied is None:
+                continue  # formula and melt-window rows are not plate layers
+            well = wells.get(r.well_id)
+            if well is None or well.well_type not in _CONTROL_TYPES:
+                continue
+            layer = str(r.normalization_applied or RAW_LAYER)
+            key = (well.plate_id, r.readout_definition_id, layer)
+            values[key][well.well_type][well.id] = r.value.value
+
+        order = {rd.id: i for i, rd in enumerate(protocol.readout_definitions)}
+        plate_order = {p.id: p.plate_number for p in run.plates}
+        out: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
+        for plate_id, rd_id, layer in sorted(
+            values,
+            key=lambda k: (plate_order.get(k[0], 0), order.get(k[1], 0), k[2] != RAW_LAYER, k[2]),
+        ):
+            by_type = values[(plate_id, rd_id, layer)]
+            pos = list(by_type[WellType.POSITIVE_CONTROL].values())
+            neg = list(by_type[WellType.NEGATIVE_CONTROL].values())
+            if not pos or not neg:
+                continue
+            qc = self._plate_quality.compute(pos, neg)
+            enough = qc.classification != "insufficient_data"
+            entry = {
+                "z_prime": qc.z_prime if enough else None,
+                "classification": qc.classification,
+                "pos_mean": qc.positive_control_mean,
+                "pos_sd": qc.positive_control_sd if len(pos) >= 2 else None,
+                "pos_n": len(pos),
+                "neg_mean": qc.negative_control_mean,
+                "neg_sd": qc.negative_control_sd if len(neg) >= 2 else None,
+                "neg_n": len(neg),
+                # A ratio of means only reads on the raw signal.
+                "s2b": qc.signal_to_background if enough and layer == RAW_LAYER else None,
+            }
+            out.setdefault(str(plate_id), {}).setdefault(str(rd_id), {})[layer] = entry
+        return out
+
     async def _window_rows(
         self, run: Run, protocol: Protocol, workspace_id: uuid.UUID
     ) -> tuple[list[ReadoutData], list[ReadoutData]]:
@@ -535,3 +558,25 @@ class ReadoutCalculationEngine:
             visit(rd.name)
 
         return order
+
+
+def _legacy_z_prime(
+    plates: dict[str, dict[str, dict[str, dict[str, Any]]]],
+) -> dict[str, dict[str, Any]]:
+    """``qc_metrics.z_prime`` as its readers know it: per plate, the raw layer of the
+    first readout (protocol order) that has one, rounded as before."""
+    legacy: dict[str, dict[str, Any]] = {}
+    for plate_id, readouts in plates.items():
+        raw = next((r[RAW_LAYER] for r in readouts.values() if RAW_LAYER in r), None)
+        if raw is None:
+            continue
+        legacy[plate_id] = {
+            "z_prime": round(raw["z_prime"] or 0.0, 3),
+            "classification": raw["classification"],
+            "pos_mean": round(raw["pos_mean"], 2),
+            "pos_sd": round(raw["pos_sd"] or 0.0, 2),
+            "neg_mean": round(raw["neg_mean"], 2),
+            "neg_sd": round(raw["neg_sd"] or 0.0, 2),
+            "s2b": round(raw["s2b"] or 0.0, 2),
+        }
+    return legacy
