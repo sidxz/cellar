@@ -261,3 +261,22 @@ async def test_empty_ids_read_nothing_without_a_query():
     assert await reader.fetch_curves(uuid.uuid4(), []) == []
     assert await reader.compound_info(uuid.uuid4(), []) == {}
     assert await reader.batch_numbers(uuid.uuid4(), []) == {}
+
+
+async def test_protocol_names_are_workspace_scoped(uow, session_factory, workspace_id):
+    async with uow:
+        s = uow.session
+        primary = await seed.protocol(s, workspace_id, name="Primary")
+        foreign = await seed.protocol(s, uuid.uuid4(), name="Counter")
+        await uow.commit()
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    names = await reader.protocol_names(workspace_id, [primary, foreign, uuid.uuid4()])
+
+    assert names == {primary: "Primary"}
+    assert (
+        await SQLAlchemyVisualizationDatasetReader(None).protocol_names(  # type: ignore[arg-type]
+            workspace_id, []
+        )
+        == {}
+    )

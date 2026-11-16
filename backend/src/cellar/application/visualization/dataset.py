@@ -61,6 +61,12 @@ class DatasetColumn:
 
 
 @dataclass(frozen=True)
+class DatasetProtocol:
+    id: uuid.UUID
+    name: str
+
+
+@dataclass(frozen=True)
 class Dataset:
     revision: str
     level: str
@@ -69,6 +75,8 @@ class Dataset:
     values: dict[str, list[Any]]
     # Wells only: each plate's Z′ as stored by the run's QC (plate id → value).
     plate_z_prime: dict[str, float] = field(default_factory=dict)
+    # The protocols the columns come from, the first one owning the rows.
+    protocols: list[DatasetProtocol] = field(default_factory=list)
 
 
 # Identity columns, in display order: (key, label, kind, hidden).

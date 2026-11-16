@@ -131,3 +131,9 @@ class VisualizationDatasetReader(Protocol):
     async def batch_numbers(
         self, workspace_id: uuid.UUID, batch_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, str]: ...
+
+    async def protocol_names(
+        self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """Names of the workspace's protocols among ``protocol_ids``."""
+        ...

@@ -36,6 +36,7 @@ async def protocol(
     *,
     dose_unit: str = "uM",
     conditions: list[tuple[str, str, str | None]] = (),  # type: ignore[assignment]
+    name: str | None = None,
 ) -> uuid.UUID:
     """``conditions``: (name, data_type, unit) condition definitions."""
     pid = uuid.uuid4()
@@ -46,7 +47,13 @@ async def protocol(
             "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, :du, 'high', 1, 1, "
             ":user)"
         ),
-        {"id": pid, "ws": ws, "name": f"Protocol-{pid.hex[:8]}", "du": dose_unit, "user": USER},
+        {
+            "id": pid,
+            "ws": ws,
+            "name": name or f"Protocol-{pid.hex[:8]}",
+            "du": dose_unit,
+            "user": USER,
+        },
     )
     for name, data_type, unit in conditions:
         await s.execute(
