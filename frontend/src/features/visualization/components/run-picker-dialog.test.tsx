@@ -23,6 +23,7 @@ vi.mock("../hooks/use-run-row-counts", () => ({
   useRunRowCounts: () => ({ data: { counts: { r1: 150_000, r2: 40_000, r3: 30_000 } } }),
 }));
 
+import { type OpenView, OpenViewContext } from "../store/open-view-context";
 import { RunPickerDialog } from "./run-picker-dialog";
 import { VisualizeButton } from "./visualize-button";
 
@@ -58,6 +59,18 @@ describe("RunPickerDialog", () => {
     expect(screen.queryByText(/over the 100,000-row limit/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open workbench" }));
     expect(push).toHaveBeenCalledWith("/assays/visualize?protocol=p1&runs=r2%2Cr3");
+  });
+
+  it("inside a saved view, reopens that view on the chosen runs", () => {
+    const open = { view: { id: "v1" }, config: {}, reload: vi.fn() } as unknown as OpenView;
+    render(
+      <OpenViewContext.Provider value={open}>
+        <RunPickerDialog protocolId="p1" open onOpenChange={vi.fn()} />
+      </OpenViewContext.Provider>,
+    );
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include 2026-11-12 · A. Chen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open workbench" }));
+    expect(push).toHaveBeenCalledWith("/assays/visualize/v1?protocol=p1&runs=r2%2Cr3&level=wells");
   });
 
   it("lists runs as date · operator, never user ids", () => {

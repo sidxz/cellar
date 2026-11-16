@@ -1,6 +1,7 @@
 "use client";
 
 import { EmptyState } from "@/shared/components/empty-state";
+import { Alert } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
@@ -10,15 +11,17 @@ import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
+import type { ViewConfig } from "../lib/config-schema";
 import { resolveUserColumns } from "../lib/dataset";
 import { defaultPanels } from "../lib/default-panels";
 import { type Carry, carryConfig, switchNote } from "../lib/level-switch";
 import { countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
+import { resolveViewConfig } from "../lib/saved-view";
 import { visualizeHref } from "../lib/source-url";
 import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
-import type { Dataset, DatasetSource, Level } from "../types";
+import type { Dataset, DatasetSource, Level, SavedView } from "../types";
 import { AddPlotMenu } from "./add-plot-menu";
 import { CurvesDialog, type CurvesTarget, curvesTarget } from "./curves-dialog";
 import { ExportMenu } from "./export-menu";
@@ -34,14 +37,26 @@ import { LevelSwitcher, SourceBar, WorkbenchHeader, useSourceRuns } from "./work
 import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
 
 /** The server's own sentence when it sent one (`{message}`), else the error text. */
-function errorText(error: unknown): string {
+export function errorText(error: unknown): string {
   const body = error instanceof ApiError ? (error.body as { message?: unknown } | null) : null;
   if (typeof body?.message === "string") return body.message;
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-/** The full-page workbench for a protocol (some or all runs) or one run, at one row level. */
-export function WorkbenchPage({ source, level }: { source: DatasetSource | null; level: Level }) {
+/** A saved view the workbench opens: its plots and filters, fitted to today's data. */
+type OpenedView = { view: SavedView; config: ViewConfig };
+
+/** The full-page workbench for a protocol (some or all runs) or one run, at one row level;
+ * with ``view``, opened on that saved view's plots and filters. */
+export function WorkbenchPage({
+  source,
+  level,
+  view,
+}: {
+  source: DatasetSource | null;
+  level: Level;
+  view?: OpenedView;
+}) {
   if (!source) {
     return (
       <EmptyState
@@ -51,13 +66,21 @@ export function WorkbenchPage({ source, level }: { source: DatasetSource | null;
       />
     );
   }
-  return <Workbench source={source} level={level} />;
+  return <Workbench source={source} level={level} view={view} />;
 }
 
 /** The last level switch: the view it leads to and what it takes along. */
 type Switch = { to: string; carry: Carry; dismissed?: boolean };
 
-function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
+function Workbench({
+  source,
+  level,
+  view,
+}: {
+  source: DatasetSource;
+  level: Level;
+  view?: OpenedView;
+}) {
   const query = useDataset(source, level);
   const nameOf = useMemberNames();
   const router = useRouter();
@@ -70,6 +93,7 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
   const closeEditor = useCallback(() => setEditing(null), []);
   const tableRef = useRef<WorkbenchTableHandle>(null);
   const [curves, setCurves] = useState<CurvesTarget | null>(null);
+  const [viewNoteOpen, setViewNoteOpen] = useState(true);
 
   const ds = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
@@ -87,17 +111,49 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
 
   // A switch refetches at the new level (the URL carries it); the plots and filters follow
   // when its data arrives, fitted to that level's columns. Not an undo step.
-  const view = viewKey(source, level);
-  const carry = switched?.to === view ? switched.carry : null;
+  const shown = viewKey(source, level);
+  const carry = switched?.to === shown ? switched.carry : null;
   const switchLevel = (next: Level, take: Carry | null) => {
     setSwitched(take && { to: viewKey(source, next), carry: take });
-    router.replace(visualizeHref(source, next), { scroll: false });
+    router.replace(visualizeHref(source, next, view?.view.id), { scroll: false });
   };
   const carried = useMemo(() => (ds && carry ? carryConfig(carry, ds) : null), [ds, carry]);
   const note =
     carried && carry && !switched?.dismissed
       ? switchNote(level, carried.dropped, carry.selected)
       : null;
+
+  // A saved view opens on its own plots and filters, less what today's data lacks; the note
+  // lists that by saved label, after whatever the server could not resolve (removed runs…).
+  const resolved = useMemo(
+    () => (ds && view ? resolveViewConfig(view.config, ds) : null),
+    [ds, view],
+  );
+  const viewLines = [
+    ...(view?.view.unresolved ?? []),
+    ...(!carry && resolved?.missing.length
+      ? [`Not available any more: ${resolved.missing.join(", ")}.`]
+      : []),
+  ];
+  const viewNote = viewNoteOpen && viewLines.length > 0 && (
+    <Alert className="flex items-start gap-2 py-2">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+      <div className="min-w-0 flex-1 space-y-0.5">
+        {viewLines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
+      <Button
+        size="icon"
+        variant="ghost"
+        className="h-6 w-6 shrink-0"
+        aria-label="Dismiss view note"
+        onClick={() => setViewNoteOpen(false)}
+      >
+        <X className="h-3.5 w-3.5" />
+      </Button>
+    </Alert>
+  );
 
   // Known before the dataset arrives (the server refuses it with a bare 422), so the
   // chemist sees the actual count and goes straight back to the picker. Wells only: the
@@ -161,15 +217,17 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
         <>
           <SourceBar source={source} level={level} />
           <LevelSwitcher level={level} onChange={(next) => switchLevel(next, carry)} />
+          {viewNote}
           {body}
         </>
       ) : (
-        // Keyed by the source and level, not the data revision: new data for the same view
-        // never resets the chemist's plots, filters, selection or history.
+        // Keyed by the source and level (and saved view), not the data revision: new data
+        // for the same view never resets the chemist's plots, filters, selection or history.
         <WorkbenchProvider
-          key={view}
-          initialPanels={carried?.panels ?? initialPanels(ds)}
-          initialFilters={carried?.filters}
+          key={view ? `${view.view.id}:${shown}` : shown}
+          initialPanels={carried?.panels ?? resolved?.panels ?? initialPanels(ds)}
+          initialFilters={carried?.filters ?? resolved?.filters}
+          saved={view !== undefined}
         >
           <WorkbenchHeader
             source={source}
@@ -179,6 +237,7 @@ function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
             exportMenu={<ExportMenu ds={ds} table={tableRef} />}
             addPlotMenu={<AddPlotMenu ds={ds} />}
           />
+          {viewNote}
           {note && (
             <div className="flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-sm">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -250,7 +309,7 @@ const viewKey = (source: DatasetSource, level: Level) => JSON.stringify([source,
 // The provider reads this once (its store is created on mount), so the ids made here stick.
 const initialPanels = (ds: Dataset) => defaultPanels(ds).map((p) => makePanel(p.type, p.defaults));
 
-function LoadingSkeleton() {
+export function LoadingSkeleton() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2" aria-busy="true" aria-label="Loading">
       <Skeleton className="h-8 w-full" />

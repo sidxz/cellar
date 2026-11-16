@@ -22,6 +22,7 @@ import { LEVELS, countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
 import { conditionsText, newestFirst, runLabel } from "../lib/runs";
 import { visualizeHref } from "../lib/source-url";
+import { useOpenView } from "../store/open-view-context";
 import type { Level } from "../types";
 
 const fmt = (n: number) => n.toLocaleString();
@@ -48,6 +49,7 @@ export function RunPickerDialog({
   level = "wells",
 }: RunPickerDialogProps) {
   const router = useRouter();
+  const viewId = useOpenView()?.view.id;
   const nameOf = useMemberNames();
   const { data: protocol } = useProtocol(protocolId);
   const { data: runs, isLoading } = useRunsByProtocol(protocolId);
@@ -92,6 +94,7 @@ export function RunPickerDialog({
           ...(runIds.length < ordered.length ? { runIds } : {}),
         },
         level,
+        viewId,
       ),
     );
     onOpenChange(false);

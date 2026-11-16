@@ -132,8 +132,10 @@ describe("ProtocolDetail actions", () => {
   it("offers Visualize beside the primary action", () => {
     state.protocol = protocol({ status: "active" } as Partial<Protocol>);
     render();
-    const visualize = screen.getByRole("button", { name: "Visualize" });
-    expect(visualize.nextElementSibling).toHaveTextContent("New Run");
+    // Visualize and its saved-views chevron form one split button.
+    const visualize = screen.getByRole("button", { name: "Visualize" }).parentElement;
+    expect(visualize).toContainElement(screen.getByRole("button", { name: "Saved views" }));
+    expect(visualize?.nextElementSibling).toHaveTextContent("New Run");
   });
 });
 

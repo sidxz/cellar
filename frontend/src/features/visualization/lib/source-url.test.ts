@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { DatasetSource } from "../types";
-import { levelFromParams, sourceFromParams, visualizeHref } from "./source-url";
+import {
+  fromDatasetRequest,
+  levelFromParams,
+  sourceFromParams,
+  toDatasetRequest,
+  visualizeHref,
+} from "./source-url";
 
 describe("visualize URL contract", () => {
   it("round-trips a run, a protocol and a protocol with chosen runs", () => {
@@ -48,5 +54,36 @@ describe("visualize URL level", () => {
     );
     expect(sourceFromParams(query)).toEqual(run);
     expect(levelFromParams(query)).toBe("batches");
+  });
+});
+
+describe("saved view URL", () => {
+  it("opens a view at its own path, naming the level always", () => {
+    const src: DatasetSource = { kind: "protocol", protocolId: "p1", runIds: ["r1"] };
+    const href = visualizeHref(src, "compounds", "v1");
+    expect(href.startsWith("/assays/visualize/v1?")).toBe(true);
+    expect(href).toContain("level=compounds");
+    // Wells too: without it the view's own saved level would win over the switch.
+    expect(visualizeHref(src, "wells", "v1")).toContain("level=wells");
+  });
+});
+
+describe("dataset request", () => {
+  it("round-trips a run source and a protocol source with or without runs", () => {
+    const sources: DatasetSource[] = [
+      { kind: "run", runId: "r1" },
+      { kind: "protocol", protocolId: "p1", runIds: ["r1", "r2"] },
+      { kind: "protocol", protocolId: "p1" },
+    ];
+    for (const source of sources) {
+      expect(fromDatasetRequest(toDatasetRequest(source, "runs"))).toEqual({
+        source,
+        level: "runs",
+      });
+    }
+    expect(toDatasetRequest(sources[1], "wells")).toEqual({
+      level: "wells",
+      source: { kind: "protocol", protocol_id: "p1", run_ids: ["r1", "r2"] },
+    });
   });
 });
