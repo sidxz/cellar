@@ -31,6 +31,7 @@ function coreOf(set: DerivedSet) {
     id: set.spec.id,
     smiles: set.spec.coreSmiles,
     label: `R-group core · ${set.spec.name} · ${n.toLocaleString()} match`,
+    title: `${n === 1 ? "1 compound contains" : `${n.toLocaleString()} compounds contain`} this core\n${set.spec.coreSmiles}`,
   };
 }
 
@@ -86,8 +87,9 @@ export function SeriesDialog({
         <DialogHeader>
           <DialogTitle>Add a series column</DialogTitle>
           <DialogDescription>
-            Pick scaffolds or R-group cores. Each compound goes to the first series it belongs to;
-            the rest are Other.
+            Pick scaffolds or R-group cores. A scaffold counts the compounds built on it; a core
+            counts every compound containing it, so the same ring can count more as a core. Each
+            compound goes to the first series it belongs to; the rest are Other.
           </DialogDescription>
         </DialogHeader>
 
@@ -97,14 +99,14 @@ export function SeriesDialog({
               key={c.scaffoldSmiles}
               type="button"
               className={tile}
-              aria-label={`Scaffold ${c.scaffoldSmiles} — in ${c.coverage} compounds`}
-              title={c.scaffoldSmiles}
+              aria-label={`Scaffold of ${c.coverage} compounds: ${c.scaffoldSmiles}`}
+              title={`${c.coverage} compounds are built on this ring scaffold\n${c.scaffoldSmiles}`}
               disabled={full || members.some((m) => m.scaffold === c.scaffoldSmiles)}
               onClick={() => add({ scaffold: c.scaffoldSmiles })}
             >
               <StructureThumbnail smiles={c.scaffoldSmiles} size={56} />
               <span className="tabular-nums text-muted-foreground">
-                {c.coverage.toLocaleString()} compounds
+                Scaffold of {c.coverage.toLocaleString()} compounds
               </span>
             </button>
           ))}
@@ -114,6 +116,7 @@ export function SeriesDialog({
               type="button"
               className={tile}
               aria-label={c.label}
+              title={c.title}
               disabled={full || members.some((m) => m.rgroupsId === c.id)}
               onClick={() => add({ rgroupsId: c.id })}
             >

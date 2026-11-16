@@ -83,8 +83,8 @@ describe("SeriesDialog", () => {
     const { onApply, onOpenChange } = open();
     expect(h.treeInput).toMatchObject({ moleculeIds: IDS });
     expect(scaffoldTiles().map((b) => b.getAttribute("aria-label"))).toEqual([
-      "Scaffold S1 — in 4 compounds",
-      "Scaffold S2 — in 3 compounds",
+      "Scaffold of 4 compounds: S1",
+      "Scaffold of 3 compounds: S2",
     ]);
     expect(apply()).toBeDisabled();
 
@@ -106,6 +106,23 @@ describe("SeriesDialog", () => {
       { name: "Series B", rgroupsId: "rg1" },
     ]);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it("says what each count means, so one ring can count more as a core than as a scaffold", () => {
+    setTree(tree);
+    open();
+    expect(screen.getByText("Scaffold of 3 compounds")).toBeInTheDocument();
+    expect(scaffoldTiles()[1]).toHaveAttribute(
+      "title",
+      "3 compounds are built on this ring scaffold\nS2",
+    );
+    expect(coreTile()).toHaveAttribute("title", "1 compound contains this core\nc1ccccc1");
+    expect(
+      screen.getByText(
+        "A scaffold counts the compounds built on it; a core counts every compound containing it, so the same ring can count more as a core.",
+        { exact: false },
+      ),
+    ).toBeInTheDocument();
   });
 
   it("previews overlaps and removes a member", () => {
