@@ -188,9 +188,42 @@ describe("describeValue", () => {
       "Best 0.1 µM",
     ]);
     expect(describeValue(censored, "dr:e", 1)?.lines).toEqual([
-      "All 2 fitted curves censored — showing the tightest bound",
+      "All 2 curves censored — showing the tightest bound",
       "1 inactive curve",
     ]);
+  });
+
+  it("says when the curves are censored both ways", () => {
+    const both: Dataset = {
+      ...compounds,
+      columns: [
+        ...compounds.columns,
+        col("dr:e:n_censored", "Enzyme · IC50 n censored", drProv("geomean", "n_censored")),
+      ],
+      values: {
+        ...compounds.values,
+        "dr:e": [null, null, null],
+        "dr:e:best": [null, null, null],
+        "dr:e:n_tested": [2, null, null],
+        "dr:e:n_inactive": [1, null, null],
+        "dr:e:n_used": [0, null, null],
+        "dr:e:n_censored": [2, null, null],
+      },
+    };
+    expect(describeValue(both, "dr:e", 0)?.lines).toEqual([
+      "Censored both ways — no value",
+      "1 inactive curve",
+    ]);
+  });
+
+  it("reads an inactive run's fit as above its top dose", () => {
+    const inactive: Dataset = {
+      ...runs,
+      values: { ...runs.values, "dr:e": [10, 0.8], "dr:e:curve_class": ["inactive", "active"] },
+    };
+    expect(describeValue(inactive, "dr:e", 0)?.lines[0]).toBe(
+      "Inactive: no response within the tested doses, so the value lies above the top dose.",
+    );
   });
 
   it("explains a p value", () => {

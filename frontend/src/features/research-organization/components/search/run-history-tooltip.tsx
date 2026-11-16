@@ -15,13 +15,12 @@ function findInterceptValue(
     | Array<{
         spec: { kind: string; level?: number };
         value: number | null;
-        at_bound?: boolean;
         qualifier?: string;
       }>
     | null
     | undefined,
   ik: InterceptKey | null,
-): { value: number | null; at_bound?: boolean; qualifier?: string } | undefined {
+): { value: number | null; qualifier?: string } | undefined {
   if (!ivs || ivs.length === 0) return undefined;
   if (ik === null) return ivs[0];
   return ivs.find((iv) => iv.spec.kind === ik.kind && iv.spec.level === ik.level);
@@ -77,11 +76,10 @@ export function RunHistoryTooltip({ av, interceptKey, unit }: RunHistoryTooltipP
           <tbody>
             {runs.map((r) => {
               const iv = findInterceptValue(r.intercept_values, interceptKey);
-              // Single-point runs carry their own qualifier ("nd" = no value).
-              const isInactive = r.curve_class === "inactive" || iv?.qualifier === "nd";
+              // Each run's value as the backend reports it: a curve's potency censored at
+              // its tested doses ("> 500" for an inactive curve), "nd" when there is none.
               const bound =
                 iv?.qualifier === ">" || iv?.qualifier === "<" ? `${iv.qualifier} ` : "";
-              const isAtBound = iv?.at_bound === true;
               return (
                 <tr key={`${r.run_id}:${r.curve_id}`} className="border-t border-border/40">
                   <td className="py-1 tabular-nums">
@@ -93,12 +91,8 @@ export function RunHistoryTooltip({ av, interceptKey, unit }: RunHistoryTooltipP
                     />
                   </td>
                   <td className="py-1 text-right tabular-nums font-mono">
-                    {isInactive ? (
+                    {iv?.qualifier === "nd" ? (
                       <span className="text-muted-foreground">ND</span>
-                    ) : isAtBound ? (
-                      <span title="Fit reached a bound. Open the source run for the tested concentration range.">
-                        Bound fit
-                      </span>
                     ) : iv?.value !== null && iv?.value !== undefined ? (
                       <span>{`${bound}${iv.value.toPrecision(3)} ${unit}`}</span>
                     ) : (

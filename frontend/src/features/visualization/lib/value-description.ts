@@ -1,4 +1,5 @@
 import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import { TOOLTIP_INACTIVE } from "@/features/screening-assay/lib/intercept-label";
 import { formatCount, formatMeasurementValue } from "@/shared/lib/format-number";
 import type { Dataset } from "../types";
 import { protocolName, selectivityKeys } from "./cross-protocol";
@@ -60,7 +61,7 @@ export function describeValue(
   } else if (aggregation === "fit") {
     const curveClass = siblingAt(ds, key, "curve_class", i);
     if (value === null && curveClass == null) return null;
-    if (curveClass === "inactive") lines.push("Inactive curve — no fitted value");
+    if (curveClass === "inactive") lines.push(TOOLTIP_INACTIVE);
     const r2 = at("r_squared");
     const hill = at("hill_slope");
     lines.push(
@@ -74,17 +75,19 @@ export function describeValue(
       lines.push(`95% CI ${sig4(lo)}–${sig4(hi)}${c.unit ? ` ${c.unit}` : ""}`);
     }
   } else if (!c.provenance.layer) {
-    // A dose-response value across runs: the geometric mean of the active curves' fits; a fit
-    // whose intercept lies beyond the dose range is censored at its bound.
+    // A dose-response value across runs: the geometric mean of the fits inside their doses; an
+    // inactive curve or a fit beyond the dose range is censored at its bound.
     const tested = at("n_tested");
     if (tested === null) return null;
     const used = at("n_used") ?? 0;
     const censored = at("n_censored") ?? 0;
     if (used === 0 && censored > 0) {
       lines.push(
-        censored === 1
-          ? "The only fitted curve is censored — showing its bound"
-          : `All ${censored} fitted curves censored — showing the tightest bound`,
+        value === null
+          ? "Censored both ways — no value"
+          : censored === 1
+            ? "The only curve is censored — showing its bound"
+            : `All ${censored} curves censored — showing the tightest bound`,
       );
     } else {
       lines.push(`Geometric mean of ${used} of ${formatCount(tested, "curve")}`);

@@ -169,7 +169,7 @@ export interface InterceptDisplay {
   } | null;
 }
 
-const TOOLTIP_INACTIVE =
+export const TOOLTIP_INACTIVE =
   "Inactive: no response within the tested doses, so the value lies above the top dose.";
 const TOOLTIP_INACTIVE_NO_RANGE =
   "ND = Not Determined. Curve was classified inactive, and no tested concentration is available to report as a bound.";

@@ -429,7 +429,7 @@ export function ResultsGridV2({
               return (
                 <span
                   className="font-mono text-muted-foreground"
-                  title="ND = Not Determined. The source curve was inactive, the intercept wasn't reached within the tested range, or no candidate is available for this cell."
+                  title="ND = Not Determined. The curve has no tested dose to quote or no such intercept, or no candidate is available for this cell. An inactive curve reads as a bound above its top dose."
                 >
                   ND
                 </span>
