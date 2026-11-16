@@ -52,6 +52,15 @@ describe("RunPickerDialog", () => {
     expect(push).toHaveBeenCalledWith("/assays/visualize?protocol=p1&level=compounds");
   });
 
+  it("lets Not counted and the conditions wrap, never widening the table past the Wells column", () => {
+    render(<RunPickerDialog protocolId="p1" level="compounds" open onOpenChange={vi.fn()} />);
+    expect(screen.getByText("Not counted").parentElement).toHaveClass("flex-wrap");
+    for (const cell of screen.getAllByText("ATP: 10 uM")) {
+      expect(cell).not.toHaveClass("truncate");
+      expect(cell).not.toHaveClass("whitespace-nowrap");
+    }
+  });
+
   it("updates the total when a run is unticked and opens the chosen runs", () => {
     render(<RunPickerDialog protocolId="p1" open onOpenChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Include 2026-11-12 · A. Chen" }));

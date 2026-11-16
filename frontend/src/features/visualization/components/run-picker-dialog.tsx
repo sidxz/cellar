@@ -163,7 +163,8 @@ export function RunPickerDialog({
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{label}</td>
                     <td className="px-2 py-1.5">
-                      <div className="flex items-center gap-1">
+                      {/* Wraps "Not counted" under the status rather than widen the table. */}
+                      <div className="flex flex-wrap items-center gap-1">
                         <StatusBadge status={run.status} />
                         {!countsAtLevel(level, run.status) && (
                           <>
@@ -178,7 +179,7 @@ export function RunPickerDialog({
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       {run.plate_count || "—"}
                     </td>
-                    <td className="max-w-[16rem] truncate px-2 py-1.5 text-muted-foreground">
+                    <td className="min-w-32 px-2 py-1.5 text-muted-foreground">
                       {conditionsText(run) || "—"}
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
