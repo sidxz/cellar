@@ -24,6 +24,9 @@ from typing import Protocol, runtime_checkable
 
 from cellar.application.shared.parsers import ParsedTable
 
+# The largest run file the wizard takes: 50,000 rows (the parser's limit) of a wide export.
+MAX_RUN_FILE_BYTES = 50 * 1024 * 1024
+
 
 @dataclass(frozen=True)
 class _StoredPreview:
@@ -55,11 +58,12 @@ class PreviewStore(Protocol):
 
 class InMemoryPreviewStore:
     """In-process preview store. A preview lives ``ttl_seconds`` from its last
-    save or peek; past ``max_items`` the least recently used goes first.
+    save or peek; past ``max_items`` previews or ``max_bytes`` of uploads the
+    least recently used go first (the newest always stays).
 
     ponytail: one process only (prod runs one uvicorn worker). More workers
-    need a shared store (Valkey); ``max_items`` bounds memory only as far as
-    the parser bounds one file.
+    need a shared store (Valkey); ``max_bytes`` counts the uploads, not the
+    parsed tables they become.
     """
 
     def __init__(
@@ -67,12 +71,14 @@ class InMemoryPreviewStore:
         ttl_seconds: float = 30 * 60,
         *,
         max_items: int = 50,
+        max_bytes: int = 500 * 1024 * 1024,
         clock=time.monotonic,
     ) -> None:
         # Ordered by last use, oldest first: the expired and the evicted are at the front.
         self._items: OrderedDict[uuid.UUID, tuple[_StoredPreview, float]] = OrderedDict()
         self._ttl = ttl_seconds
         self._max_items = max_items
+        self._max_bytes = max_bytes
         self._clock = clock
 
     @property
@@ -81,7 +87,10 @@ class InMemoryPreviewStore:
 
     def save(self, key: uuid.UUID, payload: _StoredPreview) -> None:
         self._touch(key, payload)
-        while len(self._items) > self._max_items:
+        while len(self._items) > 1 and (
+            len(self._items) > self._max_items
+            or sum(len(p.raw_bytes) for p, _ in self._items.values()) > self._max_bytes
+        ):
             self._items.popitem(last=False)
 
     def consume(self, key: uuid.UUID) -> _StoredPreview | None:

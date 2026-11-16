@@ -25,6 +25,7 @@ from cellar.application.screening.import_run_file import (
     PreviewRunFileResult,
     RepreviewRunFileQuery,
 )
+from cellar.application.screening.import_run_file_preview_store import MAX_RUN_FILE_BYTES
 from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
 from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
 from cellar.application.screening.list_instrument_file_formats import (
@@ -253,7 +254,13 @@ async def preview_run_file(
     — the wizard does not need to ask. Wells in the file are interpreted in
     that unit.
     """
-    content = await file.read()
+    # One byte past the limit is enough to refuse the file.
+    content = await file.read(MAX_RUN_FILE_BYTES + 1)
+    if len(content) > MAX_RUN_FILE_BYTES:
+        raise ValidationError(
+            f"The file is larger than {MAX_RUN_FILE_BYTES // (1024 * 1024)} MB; "
+            "split it into several imports"
+        )
     query = PreviewRunFileQuery(
         workspace_id=auth.workspace_id,
         run_id=run_id,
