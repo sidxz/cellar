@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.duar.auth import get_duar
@@ -15,6 +16,15 @@ from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.middleware.request_context import RequestContextMiddleware
 from cellar.interface.middleware.security_headers import SecurityHeadersMiddleware
 from cellar.version import build_info
+
+
+def add_compression(app: FastAPI) -> None:
+    """Gzip responses of 1 KiB or more (a workbench dataset runs to tens of MB).
+
+    Starlette skips event streams and already-compressed media, and compresses
+    large bodies in a worker thread.
+    """
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def create_app() -> FastAPI:
@@ -222,6 +232,8 @@ def create_app() -> FastAPI:
         # session-authed) is NOT excluded.
         exclude_paths=["/health", "/version", "/docs", "/openapi.json", "/api/v1/kiosk"],
     )
+
+    add_compression(app)
 
     # CORS — added last so it runs first (LIFO)
     import os

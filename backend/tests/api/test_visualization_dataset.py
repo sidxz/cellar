@@ -69,6 +69,20 @@ async def test_dataset_for_a_protocol_run_subset(client, session_factory, fake_a
     assert resp.json()["values"]["run"] == ["2026-11-12", "2026-11-12"]
 
 
+async def test_dataset_is_gzipped_for_a_client_that_accepts_it(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+
+    resp = await client.post(
+        URL,
+        json={"source": {"kind": "protocol", "protocol_id": str(w["p"])}, "level": "wells"},
+        headers={"Accept-Encoding": "gzip"},
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["content-encoding"] == "gzip"
+    assert resp.json()["row_count"] == 4
+
+
 async def test_other_workspace_gets_404(client, session_factory, fake_auth):
     w = await _seed(session_factory, uuid.uuid4())  # data lives in another workspace
 
