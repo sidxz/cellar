@@ -32,7 +32,7 @@ describe("RunPickerDialog", () => {
   it("preselects every run and disables Open above the row cap with the reason", () => {
     render(<RunPickerDialog protocolId="p1" open onOpenChange={vi.fn()} />);
     expect(screen.getByText("220,000 wells selected")).toBeInTheDocument();
-    expect(screen.getByText(/over the 200,000-row limit/i)).toBeInTheDocument();
+    expect(screen.getByText(/over the 100,000-row limit/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open workbench" })).toBeDisabled();
   });
 
@@ -40,7 +40,7 @@ describe("RunPickerDialog", () => {
     render(<RunPickerDialog protocolId="p1" open onOpenChange={vi.fn()} />);
     fireEvent.click(screen.getByRole("checkbox", { name: "Include 2026-11-12 · A. Chen" }));
     expect(screen.getByText("70,000 wells selected")).toBeInTheDocument();
-    expect(screen.queryByText(/over the 200,000-row limit/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/over the 100,000-row limit/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open workbench" }));
     expect(push).toHaveBeenCalledWith("/assays/visualize?protocol=p1&runs=r2%2Cr3");
   });

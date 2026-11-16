@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import fields
 
 from sqlalchemy import Text, and_, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -154,34 +155,38 @@ class SQLAlchemyVisualizationDatasetReader:
         rd = ReadoutDataModel
         batch_id = func.coalesce(rd.batch_id, WellModel.batch_id)
         molecule_id = func.coalesce(rd.molecule_id, BatchModel.molecule_id)
+        # Selected in WellValueRow field order (built from the dataclass, so the
+        # order holds by construction) and unpacked positionally: named Row
+        # access dominated the fetch time at 400k rows.
+        exprs = {
+            "run_id": rd.run_id,
+            "well_id": rd.well_id,
+            "plate_id": PlateModel.id,
+            "plate_number": PlateModel.plate_number,
+            "plate_barcode": PlateModel.barcode,
+            "plate_format": PlateModel.format,
+            "holder_rows": PlateModel.holder_rows,
+            "holder_columns": PlateModel.holder_columns,
+            "well_row": WellModel.row,
+            "well_column": WellModel.column,
+            "well_type": WellModel.well_type,
+            "dose": WellModel.dose,
+            "well_label": WellModel.label,
+            "molecule_id": molecule_id,
+            "registration_number": MoleculeModel.registration_number,
+            "smiles": MoleculeModel.smiles,
+            "batch_id": batch_id,
+            "batch_number": BatchModel.batch_number,
+            "readout_definition_id": rd.readout_definition_id,
+            "normalization_applied": rd.normalization_applied,
+            "value_numeric": rd.value_numeric,
+            "value_qualifier": rd.value_qualifier,
+            "value_text": rd.value_text,
+            "is_outlier": rd.is_outlier,
+            "created_at": rd.created_at,
+        }
         stmt = (
-            select(
-                rd.run_id,
-                rd.well_id,
-                PlateModel.id.label("plate_id"),
-                PlateModel.plate_number,
-                PlateModel.barcode,
-                PlateModel.format,
-                PlateModel.holder_rows,
-                PlateModel.holder_columns,
-                WellModel.row,
-                WellModel.column,
-                WellModel.well_type,
-                WellModel.dose,
-                WellModel.label,
-                molecule_id.label("molecule_id"),
-                MoleculeModel.registration_number,
-                MoleculeModel.smiles,
-                batch_id.label("batch_id"),
-                BatchModel.batch_number,
-                rd.readout_definition_id,
-                rd.normalization_applied,
-                rd.value_numeric,
-                rd.value_qualifier,
-                rd.value_text,
-                rd.is_outlier,
-                rd.created_at,
-            )
+            select(*(exprs[f.name].label(f.name) for f in fields(WellValueRow)))
             .select_from(rd)
             .join(RunModel, and_(RunModel.id == rd.run_id, RunModel.workspace_id == workspace_id))
             .outerjoin(WellModel, WellModel.id == rd.well_id)
@@ -204,34 +209,6 @@ class SQLAlchemyVisualizationDatasetReader:
             )
         )
         async with self._session_factory() as session:
-            rows = (await session.execute(stmt)).all()
-        return [
-            WellValueRow(
-                run_id=r.run_id,
-                well_id=r.well_id,
-                plate_id=r.plate_id,
-                plate_number=r.plate_number,
-                plate_barcode=r.barcode,
-                plate_format=r.format,
-                holder_rows=r.holder_rows,
-                holder_columns=r.holder_columns,
-                well_row=r.row,
-                well_column=r.column,
-                well_type=r.well_type,
-                dose=r.dose,
-                well_label=r.label,
-                molecule_id=r.molecule_id,
-                registration_number=r.registration_number,
-                smiles=r.smiles,
-                batch_id=r.batch_id,
-                batch_number=r.batch_number,
-                readout_definition_id=r.readout_definition_id,
-                normalization_applied=r.normalization_applied,
-                value_numeric=r.value_numeric,
-                value_qualifier=r.value_qualifier,
-                value_text=r.value_text,
-                is_outlier=r.is_outlier,
-                created_at=r.created_at,
-            )
-            for r in rows
-        ]
+            # Core execution on the session's connection skips the ORM loading layer.
+            rows = (await (await session.connection()).execute(stmt)).all()
+        return [WellValueRow(*r) for r in rows]

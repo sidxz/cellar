@@ -155,9 +155,10 @@ def build_wells_dataset(
             )
 
     n = len(identity)
-    cells: dict[str, list[Any]] = {}
-    qualifiers: dict[str, list[Any]] = {}
-    outliers: dict[str, list[Any]] = {}
+    # One list per column, allocated on first use (a setdefault default would allocate per row).
+    cells: defaultdict[str, list[Any]] = defaultdict(lambda: [None] * n)
+    qualifiers: defaultdict[str, list[Any]] = defaultdict(lambda: [None] * n)
+    outliers: defaultdict[str, list[Any]] = defaultdict(lambda: [None] * n)
     for row in sorted(rows, key=lambda r: r.created_at):
         rd = defs_by_id.get(row.readout_definition_id)
         if rd is None:
@@ -165,7 +166,7 @@ def build_wells_dataset(
         layer = row.normalization_applied or RAW_LAYER
         vkey = f"rd:{rd.id}:{layer}"
         i = index[_row_key(row)]
-        col = cells.setdefault(vkey, [None] * n)
+        col = cells[vkey]
         if rd.data_type in _NUMERIC_DATA_TYPES:
             col[i] = _finite(row.value_numeric)
         else:
@@ -175,9 +176,9 @@ def build_wells_dataset(
                 else (None if row.value_numeric is None else str(row.value_numeric))
             )
         if row.value_qualifier:
-            qualifiers.setdefault(vkey, [None] * n)[i] = row.value_qualifier
+            qualifiers[vkey][i] = row.value_qualifier
         if row.is_outlier:
-            outliers.setdefault(vkey, [None] * n)[i] = "outlier"
+            outliers[vkey][i] = "outlier"
 
     columns: list[DatasetColumn] = [
         DatasetColumn(key=k, label=label, kind=kind, hidden=hidden)
