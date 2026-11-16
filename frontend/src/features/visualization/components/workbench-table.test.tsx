@@ -541,16 +541,70 @@ describe("WorkbenchTable", () => {
     ).toBeNull();
   });
 
-  it("never holds the keyboard: Tab, arrows and Escape pass through cell and Selected-row buttons", async () => {
+  /** Presses Tab (Shift+Tab) on the focused element; returns what holds focus after it. */
+  const tab = (shiftKey = false) => {
+    fireEvent.keyDown(document.activeElement as Element, { key: "Tab", shiftKey });
+    return document.activeElement;
+  };
+  const nameOf = (el: Element | null) =>
+    el?.getAttribute("aria-label")?.split(",")[0] ?? el?.textContent?.trim();
+  const walk = (steps: number, shiftKey = false) =>
+    Array.from({ length: steps }, () => nameOf(tab(shiftKey)));
+  const focusHeader = (colId: string) =>
+    act(() =>
+      (document.querySelector(`.ag-header-cell[col-id="${colId}"]`) as HTMLElement).focus(),
+    );
+
+  it("tabs from the header through each row's pinned and centre controls, then on to the pager", async () => {
+    show([], { table: compounds });
+    await screen.findByRole("link", { name: "CEL-1" });
+    focusHeader("mw"); // the last column's header
+    expect(walk(9)).toEqual([
+      "Select row",
+      "CEL-1",
+      "15",
+      "0.5",
+      "Curves (3)",
+      "6.3",
+      "Select row",
+      "CEL-2",
+      "> 80",
+    ]);
+    // Past the last row: out of the rows, to the pager's first control.
+    expect(tab()?.closest(".ag-paging-panel")).not.toBeNull();
+    tab(true);
+    expect(nameOf(document.activeElement)).toBe("> 80");
+    expect(walk(8, true)).toEqual([
+      "CEL-2",
+      "Select row",
+      "6.3",
+      "Curves (3)",
+      "0.5",
+      "15",
+      "CEL-1",
+      "Select row",
+    ]);
+    // Before the first row: back to the last column's header.
+    expect(tab(true)?.closest(".ag-header-cell")?.getAttribute("col-id")).toBe("mw");
+  });
+
+  it("tabs from Selected (n) into the selected rows, then the page", async () => {
+    show(["m2"], { table: compounds });
+    const group = await screen.findByRole("button", { name: "Selected (1)" });
+    act(() => group.focus());
+    expect(walk(5)).toEqual(["Select row", "CEL-2", "> 80", "Select row", "CEL-1"]);
+    expect(walk(5, true)).toEqual(["Select row", "> 80", "CEL-2", "Select row", "Selected (1)"]);
+    expect(tab(true)?.closest(".ag-header-cell")?.getAttribute("col-id")).toBe("mw");
+  });
+
+  it("leaves arrows and Escape to the browser on cell and Selected-row buttons", async () => {
     show(["m1"], { table: compounds });
     const value = await screen.findByRole("button", { name: /> 80/ });
     const group = screen.getByRole("button", { name: "Selected (1)" });
     for (const target of [value, group]) {
-      for (const key of ["Tab", "ArrowRight", "ArrowDown", "Escape"]) {
-        // Not cancelled: the browser moves focus on (or scrolls) as it would outside a grid.
+      for (const key of ["ArrowRight", "ArrowDown", "Escape"]) {
         expect(fireEvent.keyDown(target, { key }), `${key} on ${target.textContent}`).toBe(true);
       }
-      expect(fireEvent.keyDown(target, { key: "Tab", shiftKey: true })).toBe(true);
     }
   });
 

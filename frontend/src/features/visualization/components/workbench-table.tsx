@@ -17,6 +17,7 @@ import {
   AllCommunityModule,
   type ColDef,
   type ColGroupDef,
+  type GridApi,
   type ICellRendererParams,
   ModuleRegistry,
   type PaginationChangedEvent,
@@ -26,6 +27,7 @@ import {
 import { AgGridReact } from "ag-grid-react";
 import { ChevronDown, ChevronRight, Columns3 } from "lucide-react";
 import {
+  type KeyboardEvent,
   type ReactNode,
   type Ref,
   useCallback,
@@ -79,16 +81,84 @@ const fmt = (n: number) => n.toLocaleString();
 const NO_ROWS = { noRowsToShow: "No rows match the filters" };
 const MORE = -2;
 /** Cells take no focus (``suppressCellFocus``); their buttons and links do. The grid's own
- * keys (cell-to-cell Tab and arrows) would hold focus on a button that cannot move, so every
- * key from a cell goes to the browser: Tab walks the row's controls and on, arrows scroll. */
+ * keys (cell-to-cell arrows) would hold focus on a button that cannot move, so every key from
+ * a cell goes to the browser; Tab is the table's own (see ``tabThroughRows``). */
 const DEFAULT_COL: ColDef<Row> = {
   sortable: true,
   resizable: true,
   suppressMovable: true,
   suppressKeyboardEvent: () => true,
 };
-/** The same for Tab from the full-width "Selected (n)" rows: the browser's order. */
-const BROWSER_TAB = () => false as const;
+const TABBABLE = [
+  "a[href]",
+  "button:not(:disabled)",
+  "input:not(:disabled)",
+  "select:not(:disabled)",
+  '[tabindex]:not([tabindex="-1"])',
+];
+/** Controls inside rows (a row's own tab stop not included). */
+const ROW_CONTROLS = TABBABLE.map((s) => `.ag-row ${s}`).join(",");
+
+/** The rows' controls in reading order: row by row, the pinned rows first, and within a row
+ * its left-pinned, centre and right cells. AG Grid renders each of those in a container of its
+ * own, so the DOM (the browser's Tab order) walks one container's rows before the next's. */
+function rowControls(root: HTMLElement): HTMLElement[] {
+  const byRow = new Map<string, HTMLElement[]>();
+  for (const el of root.querySelectorAll<HTMLElement>(ROW_CONTROLS)) {
+    const row = el.closest(".ag-row") as HTMLElement;
+    const key = `${row.closest(".ag-floating-top") ? 0 : 1}:${row.getAttribute("row-index")}`;
+    byRow.set(key, [...(byRow.get(key) ?? []), el]);
+  }
+  const rank = (key: string) => {
+    const [section, index] = key.split(":");
+    return Number(section) * 1e9 + Number(index.replace(/^t-/, ""));
+  };
+  return [...byRow.entries()].sort(([a], [b]) => rank(a) - rank(b)).flatMap(([, els]) => els);
+}
+
+/** The first control after the rows (the pager's), where Tab from the last row goes. */
+function afterRows(root: HTMLElement): HTMLElement | undefined {
+  const body = root.querySelector(".ag-body");
+  if (!body) return undefined;
+  return [...root.querySelectorAll<HTMLElement>(TABBABLE.join(","))].find(
+    (el) =>
+      !body.contains(el) &&
+      !!(body.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+      !el.classList.contains("ag-tab-guard") &&
+      el.getAttribute("aria-disabled") !== "true",
+  );
+}
+
+/** Tab and Shift+Tab through the table: from the last column's header into the first row,
+ * row by row through each row's controls ("Selected (n)" and its rows included), past the last
+ * row on to the pager, and back the same way. Anything else is left to the grid and the
+ * browser. */
+function tabThroughRows(e: KeyboardEvent<HTMLDivElement>, api: GridApi<Row> | undefined) {
+  if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey || !api) return;
+  const root = e.currentTarget;
+  const target = e.target as HTMLElement;
+  const back = e.shiftKey;
+  const controls = rowControls(root);
+  const lastColumn = api.getAllDisplayedColumns().at(-1);
+  const after = afterRows(root);
+  let next: HTMLElement | "header" | undefined;
+  if (target.closest(".ag-header-cell")) {
+    const last =
+      target.closest(".ag-header-cell")?.getAttribute("col-id") === lastColumn?.getColId();
+    if (!back && last) next = controls[0];
+  } else if (target === after) {
+    if (back) next = controls.at(-1);
+  } else {
+    const k = controls.indexOf(target);
+    if (k < 0) return;
+    next = controls[k + (back ? -1 : 1)] ?? (back ? "header" : after);
+  }
+  if (!next) return;
+  e.preventDefault();
+  e.stopPropagation(); // the grid's own Tab handling never runs
+  if (next !== "header") next.focus();
+  else if (lastColumn) api.setFocusedHeader(lastColumn);
+}
 const PAGE_SIZE = 100;
 const PAGE_SIZES = [50, 100, 250, 500];
 /** The grid is as tall as its page and the viewport scrolls it (see WorkbenchBody), so the
@@ -553,7 +623,11 @@ export function WorkbenchTable({
   }, []);
 
   return (
-    <div ref={root} className="viz-table flex flex-col">
+    <div
+      ref={root}
+      className="viz-table flex flex-col"
+      onKeyDownCapture={(e) => tabThroughRows(e, grid.current?.api)}
+    >
       <style>{STICKY}</style>
       <div className="flex shrink-0 items-center gap-2 px-2 py-1 text-xs">
         <span className="text-muted-foreground">{fmt(pinned.length + rest.length)} rows</span>
@@ -595,7 +669,6 @@ export function WorkbenchTable({
         pinnedTopRowData={pinnedRows}
         columnDefs={columnDefs}
         defaultColDef={DEFAULT_COL}
-        tabToNextCell={BROWSER_TAB}
         getRowId={(p) => (p.data.i < 0 ? `selected-${p.data.i}` : ds.row_ids[p.data.i])}
         isFullWidthRow={(p) => (p.rowNode.data?.i ?? 0) < 0}
         fullWidthCellRenderer={SelectedGroupRow}
