@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
-import { defaultPanels } from "./default-panels";
+import { defaultPanels, panelDefaults } from "./default-panels";
 
 const col = (key: string, kind: DatasetColumn["kind"]): DatasetColumn => ({
   key,
@@ -56,5 +56,35 @@ describe("defaultPanels", () => {
     expect(defaultPanels(d)).toEqual([
       { type: "bar", defaults: { agg: "count", category: "compound" } },
     ]);
+  });
+});
+
+describe("panelDefaults", () => {
+  const d = ds([
+    col("plate", "category"),
+    col("well_type", "category"),
+    col("well_order", "number"),
+    col("rd:pick:raw", "category"),
+    col("rd:sig:raw", "number"),
+  ]);
+
+  it("fills numeric fields with the first numeric value column and groups by well type", () => {
+    expect(panelDefaults(d, "histogram")).toEqual({
+      x: "rd:sig:raw",
+      appearance: { colorBy: "well_type" },
+    });
+    expect(panelDefaults(d, "box")).toEqual({ y: "rd:sig:raw", category: "well_type" });
+    expect(panelDefaults(d, "bar")).toEqual({ agg: "count", category: "well_type" });
+    expect(panelDefaults(d, "scatter")).toEqual({
+      x: "well_order",
+      y: "rd:sig:raw",
+      appearance: { colorBy: "well_type", shapeBy: "well_type" },
+    });
+  });
+
+  it("falls back to the first category column and leaves histograms unstacked", () => {
+    const plain = ds([col("compound", "category"), col("rd:sig:raw", "number")]);
+    expect(panelDefaults(plain, "bar")).toEqual({ agg: "count", category: "compound" });
+    expect(panelDefaults(plain, "histogram")).toEqual({ x: "rd:sig:raw", appearance: {} });
   });
 });

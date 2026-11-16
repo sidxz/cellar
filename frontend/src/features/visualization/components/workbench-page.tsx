@@ -4,19 +4,19 @@ import { EmptyState } from "@/shared/components/empty-state";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { ApiError } from "@/shared/lib/api/custom-instance";
-import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, ChartScatter, Database, Rows3 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
 import { resolveUserColumns } from "../lib/dataset";
-import { defaultPanels, numericValueColumn } from "../lib/default-panels";
+import { defaultPanels } from "../lib/default-panels";
 import { MAX_ROWS } from "../lib/limits";
-import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
+import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level } from "../types";
-import { type OnEditPanel, PanelFrame } from "./panels/panel-frame";
-import { ScatterPanel } from "./panels/scatter-panel";
+import { AddPlotMenu } from "./add-plot-menu";
+import { PanelGrid } from "./panel-grid";
+import type { OnEditPanel } from "./panels/panel-frame";
 import { RunPickerDialog } from "./run-picker-dialog";
 import { SelectionStrip } from "./selection-strip";
 import { WorkbenchBody } from "./workbench-body";
@@ -106,9 +106,9 @@ function Workbench({ source }: { source: DatasetSource }) {
         </>
       ) : (
         <WorkbenchProvider key={ds.revision} initialPanels={initialPanels(ds)}>
-          <WorkbenchHeader source={source} ds={ds} />
+          <WorkbenchHeader source={source} ds={ds} addPlotMenu={<AddPlotMenu ds={ds} />} />
           <WorkbenchBody
-            plots={<PlotsSlot ds={ds} onEdit={noEdit} />}
+            plots={<PanelGrid ds={ds} onEdit={noEdit} />}
             table={
               <div className="flex h-full flex-col">
                 <SelectionStrip ds={ds} />
@@ -154,38 +154,4 @@ function LoadingSkeleton() {
 
 function SlotNote({ children }: { children: React.ReactNode }) {
   return <p className="p-3 text-sm text-muted-foreground">{children}</p>;
-}
-
-/** Plots area: the no-numeric notice plus the configured panels (only the maximized one
- * while one is). A stand-in layout until the panel grid replaces it. */
-function PlotsSlot({ ds, onEdit }: { ds: Dataset; onEdit: OnEditPanel }) {
-  const panels = useWorkbench((s) => s.panels);
-  const maximized = useWorkbench((s) => s.maximized);
-  const shown = maximized ? panels.filter((p) => p.id === maximized) : panels;
-  return (
-    <div className="flex h-full flex-col gap-2 p-2">
-      {!numericValueColumn(ds) && (
-        <p className="rounded-md border border-dashed p-2 text-sm text-muted-foreground">
-          No numeric fields to plot — showing well counts by category. The table still lists every
-          value.
-        </p>
-      )}
-      <div
-        className={cn(
-          "grid min-h-0 flex-1 auto-rows-fr gap-2",
-          shown.length > 1 && "lg:grid-cols-2",
-        )}
-      >
-        {shown.map((p) => (
-          <PanelFrame key={p.id} panel={p} ds={ds} onEdit={onEdit}>
-            {p.type === "scatter" ? (
-              <ScatterPanel panel={p} ds={ds} />
-            ) : (
-              <SlotNote>This plot type is coming in Task 11.</SlotNote>
-            )}
-          </PanelFrame>
-        ))}
-      </div>
-    </div>
-  );
 }

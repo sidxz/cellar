@@ -1,19 +1,21 @@
-import {
-  CHART_AXIS,
-  CHART_COLORS,
-  GROUP_PALETTE,
-  WELL_TYPE_COLORS,
-} from "@/shared/lib/chart-colors";
+import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 import { categoryLabel, column, numberAt } from "../dataset";
+import {
+  type Figure,
+  GRID,
+  axisTitle,
+  baseLayout,
+  categoryColor,
+  facetsOf,
+  hoverText,
+  lackNote,
+  levels,
+} from "./common";
 
 /** Name of the trace holding rows the filters hide (drawn as faint ×, never selectable). */
 export const FILTERED = "Filtered";
-export const MAX_FACETS = 6;
-const OTHER = "Other";
-const NONE = categoryLabel("", null);
-const GRID = "rgba(113,113,122,0.2)";
 const FILTERED_COLOR = "#a1a1aa";
 /** SVG draws crisper and is plenty fast below this; WebGL above it. */
 const WEBGL_ABOVE = 5000;
@@ -27,8 +29,6 @@ export const WELL_TYPE_SYMBOLS: Record<string, string> = {
 };
 const SYMBOLS = ["circle", "square", "diamond", "triangle-up", "star", "cross", "pentagon"];
 
-const collator = new Intl.Collator(undefined, { numeric: true });
-
 /** 0 up to 1k points, 1 from 50k, linear in log n. */
 const crowding = (n: number) => Math.min(1, Math.max(0, Math.log(n / 1000) / Math.log(50)));
 /** Marker size in px: 6 at ≤1k points down to 3 at ≥50k. */
@@ -36,57 +36,12 @@ export const markerSize = (n: number) => 6 - 3 * crowding(n);
 /** Multiplies the panel's opacity: 1 at ≤1k points, 0.45/0.8 at ≥50k (0.8 → 0.45 at the default). */
 const opacityScale = (n: number) => 1 - (0.35 / 0.8) * crowding(n);
 
-/** A category column's distinct display labels, natural order, "(none)" last. */
-function levels(ds: Dataset, key: string): string[] {
-  const seen = new Set<string>();
-  for (const v of ds.values[key] ?? []) seen.add(categoryLabel(key, v));
-  return [...seen].sort(
-    (a, b) => Number(a === NONE) - Number(b === NONE) || collator.compare(a, b),
-  );
-}
-
-/** Facets for split-by: up to MAX_FACETS named, the rest pooled as "Other". Built from
- * every row, so facets never move as filters change. */
-function facetsOf(ds: Dataset, key: string | undefined) {
-  const all = key ? levels(ds, key) : [];
-  if (!key || all.length === 0) return { labels: [""], of: (_i: number) => 0 };
-  const index = new Map(all.map((label, k) => [label, Math.min(k, MAX_FACETS)]));
-  const labels = all.length > MAX_FACETS ? [...all.slice(0, MAX_FACETS), OTHER] : all;
-  return { labels, of: (i: number) => index.get(categoryLabel(key, ds.values[key]?.[i])) ?? 0 };
-}
-
 const axisId = (axis: "x" | "y", facet: number) => (facet === 0 ? axis : `${axis}${facet + 1}`);
-
-function axisTitle(ds: Dataset, key: string | undefined, log?: boolean): string {
-  const label = key ? (column(ds, key)?.label ?? key) : "—";
-  return log ? `${label} (log)` : label;
-}
-
-function hoverText(ds: Dataset, i: number): string {
-  const plate = ds.values.plate?.[i];
-  const place = [plate != null ? `Plate ${plate}` : null, ds.values.well?.[i]].filter(Boolean);
-  return [ds.values.compound?.[i] ?? "No compound", place.join(" ")].filter(Boolean).join(" · ");
-}
 
 function symbolFor(ds: Dataset, key: string, i: number, order: string[]): string {
   const v = ds.values[key]?.[i];
   if (key === "well_type") return WELL_TYPE_SYMBOLS[String(v)] ?? "circle";
   return SYMBOLS[Math.max(0, order.indexOf(categoryLabel(key, v))) % SYMBOLS.length];
-}
-
-function categoryColor(key: string, raw: unknown, label: string, order: string[]): string {
-  if (label === NONE) return CHART_COLORS.neutral;
-  if (key === "well_type") return WELL_TYPE_COLORS[String(raw)] ?? CHART_COLORS.neutral;
-  return GROUP_PALETTE[order.indexOf(label) % GROUP_PALETTE.length];
-}
-
-export interface ScatterFigure {
-  data: Record<string, unknown>[];
-  layout: Record<string, unknown>;
-  /** Passing rows that cannot be plotted (no X or Y, or ≤ 0 on a log axis). */
-  skipped: number;
-  /** "38 rows lack Signal (AU)", or null when every passing row is plotted. */
-  note: string | null;
 }
 
 /** A scatter of ``cfg.x`` × ``cfg.y``: one trace per (facet, color category), failing rows
@@ -98,7 +53,7 @@ export function buildScatterFigure(
   mask: Uint8Array,
   selection: ReadonlySet<string>,
   dark = false,
-): ScatterFigure {
+): Figure {
   const a = cfg.appearance;
   const xTitle = axisTitle(ds, cfg.x, cfg.logX);
   const yTitle = axisTitle(ds, cfg.y, cfg.logY);
@@ -114,7 +69,7 @@ export function buildScatterFigure(
     return v === null || (log && v <= 0) ? null : v;
   };
 
-  const groups = new Map<string, { facet: number; label: string; raw: unknown; rows: number[] }>();
+  const groups = new Map<string, { facet: number; label: string; rows: number[] }>();
   const filtered: number[][] = facets.labels.map(() => []);
   let skipped = 0;
   let lackX = 0;
@@ -135,12 +90,11 @@ export function buildScatterFigure(
     }
     n += 1;
     const facet = facets.of(i);
-    const raw = colorKey ? ds.values[colorKey]?.[i] : undefined;
-    const label = colorKey ? categoryLabel(colorKey, raw) : "";
+    const label = colorKey ? categoryLabel(colorKey, ds.values[colorKey]?.[i]) : "";
     const k = `${facet}|${label}`;
     let g = groups.get(k);
     if (!g) {
-      g = { facet, label, raw, rows: [] };
+      g = { facet, label, rows: [] };
       groups.set(k, g);
     }
     g.rows.push(i);
@@ -209,7 +163,7 @@ export function buildScatterFigure(
       ? g.rows.map((i) => symbolFor(ds, a.shapeBy as string, i, shapeOrder))
       : [];
     const color = colorKey
-      ? categoryColor(colorKey, g.raw, g.label, colorOrder)
+      ? categoryColor(colorKey, g.label, colorOrder)
       : numericColor && colorCol
         ? g.rows.map((i) => numberAt(ds, colorCol.key, i))
         : CHART_COLORS.primary;
@@ -260,15 +214,10 @@ export function buildScatterFigure(
   const gridCols = Math.ceil(count / gridRows);
   const split = Boolean(a.splitBy);
   const layout: Record<string, unknown> = {
-    autosize: true,
-    uirevision: cfg.id,
+    ...baseLayout(cfg.id),
     dragmode: "lasso",
     hovermode: "closest",
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
-    font: { color: CHART_AXIS.tick, size: 11 },
     margin: { l: 56, r: 12, t: split ? 52 : 32, b: 44 },
-    legend: { orientation: "h", x: 1, xanchor: "right", y: 1, yanchor: "top", yref: "container" },
   };
   for (let f = 0; f < count; f++) {
     const bottom = f >= (gridRows - 1) * gridCols;
@@ -311,9 +260,7 @@ export function buildScatterFigure(
   }
 
   const what = lackX && lackY ? `${xTitle} or ${yTitle}` : lackX ? xTitle : yTitle;
-  const note = skipped
-    ? `${skipped.toLocaleString()} ${skipped === 1 ? "row lacks" : "rows lack"} ${what}`
-    : null;
+  const note = lackNote(skipped, what);
   return { data, layout, skipped, note };
 }
 
