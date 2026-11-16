@@ -50,3 +50,10 @@ class ProtocolStatsReader(Protocol):
     async def get_stats_data(
         self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
     ) -> ProtocolStatsData: ...
+
+    async def plate_qc_metrics(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[dict[str, Any]] | None:
+        """The stored ``qc_metrics`` of the protocol's runs that are not rejected;
+        None when the protocol is not in the workspace."""
+        ...

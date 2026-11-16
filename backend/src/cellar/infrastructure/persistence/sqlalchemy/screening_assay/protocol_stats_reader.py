@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -138,3 +139,24 @@ class SQLAlchemyProtocolStatsReader:
             compound_count=compound_count,
             latest_run=latest_run,
         )
+
+    async def plate_qc_metrics(
+        self, workspace_id: uuid.UUID, protocol_id: uuid.UUID
+    ) -> list[dict[str, Any]] | None:
+        async with self._session_factory() as session:
+            found = await session.scalar(
+                select(ProtocolModel.id).where(
+                    ProtocolModel.id == protocol_id, ProtocolModel.workspace_id == workspace_id
+                )
+            )
+            if found is None:
+                return None
+            rows = await session.scalars(
+                select(RunModel.qc_metrics).where(
+                    RunModel.protocol_id == protocol_id,
+                    RunModel.workspace_id == workspace_id,
+                    RunModel.status != "rejected",
+                    RunModel.qc_metrics.is_not(None),
+                )
+            )
+            return [qc for qc in rows if isinstance(qc, dict)]

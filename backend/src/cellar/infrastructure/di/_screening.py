@@ -67,6 +67,9 @@ from cellar.application.screening.get_molecule_test_counts import GetMoleculeTes
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
+from cellar.application.screening.get_protocol_plate_qc_averages import (
+    GetProtocolPlateQcAverages,
+)
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
 from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
@@ -1349,6 +1352,10 @@ def register_screening(container: Container) -> None:
     container.define(
         GetProtocolStats,
         lambda c: GetProtocolStats(reader=c[ProtocolStatsReader]),
+    )
+    container.define(
+        GetProtocolPlateQcAverages,
+        lambda c: GetProtocolPlateQcAverages(reader=c[ProtocolStatsReader]),
     )
 
     # --- Molecule Activity Service ---

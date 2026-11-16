@@ -11,6 +11,11 @@ from pydantic import BaseModel
 from cellar.application.screening.get_protocol_activity import (
     GetProtocolActivityQuery,
 )
+from cellar.application.screening.get_protocol_plate_qc_averages import (
+    GetProtocolPlateQcAveragesQuery,
+    PlateQcAverage,
+    Spread,
+)
 from cellar.application.screening.get_protocol_stats import (
     GetProtocolStatsQuery,
 )
@@ -18,6 +23,7 @@ from cellar.interface.dependencies import (
     AuthDep,
     GetCompoundCurvesDep,
     GetProtocolActivitySummaryDep,
+    GetProtocolPlateQcAveragesDep,
     GetProtocolStatsDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -116,6 +122,55 @@ class ActivitySummaryV2Response(BaseModel):
     total_compounds: int
 
 
+class SpreadResponse(BaseModel):
+    """Mean ± SD over ``n`` plates; ``sd`` is null for one plate."""
+
+    mean: float
+    sd: float | None = None
+    n: int
+
+    @classmethod
+    def from_domain(cls, s: Spread | None) -> SpreadResponse | None:
+        return None if s is None else cls(mean=s.mean, sd=s.sd, n=s.n)
+
+
+class ControlFitAverageResponse(BaseModel):
+    role: str
+    label: str
+    value: SpreadResponse
+
+
+class PlateQcAverageResponse(BaseModel):
+    readout_definition_id: uuid.UUID
+    layer: str
+    z_prime: SpreadResponse | None = None
+    pos_mean: SpreadResponse | None = None
+    neg_mean: SpreadResponse | None = None
+    control_fits: list[ControlFitAverageResponse] = []
+
+    @classmethod
+    def from_domain(cls, a: PlateQcAverage) -> PlateQcAverageResponse:
+        return cls(
+            readout_definition_id=a.readout_definition_id,
+            layer=a.layer,
+            z_prime=SpreadResponse.from_domain(a.z_prime),
+            pos_mean=SpreadResponse.from_domain(a.pos_mean),
+            neg_mean=SpreadResponse.from_domain(a.neg_mean),
+            control_fits=[
+                ControlFitAverageResponse(
+                    role=f.role,
+                    label=f.label,
+                    value=SpreadResponse(mean=f.value.mean, sd=f.value.sd, n=f.value.n),
+                )
+                for f in a.control_fits
+            ],
+        )
+
+
+class ProtocolPlateQcAveragesResponse(BaseModel):
+    averages: list[PlateQcAverageResponse]
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -157,6 +212,22 @@ async def get_protocol_stats(
         hit_count=stats.hit_count,
         hit_criteria_applied=stats.hit_criteria_applied,
         latest_run=latest_run,
+    )
+
+
+@router.get("/{protocol_id}/plate-qc-averages", response_model=ProtocolPlateQcAveragesResponse)
+async def get_protocol_plate_qc_averages(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetProtocolPlateQcAveragesDep,
+) -> ProtocolPlateQcAveragesResponse:
+    """Plate QC per readout x layer averaged over the protocol's plates (mean ± SD, n)."""
+    query = GetProtocolPlateQcAveragesQuery(
+        workspace_id=auth.workspace_id, protocol_id=protocol_id
+    )
+    averages = result_to_response(await uc(query, auth=auth))
+    return ProtocolPlateQcAveragesResponse(
+        averages=[PlateQcAverageResponse.from_domain(a) for a in averages]
     )
 
 
