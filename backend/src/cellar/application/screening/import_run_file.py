@@ -90,6 +90,7 @@ from cellar.application.screening.import_run_file_preview_store import (
 from cellar.application.screening.import_run_file_validator import (
     _load_layouts,
     _validate_well_roles,
+    protocol_effect_roles,
 )
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -290,7 +291,10 @@ class ImportRunFile:
         )
 
         # 4. Normalize.
-        normalized_result = normalize(preview.table, typed_mapping)
+        # Role words read by effect, as the preview read them.
+        normalized_result = normalize(
+            preview.table, typed_mapping, full_effect=protocol_effect_roles(protocol)[0]
+        )
         if isinstance(normalized_result, Failure):
             return normalized_result
         normalized: NormalizedTable = normalized_result.unwrap()

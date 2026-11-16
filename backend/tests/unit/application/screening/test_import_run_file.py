@@ -3030,6 +3030,54 @@ class TestPlatformRoleWords:
         )
 
     @pytest.mark.asyncio
+    async def test_a_high_protocol_imports_the_hit_control_as_its_negative_control(self) -> None:
+        # The import writes what the preview said: read by effect, not by the literal word.
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        protocol.pos_control_signal = PosControlSignal.HIGH
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_PLATFORM_CSV,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            store=store,
+            batches_by_ref={},
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    well_role="Control State",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        types = {f"{w.row}{w.column}": w.well_type for w in run.wells}
+        assert (types["A1"], types["A2"]) == (
+            WellType.POSITIVE_CONTROL,
+            WellType.NEGATIVE_CONTROL,
+        )
+
+    @pytest.mark.asyncio
     async def test_a_low_protocol_reads_the_hit_control_as_its_positive_control(self) -> None:
         preview = await self._preview(PosControlSignal.LOW)
         assert preview.warnings == (
