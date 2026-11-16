@@ -12,6 +12,7 @@ from returns.result import Failure, Result, Success
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
+from cellar.application.screening._dr_point_reconstruction import with_captured_positions
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
     MoleculeDisplayInfo,
@@ -48,22 +49,16 @@ def _build_excluded_from_fitter(fitted: FittedCurveResult) -> list[ExcludedPoint
     """Translate a ``FittedCurveResult`` into the curve's ``excluded_points``.
 
     The points the fitter was told to leave out — points of wells flagged as outliers
-    on the run — become excluded entries (``source=WELL_FLAG``) at their position in the
-    captured set (``raw_data`` + excluded entries, stably sorted by dose: the order
-    ``build_points_with_exclusions`` and the chart rebuild). ``outlier_suggestions``
+    on the run — become excluded entries (``source=WELL_FLAG``). ``outlier_suggestions``
     become ``AUTO_3SIGMA`` entries with ``excluded=False`` — the FE renders them as
     yellow-halo "suggested for exclusion" markers; chemists accept or reject in edit mode.
+    Every entry's idx is its point's position in the captured set (``captured_set``), the
+    order the editor and a refit read indices in.
     """
     now = datetime.now(UTC)
-    captured = sorted(
-        [(p["concentration"], None) for p in fitted.raw_data]
-        + [(p["concentration"], i) for i, p in enumerate(fitted.excluded_points)],
-        key=lambda t: t[0],
-    )
-    position = {i: k for k, (_, i) in enumerate(captured) if i is not None}
-    out = [
+    entries = [
         ExcludedPointDetail(
-            idx=position[i],
+            idx=None,
             source=ExclusionSource.WELL_FLAG,
             excluded=True,
             reason=ExclusionReason.OUTLIER_WELL,
@@ -72,22 +67,21 @@ def _build_excluded_from_fitter(fitted: FittedCurveResult) -> list[ExcludedPoint
             concentration=p["concentration"],
             response=p["response"],
         )
-        for i, p in enumerate(fitted.excluded_points)
-    ]
-    for s in fitted.outlier_suggestions:
-        out.append(
-            ExcludedPointDetail(
-                idx=s.idx,
-                source=ExclusionSource.AUTO_3SIGMA,
-                excluded=False,  # SUGGESTION, not an exclusion
-                reason=ExclusionReason.AUTO_3SIGMA,
-                author_id=None,  # the fitter wrote this, no human author
-                ts=now,
-                concentration=s.concentration,
-                response=s.response,
-            )
+        for p in fitted.excluded_points
+    ] + [
+        ExcludedPointDetail(
+            idx=None,
+            source=ExclusionSource.AUTO_3SIGMA,
+            excluded=False,  # SUGGESTION, not an exclusion
+            reason=ExclusionReason.AUTO_3SIGMA,
+            author_id=None,  # the fitter wrote this, no human author
+            ts=now,
+            concentration=s.concentration,
+            response=s.response,
         )
-    return out
+        for s in fitted.outlier_suggestions
+    ]
+    return with_captured_positions(fitted.raw_data, entries)
 
 
 @dataclass(frozen=True)
