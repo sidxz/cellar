@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makePanel } from "../store/workbench-store";
+import { DEFAULT_APPEARANCE, makePanel } from "../store/workbench-store";
 import { filterSchema, panelSchema, savedFilterSchema, viewConfigSchema } from "./config-schema";
 
 describe("config schemas", () => {
@@ -45,6 +45,31 @@ describe("config schemas", () => {
     expect(savedFilterSchema.parse(sub)).toEqual(query);
     // Opened from a view: not matched against this data yet.
     expect(filterSchema.parse(query)).toEqual(query);
+  });
+
+  it("reads a config the server accepts: what it may leave out takes its default", () => {
+    const cfg = {
+      config_version: 2,
+      panels: [
+        { id: "p", type: "scatter" },
+        { id: "q", type: "histogram", x: "a", appearance: { colorBy: "plate" } },
+      ],
+      filters: [],
+    };
+    expect(viewConfigSchema.parse(cfg)).toEqual({
+      ...cfg,
+      panels: [
+        { id: "p", type: "scatter", appearance: DEFAULT_APPEARANCE },
+        {
+          id: "q",
+          type: "histogram",
+          x: "a",
+          appearance: { ...DEFAULT_APPEARANCE, colorBy: "plate" },
+        },
+      ],
+      labels: {},
+      derived: [],
+    });
   });
 
   it("a view config holds at most 4 panels", () => {

@@ -7,16 +7,17 @@ export const VIEW_CONFIG_VERSION = 2;
 export const MAX_VIEW_CONFIG_BYTES = 65_536;
 export const MAX_PANELS = 4;
 
+/** Each field defaults, so a stored plot's appearance reads whatever of it is there. */
 export const appearanceSchema = z.object({
   colorBy: z.string().optional(),
-  colorMode: z.enum(["range", "bins"]),
+  colorMode: z.enum(["range", "bins"]).default("range"),
   colorBins: z.array(z.number()).optional(),
   shapeBy: z.string().optional(),
   sizeBy: z.string().optional(),
-  opacity: z.number(),
+  opacity: z.number().default(0.8),
   splitBy: z.string().optional(),
-  tooltip: z.array(z.string()),
-  showFiltered: z.boolean(),
+  tooltip: z.array(z.string()).default([]),
+  showFiltered: z.boolean().default(true),
 });
 
 /** Display-only marks drawn over a plot. */
@@ -45,7 +46,7 @@ export const panelSchema = z.object({
   logX: z.boolean().optional(),
   logY: z.boolean().optional(),
   bins: z.number().optional(),
-  appearance: appearanceSchema,
+  appearance: appearanceSchema.prefault({}),
   overlays: overlaySchema.optional(),
 });
 
@@ -129,8 +130,8 @@ export const viewConfigSchema = z.object({
   config_version: z.number().int(),
   panels: z.array(panelSchema).max(MAX_PANELS),
   filters: z.array(savedFilterSchema).max(100),
-  labels: z.record(z.string(), z.string()),
-  derived: z.array(derivedSpecSchema),
+  labels: z.record(z.string(), z.string()).default({}),
+  derived: z.array(derivedSpecSchema).default([]),
 });
 
 export type ViewConfig = z.infer<typeof viewConfigSchema>;

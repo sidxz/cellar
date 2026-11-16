@@ -2,7 +2,7 @@ import type { z } from "zod";
 import { createStore } from "zustand/vanilla";
 import {
   MAX_PANELS,
-  type appearanceSchema,
+  appearanceSchema,
   type overlaySchema,
   type panelSchema,
 } from "../lib/config-schema";
@@ -53,12 +53,7 @@ export interface WorkbenchState extends Snapshot {
   markSaved: (saved?: Snapshot) => void;
 }
 
-export const DEFAULT_APPEARANCE: Appearance = {
-  colorMode: "range",
-  opacity: 0.8,
-  tooltip: [],
-  showFiltered: true,
-};
+export const DEFAULT_APPEARANCE: Appearance = appearanceSchema.parse({});
 
 export const canUndo = (s: WorkbenchState) => s.past.length > 0;
 export const canRedo = (s: WorkbenchState) => s.future.length > 0;
