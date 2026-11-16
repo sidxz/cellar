@@ -522,7 +522,7 @@ async def test_aggregated_levels_read_a_compounds_sample_wells_and_wells_show_ev
         rd = await seed.readout_def(
             s, p, name="Signal", unit="AU", normalizations=["percent_inhibition"]
         )
-        run = await seed.run(s, ws, p, date(2026, 11, 5), status="approved")
+        run = await seed.run(s, ws, p, date(2026, 11, 5), status="completed")
         plate = await seed.plate(s, run, 1)
         wells = [
             ("sample", 0.3585, rif),  # 50 %
@@ -538,6 +538,9 @@ async def test_aggregated_levels_read_a_compounds_sample_wells_and_wells_show_ev
         await uow.commit()
     recomputed = await client.post(f"/api/v1/runs/{run}/recompute")
     assert recomputed.status_code == 200, recomputed.text
+    async with session_factory() as s:  # approved once computed: a recompute is refused after
+        await s.execute(sa.text("UPDATE runs SET status = 'approved' WHERE id = :r"), {"r": run})
+        await s.commit()
     key, source = f"rd:{rd}:percent_inhibition", {"kind": "protocol", "protocol_id": str(p)}
 
     wells_body = await _level(client, {}, "wells", **source)
