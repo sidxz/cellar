@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { resolveCategoryColor } from "@/shared/lib/category-colors";
+import { protocolWellTypeColors } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -462,10 +463,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                         </Button>
                       )}
                     </div>
-                    {/* Read-only preview of the template — same color
-                          vocabulary as the editor + Plate Templates page,
-                          so chemists recognize the layout instantly. */}
-                    {tmpl && <PlateMapView format={tmpl.format} templateMap={tmpl.template_map} />}
+                    {/* Read-only preview of the template, its controls coloured
+                          by effect under this protocol's convention, as on its runs. */}
+                    {tmpl && (
+                      <PlateMapView
+                        format={tmpl.format}
+                        templateMap={tmpl.template_map}
+                        colors={protocolWellTypeColors(protocol)}
+                      />
+                    )}
                   </div>
                 );
               })}

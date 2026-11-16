@@ -20,12 +20,13 @@ import type { PlateData, PlateMapWell } from "../types";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const CONTROL_COLORS: Record<string, string> = {
-  positive_control: WELL_TYPE_COLORS.positive_control,
-  negative_control: WELL_TYPE_COLORS.negative_control,
-  blank: WELL_TYPE_COLORS.blank,
+/** Control outlines: the controls by effect (`colors`), the reference amber. */
+const controlColors = (colors: Record<string, string>): Record<string, string> => ({
+  positive_control: colors.positive_control,
+  negative_control: colors.negative_control,
+  blank: colors.blank,
   reference: CHART_COLORS.warning,
-};
+});
 
 /** Build a color map for compounds that scales beyond the 12-slot palette.
  *
@@ -98,10 +99,18 @@ interface PlateMapViewerProps {
   plate: PlateData;
   // Display-only label from PlateMapResponse.dose_unit (a backend string).
   doseUnit: string;
+  /** Well-type colours, the controls by effect (`protocolWellTypeColors`). */
+  colors?: Record<string, string>;
   className?: string;
 }
 
-export function PlateMapViewer({ plate, doseUnit, className }: PlateMapViewerProps) {
+export function PlateMapViewer({
+  plate,
+  doseUnit,
+  colors = WELL_TYPE_COLORS,
+  className,
+}: PlateMapViewerProps) {
+  const CONTROL_COLORS = controlColors(colors);
   const [rows, cols] = holderDimensions(plate);
   const size = plateCellSizePx(plate.format);
   const showLabel = size >= 18;

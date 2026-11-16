@@ -50,7 +50,7 @@ export function buildBoxFigure(
   const shown = rows.reduce((n, r) => n + r.length, 0);
   const data = labels.flatMap((label, k) => {
     if (rows[k].length === 0) return [];
-    const color = key ? categoryColor(key, label, k) : CHART_COLORS.primary;
+    const color = key ? categoryColor(ds, key, label, k) : CHART_COLORS.primary;
     return [
       {
         type: "box",

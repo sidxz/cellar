@@ -1,10 +1,16 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state: { signal: "high" | "low"; rows: unknown[]; canEdit: boolean } = {
+const state: {
+  signal: "high" | "low";
+  rows: unknown[];
+  canEdit: boolean;
+  normalizations: string[];
+} = {
   signal: "high",
   rows: [],
   canEdit: true,
+  normalizations: ["percent_inhibition"],
 };
 const flag = vi.fn();
 
@@ -27,7 +33,7 @@ vi.mock("../hooks/use-protocols", () => ({
           unit: "AU",
           display_order: 0,
           is_calculated: false,
-          normalizations: ["percent_inhibition"],
+          normalizations: state.normalizations,
         },
       ],
     },
@@ -106,6 +112,7 @@ const run = {
 
 beforeEach(() => {
   state.canEdit = true;
+  state.normalizations = ["percent_inhibition"];
   flag.mockReset();
 });
 
@@ -149,6 +156,46 @@ describe("RunHeatmapPanel scale", () => {
       fireEvent.click(screen.getByRole("button", { name: "Raw" }));
       expect(colorOf("A5")).toBe(RED);
       expect(colorOf("A6")).toBe(WHITE);
+    },
+  );
+});
+
+describe("RunHeatmapPanel activation", () => {
+  // % activation under HIGH: the positive control is the full activator (raw 1.0, the
+  // 100 % anchor), the negative control the basal no-effect well (raw 0.1).
+  const raw = { A1: 1.0, A2: 1.0, A3: 0.1, A4: 0.1, A5: 1.0, A6: 0.1 };
+
+  it("raw: the no-effect control's mean is white, the full activator's red", () => {
+    state.signal = "high";
+    state.normalizations = ["percent_activation"];
+    state.rows = rows(false, raw);
+    render(<RunHeatmapPanel run={run} />);
+    fireEvent.click(screen.getByRole("button", { name: "Raw" }));
+    expect(colorOf("A5")).toBe(RED); // active
+    expect(colorOf("A6")).toBe(WHITE); // inactive
+    expect(screen.getByText("POS 1 AU")).toBeInTheDocument();
+    expect(screen.getByText("NEG 0.1 AU")).toBeInTheDocument();
+  });
+});
+
+describe("RunHeatmapPanel control colours", () => {
+  const BLUE = "rgb(37, 99, 235)";
+  const borderOf = (position: string) =>
+    (document.querySelector(`[data-position="${position}"]`) as HTMLElement).style.border;
+
+  it.each([
+    ["high", ["percent_inhibition"], "A3", "A1"],
+    ["low", ["percent_inhibition"], "A1", "A3"],
+    ["high", ["percent_activation"], "A1", "A3"],
+  ] as const)(
+    "%s signal, %s: the full-effect control is outlined red, the no-effect one blue",
+    (signal, normalizations, full, none) => {
+      state.signal = signal;
+      state.normalizations = [...normalizations];
+      state.rows = [];
+      render(<RunHeatmapPanel run={run} />);
+      expect(borderOf(full)).toContain(RED);
+      expect(borderOf(none)).toContain(BLUE);
     },
   );
 });

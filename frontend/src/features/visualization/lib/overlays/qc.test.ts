@@ -97,6 +97,19 @@ describe("control bands", () => {
     expect(String(shapes[0].fillcolor).startsWith(WELL_TYPE_COLORS[NEG])).toBe(true);
   });
 
+  // Controls by effect: under a LOW protocol the positive control is the full effect.
+  it("colours bands and trends by effect under the protocol's convention", () => {
+    const ds = {
+      ...dataset({ well_order: [1, 2, 3, 4], y: [0, 2, 98, 102], well_type: [NEG, NEG, POS, POS] }),
+      protocols: [{ protocol_id: "p", name: "P", pos_control_signal: "low" }],
+    };
+    const { shapes, traces } = draw(ds, { bands: true, drift: "trend" });
+    expect(String(rect(shapes, "Positive control ± 3 SD")?.fillcolor)).toMatch(/^#dc2626/);
+    expect(String(rect(shapes, "Negative control ± 3 SD")?.fillcolor)).toMatch(/^#2563eb/);
+    const trend = traces.find((t) => t.name === "Positive control trend") as Mark;
+    expect(trend.line).toMatchObject({ color: "#dc2626" });
+  });
+
   it("says once, unprefixed, when no facet has control wells", () => {
     const ds = dataset({
       well_order: [1, 2],

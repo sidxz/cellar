@@ -55,7 +55,7 @@ export function buildHistogramFigure(
     hovertext: ranges,
     hovertemplate: `%{hovertext}: %{y}<extra>${stackKey ? "%{fullData.name}" : ""}</extra>`,
     marker: {
-      color: stackKey ? categoryColor(stackKey, label, g) : CHART_COLORS.primary,
+      color: stackKey ? categoryColor(ds, stackKey, label, g) : CHART_COLORS.primary,
       line: { color: edgeColor(dark), width: 0.5 },
     },
   }));

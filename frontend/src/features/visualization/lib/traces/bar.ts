@@ -72,7 +72,7 @@ export function buildBarFigure(
         marker: {
           color:
             key === "well_type"
-              ? labels.map((label, k) => categoryColor(key, label, k))
+              ? labels.map((label, k) => categoryColor(ds, key, label, k))
               : CHART_COLORS.primary,
           line: { color: edgeColor(dark), width: 0.5 },
         },

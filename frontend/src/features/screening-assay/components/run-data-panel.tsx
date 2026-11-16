@@ -12,11 +12,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
+import { protocolWellTypeColors } from "@/shared/lib/chart-colors";
 import { shortId } from "@/shared/lib/utils";
 import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
 import { useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
+import { useProtocol } from "../hooks/use-protocols";
 import { instrumentFileRefusal } from "../lib/instrument-labelling";
 import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
 import type { PlateData, PlateFormat, Run } from "../types";
@@ -165,6 +167,8 @@ interface RunDataPanelProps {
 export function RunDataPanel({ run }: RunDataPanelProps) {
   const { data: curves } = useDoseResponseByRun(run.id);
   const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
+  // Controls coloured by effect under the protocol's convention.
+  const wellColors = protocolWellTypeColors(useProtocol(run.protocol_id).data);
 
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
@@ -197,7 +201,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
         <span className="font-medium">Plate {p.plate_number}</span>
         <RunPlateLink runId={run.id} plate={p} readOnly={run.is_locked || !canEdit} />
       </div>
-      <PlateMapViewer plate={p} doseUnit={doseUnit} />
+      <PlateMapViewer plate={p} doseUnit={doseUnit} colors={wellColors} />
     </div>
   );
 
@@ -295,7 +299,7 @@ export function RunDataPanel({ run }: RunDataPanelProps) {
                 )
               ) : run.plate_format ? (
                 <div className="space-y-3">
-                  <PlateHeatmap format={run.plate_format as PlateFormat} />
+                  <PlateHeatmap format={run.plate_format as PlateFormat} colors={wellColors} />
                   {!run.is_locked && (
                     <p className="text-center text-sm text-muted-foreground">
                       No data imported yet.{" "}

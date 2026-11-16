@@ -118,7 +118,7 @@ export function colorGroups(ds: Dataset, a: Appearance): ColorGroups | null {
   return {
     order: g.labels,
     of: g.of,
-    colors: g.labels.map((label, k) => categoryColor(col.key, label, k)),
+    colors: g.labels.map((label, k) => categoryColor(ds, col.key, label, k)),
   };
 }
 

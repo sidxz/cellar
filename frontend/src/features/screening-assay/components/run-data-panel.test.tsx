@@ -7,6 +7,7 @@ vi.mock("../hooks/use-plate-setup", () => ({
   usePlateMap: () => ({ data: state.plateMap, isLoading: state.plateMap === undefined }),
 }));
 vi.mock("../hooks/use-dose-response", () => ({ useDoseResponseByRun: () => ({ data: [] }) }));
+vi.mock("../hooks/use-protocols", () => ({ useProtocol: () => ({ data: undefined }) }));
 vi.mock("@/features/attachment", () => ({
   AttachmentList: () => null,
   FileUploadZone: () => null,

@@ -1,4 +1,10 @@
-import { CHART_COLORS, GROUP_PALETTE, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
+import {
+  CHART_COLORS,
+  FULL_EFFECT_COLOR,
+  GROUP_PALETTE,
+  NO_EFFECT_COLOR,
+  WELL_TYPE_COLORS,
+} from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { type Appearance, DEFAULT_APPEARANCE } from "../store/workbench-store";
 import { colorBins, colorFor, colorGroups, shapeFor, sizeFor } from "./appearance";
@@ -41,6 +47,20 @@ describe("colorFor", () => {
       WELL_TYPE_COLORS.sample,
       WELL_TYPE_COLORS.positive_control,
       WELL_TYPE_COLORS.blank,
+    ]);
+  });
+
+  it("colours the controls by effect: % activation makes the HIGH positive control the full effect", () => {
+    const base = dataset({ well_type: ["positive_control", "negative_control"], y: [1, 2] });
+    const ds = {
+      ...base,
+      columns: base.columns.map((c) =>
+        c.key === "y" ? { ...c, provenance: { layer: "percent_activation" } } : c,
+      ),
+    };
+    expect(colorFor(ds, look({ colorBy: "well_type" }), [0, 1])).toEqual([
+      FULL_EFFECT_COLOR,
+      NO_EFFECT_COLOR,
     ]);
   });
 

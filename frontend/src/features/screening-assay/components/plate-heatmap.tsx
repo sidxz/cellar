@@ -1,6 +1,6 @@
 "use client";
 
-import { WELL_TYPE_COLORS as VF_WELL_COLORS, WELL_EMPTY_COLOR } from "@/shared/lib/chart-colors";
+import { WELL_EMPTY_COLOR, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { useMemo } from "react";
 import { plateDimensions } from "../lib/plate-dimensions";
@@ -19,12 +19,10 @@ interface PlateHeatmapProps {
   format: PlateFormat;
   wells?: WellData[];
   valueRange?: { min: number; max: number };
+  /** Well-type colours, the controls by effect (`protocolWellTypeColors`). */
+  colors?: Record<string, string>;
   className?: string;
 }
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const WELL_TYPE_COLORS: Record<WellType, string> = VF_WELL_COLORS as Record<WellType, string>;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +54,13 @@ function valueToColor(value: number, min: number, max: number): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function PlateHeatmap({ format, wells = [], valueRange, className }: PlateHeatmapProps) {
+export function PlateHeatmap({
+  format,
+  wells = [],
+  valueRange,
+  colors = WELL_TYPE_COLORS,
+  className,
+}: PlateHeatmapProps) {
   const dims = plateDimensions(format);
   if (!dims) return null;
 
@@ -83,7 +87,7 @@ export function PlateHeatmap({ format, wells = [], valueRange, className }: Plat
   const svgWidth = labelW + cols * cellSize + (cols - 1) * gap + 4;
   const svgHeight = labelH + rows * cellSize + (rows - 1) * gap + 4;
 
-  const wellTypeEntries = Object.entries(WELL_TYPE_COLORS) as [WellType, string][];
+  const wellTypeEntries = Object.entries(colors) as [WellType, string][];
 
   return (
     <div className={cn("w-full", className)}>
@@ -143,7 +147,7 @@ export function PlateHeatmap({ format, wells = [], valueRange, className }: Plat
                     fillColor = valueToColor(wellData.value, valueRange.min, valueRange.max);
                     titleText += ` — ${wellData.value}`;
                   } else if (wellData.well_type) {
-                    fillColor = WELL_TYPE_COLORS[wellData.well_type];
+                    fillColor = colors[wellData.well_type];
                     titleText += ` — ${WELL_TYPE_LABELS[wellData.well_type]}`;
                   }
                 }

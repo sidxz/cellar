@@ -2,7 +2,8 @@ import {
   CHART_AXIS,
   CHART_COLORS,
   GROUP_PALETTE,
-  WELL_TYPE_COLORS,
+  isActivation,
+  wellTypeColors,
 } from "@/shared/lib/chart-colors";
 import type { Dataset } from "../../types";
 import { categoryLabel, column } from "../dataset";
@@ -128,19 +129,25 @@ export function axisTitle(ds: Dataset, key: string | undefined, log?: boolean): 
   return log ? `${label} (log)` : label;
 }
 
-const WELL_TYPE_BY_LABEL = new Map(
-  Object.entries(WELL_TYPE_COLORS).map(([type, color]) => [
-    categoryLabel("well_type", type),
-    color,
-  ]),
-);
+/** Well-type colours of ``ds``'s protocol, the controls by effect: its control signal, and
+ * % activation when its value columns hold % activation and no % inhibition. */
+export function wellColorsOf(ds: Dataset): Record<string, string> {
+  const layers = ds.columns.map((c) => c.provenance?.layer);
+  return wellTypeColors(ds.protocols?.[0]?.pos_control_signal, isActivation(layers));
+}
 
-/** The color of label ``k`` of a group list: well types keep WELL_TYPE_COLORS, "(none)" is
- * neutral, "Other" a light grey, anything else its place around GROUP_PALETTE. */
-export function categoryColor(key: string, label: string, k: number): string {
+/** The color of label ``k`` of a group list: well types their well-type colour (controls by
+ * effect), "(none)" neutral, "Other" a light grey, anything else its place around
+ * GROUP_PALETTE. */
+export function categoryColor(ds: Dataset, key: string, label: string, k: number): string {
   if (label === NONE) return CHART_COLORS.neutral;
   if (label === OTHER) return OTHER_COLOR;
-  if (key === "well_type") return WELL_TYPE_BY_LABEL.get(label) ?? CHART_COLORS.neutral;
+  if (key === "well_type") {
+    const type = Object.entries(wellColorsOf(ds)).find(
+      ([t]) => categoryLabel("well_type", t) === label,
+    );
+    return type?.[1] ?? CHART_COLORS.neutral;
+  }
   return GROUP_PALETTE[k % GROUP_PALETTE.length];
 }
 

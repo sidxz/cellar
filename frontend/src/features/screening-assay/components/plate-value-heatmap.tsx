@@ -225,18 +225,15 @@ interface PlateValueHeatmapProps {
   doseUnit: string;
   /** Wells flagged as outliers: drawn with an ✕. */
   outlierWellIds?: ReadonlySet<string>;
+  /** Well-type colours, the controls by effect (`wellTypeColors`). */
+  colors?: Record<string, string>;
   /** Given when the user can flag: a well with a raw value opens the flag popover. */
   onFlag?: (well: PlateMapWell, outlier: boolean, reason: string | null) => void;
   flagPending?: boolean;
   className?: string;
 }
 
-const CONTROL_OUTLINE: Record<string, string> = {
-  positive_control: WELL_TYPE_COLORS.positive_control,
-  negative_control: WELL_TYPE_COLORS.negative_control,
-  blank: WELL_TYPE_COLORS.blank,
-  reference: WELL_TYPE_COLORS.reference,
-};
+const OUTLINED = new Set(["positive_control", "negative_control", "blank", "reference"]);
 
 export function PlateValueHeatmap({
   plate,
@@ -249,6 +246,7 @@ export function PlateValueHeatmap({
   computedUnit,
   doseUnit,
   outlierWellIds,
+  colors = WELL_TYPE_COLORS,
   onFlag,
   flagPending = false,
   className,
@@ -270,7 +268,7 @@ export function PlateValueHeatmap({
   } {
     if (!well) return { background: NO_VALUE_COLOR };
 
-    const outline = CONTROL_OUTLINE[well.well_type];
+    const outline = OUTLINED.has(well.well_type) ? colors[well.well_type] : undefined;
     const isControl = !!outline && well.well_type !== "sample";
     const v = valueByWellId.get(well.well_id);
 
@@ -428,6 +426,8 @@ interface ColorScaleLegendProps {
   >;
   /** The plate has outlier-flagged wells: the key names the ✕. */
   hasOutliers?: boolean;
+  /** Well-type colours, the controls by effect (`wellTypeColors`). */
+  colors?: Record<string, string>;
   className?: string;
 }
 
@@ -437,6 +437,7 @@ export function ColorScaleLegend({
   unit,
   controlTypesPresent,
   hasOutliers = false,
+  colors = WELL_TYPE_COLORS,
   className,
 }: ColorScaleLegendProps) {
   const stops = stopsFor(palette)
@@ -456,7 +457,7 @@ export function ColorScaleLegend({
         t: valueToT(scale.negMean, scale, palette),
         label: "NEG",
         value: scale.negMean,
-        color: WELL_TYPE_COLORS.negative_control,
+        color: colors.negative_control,
       });
     }
     if (scale.posMean != null) {
@@ -464,7 +465,7 @@ export function ColorScaleLegend({
         t: valueToT(scale.posMean, scale, palette),
         label: "POS",
         value: scale.posMean,
-        color: WELL_TYPE_COLORS.positive_control,
+        color: colors.positive_control,
       });
     }
   }
@@ -540,7 +541,7 @@ export function ColorScaleLegend({
               <span
                 className="inline-block h-2.5 w-2.5"
                 style={{
-                  border: `1.5px solid ${WELL_TYPE_COLORS[t]}`,
+                  border: `1.5px solid ${colors[t]}`,
                   background: "transparent",
                 }}
               />

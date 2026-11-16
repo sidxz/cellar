@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
+import { fullEffectControl, isActivation, wellTypeColors } from "@/shared/lib/chart-colors";
 import { showError, showSuccess, showWarning } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
 import { useMemo, useState } from "react";
@@ -128,6 +129,11 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const wantsComputed = effectiveLayer === "normalized" && layerAvailable;
   const normalization = selectedDef?.normalizations?.find((n) => n !== "none");
   const rawUnit = isDose ? doseUnit : (selectedDef?.unit ?? null);
+  // Controls by effect under the protocol's convention: the full-effect one red.
+  const activation = isActivation(selectedDef?.normalizations ?? []);
+  const fullIsPositive =
+    fullEffectControl(protocol?.pos_control_signal, activation) === "positive_control";
+  const colors = wellTypeColors(protocol?.pos_control_signal, activation);
 
   // Per-well value lookups. For the readout case we split by is_computed so
   // the tooltip can show both layers. For the dose case the dose value
@@ -262,15 +268,14 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
 
     // The platform's scale: a % layer on its fixed scale (no effect at white, full
     // effect red); raw and z-score anchored on this plate's control means — the
-    // uninhibited control (POS under HIGH, NEG under LOW) at white, the other red.
+    // no-effect control at white, the full-effect one red.
     const fixed = wantsComputed && normalization ? FIXED_PERCENT[normalization] : undefined;
     if (fixed) {
       const [none, full] = fixed;
       return anchored(none, full, `${none} %`, `${full} %`, negMean, posMean);
     }
-    const low = protocol?.pos_control_signal === "low";
-    const [none, full] = low ? [negMean, posMean] : [posMean, negMean];
-    const [noneName, fullName] = low ? ["NEG", "POS"] : ["POS", "NEG"];
+    const [none, full] = fullIsPositive ? [negMean, posMean] : [posMean, negMean];
+    const [noneName, fullName] = fullIsPositive ? ["NEG", "POS"] : ["POS", "NEG"];
     if (none != null && full != null && none !== full) {
       const u = wantsComputed ? "" : rawUnit ? ` ${rawUnit}` : "";
       return anchored(
@@ -467,6 +472,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 palette={palette}
                 unit={wantsComputed ? null : rawUnit}
                 controlTypesPresent={controlTypesPresent}
+                colors={colors}
                 hasOutliers={plate.wells.some((w) => outlierWellIds.has(w.well_id))}
               />
 
@@ -481,6 +487,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 computedUnit={computedUnit}
                 doseUnit={doseUnit}
                 outlierWellIds={outlierWellIds}
+                colors={colors}
                 onFlag={canFlag ? onFlag : undefined}
                 flagPending={flag.isPending}
               />

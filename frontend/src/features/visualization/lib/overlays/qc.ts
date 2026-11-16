@@ -4,11 +4,11 @@ import {
   READOUT_NORMALIZATION_LABELS,
   type ReadoutNormalization,
 } from "@/features/screening-assay/types";
-import { CHART_COLORS, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_COLORS } from "@/shared/lib/chart-colors";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 import { categoryLabel, column } from "../dataset";
-import type { Facet } from "../traces/common";
+import { type Facet, wellColorsOf } from "../traces/common";
 import { plottedX, plottedY } from "../traces/scatter";
 import type { OverlayParts } from "./build";
 import { linearFit, meanSd } from "./math";
@@ -41,6 +41,8 @@ export const say = (f: Facet, text: string) =>
 interface Controls {
   type: string;
   label: string;
+  /** Its well-type colour, by effect under the protocol's convention. */
+  color: string;
   drawn: number[];
   used: number[];
 }
@@ -51,6 +53,7 @@ function controlsOf(ds: Dataset, p: PanelConfig, mask: Uint8Array, facets: Facet
   const yAt = plottedY(ds, p);
   const types = ds.values.well_type ?? [];
   const flags = ds.values[`${p.y}:outlier`];
+  const colors = wellColorsOf(ds);
   return facets.map((f) => {
     const byType = new Map<string, Controls>();
     for (const i of f.rows) {
@@ -58,7 +61,13 @@ function controlsOf(ds: Dataset, p: PanelConfig, mask: Uint8Array, facets: Facet
       if (!mask[i] || !CONTROLS.includes(type) || xAt(i) === null || yAt(i) === null) continue;
       let c = byType.get(type);
       if (!c) {
-        c = { type, label: categoryLabel("well_type", type), drawn: [], used: [] };
+        c = {
+          type,
+          label: categoryLabel("well_type", type),
+          color: colors[type],
+          drawn: [],
+          used: [],
+        };
         byType.set(type, c);
       }
       c.drawn.push(i);
@@ -93,15 +102,14 @@ function eachFacet(
   return notes;
 }
 
-/** A translucent band in the type's color; the first of each ``name`` takes the legend. */
+/** A translucent band in ``color``; the first of each ``name`` takes the legend. */
 function band(
-  type: string,
+  color: string,
   name: string,
   shown: Set<string>,
   place: Record<string, unknown>,
   stats: { mean: number; sd: number },
 ): Record<string, unknown> {
-  const color = WELL_TYPE_COLORS[type];
   const first = !shown.has(name);
   shown.add(name);
   return {
@@ -129,7 +137,7 @@ function flatBand(
   const stats = meanSd(c.used.map((i) => yAt(i) as number));
   if (stats?.sd == null) return null;
   const place = { xref: `${f.xaxis} domain`, x0: 0, x1: 1, yref: f.yaxis };
-  return band(c.type, `${c.label} ± 3 SD`, shown, place, { ...stats, sd: stats.sd });
+  return band(c.color, `${c.label} ± 3 SD`, shown, place, { ...stats, sd: stats.sd });
 }
 
 /** Mean ± 3 SD of each control type's plotted Y, across each facet. */
@@ -206,7 +214,7 @@ export function drawDriftBands(
         }
         const place = { xref: f.xaxis, x0: s[0] - 0.5, x1: s[1] + 0.5, yref: f.yaxis };
         const name = `${c.label} ± 3 SD per ${noun}`;
-        shapes.push(band(c.type, name, shown, place, { ...stats, sd: stats.sd }));
+        shapes.push(band(c.color, name, shown, place, { ...stats, sd: stats.sd }));
       }
       const flat = short === groups.size && fallback ? flatBand(f, c, yAt, shown) : null;
       if (flat) shapes.push(flat);
@@ -265,7 +273,7 @@ export function drawTrends(
         yaxis: f.yaxis,
         x: [x0, x1],
         y: [fit.slope * x0 + fit.intercept, fit.slope * x1 + fit.intercept],
-        line: { color: WELL_TYPE_COLORS[c.type], dash: "dash", width: 1.5 },
+        line: { color: c.color, dash: "dash", width: 1.5 },
         hoverinfo: "skip",
       });
       shown.add(name);
