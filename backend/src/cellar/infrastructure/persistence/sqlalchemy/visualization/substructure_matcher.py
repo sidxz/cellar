@@ -15,7 +15,7 @@ from cellar.application.visualization.match_substructure import (
 )
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._structure_query import (
-    _substructure_clause,
+    substructure_clause,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
 
@@ -47,7 +47,7 @@ class SQLAlchemySubstructureMatcher:
         query_kind: QueryKind | None,
     ) -> SubstructureMatchResult:
         _check_readable(query, query_kind)
-        clause = _substructure_clause(
+        clause = substructure_clause(
             {"smiles_or_smarts": query, "query_kind": query_kind, "generalized": False}
         )
         scope = (

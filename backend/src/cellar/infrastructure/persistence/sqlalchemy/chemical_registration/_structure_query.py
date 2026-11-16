@@ -40,7 +40,7 @@ def _structure_clause(criterion: dict[str, Any]) -> ColumnElement:
         return MoleculeModel.inchi_key == inchi_key.strip().upper()
 
     if kind == "substructure":
-        return _substructure_clause(criterion)
+        return substructure_clause(criterion)
 
     if kind == "similarity":
         return _similarity_clause(criterion)
@@ -49,7 +49,7 @@ def _structure_clause(criterion: dict[str, Any]) -> ColumnElement:
     raise ValueError(msg)
 
 
-def _substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
+def substructure_clause(criterion: dict[str, Any]) -> ColumnElement:
     query_text = criterion.get("smiles_or_smarts") or criterion.get("smarts")
     if not query_text:
         raise ValueError("substructure requires smiles_or_smarts (or legacy smarts)")
