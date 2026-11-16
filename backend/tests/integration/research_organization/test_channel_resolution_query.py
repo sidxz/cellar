@@ -808,3 +808,64 @@ async def test_run_scope_excludes_other_runs_on_both_branches(session_factory):
         workspace_id=ws_id, channel=dr_channel, molecule_id=molecule_id, wellless_only=True
     )
     assert sorted(c.readout_id for c in unscoped) == sorted([row_a_id, row_b_id])
+
+
+@pytest.mark.asyncio
+async def test_readout_candidates_are_a_compounds_sample_wells_and_wellless_rows(
+    uow, session_factory, workspace_id
+):
+    """Rifampicin's positive-control and reference wells are plate QC: no campaign pick
+    (single-molecule or run-scoped) reads them — a LATEST_RUN pick could otherwise land on
+    a ~100 % control well instead of the sample."""
+    from cellar.domain.research_organization.campaign_channel import CampaignChannel
+    from cellar.domain.research_organization.enums import (
+        ChannelSourceKind,
+        QualifierHandling,
+        SelectionRule,
+    )
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization import (
+        channel_resolution_query as crq,
+    )
+    from tests.integration import _screening_seed as seed
+
+    ws = workspace_id
+    norm = "percent_inhibition"
+    async with uow:
+        s = uow.session
+        rif = await seed.molecule(s, ws, await seed.org(s, ws), "rifampicin")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="Signal", normalizations=[norm])
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        plate = await seed.plate(s, run, 1)
+        for col, (role, value) in enumerate(
+            [("sample", 40.0), ("positive_control", 100.0), ("reference", 95.0)], start=1
+        ):
+            w = await seed.well(s, plate, "A", col, well_type=role)
+            await seed.readout(s, ws, run, rd, rif, value, well_id=w, normalization=norm)
+        await seed.readout(s, ws, run, rd, rif, 60.0, wellless=True, normalization=norm)
+        await uow.commit()
+
+    query = crq.SQLAlchemyChannelResolutionQuery(session_factory)
+    channel = CampaignChannel(
+        campaign_id=uuid.uuid4(),
+        label="Signal",
+        protocol_id=p,
+        readout_definition_id=rd,
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=SelectionRule.LATEST_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=0,
+        normalization_applied=norm,
+    )
+    one = await query.fetch_candidates(workspace_id=ws, channel=channel, molecule_id=rif)
+    by_runs = await query.fetch_candidates_for_runs(
+        workspace_id=ws,
+        run_ids=[run],
+        protocol_id=p,
+        readout_definition_id=rd,
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        normalization_applied=norm,
+    )
+
+    assert sorted(c.value for c in one) == [40.0, 60.0]
+    assert {m: sorted(c.value for c in cs) for m, cs in by_runs.items()} == {rif: [40.0, 60.0]}
