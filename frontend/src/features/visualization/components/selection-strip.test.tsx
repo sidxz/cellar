@@ -165,6 +165,26 @@ describe("SelectionStrip outlier flags", () => {
     );
   });
 
+  it("asks for a reason on a completed run, and leaves rejected runs out", async () => {
+    const completed = [
+      { id: "r1", status: "completed", is_locked: false },
+      { id: "r2", status: "rejected", is_locked: false },
+    ] as Run[];
+    render(
+      <WorkbenchProvider initialPanels={[]} initialFilters={[]}>
+        <Seed ids={wells.row_ids} />
+        <SelectionStrip ds={wells} runs={completed} />
+      </WorkbenchProvider>,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Flag as outlier" }));
+    expect(screen.getByText("1 well")).toBeInTheDocument(); // r2's well c is not offered
+    const submit = screen.getAllByRole("button", { name: "Flag as outlier" }).at(-1) as HTMLElement;
+    expect(screen.getByLabelText("Reason")).toHaveAttribute("placeholder", "Reason (required)");
+    expect(submit).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "bubble" } });
+    expect(submit).toBeEnabled();
+  });
+
   it("offers nothing to a viewer, or above the Wells level", () => {
     state.canEdit = false;
     const { unmount } = strip();

@@ -6,12 +6,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/
 import { type ReactNode, useState } from "react";
 
 /** Opened from ``children``: flags wells as outliers (``flagged`` false) or removes their
- *  flag, with an optional reason. An outlier leaves plate QC and the normalization
- *  anchors; nothing changes until the button is pressed. */
+ *  flag, with a reason (required on a completed run). An outlier leaves plate QC and the
+ *  normalization anchors; nothing changes until the button is pressed. */
 export function OutlierFlagPopover({
   flagged,
   title,
   pending,
+  reasonRequired = false,
   onSubmit,
   children,
 }: {
@@ -19,6 +20,8 @@ export function OutlierFlagPopover({
   /** What is flagged, e.g. "A1 · Negative control" or "12 wells". */
   title: string;
   pending: boolean;
+  /** A completed run's flags change only with a reason. */
+  reasonRequired?: boolean;
   /** Called once per press; the popover closes. */
   onSubmit: (reason: string | null) => void;
   children: ReactNode;
@@ -53,13 +56,19 @@ export function OutlierFlagPopover({
           </p>
           <Input
             aria-label="Reason"
-            placeholder="Reason (optional)"
+            placeholder={reasonRequired ? "Reason (required)" : "Reason (optional)"}
+            required={reasonRequired}
             maxLength={500}
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             className="h-8 text-sm"
           />
-          <Button type="submit" size="sm" className="w-full" disabled={pending}>
+          <Button
+            type="submit"
+            size="sm"
+            className="w-full"
+            disabled={pending || (reasonRequired && !reason.trim())}
+          >
             {action}
           </Button>
         </form>

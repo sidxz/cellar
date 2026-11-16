@@ -18,18 +18,24 @@ import type { Dataset } from "../types";
 const fmt = (n: number) => n.toLocaleString();
 const wellsText = (n: number) => `${fmt(n)} ${n === 1 ? "well" : "wells"}`;
 
-/** Flag the selected wells as outliers, or remove their flag — only the wells of runs the
- * user can edit (neither locked nor approved). Each run is recalculated and the dataset
- * reloads. */
+/** Runs whose outlier flags can change: unlocked, and draft, in progress or completed
+ * (with a reason) — the API refuses the others. */
+const FLAGGABLE = new Set(["draft", "in_progress", "completed"]);
+
+/** Flag the selected wells as outliers, or remove their flag — only the wells of runs
+ * whose flags can change. Each run is recalculated and the dataset reloads. */
 function OutlierActions({ ds, rows, runs }: { ds: Dataset; rows: number[]; runs: Run[] }) {
   const canEdit = useCanEdit();
   const flag = useFlagOutliers();
   const targets = useMemo(() => {
     const editable = new Set(
-      runs.filter((r) => !r.is_locked && r.status !== "approved").map((r) => r.id),
+      runs.filter((r) => !r.is_locked && FLAGGABLE.has(r.status)).map((r) => r.id),
     );
     return outlierTargets(ds, rows, editable);
   }, [ds, rows, runs]);
+  const completed = new Set(runs.filter((r) => r.status === "completed").map((r) => r.id));
+  const needsReason = (byRun: Map<string, string[]>) =>
+    [...byRun.keys()].some((id) => completed.has(id));
   if (!canEdit || ds.level !== "wells") return null;
 
   const count = (byRun: Map<string, string[]>) =>
@@ -61,6 +67,7 @@ function OutlierActions({ ds, rows, runs }: { ds: Dataset; rows: number[]; runs:
           flagged={false}
           title={wellsText(toFlag)}
           pending={flag.isPending}
+          reasonRequired={needsReason(targets.flag)}
           onSubmit={(reason) => apply(targets.flag, true, reason)}
         >
           <Button size="sm" variant="outline" className="h-7">
@@ -73,6 +80,7 @@ function OutlierActions({ ds, rows, runs }: { ds: Dataset; rows: number[]; runs:
           flagged
           title={wellsText(toUnflag)}
           pending={flag.isPending}
+          reasonRequired={needsReason(targets.unflag)}
           onSubmit={(reason) => apply(targets.unflag, false, reason)}
         >
           <Button size="sm" variant="outline" className="h-7">
