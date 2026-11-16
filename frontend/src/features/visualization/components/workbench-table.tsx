@@ -78,6 +78,17 @@ const isData = (row: Row | undefined): row is Row => !!row && row.i >= 0;
 const fmt = (n: number) => n.toLocaleString();
 const NO_ROWS = { noRowsToShow: "No rows match the filters" };
 const MORE = -2;
+/** Cells take no focus (``suppressCellFocus``); their buttons and links do. The grid's own
+ * keys (cell-to-cell Tab and arrows) would hold focus on a button that cannot move, so every
+ * key from a cell goes to the browser: Tab walks the row's controls and on, arrows scroll. */
+const DEFAULT_COL: ColDef<Row> = {
+  sortable: true,
+  resizable: true,
+  suppressMovable: true,
+  suppressKeyboardEvent: () => true,
+};
+/** The same for Tab from the full-width "Selected (n)" rows: the browser's order. */
+const BROWSER_TAB = () => false as const;
 const PAGE_SIZE = 100;
 const PAGE_SIZES = [50, 100, 250, 500];
 /** The grid is as tall as its page and the viewport scrolls it (see WorkbenchBody), so the
@@ -539,7 +550,8 @@ export function WorkbenchTable({
         rowData={rowData}
         pinnedTopRowData={pinnedRows}
         columnDefs={columnDefs}
-        defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
+        defaultColDef={DEFAULT_COL}
+        tabToNextCell={BROWSER_TAB}
         getRowId={(p) => (p.data.i < 0 ? `selected-${p.data.i}` : ds.row_ids[p.data.i])}
         isFullWidthRow={(p) => (p.rowNode.data?.i ?? 0) < 0}
         fullWidthCellRenderer={SelectedGroupRow}

@@ -493,6 +493,19 @@ describe("WorkbenchTable", () => {
     ).toBeNull();
   });
 
+  it("never holds the keyboard: Tab, arrows and Escape pass through cell and Selected-row buttons", async () => {
+    show(["m1"], { table: compounds });
+    const value = await screen.findByRole("button", { name: /> 80/ });
+    const group = screen.getByRole("button", { name: "Selected (1)" });
+    for (const target of [value, group]) {
+      for (const key of ["Tab", "ArrowRight", "ArrowDown", "Escape"]) {
+        // Not cancelled: the browser moves focus on (or scrolls) as it would outside a grid.
+        expect(fireEvent.keyDown(target, { key }), `${key} on ${target.textContent}`).toBe(true);
+      }
+      expect(fireEvent.keyDown(target, { key: "Tab", shiftKey: true })).toBe(true);
+    }
+  });
+
   it("opens a compound's curves from its Curves (n) button", async () => {
     const onOpenCurves = vi.fn();
     show([], { table: compounds, onOpenCurves });
