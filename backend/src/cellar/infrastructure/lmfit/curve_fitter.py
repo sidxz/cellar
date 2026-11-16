@@ -154,6 +154,17 @@ class LmfitCurveFitter:
                 )
             )
 
+        # Replicates stacked at fewer doses than the 4PL has parameters (a control
+        # column at one dose) are never a curve, however many points they hold.
+        doses = len({p.concentration for p in active_points})
+        if doses < _MIN_FITTING_POINTS:
+            return Failure(
+                ValidationError(
+                    f"Curve fitting requires at least {_MIN_FITTING_POINTS} distinct doses; "
+                    f"got {doses}"
+                )
+            )
+
         concentrations = np.array([p.concentration for p in active_points], dtype=float)
         responses = np.array([p.response for p in active_points], dtype=float)
 

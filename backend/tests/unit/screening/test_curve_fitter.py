@@ -150,6 +150,18 @@ class TestLmfitCurveFitter:
         assert isinstance(result, Failure)
         assert "at least 4" in str(result.failure()).lower()
 
+    @pytest.mark.parametrize("doses", [[2.0], [0.1, 1.0, 10.0]])
+    def test_fewer_than_four_distinct_doses_is_no_curve(self, doses):
+        """Eight wells at one dose (a control stack) or replicates at three doses are
+        never a curve, however many points they hold."""
+        points = [
+            ConcentrationResponsePoint(concentration=doses[i % len(doses)], response=95.0 + i)
+            for i in range(8)
+        ]
+        result = self.fitter.fit(points, _make_config())
+        assert isinstance(result, Failure)
+        assert f"at least 4 distinct doses; got {len(doses)}" in str(result.failure())
+
     def test_fit_with_hill_slope_constraint_negative(self):
         points = _generate_hill_data(ic50=100.0, hill_slope=-1.0)
         config = _make_config(hill_constraint=HillSlopeConstraint.NEGATIVE_ONLY)

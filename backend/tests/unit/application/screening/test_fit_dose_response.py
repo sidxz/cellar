@@ -802,3 +802,62 @@ async def test_dosed_controls_without_a_compound_are_not_fitted():
     ]
     assert [len(points) for points in fitter.calls] == [4]
     assert result.unwrap().warnings == []
+
+
+@pytest.mark.asyncio
+async def test_a_sample_fit_reads_sample_wells_only():
+    """Rifampicin titrated on four sample wells, also the positive control (three wells at
+    2 µM) and a zero-dose reference well; another compound is only a positive control (eight
+    wells at 2 µM). Only the sample titration is fitted — the zero-dose reference no longer
+    invalidates it — and the control-only compound gets no curve and no warning."""
+    from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+
+    protocol, y_def, _ = _make_protocol_with_y(
+        y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
+    )
+    concs = [0.01, 0.1, 1.0, 10.0]
+    run, samples = _make_run_with_dose_series(protocol_id=protocol.id, concentrations=concs)
+    plate_id = run.plates[0].id
+    rif, rif_batch = uuid.UUID(int=42), uuid.UUID(int=43)
+    other, other_batch = uuid.uuid4(), uuid.uuid4()
+
+    def wells(row: str, n: int, role: WellType, dose: float, batch: uuid.UUID) -> list[Well]:
+        made = [
+            Well(plate_id=plate_id, row=row, column=c, well_type=role, dose=dose, batch_id=batch)
+            for c in range(1, n + 1)
+        ]
+        run.wells.extend(made)
+        return made
+
+    rif_pos = wells("B", 3, WellType.POSITIVE_CONTROL, 2.0, rif_batch)
+    rif_ref = wells("C", 1, WellType.REFERENCE, 0.0, rif_batch)
+    other_pos = wells("D", 8, WellType.POSITIVE_CONTROL, 2.0, other_batch)
+    pct = ReadoutNormalization.PERCENT_INHIBITION
+
+    def rows(ws: list[Well], values, mol=rif, batch=rif_batch) -> list[ReadoutData]:
+        return [
+            _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=v,
+                is_computed=True, normalization_applied=pct, molecule_id=mol, batch_id=batch)
+            for w, v in zip(ws, values, strict=True)
+        ]  # fmt: skip
+
+    readout_data = (
+        rows(samples, [5.0, 20.0, 60.0, 95.0])
+        + rows(rif_pos, [100.0] * 3)
+        + rows(rif_ref, [0.0])
+        + rows(other_pos, [99.0] * 8, mol=other, batch=other_batch)
+    )
+    curve_repo = AsyncMock()
+    use_case = FitDoseResponseCurves(
+        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=LmfitCurveFitter()
+    )
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    assert isinstance(result, Success)
+    [curve] = result.unwrap().curves
+    assert (curve.molecule_id, curve.num_points) == (rif, 4)
+    assert sorted(p["concentration"] for p in curve.raw_data) == concs
+    assert result.unwrap().warnings == []

@@ -24,6 +24,7 @@ from cellar.domain.screening_assay.enums import (
     HillSlopeConstraint,
     ReadoutDataType,
     ReadoutNormalization,
+    WellType,
 )
 from cellar.domain.screening_assay.excluded_point_detail import (
     ExcludedPointDetail,
@@ -327,12 +328,13 @@ class FitDoseResponseCurves:
                 # Calculated readouts are filtered by is_computed alone (no formula).
                 if target_formula is not None and rd.normalization_applied != target_formula:
                     continue
-                # A curve belongs to a compound: control wells without one (DMSO, no
-                # enzyme) carry normalized values but are never fitted.
+                # A curve belongs to a compound and reads its sample wells: control,
+                # reference and blank wells carry normalized values (even when they
+                # name a compound) but are plate QC, never fitted.
                 if rd.value is None or rd.well_id is None or rd.molecule_id is None:
                     continue
                 well = well_map.get(rd.well_id)
-                if well is None or well.dose is None:
+                if well is None or well.dose is None or well.well_type != WellType.SAMPLE:
                     continue
                 key = (rd.molecule_id, rd.batch_id)
                 groups[key].append(
