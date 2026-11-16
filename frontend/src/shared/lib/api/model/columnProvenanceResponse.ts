@@ -12,4 +12,5 @@ export interface ColumnProvenanceResponse {
   condition_set?: string | null;
   aggregation?: string | null;
   stat?: string | null;
+  run_ids?: string[] | null;
 }
