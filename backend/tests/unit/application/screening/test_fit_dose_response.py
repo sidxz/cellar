@@ -756,3 +756,49 @@ async def test_initial_fit_no_suggestions_yields_empty_excluded_points():
     assert isinstance(result, Success)
     assert len(saved_curves) == 1
     assert saved_curves[0].excluded_points == []
+
+
+# ---------------------------------------------------------------------------
+# Control wells: normalized beside the samples, fitted only when they name a compound
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_dosed_controls_without_a_compound_are_not_fitted():
+    """Four dosed no-compound control wells (DMSO) carry normalized values but no molecule:
+    no curve and no failure; a control compound's dose series (rifampicin) still fits."""
+    protocol, y_def, _ = _make_protocol_with_y(
+        y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
+    )
+    concs = [0.01, 0.1, 1.0, 10.0]
+    run, rif_wells = _make_run_with_dose_series(protocol_id=protocol.id, concentrations=concs)
+    plate_id = run.plates[0].id
+    dmso = [
+        Well(plate_id=plate_id, row="B", column=c, well_type=WellType.NEGATIVE_CONTROL, dose=0.1)
+        for c in range(1, 5)
+    ]
+    run.wells.extend(dmso)
+    pct = ReadoutNormalization.PERCENT_INHIBITION
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=10.0 * i,
+            is_computed=True, normalization_applied=pct)
+        for i, w in enumerate(rif_wells)
+    ] + [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=1.0,
+            is_computed=True, normalization_applied=pct, molecule_id=None, batch_id=None)
+        for w in dmso
+    ]
+    fitter = _RecordingFitter()
+    use_case = _make_use_case(fitter)
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+
+    assert isinstance(result, Success)
+    curves = result.unwrap().curves
+    assert [(c.molecule_id, c.batch_id) for c in curves] == [
+        (uuid.UUID(int=42), uuid.UUID(int=43))
+    ]
+    assert [len(points) for points in fitter.calls] == [4]
+    assert result.unwrap().warnings == []

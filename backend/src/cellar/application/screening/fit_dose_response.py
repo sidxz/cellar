@@ -327,7 +327,9 @@ class FitDoseResponseCurves:
                 # Calculated readouts are filtered by is_computed alone (no formula).
                 if target_formula is not None and rd.normalization_applied != target_formula:
                     continue
-                if rd.value is None or rd.well_id is None:
+                # A curve belongs to a compound: control wells without one (DMSO, no
+                # enzyme) carry normalized values but are never fitted.
+                if rd.value is None or rd.well_id is None or rd.molecule_id is None:
                     continue
                 well = well_map.get(rd.well_id)
                 if well is None or well.dose is None:
