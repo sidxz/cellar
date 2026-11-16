@@ -381,7 +381,9 @@ describe("SavedViewPage", () => {
       expect(banner).toHaveTextContent(
         "R-groups · Core A couldn't be regenerated: The core is not a valid structure.",
       );
-      expect(banner).toHaveTextContent("Not available any more: Filter: R1, Plot 2: Group (R1).");
+      expect(banner).toHaveTextContent(
+        "Not available any more: Filter: R1, Plot 2: Group (R1), Plot 2: Bar chart (now a histogram).",
+      );
       expect(screen.getByText("2 / 2 compounds")).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
     });

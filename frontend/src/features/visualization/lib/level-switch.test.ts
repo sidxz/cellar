@@ -82,7 +82,21 @@ describe("carryConfig", () => {
     const out = carryConfig(carry([scatter]), compounds);
     expect(out.panels).toHaveLength(1);
     expect(out.panels[0]).toMatchObject({ id: "keep-me", type: "histogram", x: X, y: undefined });
-    expect(out.dropped).toEqual(["Plot 1: X (Well order)"]);
+    expect(out.dropped).toEqual(["Plot 1: X (Well order)", "Plot 1: Scatter (now a histogram)"]);
+  });
+
+  it("says when a compared protocol's field leaves a scatter that becomes a histogram", () => {
+    const B = "rd:b:p";
+    const scatter = panel("scatter", { x: B, y: X });
+    const out = carryConfig(
+      { ...carry([scatter]), columns: [...compounds.columns, col(B, "Counter · pIC50", "number")] },
+      compounds,
+    );
+    expect(out.panels[0]).toMatchObject({ type: "histogram", x: X });
+    expect(out.dropped).toEqual([
+      "Plot 1: X (Counter · pIC50)",
+      "Plot 1: Scatter (now a histogram)",
+    ]);
   });
 
   it("clears appearance fields and tooltip entries the new level lacks, keeping the rest", () => {

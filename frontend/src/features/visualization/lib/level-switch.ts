@@ -14,6 +14,16 @@ export type Carry = {
   columns: DatasetColumn[];
 };
 
+/** How a note names a plot type: "Plot 1: Scatter (now a histogram)". */
+const TYPE_NAMES: Record<PanelConfig["type"], string> = {
+  scatter: "scatter",
+  histogram: "histogram",
+  bar: "bar chart",
+  box: "box plot",
+  "rgroup-matrix": "R-group matrix",
+};
+const capitalized = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
 /** Whether a panel still has the fields its type cannot draw without. */
 function drawable(p: PanelConfig): boolean {
   switch (p.type) {
@@ -35,7 +45,8 @@ function drawable(p: PanelConfig): boolean {
  * molecule ids, always carry; panel fields on such columns are cleared, and a panel left
  * without a field its type needs becomes the level's default plot type (same id), keeping
  * the value it measured when that survives. ``dropped`` names each
- * loss for the chemist: "Filter: Well order", "Plot 1: X (Well order)" — by ``labels`` when
+ * loss for the chemist: "Filter: Well order", "Plot 1: X (Well order)", and each plot that
+ * changed type, "Plot 1: Scatter (now a histogram)" — by ``labels`` when
  * it names the key, else by ``prev.columns``. */
 export function carryConfig(
   prev: Carry,
@@ -87,7 +98,15 @@ export function carryConfig(
     };
     if (lost.length === 0) return p;
     dropped.push(...lost);
-    if (!drawable(next) && fallback) next = patchPanel(next, retypePanel(ds, next, fallback.type));
+    if (!drawable(next) && fallback) {
+      next = patchPanel(next, retypePanel(ds, next, fallback.type));
+      // Never silently: the plot the chemist made is now another type.
+      if (next.type !== p.type) {
+        dropped.push(
+          `Plot ${n + 1}: ${capitalized(TYPE_NAMES[p.type])} (now a ${TYPE_NAMES[next.type]})`,
+        );
+      }
+    }
     return next;
   });
 
