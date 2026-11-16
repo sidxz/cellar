@@ -50,6 +50,7 @@ from cellar.application.screening.dose_response_enriched_reader import (
 from cellar.application.screening.find_curve_positions import FindCurvePositions
 from cellar.application.screening.find_similar_protocols import FindSimilarProtocols
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
+from cellar.application.screening.flag_run_outliers import FlagRunOutliers
 from cellar.application.screening.get_collection_gap import (
     GetProtocolCollectionGap,
     GetRunCollectionGap,
@@ -1099,6 +1100,18 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(RelabelRunPositions, _relabel_run_positions)
+
+    def _flag_run_outliers(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FlagRunOutliers(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            readout_repo=SQLAlchemyReadoutDataRepository(uow),
+            calculation_engine=c[ReadoutCalculationEngine],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(FlagRunOutliers, _flag_run_outliers)
 
     def _melting_step_uc(uc_cls: type):
         def _f(c: Container):

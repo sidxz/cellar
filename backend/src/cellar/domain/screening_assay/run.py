@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from typing import Any
@@ -26,6 +26,7 @@ from cellar.domain.screening_assay.events import (
     RunHitCriteriaSet,
     RunInstrumentFileImported,
     RunLocked,
+    RunOutliersFlagged,
     RunPositionsRelabelled,
     RunRejected,
     RunUnlocked,
@@ -664,6 +665,47 @@ class Run(AggregateRoot):
                 "Reloading shows their current values and discards your unsaved edits."
             )
         return checked
+
+    def check_outlier_flags(self, well_ids: Collection[uuid.UUID]) -> None:
+        """The checks ``flag_outliers`` makes: the run is neither locked nor approved, and
+        names at least one of its wells. Changes nothing."""
+        self._guard_not_locked()
+        if self.status == RunStatus.APPROVED:
+            raise ConflictError("Outlier flags cannot change on an approved run")
+        if not well_ids:
+            raise ValidationError("Name at least one well")
+        on_run = {w.id for w in self.wells}
+        for well_id in well_ids:
+            if well_id not in on_run:
+                raise ValidationError(f"Position '{well_id}' is not on this run")
+
+    def flag_outliers(
+        self, well_ids: Collection[uuid.UUID], *, outlier: bool, reason: str | None = None
+    ) -> None:
+        """Record that these wells' readouts are outliers (or no longer are): an outlier
+        leaves plate QC and the normalization anchors, and keeps its own value. The flags
+        live on the readout rows; this checks the change and registers its audit event,
+        naming the positions in plate order."""
+        self.check_outlier_flags(well_ids)
+        named = set(well_ids)
+        plates = {p.id: p for p in self.plates}
+        order = {p.id: p.plate_number for p in self.plates}
+        wells = sorted(
+            (w for w in self.wells if w.id in named),
+            key=lambda w: (order[w.plate_id], len(w.row), w.row, w.column),
+        )
+        self.register_event(
+            RunOutliersFlagged(
+                workspace_id=self.workspace_id,
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                positions=tuple(
+                    position_label(plates[w.plate_id].holder_kind, w.row, w.column) for w in wells
+                ),
+                outlier=outlier,
+                reason=(reason or "").strip() or None,
+            )
+        )
 
     def reset_data(
         self,

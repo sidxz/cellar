@@ -215,6 +215,12 @@ class ReadoutCalculationEngine:
             # Group raw data by plate for this readout definition
             plate_wells: dict[uuid.UUID, list] = defaultdict(list)
             plate_raw_values: dict[uuid.UUID, dict[uuid.UUID, float]] = defaultdict(dict)
+            # Outlier-flagged wells are no anchor, but still get a normalized value.
+            outliers = frozenset(
+                r.well_id
+                for r in raw_data
+                if r.readout_definition_id == rd.id and r.is_outlier and r.well_id is not None
+            )
 
             for readout in raw_data:
                 if readout.readout_definition_id != rd.id:
@@ -236,6 +242,7 @@ class ReadoutCalculationEngine:
                         plate_raw_values[plate_id],
                         rd.normalizations,
                         protocol.pos_control_signal,
+                        outlier_well_ids=outliers,
                     )
                 except DomainError as exc:
                     return Failure(exc)
@@ -255,6 +262,7 @@ class ReadoutCalculationEngine:
                                 batch_id=original.batch_id,
                                 readout_definition_id=rd.id,
                                 value=QualifiedValue(value=nv.normalized_value),
+                                is_outlier=original.is_outlier,
                                 is_computed=True,
                                 normalization_applied=formula,
                             )
@@ -403,7 +411,8 @@ class ReadoutCalculationEngine:
     ) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
         """``plates[plate_id][readout_definition_id][layer]``: Z′, each control's mean,
         SD and n, and S/B (raw layer only), for every readout x layer whose plate has
-        both control types. Layers are ``raw`` and each normalization."""
+        both control types. Layers are ``raw`` and each normalization. Outlier-flagged
+        wells are left out."""
         assert self._plate_quality is not None
         wells = {w.id: w for w in run.wells}
         # (plate, readout, layer) -> control type -> well -> value (the last row wins)
@@ -411,6 +420,8 @@ class ReadoutCalculationEngine:
         values = defaultdict(lambda: defaultdict(dict))
         for r in rows:
             if r.well_id is None or r.value is None or r.readout_definition_id is None:
+                continue
+            if r.is_outlier:
                 continue
             if r.is_computed and r.normalization_applied is None:
                 continue  # formula and melt-window rows are not plate layers
@@ -461,7 +472,7 @@ class ReadoutCalculationEngine:
         """Fit each positive-control and reference compound with a dose series of
         at least four doses, per plate, on the layer the samples' curves read; the
         primary intercept and curve class go into that layer's plate QC as
-        ``control_fits`` — QC, never the compound's curve."""
+        ``control_fits`` — QC, never the compound's curve. Outlier-flagged wells are left out."""
         if self._curve_fitter is None:
             return
         wells = {w.id: w for w in run.wells}
@@ -487,6 +498,7 @@ class ReadoutCalculationEngine:
                 if (
                     r.readout_definition_id != y_rd.id
                     or str(r.normalization_applied or RAW_LAYER) != layer
+                    or r.is_outlier
                 ):
                     continue
                 if r.is_computed and r.normalization_applied is None:

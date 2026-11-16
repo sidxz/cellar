@@ -55,8 +55,9 @@ class PlateNormalizer:
     All methods are synchronous and pure (no side effects).
     Sample, control and reference wells with a raw value each receive a
     normalized value; the plate's control wells are also the anchors, so a
-    control lands near its anchor's 0 % / 100 % with its own spread. Blank
-    wells are never normalized.
+    control lands near its anchor's 0 % / 100 % with its own spread. A well
+    flagged as an outlier is no anchor but still gets its value. Blank wells
+    are never normalized.
 
     Returns:
         ``list[NormalizedValue]`` — normalized values for every sample,
@@ -74,6 +75,8 @@ class PlateNormalizer:
         raw_values: dict[uuid.UUID, float],
         normalization: ReadoutNormalization,
         pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
+        *,
+        outlier_well_ids: frozenset[uuid.UUID] = frozenset(),
     ) -> list[NormalizedValue]:
         """Dispatch to the appropriate normalization strategy.
 
@@ -82,17 +85,20 @@ class PlateNormalizer:
         swapped so that the high-signal control always anchors "max activity"
         regardless of how the wells were tagged in the plate template. See
         :class:`PosControlSignal` for the full semantic.
+
+        ``outlier_well_ids`` are left out of the control anchors.
         """
+        anchors = {k: v for k, v in raw_values.items() if k not in outlier_well_ids}
         if normalization == ReadoutNormalization.NONE:
             return []
         if normalization == ReadoutNormalization.PERCENT_INHIBITION:
-            return self._percent_inhibition(wells, raw_values, pos_control_signal)
+            return self._percent_inhibition(wells, raw_values, anchors, pos_control_signal)
         if normalization == ReadoutNormalization.PERCENT_ACTIVATION:
-            return self._percent_activation(wells, raw_values, pos_control_signal)
+            return self._percent_activation(wells, raw_values, anchors, pos_control_signal)
         if normalization == ReadoutNormalization.PERCENT_CONTROL:
-            return self._percent_control(wells, raw_values, pos_control_signal)
+            return self._percent_control(wells, raw_values, anchors, pos_control_signal)
         if normalization == ReadoutNormalization.Z_SCORE:
-            return self._z_score(wells, raw_values, pos_control_signal)
+            return self._z_score(wells, raw_values, anchors, pos_control_signal)
         # Defensive: unknown strategy — treat as NONE
         return []
 
@@ -102,6 +108,8 @@ class PlateNormalizer:
         raw_values: dict[uuid.UUID, float],
         normalizations: frozenset[ReadoutNormalization],
         pos_control_signal: PosControlSignal = PosControlSignal.HIGH,
+        *,
+        outlier_well_ids: frozenset[uuid.UUID] = frozenset(),
     ) -> dict[ReadoutNormalization, list[NormalizedValue]]:
         """Fan out a single plate's raw data to multiple normalization formulas.
 
@@ -111,7 +119,9 @@ class PlateNormalizer:
         ``{PERCENT_INHIBITION, Z_SCORE}`` together).
         """
         return {
-            formula: self.normalize(wells, raw_values, formula, pos_control_signal)
+            formula: self.normalize(
+                wells, raw_values, formula, pos_control_signal, outlier_well_ids=outlier_well_ids
+            )
             for formula in normalizations
             if formula != ReadoutNormalization.NONE
         }
@@ -167,6 +177,7 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        anchors: dict[uuid.UUID, float],
         pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
         """100 * (high_anchor - sample) / (high_anchor - low_anchor).
@@ -178,7 +189,7 @@ class PlateNormalizer:
 
         A sample at the high anchor → 0% inhibition; at the low anchor → 100%.
         """
-        high_vals, low_vals = self._resolve_anchors(wells, raw_values, pos_control_signal)
+        high_vals, low_vals = self._resolve_anchors(wells, anchors, pos_control_signal)
         if not low_vals:
             raise ValidationError(
                 "PERCENT_INHIBITION requires at least one low-signal control "
@@ -220,10 +231,11 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        anchors: dict[uuid.UUID, float],
         pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
         """100 * (sample - low_anchor) / (high_anchor - low_anchor)."""
-        high_vals, low_vals = self._resolve_anchors(wells, raw_values, pos_control_signal)
+        high_vals, low_vals = self._resolve_anchors(wells, anchors, pos_control_signal)
         if not low_vals:
             raise ValidationError(
                 "PERCENT_ACTIVATION requires at least one low-signal control well with data"
@@ -261,6 +273,7 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        anchors: dict[uuid.UUID, float],
         pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
         """100 * (sample / high_anchor_mean).
@@ -269,7 +282,7 @@ class PlateNormalizer:
         baseline for "% of control activity" — independent of which template
         label the lab assigns to it.
         """
-        high_vals, _ = self._resolve_anchors(wells, raw_values, pos_control_signal)
+        high_vals, _ = self._resolve_anchors(wells, anchors, pos_control_signal)
         if not high_vals:
             raise ValidationError(
                 "PERCENT_CONTROL requires at least one high-signal control well with data"
@@ -300,6 +313,7 @@ class PlateNormalizer:
         self,
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
+        anchors: dict[uuid.UUID, float],
         pos_control_signal: PosControlSignal,
     ) -> list[NormalizedValue]:
         """(sample - high_anchor_mean) / high_anchor_stdev.
@@ -307,7 +321,7 @@ class PlateNormalizer:
         Uses the high-signal control's distribution as the reference —
         consistent with PERCENT_CONTROL's choice of baseline.
         """
-        high_vals, _ = self._resolve_anchors(wells, raw_values, pos_control_signal)
+        high_vals, _ = self._resolve_anchors(wells, anchors, pos_control_signal)
         if len(high_vals) < 2:
             raise ValidationError(
                 "Z_SCORE requires at least 2 high-signal control wells with data"

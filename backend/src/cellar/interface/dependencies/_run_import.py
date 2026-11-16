@@ -6,6 +6,7 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.screening.flag_run_outliers import FlagRunOutliers
 from cellar.application.screening.get_melting_analysis import GetMeltingAnalysis
 from cellar.application.screening.import_instrument_file import ImportInstrumentFile
 from cellar.application.screening.import_run_file import (
@@ -31,6 +32,7 @@ __all__ = [
     "AddMeltingStepDep",
     "CreateRunImportTemplateDep",
     "DeleteRunImportTemplateDep",
+    "FlagRunOutliersDep",
     "GetMeltingAnalysisDep",
     "ImportInstrumentFileDep",
     "ImportRunFileDep",
@@ -69,6 +71,7 @@ ImportInstrumentFileDep = Annotated[
 RelabelRunPositionsDep = Annotated[
     RelabelRunPositions, Depends(_get_use_case(RelabelRunPositions))
 ]
+FlagRunOutliersDep = Annotated[FlagRunOutliers, Depends(_get_use_case(FlagRunOutliers))]
 ResolveLayoutFileDep = Annotated[ResolveLayoutFile, Depends(_get_use_case(ResolveLayoutFile))]
 ListInstrumentFileFormatsDep = Annotated[
     ListInstrumentFileFormats, Depends(_get_use_case(ListInstrumentFileFormats))

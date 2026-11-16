@@ -511,6 +511,20 @@ class ReadoutDataRepository(Protocol):
         """
         ...
 
+    async def set_outlier(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        well_ids: Sequence[uuid.UUID],
+        *,
+        outlier: bool,
+    ) -> set[uuid.UUID]:
+        """Flag (or unflag) every raw readout row of these wells of the run as an outlier.
+
+        Returns the wells that had a row changed.
+        """
+        ...
+
     async def save(self, entity: ReadoutData) -> None: ...
     async def save_bulk(self, entities: list[ReadoutData]) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...

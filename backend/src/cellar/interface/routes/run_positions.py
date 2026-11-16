@@ -1,6 +1,7 @@
 """Edit a run's positions after an instrument import: label, note, role, batch, concentration.
 
-Also reads a labelling layout file for the labelling table to fill itself from.
+Also reads a labelling layout file for the labelling table to fill itself from, and flags
+wells as outliers.
 """
 
 from __future__ import annotations
@@ -11,6 +12,10 @@ from typing import Annotated
 from fastapi import APIRouter, File, UploadFile
 from pydantic import BaseModel, Field
 
+from cellar.application.screening.flag_run_outliers import (
+    FlagRunOutliersCommand,
+    OutlierFlagResult,
+)
 from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
 from cellar.application.screening.relabel_run_positions import (
     RelabelResult,
@@ -25,7 +30,12 @@ from cellar.application.screening.resolve_layout_file import (
 )
 from cellar.domain.screening_assay.run import PositionEdit, PositionValues
 from cellar.domain.shared.enums import WellType
-from cellar.interface.dependencies import AuthDep, RelabelRunPositionsDep, ResolveLayoutFileDep
+from cellar.interface.dependencies import (
+    AuthDep,
+    FlagRunOutliersDep,
+    RelabelRunPositionsDep,
+    ResolveLayoutFileDep,
+)
 from cellar.interface.error_handlers import result_to_response
 
 router = APIRouter(prefix="/api/v1", tags=["run-positions"])
@@ -180,3 +190,46 @@ async def resolve_layout_file(
     )
     result = await uc(query, auth=auth)
     return LayoutFileResponse.from_domain(result_to_response(result))
+
+
+class FlagOutliersRequest(BaseModel):
+    # Wells of the run; every raw readout row of each takes the flag.
+    well_ids: list[uuid.UUID] = Field(min_length=1, max_length=10_000)
+    # True flags them as outliers, false removes the flag.
+    outlier: bool
+    reason: str | None = Field(None, max_length=500)
+
+
+class FlagOutliersResponse(BaseModel):
+    # Wells whose flag changed; 0 when every well already had it (nothing is recorded).
+    wells_changed: int
+    recalculated: bool
+    compute_warning: str | None
+
+    @classmethod
+    def from_domain(cls, out: OutlierFlagResult) -> FlagOutliersResponse:
+        return cls(
+            wells_changed=out.wells_changed,
+            recalculated=out.recalculated,
+            compute_warning=out.compute_warning,
+        )
+
+
+@router.post("/runs/{run_id}/outliers", response_model=FlagOutliersResponse)
+async def flag_run_outliers(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    body: FlagOutliersRequest,
+    uc: FlagRunOutliersDep,
+) -> FlagOutliersResponse:
+    """Flag wells as outliers, or remove their flag, then recalculate the run. An outlier
+    leaves plate QC and the normalization anchors. Refused on a locked or approved run."""
+    cmd = FlagRunOutliersCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        well_ids=tuple(body.well_ids),
+        outlier=body.outlier,
+        reason=body.reason,
+    )
+    result = await uc(cmd, auth=auth)
+    return FlagOutliersResponse.from_domain(result_to_response(result))

@@ -53,9 +53,10 @@ class _Plate:
         self.plate = Plate(run_id=self.run.id, plate_number=1, format=PlateFormat.F96)
         self.run.plates.append(self.plate)
         self.rows: list[ReadoutData] = []
+        self.computed: list[ReadoutData] = []
         self._n = 0
 
-    def add(self, rd, well_type, value, *, dose=None, molecule=None) -> Well:
+    def add(self, rd, well_type, value, *, dose=None, molecule=None, outlier=False) -> Well:
         self._n += 1
         well = Well(
             plate_id=self.plate.id,
@@ -73,6 +74,7 @@ class _Plate:
                 molecule_id=molecule,
                 readout_definition_id=rd.id,
                 value=QualifiedValue(value=value),
+                is_outlier=outlier,
             )
         )
         return well
@@ -96,6 +98,9 @@ async def _compute(protocol: Protocol, p: _Plate, curve_fitter=None) -> Run:
         curve_fitter=curve_fitter,
     )
     assert isinstance(await engine.compute_for_run(p.run.id, workspace_id=WS), Success)
+    p.computed = (
+        readout_repo.save_bulk.await_args.args[0] if readout_repo.save_bulk.await_args else []
+    )
     return p.run
 
 
@@ -246,3 +251,64 @@ async def test_a_control_compound_dose_series_is_fitted_per_plate_as_qc() -> Non
         }
     ]
     assert "control_fits" not in run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]
+
+
+# NadD-Sumo dose response, 2026-10-08: the platform flags negative controls A01 and B01.
+_NEG = (0.40, 0.55, 0.65, 0.55, 0.61, 0.61, 0.54, 0.63, 0.63, 0.63, 0.60)
+_POS = (0.19, 0.19, 0.20, 0.19, 0.19, 0.19, 0.20, 0.20, 0.20, 0.20, 0.20)
+
+
+async def _nadd_run(flagged: int) -> tuple[_Plate, ReadoutDefinition, list[Well]]:
+    raw_au = ReadoutDefinition(
+        protocol_id=_PH,
+        name="raw AU",
+        data_type=ReadoutDataType.NUMERIC,
+        normalizations=frozenset({PI}),
+    )
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="NadD",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[raw_au],
+        pos_control_signal=PosControlSignal.LOW,
+    )
+    p = _Plate(protocol)
+    neg = [
+        p.add(raw_au, WellType.NEGATIVE_CONTROL, v, outlier=i < flagged)
+        for i, v in enumerate(_NEG)
+    ]
+    for v in _POS:
+        p.add(raw_au, WellType.POSITIVE_CONTROL, v)
+    p.add(raw_au, WellType.SAMPLE, 0.3, molecule=uuid.uuid4())
+    await _compute(protocol, p)
+    return p, raw_au, neg
+
+
+@pytest.mark.asyncio
+async def test_every_negative_control_counts_without_outlier_flags() -> None:
+    p, raw_au, _ = await _nadd_run(flagged=0)
+    qc = p.run.qc_metrics["plates"][str(p.plate.id)][str(raw_au.id)]
+    assert qc["raw"]["z_prime"] == pytest.approx(0.408, abs=1e-3)
+    assert qc["raw"]["neg_n"] == 11
+    assert qc["percent_inhibition"]["neg_sd"] == pytest.approx(18.4, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_outlier_wells_leave_plate_qc_and_the_anchors_but_keep_a_value() -> None:
+    p, raw_au, neg = await _nadd_run(flagged=2)  # A01 and B01
+
+    qc = p.run.qc_metrics["plates"][str(p.plate.id)][str(raw_au.id)]
+    assert qc["raw"]["z_prime"] == pytest.approx(0.688, abs=1e-3)
+    assert (qc["raw"]["neg_n"], qc["raw"]["pos_n"]) == (9, 11)
+    inh = qc["percent_inhibition"]
+    assert (inh["neg_mean"], inh["neg_n"]) == (pytest.approx(0.0, abs=1e-9), 9)
+    assert inh["neg_sd"] == pytest.approx(9.2, abs=0.1)
+    assert inh["z_prime"] == pytest.approx(0.688, abs=1e-3)
+    # The flagged wells still get a % inhibition, flagged too, on the 9-well anchor.
+    by_well = {r.well_id: r for r in p.computed if r.normalization_applied == PI}
+    neg9 = sum(_NEG[2:]) / 9
+    a01 = by_well[neg[0].id]
+    assert a01.is_outlier and not by_well[neg[2].id].is_outlier
+    assert a01.value.value == pytest.approx(100 * (neg9 - 0.40) / (neg9 - sum(_POS) / 11))
+    assert p.run.qc_metrics["z_prime"][str(p.plate.id)]["z_prime"] == 0.688

@@ -727,3 +727,51 @@ class TestNormalizeMany:
         )
 
         assert many[ReadoutNormalization.PERCENT_INHIBITION] == single
+
+
+# ---------------------------------------------------------------------------
+# Outlier wells
+# ---------------------------------------------------------------------------
+
+
+class TestOutlierWells:
+    """An outlier-flagged control leaves the anchors but still gets its own value."""
+
+    @pytest.mark.parametrize("formula", list(ReadoutNormalization)[1:])
+    def test_outliers_leave_the_anchors_and_are_still_normalized(self, formula) -> None:
+        normalizer = PlateNormalizer()
+        pos = [_pos_ctrl("C", c) for c in (1, 2, 3)]
+        neg = [_neg_ctrl("B", c) for c in (1, 2, 3)]
+        s = _sample()
+        raw = {pos[0].id: 100.0, pos[1].id: 102.0, pos[2].id: 98.0}
+        raw |= {neg[0].id: 10.0, neg[1].id: 12.0, neg[2].id: 8.0, s.id: 55.0}
+        flagged = {pos[2].id: 500.0, neg[2].id: -90.0}  # off the chart, flagged
+
+        clean = normalizer.normalize([*pos[:2], *neg[:2], s], raw, formula)
+        with_flags = normalizer.normalize(
+            [*pos, *neg, s],
+            raw | flagged,
+            formula,
+            outlier_well_ids=frozenset(flagged),
+        )
+
+        by_well = {nv.well_id: nv.normalized_value for nv in with_flags}
+        for nv in clean:
+            assert by_well[nv.well_id] == pytest.approx(nv.normalized_value)
+        assert set(by_well) == {*(w.id for w in pos), *(w.id for w in neg), s.id}
+
+    def test_normalize_many_passes_the_outliers_on(self) -> None:
+        pos, neg = _pos_ctrl(), _neg_ctrl()
+        bad = _neg_ctrl("B", 2)
+        raw = {pos.id: 100.0, neg.id: 0.0, bad.id: 50.0}
+        out = PlateNormalizer().normalize_many(
+            [pos, neg, bad],
+            raw,
+            frozenset({ReadoutNormalization.PERCENT_INHIBITION}),
+            outlier_well_ids=frozenset({bad.id}),
+        )
+        by_well = {
+            nv.well_id: nv.normalized_value for nv in out[ReadoutNormalization.PERCENT_INHIBITION]
+        }
+        assert by_well[bad.id] == pytest.approx(50.0)
+        assert by_well[neg.id] == pytest.approx(100.0)

@@ -23,6 +23,7 @@ from cellar.domain.screening_assay.events import (
     RunHitCriteriaSet,
     RunInstrumentFileImported,
     RunLocked,
+    RunOutliersFlagged,
     RunPositionsRelabelled,
     RunRejected,
     RunUnlocked,
@@ -1332,3 +1333,59 @@ def test_well_values_reflects_the_stored_fields():
     _, (w1, w2, _) = _instrument_run()
     assert w1.values == PositionValues(label="protein alone", well_type=WellType.REFERENCE)
     assert w2.values == PositionValues(label="x", batch_id=w2.batch_id, dose=10.0)
+
+
+# ---------------------------------------------------------------------------
+# Outlier flags
+# ---------------------------------------------------------------------------
+
+
+def test_flag_outliers_names_the_positions_in_plate_order_with_the_reason():
+    run, (w1, _, w3) = _instrument_run()
+    run.flag_outliers([w3.id, w1.id], outlier=True, reason="  bubble ")
+    (event,) = run.collect_events()
+    assert isinstance(event, RunOutliersFlagged)
+    assert (event.positions, event.outlier, event.reason) == ((P(1), P(3)), True, "bubble")
+    assert event.audit_reason == "bubble"
+    assert event.audit_changes() == [
+        (f"{P(1)}: outlier", "no", "yes"),
+        (f"{P(3)}: outlier", "no", "yes"),
+    ]
+
+
+def test_removing_a_flag_is_audited_yes_to_no_and_a_blank_reason_is_none():
+    run, (_, w2, _) = _instrument_run(status=RunStatus.COMPLETED)
+    run.flag_outliers([w2.id], outlier=False, reason="  ")
+    (event,) = run.collect_events()
+    assert event.reason is None
+    assert event.audit_changes() == [(f"{P(2)}: outlier", "yes", "no")]
+
+
+@pytest.mark.parametrize(
+    ("status", "locked", "match"),
+    [(RunStatus.APPROVED, False, "approved"), (RunStatus.COMPLETED, True, "locked")],
+)
+def test_outlier_flags_are_refused_on_a_locked_or_approved_run(status, locked, match):
+    run, (w1, _, _) = _instrument_run(status=status, locked=locked)
+    with pytest.raises(ConflictError, match=match):
+        run.check_outlier_flags([w1.id])
+    with pytest.raises(ConflictError, match=match):
+        run.flag_outliers([w1.id], outlier=True)
+    assert run.collect_events() == []
+
+
+@pytest.mark.parametrize("status", [RunStatus.IN_PROGRESS, RunStatus.REJECTED])
+def test_outlier_flags_change_on_a_run_neither_locked_nor_approved(status):
+    run, (w1, _, _) = _instrument_run(status=status)
+    run.check_outlier_flags([w1.id])
+    run.flag_outliers([w1.id], outlier=True)
+    assert len(run.collect_events()) == 1
+
+
+def test_outlier_flags_name_wells_of_this_run():
+    run, _ = _instrument_run()
+    with pytest.raises(ValidationError, match="not on this run"):
+        run.check_outlier_flags([uuid.uuid4()])
+    with pytest.raises(ValidationError, match="at least one"):
+        run.check_outlier_flags([])
+    assert run.collect_events() == []

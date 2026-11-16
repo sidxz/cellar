@@ -6,6 +6,7 @@ ReadoutData is not an AggregateRoot — standalone repo with manual CRUD.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy import delete, func, select
@@ -528,6 +529,31 @@ class SQLAlchemyReadoutDataRepository:
         )
         result = await self._uow.session.execute(stmt)
         return result.rowcount
+
+    async def set_outlier(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        well_ids: Sequence[uuid.UUID],
+        *,
+        outlier: bool,
+    ) -> set[uuid.UUID]:
+        if not well_ids:
+            return set()
+        stmt = (
+            sa.update(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id.in_(well_ids),
+                ReadoutDataModel.is_computed.is_(False),
+                ReadoutDataModel.is_outlier.is_not(outlier),
+            )
+            .values(is_outlier=outlier, updated_at=sa.func.now())
+            .returning(ReadoutDataModel.well_id)
+        )
+        result = await self._uow.session.execute(stmt)
+        return set(result.scalars())
 
     async def save(self, entity: ReadoutData) -> None:
         existing = await self._uow.session.get(ReadoutDataModel, entity.id)

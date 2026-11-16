@@ -312,3 +312,21 @@ class RunPositionsRelabelled(DomainEvent):
             for p in self.positions
             for f in p.fields
         ]
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunOutliersFlagged(DomainEvent):
+    """Wells of a run were flagged as outliers (``outlier``), or their flag was removed.
+    Audited per position, with the reason when one was given."""
+
+    positions: tuple[str, ...]
+    outlier: bool
+    reason: str | None = None
+
+    @property
+    def audit_reason(self) -> str | None:
+        return self.reason
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        old, new = ("no", "yes") if self.outlier else ("yes", "no")
+        return [(f"{p}: outlier", old, new) for p in self.positions]
