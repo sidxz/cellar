@@ -54,17 +54,13 @@ class FetchDecompositionAssignments:
                 return Failure(NotFoundError("RGroupDecompositionRun", str(payload.run_id)))
             if run.status != AsyncJobStatus.READY:
                 return Failure(ValidationError("This decomposition is not ready yet."))
-            rows = await self._reader.fetch_rows(
-                payload.run_id,
-                workspace_id=payload.workspace_id,
-                offset=0,
-                limit=max(run.matched_count, 1),
-                sort=[],
+            assignments = await self._reader.fetch_assignments(
+                payload.run_id, workspace_id=payload.workspace_id
             )
         return Success(
             DecompositionAssignments(
                 core_smiles=run.core_smiles,
                 labels=list(run.rgroup_labels),
-                assignments={r.molecule_id: r.rgroups for r in rows},
+                assignments=assignments,
             )
         )

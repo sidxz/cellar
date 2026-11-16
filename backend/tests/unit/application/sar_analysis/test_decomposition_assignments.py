@@ -42,17 +42,9 @@ class SpyReader:
         self._rows = rows
         self.calls: list[dict] = []
 
-    async def fetch_rows(self, run_id, *, workspace_id, offset, limit, sort, **_):
-        self.calls.append(
-            {
-                "run_id": run_id,
-                "workspace_id": workspace_id,
-                "offset": offset,
-                "limit": limit,
-                "sort": sort,
-            }
-        )
-        return self._rows[offset : offset + limit]
+    async def fetch_assignments(self, run_id, *, workspace_id):
+        self.calls.append({"run_id": run_id, "workspace_id": workspace_id})
+        return {r.molecule_id: r.rgroups for r in self._rows}
 
 
 def _row(i: int) -> DecompositionRow:
@@ -94,7 +86,7 @@ def _uc(run, reader) -> FetchDecompositionAssignments:
 
 
 @pytest.mark.asyncio
-async def test_reads_every_matched_row_in_one_call_past_the_page_cap():
+async def test_reads_every_assignment_in_one_call_past_the_page_cap():
     rows = [_row(i) for i in range(250)]
     run, reader = _run(ready=True, matched=250), SpyReader(rows)
 
@@ -103,16 +95,14 @@ async def test_reads_every_matched_row_in_one_call_past_the_page_cap():
     )
 
     res = out.unwrap()
-    assert reader.calls == [
-        {"run_id": run.id, "workspace_id": _WS, "offset": 0, "limit": 250, "sort": []}
-    ]
+    assert reader.calls == [{"run_id": run.id, "workspace_id": _WS}]
     assert len(res.assignments) == 250
     assert res.assignments[rows[7].molecule_id] == {"R1": "[*:1]C7"}
     assert (res.core_smiles, res.labels) == ("c1ccccc1", ["R1", "R2"])
 
 
 @pytest.mark.asyncio
-async def test_a_run_with_no_matches_reads_with_a_positive_limit():
+async def test_a_run_with_no_matches_has_no_assignments():
     run, reader = _run(ready=True, matched=0), SpyReader([])
 
     out = await _uc(run, reader).execute(
@@ -120,7 +110,6 @@ async def test_a_run_with_no_matches_reads_with_a_positive_limit():
     )
 
     assert out.unwrap().assignments == {}
-    assert reader.calls[0]["limit"] == 1
 
 
 @pytest.mark.asyncio
