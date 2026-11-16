@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Any, Protocol, runtime_checkable
 
+from cellar.application.screening.compound_curves_reader import CurveRow
+
 
 @dataclass(frozen=True)
 class RunInfo:
@@ -31,6 +33,22 @@ class ReadoutDefInfo:
     data_type: str
     unit: str | None
     display_order: int
+    dose_unit: str | None = None  # the owning protocol's
+    curve_type: str | None = None  # dose_response_config.curve_type
+    melt_measure: str | None = None  # melt_config.measure
+
+
+@dataclass(frozen=True)
+class CompoundInfo:
+    registration_number: str
+    smiles: str | None
+    molecular_weight: float | None
+    logp: float | None
+    tpsa: float | None
+    hbd: int | None
+    hba: int | None
+    rotatable_bonds: int | None
+    aromatic_rings: int | None
 
 
 @dataclass(frozen=True)
@@ -94,3 +112,19 @@ class VisualizationDatasetReader(Protocol):
     ) -> list[WellValueRow]:
         """Every readout value of the runs, ordered by run, plate, row, column, created_at."""
         ...
+
+    async def fetch_curves(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> list[CurveRow]:
+        """Every fitted curve of the runs: one per (run, molecule, batch, readout)."""
+        ...
+
+    async def compound_info(
+        self, workspace_id: uuid.UUID, molecule_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, CompoundInfo]:
+        """Registration number, structure and descriptors of the workspace's molecules."""
+        ...
+
+    async def batch_numbers(
+        self, workspace_id: uuid.UUID, batch_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]: ...

@@ -234,13 +234,14 @@ async def curve(
     with_well: bool = True,
     intercept_values: list[dict[str, Any]] | None = None,
     max_dose: float = 1.0,
+    batch_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """A fitted curve, plus (``with_well``) one per-well response reading on the
     same readout — real dose-response runs always carry their well data, and
     search matching finds tested compounds through it."""
     cid = uuid.uuid4()
     if with_well:
-        await readout(s, ws, run_id, rd_id, molecule_id, 50.0)
+        await readout(s, ws, run_id, rd_id, molecule_id, 50.0, batch_id=batch_id)
     await s.execute(
         sa.text(
             "INSERT INTO dose_response_curves (id, workspace_id, molecule_id, batch_id, "
@@ -253,7 +254,7 @@ async def curve(
             "id": cid,
             "ws": ws,
             "m": molecule_id,
-            "b": uuid.uuid4(),
+            "b": batch_id or uuid.uuid4(),
             "p": protocol_id,
             "run": run_id,
             "rd": rd_id,
@@ -265,6 +266,19 @@ async def curve(
         },
     )
     return cid
+
+
+async def batch(s: AsyncSession, ws: uuid.UUID, molecule_id: uuid.UUID, number: str) -> uuid.UUID:
+    bid = uuid.uuid4()
+    await s.execute(
+        sa.text(
+            "INSERT INTO batches (id, workspace_id, molecule_id, batch_number, amount_value, "
+            "amount_unit, source, chemist, version) "
+            "VALUES (:id, :ws, :m, :n, 1, 'mg', 'synthesized', :chemist, 1)"
+        ),
+        {"id": bid, "ws": ws, "m": molecule_id, "n": number, "chemist": USER},
+    )
+    return bid
 
 
 def descriptors(molecular_weight: float) -> dict[str, Any]:

@@ -16,19 +16,6 @@ from tests.integration import _screening_seed as seed
 pytestmark = pytest.mark.asyncio
 
 
-async def _batch(s, ws: uuid.UUID, molecule_id: uuid.UUID, number: str) -> uuid.UUID:
-    bid = uuid.uuid4()
-    await s.execute(
-        sa.text(
-            "INSERT INTO batches (id, workspace_id, molecule_id, batch_number, amount_value, "
-            "amount_unit, source, chemist, version) "
-            "VALUES (:id, :ws, :m, :n, 1, 'mg', 'synthesized', :chemist, 1)"
-        ),
-        {"id": bid, "ws": ws, "m": molecule_id, "n": number, "chemist": seed.USER},
-    )
-    return bid
-
-
 async def _world(uow, ws: uuid.UUID) -> dict[str, uuid.UUID]:
     """Protocol with one run: plate 1 has B03 (sample, two layers) and A01 (neg control);
     plus one well-less summary row."""
@@ -36,7 +23,7 @@ async def _world(uow, ws: uuid.UUID) -> dict[str, uuid.UUID]:
         s = uow.session
         o = await seed.org(s, ws)
         mol = await seed.molecule(s, ws, o, "m1")
-        batch = await _batch(s, ws, mol, "B-01")
+        batch = await seed.batch(s, ws, mol, "B-01")
         p = await seed.protocol(s, ws)
         rd = await seed.readout_def(s, p, name="Signal", unit="AU")
         run = await seed.run(s, ws, p, date(2026, 11, 12), status="approved")
@@ -152,3 +139,105 @@ async def test_runs_and_readout_definitions(uow, session_factory, workspace_id):
     defs = await reader.readout_definitions(workspace_id, [w["p"]])
     assert [(d.id, d.name, d.unit) for d in defs] == [(w["rd"], "Signal", "AU")]
     assert await reader.runs_for_protocol(workspace_id, uuid.uuid4()) is None
+
+
+async def _dr_world(uow, ws: uuid.UUID) -> dict[str, uuid.UUID]:
+    """A dose-response readout with one fitted curve on a batch, in workspace ``ws``."""
+    async with uow:
+        s = uow.session
+        o = await seed.org(s, ws)
+        mol = await seed.molecule(s, ws, o, "m1", **seed.descriptors(300.0))
+        batch = await seed.batch(s, ws, mol, "B-07")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="approved")
+        cid = await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=1.5, r_squared=0.97, batch_id=batch, max_dose=30.0
+        )
+        await s.execute(
+            sa.text(
+                "UPDATE dose_response_curves SET confidence_interval_low = 1.1, "
+                "confidence_interval_high = 2.2 WHERE id = :id"
+            ),
+            {"id": cid},
+        )
+        await uow.commit()
+    return {"p": p, "rd": rd, "run": run, "mol": mol, "batch": batch, "curve": cid}
+
+
+async def test_curves_carry_the_fit_for_the_workspace_runs(uow, session_factory, workspace_id):
+    w = await _dr_world(uow, workspace_id)
+    other = await _dr_world(uow, uuid.uuid4())
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    curves = await reader.fetch_curves(workspace_id, [w["run"], other["run"]])
+
+    assert [c.id for c in curves] == [w["curve"]]
+    c = curves[0]
+    assert (c.run_id, c.molecule_id, c.batch_id) == (w["run"], w["mol"], w["batch"])
+    assert c.readout_definition_id == w["rd"] and c.curve_type == "ic50"
+    assert (c.fitted_value, c.top, c.bottom, c.hill_slope) == (1.5, 100.0, 0.0, 1.0)
+    assert c.r_squared == 0.97 and c.curve_class == "full" and c.num_points == 3
+    assert (c.confidence_interval_low, c.confidence_interval_high) == (1.1, 2.2)
+    assert c.raw_data == [{"concentration": 30.0, "response": 50.0}]
+
+
+async def test_curve_on_another_workspaces_run_is_not_read(uow, session_factory, workspace_id):
+    """A curve row stamped with this workspace but pointing at a foreign run stays out."""
+    w = await _dr_world(uow, workspace_id)
+    other = await _dr_world(uow, uuid.uuid4())
+    async with uow:
+        s = uow.session
+        await seed.curve(s, workspace_id, other["p"], other["run"], w["mol"], other["rd"])
+        await uow.commit()
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    assert await reader.fetch_curves(workspace_id, [other["run"]]) == []
+
+
+async def test_compound_info_and_batch_numbers_are_workspace_scoped(
+    uow, session_factory, workspace_id
+):
+    w = await _dr_world(uow, workspace_id)
+    other = await _dr_world(uow, uuid.uuid4())
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    info = await reader.compound_info(workspace_id, [w["mol"], other["mol"]])
+
+    assert list(info) == [w["mol"]]
+    m = info[w["mol"]]
+    assert m.registration_number.startswith("CV-") and m.smiles == "CCO"
+    assert (m.molecular_weight, m.logp, m.tpsa) == (300.0, 1.0, 20.0)
+    assert (m.hbd, m.hba, m.rotatable_bonds, m.aromatic_rings) == (1, 2, 3, 1)
+    assert await reader.batch_numbers(workspace_id, [w["batch"], other["batch"]]) == {
+        w["batch"]: "B-07"
+    }
+
+
+async def test_readout_definitions_carry_dose_unit_curve_type_and_melt_measure(
+    uow, session_factory, workspace_id
+):
+    w = await _dr_world(uow, workspace_id)
+    async with uow:
+        s = uow.session
+        tm = await seed.readout_def(s, w["p"], name="Tm", unit="C")
+        await s.execute(
+            sa.text("UPDATE readout_definitions SET melt_config = :c WHERE id = :id"),
+            {"c": '{"measure": "tm"}', "id": tm},
+        )
+        await uow.commit()
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    defs = {d.id: d for d in await reader.readout_definitions(workspace_id, [w["p"]])}
+
+    ic50, melt = defs[w["rd"]], defs[tm]
+    assert (ic50.dose_unit, ic50.curve_type, ic50.melt_measure) == ("uM", "ic50", None)
+    assert (melt.dose_unit, melt.curve_type, melt.melt_measure) == ("uM", None, "tm")
+
+
+async def test_empty_ids_read_nothing_without_a_query():
+    reader = SQLAlchemyVisualizationDatasetReader(None)  # type: ignore[arg-type]
+
+    assert await reader.fetch_curves(uuid.uuid4(), []) == []
+    assert await reader.compound_info(uuid.uuid4(), []) == {}
+    assert await reader.batch_numbers(uuid.uuid4(), []) == {}

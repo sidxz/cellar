@@ -21,6 +21,7 @@ class CurveRow:
     batch_id: uuid.UUID
     protocol_id: uuid.UUID
     run_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str | None
     fitted_value: float | None
     hill_slope: float | None

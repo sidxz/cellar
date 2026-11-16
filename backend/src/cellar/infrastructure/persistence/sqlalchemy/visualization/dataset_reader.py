@@ -8,10 +8,18 @@ from dataclasses import fields
 from sqlalchemy import Text, and_, cast, func, join, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from cellar.application.visualization.dataset_reader import ReadoutDefInfo, RunInfo, WellValueRow
+from cellar.application.screening.compound_curves_reader import CurveRow
+from cellar.application.visualization.dataset_reader import (
+    CompoundInfo,
+    ReadoutDefInfo,
+    RunInfo,
+    WellValueRow,
+)
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import MoleculeModel
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
+    DoseResponseCurveModel,
     PlateModel,
     ProtocolModel,
     ReadoutDataModel,
@@ -101,6 +109,9 @@ class SQLAlchemyVisualizationDatasetReader:
                         ReadoutDefinitionModel.data_type,
                         ReadoutDefinitionModel.unit,
                         ReadoutDefinitionModel.display_order,
+                        ProtocolModel.dose_unit,
+                        ReadoutDefinitionModel.dose_response_config["curve_type"].astext,
+                        ReadoutDefinitionModel.melt_config["measure"].astext,
                     )
                     .join(ProtocolModel, ProtocolModel.id == ReadoutDefinitionModel.protocol_id)
                     .where(
@@ -110,17 +121,7 @@ class SQLAlchemyVisualizationDatasetReader:
                     .order_by(ReadoutDefinitionModel.display_order, ReadoutDefinitionModel.name)
                 )
             ).all()
-            return [
-                ReadoutDefInfo(
-                    id=r.id,
-                    protocol_id=r.protocol_id,
-                    name=r.name,
-                    data_type=r.data_type,
-                    unit=r.unit,
-                    display_order=r.display_order,
-                )
-                for r in rows
-            ]
+            return [ReadoutDefInfo(*r) for r in rows]  # selected in field order
 
     async def count_wells_rows(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
@@ -216,3 +217,43 @@ class SQLAlchemyVisualizationDatasetReader:
             # Core execution on the session's connection skips the ORM loading layer.
             rows = (await (await session.connection()).execute(stmt)).all()
         return [WellValueRow(*r) for r in rows]
+
+    async def fetch_curves(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> list[CurveRow]:
+        if not run_ids:
+            return []
+        c = DoseResponseCurveModel
+        stmt = (
+            select(*(getattr(c, f.name) for f in fields(CurveRow)))
+            .join(RunModel, and_(RunModel.id == c.run_id, RunModel.workspace_id == workspace_id))
+            .where(c.workspace_id == workspace_id, any_id(c.run_id, run_ids))
+        )
+        async with self._session_factory() as session:
+            rows = (await (await session.connection()).execute(stmt)).all()
+        return [CurveRow(*r) for r in rows]
+
+    async def compound_info(
+        self, workspace_id: uuid.UUID, molecule_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, CompoundInfo]:
+        if not molecule_ids:
+            return {}
+        m = MoleculeModel
+        stmt = select(m.id, *(getattr(m, f.name) for f in fields(CompoundInfo))).where(
+            m.workspace_id == workspace_id, any_id(m.id, molecule_ids)
+        )
+        async with self._session_factory() as session:
+            rows = (await (await session.connection()).execute(stmt)).all()
+        return {r[0]: CompoundInfo(*r[1:]) for r in rows}
+
+    async def batch_numbers(
+        self, workspace_id: uuid.UUID, batch_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        if not batch_ids:
+            return {}
+        stmt = select(BatchModel.id, BatchModel.batch_number).where(
+            BatchModel.workspace_id == workspace_id, any_id(BatchModel.id, batch_ids)
+        )
+        async with self._session_factory() as session:
+            rows = (await (await session.connection()).execute(stmt)).all()
+        return {r[0]: r[1] for r in rows}

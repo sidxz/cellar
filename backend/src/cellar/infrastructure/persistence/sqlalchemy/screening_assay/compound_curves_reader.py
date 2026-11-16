@@ -47,6 +47,7 @@ class SQLAlchemyCompoundCurvesReader:
                     batch_id=r.batch_id,
                     protocol_id=r.protocol_id,
                     run_id=r.run_id,
+                    readout_definition_id=r.readout_definition_id,
                     curve_type=r.curve_type,
                     fitted_value=r.fitted_value,
                     hill_slope=r.hill_slope,
