@@ -20,7 +20,7 @@ from cellar.domain.chemical_registration.mixture_component import MixtureCompone
 from cellar.domain.chemical_registration.molecule import Molecule
 from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
 from cellar.domain.shared.value_objects import RegistrationNumber
-from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
+from cellar.infrastructure.persistence.sqlalchemy._sql import any_id, escape_like
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -183,7 +183,7 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
             return []
         stmt = select(MoleculeModel).where(
             MoleculeModel.workspace_id == workspace_id,
-            MoleculeModel.id.in_(ids),
+            any_id(MoleculeModel.id, ids),
         )
         result = await self._session.execute(stmt)
         return [self._to_domain_tracked(m) for m in result.scalars().all()]
