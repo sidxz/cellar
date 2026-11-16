@@ -1,7 +1,8 @@
+import type { DoseResponseCurve } from "@/features/screening-assay/types";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { provenanceOf } from "../lib/traces/test-fixtures";
+import { compoundCurve, provenanceOf } from "../lib/traces/test-fixtures";
 import type { Dataset, DatasetColumn, DatasetSource } from "../types";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -21,7 +22,7 @@ const state = vi.hoisted(() => ({
   query: {} as Record<string, unknown>,
   counts: undefined as Record<string, number> | undefined,
   replace: vi.fn(),
-  curves: [] as Record<string, unknown>[],
+  curves: [] as DoseResponseCurve[],
 }));
 
 vi.mock("next/navigation", () => ({
@@ -338,20 +339,16 @@ describe("WorkbenchPage", () => {
       ],
       values: { ...base.values, "dr:e": [0.5], "dr:e:n_tested": [2] },
     });
-    state.curves = [R1, R2, R3].map((run_id, k) => ({
-      id: `c${k}`,
-      run_id,
-      molecule_id: "m1",
-      batch_id: "b1",
-      readout_definition_id: RD,
-      fitted_value: 0.5,
-      fitted_unit: "µM",
-      top: 100,
-      bottom: 0,
-      hill_slope: 1,
-      r_squared: 0.99,
-      curve_class: "active",
-    }));
+    state.curves = [R1, R2, R3].map((run_id, k) =>
+      compoundCurve({
+        id: `c${k}`,
+        run_id,
+        molecule_id: "m1",
+        protocol_id: P1,
+        readout_definition_id: RD,
+        fitted_value: 0.5,
+      }),
+    );
     render(<WorkbenchPage level="compounds" source={{ kind: "protocol", protocolId: P1 }} />);
     fireEvent.click(await screen.findByRole("button", { name: "Curves (2)" }));
     const chart = within(screen.getByRole("dialog", { name: "CEL-1 · Enzyme · IC50" })).getByRole(

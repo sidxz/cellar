@@ -27,7 +27,7 @@ export interface CurvesTarget {
   readoutDefinitionId: string;
   moleculeId: string;
   compound: string;
-  /** The value column's label, e.g. "Enzyme · IC50". */
+  /** The value column's label, as the dataset names it. */
   readout: string;
   runIds: string[];
   batchId: string | null;
@@ -88,7 +88,10 @@ export function CurvesDialog({
       )
       .map((c) => {
         const run = byId.get(c.run_id);
-        return { ...c, label: run ? runLabel(run, nameOf) : "Run", date: run?.run_date ?? "" };
+        const runName = run ? runLabel(run, nameOf) : "Run";
+        // A run can test several batches of the compound: the chart tells them apart by batch.
+        const label = c.batch_number ? `${runName} · ${c.batch_number}` : runName;
+        return { ...c, runName, label, date: run?.run_date ?? "" };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
   }, [data, runs, runIds, readoutDefinitionId, batchId, nameOf]);
@@ -126,7 +129,7 @@ export function CurvesDialog({
               <tbody>
                 {curves.map((c) => (
                   <tr key={c.id} className="border-b last:border-0">
-                    <td className="px-2 py-1.5">{c.label}</td>
+                    <td className="px-2 py-1.5">{c.runName}</td>
                     <td className="px-2 py-1.5 text-muted-foreground">{c.batch_number ?? "—"}</td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       {c.curve_class === "inactive"

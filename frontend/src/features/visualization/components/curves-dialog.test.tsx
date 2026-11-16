@@ -1,5 +1,7 @@
+import type { DoseResponseCurve } from "@/features/screening-assay/types";
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { compoundCurve } from "../lib/traces/test-fixtures";
 import type { Dataset, DatasetColumn } from "../types";
 import { CurvesDialog, curvesTarget } from "./curves-dialog";
 
@@ -15,7 +17,7 @@ const B1 = "dddddddd-dddd-4ddd-8ddd-dddddddddddd";
 const RD = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const OTHER_RD = "ffffffff-ffff-4fff-8fff-ffffffffffff";
 
-const state = vi.hoisted(() => ({ curves: [] as Record<string, unknown>[] }));
+const state = vi.hoisted(() => ({ curves: [] as DoseResponseCurve[] }));
 
 vi.mock("@/shared/lib/plotly", () => ({ Plot: () => null }));
 vi.mock("@structflo/components/dose-response", () => ({
@@ -43,22 +45,22 @@ vi.mock("@/shared/hooks/use-workspace-members", () => ({
   useMemberNames: () => (id: string) => ({ [U1]: "A. Chen", [U2]: "B. Diaz" })[id] ?? "",
 }));
 
-const curve = (id: string, run_id: string, fitted_value: number, readout = RD) => ({
-  id,
-  molecule_id: M1,
-  run_id,
-  batch_id: B1,
-  batch_number: "001",
-  readout_definition_id: readout,
-  curve_type: "ic50",
-  fitted_value,
-  fitted_unit: "µM",
-  top: 100,
-  bottom: 0,
-  hill_slope: 1,
-  r_squared: 0.99,
-  curve_class: "active",
-});
+const curve = (
+  id: string,
+  run_id: string,
+  fitted_value: number,
+  { readout = RD, batch_id = B1, batch_number = "CEL-000001-01" as string | null } = {},
+) =>
+  compoundCurve({
+    id,
+    run_id,
+    fitted_value,
+    molecule_id: M1,
+    protocol_id: P1,
+    readout_definition_id: readout,
+    batch_id,
+    batch_number,
+  });
 
 const target = {
   protocolId: P1,
@@ -75,7 +77,7 @@ describe("CurvesDialog", () => {
       curve("c1", R1, 0.25),
       curve("c2", R2, 0.5),
       curve("c3", R3, 1),
-      curve("c4", R1, 9, OTHER_RD),
+      curve("c4", R1, 9, { readout: OTHER_RD }),
     ];
     render(<CurvesDialog {...target} runIds={[R1, R2]} open onOpenChange={() => {}} />);
     const dialog = screen.getByRole("dialog", { name: "CEL-1 · Enzyme · IC50" });
@@ -85,18 +87,37 @@ describe("CurvesDialog", () => {
     expect(within(dialog).getAllByText("2026-11-12 · A. Chen").length).toBeGreaterThan(0);
     expect(within(dialog).getAllByText("2026-11-13 · B. Diaz").length).toBeGreaterThan(0);
     expect(within(dialog).queryByText(/2026-11-14/)).not.toBeInTheDocument();
-    expect(within(dialog).getByText("0.25 µM")).toBeInTheDocument();
+    expect(within(dialog).getByText("0.25 uM")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(UUID);
   });
 
   it("keeps to the row's batch", () => {
-    state.curves = [curve("c1", R1, 0.25), { ...curve("c2", R2, 0.5), batch_id: "other" }];
+    state.curves = [curve("c1", R1, 0.25), curve("c2", R2, 0.5, { batch_id: "other" })];
     render(
       <CurvesDialog {...target} batchId={B1} runIds={[R1, R2]} open onOpenChange={() => {}} />,
     );
     expect(
       within(screen.getByRole("list", { name: "Chart" })).getAllByRole("listitem"),
     ).toHaveLength(1);
+  });
+
+  it("names each curve's batch when the run tested several", () => {
+    state.curves = [
+      curve("c1", R1, 0.25),
+      curve("c2", R1, 0.5, { batch_id: "b2", batch_number: "CEL-000001-02" }),
+      curve("c3", R2, 1, { batch_id: "b3", batch_number: null }),
+    ];
+    render(<CurvesDialog {...target} runIds={[R1, R2]} open onOpenChange={() => {}} />);
+    expect(
+      within(screen.getByRole("list", { name: "Chart" }))
+        .getAllByRole("listitem")
+        .map((li) => li.textContent),
+    ).toEqual([
+      "2026-11-12 · A. Chen · CEL-000001-01",
+      "2026-11-12 · A. Chen · CEL-000001-02",
+      "2026-11-13 · B. Diaz",
+    ]);
+    expect(screen.getByRole("cell", { name: "CEL-000001-02" })).toBeInTheDocument();
   });
 
   it("says when the chosen runs have no curves for the compound", () => {
