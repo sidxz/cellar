@@ -27,6 +27,8 @@ describe("buildBoxFigure", () => {
       ["none", [2, 4], undefined],
       ["none", [0, 1, 3], undefined],
     ]);
+    // A box mean would add an eighth hover value: the card reads exactly seven.
+    expect(fig.data.map((t) => t.boxmean)).toEqual([undefined, undefined]);
   });
 
   it("leaves out rows that fail the filters", () => {

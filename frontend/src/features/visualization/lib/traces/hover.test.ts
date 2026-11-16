@@ -35,13 +35,15 @@ describe("hoverInfo", () => {
     });
   });
 
-  it("titles a well without a compound by its label, else says so, and draws nothing", () => {
+  it("titles a well without a compound by its label, else its role, as the table does", () => {
     const ds = wells();
     expect(hoverInfo(ds, 1, ["y"])).toMatchObject({
       structure: null,
-      title: "No compound",
+      title: "Negative control",
       place: "RUN-7 · Plate 1 A01",
     });
+    const sample = { ...ds, values: { ...ds.values, well_type: ["sample", "sample", null] } };
+    expect(hoverInfo(sample, 1, ["y"]).title).toBe("No compound");
     // A plate label that already names its run does not repeat it.
     expect(hoverInfo(ds, 2, ["y"])).toMatchObject({ title: "MadR", place: "RUN-7 · Plate 2 P24" });
   });
@@ -70,7 +72,7 @@ describe("hoverInfo", () => {
 });
 
 describe("boxSummary", () => {
-  it("reads a box's median and quartiles from Plotly's own hover values", () => {
+  it("reads a box's median, quartiles, fences and range from Plotly's own hover values", () => {
     // Plotly sends max, upper fence, Q3, median, Q1, lower fence, min (in any order).
     const points = [9, 8, 6, 5, 4, 2, 1].reverse().map((y) => ({
       y,
@@ -82,6 +84,8 @@ describe("boxSummary", () => {
       lines: [
         { label: "Median", value: "5" },
         { label: "Q1 – Q3", value: "4 – 6" },
+        { label: "Fences", value: "2 – 8" },
+        { label: "Min – Max", value: "1 – 9" },
         { label: "n", value: "8" },
       ],
     });

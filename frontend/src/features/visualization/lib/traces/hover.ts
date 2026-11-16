@@ -53,6 +53,9 @@ export function hoverInfo(ds: Dataset, i: number, fields: (string | undefined)[]
   const place = [runText, [plate, at("well")].filter(Boolean).join(" ")].filter(Boolean);
   const compound = at("compound");
   const label = compound ? null : at("label");
+  // A well without compound or label by its role, as the table names it.
+  const role = ds.values.well_type?.[i];
+  const roleText = role && role !== "sample" ? categoryLabel("well_type", role) : null;
   const lines: Line[] = [];
   for (const key of new Set(fields)) {
     if (!key || HEAD.has(key) || (label && key === "label") || !column(ds, key)) continue;
@@ -60,7 +63,7 @@ export function hoverInfo(ds: Dataset, i: number, fields: (string | undefined)[]
   }
   return {
     structure: at("structure"),
-    title: compound ?? label ?? "No compound",
+    title: compound ?? label ?? roleText ?? "No compound",
     place: place.join(" · "),
     lines,
   };
@@ -69,9 +72,10 @@ export function hoverInfo(ds: Dataset, i: number, fields: (string | undefined)[]
 /** The part of a Plotly box-hover point the card reads. */
 export type BoxHoverPoint = { y?: unknown; data?: { name?: unknown; y?: unknown[] } };
 
-/** A hovered box: its group, median and quartiles as Plotly computed them, and its count.
- * Plotly sends the box's max, upper fence, Q3, median, Q1, lower fence and min; any other
- * set (a mean, another Plotly) is not guessed at. */
+/** A hovered box: its group, median, quartiles, fences (the whisker ends) and range as Plotly
+ * computed them, and its count. Plotly sends the box's max, upper fence, Q3, median, Q1,
+ * lower fence and min — seven values only while the box draws no mean (``boxmean``); any
+ * other set is not guessed at. */
 export function boxSummary(points: BoxHoverPoint[]): { title: string; lines: Line[] } {
   const data = points[0]?.data;
   const ys = points
@@ -83,6 +87,8 @@ export function boxSummary(points: BoxHoverPoint[]): { title: string; lines: Lin
       ? [
           { label: "Median", value: cellText(ys[3]) },
           { label: "Q1 – Q3", value: `${cellText(ys[4])} – ${cellText(ys[2])}` },
+          { label: "Fences", value: `${cellText(ys[5])} – ${cellText(ys[1])}` },
+          { label: "Min – Max", value: `${cellText(ys[6])} – ${cellText(ys[0])}` },
         ]
       : [];
   lines.push({ label: "n", value: String(data?.y?.length ?? 0) });
