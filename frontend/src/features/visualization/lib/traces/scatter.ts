@@ -64,7 +64,10 @@ export function buildScatterBase(
   dark = false,
 ): Figure {
   const a = cfg.appearance;
-  const xTitle = axisTitle(ds, cfg.x, cfg.logX);
+  // Run dates plot as ISO strings on a date axis; a log toggle does not apply there.
+  const dateX = cfg.x === "run_date";
+  const logX = cfg.logX && !dateX;
+  const xTitle = axisTitle(ds, cfg.x, logX);
   const yTitle = axisTitle(ds, cfg.y, cfg.logY);
   const facets = facetsOf(ds, a.splitBy);
   // Named groups (categories, bins) get a trace each and a legend entry; a number on a
@@ -78,19 +81,24 @@ export function buildScatterBase(
     const v = key ? numberAt(ds, key, i) : null;
     return v === null || (log && v <= 0) ? null : v;
   };
+  const dates = dateX ? ds.values.run_date : undefined;
+  const xAt = dates ? (i: number) => dates[i] || null : (i: number) => value(cfg.x, i, logX);
 
   // Keyed facet-major, so sorting the keys orders traces by facet, then group.
   const groups = new Map<number, { facet: number; group: number; rows: number[] }>();
   const filtered: number[][] = facets.labels.map(() => []);
+  const facetRows: number[][] = facets.labels.map(() => []);
   let skipped = 0;
   let lackX = 0;
   let lackY = 0;
   let n = 0;
   for (let i = 0; i < ds.row_ids.length; i++) {
-    const x = value(cfg.x, i, cfg.logX);
+    const x = xAt(i);
     const y = value(cfg.y, i, cfg.logY);
+    const facet = facets.of(i);
+    facetRows[facet].push(i);
     if (!mask[i]) {
-      if (a.showFiltered && x !== null && y !== null) filtered[facets.of(i)].push(i);
+      if (a.showFiltered && x !== null && y !== null) filtered[facet].push(i);
       continue;
     }
     if (x === null || y === null) {
@@ -100,7 +108,6 @@ export function buildScatterBase(
       continue;
     }
     n += 1;
-    const facet = facets.of(i);
     const group = coloring ? coloring.of(i) : 0;
     const k = facet * groupCount + group;
     let g = groups.get(k);
@@ -117,7 +124,7 @@ export function buildScatterBase(
   const size = markerSize(n);
   const opacity = a.opacity * opacityScale(n);
   const outline = dark ? "#f1f5f9" : "#111827";
-  const xs = (rows: number[]) => rows.map((i) => numberAt(ds, cfg.x as string, i));
+  const xs = (rows: number[]) => rows.map(xAt);
   const ys = (rows: number[]) => rows.map((i) => numberAt(ds, cfg.y as string, i));
   const place = (facet: number) => ({ xaxis: axisId("x", facet), yaxis: axisId("y", facet) });
 
@@ -216,7 +223,7 @@ export function buildScatterBase(
     const bottom = f >= (gridRows - 1) * gridCols;
     const left = f % gridCols === 0;
     layout[f === 0 ? "xaxis" : `xaxis${f + 1}`] = {
-      type: cfg.logX ? "log" : "linear",
+      type: dateX ? "date" : logX ? "log" : "linear",
       title: bottom ? { text: xTitle } : undefined,
       gridcolor: GRID,
       zeroline: false,
@@ -254,7 +261,12 @@ export function buildScatterBase(
 
   const what = lackX && lackY ? `${xTitle} or ${yTitle}` : lackX ? xTitle : yTitle;
   const note = lackNote(skipped, what);
-  return { data, layout, skipped, note };
+  const facetList = facets.labels.map((label, f) => ({
+    label,
+    rows: facetRows[f],
+    ...place(f),
+  }));
+  return { data, layout, skipped, note, facets: facetList };
 }
 
 /** One value when every entry is the same (Plotly draws it faster), else the array. */

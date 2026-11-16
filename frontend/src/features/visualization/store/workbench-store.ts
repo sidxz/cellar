@@ -18,6 +18,17 @@ export interface Appearance {
   showFiltered: boolean;
 }
 
+/** Display-only marks drawn over a plot; replaced wholesale through ``updatePanel``. */
+export interface OverlayConfig {
+  bands?: boolean;
+  drift?: "band" | "trend";
+  zPrime?: boolean;
+  refLine?: number;
+  limits?: { mode: "plotted" } | { mode: "entered"; lower: number; upper: number };
+  lipe?: number[];
+  selectivity?: number[];
+}
+
 export interface PanelConfig {
   id: string;
   type: PanelType;
@@ -29,6 +40,7 @@ export interface PanelConfig {
   logY?: boolean;
   bins?: number;
   appearance: Appearance;
+  overlays?: OverlayConfig;
 }
 
 export type PanelPatch = Partial<Omit<PanelConfig, "id" | "appearance">> & {

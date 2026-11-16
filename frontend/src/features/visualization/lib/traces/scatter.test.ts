@@ -175,6 +175,27 @@ describe("buildScatterFigure", () => {
     expect(other?.customdata).toEqual([6, 7]);
     expect(fig.layout.yaxis7).toMatchObject({ matches: "y" });
   });
+
+  it("returns its facets with their axes and every row, filtered or not", () => {
+    const ds = dataset({ well_order: [1, 2, 3, 4], y: [1, 2, 3, 4], plate: ["1", "2", "1", "2"] });
+    const mask = Uint8Array.from([1, 0, 1, 1]);
+    const split = buildScatterFigure(ds, panel({ splitBy: "plate" }), mask, NONE);
+    expect(split.facets).toEqual([
+      { label: "1", rows: [0, 2], xaxis: "x", yaxis: "y" },
+      { label: "2", rows: [1, 3], xaxis: "x2", yaxis: "y2" },
+    ]);
+    expect(buildScatterFigure(ds, panel(), mask, NONE).facets).toEqual([
+      { label: "", rows: [0, 1, 2, 3], xaxis: "x", yaxis: "y" },
+    ]);
+  });
+
+  it("plots against run date on a date axis", () => {
+    const ds = dataset({ run_date: ["2026-01-02", null, "2026-01-05"], y: [7.4, 7.5, 7.3] });
+    const fig = buildScatterFigure(ds, panel({}, { x: "run_date", logX: true }), pass(3), NONE);
+    expect(fig.layout.xaxis).toMatchObject({ type: "date", title: { text: "run_date" } });
+    expect(plotted(fig)[0].x).toEqual(["2026-01-02", "2026-01-05"]);
+    expect(fig.note).toBe("1 row lacks run_date");
+  });
 });
 
 describe("selectScatter", () => {

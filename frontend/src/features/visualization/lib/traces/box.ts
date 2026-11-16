@@ -56,6 +56,8 @@ export function buildBoxFigure(
       {
         type: "box",
         name: label,
+        // Overlays may switch the legend on; boxes are named on the axis instead.
+        showlegend: false,
         x: rows[k].map(() => label),
         y: rows[k].map((i) => numberAt(ds, cfg.y as string, i)),
         text: rows[k].map((i) => hoverText(ds, i)),
@@ -82,5 +84,6 @@ export function buildBoxFigure(
     },
     skipped,
     note: panelNote(lackNote(skipped, axisTitle(ds, cfg.y)), censored),
+    facets: [{ label: "", rows: Array.from(mask, (_, i) => i), xaxis: "x", yaxis: "y" }],
   };
 }

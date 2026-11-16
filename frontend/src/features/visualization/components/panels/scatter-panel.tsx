@@ -9,6 +9,7 @@ import { useTheme } from "next-themes";
 import { useMemo, useRef } from "react";
 import { flushSync } from "react-dom";
 import { usePassMask } from "../../hooks/use-pass-mask";
+import { buildOverlays, mergeOverlays } from "../../lib/overlays/build";
 import {
   type PointEvent,
   buildScatterBase,
@@ -52,9 +53,12 @@ export function ScatterPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset })
   const dark = resolvedTheme === "dark";
   const { revision, own } = useSelectionRevision(selection);
 
-  // The costly part (coordinates, colors, hover text) waits for a data or settings change;
-  // a selection only lays its overlay on top.
-  const base = useMemo(() => buildScatterBase(ds, panel, mask, dark), [ds, panel, mask, dark]);
+  // The costly part (coordinates, colors, hover text, overlays) waits for a data or
+  // settings change; a selection only lays its marks on top.
+  const base = useMemo(() => {
+    const fig = buildScatterBase(ds, panel, mask, dark);
+    return mergeOverlays(fig, buildOverlays(ds, panel, mask, fig.facets ?? []));
+  }, [ds, panel, mask, dark]);
   const fig = useMemo(() => selectScatter(base, ds, selection), [base, ds, selection]);
   // The constant uirevision (in the figure) keeps zoom; selectionrevision governs the lasso.
   const layout = useMemo(

@@ -14,6 +14,7 @@ export function FieldSelect({
   clearable = false,
   placeholder = "None",
   disabledReason,
+  include,
 }: {
   ds: Dataset;
   kinds: DatasetColumn["kind"][];
@@ -25,9 +26,11 @@ export function FieldSelect({
   placeholder?: string;
   /** Why a field cannot be chosen here, if it cannot (it stays listed, disabled). */
   disabledReason?: (c: DatasetColumn) => string | undefined;
+  /** Keys offered whatever their kind (scatter X takes Run date). */
+  include?: string[];
 }) {
   const options = ds.columns
-    .filter((c) => !c.hidden && kinds.includes(c.kind))
+    .filter((c) => !c.hidden && (kinds.includes(c.kind) || include?.includes(c.key)))
     .map((c) => ({
       value: c.key,
       label: c.label,

@@ -20,6 +20,16 @@ export interface Figure {
   skipped: number;
   /** "38 rows lack Signal (AU)", or null when every passing row is plotted. */
   note: string | null;
+  /** The subplots overlays draw into (scatter and box only). */
+  facets?: Facet[];
+}
+
+/** One subplot: its title, every row it holds whatever the filters, and its axis ids. */
+export interface Facet {
+  label: string;
+  rows: number[];
+  xaxis: string;
+  yaxis: string;
 }
 
 /** Most groups a bar or box panel draws (one bar or box each); the rest pool as "Other". */

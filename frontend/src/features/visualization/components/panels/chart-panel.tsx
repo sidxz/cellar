@@ -4,6 +4,7 @@ import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
 import { useMemo } from "react";
 import { usePassMask } from "../../hooks/use-pass-mask";
+import { buildOverlays, mergeOverlays } from "../../lib/overlays/build";
 import { buildBarFigure } from "../../lib/traces/bar";
 import { buildBoxFigure } from "../../lib/traces/box";
 import { buildHistogramFigure } from "../../lib/traces/histogram";
@@ -18,10 +19,10 @@ const BUILDERS = { histogram: buildHistogramFigure, bar: buildBarFigure, box: bu
 export function ChartPanel({ panel, ds }: { panel: PanelConfig; ds: Dataset }) {
   const mask = usePassMask(ds);
   const dark = useTheme().resolvedTheme === "dark";
-  const fig = useMemo(
-    () => BUILDERS[panel.type as Exclude<PanelType, "scatter">](ds, panel, mask, dark),
-    [ds, panel, mask, dark],
-  );
+  const fig = useMemo(() => {
+    const f = BUILDERS[panel.type as Exclude<PanelType, "scatter">](ds, panel, mask, dark);
+    return f.facets ? mergeOverlays(f, buildOverlays(ds, panel, mask, f.facets)) : f;
+  }, [ds, panel, mask, dark]);
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1">

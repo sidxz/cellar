@@ -131,6 +131,23 @@ describe("PlotSettingsSheet", () => {
     expect(state().panel.category).toBe("plate");
   });
 
+  it("offers Run date as a scatter X, without a log toggle", () => {
+    const dated = dataset({
+      ...ds.values,
+      run_date: ["2026-01-01", "2026-01-01", "2026-01-02", null],
+    });
+    show(scatter({ logX: true }), undefined, dated);
+    fireEvent.click(screen.getByRole("combobox", { name: "X" }));
+    fireEvent.click(screen.getByRole("option", { name: "run_date" }));
+    expect(state().history).toBe(1);
+    expect(state().panel).toMatchObject({ x: "run_date", logX: false });
+    expect(screen.queryByRole("checkbox", { name: "Log X" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Histogram" }));
+    fireEvent.click(screen.getByRole("combobox", { name: "X" }));
+    expect(screen.queryByRole("option", { name: "run_date" })).not.toBeInTheDocument();
+  });
+
   it("names the opacity slider", () => {
     show(scatter());
     expect(screen.getByRole("slider", { name: "Opacity" })).toBeInTheDocument();

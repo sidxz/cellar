@@ -23,6 +23,7 @@ const NUMBER: Kind[] = ["number"];
 const CATEGORY: Kind[] = ["category"];
 const COLOR: Kind[] = ["number", "category"];
 const TOOLTIP: Kind[] = ["number", "category", "text"];
+const DATE_X = ["run_date"];
 
 const TYPES: { value: PanelType; label: string; numeric: boolean }[] = [
   { value: "scatter", label: "Scatter", numeric: true },
@@ -115,12 +116,14 @@ export function PlotSettingsSheet({
                 id={id("x")}
                 ds={ds}
                 kinds={NUMBER}
+                include={p.type === "scatter" ? DATE_X : undefined}
                 value={p.x}
-                onChange={(x) => set({ x })}
+                // A date axis has no log scale.
+                onChange={(x) => set(x === "run_date" ? { x, logX: false } : { x })}
               />
             </Row>
           )}
-          {p.type === "scatter" && (
+          {p.type === "scatter" && p.x !== "run_date" && (
             <Toggle
               id={id("logX")}
               label="Log X"
