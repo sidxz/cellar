@@ -239,6 +239,16 @@ describe("RunHeatmapPanel outliers and empty wells", () => {
     );
   });
 
+  it("asks for a reason on a completed run", () => {
+    state.signal = "high";
+    state.rows = rows(false, raw);
+    render(<RunHeatmapPanel run={{ ...run, status: "completed" } as Run} />);
+    fireEvent.click(document.querySelector('[data-position="A5"]') as HTMLElement);
+    expect(screen.getByRole("button", { name: "Flag as outlier" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "bubble" } });
+    expect(screen.getByRole("button", { name: "Flag as outlier" })).toBeEnabled();
+  });
+
   it("a flagged well offers to remove its flag", () => {
     state.signal = "high";
     state.rows = rows(false, raw, ["A4"]);
@@ -255,6 +265,7 @@ describe("RunHeatmapPanel outliers and empty wells", () => {
     ["a viewer", false, { status: "draft", is_locked: false }],
     ["an approved run", true, { status: "approved", is_locked: false }],
     ["a locked run", true, { status: "completed", is_locked: true }],
+    ["a rejected run", true, { status: "rejected", is_locked: false }],
   ])("offers no flag on %s", (_, canEdit, fields) => {
     state.canEdit = canEdit;
     state.signal = "high";

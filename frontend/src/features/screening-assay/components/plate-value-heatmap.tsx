@@ -230,6 +230,8 @@ interface PlateValueHeatmapProps {
   /** Given when the user can flag: a well with a raw value opens the flag popover. */
   onFlag?: (well: PlateMapWell, outlier: boolean, reason: string | null) => void;
   flagPending?: boolean;
+  /** A completed run's flags change only with a reason. */
+  flagReasonRequired?: boolean;
   className?: string;
 }
 
@@ -249,6 +251,7 @@ export function PlateValueHeatmap({
   colors = WELL_TYPE_COLORS,
   onFlag,
   flagPending = false,
+  flagReasonRequired = false,
   className,
 }: PlateValueHeatmapProps) {
   const [rows, cols] = holderDimensions(plate);
@@ -376,6 +379,7 @@ export function PlateValueHeatmap({
                             flagged={outlier}
                             title={`${well.position_label} · ${well.well_type.replace(/_/g, " ")}`}
                             pending={flagPending}
+                            reasonRequired={flagReasonRequired}
                             onSubmit={(reason) => onFlag(well, !outlier, reason)}
                           >
                             {trigger}

@@ -99,8 +99,10 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const { data: curves } = useDoseResponseByRun(run.id);
   const canEdit = useCanEdit();
   const flag = useFlagOutliers();
-  // Outlier flags change only on a run neither locked nor approved (the API refuses too).
-  const canFlag = canEdit && !run.is_locked && run.status !== "approved";
+  // Outlier flags change on an unlocked draft, in-progress or (with a reason) completed
+  // run; the API refuses the others.
+  const canFlag =
+    canEdit && !run.is_locked && ["draft", "in_progress", "completed"].includes(run.status);
 
   const numericReadouts = useMemo<ReadoutDefinition[]>(() => {
     if (!protocol) return [];
@@ -490,6 +492,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 colors={colors}
                 onFlag={canFlag ? onFlag : undefined}
                 flagPending={flag.isPending}
+                flagReasonRequired={run.status === "completed"}
               />
             </div>
           );
