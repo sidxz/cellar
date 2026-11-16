@@ -79,6 +79,7 @@ export function PanelFrame({
   return (
     <section
       aria-label={title}
+      data-panel-id={panel.id}
       className="flex h-full min-h-[240px] min-w-0 flex-col rounded-md border bg-card"
     >
       <header className="flex flex-wrap items-center gap-1.5 border-b px-2 py-1">

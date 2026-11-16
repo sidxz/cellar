@@ -1,6 +1,6 @@
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dataset, DatasetColumn } from "../types";
 
 const UUID = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -82,6 +82,13 @@ function dataset(numeric = true): Dataset {
 
 const ready = (ds: Dataset) => ({ data: ds, isPending: false, isError: false, refetch: vi.fn() });
 
+// Radix Popover / cmdk need these in jsdom.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= vi.fn();
+  Element.prototype.hasPointerCapture ??= vi.fn(() => false);
+  Element.prototype.releasePointerCapture ??= vi.fn();
+});
+
 beforeEach(() => {
   state.counts = undefined;
   state.query = ready(dataset());
@@ -142,5 +149,16 @@ describe("WorkbenchPage", () => {
     expect(screen.getByText("2026-11-05 · A. Chen")).toBeInTheDocument();
     expect(screen.queryByText(/2026-10-29/)).not.toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(UUID);
+  });
+
+  it("updates the header count as a rail filter narrows the rows", () => {
+    render(<WorkbenchPage source={{ kind: "run", runId: R1 }} />);
+    fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+    fireEvent.click(screen.getByRole("option", { name: "rd:s:raw" }));
+    expect(screen.getByText("3 / 3 wells · 2 compounds")).toBeInTheDocument();
+    const min = screen.getByRole("spinbutton", { name: "Minimum (inclusive)" });
+    fireEvent.change(min, { target: { value: "2" } });
+    fireEvent.keyDown(min, { key: "Enter" });
+    expect(screen.getByText("2 / 3 wells · 1 compound")).toBeInTheDocument();
   });
 });

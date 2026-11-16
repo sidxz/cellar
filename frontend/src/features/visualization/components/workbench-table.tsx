@@ -6,6 +6,7 @@ import { EntityLink } from "@/shared/components/entity-link";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/components/ui/tooltip";
+import { saveText } from "@/shared/lib/api/download";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import {
   AllCommunityModule,
@@ -18,7 +19,15 @@ import {
 } from "ag-grid-community";
 import { AgGridReact } from "ag-grid-react";
 import { ChevronDown, ChevronRight } from "lucide-react";
-import { type ReactNode, useCallback, useMemo, useState } from "react";
+import {
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { categoryLabel, column, numberAt } from "../lib/dataset";
 import { orderTableRows } from "../lib/table-rows";
@@ -42,6 +51,7 @@ const SIBLING = /:(q|outlier)$/;
 const OWN_COLUMNS = new Set(["compound", "structure"]);
 const isData = (row: Row | undefined): row is Row => !!row && row.i >= 0;
 const fmt = (n: number) => n.toLocaleString();
+const NO_ROWS = { noRowsToShow: "No rows match the filters" };
 
 function SelectCell({ data, rowIds }: ICellRendererParams<Row> & { rowIds: string[] }) {
   const selection = useWorkbench((s) => s.selection);
@@ -191,10 +201,25 @@ function tableColumns(ds: Dataset, chemistry: boolean): Col[] {
   return cols;
 }
 
+export interface WorkbenchTableHandle {
+  /** Download the passing rows (selected ones too, even collapsed) over the visible
+   * columns; numbers unrounded, a qualifier kept in front (">100"). */
+  exportCsv: (fileName: string) => void;
+}
+
 /** The linked table: passing rows (all rows on request), selected rows pinned on top
- * under a collapsible "Selected (n)" row, compact or chemistry density. */
-/** `actions` (Save, Export…) sit at the right end of the table toolbar. */
-export function WorkbenchTable({ ds, actions }: { ds: Dataset; actions?: ReactNode }) {
+ * under a collapsible "Selected (n)" row, compact or chemistry density.
+ * `actions` (Save…) sit at the right end of the toolbar; `ref` exposes the CSV export. */
+export function WorkbenchTable({
+  ds,
+  actions,
+  ref,
+}: {
+  ds: Dataset;
+  actions?: ReactNode;
+  ref?: Ref<WorkbenchTableHandle>;
+}) {
+  const grid = useRef<AgGridReact<Row>>(null);
   const mask = usePassMask(ds);
   const selection = useWorkbench((s) => s.selection);
   const [density, setDensity] = useState<Density>("chemistry");
@@ -225,6 +250,36 @@ export function WorkbenchTable({ ds, actions }: { ds: Dataset; actions?: ReactNo
   const getRowHeight = useCallback(
     (p: RowHeightParams<Row>) => (p.data?.i === -1 ? ROW_HEIGHT.compact : ROW_HEIGHT[density]),
     [density],
+  );
+  useImperativeHandle(
+    ref,
+    () => ({
+      exportCsv: (fileName) => {
+        const api = grid.current?.api;
+        if (!api) return;
+        // A collapsed Selected group holds no grid rows; lend them for the (synchronous) read.
+        const lend = collapsed && pinned.length > 0;
+        if (lend)
+          api.setGridOption(
+            "pinnedTopRowData",
+            pinned.map((i) => rows[i]),
+          );
+        const csv = api.getDataAsCsv({
+          skipColumnGroupHeaders: true,
+          columnKeys: api.getAllDisplayedColumns().filter((c) => c.getColId() !== "__select__"),
+          shouldRowBeSkipped: (p) => !isData(p.node.data) || !mask[p.node.data.i],
+          processCellCallback: (p) => {
+            if (typeof p.value !== "number" || !isData(p.node?.data)) return p.formatValue(p.value);
+            const q = ds.values[`${p.column.getColId()}:q`]?.[p.node.data.i];
+            return `${q ?? ""}${p.value}`;
+          },
+        });
+        if (lend) api.setGridOption("pinnedTopRowData", pinnedRows);
+        // The byte-order mark makes Excel read the file as UTF-8 (≥, µ).
+        if (csv !== undefined) saveText(`\uFEFF${csv}`, fileName);
+      },
+    }),
+    [ds, mask, collapsed, pinned, pinnedRows, rows],
   );
   const getRowClass = useCallback(
     (p: RowClassParams<Row>) =>
@@ -263,6 +318,7 @@ export function WorkbenchTable({ ds, actions }: { ds: Dataset; actions?: ReactNo
       </div>
       <div className="min-h-0 flex-1">
         <AgGridReact<Row>
+          ref={grid}
           theme={cellarTheme}
           rowData={rowData}
           pinnedTopRowData={pinnedRows}
@@ -277,6 +333,7 @@ export function WorkbenchTable({ ds, actions }: { ds: Dataset; actions?: ReactNo
           getRowHeight={getRowHeight}
           suppressCellFocus
           animateRows={false}
+          localeText={NO_ROWS}
         />
       </div>
     </div>

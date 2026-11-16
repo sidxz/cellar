@@ -1,5 +1,6 @@
+import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { Dataset } from "../types";
-import { numberAt } from "./dataset";
+import { categoryLabel, column, numberAt } from "./dataset";
 
 export type Filter =
   | {
@@ -88,4 +89,80 @@ export function binCounts(ds: Dataset, key: string, edges: number[], mask: Uint8
     counts[Math.min(bins - 1, Math.floor((v - lo) / step))] += 1;
   }
   return counts;
+}
+
+const collator = new Intl.Collator(undefined, { numeric: true });
+
+/** A category column's distinct values as filters hold them (``String(v)``), in display
+ * order, and whether any row lacks a value. */
+export function categoryValues(
+  ds: Dataset,
+  key: string,
+): { values: string[]; hasMissing: boolean } {
+  const seen = new Set<string>();
+  let hasMissing = false;
+  for (const v of ds.values[key] ?? []) {
+    if (v === null || v === undefined) hasMissing = true;
+    else seen.add(String(v));
+  }
+  const values = [...seen].sort((a, b) =>
+    collator.compare(categoryLabel(key, a), categoryLabel(key, b)),
+  );
+  return { values, hasMissing };
+}
+
+let filterSeq = 0;
+
+/** A filter on ``key`` that keeps every row: a range for numbers, a checklist for
+ * categories; null for other kinds. */
+export function newFilter(ds: Dataset, key: string): Filter | null {
+  const kind = column(ds, key)?.kind;
+  filterSeq += 1;
+  const id = `filter-${Date.now().toString(36)}-${filterSeq}`;
+  if (kind === "number") {
+    return { id, kind: "range", key, min: null, max: null, includeMissing: true };
+  }
+  if (kind === "category" || kind === "user") {
+    return {
+      id,
+      kind: "category",
+      key,
+      values: categoryValues(ds, key).values,
+      includeMissing: true,
+    };
+  }
+  return null;
+}
+
+/** A filter is active when, on its own, it leaves out at least one row. */
+export const isFilterActive = (ds: Dataset, f: Filter) => computePassMask(ds, [f]).includes(0);
+
+/** What a filter keeps, without its field: "≥ 30", "30 … 80", "2 of 3", "12 rows".
+ * An untouched range shows the column's span. */
+export function filterCondition(ds: Dataset, f: Filter): string {
+  if (f.kind === "rows") return `${f.rowIds.length.toLocaleString()} rows`;
+  if (f.kind === "category") {
+    const { values, hasMissing } = categoryValues(ds, f.key);
+    const kept = new Set(f.values);
+    const total = values.length + Number(hasMissing);
+    const n = values.filter((v) => kept.has(v)).length + Number(hasMissing && f.includeMissing);
+    return n === total ? `all ${total}` : `${n} of ${total}`;
+  }
+  let text: string;
+  if (f.min !== null && f.max !== null) text = `${f.min} … ${f.max}`;
+  else if (f.min !== null) text = `≥ ${f.min}`;
+  else if (f.max !== null) text = `≤ ${f.max}`;
+  else if (!f.includeMissing) return "no missing";
+  else {
+    const { edges } = fixedBins(ds, f.key, 1);
+    text = `${formatMeasurementValue(edges[0])} … ${formatMeasurementValue(edges[1])}`;
+  }
+  return f.includeMissing ? text : `${text}, no missing`;
+}
+
+/** The field and its condition: "% inhibition ≥ 30", "Well type: 2 of 3". */
+export function filterSummary(ds: Dataset, f: Filter): string {
+  const label = f.kind === "rows" ? "Selection" : (column(ds, f.key)?.label ?? f.key);
+  const sep = f.kind === "range" ? " " : ": ";
+  return `${label}${sep}${filterCondition(ds, f)}`;
 }

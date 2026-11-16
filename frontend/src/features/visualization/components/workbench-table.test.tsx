@@ -1,10 +1,11 @@
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { useEffect } from "react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { createRef, useEffect } from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { Filter } from "../lib/filters";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import type { Dataset, DatasetColumn } from "../types";
-import { WorkbenchTable } from "./workbench-table";
+import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
 
 vi.mock("@/shared/components/chemistry", () => ({
   StructureThumbnail: ({ smiles }: { smiles: string }) => <span>structure {smiles}</span>,
@@ -50,14 +51,21 @@ function Seed({ ids }: { ids: string[] }) {
   return null;
 }
 
-const show = (selected: string[] = []) =>
+const show = (
+  selected: string[] = [],
+  {
+    filters,
+    table = ds,
+    ref,
+  }: { filters?: Filter[]; table?: Dataset; ref?: React.Ref<WorkbenchTableHandle> } = {},
+) =>
   render(
     // The dashboard layout's sidebar provides tooltips in the app.
     <TooltipProvider>
-      <WorkbenchProvider initialPanels={[]}>
+      <WorkbenchProvider initialPanels={[]} initialFilters={filters}>
         <Seed ids={selected} />
         <div style={{ height: 600 }}>
-          <WorkbenchTable ds={ds} />
+          <WorkbenchTable ds={table} ref={ref} />
         </div>
       </WorkbenchProvider>
     </TooltipProvider>,
@@ -92,5 +100,43 @@ describe("WorkbenchTable", () => {
     expect(within(pinned).getByRole("link", { name: "CEL-2" })).toBeInTheDocument();
     fireEvent.click(group);
     expect(within(pinned).queryByRole("link", { name: "CEL-2" })).not.toBeInTheDocument();
+  });
+
+  it("exports visible columns and passing rows as CSV, numbers unrounded", async () => {
+    const blobs: Blob[] = [];
+    URL.createObjectURL = vi.fn((b: Blob) => {
+      blobs.push(b);
+      return "blob:csv";
+    });
+    URL.revokeObjectURL = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const ref = createRef<WorkbenchTableHandle>();
+    const precise = { ...ds, values: { ...ds.values, "rd:s:raw": [12.3456, 40, 3] } };
+    const controls: Filter = {
+      id: "f",
+      kind: "category",
+      key: "well_type",
+      values: ["sample"],
+      includeMissing: false,
+    };
+    show(["w1"], { filters: [controls], table: precise, ref });
+    // The collapsed Selected group still exports its rows.
+    fireEvent.click(await screen.findByRole("button", { name: "Selected (1)" }));
+    act(() => ref.current?.exportCsv("wells.csv"));
+    expect(blobs).toHaveLength(1);
+    expect(click).toHaveBeenCalledTimes(1);
+    click.mockRestore();
+    // jsdom's Blob has no text(); FileReader reads it.
+    const csv = await new Promise<string>((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.readAsText(blobs[0]);
+    });
+    const lines = csv.split(/\r?\n/);
+    expect(lines).toEqual([
+      '"Compound","Structure","well_type","rd:s:raw"',
+      '"CEL-2","c1ccccc1","Sample","40"',
+      '"CEL-1","CCO","Sample",">12.3456"',
+    ]);
   });
 });

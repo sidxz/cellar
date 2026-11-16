@@ -5,7 +5,7 @@ import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { AlertTriangle, ChartScatter, Database, Rows3 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
 import { resolveUserColumns } from "../lib/dataset";
@@ -15,6 +15,8 @@ import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level } from "../types";
 import { AddPlotMenu } from "./add-plot-menu";
+import { ExportMenu } from "./export-menu";
+import { FilterRail, NoRowsMatch } from "./filter-rail";
 import { PanelGrid } from "./panel-grid";
 import type { EditField } from "./panels/panel-frame";
 import { PlotSettingsSheet } from "./plot-settings-sheet";
@@ -23,7 +25,7 @@ import { SaveCollectionButton } from "./save-collection-dialog";
 import { SelectionStrip } from "./selection-strip";
 import { WorkbenchBody } from "./workbench-body";
 import { SourceBar, WorkbenchHeader } from "./workbench-header";
-import { WorkbenchTable } from "./workbench-table";
+import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
 
 const LEVEL: Level = "wells";
 
@@ -56,6 +58,7 @@ function Workbench({ source }: { source: DatasetSource }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editing, setEditing] = useState<{ panelId: string; focusField?: EditField } | null>(null);
   const closeEditor = useCallback(() => setEditing(null), []);
+  const tableRef = useRef<WorkbenchTableHandle>(null);
 
   const ds = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
@@ -110,21 +113,28 @@ function Workbench({ source }: { source: DatasetSource }) {
         </>
       ) : (
         <WorkbenchProvider key={ds.revision} initialPanels={initialPanels(ds)}>
-          <WorkbenchHeader source={source} ds={ds} addPlotMenu={<AddPlotMenu ds={ds} />} />
+          <WorkbenchHeader
+            source={source}
+            ds={ds}
+            exportMenu={<ExportMenu ds={ds} table={tableRef} />}
+            addPlotMenu={<AddPlotMenu ds={ds} />}
+          />
           <WorkbenchBody
             plots={
-              <PanelGrid
-                ds={ds}
-                onEdit={(panelId, focusField) => setEditing({ panelId, focusField })}
-              />
+              <NoRowsMatch ds={ds}>
+                <PanelGrid
+                  ds={ds}
+                  onEdit={(panelId, focusField) => setEditing({ panelId, focusField })}
+                />
+              </NoRowsMatch>
             }
             table={
               <div className="flex h-full flex-col">
                 <SelectionStrip ds={ds} />
-                <WorkbenchTable ds={ds} actions={<SaveCollectionButton ds={ds} />} />
+                <WorkbenchTable ref={tableRef} ds={ds} actions={<SaveCollectionButton ds={ds} />} />
               </div>
             }
-            rail={<SlotNote>No filters yet.</SlotNote>}
+            rail={<FilterRail ds={ds} />}
             editor={
               editing && (
                 <PlotSettingsSheet
@@ -166,8 +176,4 @@ function LoadingSkeleton() {
       </div>
     </div>
   );
-}
-
-function SlotNote({ children }: { children: React.ReactNode }) {
-  return <p className="p-3 text-sm text-muted-foreground">{children}</p>;
 }
