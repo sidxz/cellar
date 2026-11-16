@@ -1,6 +1,7 @@
 import type { Dataset } from "../../types";
 import { isComparedValue, missingReason } from "../cross-protocol";
 import { categoryLabel, column } from "../dataset";
+import { shortName } from "../short-name";
 import { cellText, qualifierText } from "../value-description";
 import { fieldLabel } from "./common";
 
@@ -21,6 +22,8 @@ export interface HoverInfo {
 /** Fields the card's head already shows. */
 const HEAD = new Set(["compound", "structure", "molecule_id", "run", "plate", "well"]);
 
+const NOT_TESTED_IN = "Not tested in ";
+
 const text = (v: unknown) => (typeof v === "string" && v ? v : null);
 
 /** A field's value as the card shows it: numbers with their qualifier ("> 42.5"); a
@@ -31,7 +34,12 @@ function valueText(ds: Dataset, key: string, i: number): string {
     const q = qualifierText(ds.values[`${key}:q`]?.[i]);
     return q && q !== "=" ? `${q} ${cellText(v)}` : cellText(v);
   }
-  if (v == null && isComparedValue(ds, key)) return missingReason(ds, key, i) ?? "No value";
+  if (v == null && isComparedValue(ds, key)) {
+    const reason = missingReason(ds, key, i) ?? "No value";
+    return reason.startsWith(NOT_TESTED_IN)
+      ? NOT_TESTED_IN + shortName(reason.slice(NOT_TESTED_IN.length))
+      : reason;
+  }
   return categoryLabel(key, v);
 }
 

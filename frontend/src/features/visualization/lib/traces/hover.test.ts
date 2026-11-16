@@ -46,7 +46,7 @@ describe("hoverInfo", () => {
     expect(hoverInfo(ds, 2, ["y"])).toMatchObject({ title: "MadR", place: "RUN-7 · Plate 2 P24" });
   });
 
-  it("says why a compared value is missing instead of a blank", () => {
+  it("says why a compared value is missing, a long protocol name cut in the middle", () => {
     const info = hoverInfo(crossProtocol, 1, ["dr:x:p", "dr:y:p"]);
     expect(info.lines).toEqual([
       { label: "Primary · pIC50", value: "6" },
@@ -55,6 +55,17 @@ describe("hoverInfo", () => {
     expect(hoverInfo(crossProtocol, 2, ["dr:y:p"]).lines).toEqual([
       { label: "Counter · pIC50", value: "No value" },
     ]);
+    const name = "M. tuberculosis InhA inhibition [DD-CoA fluorescence]";
+    const long = {
+      ...crossProtocol,
+      protocols: [
+        crossProtocol.protocols?.[0] ?? { protocol_id: "A", name: "Primary" },
+        { protocol_id: "B", name },
+      ],
+    };
+    expect(hoverInfo(long, 1, ["dr:y:p"]).lines[0].value).toBe(
+      "Not tested in M. tubercu…[DD-CoA fluorescence]",
+    );
   });
 });
 

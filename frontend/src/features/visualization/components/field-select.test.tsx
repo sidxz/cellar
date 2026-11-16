@@ -61,6 +61,18 @@ describe("FieldSelect", () => {
     expect(within(trigger).getByText("Counter")).toBeInTheDocument();
   });
 
+  it("cuts a long protocol name in the middle under the field, keeping its method", () => {
+    const name = "M. tuberculosis InhA inhibition [NADH oxidation]";
+    const long: Dataset = {
+      ...ds,
+      columns: [{ ...field("p", `${name} · pIC50`, name), kind: "number" }],
+    };
+    render(<FieldSelect ds={long} kinds={["number"]} value="p" onChange={vi.fn()} />);
+    const trigger = screen.getByRole("combobox");
+    expect(within(trigger).getByText("M. tuberculosis…[NADH oxidation]")).toBeInTheDocument();
+    expect(trigger).toHaveAttribute("title", `${name} · pIC50`);
+  });
+
   it("forgets the search once a result is picked: reopening lists every field and None", () => {
     function Picker() {
       const [value, setValue] = useState<string | undefined>("a");

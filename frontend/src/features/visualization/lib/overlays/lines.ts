@@ -4,6 +4,7 @@ import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 import { protocolName } from "../cross-protocol";
 import { column } from "../dataset";
+import { shortName } from "../short-name";
 import { type Facet, isCensored } from "../traces/common";
 import { WEBGL_ABOVE, plottedX, plottedY } from "../traces/scatter";
 import type { OverlayParts } from "./build";
@@ -272,11 +273,6 @@ export function drawLipe(
     : [];
   return parts({ shapes, annotations, notes });
 }
-
-/** Longest protocol name a guide label shows; the hover has it in full. */
-const NAME_MAX = 24;
-const shortName = (name: string) =>
-  name.length > NAME_MAX ? `${name.slice(0, NAME_MAX - 1)}…` : name;
 
 /** Selectivity guides on a p-potency × p-potency scatter of two protocols: parity (1×) and,
  * per fold k, y = x ± log10 k, each saying for which protocol the points beyond it are at

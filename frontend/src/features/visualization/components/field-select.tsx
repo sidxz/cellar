@@ -15,6 +15,7 @@ import { cn } from "@/shared/lib/utils";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useState } from "react";
 import { fieldName, rankFields } from "../lib/field-search";
+import { shortName } from "../lib/short-name";
 import type { Dataset, DatasetColumn } from "../types";
 
 /** A searchable picker of the dataset's visible columns of ``kinds``, grouped by readout
@@ -98,7 +99,9 @@ export function FieldSelect({
           <span className="flex min-w-0 flex-col items-start text-left leading-tight">
             <span className="w-full truncate">{shown?.name ?? placeholder}</span>
             {shown?.from && (
-              <span className="w-full truncate text-xs text-muted-foreground">{shown.from}</span>
+              <span className="w-full truncate text-xs text-muted-foreground">
+                {shortName(shown.from)}
+              </span>
             )}
           </span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />

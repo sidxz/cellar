@@ -105,8 +105,8 @@ describe("selectivity guides", () => {
     });
   });
 
-  it("shortens a long protocol name on the label, the full sentence on hover", () => {
-    const name = "Mtb_WCA_mc2-7000_Resazurin counter-screen";
+  it("shortens a long protocol name in the middle on the label, the full sentence on hover", () => {
+    const name = "M. tuberculosis InhA inhibition [DD-CoA fluorescence]";
     const long: Dataset = {
       ...ds,
       protocols: [
@@ -123,7 +123,7 @@ describe("selectivity guides", () => {
       buildScatterBase(long, p, mask).facets ?? [],
     );
     const counter = annotations[2] as { text: string; hovertext: string };
-    expect(counter.text).toBe("≥10× selective for Mtb_WCA_mc2-7000_Resazu…");
+    expect(counter.text).toBe("≥10× selective for M. tubercu…[DD-CoA fluorescence]");
     expect(counter.hovertext).toBe(`≥10× selective for ${name}`);
   });
 
