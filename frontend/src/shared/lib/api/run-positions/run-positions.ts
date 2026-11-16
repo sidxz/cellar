@@ -16,6 +16,8 @@ import type {
 
 import type {
   BodyResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost,
+  FlagOutliersRequest,
+  FlagOutliersResponse,
   HTTPValidationError,
   LayoutFileResponse,
   RelabelPositionsRequest,
@@ -168,4 +170,76 @@ export const useResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost = <TError =
         TContext
       > => {
       return useMutation(getResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationOptions(options), queryClient);
+    }
+    /**
+ * Flag wells as outliers, or remove their flag, then recalculate the run. An outlier
+ * leaves plate QC and the normalization anchors. Refused on a locked or approved run.
+ * @summary Flag Run Outliers
+ */
+export const flagRunOutliersApiV1RunsRunIdOutliersPost = (
+    runId: string,
+    flagOutliersRequest: FlagOutliersRequest,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<FlagOutliersResponse>(
+      {url: `/api/v1/runs/${runId}/outliers`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: flagOutliersRequest, signal
+    },
+      );
+    }
+
+
+
+
+export const getFlagRunOutliersApiV1RunsRunIdOutliersPostMutationKey = () => ['flagRunOutliersApiV1RunsRunIdOutliersPost'] as const;
+
+export const getFlagRunOutliersApiV1RunsRunIdOutliersPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagRunOutliersApiV1RunsRunIdOutliersPost>>, TError,FlagRunOutliersApiV1RunsRunIdOutliersPostMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof flagRunOutliersApiV1RunsRunIdOutliersPost>>, TError,FlagRunOutliersApiV1RunsRunIdOutliersPostMutationVariables, TContext> => {
+
+const mutationKey = getFlagRunOutliersApiV1RunsRunIdOutliersPostMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof flagRunOutliersApiV1RunsRunIdOutliersPost>>, FlagRunOutliersApiV1RunsRunIdOutliersPostMutationVariables> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  flagRunOutliersApiV1RunsRunIdOutliersPost(runId,data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type FlagRunOutliersApiV1RunsRunIdOutliersPostMutationResult = NonNullable<Awaited<ReturnType<typeof flagRunOutliersApiV1RunsRunIdOutliersPost>>>
+    export type FlagRunOutliersApiV1RunsRunIdOutliersPostMutationBody = FlagOutliersRequest
+    export type FlagRunOutliersApiV1RunsRunIdOutliersPostMutationError = HTTPValidationError
+    export type FlagRunOutliersApiV1RunsRunIdOutliersPostMutationVariables = {runId: string;data: FlagOutliersRequest}
+
+    /**
+ * Flag wells as outliers, or remove their flag, then recalculate the run. An outlier
+ * leaves plate QC and the normalization anchors. Refused on a locked or approved run.
+ * @summary Flag Run Outliers
+ */
+export const useFlagRunOutliersApiV1RunsRunIdOutliersPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof flagRunOutliersApiV1RunsRunIdOutliersPost>>, TError,FlagRunOutliersApiV1RunsRunIdOutliersPostMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof flagRunOutliersApiV1RunsRunIdOutliersPost>>,
+        TError,
+        FlagRunOutliersApiV1RunsRunIdOutliersPostMutationVariables,
+        TContext
+      > => {
+      return useMutation(getFlagRunOutliersApiV1RunsRunIdOutliersPostMutationOptions(options), queryClient);
     }
