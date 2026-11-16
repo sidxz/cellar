@@ -19,6 +19,25 @@ const opacityScale = (n: number) => 1 - (0.35 / 0.8) * crowding(n);
 
 const axisId = (axis: "x" | "y", facet: number) => (facet === 0 ? axis : `${axis}${facet + 1}`);
 
+const plotted = (ds: Dataset, key: string | undefined, i: number, log?: boolean) => {
+  const v = key ? numberAt(ds, key, i) : null;
+  return v === null || (log && v <= 0) ? null : v;
+};
+
+/** Row ``i``'s X as the scatter plots it: a run date as its ISO string, else a number
+ * (null when missing, or ≤ 0 on a log axis). */
+export function plottedX(ds: Dataset, cfg: PanelConfig): (i: number) => number | string | null {
+  if (cfg.x !== "run_date") return (i) => plotted(ds, cfg.x, i, cfg.logX);
+  const dates = ds.values.run_date;
+  return (i) => (dates?.[i] as string | undefined) || null;
+}
+
+/** Row ``i``'s Y as the scatter plots it (null when missing, or ≤ 0 on a log axis). */
+export const plottedY =
+  (ds: Dataset, cfg: PanelConfig) =>
+  (i: number): number | null =>
+    plotted(ds, cfg.y, i, cfg.logY);
+
 /** A scatter with ``selection`` marked: the base figure plus the selection overlay. */
 export function buildScatterFigure(
   ds: Dataset,
@@ -77,12 +96,8 @@ export function buildScatterBase(
   const range = !coloring && colorCol?.kind === "number" ? numericRange(ds, colorCol.key) : null;
   const groupCount = coloring?.order.length ?? 1;
 
-  const value = (key: string | undefined, i: number, log?: boolean) => {
-    const v = key ? numberAt(ds, key, i) : null;
-    return v === null || (log && v <= 0) ? null : v;
-  };
-  const dates = dateX ? ds.values.run_date : undefined;
-  const xAt = dates ? (i: number) => dates[i] || null : (i: number) => value(cfg.x, i, logX);
+  const xAt = plottedX(ds, cfg);
+  const yAt = plottedY(ds, cfg);
 
   // Keyed facet-major, so sorting the keys orders traces by facet, then group.
   const groups = new Map<number, { facet: number; group: number; rows: number[] }>();
@@ -94,7 +109,7 @@ export function buildScatterBase(
   let n = 0;
   for (let i = 0; i < ds.row_ids.length; i++) {
     const x = xAt(i);
-    const y = value(cfg.y, i, cfg.logY);
+    const y = yAt(i);
     const facet = facets.of(i);
     facetRows[facet].push(i);
     if (!mask[i]) {

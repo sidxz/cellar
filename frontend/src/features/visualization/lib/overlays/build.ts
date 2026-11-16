@@ -2,6 +2,7 @@ import type { OverlayConfig, PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 import type { Facet, Figure } from "../traces/common";
 import { type OverlayKind, overlayOptions } from "./options";
+import { drawBands, drawDriftBands, drawTrends, drawZPrime } from "./qc";
 
 /** What overlays add to a figure. Overlay traces carry no ``customdata``, so they are never
  * selectable; ``notes`` join the panel's footer note. */
@@ -17,7 +18,12 @@ export const EMPTY_PARTS: OverlayParts = { traces: [], shapes: [], annotations: 
 type Draw = (ds: Dataset, panel: PanelConfig, mask: Uint8Array, facets: Facet[]) => OverlayParts;
 
 /** The drawer of each overlay kind. */
-const DRAW: Partial<Record<OverlayKind, Draw>> = {};
+const DRAW: Partial<Record<OverlayKind, Draw>> = {
+  bands: drawBands,
+  driftBand: drawDriftBands,
+  trend: drawTrends,
+  zPrime: drawZPrime,
+};
 
 /** The kinds ``o`` switches on (empty lists and unset values are off). */
 function switchedOn(o: OverlayConfig): OverlayKind[] {
@@ -43,15 +49,18 @@ export function buildOverlays(
 ): OverlayParts {
   if (!panel.overlays) return EMPTY_PARTS;
   const options = overlayOptions(ds, panel);
-  const parts = switchedOn(panel.overlays)
-    .filter((k) => options[k] === true)
+  const kinds = switchedOn(panel.overlays).filter((k) => options[k] === true);
+  const parts = kinds
+    // Drift bands replace the flat control bands.
+    .filter((k) => k !== "bands" || !kinds.includes("driftBand"))
     .flatMap((k) => DRAW[k]?.(ds, panel, mask, facets) ?? []);
   if (parts.length === 0) return EMPTY_PARTS;
   return {
     traces: parts.flatMap((p) => p.traces),
     shapes: parts.flatMap((p) => p.shapes),
     annotations: parts.flatMap((p) => p.annotations),
-    notes: parts.flatMap((p) => p.notes),
+    // Bands and trends both say when a facet has no control wells: once is enough.
+    notes: [...new Set(parts.flatMap((p) => p.notes))],
   };
 }
 
