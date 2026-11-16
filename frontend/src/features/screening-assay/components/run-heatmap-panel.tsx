@@ -9,9 +9,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
+import { showError, showSuccess, showWarning } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
 import { useMemo, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
+import { useFlagOutliers } from "../hooks/use-flag-outliers";
+import { apiReason } from "../hooks/use-instrument-import-wizard";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
@@ -19,6 +23,7 @@ import { classifyZPrime, readPerPlateQc } from "../lib/qc-metrics";
 import { hasComputedLayer } from "../lib/readout-data-pivot";
 import {
   type PlateData,
+  type PlateMapWell,
   READOUT_NORMALIZATION_LABELS,
   type ReadoutDefinition,
   type ReadoutNormalization,
@@ -91,6 +96,10 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const { data: readoutData, isLoading: readoutLoading } = useReadoutDataByRun(run.id);
   const { data: protocol } = useProtocol(run.protocol_id);
   const { data: curves } = useDoseResponseByRun(run.id);
+  const canEdit = useCanEdit();
+  const flag = useFlagOutliers();
+  // Outlier flags change only on a run neither locked nor approved (the API refuses too).
+  const canFlag = canEdit && !run.is_locked && run.status !== "approved";
 
   const numericReadouts = useMemo<ReadoutDefinition[]>(() => {
     if (!protocol) return [];
@@ -151,6 +160,32 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
     for (const [wellId, v] of source) active.set(wellId, v);
     return { activeByWellId: active, rawByWellId: raw, computedByWellId: computed };
   }, [readoutData, effectiveReadoutId, wantsComputed, isDose, plates]);
+
+  // A well is an outlier when its raw readouts are flagged (they are flagged together).
+  const outlierWellIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const r of readoutData ?? []) {
+      if (r.is_outlier && !r.is_computed && r.well_id != null) ids.add(r.well_id);
+    }
+    return ids;
+  }, [readoutData]);
+
+  function onFlag(well: PlateMapWell, outlier: boolean, reason: string | null) {
+    flag.mutate(
+      { runId: run.id, well_ids: [well.well_id], outlier, reason },
+      {
+        onSuccess: (out) => {
+          showSuccess(
+            outlier
+              ? `${well.position_label} flagged as an outlier`
+              : `${well.position_label} is no longer an outlier`,
+          );
+          if (out.compute_warning) showWarning(out.compute_warning);
+        },
+        onError: (e) => showError(apiReason(e)),
+      },
+    );
+  }
 
   /** Per-plate scale.
    *
@@ -216,7 +251,8 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
     const sampleValues: number[] = [];
     for (const w of plate.wells) {
       const v = activeByWellId.get(w.well_id);
-      if (v == null) continue;
+      // An outlier is no anchor, as in the run's plate QC.
+      if (v == null || outlierWellIds.has(w.well_id)) continue;
       if (w.well_type === "negative_control") negValues.push(v);
       else if (w.well_type === "positive_control") posValues.push(v);
       else if (w.well_type === "sample") sampleValues.push(v);
@@ -431,6 +467,7 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 palette={palette}
                 unit={wantsComputed ? null : rawUnit}
                 controlTypesPresent={controlTypesPresent}
+                hasOutliers={plate.wells.some((w) => outlierWellIds.has(w.well_id))}
               />
 
               <PlateValueHeatmap
@@ -443,6 +480,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
                 rawUnit={rawUnit}
                 computedUnit={computedUnit}
                 doseUnit={doseUnit}
+                outlierWellIds={outlierWellIds}
+                onFlag={canFlag ? onFlag : undefined}
+                flagPending={flag.isPending}
               />
             </div>
           );

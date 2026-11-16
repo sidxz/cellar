@@ -7,11 +7,31 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
-import { WELL_EMPTY_COLOR, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
+import { WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { Fragment, useMemo } from "react";
 import { holderDimensions, plateCellSizePx, rowLabel } from "../lib/plate-dimensions";
 import type { PlateData, PlateMapWell } from "../types";
+import { OutlierFlagPopover } from "./outlier-flag-popover";
+
+/** A position with no value (or no well): light grey, as the platform draws it — the
+ *  scale's dark end means "beyond full effect". */
+const NO_VALUE_COLOR = "#cbd5e1";
+
+/** The platform's ✕ over a flagged well's colour, legible on any fill. */
+function OutlierMark() {
+  return (
+    <svg
+      role="img"
+      aria-label="Outlier"
+      viewBox="0 0 10 10"
+      className="pointer-events-none absolute inset-0 h-full w-full"
+    >
+      <path d="M2 2L8 8M8 2L2 8" stroke="#0f172a" strokeWidth="2.4" strokeLinecap="round" />
+      <path d="M2 2L8 8M8 2L2 8" stroke="#fff" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 // ─── Color palettes ──────────────────────────────────────────────────────────
 
@@ -118,6 +138,7 @@ function valueToT(v: number, scale: ValueScale, palette: Palette): number {
 
 function WellTooltipContent({
   well,
+  outlier,
   rawValue,
   computedValue,
   rawUnit,
@@ -125,6 +146,7 @@ function WellTooltipContent({
   doseUnit,
 }: {
   well: PlateMapWell;
+  outlier: boolean;
   rawValue: number | undefined;
   computedValue: number | undefined;
   rawUnit: string | null;
@@ -147,6 +169,9 @@ function WellTooltipContent({
           {well.well_type.replace(/_/g, " ")}
         </span>
       </div>
+      {outlier && (
+        <p className="text-[11px] font-medium">Outlier · left out of plate QC and anchors</p>
+      )}
       {well.batch_number && <p className="font-mono text-[11px] truncate">{well.batch_number}</p>}
       {aliases.length > 0 && (
         <p className="text-[10px] italic opacity-70 line-clamp-2">{aliases.join(" · ")}</p>
@@ -198,6 +223,11 @@ interface PlateValueHeatmapProps {
   computedUnit: string;
   // Display-only label from PlateMapResponse.dose_unit (a backend string).
   doseUnit: string;
+  /** Wells flagged as outliers: drawn with an ✕. */
+  outlierWellIds?: ReadonlySet<string>;
+  /** Given when the user can flag: a well with a raw value opens the flag popover. */
+  onFlag?: (well: PlateMapWell, outlier: boolean, reason: string | null) => void;
+  flagPending?: boolean;
   className?: string;
 }
 
@@ -218,6 +248,9 @@ export function PlateValueHeatmap({
   rawUnit,
   computedUnit,
   doseUnit,
+  outlierWellIds,
+  onFlag,
+  flagPending = false,
   className,
 }: PlateValueHeatmapProps) {
   const [rows, cols] = holderDimensions(plate);
@@ -235,7 +268,7 @@ export function PlateValueHeatmap({
     background: string;
     border?: string;
   } {
-    if (!well) return { background: WELL_EMPTY_COLOR };
+    if (!well) return { background: NO_VALUE_COLOR };
 
     const outline = CONTROL_OUTLINE[well.well_type];
     const isControl = !!outline && well.well_type !== "sample";
@@ -255,7 +288,7 @@ export function PlateValueHeatmap({
       };
     }
 
-    if (v == null) return { background: WELL_EMPTY_COLOR };
+    if (v == null) return { background: NO_VALUE_COLOR };
     return { background: paletteColor(valueToT(v, scale, palette), palette) };
   }
 
@@ -307,23 +340,51 @@ export function PlateValueHeatmap({
                     const pos = `${rLabel}${c + 1}`;
                     const well = wellMap.get(pos);
                     const style = getWellStyle(well);
-                    const cell = (
+                    const outlier = !!well && !!outlierWellIds?.has(well.well_id);
+                    const flaggable =
+                      !!well && !!onFlag && (outlier || !!rawByWellId?.has(well.well_id));
+                    const cellStyle = {
+                      width: size,
+                      height: size,
+                      background: style.background,
+                      border: style.border,
+                      boxSizing: "border-box" as const,
+                    };
+                    const cell = flaggable ? (
+                      <button
+                        type="button"
+                        data-position={pos}
+                        aria-label={`${pos}${outlier ? ", outlier" : ""}`}
+                        className="relative rounded-sm p-0 transition-opacity hover:opacity-75"
+                        style={cellStyle}
+                      >
+                        {outlier && <OutlierMark />}
+                      </button>
+                    ) : (
                       <div
                         data-position={pos}
-                        className="rounded-sm cursor-default transition-opacity hover:opacity-75"
-                        style={{
-                          width: size,
-                          height: size,
-                          background: style.background,
-                          border: style.border,
-                          boxSizing: "border-box",
-                        }}
-                      />
+                        className="relative rounded-sm cursor-default transition-opacity hover:opacity-75"
+                        style={cellStyle}
+                      >
+                        {outlier && <OutlierMark />}
+                      </div>
                     );
                     if (!well) return <Fragment key={pos}>{cell}</Fragment>;
+                    const trigger = <TooltipTrigger asChild>{cell}</TooltipTrigger>;
                     return (
                       <Tooltip key={pos}>
-                        <TooltipTrigger asChild>{cell}</TooltipTrigger>
+                        {flaggable && onFlag ? (
+                          <OutlierFlagPopover
+                            flagged={outlier}
+                            title={`${well.position_label} · ${well.well_type.replace(/_/g, " ")}`}
+                            pending={flagPending}
+                            onSubmit={(reason) => onFlag(well, !outlier, reason)}
+                          >
+                            {trigger}
+                          </OutlierFlagPopover>
+                        ) : (
+                          trigger
+                        )}
                         <TooltipContent
                           side="top"
                           sideOffset={6}
@@ -332,6 +393,7 @@ export function PlateValueHeatmap({
                         >
                           <WellTooltipContent
                             well={well}
+                            outlier={outlier}
                             rawValue={rawByWellId?.get(well.well_id)}
                             computedValue={computedByWellId?.get(well.well_id)}
                             rawUnit={rawUnit}
@@ -364,6 +426,8 @@ interface ColorScaleLegendProps {
   controlTypesPresent?: ReadonlyArray<
     "negative_control" | "positive_control" | "blank" | "reference"
   >;
+  /** The plate has outlier-flagged wells: the key names the ✕. */
+  hasOutliers?: boolean;
   className?: string;
 }
 
@@ -372,6 +436,7 @@ export function ColorScaleLegend({
   palette,
   unit,
   controlTypesPresent,
+  hasOutliers = false,
   className,
 }: ColorScaleLegendProps) {
   const stops = stopsFor(palette)
@@ -468,9 +533,9 @@ export function ColorScaleLegend({
         </div>
       )}
 
-      {controlTypesPresent && controlTypesPresent.length > 0 && (
+      {((controlTypesPresent && controlTypesPresent.length > 0) || hasOutliers) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
-          {controlTypesPresent.map((t) => (
+          {controlTypesPresent?.map((t) => (
             <span key={t} className="flex items-center gap-1">
               <span
                 className="inline-block h-2.5 w-2.5"
@@ -482,6 +547,7 @@ export function ColorScaleLegend({
               {WELL_TYPE_LABEL[t]}
             </span>
           ))}
+          {hasOutliers && <span>✕ Outlier · left out of QC</span>}
         </div>
       )}
     </div>

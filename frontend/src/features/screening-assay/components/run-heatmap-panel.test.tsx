@@ -1,7 +1,12 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const state: { signal: "high" | "low"; rows: unknown[] } = { signal: "high", rows: [] };
+const state: { signal: "high" | "low"; rows: unknown[]; canEdit: boolean } = {
+  signal: "high",
+  rows: [],
+  canEdit: true,
+};
+const flag = vi.fn();
 
 vi.mock("../hooks/use-plate-setup", () => ({
   usePlateMap: () => ({ data: PLATE_MAP, isLoading: false }),
@@ -30,6 +35,15 @@ vi.mock("../hooks/use-protocols", () => ({
 }));
 vi.mock("../hooks/use-dose-response", () => ({ useDoseResponseByRun: () => ({ data: [] }) }));
 vi.mock("./run-plate-link", () => ({ RunPlateLink: () => null }));
+vi.mock("../hooks/use-flag-outliers", () => ({
+  useFlagOutliers: () => ({ mutate: flag, isPending: false }),
+}));
+vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => state.canEdit }));
+vi.mock("@/shared/lib/toast", () => ({
+  showError: vi.fn(),
+  showSuccess: vi.fn(),
+  showWarning: vi.fn(),
+}));
 vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
 
 import type { Run } from "../types";
@@ -50,7 +64,7 @@ const well = (position: string, well_type: string) => ({
   note: null,
 });
 
-// A1/A2 positive, A3/A4 negative controls; A5–A6 samples.
+// A1/A2 positive, A3/A4 negative controls; A5–A6 samples; A7 a sample without a value.
 const PLATE_MAP = {
   dose_unit: "uM",
   plates: [
@@ -59,7 +73,7 @@ const PLATE_MAP = {
       plate_number: 1,
       format: "96",
       holder_kind: "plate",
-      summary: { total_wells: 6, sample_wells: 2, control_wells: 4 },
+      summary: { total_wells: 7, sample_wells: 3, control_wells: 4 },
       wells: [
         well("A1", "positive_control"),
         well("A2", "positive_control"),
@@ -67,20 +81,33 @@ const PLATE_MAP = {
         well("A4", "negative_control"),
         well("A5", "sample"),
         well("A6", "sample"),
+        well("A7", "sample"),
       ],
     },
   ],
 };
 
-const rows = (computed: boolean, values: Record<string, number>) =>
+const rows = (computed: boolean, values: Record<string, number>, outliers: string[] = []) =>
   Object.entries(values).map(([well_id, value_numeric]) => ({
     readout_definition_id: "rd1",
     well_id,
     value_numeric,
     is_computed: computed,
+    is_outlier: outliers.includes(well_id),
   }));
 
-const run = { id: "r1", protocol_id: "p1", qc_metrics: null } as unknown as Run;
+const run = {
+  id: "r1",
+  protocol_id: "p1",
+  qc_metrics: null,
+  status: "draft",
+  is_locked: false,
+} as unknown as Run;
+
+beforeEach(() => {
+  state.canEdit = true;
+  flag.mockReset();
+});
 
 function colorOf(position: string) {
   return (document.querySelector(`[data-position="${position}"]`) as HTMLElement).style.background;
@@ -124,4 +151,69 @@ describe("RunHeatmapPanel scale", () => {
       expect(colorOf("A6")).toBe(WHITE);
     },
   );
+});
+
+describe("RunHeatmapPanel outliers and empty wells", () => {
+  const GREY = "rgb(203, 213, 225)";
+  // HIGH: POS (uninhibited) 1.0 is white, NEG 0.1 red; A4 reads wild and is flagged.
+  const raw = { A1: 1.0, A2: 1.0, A3: 0.1, A4: 9.0, A5: 0.1, A6: 1.0 };
+
+  it("draws a well without a value, and a position without a well, light grey", () => {
+    state.signal = "high";
+    state.rows = rows(false, raw);
+    render(<RunHeatmapPanel run={run} />);
+    expect(colorOf("A7")).toBe(GREY);
+    expect(colorOf("A12")).toBe(GREY);
+  });
+
+  it("marks a flagged well with an X and leaves it out of the raw anchors", () => {
+    state.signal = "high";
+    state.rows = rows(false, raw, ["A4"]);
+    render(<RunHeatmapPanel run={run} />);
+    fireEvent.click(screen.getByRole("button", { name: "Raw" }));
+    const a4 = document.querySelector('[data-position="A4"]') as HTMLElement;
+    expect(within(a4).getByLabelText("Outlier")).toBeInTheDocument();
+    expect(document.querySelector('[data-position="A3"] [aria-label="Outlier"]')).toBeNull();
+    // NEG mean is A3 alone (0.1): with A4 in it, A5 (0.1) would no longer be red.
+    expect(colorOf("A5")).toBe(RED);
+    expect(colorOf("A6")).toBe(WHITE);
+  });
+
+  it("an editor clicks a well and flags it with a reason", () => {
+    state.signal = "high";
+    state.rows = rows(false, raw);
+    render(<RunHeatmapPanel run={run} />);
+    fireEvent.click(document.querySelector('[data-position="A5"]') as HTMLElement);
+    fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "bubble" } });
+    fireEvent.click(screen.getByRole("button", { name: "Flag as outlier" }));
+    expect(flag).toHaveBeenCalledWith(
+      { runId: "r1", well_ids: ["A5"], outlier: true, reason: "bubble" },
+      expect.anything(),
+    );
+  });
+
+  it("a flagged well offers to remove its flag", () => {
+    state.signal = "high";
+    state.rows = rows(false, raw, ["A4"]);
+    render(<RunHeatmapPanel run={run} />);
+    fireEvent.click(document.querySelector('[data-position="A4"]') as HTMLElement);
+    fireEvent.click(screen.getByRole("button", { name: "Remove outlier flag" }));
+    expect(flag).toHaveBeenCalledWith(
+      { runId: "r1", well_ids: ["A4"], outlier: false, reason: null },
+      expect.anything(),
+    );
+  });
+
+  it.each([
+    ["a viewer", false, { status: "draft", is_locked: false }],
+    ["an approved run", true, { status: "approved", is_locked: false }],
+    ["a locked run", true, { status: "completed", is_locked: true }],
+  ])("offers no flag on %s", (_, canEdit, fields) => {
+    state.canEdit = canEdit;
+    state.signal = "high";
+    state.rows = rows(false, raw);
+    render(<RunHeatmapPanel run={{ ...run, ...fields } as Run} />);
+    fireEvent.click(document.querySelector('[data-position="A5"]') as HTMLElement);
+    expect(screen.queryByRole("button", { name: "Flag as outlier" })).toBeNull();
+  });
 });
