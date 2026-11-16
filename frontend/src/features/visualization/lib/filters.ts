@@ -141,15 +141,23 @@ export function substructureSummary(f: SubstructureFilter): string {
   return `Contains ${q}`;
 }
 
+/** How many of the dataset's compounds the substructure filter keeps, of how many. */
+export function substructureCounts(
+  ds: Dataset,
+  f: SubstructureFilter,
+): { matched: number; total: number } {
+  const all = datasetMoleculeIds(ds);
+  const kept = new Set(f.moleculeIds);
+  return { matched: all.filter((id) => kept.has(id)).length, total: all.length };
+}
+
 /** What a filter keeps, without its field: "≥ 30", "30 … 80", "2 of 3", "12 rows",
  * "3 of 40 compounds". An untouched range shows the column's span. */
 export function filterCondition(ds: Dataset, f: Filter): string {
   if (f.kind === "rows") return `${f.rowIds.length.toLocaleString()} rows`;
   if (f.kind === "substructure") {
-    const all = datasetMoleculeIds(ds);
-    const kept = new Set(f.moleculeIds);
-    const n = all.filter((id) => kept.has(id)).length;
-    return `${n.toLocaleString()} of ${all.length.toLocaleString()} compounds`;
+    const { matched, total } = substructureCounts(ds, f);
+    return `${matched.toLocaleString()} of ${total.toLocaleString()} compounds`;
   }
   if (f.kind === "category") {
     const { values, hasMissing } = categoryValues(ds, f.key);

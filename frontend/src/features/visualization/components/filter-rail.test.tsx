@@ -1,11 +1,42 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Filter } from "../lib/filters";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import type { Dataset } from "../types";
 import { FilterRail, NoRowsMatch } from "./filter-rail";
 
 vi.mock("@/shared/lib/plotly", () => ({ Plot: () => null }));
+
+// RDKit/Ketcher-free shim: the editor applies benzene as SMILES.
+vi.mock("@/shared/components/chemistry", () => ({
+  StructureRenderer: () => null,
+  StructureEditorDialog: ({
+    open,
+    initialStructure,
+    onApply,
+  }: {
+    open: boolean;
+    initialStructure?: string;
+    onApply: (s: string, f: string) => void;
+  }) =>
+    open ? (
+      <button
+        type="button"
+        data-initial={initialStructure}
+        onClick={() => onApply("c1ccccc1", "smiles")}
+      >
+        Apply drawing
+      </button>
+    ) : null,
+}));
+
+vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/lib/api/custom-instance")>()),
+  customInstance: vi.fn(),
+}));
+
+import { ApiError, customInstance } from "@/shared/lib/api/custom-instance";
 
 // Radix Popover / cmdk need these in jsdom.
 beforeAll(() => {
@@ -23,11 +54,13 @@ const ds: Dataset = {
     { key: "inh", label: "% inhibition", kind: "number", unit: "%", provenance: {} },
     { key: "well_type", label: "Well type", kind: "category", provenance: {} },
     { key: "plate", label: "Plate", kind: "category", provenance: {} },
+    { key: "molecule_id", label: "Molecule", kind: "text", provenance: {}, hidden: true },
   ],
   values: {
     inh: [10, 20, 80, 90, 50, 60],
     well_type: ["sample", "sample", "sample", "negative_control", "blank", "sample"],
     plate: ["1", "1", "2", "2", "1", null],
+    molecule_id: ["m1", "m1", "m2", null, null, "m3"],
   },
 };
 const inhAbove = (min: number): Filter => ({
@@ -64,11 +97,15 @@ const state = (): { history: number; filters: Filter[] } =>
 
 const show = (filters: Filter[], children = <FilterRail ds={ds} />) =>
   render(
-    <WorkbenchProvider initialPanels={[]} initialFilters={filters}>
-      {children}
-      <Probe />
-    </WorkbenchProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+      <WorkbenchProvider initialPanels={[]} initialFilters={filters}>
+        {children}
+        <Probe />
+      </WorkbenchProvider>
+    </QueryClientProvider>,
   );
+
+beforeEach(() => vi.mocked(customInstance).mockReset());
 
 const addFilter = (label: string) => {
   fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
@@ -133,6 +170,80 @@ describe("FilterRail", () => {
   });
 });
 
+describe("FilterRail substructure", () => {
+  const drawBenzene = () => {
+    addFilter("Substructure…");
+    fireEvent.click(screen.getByRole("button", { name: "Apply drawing" }));
+  };
+
+  it("matches the dataset's compounds and adds the filter in one undo step", async () => {
+    let answer: (body: unknown) => void = () => {};
+    vi.mocked(customInstance).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    show([]);
+    drawBenzene();
+    expect(await screen.findByText("Matching…")).toBeInTheDocument();
+    answer({ matched_ids: ["m2"], searched: 3, without_structure: 0 });
+    expect(await screen.findByText("1 of 3 compounds match")).toBeInTheDocument();
+    expect(vi.mocked(customInstance)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(customInstance)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "/api/v1/visualization/substructure-match",
+        method: "POST",
+        data: { query: "c1ccccc1", query_kind: "smiles", molecule_ids: ["m1", "m2", "m3"] },
+      }),
+    );
+    expect(state()).toEqual({
+      history: 1,
+      filters: [
+        {
+          id: "sub-1",
+          kind: "substructure",
+          query: "c1ccccc1",
+          queryKind: "smiles",
+          moleculeIds: ["m2"],
+        },
+      ],
+    });
+    expect(screen.queryByText("Matching…")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Filters (1 active)" })).toBeInTheDocument();
+  });
+
+  it("shows the server's message for an unreadable query and adds no filter", async () => {
+    const message =
+      "Cannot read \u201cC1CC\u201d as a SMILES structure. Check ring closures, brackets and charges.";
+    vi.mocked(customInstance).mockRejectedValueOnce(
+      new ApiError(`API error: 422 \u2014 ${message}`, 422, { error: "ValidationError", message }),
+    );
+    show([]);
+    drawBenzene();
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    expect(state()).toEqual({ history: 0, filters: [] });
+    // Edit query reopens the editor on the query that failed.
+    fireEvent.click(screen.getByRole("button", { name: "Edit query" }));
+    expect(screen.getByRole("button", { name: "Apply drawing" })).toHaveAttribute(
+      "data-initial",
+      "c1ccccc1",
+    );
+  });
+
+  it("is unavailable when the dataset has no compounds", () => {
+    const noCompounds: Dataset = {
+      ...ds,
+      values: { ...ds.values, molecule_id: ds.row_ids.map(() => null) },
+    };
+    show([], <FilterRail ds={noCompounds} />);
+    fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+    expect(screen.getByRole("option", { name: /Substructure…/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+  });
+});
+
 describe("NoRowsMatch", () => {
   const guarded = (
     <NoRowsMatch ds={ds}>
@@ -149,6 +260,23 @@ describe("NoRowsMatch", () => {
     fireEvent.click(screen.getByRole("button", { name: "Clear filters" }));
     expect(state().filters).toEqual([]);
     expect(screen.getByText("plots")).toBeInTheDocument();
+  });
+
+  it("lists a substructure that matches nothing", () => {
+    show(
+      [
+        {
+          id: "sub-1",
+          kind: "substructure",
+          query: "C1CCCCC1",
+          queryKind: "smiles",
+          moleculeIds: [],
+        },
+      ],
+      guarded,
+    );
+    expect(screen.getByText("No rows match")).toBeInTheDocument();
+    expect(screen.getByText("Contains C1CCCCC1")).toBeInTheDocument();
   });
 
   it("renders its children while any row passes", () => {

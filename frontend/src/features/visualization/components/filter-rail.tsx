@@ -11,6 +11,7 @@ import { AddFilterCombobox } from "./filters/add-filter-combobox";
 import { CategoryFilterCard } from "./filters/category-filter-card";
 import { FilterCard } from "./filters/filter-card";
 import { RangeFilterCard } from "./filters/range-filter-card";
+import { SubstructureFilterCard } from "./filters/substructure-filter-card";
 
 /** The filter rail: "Filters (n active)" + Reset all (one undo step), the fixed-bins note,
  * the field search, then one card per filter. Memoized: it redraws only on filter or
@@ -50,6 +51,9 @@ export const FilterRail = memo(function FilterRail({ ds }: { ds: Dataset }) {
             return <RangeFilterCard key={f.id} ds={ds} filter={f} active={on} />;
           if (f.kind === "category") {
             return <CategoryFilterCard key={f.id} ds={ds} filter={f} active={on} />;
+          }
+          if (f.kind === "substructure") {
+            return <SubstructureFilterCard key={f.id} ds={ds} filter={f} active={on} />;
           }
           return <FilterCard key={f.id} ds={ds} filter={f} active={on} />;
         })}
