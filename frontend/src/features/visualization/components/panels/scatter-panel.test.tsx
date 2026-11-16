@@ -1,0 +1,73 @@
+import { act, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
+import { DEFAULT_APPEARANCE, type PanelConfig } from "../../store/workbench-store";
+import type { Dataset } from "../../types";
+import { ScatterPanel } from "./scatter-panel";
+
+type Handlers = {
+  onSelected: (ev: unknown) => void;
+  onDeselect: () => void;
+  onClick: (ev: unknown) => void;
+};
+const plot = vi.hoisted(() => ({ last: null as unknown }));
+vi.mock("@/shared/lib/plotly", () => ({
+  Plot: (p: unknown) => {
+    plot.last = p;
+    return null;
+  },
+}));
+const handlers = () => plot.last as Handlers;
+
+const ds: Dataset = {
+  revision: "r",
+  level: "wells",
+  row_count: 3,
+  row_ids: ["w0", "w1", "w2"],
+  columns: [
+    { key: "well_order", label: "Well order", kind: "number", provenance: {} },
+    { key: "y", label: "Signal", kind: "number", provenance: {} },
+  ],
+  values: { well_order: [1, 2, 3], y: [5, null, 7] },
+};
+const panel: PanelConfig = {
+  id: "p1",
+  type: "scatter",
+  x: "well_order",
+  y: "y",
+  appearance: DEFAULT_APPEARANCE,
+};
+
+function Selection() {
+  const selection = useWorkbench((s) => s.selection);
+  return <p data-testid="sel">{[...selection].join(",")}</p>;
+}
+
+const show = () =>
+  render(
+    <WorkbenchProvider initialPanels={[panel]}>
+      <ScatterPanel panel={panel} ds={ds} />
+      <Selection />
+    </WorkbenchProvider>,
+  );
+
+describe("ScatterPanel", () => {
+  it("selects rows by id from a lasso and ignores redraw echoes without geometry", () => {
+    show();
+    act(() => handlers().onSelected({ points: [{ customdata: 2 }] }));
+    expect(screen.getByTestId("sel")).toHaveTextContent(/^$/);
+    act(() =>
+      handlers().onSelected({ lassoPoints: { x: [], y: [] }, points: [{ customdata: 2 }, {}] }),
+    );
+    expect(screen.getByTestId("sel")).toHaveTextContent("w2");
+    act(() => handlers().onDeselect());
+    expect(screen.getByTestId("sel")).toHaveTextContent(/^$/);
+  });
+
+  it("selects the clicked point and notes rows it cannot plot", () => {
+    show();
+    act(() => handlers().onClick({ points: [{ customdata: 0 }] }));
+    expect(screen.getByTestId("sel")).toHaveTextContent("w0");
+    expect(screen.getByText("1 row lacks Signal")).toBeInTheDocument();
+  });
+});

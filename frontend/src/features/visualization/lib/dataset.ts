@@ -58,3 +58,17 @@ export function resolveUserColumns(ds: Dataset, nameOf: (userId: string) => stri
     values,
   };
 }
+
+const WELL_TYPE_LABELS: Record<string, string> = {
+  sample: "Sample",
+  negative_control: "Negative control",
+  positive_control: "Positive control",
+  blank: "Blank",
+  reference: "Reference",
+};
+
+/** A category value as legends and cells show it: well types in words, missing as "(none)". */
+export function categoryLabel(key: string, v: unknown): string {
+  if (v === null || v === undefined || v === "") return "(none)";
+  return (key === "well_type" && WELL_TYPE_LABELS[String(v)]) || String(v);
+}
