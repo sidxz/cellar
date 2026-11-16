@@ -166,6 +166,30 @@ describe("panelDefaults at aggregated levels", () => {
     expect(s.x).not.toBe(s.y);
   });
 
+  it("scatters two readouts, not a readout against its own p-value, unless only it exists", () => {
+    const of = (key: string, readout: string, aggregation: string): DatasetColumn => ({
+      key,
+      label: key,
+      kind: "number",
+      provenance: { readout_definition_id: readout, aggregation },
+    });
+    const ic50 = of("dr:r1:fit", "r1", "fit");
+    const pic50 = of("dr:r1:p", "r1", "p");
+    const other = of("rd:r2:pct", "r2", "mean");
+    const compounds = (columns: DatasetColumn[]) => ({
+      ...ds(columns),
+      level: "compounds" as const,
+    });
+    expect(panelDefaults(compounds([ic50, pic50, other]), "scatter")).toMatchObject({
+      x: "rd:r2:pct",
+      y: "dr:r1:fit",
+    });
+    expect(panelDefaults(compounds([ic50, pic50]), "scatter")).toMatchObject({
+      x: "dr:r1:p",
+      y: "dr:r1:fit",
+    });
+  });
+
   it("never groups a box or bar by the row's own identity, picking a real category or none", () => {
     const columns = [
       col("compound", "category"),

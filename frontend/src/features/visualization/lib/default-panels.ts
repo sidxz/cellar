@@ -48,11 +48,15 @@ export function panelDefaults(ds: Dataset, type: PanelType): PanelPatch {
       const cross = isCrossProtocol(ds) ? compareAxes(ds) : {};
       const y = cross.y ?? value;
       const other = (key?: string) => (key !== y ? key : undefined);
+      // Another readout first: a readout's own siblings (IC50 vs pIC50) only draw a fixed curve.
+      const numbers = valueColumns(ds).filter((c) => c.kind === "number" && c.key !== y);
+      const readout = y ? column(ds, y)?.provenance.readout_definition_id : undefined;
       return {
         x:
           column(ds, "well_order")?.key ??
           other(cross.x) ??
-          valueColumns(ds).find((c) => c.kind === "number" && c.key !== y)?.key ??
+          (numbers.find((c) => c.provenance.readout_definition_id !== readout) ?? numbers[0])
+            ?.key ??
           y,
         y,
         appearance: { colorBy: wellType, shapeBy: wellType },
