@@ -194,9 +194,11 @@ function Workbench({
   // (fitted to its columns then), so Wells → Runs → Wells gets the Wells plots back.
   const left = useRef(new Map<Level, Carry>()).current;
   const changeView = (next: View, take: Carry | null) => {
-    // A change before the last one's data arrived keeps the level that one left.
-    const from = switched && take === switched.carry ? switched.from : level;
-    if (take) left.set(level, take);
+    // A change before the last one's data arrived keeps the level that one left, and
+    // remembers nothing of this one: it never showed its own plots.
+    const pending = !!switched && take === switched.carry;
+    const from = pending ? switched.from : level;
+    if (take && !pending) left.set(level, take);
     const back = next.level !== level ? left.get(next.level) : undefined;
     // The selection is the one left behind: it is what the note says was cleared.
     const brought = back && take ? { ...back, selectedIds: take.selectedIds } : take;

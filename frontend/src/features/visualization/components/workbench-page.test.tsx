@@ -335,6 +335,54 @@ describe("WorkbenchPage", () => {
     expect(screen.getByRole("button", { name: "Undo" })).toBeDisabled();
   });
 
+  it("returning to a level restores its Filter to selection, on the rows still there", async () => {
+    const run = { kind: "run", runId: R1 } as const;
+    const { rerender } = render(<WorkbenchPage level="wells" source={run} />);
+    const pick = async (id: string) => {
+      await screen.findAllByRole("checkbox", { name: "Select row" });
+      const box = document.querySelector(`.ag-row[row-id="${id}"] [aria-label="Select row"]`);
+      fireEvent.click(box as Element);
+    };
+    await pick("w1");
+    await pick("w2");
+    fireEvent.click(screen.getByRole("button", { name: "Filter to selection" }));
+    expect(screen.getByRole("button", { name: "Selection: 2 rows" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
+    state.query = ready(aggregated("runs"));
+    rerender(<WorkbenchPage level="runs" source={run} />);
+    expect(screen.queryByRole("button", { name: /^Selection:/ })).toBeNull();
+
+    // The wells as they are now: w2 is gone.
+    fireEvent.click(screen.getByRole("button", { name: "Wells" }));
+    state.query = ready({ ...dataset(), row_ids: ["w1", "w3", "w4"] });
+    rerender(<WorkbenchPage level="wells" source={run} />);
+    expect(screen.getByRole("button", { name: "Selection: 1 rows" })).toBeInTheDocument();
+  });
+
+  it("a level left before its data arrived keeps no stale plots: the next visit carries today's", () => {
+    const run = { kind: "run", runId: R1 } as const;
+    const addFilter = (name: string) => {
+      fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+      fireEvent.click(screen.getByRole("option", { name }));
+    };
+    const { rerender } = render(<WorkbenchPage level="wells" source={run} />);
+    addFilter("well_order");
+    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
+    state.query = { isPending: true, isError: false, refetch: vi.fn() };
+    rerender(<WorkbenchPage level="runs" source={run} />);
+    // Back before Runs arrived, then on with another filter.
+    fireEvent.click(screen.getByRole("button", { name: "Wells" }));
+    state.query = ready(dataset());
+    rerender(<WorkbenchPage level="wells" source={run} />);
+    addFilter("rd:s:raw");
+
+    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
+    state.query = ready(aggregated("runs"));
+    rerender(<WorkbenchPage level="runs" source={run} />);
+    expect(screen.getByRole("group", { name: "rd:s:raw" })).toBeInTheDocument();
+  });
+
   it("says the selection was cleared only when rows were selected", async () => {
     const run = { kind: "run", runId: R1 } as const;
     const { rerender } = render(<WorkbenchPage level="wells" source={run} />);

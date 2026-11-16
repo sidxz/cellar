@@ -389,7 +389,7 @@ export function WorkbenchHeader({
   // Read when the view changes, so selecting rows doesn't re-render the header.
   const take = (): Carry => {
     const { panels, filters, selection } = store.getState();
-    return { panels, filters, selectedIds: [...selection], columns: ds.columns };
+    return { panels, filters, selectedIds: [...selection], columns: ds.columns, level };
   };
 
   const { one, many } = LEVELS[level];

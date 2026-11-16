@@ -5,13 +5,14 @@ import type { Filter } from "./filters";
 import { LEVELS } from "./levels";
 
 /** What a view change takes along: the chemist's plots and filters, the selected row ids
- * (kept only at the same level, where rows keep their ids) and the old view's columns, to
- * name what the new one lacks. */
+ * (kept only at the same level, where rows keep their ids), the old view's columns, to
+ * name what the new one lacks, and the level they were made at. */
 export type Carry = {
   panels: PanelConfig[];
   filters: Filter[];
   selectedIds: string[];
   columns: DatasetColumn[];
+  level?: Level;
 };
 
 /** How a note names a plot type: "Plot 1: Scatter (now a histogram)". */
@@ -41,8 +42,9 @@ function drawable(p: PanelConfig): boolean {
 }
 
 /** The plots and filters of ``prev`` fitted to the new level's dataset ``ds``: filters on
- * columns ``ds`` lacks (and any rows filter) are dropped, while substructure filters, on
- * molecule ids, always carry; panel fields on such columns are cleared, and a panel left
+ * columns ``ds`` lacks are dropped, while substructure filters, on molecule ids, always
+ * carry; a rows filter (Filter to selection) carries only at the level it was made at, where
+ * rows keep their ids, on its rows ``ds`` still has; panel fields on such columns are cleared, and a panel left
  * without a field its type needs becomes the level's default plot type (same id), keeping
  * the value it measured when that survives. ``dropped`` names each
  * loss for the chemist: "Filter: Well order", "Plot 1: X (Well order)", and each plot that
@@ -58,11 +60,16 @@ export function carryConfig(
     labels?.[key] ?? prev.columns.find((c) => c.key === key)?.label ?? key;
   const dropped: string[] = [];
 
-  const filters = prev.filters.filter((f) => {
-    if (f.kind === "substructure") return true;
-    if (f.kind !== "rows" && has.has(f.key)) return true;
+  const rowIds = new Set(prev.level === ds.level ? ds.row_ids : []);
+  const filters = prev.filters.flatMap((f): Filter[] => {
+    if (f.kind === "substructure") return [f];
+    if (f.kind === "rows") {
+      const kept = f.rowIds.filter((id) => rowIds.has(id));
+      if (kept.length === f.rowIds.length) return [f];
+      if (kept.length > 0) return [{ ...f, rowIds: kept }];
+    } else if (has.has(f.key)) return [f];
     dropped.push(`Filter: ${f.kind === "rows" ? "Selection" : label(f.key)}`);
-    return false;
+    return [];
   });
 
   const fallback = defaultPanels(ds)[0];
