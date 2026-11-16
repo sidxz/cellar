@@ -26,13 +26,14 @@ const NOT_TESTED_IN = "Not tested in ";
 
 const text = (v: unknown) => (typeof v === "string" && v ? v : null);
 
-/** A field's value as the card shows it: numbers with their qualifier ("> 42.5"); a
- * compared protocol's missing value says why ("Not tested in …"). */
+/** A field's value as the card shows it: numbers with their qualifier ("> 42.5") and,
+ * flagged, "· Outlier"; a compared protocol's missing value says why ("Not tested in …"). */
 function valueText(ds: Dataset, key: string, i: number): string {
   const v = ds.values[key]?.[i];
   if (typeof v === "number" && Number.isFinite(v)) {
     const q = qualifierText(ds.values[`${key}:q`]?.[i]);
-    return q && q !== "=" ? `${q} ${cellText(v)}` : cellText(v);
+    const text = q && q !== "=" ? `${q} ${cellText(v)}` : cellText(v);
+    return ds.values[`${key}:outlier`]?.[i] != null ? `${text} · Outlier` : text;
   }
   if (v == null && isComparedValue(ds, key)) {
     const reason = missingReason(ds, key, i) ?? "No value";

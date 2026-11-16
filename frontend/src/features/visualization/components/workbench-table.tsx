@@ -246,10 +246,17 @@ function leafColumn(ds: Dataset, c: DatasetColumn): ColDef<Row> {
       const q = qualifierText(qualifier?.[p.data.i]);
       return q ? `${q} ${text}` : text;
     },
-    cellClassRules: outlier
-      ? {
-          "line-through text-muted-foreground": (p) => isData(p.data) && outlier[p.data.i] != null,
-        }
+    // An outlier's value struck through and named: it is left out of plate QC and anchors.
+    cellRenderer: outlier
+      ? (p: ICellRendererParams<Row>) =>
+          isData(p.data) && outlier[p.data.i] != null ? (
+            <span className="text-muted-foreground" title="Outlier: left out of plate QC">
+              <span className="line-through">{p.valueFormatted}</span>{" "}
+              <span className="text-[10px] uppercase">Outlier</span>
+            </span>
+          ) : (
+            p.valueFormatted
+          )
       : undefined,
   };
 }

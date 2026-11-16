@@ -40,6 +40,9 @@ vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocol: () => ({ data: { id: P1, name: "NadD HTS" } }),
 }));
 vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
+vi.mock("@/features/screening-assay/hooks/use-flag-outliers", () => ({
+  useFlagOutliers: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
 vi.mock("@/features/research-organization/hooks/use-collections", () => ({
   useCreateCollection: () => ({ mutate: vi.fn(), isPending: false }),
 }));

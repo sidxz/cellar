@@ -1,18 +1,93 @@
 "use client";
 
+import { OutlierFlagPopover } from "@/features/screening-assay/components/outlier-flag-popover";
+import { useFlagOutliers } from "@/features/screening-assay/hooks/use-flag-outliers";
+import { apiReason } from "@/features/screening-assay/hooks/use-instrument-import-wizard";
+import type { Run } from "@/features/screening-assay/types";
 import { Button } from "@/shared/components/ui/button";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
+import { showError, showSuccess, showWarning } from "@/shared/lib/toast";
 import { useMemo } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { actionSet } from "../lib/action-set";
 import { LEVELS } from "../lib/levels";
+import { outlierTargets } from "../lib/outliers";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset } from "../types";
 
 const fmt = (n: number) => n.toLocaleString();
+const wellsText = (n: number) => `${fmt(n)} ${n === 1 ? "well" : "wells"}`;
+
+/** Flag the selected wells as outliers, or remove their flag — only the wells of runs the
+ * user can edit (neither locked nor approved). Each run is recalculated and the dataset
+ * reloads. */
+function OutlierActions({ ds, rows, runs }: { ds: Dataset; rows: number[]; runs: Run[] }) {
+  const canEdit = useCanEdit();
+  const flag = useFlagOutliers();
+  const targets = useMemo(() => {
+    const editable = new Set(
+      runs.filter((r) => !r.is_locked && r.status !== "approved").map((r) => r.id),
+    );
+    return outlierTargets(ds, rows, editable);
+  }, [ds, rows, runs]);
+  if (!canEdit || ds.level !== "wells") return null;
+
+  const count = (byRun: Map<string, string[]>) =>
+    [...byRun.values()].reduce((n, wells) => n + wells.length, 0);
+  async function apply(byRun: Map<string, string[]>, outlier: boolean, reason: string | null) {
+    let changed = 0;
+    try {
+      for (const [runId, well_ids] of byRun) {
+        const out = await flag.mutateAsync({ runId, well_ids, outlier, reason });
+        changed += out.wells_changed;
+        if (out.compute_warning) showWarning(out.compute_warning);
+      }
+      showSuccess(
+        outlier
+          ? `${wellsText(changed)} flagged as outliers`
+          : `${wellsText(changed)} no longer outliers`,
+      );
+    } catch (e) {
+      showError(apiReason(e));
+    }
+  }
+
+  const toFlag = count(targets.flag);
+  const toUnflag = count(targets.unflag);
+  return (
+    <>
+      {toFlag > 0 && (
+        <OutlierFlagPopover
+          flagged={false}
+          title={wellsText(toFlag)}
+          pending={flag.isPending}
+          onSubmit={(reason) => apply(targets.flag, true, reason)}
+        >
+          <Button size="sm" variant="outline" className="h-7">
+            Flag as outlier
+          </Button>
+        </OutlierFlagPopover>
+      )}
+      {toUnflag > 0 && (
+        <OutlierFlagPopover
+          flagged
+          title={wellsText(toUnflag)}
+          pending={flag.isPending}
+          onSubmit={(reason) => apply(targets.unflag, false, reason)}
+        >
+          <Button size="sm" variant="outline" className="h-7">
+            Remove flag
+          </Button>
+        </OutlierFlagPopover>
+      )}
+    </>
+  );
+}
 
 /** Above the table while something is selected: how many selected rows the filters
- * show and hide, with Clear and Filter to selection. */
-export function SelectionStrip({ ds }: { ds: Dataset }) {
+ * show and hide, with Clear and Filter to selection — and, on Wells, the outlier flags of
+ * ``runs`` (the source's runs). */
+export function SelectionStrip({ ds, runs = [] }: { ds: Dataset; runs?: Run[] }) {
   const selection = useWorkbench((s) => s.selection);
   const clearSelection = useWorkbench((s) => s.clearSelection);
   const filterToSelection = useWorkbench((s) => s.filterToSelection);
@@ -32,7 +107,9 @@ export function SelectionStrip({ ds }: { ds: Dataset }) {
         <b>{fmt(total)}</b> {total === 1 ? one : many} selected · <b>{fmt(visible)}</b> visible ·{" "}
         <b>{fmt(set.hiddenSelected)}</b> hidden by filters
       </output>
-      <Button size="sm" variant="outline" className="ml-auto h-7" onClick={clearSelection}>
+      <div className="ml-auto" />
+      <OutlierActions ds={ds} rows={set.rows} runs={runs} />
+      <Button size="sm" variant="outline" className="h-7" onClick={clearSelection}>
         Clear
       </Button>
       <Button size="sm" variant="outline" className="h-7" onClick={filterToSelection}>

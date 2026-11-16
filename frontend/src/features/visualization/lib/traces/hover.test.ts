@@ -15,6 +15,7 @@ const wells = () =>
       well_order: [31, 1, 384],
       y: [42.5, 3, 7],
       "y:q": [">", null, null],
+      "y:outlier": [null, "outlier", null],
       well_type: ["sample", "negative_control", "reference"],
     },
     { structure: "structure", label: "text" },
@@ -33,6 +34,11 @@ describe("hoverInfo", () => {
         { label: "well_type", value: "Sample" },
       ],
     });
+  });
+
+  it("says a flagged value is an outlier", () => {
+    expect(hoverInfo(wells(), 1, ["y"]).lines).toEqual([{ label: "Signal", value: "3 · Outlier" }]);
+    expect(hoverInfo(wells(), 0, ["y"]).lines).toEqual([{ label: "Signal", value: "> 42.5" }]);
   });
 
   it("titles a well without a compound by its label, else its role, as the table does", () => {

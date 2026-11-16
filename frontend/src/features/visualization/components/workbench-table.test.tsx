@@ -221,6 +221,7 @@ describe("WorkbenchTable", () => {
     expect(screen.getByText("> 12.5")).toBeInTheDocument();
     expect(screen.getByText("≤ 3")).toBeInTheDocument();
     expect(screen.getByText("40")).toHaveClass("line-through");
+    expect(screen.getByText("Outlier")).toBeInTheDocument();
   });
 
   it("names a well without a compound by its label, else its role, muted", async () => {

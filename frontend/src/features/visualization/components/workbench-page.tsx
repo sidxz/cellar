@@ -431,7 +431,7 @@ function Workbench({
             }
             table={
               <>
-                <SelectionStrip ds={ds} />
+                <SelectionStrip ds={ds} runs={runs} />
                 <WorkbenchTable
                   ref={tableRef}
                   ds={ds}
