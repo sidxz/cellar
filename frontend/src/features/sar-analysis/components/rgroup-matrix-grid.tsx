@@ -28,31 +28,42 @@ export interface MatrixGridCell {
   selected?: boolean;
 }
 
-function AxisFragment({ smiles, orientation }: { smiles: string; orientation: "col" | "row" }) {
+/** An axis header: the fragment drawn (decorative) over its short name. An unnamed
+ * substituent's text would be its SMILES, so the drawing shows it, the hover keeps the raw
+ * SMILES, and the header is named by the cleaned SMILES for screen readers. */
+function AxisHeader({ smiles, orientation }: { smiles: string; orientation: "col" | "row" }) {
   const frag = fragmentDisplay(smiles);
+  const textShown = frag.named || !frag.thumbnailSmiles;
   return (
-    <div
-      className={cn(
+    <th
+      scope={orientation}
+      aria-label={textShown ? undefined : frag.label}
+      className={
         orientation === "col"
-          ? "flex w-20 flex-col items-center gap-0.5"
-          : "flex w-24 items-center gap-1",
-      )}
-      title={frag.title}
+          ? "p-1 align-bottom font-normal"
+          : "sticky left-0 z-10 bg-background p-1 text-left align-middle font-normal"
+      }
     >
-      {frag.thumbnailSmiles && (
-        <StructureThumbnail
-          smiles={frag.thumbnailSmiles}
-          size={32}
-          className={orientation === "row" ? "shrink-0" : undefined}
-        />
-      )}
-      {/* An unnamed substituent's text would be its SMILES: the depiction says it, the hover keeps it. */}
-      {(frag.named || !frag.thumbnailSmiles) && (
-        <span className="break-all text-[9px] leading-tight text-muted-foreground">
-          {frag.label}
-        </span>
-      )}
-    </div>
+      <div
+        className={cn(
+          orientation === "col"
+            ? "flex w-20 flex-col items-center gap-0.5"
+            : "flex w-24 items-center gap-1",
+        )}
+        title={frag.title}
+      >
+        {frag.thumbnailSmiles && (
+          <span aria-hidden="true" className="flex shrink-0">
+            <StructureThumbnail smiles={frag.thumbnailSmiles} size={32} />
+          </span>
+        )}
+        {textShown && (
+          <span className="break-all text-[9px] leading-tight text-muted-foreground">
+            {frag.label}
+          </span>
+        )}
+      </div>
+    </th>
   );
 }
 
@@ -97,21 +108,14 @@ export function RGroupMatrixGrid({
               {yLabel} ↓ / {xLabel} →
             </th>
             {xValues.map((x) => (
-              <th key={x} className="p-1 align-bottom font-normal" scope="col">
-                <AxisFragment smiles={x} orientation="col" />
-              </th>
+              <AxisHeader key={x} smiles={x} orientation="col" />
             ))}
           </tr>
         </thead>
         <tbody>
           {yValues.map((y) => (
             <tr key={y}>
-              <th
-                scope="row"
-                className="sticky left-0 z-10 bg-background p-1 text-left align-middle font-normal"
-              >
-                <AxisFragment smiles={y} orientation="row" />
-              </th>
+              <AxisHeader smiles={y} orientation="row" />
               {xValues.map((x) => {
                 const cell = cells.get(cellKey(y, x));
                 if (!cell) {
