@@ -24,7 +24,11 @@ from cellar.application.screening.protocol_activity_reader import (
     DRAggRow,
     NumericReadoutRow,
 )
-from cellar.application.screening.run_aggregation import combine_replicates
+from cellar.application.screening.run_aggregation import (
+    ResolvedRun,
+    combine_replicates,
+    resolve_intercept,
+)
 from cellar.application.visualization.dataset import (
     IDENTITY_COLUMNS,
     RAW_LAYER,
@@ -39,7 +43,7 @@ from cellar.application.visualization.dataset import (
     run_labels,
 )
 from cellar.application.visualization.dataset_reader import CompoundInfo, ReadoutDefInfo, RunInfo
-from cellar.domain.screening_assay.enums import CurveClass, unit_for_normalization
+from cellar.domain.screening_assay.enums import unit_for_normalization
 from cellar.domain.screening_assay.readout_best import best_direction, best_of_range
 from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.units import canonical_unit, is_concentration_unit, p_scale
@@ -63,6 +67,7 @@ _DR_SIBLINGS: list[_Sibling] = [
     ("n_tested", "n tested", "number", False, False),
     ("n_inactive", "n inactive", "number", False, False),
     ("n_used", "n used", "number", False, False),
+    ("n_censored", "n censored", "number", False, False),
 ]
 _FIT_SIBLINGS: list[_Sibling] = [
     ("top", "top", "number", False, False),
@@ -114,6 +119,29 @@ def _qualifier(q: ValueQualifier, r: NumericReadoutRow) -> str | None:
     if q == ValueQualifier.LT:
         return "<=" if r.lt_inclusive else "<"
     return None
+
+
+def _resolve_fit(r: CurveRow) -> tuple[float | None, str | None]:
+    """The fit's value as the intercept resolver reads it: none when inactive, the
+    max dose as ">" when the primary intercept is at the bound (none without doses)."""
+    run = ResolvedRun(
+        run_id=r.run_id,
+        run_date=None,
+        run_approved=False,
+        curve_id=r.id,
+        value=r.fitted_value,
+        qualifier=ValueQualifier.EQ,
+        unit="",
+        z_prime=None,
+        protocol_name="",
+        protocol_version=0,
+        readout_id=r.readout_definition_id,
+        curve_class=r.curve_class,
+        curve_raw_data=r.raw_data if isinstance(r.raw_data, list) else None,
+        intercept_values=r.intercept_values if isinstance(r.intercept_values, list) else None,
+    )
+    value, q = resolve_intercept(run, None)
+    return value, ">" if q == ValueQualifier.GT else None
 
 
 def _condition_set(conditions: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
@@ -256,14 +284,18 @@ def build_aggregated_dataset(
             vk, _ValueColumn(rd, None, cs, canonical_unit(rd.dose_unit))
         )
         if isinstance(r, DRAggRow):
-            put(vk, spec, i, finite(r.geo_mean), None)
+            if r.n_used or not r.n_censored:
+                put(vk, spec, i, finite(r.geo_mean), None)
+            else:  # every fit censored: the bound, as combine_replicates keeps it
+                put(vk, spec, i, finite(r.censored_bound), ">")
+            cells[f"{vk}:n_censored"][i] = r.n_censored
             cells[f"{vk}:best"][i] = finite(r.best)
             cells[f"{vk}:n_tested"][i] = r.n_tested
             cells[f"{vk}:n_inactive"][i] = r.n_inactive
             cells[f"{vk}:n_used"][i] = r.n_used
             continue
-        inactive = r.curve_class == CurveClass.INACTIVE.value
-        put(vk, spec, i, None if inactive else finite(r.fitted_value), None)
+        value, q = _resolve_fit(r)
+        put(vk, spec, i, finite(value), q)
         points = _condense_raw_data(r.raw_data) if isinstance(r.raw_data, list) else []
         doses = [p["x"] for p in points]
         for stat, v in (

@@ -235,6 +235,7 @@ async def curve(
     intercept_values: list[dict[str, Any]] | None = None,
     max_dose: float = 1.0,
     batch_id: uuid.UUID | None = None,
+    top: float = 100.0,
 ) -> uuid.UUID:
     """A fitted curve, plus (``with_well``) one per-well response reading on the
     same readout — real dose-response runs always carry their well data, and
@@ -247,7 +248,7 @@ async def curve(
             "INSERT INTO dose_response_curves (id, workspace_id, molecule_id, batch_id, "
             "protocol_id, run_id, readout_definition_id, curve_type, fitted_value, hill_slope, "
             "top, bottom, r_squared, num_points, curve_class, raw_data, intercept_values) "
-            "VALUES (:id, :ws, :m, :b, :p, :run, :rd, 'ic50', :fv, 1.0, 100, 0, :r2, 3, :cc, "
+            "VALUES (:id, :ws, :m, :b, :p, :run, :rd, 'ic50', :fv, 1.0, :top, 0, :r2, 3, :cc, "
             "cast(:raw as jsonb), cast(:ivs as jsonb))"
         ),
         {
@@ -259,6 +260,7 @@ async def curve(
             "run": run_id,
             "rd": rd_id,
             "fv": fitted_value,
+            "top": top,
             "r2": r_squared,
             "cc": curve_class,
             "raw": json.dumps([{"concentration": max_dose, "response": 50.0}]),

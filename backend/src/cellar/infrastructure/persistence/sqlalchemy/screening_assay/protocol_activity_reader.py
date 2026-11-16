@@ -7,11 +7,16 @@ from typing import Any
 
 from sqlalchemy import (
     ColumnElement,
+    Float,
     Row,
+    ScalarSelect,
     Select,
     and_,
     case,
+    cast,
+    column,
     distinct,
+    false,
     func,
     join,
     literal_column,
@@ -160,15 +165,47 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
     return stmt
 
 
+def _max_dose() -> ScalarSelect[Any]:
+    """The curve's largest positive dose: the bound of an at-bound intercept, read
+    from its points as ``run_aggregation._max_dose_from_raw`` reads them."""
+    raw = DoseResponseCurveModel.raw_data
+    pt = (
+        func.jsonb_array_elements(case((func.jsonb_typeof(raw) == "array", raw)))
+        .table_valued(column("value", JSONB))
+        .alias("pt")
+    )
+    x = case(
+        (pt.c.value.has_key("concentration"), pt.c.value["concentration"]), else_=pt.c.value["x"]
+    )
+    dose = case(
+        (func.jsonb_typeof(x) == "number", cast(x.op("#>>")(literal_column("'{}'")), Float))
+    )
+    return select(func.max(dose)).select_from(pt).where(dose > 0).scalar_subquery()
+
+
 def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any]:
     """Dose-response curves per (molecule, readout-def) + scope keys.
 
     Grouped by readout-def, never curve_type (two DR readouts can share one).
     Active = not inactive and fitted value > 0 (a NULL class is not active);
     best and geo_mean read active curves only, and every curve is counted.
+    When the scope excludes censored values, a fit whose primary intercept is at
+    the bound is censored at its max dose (the intercept resolver's rule): it is
+    counted, kept out of best/geo_mean, and its bound kept. Activity reads none of this.
     """
     c = DoseResponseCurveModel
     active = and_(c.curve_class != "inactive", c.fitted_value > 0)
+    censored: list[ColumnElement[Any]] = []
+    if scope.exclude_censored:
+        at_bound = func.coalesce(
+            c.intercept_values[0]["at_bound"] == literal_column("'true'::jsonb"), false()
+        )
+        active = and_(active, ~at_bound)
+        bound = case((and_(at_bound, c.curve_class.is_distinct_from("inactive")), _max_dose()))
+        censored = [
+            func.count(bound).label("n_censored"),
+            func.max(bound).label("censored_bound"),
+        ]
     used = case((active, c.fitted_value))
     keys: dict[str, ColumnElement[Any]] = {
         "molecule_id": c.molecule_id,
@@ -183,6 +220,7 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
             func.count().label("n_tested"),
             func.count().filter(c.curve_class == "inactive").label("n_inactive"),
             func.count().filter(active).label("n_used"),
+            *censored,
         )
         .select_from(c)
         .join(RunModel, c.run_id == RunModel.id)
@@ -245,6 +283,8 @@ def _dr_row(r: Row[Any]) -> DRAggRow:
         n_tested=r.n_tested,
         n_inactive=r.n_inactive,
         n_used=r.n_used,
+        n_censored=m.get("n_censored", 0),
+        censored_bound=m.get("censored_bound"),
     )
 
 

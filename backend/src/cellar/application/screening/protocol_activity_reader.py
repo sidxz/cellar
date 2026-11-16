@@ -123,6 +123,10 @@ class DRAggRow:
     n_tested: int = 0  # every curve
     n_inactive: int = 0  # curve_class "inactive"
     n_used: int = 0  # active curves, the ones best/geo_mean read
+    # Only when the scope excludes censored values (the workbench path): fits whose
+    # primary intercept is at the bound read "> max dose" and stay out of best/geo_mean.
+    n_censored: int = 0
+    censored_bound: float | None = None  # the largest such max dose
 
 
 @dataclass(frozen=True)

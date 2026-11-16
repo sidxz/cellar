@@ -557,3 +557,51 @@ def test_an_inclusive_bound_stays_inclusive_and_flips_inclusive(bound, q, p_q):
     assert ds.values[f"{POTK}:q"] == [q]
     assert ds.values[f"{POTK}:p"] == [pytest.approx(5.0)]
     assert ds.values[f"{POTK}:p:q"] == [p_q]
+
+
+# --- at-bound primary intercepts are censored at the max dose ------------------------
+
+AT_BOUND = [{"spec": {"kind": "ic", "level": 50.0}, "value": None, "at_bound": True}]
+
+
+def test_runs_level_at_bound_fit_reads_greater_than_the_max_dose():
+    run = _run()
+    curve = _curve(run, uuid.uuid4(), uuid.uuid4(), fitted_value=1.0, intercept_values=AT_BOUND)
+    ds = _build("runs", curves=[curve], runs=[run])
+    assert ds.values[DRK] == [10.0]
+    assert ds.values[f"{DRK}:q"] == [">"]
+    assert ds.values[f"{DRK}:p"] == [pytest.approx(5.0)]
+    assert ds.values[f"{DRK}:p:q"] == ["<"]
+
+
+def test_runs_level_at_bound_fit_without_doses_has_no_value():
+    run = _run()
+    curve = _curve(run, uuid.uuid4(), uuid.uuid4(), intercept_values=AT_BOUND, raw_data=[])
+    ds = _build("runs", curves=[curve], runs=[run])
+    assert ds.values[DRK] == [None]
+
+
+def test_censored_fits_stay_out_of_the_geomean_and_are_counted():
+    mol = uuid.uuid4()
+    ds = _build(
+        "compounds",
+        dr=[_dr(mol, geo_mean=4.0, n_tested=2, n_inactive=0, n_used=1, n_censored=1,
+                censored_bound=10.0)],
+    )  # fmt: skip
+    assert ds.values[DRK] == [4.0]
+    assert f"{DRK}:q" not in _keys(ds)
+    assert ds.values[f"{DRK}:n_censored"] == [1]
+    assert _col(ds, f"{DRK}:n_censored").provenance.stat == "n_censored"
+
+
+def test_all_censored_fits_report_the_bound():
+    mol = uuid.uuid4()
+    ds = _build(
+        "batches",
+        dr=[_dr(mol, best=None, geo_mean=None, n_tested=1, n_inactive=0, n_used=0,
+                n_censored=1, censored_bound=10.0)],
+    )  # fmt: skip
+    assert ds.values[DRK] == [10.0]
+    assert ds.values[f"{DRK}:q"] == [">"]
+    assert ds.values[f"{DRK}:p"] == [pytest.approx(5.0)]
+    assert ds.values[f"{DRK}:p:q"] == ["<"]

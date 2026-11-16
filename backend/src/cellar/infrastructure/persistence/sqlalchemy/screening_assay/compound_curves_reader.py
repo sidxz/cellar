@@ -68,6 +68,7 @@ class SQLAlchemyCompoundCurvesReader:
                     curve_class=r.curve_class,
                     raw_data=r.raw_data,
                     excluded_points=r.excluded_points,
+                    intercept_values=r.intercept_values,
                     batch_number=batch_number,
                 )
                 for r, batch_number in rows

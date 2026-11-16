@@ -267,3 +267,41 @@ async def test_compounds_honour_the_readouts_aggregation_and_activity_keeps_the_
         aggregation, aggregation
     )
     assert summary["items"][0]["readouts"]["Potency"]["mean"] == activity
+
+
+async def test_an_at_bound_partial_curve_is_greater_than_the_max_dose(
+    client, session_factory, fake_auth
+):
+    """A partial curve (top 40) never reaches its 50 % target in 0.1-10 µM: the
+    workbench reads "> 10 µM" / "pIC50 < 5" at every level, not the stored midpoint."""
+    ws = fake_auth.workspace_id
+    at_bound = [
+        {
+            "spec": {"kind": "ic", "level": 50.0, "basis": "relative_percent", "label": None},
+            "value": None,
+            "ci_low": None,
+            "ci_high": None,
+            "at_bound": True,
+        }
+    ]
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        s = uow.session
+        m = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        ic50 = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="approved")
+        await seed.curve(
+            s, ws, p, run, m, ic50, fitted_value=1.0, top=40.0, max_dose=10.0,
+            curve_class="partial", intercept_values=at_bound, with_well=False,
+        )  # fmt: skip
+        await uow.commit()
+    w = {"p": p}
+
+    for level in ("runs", "batches", "compounds"):
+        body = await _level(client, w, level)
+        key = f"dr:{ic50}"
+        assert body["values"][key] == [10.0], level
+        assert body["values"][f"{key}:q"] == [">"], level
+        assert body["values"][f"{key}:p"] == [pytest.approx(5.0)], level
+        assert body["values"][f"{key}:p:q"] == ["<"], level

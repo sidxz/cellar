@@ -378,3 +378,43 @@ async def test_workbench_rows_say_whether_the_bound_is_inclusive(
     ).numeric_rows
 
     assert (row.gt_inclusive, row.lt_inclusive) == (gt_inclusive, lt_inclusive)
+
+
+# An unreachable primary intercept: the fitter stores the 4PL midpoint as fitted_value.
+AT_BOUND = [
+    {
+        "spec": {"kind": "ic", "level": 50.0, "basis": "relative_percent", "label": None},
+        "value": None,
+        "ci_low": None,
+        "ci_high": None,
+        "at_bound": True,
+    }
+]
+
+
+async def test_workbench_counts_an_at_bound_fit_as_censored_at_the_max_dose(
+    uow, session_factory, workspace_id
+):
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=4.0)
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=1.0, top=40.0, max_dose=10.0,
+            intercept_values=AT_BOUND,
+        )  # fmt: skip
+        await uow.commit()
+
+    [row] = (await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES)).dr_agg_rows
+    [act] = (
+        await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, exclude_censored=False)
+    ).dr_agg_rows
+
+    assert (row.n_tested, row.n_used, row.n_censored, row.censored_bound) == (2, 1, 1, 10.0)
+    assert (row.geo_mean, row.best) == (pytest.approx(4.0), 4.0)
+    # Activity is unchanged: the at-bound fit's stored value still counts.
+    assert (act.n_used, act.n_censored, act.geo_mean) == (2, 0, pytest.approx(2.0))

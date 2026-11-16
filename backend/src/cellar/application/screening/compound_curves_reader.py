@@ -34,6 +34,7 @@ class CurveRow:
     curve_class: str | None
     raw_data: Any | None
     excluded_points: Any | None
+    intercept_values: Any | None = None  # [{spec, value, at_bound, …}]; the first is primary
 
 
 @dataclass(frozen=True)
