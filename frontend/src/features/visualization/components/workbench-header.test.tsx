@@ -312,6 +312,29 @@ describe("WorkbenchHeader comparing protocols", () => {
     expect(state.protocolReads).toBe(before);
   });
 
+  it("changing runs from a run's workbench keeps its filters", async () => {
+    state.query = ready({ ...single(), level: "runs" });
+    const { rerender } = page("runs", { kind: "run", runId: R1 });
+    fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+    fireEvent.click(screen.getByRole("option", { name: "rd:s:raw" }));
+    fireEvent.click(screen.getByRole("button", { name: /^NadD HTS · run 2026-11-12/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Change runs…" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include 2026-11-05 · A. Chen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Open workbench" }));
+    expect(state.replace).toHaveBeenLastCalledWith(
+      `/assays/visualize?protocol=${P1}&runs=${R1}%2C${R2}&level=runs`,
+      { scroll: false },
+    );
+
+    rerender(
+      <WorkbenchPage
+        level="runs"
+        source={{ kind: "protocol", protocolId: P1, runIds: [R1, R2] }}
+      />,
+    );
+    expect(screen.getByRole("group", { name: "rd:s:raw" })).toBeInTheDocument();
+  });
+
   it("changing runs keeps the compared protocols", () => {
     page("compounds", compared);
     fireEvent.click(screen.getByRole("button", { name: /^NadD HTS · 3 of 3 runs/ }));

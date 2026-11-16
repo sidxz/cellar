@@ -21,7 +21,7 @@ export type PanelPatch = Partial<Omit<PanelConfig, "id" | "appearance">> & {
   appearance?: Partial<Appearance>;
 };
 
-interface Snapshot {
+export interface Snapshot {
   panels: PanelConfig[];
   filters: Filter[];
 }
@@ -89,7 +89,10 @@ export function createWorkbenchStore(initial: {
   panels: PanelConfig[];
   filters?: Filter[];
   selection?: Iterable<string>;
-  saved?: boolean;
+  /** The view as last saved (a saved view's workbench): changes from it read as unsaved. */
+  saved?: Snapshot;
+  /** Told each snapshot ``markSaved`` takes, so it can outlive this store. */
+  onSaved?: (saved: Snapshot) => void;
 }) {
   const panels = initial.panels;
   const filters = initial.filters ?? [];
@@ -107,7 +110,7 @@ export function createWorkbenchStore(initial: {
     return {
       panels,
       filters,
-      baseline: initial.saved ? { panels, filters } : null,
+      baseline: initial.saved ?? null,
       selection: new Set<string>(initial.selection),
       maximized: null,
       past: [],
@@ -167,8 +170,11 @@ export function createWorkbenchStore(initial: {
           future: future.slice(1),
         });
       },
-      markSaved: (saved) =>
-        set({ baseline: saved ?? { panels: get().panels, filters: get().filters } }),
+      markSaved: (saved) => {
+        const baseline = saved ?? { panels: get().panels, filters: get().filters };
+        set({ baseline });
+        initial.onSaved?.(baseline);
+      },
     };
   });
 }

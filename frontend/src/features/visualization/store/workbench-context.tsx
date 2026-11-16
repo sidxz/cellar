@@ -5,6 +5,7 @@ import { useStore } from "zustand";
 import type { Filter } from "../lib/filters";
 import {
   type PanelConfig,
+  type Snapshot,
   type WorkbenchState,
   type WorkbenchStore,
   createWorkbenchStore,
@@ -18,13 +19,16 @@ export function WorkbenchProvider({
   initialFilters,
   initialSelection,
   saved,
+  onSaved,
   children,
 }: {
   initialPanels: PanelConfig[];
   initialFilters?: Filter[];
   initialSelection?: string[];
-  /** The initial panels and filters are a saved view's: changes from them read as unsaved. */
-  saved?: boolean;
+  /** The saved view's panels and filters as last saved: changes from them read as unsaved. */
+  saved?: Snapshot;
+  /** Told what each save stored. */
+  onSaved?: (saved: Snapshot) => void;
   children: ReactNode;
 }) {
   const [store] = useState(() =>
@@ -33,6 +37,7 @@ export function WorkbenchProvider({
       filters: initialFilters,
       selection: initialSelection,
       saved,
+      onSaved,
     }),
   );
   return <WorkbenchContext.Provider value={store}>{children}</WorkbenchContext.Provider>;

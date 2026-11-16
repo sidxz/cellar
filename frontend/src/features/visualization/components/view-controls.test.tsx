@@ -104,10 +104,15 @@ function show({
     mutationCache: new MutationCache({ onError: onMutationError }),
   });
   const open = view && { view, config: { ...config, derived: savedDerived }, reload: state.reload };
+  const panels = [panel];
   render(
     <QueryClientProvider client={client}>
       <OpenViewContext.Provider value={open}>
-        <WorkbenchProvider initialPanels={[panel]} initialFilters={filters} saved={!!view}>
+        <WorkbenchProvider
+          initialPanels={panels}
+          initialFilters={filters}
+          saved={view ? { panels, filters } : undefined}
+        >
           <ViewControls source={at} level={level} ds={ds} derived={derived} />
           <Probe />
         </WorkbenchProvider>

@@ -136,15 +136,21 @@ const loaded = (view: SavedView) => ({ data: view, isPending: false, isError: fa
 
 function show(sourceOverride: DatasetSource | null = null, levelOverride: Level | null = null) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  let level = levelOverride;
   const page = () => (
     <QueryClientProvider client={client}>
       <TooltipProvider>
-        <SavedViewPage viewId="v1" sourceOverride={sourceOverride} levelOverride={levelOverride} />
+        <SavedViewPage viewId="v1" sourceOverride={sourceOverride} levelOverride={level} />
       </TooltipProvider>
     </QueryClientProvider>
   );
   const out = render(page());
-  return { ...out, rerender: () => out.rerender(page()) };
+  /** The page again, at ``next`` (the URL's level after a switch). */
+  const rerender = (next: Level | null = level) => {
+    level = next;
+    out.rerender(page());
+  };
+  return { ...out, rerender };
 }
 
 const job = (over: Record<string, unknown> = {}) => ({
@@ -263,6 +269,21 @@ describe("SavedViewPage", () => {
     show();
     expect(screen.getByText("Potency by compound")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("still reads an edit as unsaved after switching level and back", () => {
+    const { rerender } = show();
+    fireEvent.click(screen.getByRole("combobox", { name: /Add filter/ }));
+    fireEvent.click(screen.getByRole("option", { name: "rd:s:raw" }));
+    expect(screen.getByRole("img", { name: "Unsaved changes" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Runs" }));
+    rerender("runs");
+    fireEvent.click(screen.getByRole("button", { name: "Compounds" }));
+    rerender("compounds");
+    expect(screen.getByRole("group", { name: "rd:s:raw" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Unsaved changes" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
   });
 
   it("says so when the view doesn't exist or isn't shared with the viewer", () => {

@@ -37,7 +37,13 @@ import { resolveViewConfig } from "../lib/saved-view";
 import { visualizeHref } from "../lib/source-url";
 import { withSeenLabels } from "../lib/traces/common";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
-import { MAX_PANELS, type PanelConfig, type PanelPatch, makePanel } from "../store/workbench-store";
+import {
+  MAX_PANELS,
+  type PanelConfig,
+  type PanelPatch,
+  type Snapshot,
+  makePanel,
+} from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level, SavedView } from "../types";
 import { AddColumnsMenu } from "./add-columns-menu";
 import { AddPlotMenu } from "./add-plot-menu";
@@ -80,6 +86,9 @@ export function WorkbenchPage({
   level: Level;
   view?: OpenedView;
 }) {
+  // A run's workbench changing runs moves to its protocol (another key) yet stays the same
+  // workbench: ``moved`` keeps the key it had for the one it moved to.
+  const [moved, setMoved] = useState<{ to: string; as: string } | null>(null);
   if (!source) {
     return (
       <EmptyState
@@ -90,9 +99,17 @@ export function WorkbenchPage({
     );
   }
   // Chemistry columns belong to the protocol or run; they survive level and run changes.
-  const key = source.kind === "protocol" ? source.protocolId : source.runId;
-  return <Workbench key={key} source={source} level={level} view={view} />;
+  const key = sourceKey(source);
+  const as = moved?.to === key ? moved.as : key;
+  const onMove = (next: DatasetSource) => {
+    const to = sourceKey(next);
+    if (to !== key) setMoved({ to, as });
+  };
+  return <Workbench key={as} source={source} level={level} view={view} onMove={onMove} />;
 }
+
+const sourceKey = (source: DatasetSource) =>
+  source.kind === "protocol" ? source.protocolId : source.runId;
 
 /** The last view change: the view it leads to, the level it left and what it takes along. */
 type Switch = { to: string; from: Level; carry: Carry; dismissed?: boolean };
@@ -101,10 +118,13 @@ function Workbench({
   source,
   level,
   view,
+  onMove,
 }: {
   source: DatasetSource;
   level: Level;
   view?: OpenedView;
+  /** Told of each change of source this workbench makes itself. */
+  onMove: (next: DatasetSource) => void;
 }) {
   const query = useDataset(source, level);
   const nameOf = useMemberNames();
@@ -122,6 +142,9 @@ function Workbench({
   const [removedNote, setRemovedNote] = useState<string | null>(null);
   const { entries, readySets, dispatch, newRGroups } = useDerived();
   const [adding, setAdding] = useState<DerivedSpec["kind"] | null>(null);
+  // The saved view as last saved here, outliving each store (one per source and level), so a
+  // store opened on carried edits still tells them from what is saved.
+  const [lastSaved, setLastSaved] = useState<Snapshot | null>(null);
 
   const base = useMemo(
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
@@ -164,6 +187,7 @@ function Workbench({
     // A change before the last one's data arrived keeps the level that one left.
     const from = switched && take === switched.carry ? switched.from : level;
     setSwitched(take && { to: viewKey(next.source, next.level), from, carry: take });
+    onMove(next.source);
     router.replace(visualizeHref(next.source, next.level, view?.view.id), { scroll: false });
   };
   const switchLevel = (next: Level, take: Carry | null) =>
@@ -343,7 +367,8 @@ function Workbench({
           initialPanels={carried?.panels ?? resolved?.panels ?? initialPanels(ds)}
           initialFilters={carried?.filters ?? resolved?.filters}
           initialSelection={sameLevel ? carried?.selection : undefined}
-          saved={view !== undefined}
+          saved={lastSaved ?? resolved ?? undefined}
+          onSaved={setLastSaved}
         >
           <WorkbenchHeader
             source={source}

@@ -1,6 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Filter } from "../lib/filters";
-import { MAX_PANELS, canRedo, canUndo, createWorkbenchStore, isDirty } from "./workbench-store";
+import {
+  MAX_PANELS,
+  type PanelConfig,
+  canRedo,
+  canUndo,
+  createWorkbenchStore,
+  isDirty,
+} from "./workbench-store";
 
 const range = (id: string, min: number): Filter => ({
   id,
@@ -104,8 +111,15 @@ describe("workbench store", () => {
     expect(store.getState().maximized).toBeNull();
   });
 
+  /** A saved view's store, opened on its saved panels and filters. */
+  const savedStore = (onSaved?: (s: { panels: PanelConfig[]; filters: Filter[] }) => void) => {
+    const panels: PanelConfig[] = [];
+    const filters = [range("a", 1)];
+    return createWorkbenchStore({ panels, filters, saved: { panels, filters }, onSaved });
+  };
+
   it("a saved store is dirty only while it differs from its last save", () => {
-    const store = createWorkbenchStore({ panels: [], filters: [range("a", 1)], saved: true });
+    const store = savedStore();
     expect(isDirty(store.getState())).toBe(false);
     store.getState().upsertFilter(range("a", 10));
     expect(isDirty(store.getState())).toBe(true);
@@ -118,12 +132,14 @@ describe("workbench store", () => {
     expect(isDirty(store.getState())).toBe(true);
   });
 
-  it("markSaved takes the panels and filters that were saved, not later edits", () => {
-    const store = createWorkbenchStore({ panels: [], filters: [range("a", 1)], saved: true });
+  it("markSaved takes the panels and filters that were saved, not later edits, and says so", () => {
+    const onSaved = vi.fn();
+    const store = savedStore(onSaved);
     store.getState().upsertFilter(range("a", 10));
     const sent = { panels: store.getState().panels, filters: store.getState().filters };
     store.getState().upsertFilter(range("a", 20));
     store.getState().markSaved(sent);
+    expect(onSaved).toHaveBeenCalledWith(sent);
     expect(isDirty(store.getState())).toBe(true);
     store.getState().undo();
     expect(isDirty(store.getState())).toBe(false);
