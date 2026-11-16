@@ -28,6 +28,7 @@ const view = (over: Partial<SavedViewSummary>): SavedViewSummary => ({
   created_by: "u1",
   can_edit: true,
   version: 1,
+  protocols: [],
   ...over,
 });
 

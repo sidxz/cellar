@@ -80,6 +80,7 @@ const view = (over: Partial<SavedViewSummary>): SavedViewSummary => ({
   can_edit: true,
   version: 1,
   updated_at: new Date().toISOString(),
+  protocols: [],
   ...over,
 });
 
@@ -91,13 +92,18 @@ beforeEach(() => {
 describe("SavedViewsListPage", () => {
   it("lists every view the chemist can see: name, level, owner, sharing and last update", () => {
     state.query.data = [
-      view({ id: "v1", name: "Plate QC" }),
+      view({ id: "v1", name: "Plate QC", protocols: [{ id: "p1", name: "NadD HTS" }] }),
       view({
         id: "v2",
         name: "Potency",
         level: "compounds",
         visibility: "project",
         project_id: "proj-1",
+        // Its own protocol, then the one it compares.
+        protocols: [
+          { id: "p1", name: "NadD HTS" },
+          { id: "p2", name: "M. tuberculosis InhA inhibition [DD-CoA fluorescence]" },
+        ],
       }),
     ];
     render(<SavedViewsListPage />);
@@ -108,7 +114,7 @@ describe("SavedViewsListPage", () => {
       within(table)
         .getAllByRole("columnheader")
         .map((h) => h.textContent),
-    ).toEqual(["Name", "Level", "Owner", "Sharing", "Last updated"]);
+    ).toEqual(["Name", "Protocol", "Level", "Owner", "Sharing", "Last updated"]);
     const [, qc, potency] = within(table).getAllByRole("row");
     expect(within(qc).getByRole("link", { name: "Plate QC" })).toHaveAttribute(
       "href",
@@ -120,6 +126,20 @@ describe("SavedViewsListPage", () => {
       "/assays/visualize/v2",
     );
     expect(potency).toHaveTextContent(/Compounds.*A\. Chen.*NadD lead series/);
+    // Each protocol by name, linked; a long name cut in the middle, whole on hover.
+    expect(within(qc).getByRole("link", { name: "NadD HTS" })).toHaveAttribute(
+      "href",
+      "/assays/protocols/p1",
+    );
+    const compared = within(potency).getAllByRole("link").slice(1);
+    expect(compared.map((a) => [a.textContent, a.getAttribute("href")])).toEqual([
+      ["NadD HTS", "/assays/protocols/p1"],
+      ["M. tubercu…[DD-CoA fluorescence]", "/assays/protocols/p2"],
+    ]);
+    expect(compared[1]).toHaveAttribute(
+      "title",
+      "M. tuberculosis InhA inhibition [DD-CoA fluorescence]",
+    );
   });
 
   it("with none saved, says how to save one", () => {

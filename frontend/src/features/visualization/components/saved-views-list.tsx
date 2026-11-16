@@ -10,15 +10,16 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 import { ChartScatter } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo } from "react";
+import { Fragment, useMemo } from "react";
 import { useSavedViews } from "../hooks/use-saved-views";
 import { LEVELS } from "../lib/levels";
+import { shortName } from "../lib/short-name";
 import type { SavedViewSummary } from "../types";
 
 const viewHref = (v: SavedViewSummary) => `/assays/visualize/${v.id}`;
 
-/** `/assays/visualize` with no source: every saved view the chemist can see, searchable by
- * name; a row opens its view. */
+/** `/assays/visualize` with no source: every saved view the chemist can see with the
+ * protocols it plots, searchable by name; a row opens its view. */
 export function SavedViewsListPage() {
   const router = useRouter();
   const { data: views, isLoading, error } = useSavedViews();
@@ -37,6 +38,30 @@ export function SavedViewsListPage() {
             <Link href={viewHref(p.data)} className="font-medium hover:underline">
               {p.data.name}
             </Link>
+          ),
+      },
+      {
+        // Its own protocol, then any it compares; the search matches their names too.
+        headerName: "Protocol",
+        flex: 1,
+        minWidth: 200,
+        valueGetter: (p) => p.data?.protocols.map((x) => x.name).join(", "),
+        cellRenderer: (p: ICellRendererParams<SavedViewSummary>) =>
+          p.data && (
+            <span className="truncate">
+              {p.data.protocols.map((x, k) => (
+                <Fragment key={x.id}>
+                  {k > 0 && ", "}
+                  <Link
+                    href={`/assays/protocols/${x.id}`}
+                    title={x.name}
+                    className="hover:underline"
+                  >
+                    {shortName(x.name)}
+                  </Link>
+                </Fragment>
+              ))}
+            </span>
           ),
       },
       {
