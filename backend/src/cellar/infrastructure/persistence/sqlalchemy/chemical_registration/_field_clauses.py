@@ -27,6 +27,9 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     ProjectModel,
     molecule_projects,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
 )
@@ -262,7 +265,7 @@ def _keyword_list_clause(criterion: dict[str, Any]) -> ColumnElement:
 
 
 def _run_date_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
-    """Filter molecules to those with data in a date range."""
+    """Filter molecules to those tested (``COMPOUND_RESULT`` rows) in a date range."""
     from datetime import date
 
     date_from = criterion.get("date_from")
@@ -274,6 +277,7 @@ def _run_date_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colu
         ReadoutDataModel.molecule_id.is_not(None),
         RunModel.workspace_id == workspace_id,
         NOT_REJECTED,
+        COMPOUND_RESULT,
     ]
     if date_from:
         conditions.append(RunModel.run_date >= date.fromisoformat(date_from))

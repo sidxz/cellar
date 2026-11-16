@@ -471,7 +471,7 @@ class SQLAlchemyReadoutDataRepository:
     async def get_molecule_counts(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, int]:
-        """Return {run_id: distinct_molecule_count} for the given runs."""
+        """Return {run_id: compounds tested} for the given runs (``COMPOUND_RESULT`` rows)."""
         if not run_ids:
             return {}
         stmt = (
@@ -482,6 +482,7 @@ class SQLAlchemyReadoutDataRepository:
             .where(
                 ReadoutDataModel.run_id.in_(run_ids),
                 ReadoutDataModel.molecule_id.is_not(None),
+                COMPOUND_RESULT,
             )
             .group_by(ReadoutDataModel.run_id)
         )

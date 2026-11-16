@@ -13,6 +13,9 @@ from cellar.application.screening.protocol_stats_reader import (
     ProtocolStatsData,
     ProtocolStatsRow,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     PlateModel,
     ProtocolModel,
@@ -69,7 +72,7 @@ class SQLAlchemyProtocolStatsReader:
             status_rows = (await session.execute(status_counts_stmt)).all()
             status_counts: dict[str, int] = {row[0]: row[1] for row in status_rows}
 
-            # 3. Unique compound count across all runs for this protocol
+            # 3. Compounds tested across all runs (sample wells and well-less rows only)
             compound_count_stmt = (
                 select(func.count(func.distinct(ReadoutDataModel.molecule_id)))
                 .select_from(ReadoutDataModel)
@@ -78,6 +81,7 @@ class SQLAlchemyProtocolStatsReader:
                     RunModel.protocol_id == pid,
                     RunModel.workspace_id == ws,
                     ReadoutDataModel.molecule_id.isnot(None),
+                    COMPOUND_RESULT,
                 )
             )
             compound_count = (await session.execute(compound_count_stmt)).scalar_one()
@@ -119,6 +123,7 @@ class SQLAlchemyProtocolStatsReader:
                     .where(
                         ReadoutDataModel.run_id == run_id,
                         ReadoutDataModel.molecule_id.isnot(None),
+                        COMPOUND_RESULT,
                     )
                 )
                 run_compound_count = (await session.execute(run_compound_stmt)).scalar_one()

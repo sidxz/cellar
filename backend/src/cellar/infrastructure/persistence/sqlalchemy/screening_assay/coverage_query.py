@@ -22,6 +22,9 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.models i
     CollectionModel,
     CollectionMoleculeModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ReadoutDataModel,
     RunModel,
@@ -80,6 +83,7 @@ class SQLAlchemyCollectionCoverageQuery:
                 and_(
                     ReadoutDataModel.run_id == run_collections.c.run_id,
                     ReadoutDataModel.molecule_id.is_not(None),
+                    COMPOUND_RESULT,
                 ),
             )
             .join(
@@ -150,6 +154,7 @@ class SQLAlchemyCollectionCoverageQuery:
                 and_(
                     ReadoutDataModel.run_id == run_collections.c.run_id,
                     ReadoutDataModel.molecule_id.is_not(None),
+                    COMPOUND_RESULT,
                 ),
             )
             .join(
@@ -209,6 +214,7 @@ class SQLAlchemyCollectionCoverageQuery:
                     and_(
                         ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id,
                         ReadoutDataModel.run_id.in_(run_ids),
+                        COMPOUND_RESULT,
                     ),
                 )
                 .where(CollectionMoleculeModel.collection_id.in_([r[0] for r in ref_rows]))
@@ -254,6 +260,7 @@ class SQLAlchemyCollectionCoverageQuery:
                 .where(
                     ReadoutDataModel.run_id.in_(run_ids),
                     ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id,
+                    COMPOUND_RESULT,
                 )
                 .exists()
             )
@@ -275,6 +282,7 @@ class SQLAlchemyCollectionCoverageQuery:
             .where(
                 ReadoutDataModel.run_id == run_id,
                 ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id,
+                COMPOUND_RESULT,
             )
             .exists()
         )
@@ -319,7 +327,10 @@ class SQLAlchemyCollectionCoverageQuery:
                     RunModel.protocol_id == protocol_id,
                 ),
             )
-            .where(ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id)
+            .where(
+                ReadoutDataModel.molecule_id == CollectionMoleculeModel.molecule_id,
+                COMPOUND_RESULT,
+            )
             .exists()
         )
         stmt = (
