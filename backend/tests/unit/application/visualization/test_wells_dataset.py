@@ -146,6 +146,28 @@ def test_duplicate_value_keeps_the_latest_created():
     assert ds.values[RAW] == [2.0]
 
 
+def test_a_newer_null_keeps_the_older_value_and_its_flags():
+    run = _run()
+    w = uuid.uuid4()
+    older = _row(run, well_id=w, value_numeric=1.0, value_qualifier=">", is_outlier=True)
+    newer = _row(run, well_id=w, value_numeric=None, created_at=T0 + timedelta(seconds=5))
+    ds = build_wells_dataset([run], DEFS, [older, newer])
+    assert ds.values[RAW] == [1.0]
+    assert ds.values[f"{RAW}:q"] == [">"]
+    assert ds.values[f"{RAW}:outlier"] == ["outlier"]
+
+
+def test_a_newer_value_without_flags_clears_the_older_ones():
+    run = _run()
+    w = uuid.uuid4()
+    older = _row(run, well_id=w, value_numeric=1.0, value_qualifier=">", is_outlier=True)
+    newer = _row(run, well_id=w, value_numeric=2.0, created_at=T0 + timedelta(seconds=5))
+    ds = build_wells_dataset([run], DEFS, [older, newer])
+    assert ds.values[RAW] == [2.0]
+    keys = {c.key for c in ds.columns}
+    assert f"{RAW}:q" not in keys and f"{RAW}:outlier" not in keys
+
+
 def test_qualifier_goes_to_a_sibling_column_and_the_number_stays():
     run = _run()
     ds = build_wells_dataset([run], DEFS, [_row(run, value_numeric=10.0, value_qualifier=">")])

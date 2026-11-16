@@ -168,17 +168,19 @@ def build_wells_dataset(
         i = index[_row_key(row)]
         col = cells[vkey]
         if rd.data_type in _NUMERIC_DATA_TYPES:
-            col[i] = _finite(row.value_numeric)
+            value: Any = _finite(row.value_numeric)
         else:
-            col[i] = (
+            value = (
                 row.value_text
                 if row.value_text is not None
                 else (None if row.value_numeric is None else str(row.value_numeric))
             )
-        if row.value_qualifier:
-            qualifiers[vkey][i] = row.value_qualifier
-        if row.is_outlier:
-            outliers[vkey][i] = "outlier"
+        # The latest non-null record wins (as on the Heat Map), and its flags come with it.
+        if value is None and col[i] is not None:
+            continue
+        col[i] = value
+        qualifiers[vkey][i] = row.value_qualifier or None
+        outliers[vkey][i] = "outlier" if row.is_outlier else None
 
     columns: list[DatasetColumn] = [
         DatasetColumn(key=k, label=label, kind=kind, hidden=hidden)
@@ -222,7 +224,7 @@ def build_wells_dataset(
             )
         )
         values[vkey] = cells[vkey]
-        if vkey in qualifiers:
+        if any(v is not None for v in qualifiers[vkey]):
             qkey = f"{vkey}:q"
             columns.append(
                 DatasetColumn(
@@ -234,7 +236,7 @@ def build_wells_dataset(
                 )
             )
             values[qkey] = qualifiers[vkey]
-        if vkey in outliers:
+        if any(v is not None for v in outliers[vkey]):
             okey = f"{vkey}:outlier"
             columns.append(
                 DatasetColumn(
