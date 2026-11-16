@@ -34,15 +34,17 @@ def build_points_with_exclusions(
         A list of ``ConcentrationResponsePoint`` ready to feed to the fitter,
         with ``is_excluded=True`` set on positions matching ``excluded_indices``.
     """
-    all_points_raw = list(curve.raw_data or []) + list(curve.excluded_points or [])
-    all_points_raw.sort(key=lambda p: p.get("concentration", 0))
+    # raw_data holds the points in the fit; an excluded entry is a point outside it (a
+    # suggestion — not excluded — is one of the raw_data points, so it is not added again).
+    captured = [(p["concentration"], p["response"]) for p in curve.raw_data or []] + [
+        (e.concentration, e.response)
+        for e in curve.excluded_points or []
+        if e.excluded and e.concentration is not None and e.response is not None
+    ]
+    captured.sort(key=lambda p: p[0])
 
     excluded_set = set(excluded_indices)
     return [
-        ConcentrationResponsePoint(
-            concentration=pt["concentration"],
-            response=pt["response"],
-            is_excluded=(i in excluded_set),
-        )
-        for i, pt in enumerate(all_points_raw)
+        ConcentrationResponsePoint(concentration=c, response=r, is_excluded=(i in excluded_set))
+        for i, (c, r) in enumerate(captured)
     ]

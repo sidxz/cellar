@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useReducer } from "react";
 
-export type ExclusionSource = "manual" | "auto_3sigma";
+/** `well_flag`: the fit left the point out because its well is flagged as an outlier. */
+export type ExclusionSource = "manual" | "auto_3sigma" | "well_flag";
 
 export type ExclusionReason =
   | "outlier"
@@ -11,7 +12,8 @@ export type ExclusionReason =
   | "contamination"
   | "qc_failure"
   | "other"
-  | "auto_3sigma";
+  | "auto_3sigma"
+  | "outlier_well";
 
 export interface DraftExclusion {
   idx: number | null; // null for legacy entries (read-only)

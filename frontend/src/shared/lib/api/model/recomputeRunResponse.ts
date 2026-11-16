@@ -8,4 +8,5 @@
 export interface RecomputeRunResponse {
   computed_readouts: number;
   fit_warnings?: string[];
+  fit_notes?: string[];
 }

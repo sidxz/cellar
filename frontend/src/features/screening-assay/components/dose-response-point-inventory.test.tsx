@@ -37,6 +37,29 @@ describe("DoseResponsePointInventory", () => {
     expect(screen.getByText(/manual/i)).toBeInTheDocument();
   });
 
+  it("says a point whose well is flagged as an outlier is excluded for that", () => {
+    render(
+      <DoseResponsePointInventory
+        rawData={rawData}
+        exclusions={[
+          {
+            idx: 2,
+            source: "well_flag",
+            excluded: true,
+            reason: "outlier_well",
+            note: null,
+            author_id: null,
+            ts: "2026-11-16T10:00:00Z",
+            concentration: 1e-7,
+            response: 18.0,
+          },
+        ]}
+        onToggle={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("Excluded (outlier well)")).toBeInTheDocument();
+  });
+
   it("renders suggestion with warning styling", () => {
     render(
       <DoseResponsePointInventory

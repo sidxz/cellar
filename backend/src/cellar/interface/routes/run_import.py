@@ -457,6 +457,7 @@ class ImportRunFileResponse(ImportResultModel):
     readout_conflicts: list[ReadoutConflictModel] = Field(default_factory=list)
     compute_warning: str | None = None
     fit_warnings: list[str] = Field(default_factory=list)
+    fit_notes: list[str] = Field(default_factory=list)
     # Number of placeholder batches auto-created during this import.
     # Always 0 when auto_create_unmatched_batches=False on the request.
     auto_created_batches: int = 0
@@ -520,6 +521,7 @@ async def import_run_file(
         compute_warning=out.compute_warning,
         attachment_warning=out.attachment_warning,
         fit_warnings=out.fit_warnings,
+        fit_notes=out.fit_notes,
         auto_created_batches=out.auto_created_batches,
     )
 

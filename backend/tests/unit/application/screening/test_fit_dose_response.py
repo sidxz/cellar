@@ -19,6 +19,7 @@ from returns.result import Failure, Success
 
 from cellar.domain.shared.errors import AuthorizationError
 
+from cellar.application.screening.dose_response_enriched_reader import MoleculeDisplayInfo
 from cellar.application.screening.fit_dose_response import FitDoseResponseCurves
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
@@ -91,6 +92,16 @@ class _RecordingFitter:
                 excluded_points=[],
             )
         )
+
+
+class _Labels:
+    """The compounds' registration numbers and synonyms, as the enriched reader gives them."""
+
+    def __init__(self, info: dict[uuid.UUID, MoleculeDisplayInfo] | None = None) -> None:
+        self.info = info or {}
+
+    async def resolve_molecules(self, workspace_id, molecule_ids):
+        return {m: self.info[m] for m in molecule_ids if m in self.info}
 
 
 def _make_protocol_with_y(
@@ -177,6 +188,7 @@ def _rd(
     molecule_id: uuid.UUID | None = uuid.UUID(int=42),
     batch_id: uuid.UUID | None = uuid.UUID(int=43),
     normalization_applied: ReadoutNormalization | None = None,
+    is_outlier: bool = False,
 ) -> ReadoutData:
     return ReadoutData(
         workspace_id=WS,
@@ -188,6 +200,7 @@ def _rd(
         value=QualifiedValue(value=value),
         is_computed=is_computed,
         normalization_applied=normalization_applied,
+        is_outlier=is_outlier,
     )
 
 
@@ -199,6 +212,7 @@ def _make_use_case(fitter: _RecordingFitter) -> FitDoseResponseCurves:
         uow=_FakeUow(),
         curve_repo=curve_repo,
         curve_fitter=fitter,
+        molecules=_Labels(),
     )
 
 
@@ -543,8 +557,9 @@ async def test_fit_failures_surface_in_warnings():
     curve_repo = AsyncMock()
     curve_repo.delete_by_run = AsyncMock()
     curve_repo.save = AsyncMock()
+    labels = _Labels({bad_mol: MoleculeDisplayInfo("CC-000099", "X", None, ["RIFAMPICIN"])})
     use_case = FitDoseResponseCurves(
-        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter,
+        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter, molecules=labels,
     )
 
     result = await use_case.fit_for_run(
@@ -554,10 +569,11 @@ async def test_fit_failures_surface_in_warnings():
     fit_result = result.unwrap()
     # Only the good compound got a curve.
     assert len(fit_result.curves) == 1
-    # The failure for bad_mol surfaced as a warning naming it.
-    assert any(str(bad_mol) in w for w in fit_result.warnings), (
-        f"warnings did not name failed molecule: {fit_result.warnings}"
-    )
+    # The failure for bad_mol surfaced as a warning naming it — by registration number
+    # and synonym, never by UUID.
+    assert fit_result.warnings == [
+        "CC-000099 (RIFAMPICIN) on 'IC50': fit failed — synthetic fit failure"
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -695,6 +711,7 @@ async def test_initial_fit_persists_outlier_suggestion_as_excluded_point_detail(
     curve_repo.save = _capture_save
     use_case = FitDoseResponseCurves(
         uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter,
+        molecules=_Labels(),
     )
 
     result = await use_case.fit_for_run(
@@ -748,6 +765,7 @@ async def test_initial_fit_no_suggestions_yields_empty_excluded_points():
     curve_repo.save = _capture_save
     use_case = FitDoseResponseCurves(
         uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=fitter,
+        molecules=_Labels(),
     )
 
     result = await use_case.fit_for_run(
@@ -849,7 +867,8 @@ async def test_a_sample_fit_reads_sample_wells_only():
     )
     curve_repo = AsyncMock()
     use_case = FitDoseResponseCurves(
-        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=LmfitCurveFitter()
+        uow=_FakeUow(), curve_repo=curve_repo, curve_fitter=LmfitCurveFitter(),
+        molecules=_Labels(),
     )
 
     result = await use_case.fit_for_run(
@@ -883,7 +902,8 @@ async def test_a_sample_well_at_dose_zero_sits_out_of_the_fit():
         for w, (_, v) in zip(wells, series, strict=True)
     ]  # fmt: skip
     use_case = FitDoseResponseCurves(
-        uow=_FakeUow(), curve_repo=AsyncMock(), curve_fitter=LmfitCurveFitter()
+        uow=_FakeUow(), curve_repo=AsyncMock(), curve_fitter=LmfitCurveFitter(),
+        molecules=_Labels(),
     )
 
     result = await use_case.fit_for_run(
@@ -895,3 +915,169 @@ async def test_a_sample_well_at_dose_zero_sits_out_of_the_fit():
     [curve] = result.unwrap().curves
     assert curve.num_points == 5
     assert f"{DOSE_ZERO_LEFT_OUT}:1" in curve.fit_quality_warnings
+
+
+# ---------------------------------------------------------------------------
+# Compounds tested at fewer than four doses: a neutral count, not a fit failure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compounds_tested_at_fewer_than_four_doses_are_a_count_not_a_warning():
+    """Run 394e4741: a single-dose screen (two wells at 50 µM per compound) beside one
+    dose series. The single-dose compounds get no curve and no warning — one neutral note
+    counts them."""
+    protocol, y_def, _ = _make_protocol_with_y()
+    run, series = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0, 100.0]
+    )
+    plate_id = run.plates[0].id
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=10.0 * i,
+            is_computed=False)
+        for i, w in enumerate(series)
+    ]  # fmt: skip
+    for n in range(3):
+        mol, batch = uuid.uuid4(), uuid.uuid4()
+        for c in (1, 2):
+            well = Well(plate_id=plate_id, row="B", column=2 * n + c, well_type=WellType.SAMPLE,
+                        batch_id=batch, dose=50.0)  # fmt: skip
+            run.wells.append(well)
+            row = _rd(run_id=run.id, well_id=well.id, readout_definition_id=y_def.id, value=5.0,
+                      is_computed=False, molecule_id=mol, batch_id=batch)  # fmt: skip
+            readout_data.append(row)
+    fitter = _RecordingFitter()
+
+    result = await _make_use_case(fitter).fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    fit = result.unwrap()
+    assert len(fit.curves) == 1
+    assert len(fitter.calls) == 1
+    assert fit.warnings == []
+    assert fit.notes == ["3 compounds tested at fewer than 4 doses — no curve"]
+
+
+# ---------------------------------------------------------------------------
+# A recompute replaces only the curves it can rebuild
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_curves_whose_data_is_on_no_well_of_the_run_are_kept():
+    """The [E2E demo] InhA-by-ATP runs: readout rows name wells the run does not have, so a
+    refit builds nothing — their curves must stay, not be deleted."""
+    protocol, y_def, _ = _make_protocol_with_y()
+    run, _ = _make_run_with_dose_series(protocol_id=protocol.id, concentrations=[])
+    readout_data = [
+        _rd(run_id=run.id, well_id=uuid.uuid4(), readout_definition_id=y_def.id, value=v,
+            is_computed=False)
+        for v in (5.0, 20.0, 60.0, 95.0)
+    ]  # fmt: skip
+    use_case = _make_use_case(_RecordingFitter())
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    assert result.unwrap().curves == []
+    use_case._curve_repo.delete_by_run.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_a_refit_replaces_the_curves_of_the_readout_it_fits():
+    protocol, y_def, ic50_def = _make_protocol_with_y()
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0, 100.0]
+    )
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=10.0 * i,
+            is_computed=False)
+        for i, w in enumerate(wells)
+    ]  # fmt: skip
+    use_case = _make_use_case(_RecordingFitter())
+
+    await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    use_case._curve_repo.delete_by_run.assert_awaited_once_with(
+        WS, run.id, readout_definition_id=ic50_def.id
+    )
+
+
+# ---------------------------------------------------------------------------
+# Outlier-flagged wells sit out of the fit, recorded as excluded points
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_point_from_an_outlier_well_is_excluded_from_the_fit_and_recorded():
+    """A titration in duplicate, one 1 µM well flagged as an outlier: the fit reads the other
+    nine points, and the curve records the flagged one as excluded (reason outlier well) at
+    its place in the dose-ordered captured set, so the card counts it as excluded."""
+    from cellar.application.screening._dr_point_reconstruction import (
+        build_points_with_exclusions,
+    )
+    from cellar.domain.screening_assay.excluded_point_detail import (
+        ExclusionReason,
+        ExclusionSource,
+    )
+    from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+
+    protocol, y_def, _ = _make_protocol_with_y()
+    series = [(100.0, 98.0), (0.01, 2.0), (0.1, 11.0), (1.0, 52.0), (10.0, 90.0)]
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[c for c, _ in series] * 2
+    )
+    values = [v for _, v in series] + [v + 1.0 for _, v in series]
+    flagged = wells[8]  # the second 1 µM well
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id,
+            value=-40.0 if w is flagged else v, is_computed=False, is_outlier=w is flagged)
+        for w, v in zip(wells, values, strict=True)
+    ]  # fmt: skip
+    use_case = FitDoseResponseCurves(
+        uow=_FakeUow(), curve_repo=AsyncMock(), curve_fitter=LmfitCurveFitter(),
+        molecules=_Labels(),
+    )  # fmt: skip
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    [curve] = result.unwrap().curves
+    assert curve.num_points == 9
+    assert -40.0 not in [p["response"] for p in curve.raw_data]
+    [entry] = [e for e in curve.excluded_points if e.excluded]
+    assert entry.source == ExclusionSource.WELL_FLAG
+    assert entry.reason == ExclusionReason.OUTLIER_WELL
+    assert (entry.concentration, entry.response) == (1.0, -40.0)
+    # The captured set (raw_data + excluded entries, in dose order) puts it at its idx, so
+    # an edit of the curve keeps it out of the fit.
+    captured = build_points_with_exclusions(curve, [entry.idx])
+    assert len(captured) == 10
+    assert (captured[entry.idx].concentration, captured[entry.idx].response) == (1.0, -40.0)
+    assert sum(p.is_excluded for p in captured) == 1
+
+
+@pytest.mark.asyncio
+async def test_outlier_wells_do_not_count_toward_four_doses():
+    protocol, y_def, _ = _make_protocol_with_y()
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0, 100.0]
+    )
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=10.0 * i,
+            is_computed=False, is_outlier=i == 0)
+        for i, w in enumerate(wells)
+    ]  # fmt: skip
+    fitter = _RecordingFitter()
+
+    result = await _make_use_case(fitter).fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    assert fitter.calls == []
+    assert result.unwrap().notes == ["1 compound tested at fewer than 4 doses — no curve"]

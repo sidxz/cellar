@@ -33,5 +33,6 @@ export interface ImportRunFileResponse {
   readout_conflicts?: ReadoutConflictModel[];
   compute_warning?: string | null;
   fit_warnings?: string[];
+  fit_notes?: string[];
   auto_created_batches?: number;
 }

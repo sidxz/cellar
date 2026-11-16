@@ -174,6 +174,7 @@ class ImportRunFileResult:
     attachment_warning: str | None = None
     # Per-compound dose-response fit warnings surfaced from the calc engine.
     fit_warnings: list[str] = field(default_factory=list)
+    fit_notes: list[str] = field(default_factory=list)
     # Number of placeholder batches auto-created during this import.
     # Always 0 when auto_create_unmatched_batches=False on the command.
     auto_created_batches: int = 0

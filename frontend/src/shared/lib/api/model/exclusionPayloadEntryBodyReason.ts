@@ -16,4 +16,5 @@ export const ExclusionPayloadEntryBodyReason = {
   qc_failure: 'qc_failure',
   other: 'other',
   auto_3sigma: 'auto_3sigma',
+  outlier_well: 'outlier_well',
 } as const;

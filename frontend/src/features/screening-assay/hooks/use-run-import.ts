@@ -21,7 +21,7 @@ import type {
   RunImportTemplateResponse,
   WellConflictModel,
 } from "@/shared/lib/api/model";
-import { showWarning } from "@/shared/lib/toast";
+import { showInfo, showWarning } from "@/shared/lib/toast";
 import {
   DOSE_RESPONSE_KEY,
   MEASURED_CURVES_KEY,
@@ -33,13 +33,18 @@ import {
   RUN_KEY,
 } from "./query-keys";
 
-/** Compose a non-blocking warning toast body from a fit_warnings array.
- *  Up to 3 lines are shown verbatim; anything beyond is collapsed into a
- *  "+N more" suffix so the toast doesn't grow unbounded on bad runs. */
-function buildFitWarningDescription(warnings: string[]): string {
+/** Warn of a refit's failed fits, each naming its compound: up to 3 lines verbatim,
+ *  anything beyond collapsed into a "+N more" suffix so the toast doesn't grow unbounded
+ *  on bad runs. Compounds tested at too few doses are not failures: they ride in the
+ *  refit's notes. */
+export function showFitFailures(warnings: string[] | undefined, prefix = ""): void {
+  if (!warnings?.length) return;
   const head = warnings.slice(0, 3);
   const rest = warnings.length - head.length;
-  return rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
+  const n = warnings.length;
+  showWarning(`${prefix}${n} curve fit${n === 1 ? "" : "s"} failed`, {
+    description: rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n"),
+  });
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -212,12 +217,8 @@ export function useImportRunFile(runId: string) {
       qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: ["attachments", "run", runId] });
-      const warnings = data.fit_warnings ?? [];
-      if (warnings.length > 0) {
-        showWarning(`Run imported. ${warnings.length} curve(s) had fit issues.`, {
-          description: buildFitWarningDescription(warnings),
-        });
-      }
+      if (data.fit_notes?.length) showInfo(data.fit_notes.join("\n"));
+      showFitFailures(data.fit_warnings, "Run imported. ");
     },
   });
 }

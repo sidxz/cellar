@@ -28,7 +28,12 @@ interface DoseResponsePointInventoryProps {
   onToggle: (idx: number) => void;
 }
 
-type RowStatus = "included" | "excluded_manual" | "suggested_3sigma" | "excluded_3sigma";
+type RowStatus =
+  | "included"
+  | "excluded_manual"
+  | "suggested_3sigma"
+  | "excluded_3sigma"
+  | "excluded_well";
 
 interface ResolvedRow {
   idx: number;
@@ -50,6 +55,7 @@ function classifyRow(entry: DraftExclusion | undefined): RowStatus {
   if (entry.source === "manual" && entry.excluded) return "excluded_manual";
   if (entry.source === "auto_3sigma" && entry.excluded) return "excluded_3sigma";
   if (entry.source === "auto_3sigma" && !entry.excluded) return "suggested_3sigma";
+  if (entry.source === "well_flag" && entry.excluded) return "excluded_well";
   // Defensive fallback — a manual entry with excluded=false shouldn't exist
   // but treat as included so we don't gaslight the chemist.
   return "included";
@@ -99,6 +105,12 @@ function StatusPill({ status }: { status: RowStatus }) {
       return (
         <Badge variant="destructive" className="text-xs">
           Excluded (accepted 3σ)
+        </Badge>
+      );
+    case "excluded_well":
+      return (
+        <Badge variant="destructive" className="text-xs">
+          Excluded (outlier well)
         </Badge>
       );
   }

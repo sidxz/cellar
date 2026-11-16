@@ -811,6 +811,7 @@ def register_screening(container: Container) -> None:
             uow=uow,
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
             curve_fitter=c[CurveFittingService],
+            molecules=c[DoseResponseEnrichedReader],
         )
 
     container.define(FitDoseResponseCurves, _fit_dose_response_curves)

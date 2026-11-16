@@ -277,7 +277,7 @@ class ExclusionPayloadEntryBody(BaseModel):
     """
 
     idx: int | None
-    source: Literal["manual", "auto_3sigma"]
+    source: Literal["manual", "auto_3sigma", "well_flag"]
     excluded: bool
     reason: Literal[
         "outlier",
@@ -287,6 +287,7 @@ class ExclusionPayloadEntryBody(BaseModel):
         "qc_failure",
         "other",
         "auto_3sigma",
+        "outlier_well",
     ]
     note: str | None = None
     concentration: float | None = None

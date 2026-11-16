@@ -433,6 +433,8 @@ async def import_run_readouts(
 class RecomputeRunResponse(BaseModel):
     computed_readouts: int
     fit_warnings: list[str] = []
+    # Neutral facts from the refit ("3 compounds tested at fewer than 4 doses — no curve").
+    fit_notes: list[str] = []
 
 
 class RecomputeRunRequest(BaseModel):
@@ -505,6 +507,7 @@ async def recompute_run(
     return RecomputeRunResponse(
         computed_readouts=len(outcome.computed_readouts),
         fit_warnings=outcome.fit_warnings,
+        fit_notes=outcome.fit_notes,
     )
 
 

@@ -675,7 +675,15 @@ class DoseResponseCurveRepository(Protocol):
     ) -> DoseResponseCurve | None: ...
     async def save(self, entity: DoseResponseCurve) -> None: ...
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
-    async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None: ...
+    async def delete_by_run(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        *,
+        readout_definition_id: uuid.UUID | None = None,
+    ) -> None:
+        """The run's curves — of one readout when ``readout_definition_id`` is given."""
+        ...
 
 
 class MeasuredCurveRepository(Protocol):

@@ -80,11 +80,13 @@ class ComputeRunResult:
 
     ``computed_readouts`` is the list of newly persisted ``ReadoutData`` rows.
     ``fit_warnings`` accumulates any per-compound dose-response fit failures
-    so callers can surface them instead of silently swallowing them.
+    so callers can surface them instead of silently swallowing them;
+    ``fit_notes`` are the fit's neutral facts (compounds tested at too few doses).
     """
 
     computed_readouts: list[ReadoutData]
     fit_warnings: list[str] = field(default_factory=list)
+    fit_notes: list[str] = field(default_factory=list)
 
 
 class ReadoutCalculationEngine:
@@ -387,6 +389,7 @@ class ReadoutCalculationEngine:
         # 7.5. Auto-fit dose-response curves
         # ------------------------------------------------------------------
         fit_warnings: list[str] = []
+        fit_notes: list[str] = []
         if self._fit_dose_response is not None:
             fit_outcome = await self._fit_dose_response.fit_for_run(
                 run=run,
@@ -397,6 +400,7 @@ class ReadoutCalculationEngine:
             )
             if isinstance(fit_outcome, Success):
                 fit_warnings = list(fit_outcome.unwrap().warnings)
+                fit_notes = list(fit_outcome.unwrap().notes)
 
         # ------------------------------------------------------------------
         # 7. Persist
@@ -404,7 +408,11 @@ class ReadoutCalculationEngine:
         if computed:
             await self._readout_data_repo.save_bulk(computed)
 
-        return Success(ComputeRunResult(computed_readouts=computed, fit_warnings=fit_warnings))
+        return Success(
+            ComputeRunResult(
+                computed_readouts=computed, fit_warnings=fit_warnings, fit_notes=fit_notes
+            )
+        )
 
     def _plate_qc(
         self, run: Run, protocol: Protocol, rows: list[ReadoutData]

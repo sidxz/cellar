@@ -418,11 +418,21 @@ class SQLAlchemyDoseResponseCurveRepository:
         )
         await self._uow.session.execute(stmt)
 
-    async def delete_by_run(self, workspace_id: uuid.UUID, run_id: uuid.UUID) -> None:
+    async def delete_by_run(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        *,
+        readout_definition_id: uuid.UUID | None = None,
+    ) -> None:
         stmt = delete(DoseResponseCurveModel).where(
             DoseResponseCurveModel.workspace_id == workspace_id,
             DoseResponseCurveModel.run_id == run_id,
         )
+        if readout_definition_id is not None:
+            stmt = stmt.where(
+                DoseResponseCurveModel.readout_definition_id == readout_definition_id
+            )
         await self._uow.session.execute(stmt)
 
     # ------------------------------------------------------------------

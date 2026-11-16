@@ -493,6 +493,7 @@ class ImportRunFile:
             result.compute_warning = str(compute_result.failure())
         else:
             result.fit_warnings = list(compute_result.unwrap().fit_warnings)
+            result.fit_notes = list(compute_result.unwrap().fit_notes)
 
     async def _maybe_attach_raw_file(
         self,

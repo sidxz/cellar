@@ -3,7 +3,7 @@
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type { RecomputeRunRequest, RecomputeRunResponse } from "@/shared/lib/api/model";
-import { showSuccess, showWarning } from "@/shared/lib/toast";
+import { showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { CreateRunInput, HitCriterion, Run } from "../types";
 import {
@@ -15,6 +15,7 @@ import {
   READOUT_DATA_KEY,
   RUNS_KEY,
 } from "./query-keys";
+import { showFitFailures } from "./use-run-import";
 
 const runHooks = createCrudHooks<Run, CreateRunInput, Record<string, unknown>>({
   entityName: "Run",
@@ -262,16 +263,12 @@ export function useRecomputeRun() {
       qc.invalidateQueries({ queryKey: COMPOUND_CURVES_KEY });
       qc.invalidateQueries({ queryKey: PROTOCOL_ACTIVITY_KEY });
       qc.invalidateQueries({ queryKey: MELTING_ANALYSIS_KEY });
-      showSuccess(`Recomputed ${data.computed_readouts} readouts and refit curves`);
-      const warnings = data.fit_warnings ?? [];
-      if (warnings.length > 0) {
-        const head = warnings.slice(0, 3);
-        const rest = warnings.length - head.length;
-        const description = rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
-        showWarning(`${warnings.length} curve(s) had fit issues — see the chart for details.`, {
-          description,
-        });
-      }
+      const notes = data.fit_notes ?? [];
+      showSuccess(
+        `Recomputed ${data.computed_readouts} readouts and refit curves`,
+        notes.length ? { description: notes.join("\n") } : undefined,
+      );
+      showFitFailures(data.fit_warnings);
     },
   });
 }
