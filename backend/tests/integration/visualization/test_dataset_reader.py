@@ -104,6 +104,35 @@ async def test_other_workspace_sees_nothing(uow, session_factory, workspace_id):
     assert await reader.count_wells_rows(other, [w["run"]]) == {}
 
 
+async def test_well_of_another_runs_plate_is_not_joined(uow, session_factory, workspace_id):
+    """A readout pointing at a well outside its own run (here: another workspace's) reads
+    as well-less: none of that well's plate, barcode, label or dose comes through."""
+    w = await _world(uow, workspace_id)
+    other = uuid.uuid4()
+    async with uow:
+        s = uow.session
+        o = await seed.org(s, other)
+        mol = await seed.molecule(s, other, o, "foreign")
+        p = await seed.protocol(s, other)
+        run = await seed.run(s, other, p, date(2026, 11, 12))
+        plate = await seed.plate(s, run, 7, barcode="SECRET-BC")
+        foreign = await seed.well(s, plate, "H", 12, dose=99.0)
+        await s.execute(
+            sa.text("UPDATE wells SET label = 'secret' WHERE id = :id"), {"id": foreign}
+        )
+        await seed.readout(s, workspace_id, w["run"], w["rd"], mol, 1.0, well_id=foreign)
+        await uow.commit()
+    reader = SQLAlchemyVisualizationDatasetReader(session_factory)
+
+    rows = await reader.fetch_well_values(workspace_id, [w["run"]])
+
+    planted = next(r for r in rows if r.value_numeric == 1.0)
+    assert planted.well_id is None and planted.plate_id is None
+    assert (planted.plate_number, planted.plate_barcode) == (None, None)
+    assert (planted.well_row, planted.well_label, planted.dose) == (None, None, None)
+    assert {r.plate_barcode for r in rows} <= {"BC-1", None}
+
+
 async def test_count_counts_each_well_once_and_wellless_keys(uow, session_factory, workspace_id):
     w = await _world(uow, workspace_id)
     reader = SQLAlchemyVisualizationDatasetReader(session_factory)

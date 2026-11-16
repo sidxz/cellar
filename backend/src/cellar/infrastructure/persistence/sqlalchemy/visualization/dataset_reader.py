@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import fields
 
-from sqlalchemy import Text, and_, cast, func, select
+from sqlalchemy import Text, and_, cast, func, join, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.application.visualization.dataset_reader import ReadoutDefInfo, RunInfo, WellValueRow
@@ -160,7 +160,7 @@ class SQLAlchemyVisualizationDatasetReader:
         # access dominated the fetch time at 400k rows.
         exprs = {
             "run_id": rd.run_id,
-            "well_id": rd.well_id,
+            "well_id": WellModel.id,
             "plate_id": PlateModel.id,
             "plate_number": PlateModel.plate_number,
             "plate_barcode": PlateModel.barcode,
@@ -189,8 +189,12 @@ class SQLAlchemyVisualizationDatasetReader:
             select(*(exprs[f.name].label(f.name) for f in fields(WellValueRow)))
             .select_from(rd)
             .join(RunModel, and_(RunModel.id == rd.run_id, RunModel.workspace_id == workspace_id))
-            .outerjoin(WellModel, WellModel.id == rd.well_id)
-            .outerjoin(PlateModel, PlateModel.id == WellModel.plate_id)
+            # Only a well on a plate of the readout's own run joins; a well_id pointing
+            # anywhere else reads as well-less rather than exposing that well.
+            .outerjoin(
+                join(WellModel, PlateModel, PlateModel.id == WellModel.plate_id),
+                and_(WellModel.id == rd.well_id, PlateModel.run_id == rd.run_id),
+            )
             .outerjoin(
                 BatchModel,
                 and_(BatchModel.id == batch_id, BatchModel.workspace_id == workspace_id),
