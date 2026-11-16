@@ -3,7 +3,7 @@ import { z } from "zod";
 /** The single definition of the workbench's plot and filter settings: the store's types are
  * inferred from these, and a saved view's config is checked against them on load. */
 
-export const VIEW_CONFIG_VERSION = 1;
+export const VIEW_CONFIG_VERSION = 2;
 export const MAX_VIEW_CONFIG_BYTES = 65_536;
 export const MAX_PANELS = 4;
 
@@ -97,13 +97,40 @@ export const savedFilterSchema = z.discriminatedUnion("kind", [
   substructureFilter.omit({ moleculeIds: true }),
 ]);
 
+/** One series: compounds under a scaffold-tree node, or matching an R-groups set's core
+ * (exactly one of the two). */
+const seriesMemberSchema = z.object({
+  name: z.string(),
+  scaffold: z.string().optional(),
+  rgroupsId: z.string().optional(),
+});
+
+/** What a derived column set is computed from. R-groups sets are `rg1`, `rg2`, … ("Core A",
+ * "Core B", …); there is at most one clusters set and one series set. */
+export const derivedSpecSchema = z.discriminatedUnion("kind", [
+  z.object({
+    id: z.string(),
+    kind: z.literal("rgroups"),
+    coreSmiles: z.string(),
+    name: z.string(),
+  }),
+  z.object({ id: z.literal("clusters"), kind: z.literal("clusters"), threshold: z.number() }),
+  z.object({
+    id: z.literal("series"),
+    kind: z.literal("series"),
+    members: z.array(seriesMemberSchema),
+  }),
+]);
+
 /** How a saved view looks — never its data. ``labels`` names each referenced column key, so
- * what no longer resolves can be listed by name. */
+ * what no longer resolves can be listed by name; ``derived`` says how to compute its
+ * chemistry columns again. */
 export const viewConfigSchema = z.object({
   config_version: z.number().int(),
   panels: z.array(panelSchema).max(MAX_PANELS),
   filters: z.array(savedFilterSchema).max(100),
   labels: z.record(z.string(), z.string()),
+  derived: z.array(derivedSpecSchema),
 });
 
 export type ViewConfig = z.infer<typeof viewConfigSchema>;

@@ -2,19 +2,13 @@ import { fragmentDisplay } from "@/features/sar-analysis/lib/sar-fragment-label"
 import { buildSubtreeMolIdMap } from "@/features/sar-analysis/lib/scaffold-tree-math";
 import type { ScaffoldTreeResult, UmapResult } from "@/features/sar-analysis/types";
 import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
+import type { z } from "zod";
 import type { Dataset, DatasetColumn } from "../types";
+import type { derivedSpecSchema } from "./config-schema";
 import { column, moleculeStructures } from "./dataset";
 
-/** One series: compounds under a scaffold-tree node, or matching an R-groups set's core
- * (exactly one of the two). */
-export type SeriesMember = { name: string; scaffold?: string; rgroupsId?: string };
-
-/** What a derived column set was computed from. R-groups sets are `rg1`, `rg2`, … ("Core A",
- * "Core B", …); there is at most one clusters set and one series set. */
-export type DerivedSpec =
-  | { id: string; kind: "rgroups"; coreSmiles: string; name: string }
-  | { id: "clusters"; kind: "clusters"; threshold: number }
-  | { id: "series"; kind: "series"; members: SeriesMember[] };
+export type DerivedSpec = z.infer<typeof derivedSpecSchema>;
+export type SeriesMember = Extract<DerivedSpec, { kind: "series" }>["members"][number];
 
 type Cell = string | number | null;
 

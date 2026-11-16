@@ -39,6 +39,7 @@ import {
   useUpdateSavedView,
 } from "../hooks/use-saved-views";
 import { errorText, isStaleEdit } from "../lib/api-errors";
+import type { DerivedSpec } from "../lib/derived";
 import { buildViewConfig, tooLargeToSave } from "../lib/saved-view";
 import { toDatasetRequest } from "../lib/source-url";
 import { useWorkbench } from "../store/workbench-context";
@@ -56,6 +57,7 @@ export function SaveViewDialog({
   source,
   level,
   ds,
+  derived,
   open,
   onOpenChange,
   onStale,
@@ -65,6 +67,7 @@ export function SaveViewDialog({
   source: DatasetSource;
   level: Level;
   ds: Dataset;
+  derived: DerivedSpec[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onStale?: () => void;
@@ -85,8 +88,8 @@ export function SaveViewDialog({
   const [projectId, setProjectId] = useState((details && view.project_id) || "");
 
   const config = useMemo(
-    () => (details ? null : buildViewConfig({ panels, filters }, ds)),
-    [details, panels, filters, ds],
+    () => (details ? null : buildViewConfig({ panels, filters }, ds, derived)),
+    [details, panels, filters, ds, derived],
   );
   const tooLarge = config && tooLargeToSave(config);
   const ready = name.trim() !== "" && (visibility === "private" || projectId !== "");
@@ -129,6 +132,7 @@ export function SaveViewDialog({
     : [
         "Saves the plots, filters and level — never the data. Opening it loads current data.",
         filters.some((f) => f.kind === "rows") && "Filter to selection isn't saved.",
+        derived.length > 0 && "Chemistry columns are computed again each time the view opens.",
         source.kind === "protocol" &&
           !source.runIds &&
           "Runs added to the protocol later will be included.",

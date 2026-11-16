@@ -14,6 +14,7 @@ from cellar.domain.research_organization.events import (
     SavedVisualizationUpdated,
 )
 from cellar.domain.research_organization.saved_visualization import (
+    VIEW_CONFIG_VERSION,
     SavedVisualization,
     ViewPanel,
     validate_view_config,
@@ -89,6 +90,12 @@ FRONTEND_CONFIG_SCHEMA = (
     / "frontend/src/features/visualization/lib/config-schema.ts"
 )
 SUBSTRUCTURE = {"id": "sub-1", "kind": "substructure", "query": "c1ccccc1", "queryKind": "smiles"}
+RGROUPS = {"id": "rg1", "kind": "rgroups", "coreSmiles": "c1ccccc1[*:1]", "name": "Core A"}
+CLUSTERS = {"id": "clusters", "kind": "clusters", "threshold": 0.4}
+
+
+def _series(*members: dict) -> dict:
+    return {"id": "series", "kind": "series", "members": list(members)}
 
 
 class TestConfig:
@@ -133,7 +140,47 @@ class TestConfig:
 
     def test_newer_version_rejected(self) -> None:
         with pytest.raises(ValidationError, match="newer version"):
-            validate_view_config(_config(config_version=2))
+            validate_view_config(_config(config_version=VIEW_CONFIG_VERSION + 1))
+
+    def test_derived_column_specs_saved(self) -> None:
+        series = _series(
+            {"name": "Series A", "rgroupsId": "rg1"}, {"name": "B", "scaffold": "c1ccncc1"}
+        )
+        cfg = _config(config_version=2, derived=[RGROUPS, CLUSTERS, series])
+        assert validate_view_config(cfg) == cfg
+
+    def test_nine_series_members_rejected(self) -> None:
+        members = [{"name": f"S{n}", "scaffold": "c1ccccc1"} for n in range(9)]
+        with pytest.raises(ValidationError, match="members"):
+            validate_view_config(_config(config_version=2, derived=[_series(*members)]))
+
+    def test_unknown_derived_kind_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="derived"):
+            validate_view_config(_config(config_version=2, derived=[{"id": "x", "kind": "pca"}]))
+
+    @pytest.mark.parametrize(
+        "member",
+        [{"name": "A"}, {"name": "A", "scaffold": "c1ccccc1", "rgroupsId": "rg1"}],
+        ids=["neither", "both"],
+    )
+    def test_series_member_has_exactly_one_source(self, member: dict) -> None:
+        with pytest.raises(ValidationError, match="scaffold"):
+            validate_view_config(_config(config_version=2, derived=[_series(member)]))
+
+    @pytest.mark.parametrize(
+        "spec",
+        [
+            RGROUPS | {"coreSmiles": "C" * 2001},
+            CLUSTERS | {"threshold": 0.01},
+            CLUSTERS | {"threshold": 0.96},
+            _series({"name": "x" * 61, "scaffold": "c1ccccc1"}),
+            RGROUPS | {"moleculeIds": ["m1"]},
+        ],
+        ids=["long-core", "threshold-low", "threshold-high", "long-name", "data"],
+    )
+    def test_out_of_bounds_derived_spec_rejected(self, spec: dict) -> None:
+        with pytest.raises(ValidationError, match="derived"):
+            validate_view_config(_config(config_version=2, derived=[spec]))
 
     def test_unknown_top_level_key_rejected(self) -> None:
         with pytest.raises(ValidationError):

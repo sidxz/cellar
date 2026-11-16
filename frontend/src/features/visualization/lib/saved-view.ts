@@ -1,12 +1,15 @@
+import { z } from "zod";
 import type { PanelConfig } from "../store/workbench-store";
 import type { Dataset } from "../types";
 import {
   MAX_VIEW_CONFIG_BYTES,
   VIEW_CONFIG_VERSION,
   type ViewConfig,
+  derivedSpecSchema,
   viewConfigSchema,
 } from "./config-schema";
 import { column } from "./dataset";
+import type { DerivedSpec } from "./derived";
 import type { Filter } from "./filters";
 import { carryConfig } from "./level-switch";
 
@@ -33,8 +36,12 @@ function savedFilters(filters: Filter[]): SavedFilter[] {
 }
 
 /** What a saved view stores of the workbench: its plots and its saved filters, with the
- * label of every column they reference. */
-export function buildViewConfig(state: Settings, ds: Dataset): ViewConfig {
+ * label of every column they reference, and how its chemistry columns were computed. */
+export function buildViewConfig(
+  state: Settings,
+  ds: Dataset,
+  derived: DerivedSpec[] = [],
+): ViewConfig {
   const filters = savedFilters(state.filters);
   const filterKeys = filters.map((f) => ("key" in f ? f.key : undefined));
   const labels: Record<string, string> = {};
@@ -42,7 +49,7 @@ export function buildViewConfig(state: Settings, ds: Dataset): ViewConfig {
     const label = key === undefined ? undefined : column(ds, key)?.label;
     if (key !== undefined && label !== undefined) labels[key] = label;
   }
-  return { config_version: VIEW_CONFIG_VERSION, panels: state.panels, filters, labels };
+  return { config_version: VIEW_CONFIG_VERSION, panels: state.panels, filters, labels, derived };
 }
 
 /** Whether ``a`` and ``b`` save as the same view (a selection or a query's matches never
@@ -51,6 +58,12 @@ export const sameSaved = (a: Settings, b: Settings) =>
   (a.panels === b.panels && a.filters === b.filters) ||
   JSON.stringify([a.panels, savedFilters(a.filters)]) ===
     JSON.stringify([b.panels, savedFilters(b.filters)]);
+
+/** Whether two lists of chemistry column specs save the same (key order aside). */
+export const sameDerived = (a: DerivedSpec[], b: DerivedSpec[]) =>
+  a.length === b.length &&
+  JSON.stringify(z.array(derivedSpecSchema).parse(a)) ===
+    JSON.stringify(z.array(derivedSpecSchema).parse(b));
 
 /** The config's size as stored: UTF-8 bytes of its compact JSON. */
 export const configBytes = (cfg: ViewConfig) =>
@@ -66,7 +79,10 @@ export function tooLargeToSave(cfg: ViewConfig): string | null {
 
 /** ``MIGRATIONS[v]`` turns a version-``v`` config into a version-``v + 1`` one. */
 // biome-ignore lint/suspicious/noExplicitAny: a step reads a config of an older shape
-export const MIGRATIONS: Record<number, (c: any) => any> = {};
+export const MIGRATIONS: Record<number, (c: any) => any> = {
+  // Version 2 saves how chemistry columns were computed.
+  1: (c) => ({ ...c, config_version: 2, derived: [] }),
+};
 
 const UNREADABLE = "This view's settings can't be read.";
 const NEWER = "This view was saved by a newer version of ChemCellar. Reload the page to open it.";

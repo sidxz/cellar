@@ -3,11 +3,14 @@
 import { useDecompositionRun } from "@/features/sar-analysis/hooks/use-decomposition-run";
 import { useScaffoldTree } from "@/features/sar-analysis/hooks/use-scaffold-tree";
 import { useUmapCluster } from "@/features/sar-analysis/hooks/use-umap-cluster";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Dispatch, useEffect, useMemo, useRef } from "react";
 import type { DerivedAction, DerivedEntry } from "../hooks/use-derived";
 import { useRGroupAssignments } from "../hooks/use-rgroup-assignments";
+import { matchSubstructure } from "../hooks/use-substructure-match";
 import { errorText } from "../lib/api-errors";
+import type { ViewConfig } from "../lib/config-schema";
+import { datasetMoleculeIds } from "../lib/dataset";
 import {
   type DerivedSet,
   type DerivedSpec,
@@ -139,5 +142,34 @@ function SeriesRunner(props: Of<"series">) {
     [ds, needsTree, tree, entry.spec, readySets],
   );
   useOutcome(props, "scaffold-tree", () => {}, needsTree && error ? plain(error) : null, set);
+  return null;
+}
+
+type SavedQuery = Extract<ViewConfig["filters"][number], { kind: "substructure" }>;
+/** A saved substructure query matched again: the compounds it matched, or why it couldn't be. */
+export type Rematch = { moleculeIds: string[] } | { error: string };
+
+/** Matches a saved view's substructure query against the dataset's compounds and reports the
+ * outcome; renders nothing. A query is not a job: no cancel. */
+export function SubstructureRematch({
+  filter,
+  ds,
+  onDone,
+}: {
+  filter: SavedQuery;
+  ds: Dataset;
+  onDone: (id: string, outcome: Rematch) => void;
+}) {
+  const { query, queryKind } = filter;
+  const { data, error } = useQuery({
+    queryKey: ["visualization", "substructure-rematch", query, queryKind, ds.revision],
+    queryFn: () => matchSubstructure({ query, queryKind, moleculeIds: datasetMoleculeIds(ds) }),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+  useEffect(() => {
+    if (data) onDone(filter.id, { moleculeIds: data.matched_ids });
+    else if (error) onDone(filter.id, { error: plain(error) });
+  }, [filter.id, data, error, onDone]);
   return null;
 }

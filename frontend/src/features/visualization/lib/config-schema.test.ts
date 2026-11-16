@@ -49,7 +49,7 @@ describe("config schemas", () => {
 
   it("a view config holds at most 4 panels", () => {
     const panels = Array.from({ length: 5 }, () => makePanel("histogram", { x: "a" }));
-    const cfg = { config_version: 1, panels, filters: [], labels: {} };
+    const cfg = { config_version: 2, panels, filters: [], labels: {}, derived: [] };
     expect(viewConfigSchema.safeParse(cfg).success).toBe(false);
     expect(viewConfigSchema.safeParse({ ...cfg, panels: panels.slice(1) }).success).toBe(true);
   });

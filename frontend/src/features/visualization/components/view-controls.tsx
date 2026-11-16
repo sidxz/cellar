@@ -23,8 +23,9 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useUpdateSavedView } from "../hooks/use-saved-views";
 import { isStaleEdit } from "../lib/api-errors";
+import type { DerivedSpec } from "../lib/derived";
 import type { Filter } from "../lib/filters";
-import { buildViewConfig, sameSaved, tooLargeToSave } from "../lib/saved-view";
+import { buildViewConfig, sameDerived, sameSaved, tooLargeToSave } from "../lib/saved-view";
 import { fromDatasetRequest, toDatasetRequest, visualizeHref } from "../lib/source-url";
 import { type OpenView, useOpenView } from "../store/open-view-context";
 import { useWorkbench } from "../store/workbench-context";
@@ -33,7 +34,8 @@ import type { Dataset, DatasetSource, Level } from "../types";
 import { DeleteViewDialog, SaveViewDialog } from "./save-view-dialog";
 
 type Dialog = "create" | "details" | "delete" | "stale";
-type Props = { source: DatasetSource; level: Level; ds: Dataset };
+/** ``derived``: how the workbench's chemistry columns were computed (saved with the view). */
+type Props = { source: DatasetSource; level: Level; ds: Dataset; derived: DerivedSpec[] };
 
 /** Header controls for saving the workbench as a named view. No view open: "Save view…".
  * A view open: its name, a dot while there are unsaved changes, and — for its owner or an
@@ -50,6 +52,7 @@ function Controls({
   source,
   level,
   ds,
+  derived,
   open,
   readOnly = false,
 }: Props & { open: OpenView | null; readOnly?: boolean }) {
@@ -60,12 +63,24 @@ function Controls({
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const view = open?.view;
 
-  const config = useMemo(() => buildViewConfig({ panels, filters }, ds), [panels, filters, ds]);
+  const config = useMemo(
+    () => buildViewConfig({ panels, filters }, ds, derived),
+    [panels, filters, ds, derived],
+  );
   const tooLarge = useMemo(() => tooLargeToSave(config), [config]);
   const saved = view?.dataset ? fromDatasetRequest(view.dataset).source : null;
+  const savedDerived = open?.config.derived;
+  const derivedChanged = useMemo(
+    () => savedDerived !== undefined && !sameDerived(derived, savedDerived),
+    [derived, savedDerived],
+  );
   const dirty =
     view !== undefined &&
-    (changed || level !== view.level || !saved || visualizeHref(saved) !== visualizeHref(source));
+    (changed ||
+      derivedChanged ||
+      level !== view.level ||
+      !saved ||
+      visualizeHref(saved) !== visualizeHref(source));
 
   const closeDialog = (next: boolean) => !next && setDialog(null);
   const saveAsNew = (
@@ -122,6 +137,7 @@ function Controls({
           source={source}
           level={level}
           ds={ds}
+          derived={derived}
           open
           onOpenChange={closeDialog}
           onStale={() => setDialog("stale")}

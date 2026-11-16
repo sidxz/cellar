@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { type DerivedSet, type DerivedSpec, type SeriesMember, letters } from "../lib/derived";
-import { type DerivedEntry, derivedReducer, setsOf, useDerived } from "./use-derived";
+import { type DerivedEntry, derivedReducer, runnable, setsOf, useDerived } from "./use-derived";
 
 const rg1: DerivedSpec = {
   id: "rg1",
@@ -24,6 +24,17 @@ const setOf = (spec: DerivedSpec): DerivedSet => ({
 
 const add = (entries: DerivedEntry[], spec: DerivedSpec, ids = ["m1", "m2"]) =>
   derivedReducer(entries, { type: "add", spec, moleculeIds: ids });
+
+describe("runnable", () => {
+  it("holds a series back while an R-groups set it names is still running", () => {
+    const both = add(add(add([], rg1), clusters), series({ name: "Series A", rgroupsId: "rg1" }));
+    expect(runnable(both).map((e) => e.spec.id)).toEqual(["rg1", "clusters"]);
+    const ready = derivedReducer(both, { type: "resolve", id: "rg1", set: setOf(rg1) });
+    expect(runnable(ready).map((e) => e.spec.id)).toEqual(["clusters", "series"]);
+    const failed = derivedReducer(both, { type: "fail", id: "rg1", message: "No match." });
+    expect(runnable(failed).map((e) => e.spec.id)).toEqual(["clusters", "series"]);
+  });
+});
 
 describe("derivedReducer", () => {
   it("adds a running entry over the given compounds; adding the same id replaces it", () => {

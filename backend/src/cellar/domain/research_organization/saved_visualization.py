@@ -14,7 +14,7 @@ from datetime import UTC, datetime
 from types import EllipsisType
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic import ValidationError as PydanticValidationError
 
 from cellar.domain.research_organization.enums import SearchVisibility
@@ -26,7 +26,7 @@ from cellar.domain.research_organization.events import (
 from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import StaleEditError, ValidationError
 
-VIEW_CONFIG_VERSION = 1
+VIEW_CONFIG_VERSION = 2
 MAX_VIEW_CONFIG_BYTES = 65_536
 MAX_NAME_LENGTH = 255
 MAX_DESCRIPTION_LENGTH = 2_000
@@ -67,8 +67,55 @@ class ViewSubstructureFilter(BaseModel):
     queryKind: Literal["smiles", "smarts"]
 
 
+class ViewRGroups(BaseModel):
+    """R-group columns: a decomposition of the dataset's compounds on a core."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^rg[0-9]{1,6}$")
+    kind: Literal["rgroups"]
+    coreSmiles: str = Field(min_length=1, max_length=2_000)
+    name: str = Field(min_length=1, max_length=60)
+
+
+class ViewClusters(BaseModel):
+    """Cluster columns: Butina clusters at a similarity threshold."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["clusters"]
+    kind: Literal["clusters"]
+    threshold: float = Field(ge=0.05, le=0.95)
+
+
+class ViewSeriesMember(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=60)
+    scaffold: str | None = Field(default=None, min_length=1, max_length=2_000)
+    rgroupsId: str | None = Field(default=None, min_length=1, max_length=64)
+
+    @model_validator(mode="after")
+    def _one_source(self) -> ViewSeriesMember:
+        if (self.scaffold is None) == (self.rgroupsId is None):
+            raise ValueError("a series member needs either a scaffold or an R-groups core")
+        return self
+
+
+class ViewSeries(BaseModel):
+    """A Series column: compounds under a scaffold or matching an R-groups core."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: Literal["series"]
+    kind: Literal["series"]
+    members: list[ViewSeriesMember] = Field(min_length=1, max_length=8)
+
+
 class ViewConfig(BaseModel):
-    """A selection (``rows`` filter) is never part of a view."""
+    """A selection (``rows`` filter) is never part of a view. ``derived`` holds how each
+    chemistry column set was computed (never its values): the workbench recomputes them on
+    open."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -78,6 +125,9 @@ class ViewConfig(BaseModel):
         Field(max_length=100)
     )
     labels: dict[str, str] = {}
+    derived: list[
+        Annotated[ViewRGroups | ViewClusters | ViewSeries, Field(discriminator="kind")]
+    ] = []
 
 
 def validate_view_config(config: dict[str, Any]) -> dict[str, Any]:

@@ -2,12 +2,14 @@ import { describe, expect, it } from "vitest";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset } from "../types";
 import { MAX_VIEW_CONFIG_BYTES, VIEW_CONFIG_VERSION, type ViewConfig } from "./config-schema";
+import type { DerivedSpec } from "./derived";
 import type { Filter } from "./filters";
 import {
   buildViewConfig,
   configBytes,
   migrateViewConfig,
   resolveViewConfig,
+  sameDerived,
   sameSaved,
   tooLargeToSave,
 } from "./saved-view";
@@ -104,9 +106,11 @@ describe("configBytes", () => {
       ds,
     );
     expect(configBytes(big)).toBeGreaterThan(MAX_VIEW_CONFIG_BYTES);
-    expect(configBytes({ config_version: 1, panels: [], filters: [], labels: { a: "é" } })).toBe(
-      new TextEncoder().encode('{"config_version":1,"panels":[],"filters":[],"labels":{"a":"é"}}')
-        .length,
+    const small = { config_version: 2, panels: [], filters: [], labels: { a: "é" }, derived: [] };
+    expect(configBytes(small)).toBe(
+      new TextEncoder().encode(
+        '{"config_version":2,"panels":[],"filters":[],"labels":{"a":"é"},"derived":[]}',
+      ).length,
     );
   });
 });
@@ -153,14 +157,22 @@ describe("sameSaved", () => {
 });
 
 describe("migrateViewConfig", () => {
-  const v1: ViewConfig = buildViewConfig({ panels: [scatter], filters: [rangeOn("f1", Y)] }, ds);
+  const current: ViewConfig = buildViewConfig(
+    { panels: [scatter], filters: [rangeOn("f1", Y)] },
+    ds,
+  );
+  const { derived: _, ...v1 } = { ...current, config_version: 1 };
 
   it("reads a current config unchanged", () => {
-    expect(migrateViewConfig(v1)).toEqual({ ok: true, config: v1 });
+    expect(migrateViewConfig(current)).toEqual({ ok: true, config: current });
+  });
+
+  it("opens a version-1 config with no chemistry columns", () => {
+    expect(migrateViewConfig(v1)).toEqual({ ok: true, config: { ...current, derived: [] } });
   });
 
   it("refuses a newer config", () => {
-    expect(migrateViewConfig({ ...v1, config_version: 2 })).toEqual({
+    expect(migrateViewConfig({ ...current, config_version: VIEW_CONFIG_VERSION + 1 })).toEqual({
       ok: false,
       reason: "This view was saved by a newer version of ChemCellar. Reload the page to open it.",
     });
@@ -179,11 +191,50 @@ describe("migrateViewConfig", () => {
         ...c,
         config_version: 2,
         panels: c.panels.map((p) => ({ ...p, bins: 20 })),
+        derived: [],
       }),
     };
     const out = migrateViewConfig(v1, 2, steps);
     expect(out.ok && out.config.config_version).toBe(2);
     expect(out.ok && out.config.panels[0].bins).toBe(20);
+  });
+});
+
+describe("a view's chemistry", () => {
+  const rg1: DerivedSpec = {
+    id: "rg1",
+    kind: "rgroups",
+    coreSmiles: "c1ccccc1[*:1]",
+    name: "Core A",
+  };
+  const clusters: DerivedSpec = { id: "clusters", kind: "clusters", threshold: 0.4 };
+  const matched: Filter = {
+    id: "sub-1",
+    kind: "substructure",
+    query: "c1ccncc1",
+    queryKind: "smarts",
+    moleculeIds: ["m-matched"],
+  };
+
+  it("saves how each chemistry column set was made and a query without its matches", () => {
+    const cfg = buildViewConfig({ panels: [scatter], filters: [matched] }, ds, [rg1, clusters]);
+    const stored = JSON.parse(JSON.stringify(cfg));
+    expect(migrateViewConfig(stored)).toEqual({ ok: true, config: cfg });
+    expect(cfg.derived).toEqual([rg1, clusters]);
+    expect(cfg.filters).toEqual([
+      { id: "sub-1", kind: "substructure", query: "c1ccncc1", queryKind: "smarts" },
+    ]);
+    expect(JSON.stringify(stored)).not.toContain("m-matched");
+  });
+
+  it("tells chemistry apart by content, whatever the key order", () => {
+    const reordered = JSON.parse(
+      '{"name":"Core A","coreSmiles":"c1ccccc1[*:1]","kind":"rgroups","id":"rg1"}',
+    );
+    expect(sameDerived([rg1, clusters], [reordered, { ...clusters }])).toBe(true);
+    expect(sameDerived([rg1], [rg1, clusters])).toBe(false);
+    expect(sameDerived([rg1], [{ ...clusters, threshold: 0.5 }])).toBe(false);
+    expect(sameDerived([], [])).toBe(true);
   });
 });
 

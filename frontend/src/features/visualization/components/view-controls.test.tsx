@@ -4,6 +4,7 @@ import { MutationCache, QueryClient, QueryClientProvider } from "@tanstack/react
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { MAX_VIEW_CONFIG_BYTES } from "../lib/config-schema";
+import type { DerivedSpec } from "../lib/derived";
 import type { Filter } from "../lib/filters";
 import { toDatasetRequest, visualizeHref } from "../lib/source-url";
 import { OpenViewContext } from "../store/open-view-context";
@@ -43,7 +44,13 @@ const ds: Dataset = {
   values: { well_order: [1, 2], plate: ["P1", "P2"] },
 };
 const panel = makePanel("histogram", { x: "well_order" });
-const config = { config_version: 1, panels: [panel], filters: [], labels: {} };
+const config = { config_version: 2, panels: [panel], filters: [], labels: {}, derived: [] };
+const rg1: DerivedSpec = {
+  id: "rg1",
+  kind: "rgroups",
+  coreSmiles: "c1ccccc1[*:1]",
+  name: "Core A",
+};
 
 function savedView(over: Partial<SavedView> = {}): SavedView {
   return {
@@ -90,16 +97,18 @@ function show({
   level = "wells" as Level,
   at = source,
   filters = [] as Filter[],
+  derived = [] as DerivedSpec[],
+  savedDerived = [] as DerivedSpec[],
 } = {}) {
   const client = new QueryClient({
     mutationCache: new MutationCache({ onError: onMutationError }),
   });
-  const open = view && { view, config, reload: state.reload };
+  const open = view && { view, config: { ...config, derived: savedDerived }, reload: state.reload };
   render(
     <QueryClientProvider client={client}>
       <OpenViewContext.Provider value={open}>
         <WorkbenchProvider initialPanels={[panel]} initialFilters={filters} saved={!!view}>
-          <ViewControls source={at} level={level} ds={ds} />
+          <ViewControls source={at} level={level} ds={ds} derived={derived} />
           <Probe />
         </WorkbenchProvider>
       </OpenViewContext.Provider>
@@ -150,6 +159,16 @@ describe("ViewControls", () => {
     expect(dot()).not.toBeNull();
   });
 
+  it("counts added or removed chemistry columns as unsaved", () => {
+    show({ derived: [rg1] });
+    expect(dot()).not.toBeNull();
+  });
+
+  it("reads the saved chemistry columns as saved", () => {
+    show({ derived: [{ ...rg1 }], savedDerived: [rg1] });
+    expect(dot()).toBeNull();
+  });
+
   it("counts a change of runs as unsaved", () => {
     show({ at: { ...source, runIds: ["r1"] } });
     expect(dot()).not.toBeNull();
@@ -157,7 +176,7 @@ describe("ViewControls", () => {
 
   it("Save sends the version it was opened at, then reads as saved", async () => {
     vi.mocked(customInstance).mockResolvedValueOnce(savedView({ version: 2 }));
-    show();
+    show({ derived: [rg1], savedDerived: [rg1] });
     fireEvent.click(screen.getByRole("button", { name: "change" }));
     fireEvent.click(saveBtn());
 
@@ -169,10 +188,11 @@ describe("ViewControls", () => {
         expected_version: 1,
         dataset: toDatasetRequest(source, "wells"),
         config: {
-          config_version: 1,
+          config_version: 2,
           panels: [panel],
           filters: [plateFilter(["P1"])],
           labels: { well_order: "Well order", plate: "Plate" },
+          derived: [rg1],
         },
       },
     });

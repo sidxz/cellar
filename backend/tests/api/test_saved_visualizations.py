@@ -201,7 +201,22 @@ async def test_a_source_outside_the_workspace_is_not_found(client, session_facto
     [
         (CONFIG | {"filters": [{"id": "f1", "kind": "rows", "key": "row"}]}, "Selections"),
         (CONFIG | {"panels": [{"id": f"p{i}", "type": "bar"} for i in range(5)]}, "panels"),
-        (CONFIG | {"config_version": 2}, "newer version"),
+        (CONFIG | {"config_version": 3}, "newer version"),
+        (
+            CONFIG
+            | {
+                "config_version": 2,
+                "derived": [
+                    {
+                        "id": "series",
+                        "kind": "series",
+                        "members": [{"name": f"S{n}", "scaffold": "c1ccccc1"} for n in range(9)],
+                    }
+                ],
+            },
+            "members",
+        ),
+        (CONFIG | {"config_version": 2, "derived": [{"id": "x", "kind": "pca"}]}, "derived"),
         (
             CONFIG
             | {
@@ -227,7 +242,15 @@ async def test_a_source_outside_the_workspace_is_not_found(client, session_facto
             "64 KB",
         ),
     ],
-    ids=["selection", "five-panels", "newer-version", "substructure-matches", "too-large"],
+    ids=[
+        "selection",
+        "five-panels",
+        "newer-version",
+        "nine-series-members",
+        "unknown-derived-kind",
+        "substructure-matches",
+        "too-large",
+    ],
 )
 async def test_unsavable_settings_are_refused(client, session_factory, fake_auth, config, message):
     w = await _seed(session_factory, fake_auth.workspace_id)

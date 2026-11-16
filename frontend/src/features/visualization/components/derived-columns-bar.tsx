@@ -38,8 +38,8 @@ type Handlers = {
   onRetry: (id: string) => void;
   onRemove: (id: string) => void;
   onRecompute: (id: string) => void;
-  /** Add the set's plot: the cluster map, or an R-group matrix. */
-  onPlot: (id: string) => void;
+  /** Add the set's plot: the cluster map, or an R-group matrix (none without it). */
+  onPlot?: (id: string) => void;
 };
 
 /** One line per derived column set under the header: running (elapsed time, Cancel),
@@ -78,8 +78,13 @@ function Line({
   const id = e.spec.id;
   const title = derivedTitle(e.spec);
   const btn = "h-6 px-2 text-xs";
-  const plot =
-    e.spec.kind === "clusters" ? "Show map" : e.spec.kind === "rgroups" ? "Matrix" : null;
+  const plot = !onPlot
+    ? null
+    : e.spec.kind === "clusters"
+      ? "Show map"
+      : e.spec.kind === "rgroups"
+        ? "Matrix"
+        : null;
   const covered = e.status === "ready" && e.set ? coverage(ds, e.set) : null;
 
   return (
@@ -139,7 +144,7 @@ function Line({
                 variant="outline"
                 className={btn}
                 disabled={plotsFull}
-                onClick={() => onPlot(id)}
+                onClick={() => onPlot?.(id)}
               >
                 {plot}
               </Button>

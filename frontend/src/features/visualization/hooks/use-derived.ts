@@ -83,6 +83,20 @@ export function derivedReducer(entries: DerivedEntry[], a: DerivedAction): Deriv
     : entries.map((e, k) => (k === at ? next : e));
 }
 
+/** The running entries whose job can start now: a series waits for the R-groups sets it
+ * names (a saved view starts them together). */
+export const runnable = (entries: DerivedEntry[]): DerivedEntry[] =>
+  entries.filter(
+    (e) =>
+      e.status === "running" &&
+      !(
+        e.spec.kind === "series" &&
+        e.spec.members.some((m) =>
+          entries.some((o) => o.spec.id === m.rgroupsId && o.status === "running"),
+        )
+      ),
+  );
+
 /** The column sets on show: every entry that has columns (ready, or recomputing). */
 export const setsOf = (entries: DerivedEntry[]): DerivedSet[] =>
   entries.flatMap((e) => (e.set ? [e.set] : []));

@@ -66,7 +66,7 @@ const view: SavedView = {
   can_edit: true,
   version: 3,
   dataset: toDatasetRequest(allRuns, "wells"),
-  config: { config_version: 1, panels: [], filters: [], labels: {} },
+  config: { config_version: 2, panels: [], filters: [], labels: {}, derived: [] },
   unresolved: [],
 };
 
@@ -86,6 +86,7 @@ function show(
           source={allRuns}
           level="wells"
           ds={ds}
+          derived={[]}
           open
           onOpenChange={onOpenChange}
           {...props}
@@ -144,7 +145,11 @@ describe("SaveViewDialog", () => {
 
   it("creates the view from the source and plots, without the selection, and opens it", async () => {
     vi.mocked(customInstance).mockResolvedValueOnce({ ...view, id: "v-new" });
-    show();
+    const clusters = { id: "clusters", kind: "clusters", threshold: 0.4 } as const;
+    show({ derived: [clusters] });
+    expect(
+      screen.getByText("Chemistry columns are computed again each time the view opens."),
+    ).toBeInTheDocument();
     fireEvent.change(name(), { target: { value: "  Plate drift " } });
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Edge wells" } });
     fireEvent.click(save());
@@ -160,10 +165,11 @@ describe("SaveViewDialog", () => {
         project_id: null,
         dataset: toDatasetRequest(allRuns, "wells"),
         config: {
-          config_version: 1,
+          config_version: 2,
           panels: [panel],
           filters: [range],
           labels: { well_order: "Well order", "rd:X:raw": "Signal (AU)" },
+          derived: [clusters],
         },
       },
     });

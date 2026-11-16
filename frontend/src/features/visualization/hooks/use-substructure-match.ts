@@ -12,16 +12,18 @@ export type SubstructureMatchInput = {
 
 /** Which of the given compounds contain the query, matched on the server the way Search
  * matches a substructure. */
+export const matchSubstructure = ({ query, queryKind, moleculeIds }: SubstructureMatchInput) =>
+  customInstance<SubstructureMatchResponse>({
+    url: `${API_V1}/visualization/substructure-match`,
+    method: "POST",
+    data: {
+      query,
+      query_kind: queryKind,
+      molecule_ids: moleculeIds,
+    } satisfies SubstructureMatchRequest,
+  });
+
 export const useSubstructureMatch = () =>
   useMutation<SubstructureMatchResponse, ApiError, SubstructureMatchInput>({
-    mutationFn: ({ query, queryKind, moleculeIds }) =>
-      customInstance<SubstructureMatchResponse>({
-        url: `${API_V1}/visualization/substructure-match`,
-        method: "POST",
-        data: {
-          query,
-          query_kind: queryKind,
-          molecule_ids: moleculeIds,
-        } satisfies SubstructureMatchRequest,
-      }),
+    mutationFn: (input) => matchSubstructure(input),
   });

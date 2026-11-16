@@ -5,14 +5,15 @@ import { Alert } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
-import { AlertTriangle, ChartScatter, Database, Info, Rows3, X } from "lucide-react";
+import { AlertTriangle, ChartScatter, Database, Info, Loader2, Rows3, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type Dispatch, useCallback, useMemo, useRef, useState } from "react";
+import { type Dispatch, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import {
   type DerivedAction,
   type DerivedEntry,
   derivedReducer,
+  runnable,
   setsOf,
   useDerived,
 } from "../hooks/use-derived";
@@ -28,19 +29,20 @@ import {
   rgroupSetOf,
   withDerived,
 } from "../lib/derived";
+import { type Filter, substructureSummary } from "../lib/filters";
 import { type Carry, carryConfig, switchNote } from "../lib/level-switch";
 import { countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
 import { resolveViewConfig } from "../lib/saved-view";
 import { visualizeHref } from "../lib/source-url";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
-import { MAX_PANELS, type PanelPatch, makePanel } from "../store/workbench-store";
+import { MAX_PANELS, type PanelConfig, type PanelPatch, makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level, SavedView } from "../types";
 import { AddColumnsMenu } from "./add-columns-menu";
 import { AddPlotMenu } from "./add-plot-menu";
 import { CurvesDialog, type CurvesTarget, curvesTarget } from "./curves-dialog";
 import { DerivedColumnsBar, derivedTitle } from "./derived-columns-bar";
-import { DerivedRunner } from "./derived-runner";
+import { DerivedRunner, type Rematch, SubstructureRematch } from "./derived-runner";
 import { ClustersDialog } from "./derived/clusters-dialog";
 import { RGroupsDialog } from "./derived/rgroups-dialog";
 import { SeriesDialog } from "./derived/series-dialog";
@@ -128,6 +130,8 @@ function Workbench({
   const ds = useMemo(() => base && withDerived(base, readySets), [base, readySets]);
   // The compounds a new chemistry job runs over: every one with a structure.
   const moleculeIds = useMemo(() => (base ? jobMoleculeIds(base) : []), [base]);
+  // How the chemistry columns were made: what a saved view keeps of them.
+  const specs = useMemo(() => entries.map((e) => e.spec), [entries]);
   const addSet = (spec: DerivedSpec) => dispatch({ type: "add", spec, moleculeIds });
   const specOf = <K extends DerivedSpec["kind"]>(kind: K) =>
     entries.find((e) => e.spec.kind === kind)?.spec as
@@ -175,14 +179,38 @@ function Workbench({
         : null;
   }
 
-  // A saved view opens on its own plots and filters, less what today's data lacks; the note
-  // lists that by saved label, after whatever the server could not resolve (removed runs…).
-  const resolved = useMemo(
-    () => (ds && view ? resolveViewConfig(view.config, ds) : null),
-    [ds, view],
+  // A saved view's chemistry columns are computed again for today's data, and its
+  // substructure queries matched again, before its plots and filters open on them.
+  const toRegenerate = useRef(view?.config.derived ?? []);
+  useEffect(() => {
+    if (!base || toRegenerate.current.length === 0) return;
+    for (const spec of toRegenerate.current) dispatch({ type: "add", spec, moleculeIds });
+    toRegenerate.current = [];
+  }, [base, moleculeIds, dispatch]);
+  const [rematched, setRematched] = useState<Record<string, Rematch>>({});
+  const onRematched = useCallback(
+    (id: string, outcome: Rematch) => setRematched((m) => ({ ...m, [id]: outcome })),
+    [],
   );
+  // The saved view as opened, fixed once (later changes have notes of their own).
+  const opened = useRef<Opened | null>(null);
+  const toMatch = view && !opened.current ? view.config.filters.filter(unmatched(rematched)) : [];
+  const regenerating =
+    view !== undefined &&
+    !opened.current &&
+    (toRegenerate.current.length > 0 ||
+      entries.some((e) => e.status === "running") ||
+      toMatch.length > 0);
+  if (view && ds && !regenerating && !opened.current) {
+    opened.current = openSaved(view.config, ds, entries, rematched);
+  }
+  // A saved view opens on its own plots and filters, less what today's data lacks; the note
+  // lists that by saved label, after whatever the server could not resolve (removed runs…)
+  // and the chemistry that couldn't be made again.
+  const resolved = opened.current;
   const viewLines = [
     ...(view?.view.unresolved ?? []),
+    ...(resolved?.lines ?? []),
     ...(!carry && resolved?.missing.length
       ? [`Not available any more: ${resolved.missing.join(", ")}.`]
       : []),
@@ -259,22 +287,34 @@ function Workbench({
         description="Import readouts on the run page, then open the workbench again."
       />
     );
+  } else if (regenerating) {
+    body = (
+      <Regenerating
+        entries={entries}
+        ds={ds}
+        dispatch={dispatch}
+        moleculeIds={moleculeIds}
+        matching={toMatch.length}
+      />
+    );
   }
 
   return (
     <div className="flex h-[calc(100dvh-4.5rem)] min-h-[560px] flex-col gap-2">
       {/* Always mounted, so screen readers announce the notes when they appear. */}
       <output className="sr-only">{[note, removedNote].filter(Boolean).join(" ")}</output>
-      {entries
-        .filter((e) => e.status === "running")
-        .map((e) => (
-          <DerivedRunner
-            key={`${e.spec.id}:${e.attempt}`}
-            entry={e}
-            ds={base}
-            readySets={readySets}
-            dispatch={dispatch}
-          />
+      {runnable(entries).map((e) => (
+        <DerivedRunner
+          key={`${e.spec.id}:${e.attempt}`}
+          entry={e}
+          ds={base}
+          readySets={readySets}
+          dispatch={dispatch}
+        />
+      ))}
+      {base &&
+        toMatch.map((f) => (
+          <SubstructureRematch key={f.id} filter={f} ds={base} onDone={onRematched} />
         ))}
       {body || !ds ? (
         <>
@@ -316,7 +356,7 @@ function Workbench({
                 }
               />
             }
-            viewControls={<ViewControls source={source} level={level} ds={ds} />}
+            viewControls={<ViewControls source={source} level={level} ds={ds} derived={specs} />}
           />
           {entries.length > 0 && base && (
             <DerivedStrip
@@ -407,6 +447,86 @@ function Workbench({
           onOpenChange={setPickerOpen}
           onConfirm={(runIds) => changeView({ source: { ...source, runIds }, level }, carry)}
         />
+      )}
+    </div>
+  );
+}
+
+type SavedQuery = Extract<ViewConfig["filters"][number], { kind: "substructure" }>;
+
+/** A saved substructure query not matched again yet. */
+const unmatched =
+  (rematched: Record<string, Rematch>) =>
+  (f: ViewConfig["filters"][number]): f is SavedQuery =>
+    f.kind === "substructure" && !rematched[f.id];
+
+/** A saved view as opened: its plots and filters fitted to today's data (substructure
+ * filters with today's matches), what is missing, and what couldn't be made again. */
+type Opened = { panels: PanelConfig[]; filters: Filter[]; missing: string[]; lines: string[] };
+
+function openSaved(
+  cfg: ViewConfig,
+  ds: Dataset,
+  entries: DerivedEntry[],
+  rematched: Record<string, Rematch>,
+): Opened {
+  const { panels, filters, missing } = resolveViewConfig(cfg, ds);
+  const lines = entries.flatMap((e) => {
+    const title = derivedTitle(e.spec);
+    if (e.status === "failed") return [`${title} couldn't be regenerated: ${e.error}`];
+    if (e.status === "cancelled") return [`${title} was cancelled; its columns weren't made.`];
+    return [];
+  });
+  const matched = filters.map((f): Filter => {
+    const outcome = f.kind === "substructure" ? rematched[f.id] : undefined;
+    if (!outcome || f.kind !== "substructure") return f;
+    if ("error" in outcome) {
+      lines.push(`The filter “${substructureSummary(f)}” couldn't be re-run: ${outcome.error}`);
+      return f;
+    }
+    return { ...f, moleculeIds: outcome.moleculeIds };
+  });
+  return { panels, filters: matched, missing, lines };
+}
+
+/** A saved view's chemistry being made again for today's data: each job's progress with
+ * Cancel. The view opens once every one has finished, failed or been cancelled. */
+function Regenerating({
+  entries,
+  ds,
+  dispatch,
+  moleculeIds,
+  matching,
+}: {
+  entries: DerivedEntry[];
+  ds: Dataset;
+  dispatch: Dispatch<DerivedAction>;
+  moleculeIds: string[];
+  matching: number;
+}) {
+  return (
+    <div className="flex flex-col gap-2">
+      <output className="flex items-center gap-2 text-sm text-muted-foreground">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Regenerating chemistry columns…
+      </output>
+      {entries.length > 0 && (
+        <DerivedColumnsBar
+          entries={entries}
+          ds={ds}
+          plotsFull={false}
+          onCancel={(id) => dispatch({ type: "cancel", id })}
+          onRetry={(id) => dispatch({ type: "retry", id })}
+          onRemove={(id) => dispatch({ type: "remove", id })}
+          onRecompute={(id) => dispatch({ type: "recompute", id, moleculeIds })}
+        />
+      )}
+      {matching > 0 && (
+        <p className="text-sm text-muted-foreground">
+          {matching === 1
+            ? "Matching 1 substructure filter…"
+            : `Matching ${matching} substructure filters…`}
+        </p>
       )}
     </div>
   );

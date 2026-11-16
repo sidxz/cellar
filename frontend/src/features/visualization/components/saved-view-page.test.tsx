@@ -1,7 +1,12 @@
+import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { ApiError } from "@/shared/lib/api/custom-instance";
-import { fireEvent, render, screen } from "@testing-library/react";
+import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewConfig } from "../lib/config-schema";
+import { rgroupSet, withDerived } from "../lib/derived";
+import { buildViewConfig } from "../lib/saved-view";
 import { provenanceOf } from "../lib/traces/test-fixtures";
 import { DEFAULT_APPEARANCE } from "../store/workbench-store";
 import type { Dataset, DatasetColumn, DatasetSource, Level, SavedView } from "../types";
@@ -16,6 +21,9 @@ const state = vi.hoisted(() => ({
   datasetCalls: [] as [unknown, unknown][],
   replace: vi.fn(),
   remove: vi.fn(),
+  decomposition: {} as Record<string, unknown>,
+  assignments: {} as Record<string, unknown>,
+  match: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -45,6 +53,22 @@ vi.mock("../hooks/use-dataset", () => ({
     };
   },
 }));
+vi.mock("@/shared/components/chemistry", () => ({
+  StructureThumbnail: () => null,
+  StructureRenderer: () => null,
+  StructureEditorDialog: () => null,
+}));
+vi.mock("@/features/sar-analysis/hooks/use-decomposition-run", () => ({
+  useDecompositionRun: () => state.decomposition,
+}));
+vi.mock("../hooks/use-rgroup-assignments", () => ({
+  useRGroupAssignments: (runId: string | null) =>
+    runId ? state.assignments : { data: undefined, error: null },
+}));
+vi.mock("../hooks/use-substructure-match", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../hooks/use-substructure-match")>()),
+  matchSubstructure: state.match,
+}));
 vi.mock("../hooks/use-saved-views", () => ({
   useSavedView: () => state.view,
   useUpdateSavedView: () => ({ mutate: vi.fn(), isPending: false }),
@@ -71,17 +95,24 @@ function dataset(level: Level): Dataset {
     columns: [
       col("compound", "category"),
       col("molecule_id", "text", true),
+      col("structure", "structure"),
       col("rd:s:raw", "number"),
     ],
-    values: { compound: ["CEL-1", "CEL-2"], molecule_id: ["m1", "m2"], "rd:s:raw": [1, 2] },
+    values: {
+      compound: ["CEL-1", "CEL-2"],
+      molecule_id: ["m1", "m2"],
+      structure: ["Clc1ccccc1", "c1ccccc1"],
+      "rd:s:raw": [1, 2],
+    },
   };
 }
 
 const config = (over: Partial<ViewConfig> = {}): ViewConfig => ({
-  config_version: 1,
+  config_version: 2,
   panels: [{ id: "saved-1", type: "histogram", x: "rd:s:raw", appearance: DEFAULT_APPEARANCE }],
   filters: [],
   labels: { "rd:s:raw": "Signal" },
+  derived: [],
   ...over,
 });
 
@@ -104,10 +135,27 @@ function savedView(over: Partial<SavedView> = {}): SavedView {
 const loaded = (view: SavedView) => ({ data: view, isPending: false, isError: false });
 
 function show(sourceOverride: DatasetSource | null = null, levelOverride: Level | null = null) {
-  return render(
-    <SavedViewPage viewId="v1" sourceOverride={sourceOverride} levelOverride={levelOverride} />,
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const page = () => (
+    <QueryClientProvider client={client}>
+      <TooltipProvider>
+        <SavedViewPage viewId="v1" sourceOverride={sourceOverride} levelOverride={levelOverride} />
+      </TooltipProvider>
+    </QueryClientProvider>
   );
+  const out = render(page());
+  return { ...out, rerender: () => out.rerender(page()) };
 }
+
+const job = (over: Record<string, unknown> = {}) => ({
+  runId: null,
+  status: "running",
+  counts: null,
+  error: null,
+  isCancelled: false,
+  cancel: vi.fn(),
+  ...over,
+});
 
 beforeAll(() => {
   Element.prototype.scrollIntoView ??= vi.fn();
@@ -120,6 +168,16 @@ beforeEach(() => {
   state.replace.mockReset();
   state.remove.mockReset();
   state.view = loaded(savedView());
+  state.decomposition = job();
+  state.assignments = {
+    data: {
+      core_smiles: "c1ccccc1[*:1]",
+      labels: ["R1"],
+      assignments: { m1: { R1: "Cl[*:1]" }, m2: { R1: "[H][*:1]" } },
+    },
+    error: null,
+  };
+  state.match.mockReset();
 });
 
 describe("SavedViewPage", () => {
@@ -220,12 +278,118 @@ describe("SavedViewPage", () => {
   });
 
   it("refuses a view saved by a newer version", () => {
-    state.view = loaded(savedView({ config: { ...config(), config_version: 2 } }));
+    state.view = loaded(savedView({ config: { ...config(), config_version: 3 } }));
     show();
     expect(
       screen.getByText(
         "This view was saved by a newer version of ChemCellar. Reload the page to open it.",
       ),
     ).toBeInTheDocument();
+  });
+
+  describe("with chemistry", () => {
+    const POS = "chem:rg1:R1";
+    const rg1 = {
+      id: "rg1",
+      kind: "rgroups",
+      coreSmiles: "c1ccccc1[*:1]",
+      name: "Core A",
+    } as const;
+    /** Saved from a workbench showing Core A's columns: a filter and a plot on R1. */
+    const withRGroups = () => {
+      const base = dataset("compounds");
+      const assignments = state.assignments.data as DecompositionAssignmentsResponse;
+      const shown = withDerived(base, [rgroupSet(rg1, base, assignments)]);
+      const byR1 = { id: "saved-2", type: "bar" as const, category: POS, agg: "count" as const };
+      const saved = buildViewConfig(
+        {
+          panels: [...config().panels, { ...byR1, appearance: DEFAULT_APPEARANCE }],
+          filters: [
+            { id: "f-r1", kind: "category", key: POS, values: ["Cl"], includeMissing: false },
+          ],
+        },
+        shown,
+        [rg1],
+      );
+      return loaded(savedView({ config: JSON.parse(JSON.stringify(saved)) }));
+    };
+
+    it("regenerates its R-group columns, then opens on the filter that uses them", () => {
+      state.view = withRGroups();
+      const { rerender } = show();
+      expect(screen.getByText("Regenerating chemistry columns…")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Cancel R-groups · Core A" })).toBeInTheDocument();
+      expect(document.querySelector('[data-panel-id="saved-1"]')).toBeNull();
+
+      state.decomposition = job({
+        runId: "run-1",
+        status: "ready",
+        counts: { matched: 2, unmatched: 0, total: 2 },
+      });
+      rerender();
+      expect(screen.queryByText("Regenerating chemistry columns…")).not.toBeInTheDocument();
+      expect(document.querySelector('[data-panel-id="saved-2"]')).not.toBeNull();
+      expect(screen.getByText("1 / 2 compounds")).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      // Opened as saved: nothing to save.
+      expect(screen.queryByRole("img", { name: "Unsaved changes" })).not.toBeInTheDocument();
+    });
+
+    it("lists a failed regeneration and drops the filter on its columns", () => {
+      state.view = withRGroups();
+      state.decomposition = job({ status: "failed", error: "The core is not a valid structure." });
+      show();
+      const banner = screen.getByRole("alert");
+      expect(banner).toHaveTextContent(
+        "R-groups · Core A couldn't be regenerated: The core is not a valid structure.",
+      );
+      expect(banner).toHaveTextContent("Not available any more: Filter: R1, Plot 2: Group (R1).");
+      expect(screen.getByText("2 / 2 compounds")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
+    });
+
+    const withQuery = () =>
+      loaded(
+        savedView({
+          config: config({
+            filters: [
+              { id: "sub-1", kind: "substructure", query: "Clc1ccccc1", queryKind: "smiles" },
+            ],
+          }),
+        }),
+      );
+
+    it("matches its substructure filter again before opening", async () => {
+      state.view = withQuery();
+      state.match.mockResolvedValue({ matched_ids: ["m1"], searched: 2, without_structure: 0 });
+      show();
+      expect(screen.getByText("Regenerating chemistry columns…")).toBeInTheDocument();
+      expect(await screen.findByText("1 of 2 compounds match")).toBeInTheDocument();
+      expect(screen.getByText("1 / 2 compounds")).toBeInTheDocument();
+      expect(state.match).toHaveBeenCalledWith({
+        query: "Clc1ccccc1",
+        queryKind: "smiles",
+        moleculeIds: ["m1", "m2"],
+      });
+      expect(screen.queryByRole("img", { name: "Unsaved changes" })).not.toBeInTheDocument();
+    });
+
+    it("keeps a substructure filter it couldn't match again, with Match again", async () => {
+      const reason = "Cannot read “Clc1ccccc1” as a SMILES structure.";
+      state.view = withQuery();
+      state.match.mockRejectedValue(
+        new ApiError(`API error: 422 — ${reason}`, 422, { message: reason }),
+      );
+      show();
+      await waitFor(() =>
+        expect(screen.getByRole("alert")).toHaveTextContent(
+          `The filter “Contains Clc1ccccc1” couldn't be re-run: ${reason}`,
+        ),
+      );
+      expect(
+        screen.getByText("Not matched against this data yet — it filters nothing until matched."),
+      ).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Match again" })).toBeInTheDocument();
+    });
   });
 });
