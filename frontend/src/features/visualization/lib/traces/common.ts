@@ -109,12 +109,6 @@ export function groupsOf(ds: Dataset, key: string | undefined, max: number): Gro
 /** Facets of a split: up to MAX_FACETS named, the rest pooled as "Other". */
 export const facetsOf = (ds: Dataset, key: string | undefined) => groupsOf(ds, key, MAX_FACETS);
 
-/** "CEL-12 · Plate 3 B07": what a hovered point is (the plate value is its full label). */
-export function hoverText(ds: Dataset, i: number): string {
-  const place = [ds.values.plate?.[i], ds.values.well?.[i]].filter(Boolean);
-  return [ds.values.compound?.[i] ?? "No compound", place.join(" ")].filter(Boolean).join(" · ");
-}
-
 // Labels a workbench has shown, by the dataset it draws: undo can bring back a plot on
 // chemistry columns removed since, and it still reads by name.
 const seenLabels = new WeakMap<Dataset, ReadonlyMap<string, string>>();

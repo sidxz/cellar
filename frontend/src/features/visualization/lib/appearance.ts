@@ -1,9 +1,8 @@
 import { CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colors";
-import { formatMeasurementValue } from "@/shared/lib/format-number";
 import type { Appearance } from "../store/workbench-store";
 import type { Dataset } from "../types";
-import { categoryLabel, column, numberAt } from "./dataset";
-import { NONE, categoryColor, groupsOf, hoverText } from "./traces/common";
+import { column, numberAt } from "./dataset";
+import { NONE, categoryColor, groupsOf } from "./traces/common";
 
 export const WELL_TYPE_SYMBOLS: Record<string, string> = {
   sample: "circle",
@@ -160,23 +159,4 @@ export function sizeFor(ds: Dataset, a: Appearance, rows: number[], auto: number
       ? SIZE_MIN + ((SIZE_MAX - SIZE_MIN) * (v - r[0])) / span
       : (SIZE_MIN + SIZE_MAX) / 2;
   });
-}
-
-/** A field's value as hovers and cells show it. */
-function display(ds: Dataset, key: string, i: number): string {
-  const v = ds.values[key]?.[i];
-  if (typeof v === "number" && Number.isFinite(v)) {
-    return Number.isInteger(v) ? String(v) : formatMeasurementValue(v);
-  }
-  return categoryLabel(key, typeof v === "number" ? null : v);
-}
-
-/** Hover text of row ``i``: what the point is, then "Label: value" per chosen field. */
-export function tooltipText(ds: Dataset, i: number, fields: string[]): string {
-  const lines = [hoverText(ds, i)];
-  for (const key of fields) {
-    const col = column(ds, key);
-    if (col) lines.push(`${col.label}: ${display(ds, key, i)}`);
-  }
-  return lines.join("<br>");
 }

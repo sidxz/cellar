@@ -1,7 +1,7 @@
 import { CHART_COLORS, GROUP_PALETTE, WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { describe, expect, it } from "vitest";
 import { type Appearance, DEFAULT_APPEARANCE } from "../store/workbench-store";
-import { colorBins, colorFor, colorGroups, shapeFor, sizeFor, tooltipText } from "./appearance";
+import { colorBins, colorFor, colorGroups, shapeFor, sizeFor } from "./appearance";
 import { dataset } from "./traces/test-fixtures";
 
 const look = (a: Partial<Appearance>): Appearance => ({ ...DEFAULT_APPEARANCE, ...a });
@@ -86,23 +86,5 @@ describe("sizeFor", () => {
     const ds = dataset({ y: [10, 20, 30, null] });
     expect(sizeFor(ds, look({ sizeBy: "y" }), [0, 1, 2, 3], 6)).toEqual([5, 10.5, 16, 5]);
     expect(sizeFor(ds, look({}), [0, 1], 6)).toEqual([6, 6]);
-  });
-});
-
-describe("tooltipText", () => {
-  it("adds each chosen field to the identity line", () => {
-    const ds = dataset({
-      compound: ["CEL-1"],
-      // The backend sends the whole plate label (barcode, or "Plate n" with its run).
-      plate: ["Plate 3 · 2026-11-12"],
-      well: ["B07"],
-      y: [12.3456],
-      well_type: ["positive_control"],
-      dose: [null],
-    });
-    expect(tooltipText(ds, 0, ["y", "well_type", "dose"])).toBe(
-      "CEL-1 · Plate 3 · 2026-11-12 B07<br>Signal: 12.3<br>well_type: Positive control<br>dose: (none)",
-    );
-    expect(tooltipText(ds, 0, [])).toBe("CEL-1 · Plate 3 · 2026-11-12 B07");
   });
 });
