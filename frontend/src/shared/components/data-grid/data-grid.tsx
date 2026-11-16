@@ -20,6 +20,7 @@ import { AgGridReact, type AgGridReactProps } from "ag-grid-react";
 import { Search } from "lucide-react";
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cellarTheme } from "./ag-grid-theme";
+import { focusFromBelow, tabThroughRows } from "./tab-through-rows";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
@@ -110,6 +111,7 @@ export function DataGrid<TData = unknown>({
   } = rest;
   void _rowSelectionFromRest;
   const gridRef = useRef<AgGridReact<TData>>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
   const [quickFilter, setQuickFilter] = useState("");
   const [selectedRows, setSelectedRows] = useState<TData[]>([]);
 
@@ -130,6 +132,9 @@ export function DataGrid<TData = unknown>({
   );
   const prefs = useGridPreferences(preferencesKey ?? "__unused__");
   const hasPrefs = !!preferencesKey;
+  // Links and buttons in cells take Tab in the order the rows are shown; a caller that gives
+  // the cells focus keeps AG Grid's own cell-to-cell Tab.
+  const cellFocus = restWithoutSelection.suppressCellFocus === false;
   const defaultColDef = useMemo<ColDef<TData>>(
     () => ({
       sortable: true,
@@ -326,7 +331,13 @@ export function DataGrid<TData = unknown>({
           {selectionToolbar(selectedRows)}
         </div>
       ) : null}
-      <div style={{ height, width: "100%" }}>
+      <div
+        ref={wrapRef}
+        style={{ height, width: "100%" }}
+        onKeyDownCapture={
+          cellFocus ? undefined : (e) => tabThroughRows(e, gridRef.current?.api ?? undefined)
+        }
+      >
         <AgGridReact<TData>
           ref={gridRef}
           theme={cellarTheme}
@@ -355,6 +366,9 @@ export function DataGrid<TData = unknown>({
           rowClass={onRowClick ? "cursor-pointer" : undefined}
           quickFilterText={isInfinite ? undefined : quickFilter || undefined}
           suppressCellFocus
+          focusGridInnerElement={
+            cellFocus ? undefined : (p) => focusFromBelow(wrapRef.current, !!p.fromBottom)
+          }
           animateRows={false}
           {...restWithoutSelection}
         />
