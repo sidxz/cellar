@@ -15,6 +15,7 @@ import {
   Grid3x3,
   Plus,
 } from "lucide-react";
+import { useState } from "react";
 import { numericValueColumn, panelDefaults } from "../lib/default-panels";
 import { rgroupPositions } from "../lib/derived";
 import { useWorkbench } from "../store/workbench-context";
@@ -35,6 +36,7 @@ export function AddPlotMenu({ ds }: { ds: Dataset }) {
   const addPanel = useWorkbench((s) => s.addPanel);
   const setMaximized = useWorkbench((s) => s.setMaximized);
   const full = count >= MAX_PANELS;
+  const [open, setOpen] = useState(false);
   const hasNumeric = Boolean(numericValueColumn(ds));
   const hasRGroups = rgroupPositions(ds).length > 0;
 
@@ -44,39 +46,38 @@ export function AddPlotMenu({ ds }: { ds: Dataset }) {
   };
 
   return (
-    // A disabled button shows no tooltip of its own; the wrapper carries the reason.
-    <span title={full ? "Up to 4 plots — close one to add another" : undefined}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" className="h-8" disabled={full}>
-            <Plus className="h-4 w-4" />
-            Add plot ({count}/{MAX_PANELS})
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {TYPES.map(({ type, label, icon: Icon, numeric }) => (
-            <DropdownMenuItem
-              key={type}
-              disabled={numeric && !hasNumeric}
-              onSelect={() => add(type)}
-            >
-              <Icon className="h-4 w-4" />
-              {label}
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuItem disabled={!hasRGroups} onSelect={() => add("rgroup-matrix")}>
-            <Grid3x3 className="h-4 w-4" />
-            <span className="flex flex-col">
-              R-group matrix
-              {!hasRGroups && (
-                <span className="text-xs text-muted-foreground">
-                  Add R-groups first: Add columns → R-groups…
-                </span>
-              )}
-            </span>
+    // Unavailable yet focusable when full, so the title says why to keyboard users too.
+    <DropdownMenu open={open} onOpenChange={(o) => setOpen(o && !full)}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          className="h-8"
+          aria-disabled={full}
+          title={full ? "Up to 4 plots — close one to add another" : undefined}
+        >
+          <Plus className="h-4 w-4" />
+          Add plot ({count}/{MAX_PANELS})
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {TYPES.map(({ type, label, icon: Icon, numeric }) => (
+          <DropdownMenuItem key={type} disabled={numeric && !hasNumeric} onSelect={() => add(type)}>
+            <Icon className="h-4 w-4" />
+            {label}
           </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </span>
+        ))}
+        <DropdownMenuItem disabled={!hasRGroups} onSelect={() => add("rgroup-matrix")}>
+          <Grid3x3 className="h-4 w-4" />
+          <span className="flex flex-col">
+            R-group matrix
+            {!hasRGroups && (
+              <span className="text-xs text-muted-foreground">
+                Add R-groups first: Add columns → R-groups…
+              </span>
+            )}
+          </span>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

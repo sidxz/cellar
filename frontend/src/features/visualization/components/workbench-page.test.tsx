@@ -191,6 +191,16 @@ describe("WorkbenchPage", () => {
     expect(screen.getByRole("dialog", { name: "Choose runs to visualize" })).toBeInTheDocument();
   });
 
+  it("leaves Add columns reachable without structures, saying why it is unavailable", () => {
+    render(<WorkbenchPage level="wells" source={{ kind: "run", runId: R1 }} />);
+    const add = screen.getByRole("button", { name: "Add columns" });
+    expect(add).toHaveAttribute("aria-disabled", "true");
+    expect(add).toBeEnabled();
+    expect(add).toHaveAccessibleDescription("No compound in this dataset has a structure");
+    fireEvent.keyDown(add, { key: "Enter" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
   it("says so when the runs have no readout data", () => {
     state.query = ready({ ...dataset(), row_count: 0, row_ids: [], values: {} });
     render(<WorkbenchPage level="wells" source={{ kind: "run", runId: R1 }} />);

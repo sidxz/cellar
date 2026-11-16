@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { provenanceOf } from "../lib/traces/test-fixtures";
@@ -178,8 +178,12 @@ describe("WorkbenchHeader comparing protocols", () => {
     state.query = ready({ ...single(), level: "wells" });
     page("wells", { kind: "protocol", protocolId: P1 });
     const add = screen.getByRole("button", { name: "Add protocol" });
-    expect(add).toBeDisabled();
+    // Unavailable but reachable by keyboard, so its reason can be read.
+    expect(add).toHaveAttribute("aria-disabled", "true");
+    expect(add).toBeEnabled();
     expect(add).toHaveAccessibleDescription("Switch to Compounds to compare protocols");
+    fireEvent.click(add);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     cleanup();
 
     page("wells", { kind: "run", runId: R1 });
@@ -189,7 +193,10 @@ describe("WorkbenchHeader comparing protocols", () => {
     state.query = ready(crossed());
     const four = ["a", "b", "c", "d"].map((protocolId) => ({ protocolId }));
     page("compounds", { kind: "protocol", protocolId: P1, compare: four });
-    expect(screen.getByRole("button", { name: "Add protocol" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add protocol" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
     expect(screen.getByRole("button", { name: "Add protocol" })).toHaveAccessibleDescription(
       "Up to 5 protocols",
     );
@@ -199,11 +206,14 @@ describe("WorkbenchHeader comparing protocols", () => {
     page("compounds", compared);
     for (const name of ["Wells", "Runs", "Batches"]) {
       const button = screen.getByRole("button", { name });
-      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).toBeEnabled();
       expect(button).toHaveAccessibleDescription(
         "Comparing protocols works at the Compounds level only — remove the added protocols to switch.",
       );
+      fireEvent.click(button);
     }
+    expect(state.replace).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Compounds" })).toBeEnabled();
   });
 
@@ -279,6 +289,18 @@ describe("WorkbenchHeader comparing protocols", () => {
       "Not available now: Filter: MMP2 counter · b.",
     );
     expect(screen.getByText(/selected ·/).textContent).toMatch(/^1 compound selected/);
+  });
+
+  it("gives focus back to Add protocol when it closes without adding", async () => {
+    state.query = ready(single());
+    page("compounds", { kind: "protocol", protocolId: P1 });
+    const add = screen.getByRole("button", { name: "Add protocol" });
+    add.focus();
+    fireEvent.click(add);
+    // Picking a protocol swaps in its run picker; cancelling that still returns focus.
+    fireEvent.click(screen.getByRole("option", { name: /MMP2 counter/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(add).toHaveFocus());
   });
 
   it("selecting rows leaves the header as it is", async () => {

@@ -83,13 +83,15 @@ function Controls({
       visualizeHref(saved) !== visualizeHref(source));
 
   const closeDialog = (next: boolean) => !next && setDialog(null);
+  // Unavailable yet focusable, so the title says why to keyboard users too.
   const saveAsNew = (
     <Button
       size="sm"
       variant="outline"
       className="h-8"
-      disabled={tooLarge !== null}
-      onClick={() => setDialog("create")}
+      aria-disabled={tooLarge !== null}
+      title={tooLarge ?? undefined}
+      onClick={() => tooLarge === null && setDialog("create")}
     >
       {view ? "Save as new view…" : "Save view…"}
     </Button>
@@ -112,24 +114,20 @@ function Controls({
           )}
         </span>
       )}
-      {!readOnly && (
-        // Disabled buttons show no tooltip, so the reason sits on a wrapper.
-        <span title={tooLarge ?? undefined} className="inline-flex">
-          {view?.can_edit && open ? (
-            <OwnerSave
-              open={open}
-              body={{ dataset: toDatasetRequest(source, level), config }}
-              sent={{ panels, filters }}
-              disabled={!dirty || tooLarge !== null}
-              tooLarge={tooLarge !== null}
-              onStale={() => setDialog("stale")}
-              onMenu={setDialog}
-            />
-          ) : (
-            saveAsNew
-          )}
-        </span>
-      )}
+      {!readOnly &&
+        (view?.can_edit && open ? (
+          <OwnerSave
+            open={open}
+            body={{ dataset: toDatasetRequest(source, level), config }}
+            sent={{ panels, filters }}
+            disabled={!dirty}
+            tooLarge={tooLarge}
+            onStale={() => setDialog("stale")}
+            onMenu={setDialog}
+          />
+        ) : (
+          saveAsNew
+        ))}
       {(dialog === "create" || dialog === "details") && (
         <SaveViewDialog
           mode={dialog}
@@ -190,7 +188,8 @@ function OwnerSave({
   body: Omit<UpdateSavedVisualizationBody, "expected_version">;
   sent: { panels: PanelConfig[]; filters: Filter[] };
   disabled: boolean;
-  tooLarge: boolean;
+  /** Why the settings can't be saved for their size, or null. */
+  tooLarge: string | null;
   onStale: () => void;
   onMenu: (dialog: Dialog) => void;
 }) {
@@ -210,7 +209,10 @@ function OwnerSave({
         size="sm"
         className="h-8 rounded-r-none"
         disabled={disabled || update.isPending}
-        onClick={save}
+        // Unavailable yet focusable, so the title says why to keyboard users too.
+        aria-disabled={tooLarge !== null}
+        title={tooLarge ?? undefined}
+        onClick={() => tooLarge === null && save()}
       >
         Save
       </Button>
@@ -225,7 +227,7 @@ function OwnerSave({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem disabled={tooLarge} onSelect={() => onMenu("create")}>
+          <DropdownMenuItem disabled={tooLarge !== null} onSelect={() => onMenu("create")}>
             Save as new view…
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => onMenu("details")}>

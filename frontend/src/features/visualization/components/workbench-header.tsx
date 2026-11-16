@@ -10,7 +10,7 @@ import { Switch } from "@/shared/components/ui/switch";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { ArrowLeft, ChevronDown, Plus, Redo2, Undo2, X } from "lucide-react";
 import Link from "next/link";
-import { type ReactNode, useId, useMemo, useState } from "react";
+import { type ReactNode, useId, useMemo, useRef, useState } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import {
   isCrossProtocol,
@@ -190,6 +190,7 @@ export function SourceBar({
   onChange: (source: DatasetSource) => void;
 }) {
   const [adding, setAdding] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
   const { run, protocolRuns, runs } = useSourceRuns(source);
   const protocolId = source.kind === "protocol" ? source.protocolId : run?.protocol_id;
   const { data: protocol } = useProtocol(protocolId);
@@ -256,13 +257,13 @@ export function SourceBar({
       ))}
       {source.kind === "protocol" && (
         <Button
+          ref={addButton}
           size="sm"
           variant="ghost"
-          // Hoverable while disabled, so the title says why.
-          className="disabled:pointer-events-auto"
-          disabled={addReason !== null}
+          // Unavailable yet focusable, so the title says why to keyboard users too.
+          aria-disabled={addReason !== null}
           title={addReason ?? undefined}
-          onClick={() => setAdding(true)}
+          onClick={() => addReason === null && setAdding(true)}
         >
           <Plus className="h-4 w-4" />
           Add protocol
@@ -274,6 +275,7 @@ export function SourceBar({
           onOpenChange={setAdding}
           exclude={[source.protocolId, ...compare.map((c) => c.protocolId)]}
           onAdd={(c) => setCompare([...compare, c])}
+          returnFocus={addButton}
         />
       )}
     </div>
@@ -303,12 +305,12 @@ export function LevelSwitcher({
               key={l}
               size="sm"
               variant={l === level ? "secondary" : "ghost"}
-              // Hoverable while disabled, so the title says why.
-              className="h-7 disabled:pointer-events-auto"
+              className="h-7"
               aria-pressed={l === level}
-              disabled={off}
+              // Unavailable yet focusable, so the title says why to keyboard users too.
+              aria-disabled={off}
               title={off ? LEVEL_LOCKED : undefined}
-              onClick={() => l !== level && onChange(l)}
+              onClick={() => !off && l !== level && onChange(l)}
             >
               {LEVELS[l].label}
             </Button>

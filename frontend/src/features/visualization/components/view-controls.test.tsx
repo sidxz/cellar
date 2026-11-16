@@ -284,7 +284,23 @@ describe("ViewControls", () => {
         /^These settings are too large to save \(\d+ KB of 64 KB\)\. Remove some category filter values\.$/,
       ),
     ).toBeInTheDocument();
-    expect(saveBtn()).toBeDisabled();
+    // Unavailable but reachable by keyboard, so the reason can be read.
+    expect(saveBtn()).toHaveAttribute("aria-disabled", "true");
+    expect(saveBtn()).toBeEnabled();
+    expect(saveBtn()).toHaveAccessibleDescription(/^These settings are too large to save/);
+    fireEvent.click(saveBtn());
+    expect(vi.mocked(customInstance)).not.toHaveBeenCalled();
+  });
+
+  it("settings too large to save leave Save as new view… reachable, saying why", () => {
+    const values = Array.from({ length: 5_000 }, (_, i) => `plate-${i}-${"x".repeat(10)}`);
+    show({ view: null, filters: [plateFilter(values)] });
+    const saveAs = screen.getByRole("button", { name: "Save view…" });
+    expect(saveAs).toHaveAttribute("aria-disabled", "true");
+    expect(saveAs).toBeEnabled();
+    expect(saveAs).toHaveAccessibleDescription(/^These settings are too large to save/);
+    fireEvent.click(saveAs);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("deletes after confirming, leaving the workbench open unsaved", async () => {

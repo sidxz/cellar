@@ -16,24 +16,32 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
-import { useState } from "react";
+import { type RefObject, useState } from "react";
 import type { ComparedProtocol } from "../types";
 import { RunPickerDialog } from "./run-picker-dialog";
 
-/** Pick a protocol by name (protocols in ``exclude`` are not offered), then its runs. */
+/** Pick a protocol by name (protocols in ``exclude`` are not offered), then its runs.
+ * Closing gives focus to ``returnFocus`` (the run picker it swaps to never saw the opener). */
 export function AddProtocolDialog({
   open,
   onOpenChange,
   exclude,
   onAdd,
+  returnFocus,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   exclude: string[];
   onAdd: (p: ComparedProtocol) => void;
+  returnFocus?: RefObject<HTMLElement | null>;
 }) {
   const { data: protocols, isLoading } = useProtocolSummaries(undefined, { includeAll: true });
   const [picked, setPicked] = useState<string | null>(null);
+  const onCloseAutoFocus = (e: Event) => {
+    if (!returnFocus?.current) return;
+    e.preventDefault();
+    returnFocus.current.focus();
+  };
 
   if (picked) {
     return (
@@ -44,13 +52,14 @@ export function AddProtocolDialog({
         open={open}
         onOpenChange={onOpenChange}
         onConfirm={(runIds) => onAdd({ protocolId: picked, ...(runIds && { runIds }) })}
+        onCloseAutoFocus={onCloseAutoFocus}
       />
     );
   }
   const shown = (protocols ?? []).filter((p) => !exclude.includes(p.id));
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Add a protocol</DialogTitle>
           <DialogDescription>

@@ -39,6 +39,8 @@ interface RunPickerDialogProps {
   /** Called with the chosen runs (undefined = every run) instead of opening the workbench. */
   onConfirm?: (runIds: string[] | undefined) => void;
   confirmLabel?: string;
+  /** Where focus goes on close, when not back to what had it on open. */
+  onCloseAutoFocus?: (e: Event) => void;
 }
 
 /** Choose which runs of a protocol to load, with each run's well count and a running
@@ -53,6 +55,7 @@ export function RunPickerDialog({
   level = "wells",
   onConfirm,
   confirmLabel = "Open workbench",
+  onCloseAutoFocus,
 }: RunPickerDialogProps) {
   const router = useRouter();
   const viewId = useOpenView()?.view.id;
@@ -106,7 +109,7 @@ export function RunPickerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl">
+      <DialogContent className="sm:max-w-3xl" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>Choose runs to visualize</DialogTitle>
           <DialogDescription>

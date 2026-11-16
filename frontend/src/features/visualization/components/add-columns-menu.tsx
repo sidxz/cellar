@@ -8,6 +8,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { Columns3 } from "lucide-react";
+import { useState } from "react";
 import type { DerivedSpec } from "../lib/derived";
 
 const KINDS = [
@@ -25,24 +26,29 @@ export function AddColumnsMenu({
   onPick: (kind: DerivedSpec["kind"]) => void;
   disabledReason?: string;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    // A disabled button shows no tooltip of its own; the wrapper carries the reason.
-    <span title={disabledReason}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button size="sm" variant="ghost" className="h-8" disabled={Boolean(disabledReason)}>
-            <Columns3 className="h-4 w-4" />
-            Add columns
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          {KINDS.map(({ kind, label }) => (
-            <DropdownMenuItem key={kind} onSelect={() => onPick(kind)}>
-              {label}
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </span>
+    // Unavailable yet focusable, so the title says why to keyboard users too.
+    <DropdownMenu open={open} onOpenChange={(o) => setOpen(o && !disabledReason)}>
+      <DropdownMenuTrigger asChild>
+        <Button
+          size="sm"
+          variant="ghost"
+          className="h-8"
+          aria-disabled={Boolean(disabledReason)}
+          title={disabledReason}
+        >
+          <Columns3 className="h-4 w-4" />
+          Add columns
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        {KINDS.map(({ kind, label }) => (
+          <DropdownMenuItem key={kind} onSelect={() => onPick(kind)}>
+            {label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

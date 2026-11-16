@@ -63,8 +63,12 @@ describe("PanelGrid and AddPlotMenu", () => {
   it("disables the menu at four plots and says why", () => {
     show(4);
     const button = screen.getByRole("button", { name: "Add plot (4/4)" });
-    expect(button).toBeDisabled();
-    expect(button.closest("[title]")).toHaveAttribute("title", FULL);
+    // Unavailable but reachable by keyboard, so its reason can be read.
+    expect(button).toHaveAttribute("aria-disabled", "true");
+    expect(button).toBeEnabled();
+    expect(button).toHaveAccessibleDescription(FULL);
+    openMenu(/Add plot \(4\/4\)/);
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
   it("offers an Add plot call to action when the last plot is closed", () => {
