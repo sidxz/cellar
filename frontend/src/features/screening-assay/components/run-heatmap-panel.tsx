@@ -46,6 +46,42 @@ function computedUnitLabel(normalization: ReadoutNormalization): string {
   return READOUT_NORMALIZATION_LABELS[normalization];
 }
 
+/** A % layer's fixed anchors: [no effect (white), full effect (red)]. */
+const FIXED_PERCENT: Partial<Record<ReadoutNormalization, [number, number]>> = {
+  percent_inhibition: [0, 100],
+  percent_activation: [0, 100],
+  percent_control: [100, 0],
+};
+
+const mean = (vs: number[]) =>
+  vs.length > 0 ? vs.reduce((a, b) => a + b, 0) / vs.length : undefined;
+
+const fmt = (v: number) => String(Number(v.toPrecision(3)));
+
+/** ``none`` at white and ``full`` red: the diverging palette puts ``low`` at t=0.25
+ *  and ``high`` at 0.75, so ``low`` mirrors ``full`` around ``none``. Beyond full
+ *  darkens toward black, below none toward blue. */
+function anchored(
+  none: number,
+  full: number,
+  noneText: string,
+  fullText: string,
+  negMean: number | undefined,
+  posMean: number | undefined,
+): ValueScale {
+  return {
+    low: 2 * none - full,
+    high: full,
+    kind: "linear",
+    negMean,
+    posMean,
+    marks: [
+      { value: none, text: noneText },
+      { value: full, text: fullText },
+    ],
+  };
+}
+
 interface RunHeatmapPanelProps {
   run: Run;
 }
@@ -81,6 +117,8 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
   const effectiveLayer: ValueLayer = layerAvailable ? layer : "raw";
 
   const wantsComputed = effectiveLayer === "normalized" && layerAvailable;
+  const normalization = selectedDef?.normalizations?.find((n) => n !== "none");
+  const rawUnit = isDose ? doseUnit : (selectedDef?.unit ?? null);
 
   // Per-well value lookups. For the readout case we split by is_computed so
   // the tooltip can show both layers. For the dose case the dose value
@@ -121,8 +159,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
    *  high-leverage control wells dominate the gradient and crush the
    *  sample variance.
    *
-   *  Linear (readouts): anchored on NEG/POS means when both controls
-   *  have values for the active layer; otherwise min/max of samples.
+   *  Linear (readouts), the platform's scale: a % layer on its fixed
+   *  scale (0 % white, 100 % red); raw and z-score anchored on the plate's
+   *  control means; otherwise min/max of samples.
    *
    *  Linear (dose): no control anchoring (NEG/POS doses aren't meaningful
    *  reference points). min/max across every well with a dose. */
@@ -139,31 +178,29 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
           low: 0,
           high: 1,
           kind: "zscore",
-          controlAnchored: false,
           zMean: 0,
           zStd: 0,
         };
       }
-      const mean = allValues.reduce((a, b) => a + b, 0) / allValues.length;
-      const variance = allValues.reduce((a, b) => a + (b - mean) ** 2, 0) / (allValues.length - 1);
+      const mu = mean(allValues) as number;
+      const variance = allValues.reduce((a, b) => a + (b - mu) ** 2, 0) / (allValues.length - 1);
       const std = Math.sqrt(variance);
       // Symmetric ±2σ window. Outliers fall into the dark tails.
       // If σ collapses to 0 (all values identical) widen to ±1 so the
       // legend still renders without divide-by-zero downstream.
       const halfSpan = std > 0 ? 2 * std : 1;
       return {
-        low: mean - halfSpan,
-        high: mean + halfSpan,
+        low: mu - halfSpan,
+        high: mu + halfSpan,
         kind: "zscore",
-        controlAnchored: false,
-        zMean: mean,
+        zMean: mu,
         zStd: std,
       };
     }
 
     if (isDose) {
       if (allValues.length === 0) {
-        return { low: 0, high: 1, kind: "linear", controlAnchored: false };
+        return { low: 0, high: 1, kind: "linear" };
       }
       const lo = Math.min(...allValues);
       const hi = Math.max(...allValues);
@@ -171,7 +208,6 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
         low: lo,
         high: hi === lo ? lo + 1 : hi,
         kind: "linear",
-        controlAnchored: false,
       };
     }
 
@@ -185,27 +221,36 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
       else if (w.well_type === "positive_control") posValues.push(v);
       else if (w.well_type === "sample") sampleValues.push(v);
     }
-    const negMean =
-      negValues.length > 0 ? negValues.reduce((a, b) => a + b, 0) / negValues.length : undefined;
-    const posMean =
-      posValues.length > 0 ? posValues.reduce((a, b) => a + b, 0) / posValues.length : undefined;
+    const negMean = mean(negValues);
+    const posMean = mean(posValues);
 
-    if (negMean != null && posMean != null) {
-      return {
-        low: negMean,
-        high: posMean,
-        kind: "linear",
-        controlAnchored: true,
+    // The platform's scale: a % layer on its fixed scale (no effect at white, full
+    // effect red); raw and z-score anchored on this plate's control means — the
+    // uninhibited control (POS under HIGH, NEG under LOW) at white, the other red.
+    const fixed = wantsComputed && normalization ? FIXED_PERCENT[normalization] : undefined;
+    if (fixed) {
+      const [none, full] = fixed;
+      return anchored(none, full, `${none} %`, `${full} %`, negMean, posMean);
+    }
+    const low = protocol?.pos_control_signal === "low";
+    const [none, full] = low ? [negMean, posMean] : [posMean, negMean];
+    const [noneName, fullName] = low ? ["NEG", "POS"] : ["POS", "NEG"];
+    if (none != null && full != null && none !== full) {
+      const u = wantsComputed ? "" : rawUnit ? ` ${rawUnit}` : "";
+      return anchored(
+        none,
+        full,
+        `${noneName} ${fmt(none)}${u}`,
+        `${fullName} ${fmt(full)}${u}`,
         negMean,
         posMean,
-      };
+      );
     }
     if (sampleValues.length === 0) {
       return {
         low: 0,
         high: 1,
         kind: "linear",
-        controlAnchored: false,
         negMean,
         posMean,
       };
@@ -216,7 +261,6 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
       low: lo,
       high: hi === lo ? lo + 1 : hi,
       kind: "linear",
-      controlAnchored: false,
       negMean,
       posMean,
     };
@@ -241,11 +285,10 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
 
   // For the dose option there's no readout def — synthesize labels from
   // the protocol's canonical dose unit.
-  const rawUnit = isDose ? doseUnit : (selectedDef?.unit ?? null);
   const computedUnit = isDose
     ? "Concentration"
     : selectedDef
-      ? computedUnitLabel(selectedDef.normalizations?.find((n) => n !== "none") ?? "none")
+      ? computedUnitLabel(normalization ?? "none")
       : "Computed";
 
   return (
@@ -330,19 +373,14 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
           const zp = typeof qc?.z_prime === "number" ? qc.z_prime : null;
           const zpQuality = zp != null ? classifyZPrime(zp) : null;
 
-          // For readouts: skip controls so they always render as type-color
-          // outlines regardless of their raw value.
-          // For the dose view: include every well — POS wells at a fixed
-          // inhibitor dose are part of the dose distribution and the user
-          // is here specifically to see where doses landed across the plate.
+          // Every well with a value is filled, controls too (as on the platform:
+          // the positive-control column reads solid red); a control keeps its
+          // type-color outline as identity.
           const valuesForGradient = new Map<string, number>();
           const controlTypesSeen = new Set<string>();
           for (const w of plate.wells) {
-            const includeControls = isDose;
-            if (w.well_type === "sample" || includeControls) {
-              const v = activeByWellId.get(w.well_id);
-              if (v != null) valuesForGradient.set(w.well_id, v);
-            }
+            const v = activeByWellId.get(w.well_id);
+            if (v != null) valuesForGradient.set(w.well_id, v);
             if (
               w.well_type === "negative_control" ||
               w.well_type === "positive_control" ||

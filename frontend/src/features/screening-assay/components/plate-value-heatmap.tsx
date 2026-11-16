@@ -73,20 +73,22 @@ export type ScaleKind = "linear" | "zscore";
 
 export interface ValueScale {
   /** Value mapped to t=0.25 in diverging palettes (or t=0 in sequential).
-   *  For z-score: mean − 2σ. For linear: scale min / NEG anchor. */
+   *  For z-score: mean − 2σ. For linear: scale min, or (anchored) the mirror of
+   *  ``high`` around the no-effect level, which then sits at white (t=0.5). */
   low: number;
   /** Value mapped to t=0.75 in diverging palettes (or t=1 in sequential).
-   *  For z-score: mean + 2σ. For linear: scale max / POS anchor. */
+   *  For z-score: mean + 2σ. For linear: scale max, or (anchored) the full-effect
+   *  level, red. */
   high: number;
   /** "linear" | "zscore" — drives legend labels. */
   kind: ScaleKind;
-  /** Linear scales anchored on per-plate NEG/POS control means. False for
-   *  min/max scales and all z-score scales. */
-  controlAnchored: boolean;
   /** For z-score legends: the underlying mean and σ so the legend can
    *  render σ tick marks. */
   zMean?: number;
   zStd?: number;
+  /** Labels under the gradient at their own values, for scales anchored the
+   *  platform's way ("0 %" at white, "100 %" at red). Replaces the end labels. */
+  marks?: { value: number; text: string }[];
   /** Mean of negative-control wells on the plate, when present. Surfaced
    *  by the legend as a tick mark on the gradient even when the scale
    *  isn't anchored on controls — answers "where do controls land?"
@@ -307,6 +309,7 @@ export function PlateValueHeatmap({
                     const style = getWellStyle(well);
                     const cell = (
                       <div
+                        data-position={pos}
                         className="rounded-sm cursor-default transition-opacity hover:opacity-75"
                         style={{
                           width: size,
@@ -422,45 +425,48 @@ export function ColorScaleLegend({
         ))}
       </div>
 
-      <div className="flex max-w-md justify-between text-[10px] text-muted-foreground">
-        {scale.kind === "zscore" ? (
-          <>
-            <span>
-              −2σ <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
-              {u}
+      {scale.marks ? (
+        <div className="relative h-3.5 max-w-md text-[10px] text-muted-foreground">
+          {scale.marks.map((m) => (
+            <span
+              key={m.text}
+              className="absolute -translate-x-1/2 whitespace-nowrap font-mono tabular-nums"
+              style={{ left: `${valueToT(m.value, scale, palette) * 100}%` }}
+            >
+              {m.text}
             </span>
-            {scale.zMean != null && (
+          ))}
+        </div>
+      ) : (
+        <div className="flex max-w-md justify-between text-[10px] text-muted-foreground">
+          {scale.kind === "zscore" ? (
+            <>
               <span>
-                μ <span className="font-mono tabular-nums">{scale.zMean.toFixed(2)}</span>
+                −2σ <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
+                {u}
               </span>
-            )}
-            <span>
-              +2σ <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
-              {u}
-            </span>
-          </>
-        ) : scale.controlAnchored ? (
-          <>
-            <span>
-              NEG <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
-              {u}
-            </span>
-            <span>
-              POS <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
-              {u}
-            </span>
-          </>
-        ) : (
-          <>
-            <span>
-              min <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
-            </span>
-            <span>
-              max <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
-            </span>
-          </>
-        )}
-      </div>
+              {scale.zMean != null && (
+                <span>
+                  μ <span className="font-mono tabular-nums">{scale.zMean.toFixed(2)}</span>
+                </span>
+              )}
+              <span>
+                +2σ <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
+                {u}
+              </span>
+            </>
+          ) : (
+            <>
+              <span>
+                min <span className="font-mono tabular-nums">{scale.low.toFixed(2)}</span>
+              </span>
+              <span>
+                max <span className="font-mono tabular-nums">{scale.high.toFixed(2)}</span>
+              </span>
+            </>
+          )}
+        </div>
+      )}
 
       {controlTypesPresent && controlTypesPresent.length > 0 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
