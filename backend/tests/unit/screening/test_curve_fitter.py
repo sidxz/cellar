@@ -8,7 +8,10 @@ import random
 import pytest
 from returns.result import Failure, Success
 
-from cellar.domain.screening_assay.curve_fitting import ConcentrationResponsePoint
+from cellar.domain.screening_assay.curve_fitting import (
+    DOSE_ZERO_LEFT_OUT,
+    ConcentrationResponsePoint,
+)
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
     CurveClass,
@@ -161,6 +164,41 @@ class TestLmfitCurveFitter:
         result = self.fitter.fit(points, _make_config())
         assert isinstance(result, Failure)
         assert f"at least 4 distinct doses; got {len(doses)}" in str(result.failure())
+
+    def test_a_point_at_dose_zero_is_left_out_of_the_fit(self):
+        """Rifampicin's Resazurin titration: a vehicle well at dose 0 in an otherwise valid
+        series. Zero has no place on a log-dose axis, so the point sits out of the fit and
+        the curve records it, instead of the whole series being refused."""
+        series = [
+            (0.0, -3.89), (0.0006, 38.37), (0.0013, 54.94), (0.0025, 74.19), (0.005, 91.78),
+            (0.01, 93.40), (0.02, 97.92), (0.03, 99.16), (0.06, 97.75), (0.13, 99.82),
+            (0.25, 98.07), (0.5, 100.93), (1.0, 101.12), (2.0, 101.58), (2.0, 100.26),
+        ]  # fmt: skip
+        points = [ConcentrationResponsePoint(concentration=c, response=r) for c, r in series]
+        result = self.fitter.fit(points, _make_config())
+        assert isinstance(result, Success)
+        fitted = result.unwrap()
+        assert fitted.num_points == 14
+        assert 0.0 not in [p["concentration"] for p in fitted.raw_data]
+        assert f"{DOSE_ZERO_LEFT_OUT}:1" in fitted.fit_quality_warnings
+        assert 0.0005 < fitted.fitted_value < 0.003
+
+    def test_an_inactive_series_still_records_its_dose_zero_points(self):
+        points = [ConcentrationResponsePoint(concentration=0.0, response=1.0)] * 2 + [
+            ConcentrationResponsePoint(concentration=10.0**-i, response=2.0) for i in range(5)
+        ]
+        fitted = self.fitter.fit(points, _make_config()).unwrap()
+        assert fitted.curve_class == CurveClass.INACTIVE
+        assert fitted.fit_quality_warnings == [f"{DOSE_ZERO_LEFT_OUT}:2"]
+
+    def test_points_at_dose_zero_do_not_count_toward_four_doses(self):
+        points = [ConcentrationResponsePoint(concentration=0.0, response=0.0)] + [
+            ConcentrationResponsePoint(concentration=c, response=r)
+            for c, r in [(0.1, 10.0), (1.0, 50.0), (10.0, 90.0), (10.0, 92.0)]
+        ]
+        result = self.fitter.fit(points, _make_config())
+        assert isinstance(result, Failure)
+        assert "at least 4 distinct doses; got 3" in str(result.failure())
 
     def test_fit_with_hill_slope_constraint_negative(self):
         points = _generate_hill_data(ic50=100.0, hill_slope=-1.0)

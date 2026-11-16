@@ -21,7 +21,7 @@ from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.enums import AuditAction, OperationType
 from cellar.domain.audit_compliance.models import AuditEntry
-from cellar.domain.screening_assay.curve_fitting import CurveFittingService
+from cellar.domain.screening_assay.curve_fitting import DOSE_ZERO_LEFT_OUT, CurveFittingService
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
@@ -252,7 +252,12 @@ class RefitDoseResponseCurve:
                 curve_class=fitted.curve_class,
                 raw_data=fitted.raw_data,
                 excluded_points=new_excluded_points,
-                fit_quality_warnings=fitted.fit_quality_warnings,
+                # Points left out at dose 0 never reached raw_data, so this fit cannot
+                # see them: keep the curve's note of them.
+                fit_quality_warnings=[
+                    *fitted.fit_quality_warnings,
+                    *(w for w in curve.fit_quality_warnings if w.startswith(DOSE_ZERO_LEFT_OUT)),
+                ],
                 intercept_values=fitted.intercept_values,
                 dose_response_config_snapshot=serialize_dose_response_config(config),
             )

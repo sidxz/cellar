@@ -18,6 +18,7 @@ from cellar.application.screening.refit_dose_response import (
 )
 from cellar.domain.audit_compliance.enums import OperationType
 from cellar.domain.screening_assay.curve_fitting import (
+    DOSE_ZERO_LEFT_OUT,
     ConcentrationResponsePoint,
     FittedCurveResult,
 )
@@ -271,6 +272,23 @@ async def test_refit_without_disable_auto_outliers_preserves_protocol_sigma():
     # default (currently 3.0 via ``DEFAULT_OUTLIER_SIGMA``); the key assertion
     # is that the use case did not silently swap it to None.
     assert fitter.last_config.outlier_sigma is not None
+
+
+@pytest.mark.asyncio
+async def test_a_refit_keeps_the_note_of_points_left_out_at_dose_zero():
+    """The dose-0 points never reach the stored raw_data, so a refit cannot see them;
+    the curve keeps saying they were left out."""
+    curve = _make_curve_with_points([(1.0, 5.0), (10.0, 20.0), (100.0, 50.0), (1000.0, 80.0)])
+    curve.fit_quality_warnings = ["low_r_squared", f"{DOSE_ZERO_LEFT_OUT}:2"]
+    use_case, curve_repo = _make_use_case(curve)
+
+    cmd = RefitDoseResponseCurveCommand(
+        workspace_id=WS, curve_id=curve.id, excluded_point_indices=[]
+    )
+    assert isinstance(await use_case(cmd, auth=_make_auth()), Success)
+
+    [saved] = curve_repo.save.await_args.args
+    assert saved.fit_quality_warnings == [f"{DOSE_ZERO_LEFT_OUT}:2"]
 
 
 # ---------------------------------------------------------------------------

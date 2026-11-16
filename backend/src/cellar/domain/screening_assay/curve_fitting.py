@@ -15,6 +15,10 @@ from cellar.domain.screening_assay.enums import CurveClass
 from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
 from cellar.domain.shared.errors import DomainError
 
+# Fit-quality code for points left out of a fit because their dose is zero or negative (no
+# place on a log-dose axis), suffixed with how many: ``"dose_zero_left_out:2"``.
+DOSE_ZERO_LEFT_OUT = "dose_zero_left_out"
+
 
 @dataclass(frozen=True)
 class ConcentrationResponsePoint:

@@ -861,3 +861,37 @@ async def test_a_sample_fit_reads_sample_wells_only():
     assert (curve.molecule_id, curve.num_points) == (rif, 4)
     assert sorted(p["concentration"] for p in curve.raw_data) == concs
     assert result.unwrap().warnings == []
+
+
+@pytest.mark.asyncio
+async def test_a_sample_well_at_dose_zero_sits_out_of_the_fit():
+    """Rifampicin's titration also has a SAMPLE well at dose 0 (a vehicle point). The
+    series still gets its curve; the dose-0 point is left out and the curve says so."""
+    from cellar.domain.screening_assay.curve_fitting import DOSE_ZERO_LEFT_OUT
+    from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+
+    protocol, y_def, _ = _make_protocol_with_y(
+        y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
+    )
+    series = [(0.0, 4.26), (0.0006, 37.4), (0.0025, 74.1), (0.01, 95.2), (0.06, 97.7), (1.0, 99.6)]
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[c for c, _ in series]
+    )
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=v,
+            is_computed=True, normalization_applied=ReadoutNormalization.PERCENT_INHIBITION)
+        for w, (_, v) in zip(wells, series, strict=True)
+    ]  # fmt: skip
+    use_case = FitDoseResponseCurves(
+        uow=_FakeUow(), curve_repo=AsyncMock(), curve_fitter=LmfitCurveFitter()
+    )
+
+    result = await use_case.fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS
+    )
+
+    assert isinstance(result, Success)
+    assert result.unwrap().warnings == []
+    [curve] = result.unwrap().curves
+    assert curve.num_points == 5
+    assert f"{DOSE_ZERO_LEFT_OUT}:1" in curve.fit_quality_warnings
