@@ -4,7 +4,7 @@ import { panelDefaults } from "../default-panels";
 import { rgroupPositions } from "../derived";
 import { carryConfig } from "../level-switch";
 import { MATRIX_AXIS_CAP } from "../limits";
-import { buildRGroupMatrix } from "./rgroup-matrix";
+import { buildRGroupMatrix, selectedCells } from "./rgroup-matrix";
 import { dataset, matrixWells, panel, pass } from "./test-fixtures";
 
 const V = "rd:s:raw";
@@ -16,17 +16,12 @@ const matrix = (patch = {}) =>
 
 describe("buildRGroupMatrix", () => {
   it("groups passing rows by their two R groups, counting compounds once", () => {
-    const m = buildRGroupMatrix(
-      matrixWells(),
-      matrix(),
-      Uint8Array.from([1, 1, 1, 0, 1, 1, 1]),
-      new Set(),
-    );
+    const m = buildRGroupMatrix(matrixWells(), matrix(), Uint8Array.from([1, 1, 1, 0, 1, 1, 1]));
     expect(m.yValues).toEqual([CL, "F[*:1]"]);
     expect(m.xValues).toEqual([H]);
     const cell = m.cells.get(cellKey(CL, H));
     // m2's failing row is left out; m1's three wells are one compound.
-    expect(cell).toMatchObject({ rows: [0, 1, 2], compounds: 1, value: 3, selected: false });
+    expect(cell).toMatchObject({ rows: [0, 1, 2], compounds: 1, value: 3 });
     expect(m.cells.get(cellKey("F[*:1]", H))?.value).toBe(5);
     // m3 (no match) and the control.
     expect(m.skipped).toBe(2);
@@ -36,29 +31,31 @@ describe("buildRGroupMatrix", () => {
 
   it("takes the mean when asked, and only counts without a value field", () => {
     const ds = matrixWells();
-    const mean = buildRGroupMatrix(ds, matrix({ agg: "mean" }), pass(7), new Set());
+    const mean = buildRGroupMatrix(ds, matrix({ agg: "mean" }), pass(7));
     expect(mean.cells.get(cellKey(CL, H))?.value).toBe(28.5);
-    const count = buildRGroupMatrix(ds, matrix({ y: undefined }), pass(7), new Set());
+    const count = buildRGroupMatrix(ds, matrix({ y: undefined }), pass(7));
     expect(count.cells.get(cellKey(CL, H))).toMatchObject({ compounds: 2, value: null });
   });
 
   it("orders axes most-populated first", () => {
-    const m = buildRGroupMatrix(matrixWells(), matrix(), pass(7), new Set());
+    const m = buildRGroupMatrix(matrixWells(), matrix(), pass(7));
     expect(m.yValues).toEqual([CL, "F[*:1]"]);
   });
 
   it("leaves censored values out of the value and counts them", () => {
     const ds = matrixWells();
     ds.values[`${V}:q`] = [null, null, ">", null, null, null, null];
-    const m = buildRGroupMatrix(ds, matrix(), Uint8Array.from([1, 1, 1, 0, 1, 1, 1]), new Set());
+    const m = buildRGroupMatrix(ds, matrix(), Uint8Array.from([1, 1, 1, 0, 1, 1, 1]));
     expect(m.cells.get(cellKey(CL, H))?.value).toBe(2);
     expect(m.censored).toBe(1);
   });
 
-  it("marks the cell of a selected row", () => {
-    const m = buildRGroupMatrix(matrixWells(), matrix(), pass(7), new Set(["w5"]));
-    expect(m.cells.get(cellKey("F[*:1]", H))?.selected).toBe(true);
-    expect(m.cells.get(cellKey(CL, H))?.selected).toBe(false);
+  it("marks the cell of a selected row, apart from the matrix (a selection rebuilds nothing)", () => {
+    const ds = matrixWells();
+    const m = buildRGroupMatrix(ds, matrix(), pass(7));
+    const selected = selectedCells(m, ds, new Set(["w5"]));
+    expect(selected.has(cellKey("F[*:1]", H))).toBe(true);
+    expect(selected.has(cellKey(CL, H))).toBe(false);
   });
 
   it(`caps each axis at the ${MATRIX_AXIS_CAP} most-populated values`, () => {
@@ -79,7 +76,7 @@ describe("buildRGroupMatrix", () => {
         "chem:rg1:R2:smiles": "structure",
       },
     );
-    const m = buildRGroupMatrix(ds, matrix({ y: undefined }), pass(n + 1), new Set());
+    const m = buildRGroupMatrix(ds, matrix({ y: undefined }), pass(n + 1));
     expect(m.yValues).toHaveLength(MATRIX_AXIS_CAP);
     expect(m.yValues[0]).toBe(r1[n - 1]);
     expect(m.yTotal).toBe(n);

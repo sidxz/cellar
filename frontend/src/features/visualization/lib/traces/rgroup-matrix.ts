@@ -11,7 +11,6 @@ export interface MatrixCell {
   /** Distinct compounds: the wells of one compound count once. */
   compounds: number;
   value: number | null;
-  selected: boolean;
 }
 
 export interface RGroupMatrix {
@@ -47,14 +46,9 @@ const add = (m: Map<string, Set<unknown>>, key: string, id: unknown) => {
 };
 
 /** The passing rows grouped by their row R group (``cfg.category``) × column R group
- * (``cfg.x``), read from the raw fragments: each cell's rows, compounds, the median (or
- * mean) of ``cfg.y`` — censored values left out — and whether a selected row is in it. */
-export function buildRGroupMatrix(
-  ds: Dataset,
-  cfg: PanelConfig,
-  mask: Uint8Array,
-  selection: ReadonlySet<string>,
-): RGroupMatrix {
+ * (``cfg.x``), read from the raw fragments: each cell's rows, compounds and the median (or
+ * mean) of ``cfg.y`` — censored values left out. */
+export function buildRGroupMatrix(ds: Dataset, cfg: PanelConfig, mask: Uint8Array): RGroupMatrix {
   const ys = (cfg.category && ds.values[`${cfg.category}:smiles`]) || [];
   const xs = (cfg.x && ds.values[`${cfg.x}:smiles`]) || [];
   const molecules = ds.values.molecule_id ?? [];
@@ -97,7 +91,6 @@ export function buildRGroupMatrix(
       rows: g.rows,
       compounds: g.ids.size,
       value: g.values.length ? agg(g.values) : null,
-      selected: g.rows.some((i) => selection.has(ds.row_ids[i])),
     });
   }
   const yAxis = axis(yIds);
@@ -113,4 +106,18 @@ export function buildRGroupMatrix(
     noCompound,
     censored,
   };
+}
+
+/** The cells holding a selected row: cheap beside the matrix, so a selection rebuilds only this. */
+export function selectedCells(
+  m: RGroupMatrix,
+  ds: Dataset,
+  selection: ReadonlySet<string>,
+): Set<string> {
+  const out = new Set<string>();
+  if (selection.size === 0) return out;
+  for (const [key, c] of m.cells) {
+    if (c.rows.some((i) => selection.has(ds.row_ids[i]))) out.add(key);
+  }
+  return out;
 }

@@ -13,7 +13,7 @@ import { useMemo } from "react";
 import { usePassMask } from "../../hooks/use-pass-mask";
 import { column } from "../../lib/dataset";
 import { fieldLabel, panelNote } from "../../lib/traces/common";
-import { buildRGroupMatrix } from "../../lib/traces/rgroup-matrix";
+import { buildRGroupMatrix, selectedCells } from "../../lib/traces/rgroup-matrix";
 import { useWorkbench } from "../../store/workbench-context";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
@@ -31,10 +31,8 @@ export function RGroupMatrixPanel({ panel, ds }: { panel: PanelConfig; ds: Datas
   const mask = usePassMask(ds);
   const selection = useWorkbench((s) => s.selection);
   const setSelection = useWorkbench((s) => s.setSelection);
-  const m = useMemo(
-    () => buildRGroupMatrix(ds, panel, mask, selection),
-    [ds, panel, mask, selection],
-  );
+  const m = useMemo(() => buildRGroupMatrix(ds, panel, mask), [ds, panel, mask]);
+  const selected = useMemo(() => selectedCells(m, ds, selection), [m, ds, selection]);
 
   const label = (key?: string) => (key ? fieldLabel(ds, key) : "—");
   const [yLabel, xLabel] = [label(panel.category), label(panel.x)];
@@ -61,11 +59,11 @@ export function RGroupMatrixPanel({ panel, ds }: { panel: PanelConfig; ds: Datas
         badge: value ? `n=${c.compounds}` : undefined,
         shade: potency ? potencyShade(c.value, reference) : "",
         title: `${yLabel} ${fragmentDisplay(y).label} × ${xLabel} ${fragmentDisplay(x).label}: ${n}`,
-        selected: c.selected,
+        selected: selected.has(key),
       });
     }
     return out;
-  }, [m, value, potency, unit, yLabel, xLabel]);
+  }, [m, selected, value, potency, unit, yLabel, xLabel]);
 
   const unmatched = m.skipped - m.noCompound;
   const notes = [
