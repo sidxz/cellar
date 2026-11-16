@@ -23,6 +23,7 @@ class RunInfo:
     status: str
     conditions: dict[str, Any] | None
     created_at: datetime
+    # Filled for the Wells level only (``run_qc_metrics``).
     qc_metrics: dict[str, Any] | None = None
 
 
@@ -97,6 +98,13 @@ class VisualizationDatasetReader(Protocol):
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
     ) -> list[RunInfo]:
         """Runs of the workspace among ``run_ids`` (foreign ids are simply absent)."""
+        ...
+
+    async def run_qc_metrics(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, dict[str, Any]]:
+        """The QC each run stored (runs without any are absent). Wells level only: the runs
+        themselves are read without it."""
         ...
 
     async def readout_definitions(

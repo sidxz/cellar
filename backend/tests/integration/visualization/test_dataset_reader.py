@@ -141,7 +141,7 @@ async def test_runs_and_readout_definitions(uow, session_factory, workspace_id):
     assert await reader.runs_for_protocol(workspace_id, uuid.uuid4()) is None
 
 
-async def test_runs_carry_their_stored_qc_metrics(uow, session_factory, workspace_id):
+async def test_stored_qc_metrics_are_read_apart_from_the_runs(uow, session_factory, workspace_id):
     qc = {"z_prime": {"plate-1": {"z_prime": 0.712, "classification": "excellent"}}}
     async with uow:
         s = uow.session
@@ -152,9 +152,11 @@ async def test_runs_carry_their_stored_qc_metrics(uow, session_factory, workspac
     reader = SQLAlchemyVisualizationDatasetReader(session_factory)
 
     runs = await reader.runs_for_protocol(workspace_id, p)
-    assert runs is not None and [(r.id, r.qc_metrics) for r in runs] == [(run, qc), (bare, None)]
+    assert runs is not None and [(r.id, r.qc_metrics) for r in runs] == [(run, None), (bare, None)]
     [by_id] = await reader.runs_by_ids(workspace_id, [run])
-    assert by_id.qc_metrics == qc
+    assert by_id.qc_metrics is None  # only the Wells level reads it
+    assert await reader.run_qc_metrics(workspace_id, [run, bare]) == {run: qc}
+    assert await reader.run_qc_metrics(uuid.uuid4(), [run]) == {}
 
 
 async def _dr_world(uow, ws: uuid.UUID) -> dict[str, uuid.UUID]:

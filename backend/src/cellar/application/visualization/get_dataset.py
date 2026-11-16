@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Literal
 
 from returns.result import Failure, Result, Success
@@ -194,6 +194,8 @@ class GetVisualizationDataset:
         if total > MAX_DATASET_ROWS:
             return _too_many_rows(total)  # refused before loading anything
 
+        qc = await self._reader.run_qc_metrics(ws, run_ids)
+        runs = [replace(r, qc_metrics=qc.get(r.id)) for r in runs]
         defs = await self._reader.readout_definitions(ws, sorted({r.protocol_id for r in runs}))
         rows = await self._reader.fetch_well_values(ws, run_ids)
         molecules = await self._reader.compound_info(

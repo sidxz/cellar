@@ -109,6 +109,9 @@ class FakeReader:
     async def runs_by_ids(self, workspace_id, run_ids):
         return [r for r in self.runs if r.id in run_ids] if workspace_id == WS else []
 
+    async def run_qc_metrics(self, workspace_id, run_ids):
+        return {}
+
     async def readout_definitions(self, workspace_id, protocol_ids):
         return [
             ReadoutDefInfo(

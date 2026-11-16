@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import fields
+from typing import Any
 
 from sqlalchemy import Text, and_, cast, func, join, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -36,7 +37,6 @@ _RUN_COLUMNS = (
     RunModel.status,
     RunModel.conditions,
     RunModel.created_at,
-    RunModel.qc_metrics,
 )
 
 
@@ -49,7 +49,6 @@ def _run_info(r) -> RunInfo:  # SQLAlchemy Row
         status=r.status,
         conditions=r.conditions,
         created_at=r.created_at,
-        qc_metrics=r.qc_metrics,
     )
 
 
@@ -95,6 +94,20 @@ class SQLAlchemyVisualizationDatasetReader:
                 )
             ).all()
             return [_run_info(r) for r in rows]
+
+    async def run_qc_metrics(
+        self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, dict[str, Any]]:
+        if not run_ids:
+            return {}
+        stmt = select(RunModel.id, RunModel.qc_metrics).where(
+            RunModel.workspace_id == workspace_id,
+            any_id(RunModel.id, run_ids),
+            RunModel.qc_metrics.is_not(None),
+        )
+        async with self._session_factory() as session:
+            rows = (await (await session.connection()).execute(stmt)).all()
+        return {r[0]: r[1] for r in rows}
 
     async def readout_definitions(
         self, workspace_id: uuid.UUID, protocol_ids: list[uuid.UUID]
