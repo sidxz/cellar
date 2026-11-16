@@ -39,6 +39,9 @@ export interface WorkbenchState extends Snapshot {
   setFilters: (filters: Filter[]) => void;
   upsertFilter: (filter: Filter) => void;
   removeFilter: (id: string) => void;
+  /** Swap filter ``prev`` for ``next``, not as an undo step (the chemist changed nothing: a
+   * substructure query matched again for today's compounds); nothing once ``prev`` is gone. */
+  replaceFilter: (prev: Filter, next: Filter) => void;
   /** Replace the panels and filters together, as one undo step. */
   setConfig: (panels: PanelConfig[], filters: Filter[]) => void;
   setSelection: (rowIds: Iterable<string>) => void;
@@ -140,6 +143,10 @@ export function createWorkbenchStore(initial: {
         });
       },
       removeFilter: (id) => commit({ filters: get().filters.filter((f) => f.id !== id) }),
+      replaceFilter: (prev, next) => {
+        const filters = get().filters;
+        if (filters.includes(prev)) set({ filters: filters.map((f) => (f === prev ? next : f)) });
+      },
       setConfig: (panels, filters) => commit({ panels, filters }),
       setSelection: (rowIds) => set({ selection: new Set(rowIds) }),
       clearSelection: () => set({ selection: new Set<string>() }),

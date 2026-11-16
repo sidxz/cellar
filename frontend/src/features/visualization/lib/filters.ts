@@ -29,8 +29,9 @@ function predicate(ds: Dataset, f: Filter): Predicate {
     };
   }
   if (f.kind === "substructure") {
-    if (!f.moleculeIds) return () => true;
-    const ids = new Set(f.moleculeIds);
+    const matched = matchedIds(ds, f);
+    if (!matched) return () => true;
+    const ids = new Set(matched);
     const molecules = ds.values.molecule_id ?? [];
     return (i) => ids.has(molecules[i] as string);
   }
@@ -144,13 +145,31 @@ export function substructureSummary(f: SubstructureFilter): string {
   return `Contains ${q}`;
 }
 
+// One key per loaded dataset: its compounds, sorted.
+const membership = new WeakMap<Dataset, string>();
+
+/** Which compounds the dataset holds, as one string: what a substructure match was made over. */
+export function membershipKey(ds: Dataset): string {
+  let key = membership.get(ds);
+  if (key === undefined) {
+    key = datasetMoleculeIds(ds).join(",");
+    membership.set(ds, key);
+  }
+  return key;
+}
+
+/** The compounds the substructure filter matched, when it was matched over exactly this
+ * dataset's compounds; else undefined (it filters nothing until matched again). */
+export const matchedIds = (ds: Dataset, f: SubstructureFilter): string[] | undefined =>
+  f.moleculeIds && f.over === membershipKey(ds) ? f.moleculeIds : undefined;
+
 /** How many of the dataset's compounds the substructure filter keeps, of how many. */
 export function substructureCounts(
   ds: Dataset,
   f: SubstructureFilter,
 ): { matched: number; total: number } {
   const all = datasetMoleculeIds(ds);
-  const kept = new Set(f.moleculeIds);
+  const kept = new Set(matchedIds(ds, f));
   return { matched: all.filter((id) => kept.has(id)).length, total: all.length };
 }
 
@@ -159,7 +178,7 @@ export function substructureCounts(
 export function filterCondition(ds: Dataset, f: Filter): string {
   if (f.kind === "rows") return `${f.rowIds.length.toLocaleString()} rows`;
   if (f.kind === "substructure") {
-    if (!f.moleculeIds) return "not matched";
+    if (!matchedIds(ds, f)) return "not matched";
     const { matched, total } = substructureCounts(ds, f);
     return `${matched.toLocaleString()} of ${total.toLocaleString()} compounds`;
   }

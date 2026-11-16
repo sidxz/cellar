@@ -513,7 +513,7 @@ function openSaved(
       lines.push(`The filter “${substructureSummary(f)}” couldn't be re-run: ${outcome.error}`);
       return f;
     }
-    return { ...f, moleculeIds: outcome.moleculeIds };
+    return { ...f, ...outcome };
   });
   return { panels, filters: matched, missing, lines };
 }

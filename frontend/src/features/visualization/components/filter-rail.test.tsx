@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Filter } from "../lib/filters";
+import { type Filter, membershipKey } from "../lib/filters";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import type { Dataset } from "../types";
 import { FilterRail, NoRowsMatch } from "./filter-rail";
@@ -230,16 +230,42 @@ describe("FilterRail substructure", () => {
       history: 1,
       filters: [
         {
-          id: "sub-1",
+          id: expect.stringMatching(/^sub-/),
           kind: "substructure",
           query: "c1ccccc1",
           queryKind: "smiles",
           moleculeIds: ["m2"],
+          over: membershipKey(ds),
         },
       ],
     });
     expect(screen.queryByText("Matching…")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Filters (1 active)" })).toBeInTheDocument();
+  });
+
+  it("adds both of two queries drawn while the first still matches, each its own filter", async () => {
+    const answers: ((body: unknown) => void)[] = [];
+    for (const _ of [1, 2]) {
+      vi.mocked(customInstance).mockReturnValueOnce(
+        new Promise((resolve) => {
+          answers.push(resolve);
+        }),
+      );
+    }
+    show([]);
+    drawBenzene();
+    addFilter("Substructure…");
+    fireEvent.click(screen.getByRole("button", { name: "Apply drawing" }));
+    await waitFor(() => expect(answers).toHaveLength(2));
+    answers[0]({ matched_ids: ["m1"], searched: 3, without_structure: 0 });
+    answers[1]({ matched_ids: ["m2"], searched: 3, without_structure: 0 });
+    await waitFor(() => expect(state().filters).toHaveLength(2));
+    const [a, b] = state().filters;
+    expect(a.id).not.toBe(b.id);
+    expect(state().filters.map((f) => f.kind === "substructure" && f.moleculeIds)).toEqual([
+      ["m1"],
+      ["m2"],
+    ]);
   });
 
   it("shows the server's message for an unreadable query and adds no filter", async () => {
@@ -301,6 +327,7 @@ describe("NoRowsMatch", () => {
           query: "C1CCCCC1",
           queryKind: "smiles",
           moleculeIds: [],
+          over: membershipKey(ds),
         },
       ],
       guarded,

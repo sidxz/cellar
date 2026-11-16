@@ -18,6 +18,7 @@ import {
   rgroupSet,
   seriesSet,
 } from "../lib/derived";
+import { membershipKey } from "../lib/filters";
 import type { Dataset } from "../types";
 
 type Props = {
@@ -153,8 +154,9 @@ function SeriesRunner(props: Of<"series">) {
 }
 
 type SavedQuery = Extract<ViewConfig["filters"][number], { kind: "substructure" }>;
-/** A saved substructure query matched again: the compounds it matched, or why it couldn't be. */
-export type Rematch = { moleculeIds: string[] } | { error: string };
+/** A saved substructure query matched again: the compounds it matched and the compounds it
+ * was matched over, or why it couldn't be. */
+export type Rematch = { moleculeIds: string[]; over: string } | { error: string };
 
 /** Matches a saved view's substructure query against the dataset's compounds and reports the
  * outcome; renders nothing. A query is not a job: no cancel. */
@@ -175,8 +177,8 @@ export function SubstructureRematch({
     retry: false,
   });
   useEffect(() => {
-    if (data) onDone(filter.id, { moleculeIds: data.matched_ids });
+    if (data) onDone(filter.id, { moleculeIds: data.matched_ids, over: membershipKey(ds) });
     else if (error) onDone(filter.id, { error: plain(error) });
-  }, [filter.id, data, error, onDone]);
+  }, [filter.id, data, error, onDone, ds]);
   return null;
 }

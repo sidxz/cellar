@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Filter, SubstructureFilter } from "../../lib/filters";
+import { type Filter, type SubstructureFilter, membershipKey } from "../../lib/filters";
 import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
 import type { Dataset } from "../../types";
 
@@ -63,6 +63,7 @@ const benzene = (moleculeIds: string[]): SubstructureFilter => ({
   query: "c1ccccc1",
   queryKind: "smiles",
   moleculeIds,
+  over: membershipKey(ds),
 });
 
 function Probe() {
@@ -117,7 +118,7 @@ describe("SubstructureFilterCard", () => {
       row_ids: ["c1", "c2"],
       values: { structure: ["c1ccccc1C", "c1ccncc1"], molecule_id: ["m1", "m2"] },
     };
-    show(benzene(["m1"]), allDrawn);
+    show({ ...benzene(["m1"]), over: membershipKey(allDrawn) }, allDrawn);
     expect(screen.getByText("1 of 2 compounds match")).toBeInTheDocument();
     expect(screen.queryByText(/no structure/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Rows without a compound/)).not.toBeInTheDocument();
@@ -153,6 +154,29 @@ describe("SubstructureFilterCard", () => {
       }),
     );
     expect(screen.getByText("1 of 3 compounds match")).toBeInTheDocument();
+  });
+
+  it("matches again by itself once the dataset's compounds change: no undo step, inert meanwhile", async () => {
+    let answer: (body: unknown) => void = () => {};
+    vi.mocked(customInstance).mockReturnValueOnce(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    // Matched over m1 and m2 only; m3 joined the dataset since.
+    show({ ...benzene(["m1"]), over: "m1,m2" });
+    expect(await screen.findByText("Matching…")).toBeInTheDocument();
+    expect(screen.queryByText(/compounds match/)).not.toBeInTheDocument();
+    expect(vi.mocked(customInstance)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { query: "c1ccccc1", query_kind: "smiles", molecule_ids: ["m1", "m2", "m3"] },
+      }),
+    );
+    answer({ matched_ids: ["m1", "m3"], searched: 3, without_structure: 1 });
+    await waitFor(() => expect(state().filters).toEqual([benzene(["m1", "m3"])]));
+    expect(state().history).toBe(0);
+    expect(await screen.findByText("2 of 3 compounds match")).toBeInTheDocument();
+    expect(vi.mocked(customInstance)).toHaveBeenCalledTimes(1);
   });
 
   it("edits the query: re-matches and keeps the filter's id, in one undo step", async () => {

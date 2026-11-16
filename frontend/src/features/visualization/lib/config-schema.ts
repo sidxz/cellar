@@ -74,16 +74,18 @@ const rowsFilter = z.object({
   rowIds: z.array(z.string()),
 });
 
-/** Rows whose compound contains a structure: ``moleculeIds`` are the dataset compounds the
- * query matched; absent until it is matched against the open data (a saved view's filter),
- * when it filters nothing. Matches are data, so a view saves the query alone; molecule ids
- * are the same at every level, so a level switch keeps them. */
+/** Rows whose compound contains a structure: ``moleculeIds`` are the compounds the query
+ * matched among ``over`` (``membershipKey`` of the dataset it was matched against). Absent,
+ * or matched over other compounds than the open data's (runs added, a level that counts
+ * other runs), it filters nothing until matched again. Matches are data, so a view saves
+ * the query alone. */
 const substructureFilter = z.object({
   id: z.string(),
   kind: z.literal("substructure"),
   query: z.string(),
   queryKind: z.enum(["smiles", "smarts"]),
   moleculeIds: z.array(z.string()).optional(),
+  over: z.string().optional(),
 });
 
 export const filterSchema = z.discriminatedUnion("kind", [
@@ -95,7 +97,7 @@ export const filterSchema = z.discriminatedUnion("kind", [
 export const savedFilterSchema = z.discriminatedUnion("kind", [
   rangeFilter,
   categoryFilter,
-  substructureFilter.omit({ moleculeIds: true }),
+  substructureFilter.omit({ moleculeIds: true, over: true }),
 ]);
 
 /** One series: compounds under a scaffold-tree node, or matching an R-groups set's core

@@ -9,6 +9,7 @@ import {
   filterSummary,
   fixedBins,
   isFilterActive,
+  membershipKey,
   substructureSummary,
 } from "./filters";
 
@@ -132,6 +133,7 @@ describe("substructure filter", () => {
     query,
     queryKind: "smiles",
     moleculeIds,
+    over: membershipKey(wells()),
   });
 
   it("keeps the rows of matched compounds; rows without a compound never pass", () => {
@@ -155,6 +157,17 @@ describe("substructure filter", () => {
 
   it("counts the dataset compounds it keeps", () => {
     expect(filterCondition(wells(), sub(["m1", "m9"]))).toBe("1 of 2 compounds");
+  });
+
+  it("filters nothing once the dataset's compounds differ from those it was matched over", () => {
+    // m2 gave way to m3, which was never matched: no stale match may leave it out.
+    const grown = wells();
+    grown.values = { ...grown.values, molecule_id: ["m1", "m1", "m1", null, "m3"] };
+    expect(mask(computePassMask(grown, [sub(["m1"])]))).toEqual([1, 1, 1, 1, 1]);
+    expect(filterCondition(grown, sub(["m1"]))).toBe("not matched");
+    // The same compounds in another dataset (another level) keep the match.
+    const compounds = { ...wells(), row_ids: ["m1", "m2"], values: { molecule_id: ["m1", "m2"] } };
+    expect(mask(computePassMask(compounds, [sub(["m1"])]))).toEqual([1, 0]);
   });
 
   it("filters nothing until it is matched against this data", () => {
