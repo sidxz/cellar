@@ -342,7 +342,8 @@ class SQLAlchemyReadoutDataRepository:
         molecule_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
     ) -> list[ReadoutData]:
-        """Non-outlier, non-computed readout data for a molecule+definition pair."""
+        """Non-outlier, non-computed results (sample wells and well-less rows) for a
+        molecule+definition pair."""
         stmt = (
             select(ReadoutDataModel)
             .where(
@@ -351,6 +352,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.readout_definition_id == readout_definition_id,
                 ReadoutDataModel.is_outlier.is_(False),
                 ReadoutDataModel.is_computed.is_(False),
+                COMPOUND_RESULT,
             )
             .order_by(ReadoutDataModel.created_at.desc())
         )
