@@ -28,14 +28,17 @@ export function RGroupsDialog({
   const [core, setCore] = useState<string | null>(null);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      {/* No taller than the screen: the picker scrolls, the title and footer stay. */}
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add R-group columns</DialogTitle>
           <DialogDescription>
             Each R position becomes a column; compounds that don't match the core get none.
           </DialogDescription>
         </DialogHeader>
-        <RGroupCorePicker moleculeIds={moleculeIds} coreSmiles={core} onCoreChange={setCore} />
+        <div className="-m-1 min-h-0 overflow-y-auto p-1">
+          <RGroupCorePicker moleculeIds={moleculeIds} coreSmiles={core} onCoreChange={setCore} />
+        </div>
         <p className="text-sm text-muted-foreground">
           Decompose {moleculeIds.length.toLocaleString()} compounds against this core
         </p>

@@ -83,7 +83,8 @@ export function SeriesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      {/* No taller than the screen: the cards scroll, the title and footer stay. */}
+      <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Add a series column</DialogTitle>
           <DialogDescription>
@@ -93,7 +94,7 @@ export function SeriesDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-wrap items-start gap-2">
+        <div className="-m-1 flex min-h-0 flex-wrap items-start gap-2 overflow-y-auto p-1">
           {candidates.map((c) => (
             <button
               key={c.scaffoldSmiles}

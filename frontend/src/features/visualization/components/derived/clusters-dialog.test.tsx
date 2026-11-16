@@ -77,4 +77,9 @@ describe("ClustersDialog", () => {
       screen.getByText("61,204 compounds; clustering is capped at 50,000. Choose fewer runs."),
     ).toBeInTheDocument();
   });
+
+  it("fits the screen: no taller than the viewport, scrolling when it must", () => {
+    open(120);
+    expect(screen.getByRole("dialog")).toHaveClass("max-h-[calc(100dvh-2rem)]", "overflow-y-auto");
+  });
 });

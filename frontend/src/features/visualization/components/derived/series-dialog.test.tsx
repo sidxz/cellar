@@ -198,4 +198,16 @@ describe("SeriesDialog", () => {
     open();
     expect(screen.getByText("Could not load scaffolds.")).toBeInTheDocument();
   });
+
+  it("fits the screen: no taller than the viewport, the cards scroll between title and footer", () => {
+    setTree(tree);
+    open();
+    expect(screen.getByRole("dialog")).toHaveClass("max-h-[calc(100dvh-2rem)]", "flex-col");
+    const cards = scaffoldTiles()[0].parentElement as HTMLElement;
+    expect(cards).toHaveClass("min-h-0", "overflow-y-auto");
+    expect(cards).not.toContainElement(
+      screen.getByRole("heading", { name: "Add a series column" }),
+    );
+    expect(cards).not.toContainElement(apply());
+  });
 });

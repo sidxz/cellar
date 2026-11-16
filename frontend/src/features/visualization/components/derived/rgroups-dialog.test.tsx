@@ -72,4 +72,15 @@ describe("RGroupsDialog", () => {
     fireEvent.click(apply());
     expect(onApply).not.toHaveBeenCalled();
   });
+
+  it("fits the screen: the core picker scrolls between title and footer", () => {
+    setTree(tree);
+    open();
+    expect(screen.getByRole("dialog")).toHaveClass("max-h-[calc(100dvh-2rem)]", "flex-col");
+    const picker = screen
+      .getByRole("button", { name: /Select core c1ccncc1/ })
+      .closest(".overflow-y-auto");
+    expect(picker).toHaveClass("min-h-0");
+    expect(picker).not.toContainElement(apply());
+  });
 });
