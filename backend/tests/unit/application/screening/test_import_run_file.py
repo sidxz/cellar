@@ -2398,7 +2398,7 @@ class TestImportAutoLinksInventoryPlate:
 _ROLE_CSV = (
     b"Plate Name,Well,Control State,Batch,Raw Data\n"
     b"P1,A1,negative control,,0.95\n"
-    b"P1,A2,positive control (hit),,0.07\n"
+    b"P1,A2,positive control,,0.07\n"
     b"P1,A3,,LG-1,0.5\n"
     b"P1,A4,blank,,0.01\n"
     b"P1,H12,,LG-1,0.4\n"
@@ -2787,11 +2787,13 @@ class TestRunLayoutPrecedence:
 # ---------------------------------------------------------------------------
 
 
-def _controls_table(pos: list[float], neg: list[float]) -> tuple[NormalizedTable, uuid.UUID]:
+def _controls_table(
+    pos: list[float], neg: list[float], *, words: tuple[str, str] = ("positive", "negative")
+) -> tuple[NormalizedTable, uuid.UUID]:
     rd_id = uuid.uuid4()
     lines = ["Plate Name,Well,Control State,Raw Data"]
-    lines += [f"P1,A{i + 1},positive control,{v}" for i, v in enumerate(pos)]
-    lines += [f"P1,B{i + 1},negative control,{v}" for i, v in enumerate(neg)]
+    lines += [f"P1,A{i + 1},{words[0]} control,{v}" for i, v in enumerate(pos)]
+    lines += [f"P1,B{i + 1},{words[1]} control,{v}" for i, v in enumerate(neg)]
     lines += ["P1,C1,,0.5"]
     table = parse_tabular("\n".join(lines).encode(), "x.csv")
     mapping = ColumnMapping(
@@ -2803,36 +2805,68 @@ def _controls_table(pos: list[float], neg: list[float]) -> tuple[NormalizedTable
     return normalize(table, mapping).unwrap(), rd_id
 
 
+INHIBITION, ACTIVATION = False, True
+
+
 class TestSwappedControls:
-    def test_positive_reading_low_when_the_protocol_expects_high(self) -> None:
+    """The full-effect control against the no-effect one: under HIGH the negative control
+    is the full effect of an inhibition and the positive control that of an activation;
+    LOW mirrors both."""
+
+    def test_full_effect_reading_high_in_an_inhibition_is_flagged(self) -> None:
         norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
-        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == (
-            "Controls look swapped on plate P1 (positive mean 0.11 vs negative mean 0.91; "
-            "this protocol's positive controls read the higher signal).",
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == (
+            "Plate P1: the full-effect controls (negative controls, mean 0.91) read higher "
+            "than the no-effect controls (positive controls, mean 0.11); this protocol "
+            "expects the full effect to lower the signal.",
         )
 
-    def test_positive_reading_high_when_the_protocol_expects_low(self) -> None:
+    def test_low_protocol_inhibition(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.LOW) == ()
         norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
-        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.LOW) == (
-            "Controls look swapped on plate P1 (positive mean 0.91 vs negative mean 0.11; "
-            "this protocol's positive controls read the lower signal).",
+        (note,) = _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.LOW)
+        assert note.startswith("Plate P1: the full-effect controls (positive controls, mean 0.91)")
+
+    def test_activation_expects_the_full_effect_to_raise_the_signal(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
+        assert _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.HIGH) == ()
+        assert _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.LOW) == (
+            "Plate P1: the full-effect controls (negative controls, mean 0.11) read lower "
+            "than the no-effect controls (positive controls, mean 0.91); this protocol "
+            "expects the full effect to raise the signal.",
         )
 
-    def test_controls_the_right_way_round_pass(self) -> None:
-        norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
-        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == ()
+    def test_platform_words_read_by_effect_pass_under_a_high_protocol(self) -> None:
+        # The platform's hit control reads low, its negative control high: right for an
+        # inhibition, once the words are read by effect.
+        rd_id = uuid.uuid4()
+        table = parse_tabular(
+            b"Plate Name,Well,Control State,Raw Data\n"
+            b"P1,A1,positive control (hit),0.07\nP1,A2,positive control (hit),0.08\n"
+            b"P1,B1,negative control,0.95\nP1,B2,negative control,0.93\n",
+            "x.csv",
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            plate_name="Plate Name",
+            well_role="Control State",
+            readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+        )
+        norm = normalize(table, mapping, full_effect=WellType.NEGATIVE_CONTROL).unwrap()
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == ()
 
     def test_no_clear_separation_says_nothing(self) -> None:
         norm, rd_id = _controls_table(pos=[0.2, 0.8], neg=[0.3, 0.9])
-        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == ()
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == ()
 
     def test_one_well_per_group_says_nothing(self) -> None:
         norm, rd_id = _controls_table(pos=[0.1], neg=[0.9])
-        assert _swapped_controls(norm, {}, {rd_id}, PosControlSignal.HIGH) == ()
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == ()
 
     def test_readouts_not_normalized_against_controls_are_not_checked(self) -> None:
         norm, _ = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
-        assert _swapped_controls(norm, {}, set(), PosControlSignal.HIGH) == ()
+        assert _swapped_controls(norm, {}, {}, PosControlSignal.HIGH) == ()
 
     @pytest.mark.asyncio
     async def test_the_preview_flags_a_layout_that_swaps_the_controls(self) -> None:
@@ -2878,4 +2912,53 @@ class TestSwappedControls:
             auth=auth,
         )
         swapped = result.unwrap().swapped_controls
-        assert len(swapped) == 1 and swapped[0].startswith("Controls look swapped on plate P1")
+        assert len(swapped) == 1 and swapped[0].startswith("Plate P1: the full-effect controls")
+
+
+# The external platform's export: its "positive control (hit)" is the full-effect control.
+_PLATFORM_CSV = (
+    b"Plate Name,Well,Control State,Raw Data\n"
+    b"P1,A1,negative control,0.95\n"
+    b"P1,A2,positive control (hit),0.07\n"
+    b"P1,H12,,0.5\n"
+)
+
+
+class TestPlatformRoleWords:
+    async def _preview(self, signal: PosControlSignal):
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)  # layout: A1 positive, A2 negative
+        protocol.pos_control_signal = signal
+        uc, _ = _build_preview_uc(run=run, protocol=protocol, plate_templates={tmpl.id: tmpl})
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=_PLATFORM_CSV,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        return result.unwrap()
+
+    @pytest.mark.asyncio
+    async def test_a_high_protocol_reads_the_hit_control_as_its_negative_control(self) -> None:
+        preview = await self._preview(PosControlSignal.HIGH)
+        # Read by effect the file agrees with the layout: A1 positive, A2 negative.
+        assert preview.warnings == (
+            'Control roles read by effect: "negative control" as positive control, '
+            '"positive control (hit)" as negative control — under this protocol the '
+            "negative control is the full-effect (hit) end.",
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_low_protocol_reads_the_hit_control_as_its_positive_control(self) -> None:
+        preview = await self._preview(PosControlSignal.LOW)
+        assert preview.warnings == (
+            'Control roles from the file\'s "Control State" column differ from the '
+            'protocol default "Test Layout" on 2 wells.',
+            'Control roles read by effect: "negative control" as negative control, '
+            '"positive control (hit)" as positive control — under this protocol the '
+            "positive control is the full-effect (hit) end.",
+        )

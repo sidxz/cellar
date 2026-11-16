@@ -53,8 +53,11 @@ from cellar.application.screening.import_run_file_validator import (
     _load_layouts,
     _normalization_requires_controls,
     _role_disagreement_warnings,
+    _role_name,
     _swapped_controls,
     _validate_well_roles,
+    full_effect_raises_signal,
+    protocol_effect_roles,
 )
 from cellar.application.screening.long_format_normalizer import (
     NormalizedTable,
@@ -71,6 +74,7 @@ from cellar.application.shared.parsers import TabularParseError, TabularParser
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
+from cellar.domain.screening_assay.enums import WellType
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
 from cellar.domain.screening_assay.repository import (
     PlateTemplateRepository,
@@ -92,12 +96,30 @@ def _swap_check(
     protocol: AssayProtocol, norm: NormalizedTable, layouts: LayoutsByFormat
 ) -> tuple[str, ...]:
     """Swapped-control notes for the readouts this protocol normalizes against controls."""
-    readout_ids = {
-        rd.id
+    readouts = {
+        rd.id: full_effect_raises_signal(rd.normalizations)
         for rd in protocol.readout_definitions
         if any(_normalization_requires_controls(n) for n in rd.normalizations)
     }
-    return _swapped_controls(norm, layouts, readout_ids, protocol.pos_control_signal)
+    return _swapped_controls(norm, layouts, readouts, protocol.pos_control_signal)
+
+
+def _full_effect(protocol: AssayProtocol | None) -> WellType:
+    """The role the platform's full-effect words are read as (the default without a protocol)."""
+    return (
+        protocol_effect_roles(protocol)[0] if protocol is not None else WellType.POSITIVE_CONTROL
+    )
+
+
+def _effect_note(norm: NormalizedTable, full: WellType) -> tuple[str, ...]:
+    """Which roles the platform's effect words were read as, when the file uses them."""
+    if not norm.roles_by_effect:
+        return ()
+    read = ", ".join(f'"{word}" as {_role_name(role)}' for word, role in norm.roles_by_effect)
+    return (
+        f"Control roles read by effect: {read} — under this protocol the "
+        f"{_role_name(full)} is the full-effect (hit) end.",
+    )
 
 
 def _readout_def_refs(protocol: AssayProtocol | None) -> tuple[ReadoutDefRef, ...]:
@@ -222,7 +244,7 @@ class PreviewRunFile:
         swapped_controls: tuple[str, ...] = ()
 
         if guessed is not None:
-            normalized = normalize(table, guessed)
+            normalized = normalize(table, guessed, full_effect=_full_effect(protocol))
             if isinstance(normalized, Success):
                 norm: NormalizedTable = normalized.unwrap()
                 rows_skipped = norm.skipped_rows
@@ -320,7 +342,7 @@ class PreviewRunFile:
                     readout_conflicts = plan.readout_conflicts
                     warnings = _role_disagreement_warnings(plan.role_disagreements)
                     swapped_controls = _swap_check(protocol, norm, layouts)
-                warnings += _lot_notes(resolutions)
+                warnings += _effect_note(norm, _full_effect(protocol)) + _lot_notes(resolutions)
                 plates = _summarize_plates(norm, layouts)
 
         preview_id = uuid.uuid4()
@@ -449,7 +471,7 @@ class RepreviewRunFile:
         # mapping for normalization.
         suggested = infer_mapping(cached.table, readout_defs=_readout_def_refs(protocol))
 
-        normalized = normalize(cached.table, input.mapping)
+        normalized = normalize(cached.table, input.mapping, full_effect=_full_effect(protocol))
         if isinstance(normalized, Failure):
             return normalized
         norm: NormalizedTable = normalized.unwrap()
@@ -501,7 +523,7 @@ class RepreviewRunFile:
             readout_conflicts = plan.readout_conflicts
             warnings = _role_disagreement_warnings(plan.role_disagreements)
             swapped_controls = _swap_check(protocol, norm, layouts)
-        warnings += _lot_notes(resolutions)
+        warnings += _effect_note(norm, _full_effect(protocol)) + _lot_notes(resolutions)
 
         plates = _summarize_plates(norm, layouts)
         ambiguous_dto = tuple(_to_ambiguous_dto(a) for a in resolutions.ambiguous_compounds)

@@ -33,6 +33,25 @@ _NORMALIZED_TYPES = frozenset(
 # ---------------------------------------------------------------------------
 
 
+def effect_roles(
+    pos_control_signal: PosControlSignal, *, activation: bool
+) -> tuple[WellType, WellType]:
+    """(full-effect, no-effect) control roles, as ``PlateNormalizer`` anchors them.
+
+    The high anchor (POSITIVE_CONTROL under ``HIGH``, NEGATIVE_CONTROL under ``LOW``)
+    is 0 % for % inhibition, % control and z-score, and 100 % for % activation.
+    """
+    high, low = _anchor_roles(pos_control_signal)
+    return (high, low) if activation else (low, high)
+
+
+def _anchor_roles(pos_control_signal: PosControlSignal) -> tuple[WellType, WellType]:
+    """(high-anchor role, low-anchor role)."""
+    if pos_control_signal == PosControlSignal.LOW:
+        return WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL
+    return WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL
+
+
 @dataclass(frozen=True)
 class NormalizedValue:
     """A single normalized readout value for one well."""
@@ -155,11 +174,11 @@ class PlateNormalizer:
         - ``LOW``: roles swap — the lab labels its known-inhibitor wells as
           POSITIVE_CONTROL, but those carry the low signal.
         """
-        pos_label = PlateNormalizer._values_for_type(wells, raw_values, WellType.POSITIVE_CONTROL)
-        neg_label = PlateNormalizer._values_for_type(wells, raw_values, WellType.NEGATIVE_CONTROL)
-        if pos_control_signal == PosControlSignal.LOW:
-            return neg_label, pos_label
-        return pos_label, neg_label
+        high, low = _anchor_roles(pos_control_signal)
+        return (
+            PlateNormalizer._values_for_type(wells, raw_values, high),
+            PlateNormalizer._values_for_type(wells, raw_values, low),
+        )
 
     @staticmethod
     def _normalized_wells(

@@ -2,7 +2,9 @@
 
 The protocol layout says A1 = positive control, A2 = negative control; the file
 (as the lab's screening platform exports it, each run with its own layout) says
-the opposite. The file wins, and the preview says where the two differ.
+the opposite. The file wins, and the preview says where the two differ. The
+platform's words name the effect; under this LOW protocol (positive control = the
+full effect) its "positive control (hit)" is a positive control.
 """
 
 from __future__ import annotations
@@ -58,7 +60,10 @@ async def _seed(
             },
         )
         await uow.session.execute(
-            sa.text("UPDATE protocols SET control_layouts = CAST(:cl AS jsonb) WHERE id = :id"),
+            sa.text(
+                "UPDATE protocols SET control_layouts = CAST(:cl AS jsonb), "
+                "pos_control_signal = 'low' WHERE id = :id"
+            ),
             {"cl": json.dumps({"96": str(tmpl_id)}), "id": protocol_id},
         )
         await _insert_run(uow, run_id, protocol_id, ws)
@@ -92,7 +97,10 @@ async def test_the_files_control_state_column_beats_the_protocol_layout(
     assert preview["swapped_controls"] == []
     assert preview["warnings"] == [
         'Control roles from the file\'s "Control State" column differ from the '
-        'protocol default "Layout" on 2 wells.'
+        'protocol default "Layout" on 2 wells.',
+        'Control roles read by effect: "negative control" as negative control, '
+        '"positive control (hit)" as positive control — under this protocol the '
+        "positive control is the full-effect (hit) end.",
     ]
 
     mapping = {

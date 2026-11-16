@@ -764,7 +764,9 @@ class TestWellRoleColumn:
             roles = {s.header: (s.role, s.confidence) for s in infer_mapping(table).suggestions}
             assert roles[header] == ("well_role", "high"), header
 
-    def _normalize(self, values: list[str]) -> NormalizedTable:
+    def _normalize(
+        self, values: list[str], full_effect: WellType = WellType.NEGATIVE_CONTROL
+    ) -> NormalizedTable:
         rd_id = uuid.uuid4()
         table = _make_table(
             ["Well", "Control State", "Raw"],
@@ -778,13 +780,13 @@ class TestWellRoleColumn:
             well_role="Control State",
             readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
         )
-        return normalize(table, mapping).unwrap()
+        return normalize(table, mapping, full_effect=full_effect).unwrap()
 
     def test_values_map_to_well_types(self) -> None:
         out = self._normalize(
             [
                 "negative control",
-                "positive control (hit)",
+                "positive control",
                 "Positive Control",
                 "reference",
                 "Reference Molecule",
@@ -802,6 +804,44 @@ class TestWellRoleColumn:
             WellType.SAMPLE,
         ]
         assert out.unknown_well_roles == ()
+        assert out.roles_by_effect == ()
+
+    # The external platform names its controls by effect: "positive control (hit)" is the
+    # full-effect control, and beside it "negative control" the no-effect one.
+    def test_platform_words_under_a_high_protocol(self) -> None:
+        out = self._normalize(
+            ["Positive Control (Hit)", "negative control", "hit control", ""],
+            full_effect=WellType.NEGATIVE_CONTROL,
+        )
+        assert [r.well_role for r in out.rows] == [
+            WellType.NEGATIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+            WellType.NEGATIVE_CONTROL,
+            WellType.SAMPLE,
+        ]
+        assert out.roles_by_effect == (
+            ("Positive Control (Hit)", WellType.NEGATIVE_CONTROL),
+            ("negative control", WellType.POSITIVE_CONTROL),
+            ("hit control", WellType.NEGATIVE_CONTROL),
+        )
+
+    def test_platform_words_under_a_low_protocol(self) -> None:
+        out = self._normalize(
+            ["positive control (hit)", "negative control"], full_effect=WellType.POSITIVE_CONTROL
+        )
+        assert [r.well_role for r in out.rows] == [
+            WellType.POSITIVE_CONTROL,
+            WellType.NEGATIVE_CONTROL,
+        ]
+
+    def test_plain_words_stay_literal_whatever_the_convention(self) -> None:
+        for full in (WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL):
+            out = self._normalize(["positive control", "negative control"], full_effect=full)
+            assert [r.well_role for r in out.rows] == [
+                WellType.POSITIVE_CONTROL,
+                WellType.NEGATIVE_CONTROL,
+            ]
+            assert out.roles_by_effect == ()
 
     def test_unknown_values_are_listed_never_a_sample(self) -> None:
         out = self._normalize(["negative control", "vehicle", "Vehicle ", "dmso"])

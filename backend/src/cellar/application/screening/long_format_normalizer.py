@@ -14,9 +14,12 @@ This module contains no I/O. It does:
 
 Well roles: when the file carries a role column ("Control State", "Well
 Type", …) and it is mapped, each row's ``well_role`` is read from it and the
-importer writes that role. Otherwise ``well_role`` stays ``None`` and the
-importer derives WellType from the protocol's ``control_layouts``
-(PlateTemplate.template_map).
+importer writes that role. The external platform's words name the effect, not
+cellar's role: its "positive control (hit)" is the full-effect control, and in a
+file that uses it, "negative control" the no-effect one — each read as the role
+that anchors that end under the protocol's convention (``full_effect``).
+Without a mapped role column ``well_role`` stays ``None`` and the importer
+derives WellType from the protocol's ``control_layouts``.
 """
 
 from __future__ import annotations
@@ -189,6 +192,9 @@ class NormalizedTable:
     unknown_well_roles: tuple[str, ...] = ()
     # The mapped role column's header; None = roles come from the layouts.
     well_role_column: str | None = None
+    # The platform's effect words found, with the role each was read as (first
+    # spelling of each, in file order).
+    roles_by_effect: tuple[tuple[str, WellType], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -296,19 +302,22 @@ _WELL_ROLE_VALUES: dict[str, WellType] = {
         ("compound", WellType.SAMPLE),
         ("negative control", WellType.NEGATIVE_CONTROL),
         ("positive control", WellType.POSITIVE_CONTROL),
-        ("positive control (hit)", WellType.POSITIVE_CONTROL),
         ("reference", WellType.REFERENCE),
         ("reference molecule", WellType.REFERENCE),
         ("blank", WellType.BLANK),
     )
 }
+# The platform's full-effect words; beside them its "negative control" is the no-effect one.
+_HIT_WORDS = frozenset(_norm(x) for x in ("positive control (hit)", "hit control"))
+_NO_EFFECT_WORD = _norm("negative control")
 
 
 def unknown_well_roles_message(header: str, values: Sequence[str]) -> str:
     listed = ", ".join(f'"{v}"' for v in values)
     return (
         f'Unknown values in the "{header}" column: {listed}. Use negative control, '
-        "positive control, reference or blank, or leave the cell empty for a sample."
+        "positive control, positive control (hit), reference or blank, or leave the cell "
+        "empty for a sample."
     )
 
 
@@ -582,8 +591,15 @@ def _has_shared_prefix(values: list[str], min_len: int) -> bool:
 def normalize(
     table: ParsedTable,
     mapping: ColumnMapping,
+    *,
+    full_effect: WellType = WellType.POSITIVE_CONTROL,
 ) -> Result[NormalizedTable, DomainError]:
     """Convert parsed rows + mapping to typed long-format rows.
+
+    ``full_effect`` is the control role that anchors the full-effect end under the
+    protocol's convention (``protocol_effect_roles``); the platform's effect words in
+    the role column are read as it and the other control role. The default reads them
+    literally ("positive control (hit)" as a positive control).
 
     - Well positions are canonicalized to ``WellPosition(row, column)``.
     - Plate name comes from ``mapping.plate_name`` if set; otherwise all
@@ -615,6 +631,18 @@ def normalize(
     rows: list[LongFormatRow] = []
     skipped = 0
     unknown_roles: dict[str, str] = {}  # _norm(value) -> first spelling
+    # The platform's effect words, when the role column uses them: value -> role.
+    effect_words: dict[str, WellType] = {}
+    if mapping.well_role and any(
+        _norm(raw.get(mapping.well_role) or "") in _HIT_WORDS for raw in table.iter_rows()
+    ):
+        effect_words = dict.fromkeys(_HIT_WORDS, full_effect)
+        effect_words[_NO_EFFECT_WORD] = (
+            WellType.POSITIVE_CONTROL
+            if full_effect == WellType.NEGATIVE_CONTROL
+            else WellType.NEGATIVE_CONTROL
+        )
+    by_effect: dict[str, tuple[str, WellType]] = {}  # _norm(value) -> (first spelling, role)
     for raw in table.iter_rows():
         well_str = (raw.get(mapping.well) or "").strip()
         if not well_str:
@@ -644,9 +672,12 @@ def normalize(
         well_role: WellType | None = None
         if mapping.well_role:
             role_cell = (raw.get(mapping.well_role) or "").strip()
-            well_role = _WELL_ROLE_VALUES.get(_norm(role_cell))
+            key = _norm(role_cell)
+            well_role = effect_words.get(key) or _WELL_ROLE_VALUES.get(key)
             if well_role is None:
-                unknown_roles.setdefault(_norm(role_cell), role_cell)
+                unknown_roles.setdefault(key, role_cell)
+            elif key in effect_words:
+                by_effect.setdefault(key, (role_cell, well_role))
 
         readouts: dict[uuid.UUID, float | str] = {}
         for rc in mapping.readout_columns:
@@ -686,6 +717,7 @@ def normalize(
             skipped_rows=skipped,
             unknown_well_roles=tuple(unknown_roles.values()),
             well_role_column=mapping.well_role,
+            roles_by_effect=tuple(by_effect.values()),
         )
     )
 

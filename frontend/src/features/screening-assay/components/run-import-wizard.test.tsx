@@ -165,14 +165,18 @@ describe("RunImportWizard", () => {
     const swapped = {
       ...PREVIEW,
       swapped_controls: [
-        "Controls look swapped on plate P1 (positive mean 0.07 vs negative mean 0.95; this protocol's positive controls read the higher signal).",
+        "Plate P1: the full-effect controls (negative controls, mean 0.95) read higher than the no-effect controls (positive controls, mean 0.07); this protocol expects the full effect to lower the signal.",
       ],
     };
     hookState.value = baseHook({ preview: swapped, setAcknowledgedSwappedControls: acknowledge });
     const { unmount } = renderWizard();
-    expect(screen.getByText(/controls look swapped on plate P1/i)).toBeVisible();
+    expect(screen.getByText(/^Plate P1: the full-effect controls/)).toBeVisible();
     expect(screen.getByRole("button", { name: /^import$/i })).toBeDisabled();
-    fireEvent.click(screen.getByRole("checkbox", { name: /import with these control roles/i }));
+    // The acknowledgement says what importing anyway does to the values.
+    const ack = screen.getByRole("checkbox", {
+      name: /import anyway.*inactive wells read near 100 % and hits near 0 %/i,
+    });
+    fireEvent.click(ack);
     expect(acknowledge).toHaveBeenCalledWith(true);
     unmount();
 

@@ -18,8 +18,10 @@ orchestration.
   above when roles come from layouts, the role-value check when they come
   from the file's role column.
 - ``_role_disagreement_warnings`` / ``_swapped_controls`` — preview-only
-  notes: role sources that disagree, and controls whose raw signal reads
-  the wrong way round for the protocol's ``pos_control_signal``.
+  notes: role sources that disagree, and full-effect controls whose raw signal
+  reads the wrong way round against the no-effect ones.
+- ``protocol_effect_roles`` — the protocol's (full-effect, no-effect) control
+  roles, which the platform's effect words in a role column are read as.
 """
 
 from __future__ import annotations
@@ -27,7 +29,7 @@ from __future__ import annotations
 import statistics
 import uuid
 from collections import Counter, defaultdict
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass
 
 from cellar.application.screening.import_plan import _row_role
@@ -40,6 +42,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutNormalization,
     WellType,
 )
+from cellar.domain.screening_assay.plate_normalizer import effect_roles
 from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
 from cellar.domain.screening_assay.plate_template import PlateTemplate
 from cellar.domain.screening_assay.protocol import Protocol as AssayProtocol
@@ -179,18 +182,43 @@ def _role_disagreement_warnings(
     )
 
 
+def full_effect_raises_signal(normalizations: Collection[ReadoutNormalization]) -> bool:
+    """The full effect is the 100 % end: % activation, with no % inhibition beside it."""
+    return (
+        ReadoutNormalization.PERCENT_ACTIVATION in normalizations
+        and ReadoutNormalization.PERCENT_INHIBITION not in normalizations
+    )
+
+
+def protocol_effect_roles(protocol: AssayProtocol) -> tuple[WellType, WellType]:
+    """(full-effect, no-effect) control roles under the protocol's convention, over all
+    its readouts' normalizations."""
+    normalizations = {n for rd in protocol.readout_definitions for n in rd.normalizations}
+    return effect_roles(
+        protocol.pos_control_signal, activation=full_effect_raises_signal(normalizations)
+    )
+
+
+def _role_name(role: WellType) -> str:
+    return role.value.replace("_", " ")
+
+
 def _swapped_controls(
     normalized: NormalizedTable,
     layouts: LayoutsByFormat,
-    readout_ids: Collection[uuid.UUID],
+    readouts: Mapping[uuid.UUID, bool],
     pos_control_signal: PosControlSignal,
 ) -> tuple[str, ...]:
-    """Plates whose controls read the wrong way round, one note per plate.
+    """Plates whose full-effect controls read the wrong way round against the no-effect
+    controls, one note per plate.
 
-    Checked on the readouts normalized against controls (``readout_ids``):
-    with ``HIGH`` the positive controls must read the higher raw signal, with
-    ``LOW`` the lower. Only a clear separation counts — at least two wells per
-    group and a Z' above 0 — so noisy or overlapping controls say nothing.
+    Checked on the readouts normalized against controls (``readouts``: id → whether the
+    full effect raises the signal, as for % activation; else it lowers it). The roles
+    come from ``effect_roles`` under ``pos_control_signal``. Only a clear separation
+    counts — at least two wells per group and a Z' above 0 — so noisy or overlapping
+    controls say nothing. Raw values alone cannot tell swapped controls from an assay
+    whose effect runs the other way (an inhibition that raises the signal), so the note
+    states the expectation.
     """
     values: dict[tuple[str, uuid.UUID], dict[WellType, list[float]]] = defaultdict(
         lambda: defaultdict(list)
@@ -202,21 +230,25 @@ def _swapped_controls(
         if role not in (WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL):
             continue
         for rd_id, value in row.readouts.items():
-            if rd_id in readout_ids and isinstance(value, float):
+            if rd_id in readouts and isinstance(value, float):
                 values[(row.plate_name, rd_id)][role].append(value)
 
-    reads = "higher" if pos_control_signal == PosControlSignal.HIGH else "lower"
     flagged: dict[str, str] = {}
-    for (plate, _), by_role in values.items():
-        pos = by_role[WellType.POSITIVE_CONTROL]
-        neg = by_role[WellType.NEGATIVE_CONTROL]
-        if plate in flagged or PlateQualityCalculator().compute(pos, neg).z_prime <= 0:
+    for (plate, rd_id), by_role in values.items():
+        raises = readouts[rd_id]
+        full, none = effect_roles(pos_control_signal, activation=raises)
+        if (
+            plate in flagged
+            or PlateQualityCalculator().compute(by_role[full], by_role[none]).z_prime <= 0
+        ):
             continue
-        pos_mean, neg_mean = statistics.mean(pos), statistics.mean(neg)
-        if (pos_mean < neg_mean) == (pos_control_signal == PosControlSignal.HIGH):
+        full_mean, none_mean = statistics.mean(by_role[full]), statistics.mean(by_role[none])
+        if (full_mean > none_mean) != raises:
             flagged[plate] = (
-                f"Controls look swapped on plate {plate} (positive mean {pos_mean:.4g} vs "
-                f"negative mean {neg_mean:.4g}; this protocol's positive controls read "
-                f"the {reads} signal)."
+                f"Plate {plate}: the full-effect controls ({_role_name(full)}s, mean "
+                f"{full_mean:.4g}) read {'higher' if full_mean > none_mean else 'lower'} than "
+                f"the no-effect controls ({_role_name(none)}s, mean {none_mean:.4g}); this "
+                f"protocol expects the full effect to {'raise' if raises else 'lower'} the "
+                "signal."
             )
     return tuple(flagged.values())

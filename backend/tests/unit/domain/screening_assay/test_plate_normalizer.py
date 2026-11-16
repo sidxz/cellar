@@ -7,8 +7,8 @@ import uuid
 
 import pytest
 
-from cellar.domain.screening_assay.enums import ReadoutNormalization, WellType
-from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer
+from cellar.domain.screening_assay.enums import PosControlSignal, ReadoutNormalization, WellType
+from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer, effect_roles
 from cellar.domain.screening_assay.run import Well
 from cellar.domain.shared.errors import ValidationError
 
@@ -775,3 +775,31 @@ class TestOutlierWells:
         }
         assert by_well[bad.id] == pytest.approx(50.0)
         assert by_well[neg.id] == pytest.approx(100.0)
+
+
+class TestEffectRoles:
+    """Which control is the full-effect (hit) end and which the no-effect end, as the
+    anchors put them: the high anchor is 0 % for inhibition and 100 % for activation."""
+
+    @pytest.mark.parametrize(
+        ("signal", "activation", "full", "none"),
+        [
+            (PosControlSignal.HIGH, False, WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL),
+            (PosControlSignal.LOW, False, WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL),
+            (PosControlSignal.HIGH, True, WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL),
+            (PosControlSignal.LOW, True, WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL),
+        ],
+    )
+    def test_roles_follow_the_anchors(self, signal, activation, full, none) -> None:
+        assert effect_roles(signal, activation=activation) == (full, none)
+        normalization = (
+            ReadoutNormalization.PERCENT_ACTIVATION
+            if activation
+            else ReadoutNormalization.PERCENT_INHIBITION
+        )
+        wells = [_make_well(full, "A", 1), _make_well(none, "B", 1)]
+        out = PlateNormalizer().normalize(
+            wells, {wells[0].id: 1.0, wells[1].id: 9.0}, normalization, signal
+        )
+        by_id = {v.well_id: v.normalized_value for v in out}
+        assert (by_id[wells[0].id], by_id[wells[1].id]) == (100.0, 0.0)

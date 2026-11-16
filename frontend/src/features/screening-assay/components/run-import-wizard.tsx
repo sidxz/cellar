@@ -464,17 +464,19 @@ function PreviewStep({
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            Every % value would come out inverted. If the file has a role column, map it on the
-            Mapping step; otherwise check the layout named under Roles from.
+            Check where the roles come from (Roles from, below): the layout, or the file&apos;s role
+            column. If they are right (the effect runs the other way in this assay), import anyway.
           </p>
-          <div className="mt-2 flex items-center gap-2 text-xs">
+          <div className="mt-2 flex items-start gap-2 text-xs">
             <Checkbox
               id="ack-swapped-controls"
               checked={acknowledgedSwappedControls}
               onCheckedChange={(v) => onAcknowledgeSwappedControls(!!v)}
             />
             <label htmlFor="ack-swapped-controls">
-              The roles are right — import with these control roles
+              Import anyway. % values are calculated with these roles: if they are swapped, every %
+              value on these plates comes out inverted — inactive wells read near 100 % and hits
+              near 0 %.
             </label>
           </div>
         </div>
