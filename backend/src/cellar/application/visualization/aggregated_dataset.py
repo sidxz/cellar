@@ -292,8 +292,9 @@ def build_aggregated_dataset(
             put(vk, spec, i, finite(value), _qualifier(q, r))
             if spec.aggregation == "geometric_mean":
                 cells[f"{vk}:n_nonpositive"][i] = r.nonpositive_count
+            else:  # an arithmetic SD (≤ 0 values included) says nothing about a geomean
+                cells[f"{vk}:sd"][i] = finite(r.sd)
             cells[f"{vk}:n"][i] = r.n
-            cells[f"{vk}:sd"][i] = finite(r.sd)
             direction = best_direction(rd.data_type, rd.melt_measure)
             cells[f"{vk}:best"][i] = finite(best_of_range(r.low, r.best, direction))
             cells[f"{vk}:n_censored"][i] = r.gt_count + r.lt_count

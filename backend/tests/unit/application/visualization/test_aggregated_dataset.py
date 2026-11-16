@@ -658,3 +658,12 @@ def test_pick_list_and_text_readouts_are_never_aggregated():
     ds = _build("compounds", numeric=rows, defs=[*DEFS, pick])
     assert ds.row_ids == [str(a)]
     assert not any(c.provenance.readout_definition_id == pick.id for c in ds.columns)
+
+
+def test_a_geomean_column_has_no_arithmetic_sd():
+    mol = uuid.uuid4()
+    geo = [replace(DEFS[1], aggregation="geometric_mean")]
+    ds = _build("compounds", numeric=[_num(mol, rd=POT, geomean=10.0)], defs=geo)
+    assert f"{POTK}:sd" not in _keys(ds)
+    ds = _build("compounds", numeric=[_num(mol, rd=POT)], defs=[DEFS[1]])
+    assert ds.values[f"{POTK}:sd"] == [7.07]
