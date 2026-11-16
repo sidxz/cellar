@@ -32,7 +32,8 @@ class AsyncUnitOfWork:
     def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
         self._session_factory = session_factory
         self._session: AsyncSession | None = None
-        self._tracked_aggregates: list[AggregateRoot] = []
+        # An insertion-ordered set (identity = id): a list scan made 20k loads take ~20 s.
+        self._tracked_aggregates: dict[AggregateRoot, None] = {}
 
     @property
     def is_active(self) -> bool:
@@ -51,8 +52,7 @@ class AsyncUnitOfWork:
 
         Called automatically by repositories on ``find_by_id`` and ``save``.
         """
-        if aggregate not in self._tracked_aggregates:
-            self._tracked_aggregates.append(aggregate)
+        self._tracked_aggregates.setdefault(aggregate, None)
 
     async def commit(self) -> list[DomainEvent]:
         """Flush, commit, then collect and clear events.
@@ -74,7 +74,7 @@ class AsyncUnitOfWork:
 
     async def __aenter__(self) -> AsyncUnitOfWork:
         self._session = self._session_factory()
-        self._tracked_aggregates = []
+        self._tracked_aggregates = {}
         return self
 
     async def __aexit__(
@@ -94,7 +94,7 @@ class AsyncUnitOfWork:
         if self._session is not None:
             await self._session.close()
         self._session = None
-        self._tracked_aggregates = []
+        self._tracked_aggregates = {}
         if isinstance(exc_val, IntegrityError):
             # The database refused a write that violates a constraint (unique,
             # FK, check) — at flush inside commit() or at a direct execute.
