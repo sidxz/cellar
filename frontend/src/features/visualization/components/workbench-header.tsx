@@ -11,31 +11,39 @@ import Link from "next/link";
 import { type ReactNode, useMemo, useState } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { uniqueCompounds } from "../lib/dataset";
+import type { Carry } from "../lib/level-switch";
+import { LEVELS, LEVEL_ORDER } from "../lib/levels";
 import { conditionsText, newestFirst, runLabel } from "../lib/runs";
 import { useWorkbench } from "../store/workbench-context";
 import { canRedo, canUndo } from "../store/workbench-store";
-import type { Dataset, DatasetSource } from "../types";
+import type { Dataset, DatasetSource, Level } from "../types";
 import { RunPickerDialog } from "./run-picker-dialog";
 
 const fmt = (n: number) => n.toLocaleString();
 
-/** Header row 1: back link, and the source chip whose popover lists the loaded runs. */
-export function SourceBar({ source }: { source: DatasetSource }) {
-  const nameOf = useMemberNames();
-  const [pickerOpen, setPickerOpen] = useState(false);
+/** The runs a source loads, newest first, plus the run (run source) and every run of the
+ * protocol (protocol source) they were picked from. */
+export function useSourceRuns(source: DatasetSource) {
   const { data: run } = useRun(source.kind === "run" ? source.runId : undefined);
-  const protocolId = source.kind === "protocol" ? source.protocolId : run?.protocol_id;
-  const { data: protocol } = useProtocol(protocolId);
   const { data: protocolRuns } = useRunsByProtocol(
     source.kind === "protocol" ? source.protocolId : undefined,
   );
-
   const runs = useMemo(() => {
     if (source.kind === "run") return run ? [run] : [];
     const all = newestFirst(protocolRuns ?? []);
     const ids = source.runIds ? new Set(source.runIds) : null;
     return ids ? all.filter((r) => ids.has(r.id)) : all;
   }, [source, run, protocolRuns]);
+  return { run, protocolRuns, runs };
+}
+
+/** Header row 1: back link, and the source chip whose popover lists the loaded runs. */
+export function SourceBar({ source, level }: { source: DatasetSource; level: Level }) {
+  const nameOf = useMemberNames();
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const { run, protocolRuns, runs } = useSourceRuns(source);
+  const protocolId = source.kind === "protocol" ? source.protocolId : run?.protocol_id;
+  const { data: protocol } = useProtocol(protocolId);
 
   const name = protocol?.name ?? "…";
   const back =
@@ -92,6 +100,7 @@ export function SourceBar({ source }: { source: DatasetSource }) {
         <RunPickerDialog
           protocolId={protocolId}
           initialRunIds={runs.map((r) => r.id)}
+          level={level}
           open
           onOpenChange={setPickerOpen}
         />
@@ -100,9 +109,42 @@ export function SourceBar({ source }: { source: DatasetSource }) {
   );
 }
 
+/** The row-level switcher (one button per level) and what one row is at ``level``. */
+export function LevelSwitcher({
+  level,
+  onChange,
+}: {
+  level: Level;
+  onChange: (level: Level) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <fieldset className="inline-flex rounded-md border p-0.5">
+        <legend className="sr-only">Row level</legend>
+        {LEVEL_ORDER.map((l) => (
+          <Button
+            key={l}
+            size="sm"
+            variant={l === level ? "secondary" : "ghost"}
+            className="h-7"
+            aria-pressed={l === level}
+            onClick={() => l !== level && onChange(l)}
+          >
+            {LEVELS[l].label}
+          </Button>
+        ))}
+      </fieldset>
+      <span className="text-xs text-muted-foreground">{LEVELS[level].caption}</span>
+    </div>
+  );
+}
+
 interface WorkbenchHeaderProps {
   source: DatasetSource;
   ds: Dataset;
+  level: Level;
+  /** Called with the plots, filters and selection size to take to ``level``. */
+  onLevelChange: (level: Level, carry: Carry) => void;
   /** Export menu. */
   exportMenu?: ReactNode;
   /** "+ Add plot (n/4)" menu. */
@@ -110,8 +152,18 @@ interface WorkbenchHeaderProps {
 }
 
 /** Two rows: the source (row 1), then grain, counts, history and the plot/export menus. */
-export function WorkbenchHeader({ source, ds, exportMenu, addPlotMenu }: WorkbenchHeaderProps) {
+export function WorkbenchHeader({
+  source,
+  ds,
+  level,
+  onLevelChange,
+  exportMenu,
+  addPlotMenu,
+}: WorkbenchHeaderProps) {
   const mask = usePassMask(ds);
+  const panels = useWorkbench((s) => s.panels);
+  const filters = useWorkbench((s) => s.filters);
+  const selected = useWorkbench((s) => s.selection.size);
   const undoable = useWorkbench(canUndo);
   const redoable = useWorkbench(canRedo);
   const undo = useWorkbench((s) => s.undo);
@@ -123,20 +175,23 @@ export function WorkbenchHeader({ source, ds, exportMenu, addPlotMenu }: Workben
     return { passing: rows.length, compounds: uniqueCompounds(ds, rows).length };
   }, [ds, mask]);
 
+  const { one, many } = LEVELS[level];
   return (
     <header className="space-y-2">
-      <SourceBar source={source} />
+      <SourceBar source={source} level={level} />
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <fieldset className="inline-flex rounded-md border p-0.5">
-          <legend className="sr-only">Row level</legend>
-          <Button size="sm" variant="secondary" className="h-7" aria-pressed="true">
-            Wells
-          </Button>
-        </fieldset>
-        <span className="text-xs text-muted-foreground">Each row: one well</span>
+        <LevelSwitcher
+          level={level}
+          onChange={(next) =>
+            onLevelChange(next, { panels, filters, selected, columns: ds.columns })
+          }
+        />
         <span className="h-4 w-px bg-border" />
         <span className="tabular-nums">
-          {`${fmt(passing)} / ${fmt(ds.row_count)} wells · ${fmt(compounds)} ${compounds === 1 ? "compound" : "compounds"}`}
+          {`${fmt(passing)} / ${fmt(ds.row_count)} ${ds.row_count === 1 ? one : many}`}
+          {/* At Compounds the rows are the compounds. */}
+          {level !== "compounds" &&
+            ` · ${fmt(compounds)} ${compounds === 1 ? "compound" : "compounds"}`}
         </span>
         <div className="ml-auto flex items-center gap-1">
           <Button

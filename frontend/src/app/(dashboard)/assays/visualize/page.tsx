@@ -1,9 +1,10 @@
-import { WorkbenchPage, sourceFromParams } from "@/features/visualization";
+import { WorkbenchPage, levelFromParams, sourceFromParams } from "@/features/visualization";
 
 export default async function VisualizePage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return <WorkbenchPage source={sourceFromParams(await searchParams)} />;
+  const params = await searchParams;
+  return <WorkbenchPage source={sourceFromParams(params)} level={levelFromParams(params)} />;
 }

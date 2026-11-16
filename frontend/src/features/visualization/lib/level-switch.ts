@@ -57,12 +57,16 @@ export function carryConfig(
       return undefined;
     };
     const a = p.appearance;
+    // Axes first, so the note reads in the editor's order.
+    const x = kept(p.x, "X");
+    const y = kept(p.y, "Y");
+    const category = kept(p.category, "Group");
     const colorBy = kept(a.colorBy, "Color");
     let next: PanelConfig = {
       ...p,
-      x: kept(p.x, "X"),
-      y: kept(p.y, "Y"),
-      category: kept(p.category, "Group"),
+      x,
+      y,
+      category,
       appearance: {
         ...a,
         colorBy,

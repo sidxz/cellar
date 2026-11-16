@@ -4,6 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { useMemo } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { actionSet } from "../lib/action-set";
+import { LEVELS } from "../lib/levels";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset } from "../types";
 
@@ -24,11 +25,12 @@ export function SelectionStrip({ ds }: { ds: Dataset }) {
 
   const visible = set.rows.length;
   const total = visible + set.hiddenSelected;
+  const { one, many } = LEVELS[ds.level];
   return (
     <div className="flex shrink-0 items-center gap-2 border-b bg-primary/5 px-3 py-1 text-sm">
       <output>
-        <b>{fmt(total)}</b> {total === 1 ? "well" : "wells"} selected · <b>{fmt(visible)}</b>{" "}
-        visible · <b>{fmt(set.hiddenSelected)}</b> hidden by filters
+        <b>{fmt(total)}</b> {total === 1 ? one : many} selected · <b>{fmt(visible)}</b> visible ·{" "}
+        <b>{fmt(set.hiddenSelected)}</b> hidden by filters
       </output>
       <Button size="sm" variant="outline" className="ml-auto h-7" onClick={clearSelection}>
         Clear

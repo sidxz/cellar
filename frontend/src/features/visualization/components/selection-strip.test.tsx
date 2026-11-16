@@ -37,11 +37,11 @@ function Filters() {
   return <p data-testid="filters">{filters.map((f) => f.kind).join(",")}</p>;
 }
 
-const show = (ids: string[]) =>
+const show = (ids: string[], data: Dataset = ds) =>
   render(
     <WorkbenchProvider initialPanels={[]} initialFilters={[onlyA]}>
       <Seed ids={ids} />
-      <SelectionStrip ds={ds} />
+      <SelectionStrip ds={data} />
       <Filters />
     </WorkbenchProvider>,
   );
@@ -52,6 +52,11 @@ describe("SelectionStrip", () => {
     expect(screen.getByRole("status")).toHaveTextContent(
       "12 wells selected · 9 visible · 3 hidden",
     );
+  });
+
+  it("counts in the level's noun", () => {
+    show(twelve, { ...ds, level: "compounds" });
+    expect(screen.getByRole("status")).toHaveTextContent("12 compounds selected");
   });
 
   it("is absent with nothing selected", () => {

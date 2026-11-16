@@ -34,6 +34,21 @@ describe("RunPickerDialog", () => {
     expect(screen.getByText("220,000 wells selected")).toBeInTheDocument();
     expect(screen.getByText(/over the 100,000-row limit/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open workbench" })).toBeDisabled();
+    expect(screen.queryByText("Not counted")).not.toBeInTheDocument();
+  });
+
+  it("at Compounds, marks runs that don't count there, keeps them ticked and opens at that level", () => {
+    render(<RunPickerDialog protocolId="p1" level="compounds" open onOpenChange={vi.fn()} />);
+    expect(screen.getByText("Not counted")).toHaveAttribute(
+      "title",
+      "Batches and Compounds count only completed or approved runs",
+    );
+    expect(screen.getByRole("checkbox", { name: "Include 2026-10-29 · A. Chen" })).toBeChecked();
+    expect(screen.getByText("2 of 3 chosen runs count at this level")).toBeInTheDocument();
+    expect(screen.getByText("220,000 wells selected")).toBeInTheDocument();
+    expect(screen.queryByText(/over the 100,000-row limit/i)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Open workbench" }));
+    expect(push).toHaveBeenCalledWith("/assays/visualize?protocol=p1&level=compounds");
   });
 
   it("updates the total when a run is unticked and opens the chosen runs", () => {

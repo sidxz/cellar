@@ -1,16 +1,21 @@
 "use client";
 
 import { EmptyState } from "@/shared/components/empty-state";
+import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { ApiError } from "@/shared/lib/api/custom-instance";
-import { AlertTriangle, ChartScatter, Database, Rows3 } from "lucide-react";
+import { AlertTriangle, ChartScatter, Database, Info, Rows3, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useDataset } from "../hooks/use-dataset";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
 import { resolveUserColumns } from "../lib/dataset";
 import { defaultPanels } from "../lib/default-panels";
+import { type Carry, carryConfig, switchNote } from "../lib/level-switch";
+import { countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
+import { visualizeHref } from "../lib/source-url";
 import { WorkbenchProvider } from "../store/workbench-context";
 import { makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level } from "../types";
@@ -24,10 +29,8 @@ import { RunPickerDialog } from "./run-picker-dialog";
 import { SaveCollectionButton } from "./save-collection-dialog";
 import { SelectionStrip } from "./selection-strip";
 import { WorkbenchBody } from "./workbench-body";
-import { SourceBar, WorkbenchHeader } from "./workbench-header";
+import { LevelSwitcher, SourceBar, WorkbenchHeader, useSourceRuns } from "./workbench-header";
 import { WorkbenchTable, type WorkbenchTableHandle } from "./workbench-table";
-
-const LEVEL: Level = "wells";
 
 /** The server's own sentence when it sent one (`{message}`), else the error text. */
 function errorText(error: unknown): string {
@@ -36,8 +39,8 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : "Something went wrong.";
 }
 
-/** The full-page workbench for a protocol (some or all runs) or one run. */
-export function WorkbenchPage({ source }: { source: DatasetSource | null }) {
+/** The full-page workbench for a protocol (some or all runs) or one run, at one row level. */
+export function WorkbenchPage({ source, level }: { source: DatasetSource | null; level: Level }) {
   if (!source) {
     return (
       <EmptyState
@@ -47,14 +50,20 @@ export function WorkbenchPage({ source }: { source: DatasetSource | null }) {
       />
     );
   }
-  return <Workbench source={source} />;
+  return <Workbench source={source} level={level} />;
 }
 
-function Workbench({ source }: { source: DatasetSource }) {
-  const query = useDataset(source, LEVEL);
+/** The last level switch: the view it leads to and what it takes along. */
+type Switch = { to: string; carry: Carry; dismissed?: boolean };
+
+function Workbench({ source, level }: { source: DatasetSource; level: Level }) {
+  const query = useDataset(source, level);
   const nameOf = useMemberNames();
+  const router = useRouter();
   const protocolId = source.kind === "protocol" ? source.protocolId : null;
   const { data: rowCounts } = useRunRowCounts(protocolId);
+  const { runs } = useSourceRuns(source);
+  const [switched, setSwitched] = useState<Switch | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [editing, setEditing] = useState<{ panelId: string; focusField?: EditField } | null>(null);
   const closeEditor = useCallback(() => setEditing(null), []);
@@ -65,13 +74,28 @@ function Workbench({ source }: { source: DatasetSource }) {
     [query.data, nameOf],
   );
 
+  // A switch refetches at the new level (the URL carries it); the plots and filters follow
+  // when its data arrives, fitted to that level's columns. Not an undo step.
+  const view = viewKey(source, level);
+  const carry = switched?.to === view ? switched.carry : null;
+  const switchLevel = (next: Level, take: Carry | null) => {
+    setSwitched(take && { to: viewKey(source, next), carry: take });
+    router.replace(visualizeHref(source, next), { scroll: false });
+  };
+  const carried = useMemo(() => (ds && carry ? carryConfig(carry, ds) : null), [ds, carry]);
+  const note =
+    carried && carry && !switched?.dismissed
+      ? switchNote(level, carried.dropped, carry.selected)
+      : null;
+
   // Known before the dataset arrives (the server refuses it with a bare 422), so the
-  // chemist sees the actual count and goes straight back to the picker.
+  // chemist sees the actual count and goes straight back to the picker. Wells only: the
+  // run counts are well counts.
   const requested = useMemo(() => {
-    if (source.kind !== "protocol" || !rowCounts) return null;
+    if (level !== "wells" || source.kind !== "protocol" || !rowCounts) return null;
     const ids = source.runIds ?? Object.keys(rowCounts.counts);
     return ids.reduce((n, id) => n + (rowCounts.counts[id] ?? 0), 0);
-  }, [source, rowCounts]);
+  }, [level, source, rowCounts]);
 
   let body: React.ReactNode;
   if (requested !== null && requested > MAX_ROWS) {
@@ -95,6 +119,19 @@ function Workbench({ source }: { source: DatasetSource }) {
         action={{ label: "Retry", onClick: () => void query.refetch() }}
       />
     );
+  } else if (
+    (!ds || ds.row_count === 0) &&
+    runs.length > 0 &&
+    !runs.some((r) => countsAtLevel(level, r.status))
+  ) {
+    body = (
+      <EmptyState
+        icon={Database}
+        title="No completed or approved runs here"
+        description="Batches and Compounds count only completed or approved runs."
+        action={{ label: "Show Runs", onClick: () => switchLevel("runs", carry) }}
+      />
+    );
   } else if (!ds || ds.row_count === 0) {
     body = (
       <EmptyState
@@ -107,21 +144,48 @@ function Workbench({ source }: { source: DatasetSource }) {
 
   return (
     <div className="flex h-[calc(100dvh-4.5rem)] min-h-[560px] flex-col gap-2">
+      {/* Always mounted, so screen readers announce the switch note when it appears. */}
+      <output className="sr-only">{note}</output>
       {body || !ds ? (
         <>
-          <SourceBar source={source} />
+          <SourceBar source={source} level={level} />
+          <LevelSwitcher level={level} onChange={(next) => switchLevel(next, carry)} />
           {body}
         </>
       ) : (
-        // Keyed by the source, not the data revision: new data for the same source never
-        // resets the chemist's plots, filters, selection or history.
-        <WorkbenchProvider key={sourceKey(source)} initialPanels={initialPanels(ds)}>
+        // Keyed by the source and level, not the data revision: new data for the same view
+        // never resets the chemist's plots, filters, selection or history.
+        <WorkbenchProvider
+          key={view}
+          initialPanels={carried?.panels ?? initialPanels(ds)}
+          initialFilters={carried?.filters}
+        >
           <WorkbenchHeader
             source={source}
             ds={ds}
+            level={level}
+            onLevelChange={switchLevel}
             exportMenu={<ExportMenu ds={ds} table={tableRef} />}
             addPlotMenu={<AddPlotMenu ds={ds} />}
           />
+          {note && (
+            <div className="flex items-start gap-2 rounded-md border bg-card px-3 py-2 text-sm">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+              {/* Read out by the status line above; hidden here so it is not heard twice. */}
+              <p aria-hidden="true" className="min-w-0 flex-1">
+                {note}
+              </p>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-6 w-6 shrink-0"
+                aria-label="Dismiss note"
+                onClick={() => setSwitched((s) => s && { ...s, dismissed: true })}
+              >
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
           <WorkbenchBody
             plots={
               <NoRowsMatch ds={ds}>
@@ -155,6 +219,7 @@ function Workbench({ source }: { source: DatasetSource }) {
         <RunPickerDialog
           protocolId={protocolId}
           initialRunIds={source.kind === "protocol" ? source.runIds : undefined}
+          level={level}
           open
           onOpenChange={setPickerOpen}
         />
@@ -163,7 +228,7 @@ function Workbench({ source }: { source: DatasetSource }) {
   );
 }
 
-const sourceKey = (source: DatasetSource) => JSON.stringify(source);
+const viewKey = (source: DatasetSource, level: Level) => JSON.stringify([source, level]);
 
 // The provider reads this once (its store is created on mount), so the ids made here stick.
 const initialPanels = (ds: Dataset) => defaultPanels(ds).map((p) => makePanel(p.type, p.defaults));

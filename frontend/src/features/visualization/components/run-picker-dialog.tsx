@@ -3,6 +3,7 @@
 import { useProtocol } from "@/features/screening-assay/hooks/use-protocols";
 import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
 import { StatusBadge } from "@/shared/components/status-badge";
+import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
@@ -17,11 +18,14 @@ import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useRunRowCounts } from "../hooks/use-run-row-counts";
+import { LEVELS, countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
 import { conditionsText, newestFirst, runLabel } from "../lib/runs";
 import { visualizeHref } from "../lib/source-url";
+import type { Level } from "../types";
 
 const fmt = (n: number) => n.toLocaleString();
+const NOT_COUNTED = "Batches and Compounds count only completed or approved runs";
 
 interface RunPickerDialogProps {
   protocolId: string;
@@ -29,15 +33,19 @@ interface RunPickerDialogProps {
   onOpenChange: (open: boolean) => void;
   /** Runs ticked on open; every run when omitted. */
   initialRunIds?: string[];
+  /** The level the workbench opens at (kept from the one it was opened from). */
+  level?: Level;
 }
 
 /** Choose which runs of a protocol to load, with each run's well count and a running
- * total against the row cap. Opening navigates to the workbench URL. */
+ * total against the row cap (Wells only). At Batches and Compounds, runs whose status does
+ * not count there are marked but stay ticked. Opening navigates to the workbench URL. */
 export function RunPickerDialog({
   protocolId,
   open,
   onOpenChange,
   initialRunIds,
+  level = "wells",
 }: RunPickerDialogProps) {
   const router = useRouter();
   const nameOf = useMemberNames();
@@ -53,14 +61,19 @@ export function RunPickerDialog({
   const selected = ordered.filter((r) => chosen.has(r.id));
   const counts = rowCounts?.counts;
   const total = counts ? selected.reduce((n, r) => n + (counts[r.id] ?? 0), 0) : null;
+  const wells = level === "wells";
+  const counting = selected.filter((r) => countsAtLevel(level, r.status)).length;
+  // Above Wells the cap applies to the server's (fewer) aggregated rows, so it checks it.
   const reason =
     selected.length === 0
       ? "Choose at least one run."
-      : total === null
-        ? "Counting wells…"
-        : total > MAX_ROWS
-          ? `Over the ${fmt(MAX_ROWS)}-row limit — untick some runs.`
-          : null;
+      : !wells
+        ? null
+        : total === null
+          ? "Counting wells…"
+          : total > MAX_ROWS
+            ? `Over the ${fmt(MAX_ROWS)}-row limit — untick some runs.`
+            : null;
 
   const setAll = (on: boolean) => setPicked(new Set(on ? ordered.map((r) => r.id) : []));
   const toggle = (id: string, on: boolean) => {
@@ -72,11 +85,14 @@ export function RunPickerDialog({
   const openWorkbench = () => {
     const runIds = selected.map((r) => r.id);
     router.push(
-      visualizeHref({
-        kind: "protocol",
-        protocolId,
-        ...(runIds.length < ordered.length ? { runIds } : {}),
-      }),
+      visualizeHref(
+        {
+          kind: "protocol",
+          protocolId,
+          ...(runIds.length < ordered.length ? { runIds } : {}),
+        },
+        level,
+      ),
     );
     onOpenChange(false);
   };
@@ -89,7 +105,9 @@ export function RunPickerDialog({
       <DialogContent className="sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>Choose runs to visualize</DialogTitle>
-          <DialogDescription>{protocol?.name ?? "…"} · each row is one well</DialogDescription>
+          <DialogDescription>
+            {protocol?.name ?? "…"} · {LEVELS[level].caption}
+          </DialogDescription>
         </DialogHeader>
         <div className="max-h-[50vh] overflow-auto rounded-md border">
           <table className="w-full text-sm">
@@ -138,7 +156,17 @@ export function RunPickerDialog({
                     </td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{label}</td>
                     <td className="px-2 py-1.5">
-                      <StatusBadge status={run.status} />
+                      <div className="flex items-center gap-1">
+                        <StatusBadge status={run.status} />
+                        {!countsAtLevel(level, run.status) && (
+                          <>
+                            <Badge variant="warning" title={NOT_COUNTED}>
+                              Not counted
+                            </Badge>
+                            <span className="sr-only">{NOT_COUNTED}</span>
+                          </>
+                        )}
+                      </div>
                     </td>
                     <td className="px-2 py-1.5 text-right tabular-nums">
                       {run.plate_count || "—"}
@@ -160,7 +188,13 @@ export function RunPickerDialog({
             <span className="font-medium tabular-nums">
               {total === null ? "…" : `${fmt(total)} wells selected`}
             </span>
-            <span className="text-muted-foreground"> · limit {fmt(MAX_ROWS)}</span>
+            {wells ? (
+              <span className="text-muted-foreground"> · limit {fmt(MAX_ROWS)}</span>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                {`${counting} of ${selected.length} chosen runs count at this level`}
+              </p>
+            )}
             {reason && <p className="text-xs text-destructive">{reason}</p>}
           </div>
           <div className="flex gap-2">
