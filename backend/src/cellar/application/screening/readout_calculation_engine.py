@@ -23,6 +23,9 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.screening._dose_response_config_serde import (
+    serialize_dose_response_config,
+)
 from cellar.application.screening.fit_dose_response import (
     FitDoseResponseCurves,
     FitOverrides,
@@ -41,6 +44,7 @@ from cellar.domain.screening_assay.enums import (
     WellType,
     primary_normalization,
 )
+from cellar.domain.screening_assay.excluded_point_detail import ExclusionSource
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from cellar.domain.screening_assay.melt_series import series_points, series_values
 from cellar.domain.screening_assay.melt_window import (
@@ -55,6 +59,7 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.screening_assay.repository import (
+    DoseResponseCurveRepository,
     MeasuredCurveRepository,
     MeltingStepRepository,
     ProtocolRepository,
@@ -70,6 +75,18 @@ _CONTROL_TYPES = frozenset({WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL
 # Control roles whose compound gets a per-plate potency, and the doses a curve needs.
 _FITTED_CONTROL_TYPES = (WellType.POSITIVE_CONTROL, WellType.REFERENCE)
 _MIN_FIT_DOSES = 4
+# A curve's own fit settings, as its config snapshot stores them.
+_CONSTRAINTS = (
+    "top_constraint",
+    "top_constraint_min",
+    "top_constraint_max",
+    "bottom_constraint",
+    "bottom_constraint_min",
+    "bottom_constraint_max",
+    "hill_slope_constraint",
+    "hill_slope_min",
+    "hill_slope_max",
+)
 
 # Regex to detect cross-protocol references: @ProtocolName.ReadoutName or @{Protocol Name}.Readout
 _CROSS_PROTOCOL_RE = re.compile(r"@\{?[A-Z]{2,8}-\d+\}?\.")
@@ -116,6 +133,7 @@ class ReadoutCalculationEngine:
         measured_curve_repo: MeasuredCurveRepository | None = None,
         batch_repo: BatchRepository | None = None,
         curve_fitter: CurveFittingService | None = None,
+        curve_repo: DoseResponseCurveRepository | None = None,
     ) -> None:
         self._uow = uow
         self._formula_evaluator = formula_evaluator
@@ -131,6 +149,7 @@ class ReadoutCalculationEngine:
         self._measured_curve_repo = measured_curve_repo
         self._batch_repo = batch_repo
         self._curve_fitter = curve_fitter
+        self._curve_repo = curve_repo
 
     async def compute_for_run(
         self,
@@ -138,8 +157,12 @@ class ReadoutCalculationEngine:
         *,
         workspace_id: uuid.UUID,
         fit_overrides: FitOverrides | None = None,
+        refit_curves: bool = True,
     ) -> Result[ComputeRunResult, DomainError]:
         """Execute the full computation pipeline for *run_id*.
+
+        ``refit_curves=False`` leaves the dose-response curves to the caller (an outlier
+        flag refits only the curves it touches, keeping their edits).
 
         Returns:
             Success(ComputeRunResult) — newly computed readouts + any
@@ -149,12 +172,18 @@ class ReadoutCalculationEngine:
         if self._uow.is_active:
             # Caller owns the transaction; they will commit and dispatch.
             return await self._execute(
-                run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
+                run_id,
+                workspace_id=workspace_id,
+                fit_overrides=fit_overrides,
+                refit_curves=refit_curves,
             )
         events: list = []
         async with self._uow:
             result = await self._execute(
-                run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
+                run_id,
+                workspace_id=workspace_id,
+                fit_overrides=fit_overrides,
+                refit_curves=refit_curves,
             )
             # Computed readouts and qc_metrics live in the session until we
             # commit. Without this commit they were silently rolled back on
@@ -171,6 +200,7 @@ class ReadoutCalculationEngine:
         *,
         workspace_id: uuid.UUID,
         fit_overrides: FitOverrides | None = None,
+        refit_curves: bool = True,
     ) -> Result[ComputeRunResult, DomainError]:
         # ------------------------------------------------------------------
         # 1. Load context + workspace ownership check
@@ -398,7 +428,8 @@ class ReadoutCalculationEngine:
         # ------------------------------------------------------------------
         fit_warnings: list[str] = []
         fit_notes: list[str] = []
-        if self._fit_dose_response is not None:
+        if self._fit_dose_response is not None and refit_curves:
+            edited = await self._edited_curves(run, protocol, fit_overrides)
             fit_outcome = await self._fit_dose_response.fit_for_run(
                 run=run,
                 protocol=protocol,
@@ -409,6 +440,13 @@ class ReadoutCalculationEngine:
             if isinstance(fit_outcome, Success):
                 fit_warnings = list(fit_outcome.unwrap().warnings)
                 fit_notes = list(fit_outcome.unwrap().notes)
+            if edited and self._curve_repo is not None:
+                kept = {c.id for c in await self._curve_repo.find_by_run(workspace_id, run_id)}
+                if n := len(edited - kept):
+                    fit_notes.append(
+                        f"{n} curve{'' if n == 1 else 's'} with excluded points or fit settings "
+                        "of their own refitted with these settings; those edits were reset"
+                    )
 
         # ------------------------------------------------------------------
         # 7. Persist
@@ -421,6 +459,37 @@ class ReadoutCalculationEngine:
                 computed_readouts=computed, fit_warnings=fit_warnings, fit_notes=fit_notes
             )
         )
+
+    async def _edited_curves(
+        self, run: Run, protocol: Protocol, fit_overrides: FitOverrides | None
+    ) -> set[uuid.UUID]:
+        """The run's curves a chemist changed: points excluded by hand (or an accepted 3σ
+        suggestion), or fit constraints other than the ones this refit uses."""
+        if self._curve_repo is None:
+            return set()
+        configs = {
+            rd.id: serialize_dose_response_config(
+                fit_overrides.apply(rd.dose_response_config)
+                if fit_overrides is not None
+                else rd.dose_response_config
+            )
+            for rd in protocol.readout_definitions
+            if rd.dose_response_config is not None
+        }
+        edited = set()
+        for c in await self._curve_repo.find_by_run(run.workspace_id, run.id):
+            config = configs.get(c.readout_definition_id)
+            snapshot = c.dose_response_config_snapshot or {}
+            if any(
+                e.excluded and e.source != ExclusionSource.WELL_FLAG
+                for e in c.excluded_points or []
+            ) or (
+                config is not None
+                and snapshot
+                and any(snapshot.get(k) != config.get(k) for k in _CONSTRAINTS)
+            ):
+                edited.add(c.id)
+        return edited
 
     def _plate_qc(
         self, run: Run, protocol: Protocol, rows: list[ReadoutData]

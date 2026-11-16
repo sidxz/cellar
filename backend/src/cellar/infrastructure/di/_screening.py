@@ -178,11 +178,13 @@ from cellar.application.screening.protocol_naming_service import ProtocolNameSer
 from cellar.application.screening.protocol_stats_reader import ProtocolStatsReader
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
 from cellar.application.screening.readout_data_enriched_reader import ReadoutDataEnrichedReader
+from cellar.application.screening.recompute_run import RecomputeRun
 from cellar.application.screening.rederive_protocol_names import (
     ListNameFlags,
     RederiveAllProtocolNames,
     RederiveProtocolNames,
 )
+from cellar.application.screening.refit_curves_keeping_edits import RefitCurvesKeepingEdits
 from cellar.application.screening.refit_dose_response import RefitDoseResponseCurve
 from cellar.application.screening.refit_dose_response_preview import (
     RefitDoseResponseCurvePreview,
@@ -805,8 +807,7 @@ def register_screening(container: Container) -> None:
 
     container.define(ListDoseResponseEnriched, _dose_response_enriched)
 
-    def _fit_dose_response_curves(c: Container):
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
+    def _fit_curves_on(c: Container, uow: AsyncUnitOfWork) -> FitDoseResponseCurves:
         return FitDoseResponseCurves(
             uow=uow,
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
@@ -814,7 +815,9 @@ def register_screening(container: Container) -> None:
             molecules=c[DoseResponseEnrichedReader],
         )
 
-    container.define(FitDoseResponseCurves, _fit_dose_response_curves)
+    container.define(
+        FitDoseResponseCurves, lambda c: _fit_curves_on(c, AsyncUnitOfWork(c[async_sessionmaker]))
+    )
 
     def _refit_dose_response_curve(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -892,8 +895,10 @@ def register_screening(container: Container) -> None:
     container.define(ListPlateTemplates, _pt_query(ListPlateTemplates))
 
     # --- Readout Calculation Engine + Plate Setup ---
-    def _readout_calc_engine(c: Container):
-        uow = AsyncUnitOfWork(c[async_sessionmaker])
+    def _calc_engine_on(
+        c: Container, uow: AsyncUnitOfWork, fit: FitDoseResponseCurves | None
+    ) -> ReadoutCalculationEngine:
+        """An engine working in ``uow`` (a use case's own, to commit with it)."""
         return ReadoutCalculationEngine(
             uow=uow,
             formula_evaluator=c[FormulaEvaluator],
@@ -903,15 +908,32 @@ def register_screening(container: Container) -> None:
             run_repo=SQLAlchemyRunRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
             dispatcher=c[EventDispatcher],
-            fit_dose_response=c[FitDoseResponseCurves],
+            fit_dose_response=fit,
             plate_quality=c[PlateQualityCalculator],
             melting_step_repo=SQLAlchemyMeltingStepRepository(uow),
             measured_curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
             batch_repo=SQLAlchemyBatchRepository(uow),
             curve_fitter=c[CurveFittingService],
+            curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
         )
 
-    container.define(ReadoutCalculationEngine, _readout_calc_engine)
+    container.define(
+        ReadoutCalculationEngine,
+        lambda c: _calc_engine_on(
+            c, AsyncUnitOfWork(c[async_sessionmaker]), c[FitDoseResponseCurves]
+        ),
+    )
+
+    def _recompute_run(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RecomputeRun(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            calculation_engine=_calc_engine_on(c, uow, _fit_curves_on(c, uow)),
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(RecomputeRun, _recompute_run)
 
     def _set_up_run_plate(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -1108,7 +1130,12 @@ def register_screening(container: Container) -> None:
             uow=uow,
             run_repo=SQLAlchemyRunRepository(uow),
             readout_repo=SQLAlchemyReadoutDataRepository(uow),
-            calculation_engine=c[ReadoutCalculationEngine],
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+            calculation_engine=_calc_engine_on(c, uow, None),
+            curves=RefitCurvesKeepingEdits(
+                curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+                curve_fitter=c[CurveFittingService],
+            ),
             dispatcher=c[EventDispatcher],
         )
 

@@ -84,3 +84,37 @@ async def test_curves_of_rows_on_no_well_of_the_run_survive_a_recompute(
 
     assert resp.status_code == 200, resp.text
     assert await _curves(session_factory, run) == 1
+
+
+async def _plain_run(session_factory, ws, *, status="completed", locked=False):  # type: ignore[no-untyped-def]
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="Signal")
+        run = await seed.run(s, ws, p, date(2026, 10, 8), status=status)
+        if locked:
+            await s.execute(sa.text("UPDATE runs SET is_locked = true WHERE id = :r"), {"r": run})
+        plate = await seed.plate(s, run, 1)
+        w = await seed.well(s, plate, "A", 1)
+        await seed.readout(s, ws, run, rd, None, 1.0, well_id=w)  # type: ignore[arg-type]
+        await uow.commit()
+    return run
+
+
+async def test_a_viewer_cannot_recompute(viewer_client, session_factory, workspace_id):
+    run = await _plain_run(session_factory, workspace_id)
+    resp = await viewer_client.post(f"/api/v1/runs/{run}/recompute")
+    assert resp.status_code == 403, resp.text
+
+
+@pytest.mark.parametrize(("status", "locked"), [("approved", False), ("completed", True)])
+async def test_a_locked_or_approved_run_is_not_recomputed(
+    client, session_factory, fake_auth, status, locked
+):
+    run = await _plain_run(session_factory, fake_auth.workspace_id, status=status, locked=locked)
+    resp = await client.post(f"/api/v1/runs/{run}/recompute")
+    assert resp.status_code == 409, resp.text
+    async with session_factory() as s:
+        q = sa.text("SELECT count(*) FROM readout_data WHERE run_id = :r AND is_computed")
+        assert (await s.execute(q, {"r": run})).scalar_one() == 0

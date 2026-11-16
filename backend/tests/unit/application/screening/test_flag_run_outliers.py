@@ -13,6 +13,7 @@ from cellar.application.screening.flag_run_outliers import (
     FlagRunOutliersCommand,
     OutlierFlagResult,
 )
+from cellar.application.screening.refit_curves_keeping_edits import CurveRefitOutcome
 from cellar.domain.screening_assay.enums import RunStatus
 from cellar.domain.screening_assay.events import RunOutliersFlagged
 from cellar.domain.shared.errors import (
@@ -36,14 +37,23 @@ class Harness:
         self.run_repo.find_by_id_in_workspace = AsyncMock(return_value=self.run)
         self.readout_repo = AsyncMock()
         self.readout_repo.set_outlier = AsyncMock(side_effect=lambda ws, run, ids, **_: set(ids))
+        # Rows before the flag, then after the recalculation.
+        self.readout_repo.find_by_run = AsyncMock(side_effect=[["before"], ["after"]])
+        self.protocol_repo = AsyncMock()
+        self.protocol = object()
+        self.protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=self.protocol)
         self.engine = AsyncMock()
         self.engine.compute_for_run = AsyncMock(return_value=Success(object()))
+        self.curves = AsyncMock()
+        self.curves.refit = AsyncMock(return_value=CurveRefitOutcome(refitted=1))
         self.dispatcher = AsyncMock()
         self.uc = FlagRunOutliers(
             uow=self.uow,
             run_repo=self.run_repo,
             readout_repo=self.readout_repo,
+            protocol_repo=self.protocol_repo,
             calculation_engine=self.engine,
+            curves=self.curves,
             dispatcher=self.dispatcher,
         )
 
@@ -62,6 +72,7 @@ class Harness:
         assert self.uow.committed is False
         self.dispatcher.dispatch_all.assert_not_awaited()
         self.engine.compute_for_run.assert_not_awaited()
+        self.curves.refit.assert_not_awaited()
 
 
 async def test_flagging_sets_the_rows_audits_the_changed_positions_and_recalculates():
@@ -81,7 +92,15 @@ async def test_flagging_sets_the_rows_audits_the_changed_positions_and_recalcula
     assert isinstance(event, RunOutliersFlagged)
     assert ([p.label for p in event.positions], event.outlier) == ([f"Cassette 1 · {P(3)}"], True)
     assert event.reason == "bubble"
-    h.engine.compute_for_run.assert_awaited_once_with(h.run.id, workspace_id=h.ws)
+    # The run is saved (its version guards against an approval meanwhile), recalculated
+    # without the full refit, and the curves the flag touched are refitted keeping edits.
+    h.run_repo.save.assert_awaited_once_with(h.run)
+    h.engine.compute_for_run.assert_awaited_once_with(
+        h.run.id, workspace_id=h.ws, refit_curves=False
+    )
+    h.curves.refit.assert_awaited_once_with(
+        run=h.run, protocol=h.protocol, before=["before"], after=["after"]
+    )
 
 
 async def test_removing_flags_passes_outlier_false():
@@ -101,15 +120,24 @@ async def test_nothing_to_change_commits_nothing_and_does_not_recalculate():
     h.engine.compute_for_run.assert_not_awaited()
 
 
-async def test_a_failed_recalculation_keeps_the_flags_and_says_why():
+async def test_a_failed_recalculation_saves_nothing_and_says_why():
     h = Harness()
     h.engine.compute_for_run.return_value = Failure(
         ValidationError("PERCENT_INHIBITION requires at least one low-signal control")
     )
+    error = (await h([h.w1.id])).failure()
+    assert isinstance(error, ValidationError)
+    assert error.message.startswith("Not saved") and "low-signal control" in error.message
+    assert h.uow.committed is False
+    h.dispatcher.dispatch_all.assert_not_awaited()
+    h.curves.refit.assert_not_awaited()
+
+
+async def test_removed_curves_are_reported():
+    h = Harness()
+    h.curves.refit.return_value = CurveRefitOutcome(removed=2)
     out = (await h([h.w1.id])).unwrap()
-    assert h.uow.committed and out.recalculated is False
-    assert out.compute_warning is not None
-    assert "low-signal control" in out.compute_warning
+    assert out.compute_warning is not None and "2 curves removed" in out.compute_warning
 
 
 async def test_refused_on_a_locked_or_approved_run_before_any_write():

@@ -1425,3 +1425,19 @@ def test_outlier_flags_name_wells_of_this_run():
     with pytest.raises(ValidationError, match="at least one"):
         run.check_outlier_flags([])
     assert run.collect_events() == []
+
+
+@pytest.mark.parametrize(
+    ("status", "locked", "match"),
+    [(RunStatus.APPROVED, False, "approved"), (RunStatus.COMPLETED, True, "locked")],
+)
+def test_a_locked_or_approved_run_is_not_recalculated(status, locked, match):
+    run, _ = _instrument_run(status=status, locked=locked)
+    with pytest.raises(ConflictError, match=match):
+        run.check_recalculation()
+
+
+@pytest.mark.parametrize("status", [RunStatus.DRAFT, RunStatus.COMPLETED, RunStatus.REJECTED])
+def test_an_unlocked_run_short_of_approval_is_recalculated(status):
+    run, _ = _instrument_run(status=status)
+    run.check_recalculation()

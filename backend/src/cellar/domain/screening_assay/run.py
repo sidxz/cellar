@@ -671,6 +671,13 @@ class Run(AggregateRoot):
             )
         return checked
 
+    def check_recalculation(self) -> None:
+        """A recalculation rewrites the run's computed values, plate QC and curves: refused
+        on a locked or approved run. Changes nothing."""
+        self._guard_not_locked()
+        if self.status == RunStatus.APPROVED:
+            raise ConflictError("An approved run cannot be recalculated")
+
     def _audit_label(self, well: Well) -> str:
         plate = next(p for p in self.plates if p.id == well.plate_id)
         return holder_position_label(plate.holder_kind, plate.plate_number, well.row, well.column)
