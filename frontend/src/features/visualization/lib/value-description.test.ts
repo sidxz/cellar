@@ -147,6 +147,35 @@ describe("describeValue", () => {
     ]);
   });
 
+  it("counts curves censored at the dose bound, and shows the bound when every fit is", () => {
+    const censored: Dataset = {
+      ...compounds,
+      columns: [
+        ...compounds.columns,
+        col("dr:e:n_censored", "Enzyme · IC50 n censored", drProv("geomean", "n_censored")),
+      ],
+      values: {
+        ...compounds.values,
+        "dr:e": [0.31622776, 10, null],
+        "dr:e:best": [0.1, null, null],
+        "dr:e:n_tested": [4, 3, null],
+        "dr:e:n_inactive": [1, 1, null],
+        "dr:e:n_used": [2, 0, null],
+        "dr:e:n_censored": [1, 2, null],
+      },
+    };
+    expect(describeValue(censored, "dr:e", 0)?.lines).toEqual([
+      "Geometric mean of 2 of 4 curves",
+      "1 inactive curve",
+      "1 censored curve not averaged",
+      "Best 0.1 µM",
+    ]);
+    expect(describeValue(censored, "dr:e", 1)?.lines).toEqual([
+      "All 2 fitted curves censored — showing the tightest bound",
+      "1 inactive curve",
+    ]);
+  });
+
   it("explains a p value", () => {
     expect(describeValue(compounds, "dr:e:p", 0)).toEqual({
       title: "Enzyme · pIC50",

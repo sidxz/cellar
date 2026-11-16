@@ -67,12 +67,26 @@ export function describeValue(
       lines.push(`95% CI ${sig4(lo)}–${sig4(hi)}${c.unit ? ` ${c.unit}` : ""}`);
     }
   } else if (!c.provenance.layer) {
-    // A dose-response value across runs: the geometric mean of the active curves' fits.
+    // A dose-response value across runs: the geometric mean of the active curves' fits; a fit
+    // whose intercept lies beyond the dose range is censored at its bound.
     const tested = at("n_tested");
     if (tested === null) return null;
-    lines.push(`Geometric mean of ${at("n_used") ?? 0} of ${formatCount(tested, "curve")}`);
+    const used = at("n_used") ?? 0;
+    const censored = at("n_censored") ?? 0;
+    if (used === 0 && censored > 0) {
+      lines.push(
+        censored === 1
+          ? "The only fitted curve is censored — showing its bound"
+          : `All ${censored} fitted curves censored — showing the tightest bound`,
+      );
+    } else {
+      lines.push(`Geometric mean of ${used} of ${formatCount(tested, "curve")}`);
+    }
     const inactive = at("n_inactive") ?? 0;
     if (inactive > 0) lines.push(formatCount(inactive, "inactive curve"));
+    if (used > 0 && censored > 0) {
+      lines.push(`${formatCount(censored, "censored curve")} not averaged`);
+    }
     const best = at("best");
     if (best !== null) lines.push(`Best ${withUnit(best)}`);
   } else {
