@@ -53,6 +53,8 @@ export interface WorkbenchState extends Snapshot {
   removeFilter: (id: string) => void;
   setSelection: (rowIds: Iterable<string>) => void;
   clearSelection: () => void;
+  /** Turn the selection into a rows filter (one undo step) and clear it. */
+  filterToSelection: () => void;
   setMaximized: (id: string | null) => void;
   undo: () => void;
   redo: () => void;
@@ -137,6 +139,10 @@ export function createWorkbenchStore(initial: { panels: PanelConfig[]; filters?:
       removeFilter: (id) => commit({ filters: get().filters.filter((f) => f.id !== id) }),
       setSelection: (rowIds) => set({ selection: new Set(rowIds) }),
       clearSelection: () => set({ selection: new Set<string>() }),
+      filterToSelection: () => {
+        get().upsertFilter({ id: "selection", kind: "rows", rowIds: [...get().selection] });
+        set({ selection: new Set<string>() });
+      },
       setMaximized: (id) => set({ maximized: id }),
       undo: () => {
         const { past, future, panels, filters } = get();

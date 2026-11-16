@@ -14,7 +14,7 @@ const fmt = (n: number) => n.toLocaleString();
 export function SelectionStrip({ ds }: { ds: Dataset }) {
   const selection = useWorkbench((s) => s.selection);
   const clearSelection = useWorkbench((s) => s.clearSelection);
-  const upsertFilter = useWorkbench((s) => s.upsertFilter);
+  const filterToSelection = useWorkbench((s) => s.filterToSelection);
   const mask = usePassMask(ds);
   const set = useMemo(
     () => (selection.size > 0 ? actionSet(ds, selection, mask) : null),
@@ -24,10 +24,6 @@ export function SelectionStrip({ ds }: { ds: Dataset }) {
 
   const visible = set.rows.length;
   const total = visible + set.hiddenSelected;
-  const filterToSelection = () => {
-    upsertFilter({ id: "selection", kind: "rows", rowIds: [...selection] });
-    clearSelection();
-  };
   return (
     <div className="flex shrink-0 items-center gap-2 border-b bg-primary/5 px-3 py-1 text-sm">
       <output>

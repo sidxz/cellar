@@ -197,23 +197,57 @@ describe("WorkbenchTable", () => {
     expect(within(pinned).queryByRole("link", { name: "CEL-2" })).not.toBeInTheDocument();
   });
 
-  it("exports visible columns and passing rows as CSV, numbers unrounded", async () => {
-    const ref = createRef<WorkbenchTableHandle>();
-    const precise = { ...ds, values: { ...ds.values, "rd:s:raw": [12.3456, 40, 3] } };
-    const controls: Filter = {
-      id: "f",
-      kind: "category",
-      key: "well_type",
-      values: ["sample"],
-      includeMissing: false,
+  it("shows at most 50 selected rows, then offers Filter to selection for the rest", async () => {
+    const n = 60;
+    const rowIds = Array.from({ length: n }, (_, i) => `w${i}`);
+    const sixty: Dataset = {
+      ...ds,
+      row_count: n,
+      row_ids: rowIds,
+      columns: [col("compound", "category"), col("molecule_id", "text", { hidden: true })],
+      values: {
+        compound: rowIds.map((_, i) => `CEL-${i}`),
+        molecule_id: rowIds.map((_, i) => `m${i}`),
+      },
     };
-    show(["w1"], { filters: [controls], table: precise, ref });
+    show(rowIds, { table: sixty });
+    await screen.findByRole("button", { name: "Selected (60)" });
+    const pinned = document.querySelector(".ag-floating-top") as HTMLElement;
+    expect(within(pinned).getAllByRole("link")).toHaveLength(50);
+    expect(within(pinned).getByText("and 10 more selected")).toBeInTheDocument();
+    fireEvent.click(within(pinned).getByRole("button", { name: "Filter to selection" }));
+    expect(screen.queryByRole("button", { name: /Selected/ })).not.toBeInTheDocument();
+    expect(screen.getByText("60 rows")).toBeInTheDocument();
+  });
+
+  const precise = { ...ds, values: { ...ds.values, "rd:s:raw": [12.3456, 40, 3] } };
+  const controls: Filter = {
+    id: "f",
+    kind: "category",
+    key: "well_type",
+    values: ["sample"],
+    includeMissing: false,
+  };
+
+  it("exports the selected passing rows as CSV over the visible columns, numbers unrounded", async () => {
+    const ref = createRef<WorkbenchTableHandle>();
+    show(["w0", "w2"], { filters: [controls], table: precise, ref });
     // The collapsed Selected group still exports its rows.
     fireEvent.click(await screen.findByRole("button", { name: "Selected (1)" }));
     expect(await exportedCsv(ref)).toEqual([
       '"Compound","Structure","well_type","rd:s:raw"',
-      '"CEL-2","c1ccccc1","Sample","40"',
       '"CEL-1","CCO","Sample",">12.3456"',
+    ]);
+  });
+
+  it("exports every passing row when nothing is selected", async () => {
+    const ref = createRef<WorkbenchTableHandle>();
+    show([], { filters: [controls], table: precise, ref });
+    await screen.findByRole("link", { name: "CEL-1" });
+    expect(await exportedCsv(ref)).toEqual([
+      '"Compound","Structure","well_type","rd:s:raw"',
+      '"CEL-1","CCO","Sample",">12.3456"',
+      '"CEL-2","c1ccccc1","Sample","40"',
     ]);
   });
 });

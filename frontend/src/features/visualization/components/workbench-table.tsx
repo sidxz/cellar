@@ -36,14 +36,15 @@ import {
 } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { categoryLabel, column, numberAt } from "../lib/dataset";
-import { orderTableRows } from "../lib/table-rows";
+import { orderTableRows, pinnedBlock } from "../lib/table-rows";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset, DatasetColumn } from "../types";
 
 ModuleRegistry.registerModules([AllCommunityModule]);
 
 type Density = "compact" | "chemistry";
-/** A grid row points at dataset row ``i``; ``i = -1`` is the "Selected (n)" label row. */
+/** A grid row points at dataset row ``i``; ``i = -1`` is the "Selected (n)" label row and
+ * ``i = -2`` the "and n more selected" row under the pinned ones. */
 interface Row {
   i: number;
   label?: string;
@@ -68,6 +69,7 @@ const isValue = (c: DatasetColumn) => c.key.startsWith("rd:");
 const isData = (row: Row | undefined): row is Row => !!row && row.i >= 0;
 const fmt = (n: number) => n.toLocaleString();
 const NO_ROWS = { noRowsToShow: "No rows match the filters" };
+const MORE = -2;
 
 function SelectCell({ data, rowIds }: ICellRendererParams<Row> & { rowIds: string[] }) {
   const selection = useWorkbench((s) => s.selection);
@@ -123,7 +125,21 @@ function StructureCell({ value }: ICellRendererParams<Row>) {
   );
 }
 
-function SelectedGroupRow({ data, onToggle }: ICellRendererParams<Row> & { onToggle: () => void }) {
+function SelectedGroupRow({
+  data,
+  onToggle,
+  onFilter,
+}: ICellRendererParams<Row> & { onToggle: () => void; onFilter: () => void }) {
+  if (data?.i === MORE) {
+    return (
+      <div className="flex h-full items-center gap-2 bg-primary/5 px-2 text-xs text-muted-foreground">
+        {data.label}
+        <Button size="sm" variant="link" className="h-6 px-0 text-xs" onClick={onFilter}>
+          Filter to selection
+        </Button>
+      </div>
+    );
+  }
   const Icon = data?.collapsed ? ChevronRight : ChevronDown;
   return (
     <button
@@ -272,8 +288,8 @@ function tableColumns(ds: Dataset, chemistry: boolean, hidden: Set<string>): Col
 }
 
 export interface WorkbenchTableHandle {
-  /** Download the passing rows (selected ones too, even collapsed) over the visible
-   * columns; numbers unrounded, a qualifier kept in front (">100"). */
+  /** Download the rows Save acts on — the selected passing rows, else every passing row —
+   * over the visible columns; numbers unrounded, a qualifier kept in front (">100"). */
   exportCsv: (fileName: string) => void;
 }
 
@@ -292,6 +308,7 @@ export function WorkbenchTable({
   const grid = useRef<AgGridReact<Row>>(null);
   const mask = usePassMask(ds);
   const selection = useWorkbench((s) => s.selection);
+  const filterToSelection = useWorkbench((s) => s.filterToSelection);
   const [density, setDensity] = useState<Density>("chemistry");
   const [showAll, setShowAll] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
@@ -314,25 +331,27 @@ export function WorkbenchTable({
     [ds, mask, selection, showAll],
   );
   const rowData = useMemo(() => rest.map((i) => rows[i]), [rest, rows]);
-  const pinnedRows = useMemo<Row[]>(
-    () =>
-      pinned.length === 0
-        ? []
-        : [
-            { i: -1, label: `Selected (${fmt(pinned.length)})`, collapsed },
-            ...(collapsed ? [] : pinned.map((i) => rows[i])),
-          ],
-    [pinned, rows, collapsed],
-  );
+  const pinnedRows = useMemo<Row[]>(() => {
+    if (pinned.length === 0) return [];
+    const { shown, more } = pinnedBlock(pinned, collapsed);
+    return [
+      { i: -1, label: `Selected (${fmt(pinned.length)})`, collapsed },
+      ...shown.map((i) => rows[i]),
+      ...(more ? [{ i: MORE, label: `and ${fmt(more)} more selected` }] : []),
+    ];
+  }, [pinned, rows, collapsed]);
   const columnDefs = useMemo(
     () => tableColumns(ds, density === "chemistry", hidden),
     [ds, density, hidden],
   );
   const toggleGroup = useCallback(() => setCollapsed((c) => !c), []);
-  const groupParams = useMemo(() => ({ onToggle: toggleGroup }), [toggleGroup]);
-  // The label row stays compact whatever the density.
+  const groupParams = useMemo(
+    () => ({ onToggle: toggleGroup, onFilter: filterToSelection }),
+    [toggleGroup, filterToSelection],
+  );
+  // The label rows stay compact whatever the density.
   const getRowHeight = useCallback(
-    (p: RowHeightParams<Row>) => (p.data?.i === -1 ? ROW_HEIGHT.compact : ROW_HEIGHT[density]),
+    (p: RowHeightParams<Row>) => (isData(p.data) ? ROW_HEIGHT[density] : ROW_HEIGHT.compact),
     [density],
   );
   useImperativeHandle(
@@ -341,8 +360,9 @@ export function WorkbenchTable({
       exportCsv: (fileName) => {
         const api = grid.current?.api;
         if (!api) return;
-        // A collapsed Selected group holds no grid rows; lend them for the (synchronous) read.
-        const lend = collapsed && pinned.length > 0;
+        // The Selected group shows only some of its rows (or none, collapsed); lend the grid
+        // all of them for the (synchronous) read.
+        const lend = pinnedRows.filter(isData).length < pinned.length;
         if (lend)
           api.setGridOption(
             "pinnedTopRowData",
@@ -351,7 +371,10 @@ export function WorkbenchTable({
         const csv = api.getDataAsCsv({
           skipColumnGroupHeaders: true,
           columnKeys: api.getAllDisplayedColumns().filter((c) => c.getColId() !== "__select__"),
-          shouldRowBeSkipped: (p) => !isData(p.node.data) || !mask[p.node.data.i],
+          shouldRowBeSkipped: (p) =>
+            !isData(p.node.data) ||
+            !mask[p.node.data.i] ||
+            (selection.size > 0 && !selection.has(ds.row_ids[p.node.data.i])),
           processCellCallback: (p) => {
             if (typeof p.value !== "number" || !isData(p.node?.data)) return p.formatValue(p.value);
             const q = ds.values[`${p.column.getColId()}:q`]?.[p.node.data.i];
@@ -363,7 +386,7 @@ export function WorkbenchTable({
         if (csv !== undefined) saveText(`\uFEFF${csv}`, fileName);
       },
     }),
-    [ds, mask, collapsed, pinned, pinnedRows, rows],
+    [ds, mask, selection, pinned, pinnedRows, rows],
   );
   const getRowClass = useCallback(
     (p: RowClassParams<Row>) =>
@@ -409,8 +432,8 @@ export function WorkbenchTable({
           pinnedTopRowData={pinnedRows}
           columnDefs={columnDefs}
           defaultColDef={{ sortable: true, resizable: true, suppressMovable: true }}
-          getRowId={(p) => (p.data.i < 0 ? "selected-group" : ds.row_ids[p.data.i])}
-          isFullWidthRow={(p) => p.rowNode.data?.i === -1}
+          getRowId={(p) => (p.data.i < 0 ? `selected-${p.data.i}` : ds.row_ids[p.data.i])}
+          isFullWidthRow={(p) => (p.rowNode.data?.i ?? 0) < 0}
           fullWidthCellRenderer={SelectedGroupRow}
           fullWidthCellRendererParams={groupParams}
           getRowClass={getRowClass}

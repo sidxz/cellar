@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Dataset } from "../types";
-import { orderTableRows } from "./table-rows";
+import { MAX_PINNED, orderTableRows, pinnedBlock } from "./table-rows";
 
 const ds: Dataset = {
   revision: "r",
@@ -27,5 +27,20 @@ describe("orderTableRows", () => {
 
   it("pins nothing without a selection", () => {
     expect(orderTableRows(ds, mask, new Set(), false)).toEqual({ pinned: [], rest: [0, 1, 3, 5] });
+  });
+});
+
+describe("pinnedBlock", () => {
+  const many = Array.from({ length: 3000 }, (_, i) => i);
+
+  it("shows at most MAX_PINNED selected rows and counts the rest", () => {
+    expect(pinnedBlock([4, 7], false)).toEqual({ shown: [4, 7], more: 0 });
+    const block = pinnedBlock(many, false);
+    expect(block.shown).toEqual(many.slice(0, MAX_PINNED));
+    expect(block.more).toBe(3000 - MAX_PINNED);
+  });
+
+  it("shows nothing while collapsed", () => {
+    expect(pinnedBlock(many, true)).toEqual({ shown: [], more: 0 });
   });
 });

@@ -18,3 +18,17 @@ export function orderTableRows(
   }
   return { pinned, rest: showAll ? rest.concat(failing) : rest };
 }
+
+/** Selected rows the table shows at once; past it a summary row offers Filter to selection,
+ * so a selection of thousands never mounts thousands of pinned rows. */
+export const MAX_PINNED = 50;
+
+/** What the pinned "Selected" block shows of ``pinned``: at most MAX_PINNED rows (none while
+ * collapsed) and how many more are selected. */
+export function pinnedBlock(
+  pinned: number[],
+  collapsed: boolean,
+): { shown: number[]; more: number } {
+  const shown = collapsed ? [] : pinned.slice(0, MAX_PINNED);
+  return { shown, more: collapsed ? 0 : pinned.length - shown.length };
+}

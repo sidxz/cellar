@@ -11,7 +11,9 @@ import {
 } from "@/shared/components/ui/dropdown-menu";
 import { getPlotlyGlobal } from "@/shared/lib/plotly";
 import { ChevronDown, Download } from "lucide-react";
-import type { RefObject } from "react";
+import { type RefObject, useMemo } from "react";
+import { usePassMask } from "../hooks/use-pass-mask";
+import { actionSet } from "../lib/action-set";
 import { useWorkbench } from "../store/workbench-context";
 import type { Dataset } from "../types";
 import { panelTitle } from "./panels/panel-frame";
@@ -29,7 +31,18 @@ function downloadPng(panelId: string, title: string) {
   });
 }
 
-/** Export ▾: the table as CSV (visible columns, passing rows) and each shown plot as PNG. */
+/** The CSV item: it acts on the same rows as Save (the selected passing rows, else every
+ * passing row) and says which. Rendered only while the menu is open. */
+function CsvItem({ ds, onExport }: { ds: Dataset; onExport: () => void }) {
+  const selection = useWorkbench((s) => s.selection);
+  const mask = usePassMask(ds);
+  const { mode, rows } = useMemo(() => actionSet(ds, selection, mask), [ds, selection, mask]);
+  const n = rows.length;
+  const what = `${n.toLocaleString()}${mode === "selected" ? " selected" : ""} ${n === 1 ? "row" : "rows"}`;
+  return <DropdownMenuItem onSelect={onExport}>Export {what} as CSV</DropdownMenuItem>;
+}
+
+/** Export ▾: the table as CSV (visible columns) and each shown plot as PNG. */
 export function ExportMenu({
   ds,
   table,
@@ -51,9 +64,7 @@ export function ExportMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuItem onSelect={() => table.current?.exportCsv(`${ds.level}.csv`)}>
-          Table as CSV
-        </DropdownMenuItem>
+        <CsvItem ds={ds} onExport={() => table.current?.exportCsv(`${ds.level}.csv`)} />
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Plot as PNG</DropdownMenuLabel>
         {shown.length === 0 && <DropdownMenuItem disabled>No plots open</DropdownMenuItem>}
