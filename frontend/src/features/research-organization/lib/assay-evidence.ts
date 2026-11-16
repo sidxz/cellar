@@ -22,7 +22,9 @@ export function activityEndpoint(
     value,
     at_bound: aggregate ? false : iv?.at_bound,
     curve_class: aggregate ? null : av.curve_params?.curve_class,
-    ...doseRange(av.raw_data),
+    // The tested doses censor one curve's value. An aggregate can summarize several runs
+    // (raw_data is the representative's alone): it keeps the qualifier the backend resolved.
+    ...doseRange(aggregate || av.aggregate ? null : av.raw_data),
     runCount: av.run_count ?? 1,
     mode,
     foldRange: aggregate?.aggregate_stats?.fold_range,

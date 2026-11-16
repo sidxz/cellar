@@ -163,7 +163,8 @@ function interceptColumn(
       value,
       at_bound: iv?.at_bound,
       curve_class: rv?.curve_class,
-      ...doseRange(rv?.data_points),
+      // The best curve's doses censor its own value, not a mean over several curves.
+      ...doseRange(useMean ? null : rv?.data_points),
     });
   };
   return {

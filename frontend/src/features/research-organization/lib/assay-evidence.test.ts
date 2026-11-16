@@ -73,6 +73,41 @@ describe("assay endpoint evidence", () => {
     expect(value.value).toBe(200);
     expect(value.display.kind).toBe("scalar");
   });
+  it("keeps an aggregate's resolved value: one representative run's doses do not censor it", () => {
+    // Three runs summarized as 50; the representative run's top dose is 10.
+    const aggregated = endpoint({
+      value: 50,
+      run_count: 3,
+      raw_data: [
+        { x: 0.1, y: 5 },
+        { x: 10, y: 40 },
+      ],
+      intercept_aggregates: [
+        {
+          spec: { kind: "primary" },
+          selected_value: 50,
+          selected_qualifier: "=",
+          aggregate_stats: null,
+          disagreement_flag: false,
+        },
+      ],
+    });
+    const value = activityEndpoint(aggregated.av, null, true, "gmean");
+
+    expect(value.display.kind).toBe("scalar");
+    expect(value.display.text).toBe("50.00");
+    expect(selectivityRatio(aggregated, endpoint(), "gmean").value).toBeCloseTo(2);
+  });
+  it("still reads one curve's value above its top dose as a bound", () => {
+    const single = endpoint({
+      value: 50,
+      raw_data: [
+        { x: 0.1, y: 5 },
+        { x: 10, y: 40 },
+      ],
+    });
+    expect(activityEndpoint(single.av, null, true, "latest").display.text).toBe("> 10");
+  });
   it.each(["nd", "excluded", ">", "<"])("preserves %s wire qualifiers", (qualifier) => {
     const value = activityEndpoint({ ...av, qualifier }, null, true, "latest");
     expect(value.display.kind).not.toBe("scalar");
