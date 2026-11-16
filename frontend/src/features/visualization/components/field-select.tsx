@@ -68,9 +68,11 @@ export function FieldSelect({
     const heading = searching ? "" : (o.group ?? "");
     groups.set(heading, [...(groups.get(heading) ?? []), o]);
   }
+  // Closing from here bypasses onOpenChange, so the search is cleared here too.
   const pick = (key: string | undefined) => {
     onChange(key);
     setOpen(false);
+    setQuery("");
   };
 
   return (

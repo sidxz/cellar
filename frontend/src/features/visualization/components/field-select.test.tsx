@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
+import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { crossProtocol } from "../lib/cross-protocol-fixture";
 import type { Dataset, DatasetColumn } from "../types";
@@ -58,6 +59,23 @@ describe("FieldSelect", () => {
     expect(trigger).toHaveAttribute("title", "Counter · pIC50");
     expect(within(trigger).getByText("pIC50")).toBeInTheDocument();
     expect(within(trigger).getByText("Counter")).toBeInTheDocument();
+  });
+
+  it("forgets the search once a result is picked: reopening lists every field and None", () => {
+    function Picker() {
+      const [value, setValue] = useState<string | undefined>("a");
+      return (
+        <FieldSelect ds={ds} kinds={["category"]} value={value} onChange={setValue} clearable />
+      );
+    }
+    render(<Picker />);
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.change(screen.getByPlaceholderText("Search fields…"), { target: { value: "Seri" } });
+    fireEvent.click(screen.getByRole("option", { name: "Series" }));
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.getByPlaceholderText("Search fields…")).toHaveValue("");
+    expect(screen.getByRole("option", { name: "None" })).toBeInTheDocument();
+    expect(screen.getAllByRole("option")).toHaveLength(ds.columns.length + 1);
   });
 
   it("clears an optional field with None and picks by click", () => {
