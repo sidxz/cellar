@@ -58,6 +58,7 @@ export * from './sample-requests/sample-requests';
 export * from './samples/samples';
 export * from './sar-analysis/sar-analysis';
 export * from './saved-searches/saved-searches';
+export * from './saved-visualizations/saved-visualizations';
 export * from './scaffold-tree/scaffold-tree';
 export * from './search/search';
 export * from './settings/settings';
