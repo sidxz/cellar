@@ -36,6 +36,28 @@ class SavedSearchCreated(DomainEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
+class SavedVisualizationCreated(DomainEvent):
+    name: str
+    visibility: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class SavedVisualizationUpdated(DomainEvent):
+    """Old and new value per changed field; ``source`` and ``config`` are named without
+    values (they are JSON documents, not audit text)."""
+
+    changes: tuple[tuple[str, str | None, str | None], ...]
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return list(self.changes)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SavedVisualizationDeleted(DomainEvent):
+    name: str
+
+
+@dataclass(frozen=True, kw_only=True)
 class ProjectMemberAdded(DomainEvent):
     """Fired when a user is added to a project."""
 
