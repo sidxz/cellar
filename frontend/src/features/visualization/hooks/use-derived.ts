@@ -5,7 +5,7 @@ import { type DerivedSet, type DerivedSpec, letters } from "../lib/derived";
 
 /** A derived column set and the job behind it: the compounds it runs over (fixed when it
  * starts, so the job hooks always see the same array), how it stands, and its columns once
- * ready. A set being recomputed keeps its last columns until the new ones arrive. Held by
+ * ready. A set being recomputed or replaced keeps its last columns until new ones arrive. Held by
  * the page, outside the workbench store: never part of undo history. */
 export type DerivedEntry = {
   spec: DerivedSpec;
@@ -70,6 +70,9 @@ export function derivedReducer(entries: DerivedEntry[], a: DerivedAction): Deriv
       spec: a.spec,
       moleculeIds: a.moleculeIds,
       status: "running",
+      // A replacement keeps the columns it replaces on show until its own arrive, so the
+      // plots and filters on them never go blank meanwhile (nor, if it fails, after).
+      set: entries[at]?.set,
       startedAt: Date.now(),
       // Counts every start under this id, so a replacement never reuses its runner.
       attempt: (entries[at]?.attempt ?? 0) + 1,
@@ -97,7 +100,8 @@ export const runnable = (entries: DerivedEntry[]): DerivedEntry[] =>
       ),
   );
 
-/** The column sets on show: every entry that has columns (ready, or recomputing). */
+/** The column sets on show: every entry that has columns (ready, or being recomputed or
+ * replaced, whether that is still running or failed). */
 export const setsOf = (entries: DerivedEntry[]): DerivedSet[] =>
   entries.flatMap((e) => (e.set ? [e.set] : []));
 

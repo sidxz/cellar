@@ -37,7 +37,7 @@ describe("runnable", () => {
 });
 
 describe("derivedReducer", () => {
-  it("adds a running entry over the given compounds; adding the same id replaces it", () => {
+  it("adds a running entry over the given compounds; adding the same id replaces it, its columns kept on show until the new ones arrive", () => {
     const one = add([], rg1);
     expect(one).toEqual([
       expect.objectContaining({
@@ -51,7 +51,15 @@ describe("derivedReducer", () => {
     const again = add(ready, { ...rg1, coreSmiles: "C1CCCCC1[*:1]" }, ["m3"]);
     expect(again).toHaveLength(1);
     expect(again[0]).toMatchObject({ status: "running", moleculeIds: ["m3"], attempt: 2 });
-    expect(again[0].set).toBeUndefined();
+    expect(setsOf(again)).toEqual([ready[0].set]);
+    // A replacement that fails leaves the earlier columns in place: no plot or filter on
+    // them goes blank.
+    const failed = derivedReducer(again, { type: "fail", id: "rg1", message: "No match." });
+    expect(setsOf(failed)).toEqual([ready[0].set]);
+    const next = setOf({ ...rg1, coreSmiles: "C1CCCCC1[*:1]" });
+    expect(setsOf(derivedReducer(again, { type: "resolve", id: "rg1", set: next }))).toEqual([
+      next,
+    ]);
   });
 
   it("resolves a running entry and ignores a late answer for one no longer running", () => {

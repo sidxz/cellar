@@ -115,8 +115,22 @@ export function hoverText(ds: Dataset, i: number): string {
   return [ds.values.compound?.[i] ?? "No compound", place.join(" ")].filter(Boolean).join(" · ");
 }
 
+// Labels a workbench has shown, by the dataset it draws: undo can bring back a plot on
+// chemistry columns removed since, and it still reads by name.
+const seenLabels = new WeakMap<Dataset, ReadonlyMap<string, string>>();
+
+/** ``ds``, whose fields without a column take the label ``labels`` last saw for them. */
+export function withSeenLabels(ds: Dataset, labels: ReadonlyMap<string, string>): Dataset {
+  seenLabels.set(ds, labels);
+  return ds;
+}
+
+/** A field's name: its column's label, else the one it last had, else its key. */
+export const fieldLabel = (ds: Dataset, key: string): string =>
+  column(ds, key)?.label ?? seenLabels.get(ds)?.get(key) ?? key;
+
 export function axisTitle(ds: Dataset, key: string | undefined, log?: boolean): string {
-  const label = key ? (column(ds, key)?.label ?? key) : "—";
+  const label = key ? fieldLabel(ds, key) : "—";
   return log ? `${label} (log)` : label;
 }
 

@@ -1,9 +1,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { withSeenLabels } from "../../lib/traces/common";
 import { WorkbenchProvider } from "../../store/workbench-context";
 import { DEFAULT_APPEARANCE, type PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
-import { PanelFrame } from "./panel-frame";
+import { PanelFrame, panelTitle } from "./panel-frame";
 
 const col = (key: string, label: string) => ({
   key,
@@ -67,5 +68,17 @@ describe("PanelFrame", () => {
     show(vi.fn(), { ...panel, type: "bar", agg: "count", category: "plate" });
     expect(screen.getByRole("button", { name: "Group Plate" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^(Y|X|Split|Color)/ })).not.toBeInTheDocument();
+  });
+
+  it("names a field whose column has gone since by the label it last had", () => {
+    const gone = { ...panel, x: "chem:clusters:x", y: "chem:clusters:y" };
+    const seen = new Map([
+      ["chem:clusters:x", "Cluster map X"],
+      ["chem:clusters:y", "Cluster map Y"],
+    ]);
+    expect(panelTitle(ds, gone)).toBe("chem:clusters:y by chem:clusters:x");
+    expect(panelTitle(withSeenLabels({ ...ds }, seen), gone)).toBe(
+      "Cluster map Y by Cluster map X",
+    );
   });
 });

@@ -4,6 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Maximize2, Minimize2, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { column } from "../../lib/dataset";
+import { fieldLabel } from "../../lib/traces/common";
 import { useWorkbench } from "../../store/workbench-context";
 import type { PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
@@ -12,7 +13,7 @@ import type { Dataset } from "../../types";
 export type EditField = "x" | "y" | "category" | "colorBy" | "shapeBy" | "splitBy";
 export type OnEditPanel = (panelId: string, focusField?: EditField) => void;
 
-const labelOf = (ds: Dataset, key?: string) => (key ? (column(ds, key)?.label ?? key) : "—");
+const labelOf = (ds: Dataset, key?: string) => (key ? fieldLabel(ds, key) : "—");
 
 export function panelTitle(ds: Dataset, p: PanelConfig): string {
   const l = (key?: string) => labelOf(ds, key);

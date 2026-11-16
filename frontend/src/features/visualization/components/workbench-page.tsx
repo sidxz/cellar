@@ -35,6 +35,7 @@ import { countsAtLevel } from "../lib/levels";
 import { MAX_ROWS } from "../lib/limits";
 import { resolveViewConfig } from "../lib/saved-view";
 import { visualizeHref } from "../lib/source-url";
+import { withSeenLabels } from "../lib/traces/common";
 import { WorkbenchProvider, useWorkbench } from "../store/workbench-context";
 import { MAX_PANELS, type PanelConfig, type PanelPatch, makePanel } from "../store/workbench-store";
 import type { Dataset, DatasetSource, Level, SavedView } from "../types";
@@ -126,8 +127,14 @@ function Workbench({
     () => (query.data ? resolveUserColumns(query.data, nameOf) : undefined),
     [query.data, nameOf],
   );
+  // Every column label shown here, so a filter or plot that undo brings back onto a removed
+  // chemistry column still reads by name.
+  const seenLabels = useRef(new Map<string, string>()).current;
   // Chemistry columns, computed per compound, joined onto whatever level is loaded.
-  const ds = useMemo(() => base && withDerived(base, readySets), [base, readySets]);
+  const ds = useMemo(
+    () => base && withSeenLabels(withDerived(base, readySets), seenLabels),
+    [base, readySets, seenLabels],
+  );
   // The compounds a new chemistry job runs over: every one with a structure.
   const moleculeIds = useMemo(() => (base ? jobMoleculeIds(base) : []), [base]);
   // How the chemistry columns were made: what a saved view keeps of them.
@@ -137,9 +144,6 @@ function Workbench({
     entries.find((e) => e.spec.kind === kind)?.spec as
       | Extract<DerivedSpec, { kind: K }>
       | undefined;
-  // Every column label shown here, so a filter that undo brings back onto a removed
-  // chemistry column still reads by name.
-  const seenLabels = useRef(new Map<string, string>()).current;
   for (const c of ds?.columns ?? []) seenLabels.set(c.key, c.label);
   // A row above Runs pools the source runs that count at its level; its curves come from those.
   const countedRunIds = useMemo(

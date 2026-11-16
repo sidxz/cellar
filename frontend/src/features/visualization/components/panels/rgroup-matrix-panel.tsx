@@ -12,7 +12,7 @@ import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { useMemo } from "react";
 import { usePassMask } from "../../hooks/use-pass-mask";
 import { column } from "../../lib/dataset";
-import { panelNote } from "../../lib/traces/common";
+import { fieldLabel, panelNote } from "../../lib/traces/common";
 import { buildRGroupMatrix } from "../../lib/traces/rgroup-matrix";
 import { useWorkbench } from "../../store/workbench-context";
 import type { PanelConfig } from "../../store/workbench-store";
@@ -36,7 +36,7 @@ export function RGroupMatrixPanel({ panel, ds }: { panel: PanelConfig; ds: Datas
     [ds, panel, mask, selection],
   );
 
-  const label = (key?: string) => (key ? (column(ds, key)?.label ?? key) : "—");
+  const label = (key?: string) => (key ? fieldLabel(ds, key) : "—");
   const [yLabel, xLabel] = [label(panel.category), label(panel.x)];
   const value = panel.y ? column(ds, panel.y) : undefined;
   const potency = POTENCY.has(value?.provenance.aggregation ?? "");
