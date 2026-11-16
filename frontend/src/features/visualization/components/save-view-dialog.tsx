@@ -31,6 +31,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { isStaleEdit } from "@/shared/lib/api/custom-instance";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useId, useMemo, useState } from "react";
 import {
@@ -38,7 +39,7 @@ import {
   useDeleteSavedView,
   useUpdateSavedView,
 } from "../hooks/use-saved-views";
-import { errorText, isStaleEdit } from "../lib/api-errors";
+import { errorText } from "../lib/api-errors";
 import type { DerivedSpec } from "../lib/derived";
 import { buildViewConfig, tooLargeToSave } from "../lib/saved-view";
 import { toDatasetRequest } from "../lib/source-url";
@@ -108,7 +109,7 @@ export function SaveViewDialog({
         {
           onSuccess: () => onOpenChange(false),
           onError: (err) => {
-            if (!isStaleEdit(err)) return;
+            if (!isStaleEdit(err, { race: true })) return;
             onOpenChange(false);
             onStale?.();
           },
@@ -137,7 +138,10 @@ export function SaveViewDialog({
           !source.runIds &&
           "Runs added to the protocol later will be included.",
       ].filter((n): n is string => typeof n === "string");
-  const refused = mutation.error && !isStaleEdit(mutation.error) ? errorText(mutation.error) : null;
+  const refused =
+    mutation.error && !isStaleEdit(mutation.error, { race: true })
+      ? errorText(mutation.error)
+      : null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

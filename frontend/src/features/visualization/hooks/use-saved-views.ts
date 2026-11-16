@@ -1,14 +1,13 @@
 "use client";
 
 import { createCrudHooks } from "@/shared/hooks/create-crud-hooks";
-import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, customInstance, isStaleEdit } from "@/shared/lib/api/custom-instance";
 import type {
   CreateSavedVisualizationBody,
   UpdateSavedVisualizationBody,
 } from "@/shared/lib/api/model";
 import { showError } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { isStaleEdit } from "../lib/api-errors";
 import type { SavedView, SavedViewSummary } from "../types";
 import { SAVED_VIEWS_KEY } from "./query-keys";
 
@@ -46,11 +45,12 @@ export const useSavedView = (id: string) =>
 export const useCreateSavedView = hooks.useCreate;
 export const useDeleteSavedView = hooks.useDelete;
 
-/** PATCH a view; the open view takes the saved version. A stale edit (someone saved first)
- * is the caller's to explain, so it gets no error toast. */
+/** PATCH a view; the open view takes the saved version. A stale edit (someone saved first,
+ * or a save racing this one won) is the caller's to explain, so it gets no error toast. */
 export function useUpdateSavedView(id: string) {
   const qc = useQueryClient();
   return useMutation({
+    meta: { raceIsStale: true },
     mutationFn: (data: UpdateSavedVisualizationBody) =>
       customInstance<SavedView>({ url: `${BASE}/${id}`, method: "PATCH", data }),
     onSuccess: (view) => {
@@ -58,7 +58,7 @@ export function useUpdateSavedView(id: string) {
       qc.invalidateQueries({ queryKey: LIST_KEY });
     },
     onError: (err: Error) => {
-      if (!isStaleEdit(err)) showError(err.message || "Failed to save the view");
+      if (!isStaleEdit(err, { race: true })) showError(err.message || "Failed to save the view");
     },
   });
 }

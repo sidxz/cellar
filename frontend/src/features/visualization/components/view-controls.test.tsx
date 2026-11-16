@@ -247,6 +247,22 @@ describe("ViewControls", () => {
     expect(state.reload).toHaveBeenCalled();
   });
 
+  it("a save that lost a race to another explains itself the same way, with no error toast", async () => {
+    vi.mocked(customInstance).mockRejectedValueOnce(
+      new ApiError("API error: 409 — conflict", 409, {
+        error: "ConcurrencyConflictError",
+        message: "x",
+        retry: true,
+      }),
+    );
+    show();
+    fireEvent.click(screen.getByRole("button", { name: "change" }));
+    fireEvent.click(saveBtn());
+
+    expect(await screen.findByText("This view changed since you opened it")).toBeInTheDocument();
+    expect(showError).not.toHaveBeenCalled();
+  });
+
   it("the stale dialog's Save as new view… opens the save dialog", async () => {
     vi.mocked(customInstance).mockRejectedValueOnce(
       new ApiError("API error: 409", 409, { error: "StaleEditError" }),

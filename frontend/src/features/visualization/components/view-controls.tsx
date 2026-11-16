@@ -17,12 +17,12 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
+import { isStaleEdit } from "@/shared/lib/api/custom-instance";
 import type { UpdateSavedVisualizationBody } from "@/shared/lib/api/model";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { useUpdateSavedView } from "../hooks/use-saved-views";
-import { isStaleEdit } from "../lib/api-errors";
 import type { DerivedSpec } from "../lib/derived";
 import type { Filter } from "../lib/filters";
 import { buildViewConfig, sameDerived, sameSaved, tooLargeToSave } from "../lib/saved-view";
@@ -201,7 +201,7 @@ function OwnerSave({
       { expected_version: open.view.version, ...body },
       {
         onSuccess: () => markSaved(sent),
-        onError: (err) => isStaleEdit(err) && onStale(),
+        onError: (err) => isStaleEdit(err, { race: true }) && onStale(),
       },
     );
   return (
