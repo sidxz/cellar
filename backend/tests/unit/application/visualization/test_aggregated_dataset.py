@@ -667,3 +667,36 @@ def test_a_geomean_column_has_no_arithmetic_sd():
     assert f"{POTK}:sd" not in _keys(ds)
     ds = _build("compounds", numeric=[_num(mol, rd=POT)], defs=[DEFS[1]])
     assert ds.values[f"{POTK}:sd"] == [7.07]
+
+
+# --- a primary intercept other than 50 % --------------------------------------------
+
+IC90 = {"kind": "ic", "level": 90.0, "basis": "relative_percent", "label": None}
+
+
+def test_dose_response_labels_name_the_primary_intercept():
+    defs = [replace(DEFS[2], primary_intercept=IC90)]  # curve_type stays "ic50"
+    ds = _build("compounds", dr=[_dr(uuid.uuid4())], defs=defs)
+    assert _col(ds, DRK).label == "Enzyme · IC90"
+    assert _col(ds, f"{DRK}:p").label == "Enzyme · pIC90"
+
+
+@pytest.mark.parametrize(
+    ("primary", "fitted", "midpoint"),
+    [
+        ({"spec": IC90, "value": 9.0, "at_bound": False}, 9.0, 1.0),
+        ({"spec": {**IC90, "level": 50.0}, "value": 1.5, "at_bound": False}, 1.5, 1.5),
+        ({"spec": IC90, "value": None, "at_bound": True}, 2.0, 2.0),  # stored midpoint
+        (None, 1.5, 1.5),  # fitted before intercepts were stored
+    ],
+)
+def test_runs_level_carries_the_4pl_midpoint(primary, fitted, midpoint):
+    run = _run()
+    curve = _curve(
+        run, uuid.uuid4(), uuid.uuid4(), fitted_value=fitted, hill_slope=1.0,
+        intercept_values=[primary] if primary else None,
+    )  # fmt: skip
+    ds = _build("runs", curves=[curve], runs=[run])
+    assert ds.values[f"{DRK}:midpoint"] == [pytest.approx(midpoint)]
+    col = _col(ds, f"{DRK}:midpoint")
+    assert (col.hidden, col.unit, col.provenance.stat) == (True, "µM", "midpoint")

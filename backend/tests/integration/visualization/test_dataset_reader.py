@@ -180,6 +180,7 @@ async def test_curves_carry_the_fit_for_the_workspace_runs(uow, session_factory,
     assert c.r_squared == 0.97 and c.curve_class == "full" and c.num_points == 3
     assert (c.confidence_interval_low, c.confidence_interval_high) == (1.1, 2.2)
     assert c.raw_data == [{"concentration": 30.0, "response": 50.0}]
+    assert c.intercept_values is None  # a curve fitted before intercepts were stored
 
 
 async def test_curve_on_another_workspaces_run_is_not_read(uow, session_factory, workspace_id):
@@ -234,6 +235,8 @@ async def test_readout_definitions_carry_dose_unit_curve_type_and_melt_measure(
     assert (ic50.dose_unit, ic50.curve_type, ic50.melt_measure) == ("uM", "ic50", None)
     assert (melt.dose_unit, melt.curve_type, melt.melt_measure) == ("uM", None, "tm")
     assert melt.aggregation == "median"
+    assert ic50.primary_intercept == seed.DR_CONFIG["intercepts"][0]
+    assert melt.primary_intercept is None
 
 
 async def test_empty_ids_read_nothing_without_a_query():

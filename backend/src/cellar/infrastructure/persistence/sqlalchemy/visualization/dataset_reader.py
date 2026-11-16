@@ -113,6 +113,7 @@ class SQLAlchemyVisualizationDatasetReader:
                         ReadoutDefinitionModel.dose_response_config["curve_type"].astext,
                         ReadoutDefinitionModel.melt_config["measure"].astext,
                         ReadoutDefinitionModel.aggregation,
+                        ReadoutDefinitionModel.dose_response_config["intercepts"][0],
                     )
                     .join(ProtocolModel, ProtocolModel.id == ReadoutDefinitionModel.protocol_id)
                     .where(

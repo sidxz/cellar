@@ -45,7 +45,12 @@ from cellar.application.visualization.dataset import (
     run_labels,
 )
 from cellar.application.visualization.dataset_reader import CompoundInfo, ReadoutDefInfo, RunInfo
-from cellar.domain.screening_assay.enums import unit_for_normalization
+from cellar.domain.screening_assay.dose_response_config import InterceptSpec
+from cellar.domain.screening_assay.enums import (
+    InterceptBasis,
+    InterceptKind,
+    unit_for_normalization,
+)
 from cellar.domain.screening_assay.readout_best import best_direction, best_of_range
 from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.units import canonical_unit, is_concentration_unit, p_scale
@@ -82,6 +87,7 @@ _FIT_SIBLINGS: list[_Sibling] = [
     ("ci_low", "CI low", "number", True, True),
     ("ci_high", "CI high", "number", True, True),
     ("points", "points", "text", False, True),
+    ("midpoint", "4PL midpoint", "number", True, True),  # where the drawn curve centres
 ]
 _IDENTITY_BY_KEY = {c[0]: c for c in [*IDENTITY_COLUMNS, ("batch_id", "Batch id", "text", True)]}
 # A numeric readout's replicate aggregation (combine_replicates' name) → provenance name.
@@ -180,9 +186,42 @@ def _set_labels(sets: dict[str, dict[str, Any]]) -> dict[str, str]:
     }
 
 
+def _intercept_label(rd: ReadoutDefInfo) -> str:
+    """The primary intercept's name ("IC90"), else the curve type's ("IC50")."""
+    spec = rd.primary_intercept
+    if not spec:
+        return (rd.curve_type or "").upper()
+    return InterceptSpec(
+        kind=InterceptKind(spec["kind"]),
+        level=float(spec["level"]),
+        basis=InterceptBasis(spec.get("basis", "relative_percent")),
+        label=spec.get("label"),
+    ).display_label
+
+
+def _midpoint(r: CurveRow) -> float | None:
+    """The 4PL midpoint (EC50) to draw the fit around. ``fitted_value`` is the primary
+    intercept's value, so it is the midpoint only for a 50 % relative intercept — or an
+    at-bound one, where the fitter stores the midpoint itself. Otherwise the fit's
+    4PL is solved back from the intercept (the inverse of the fitter's Hill inverse)."""
+    ivs = r.intercept_values if isinstance(r.intercept_values, list) else []
+    primary = ivs[0] if ivs and isinstance(ivs[0], dict) else {}
+    spec = primary.get("spec")
+    if not isinstance(spec, dict) or primary.get("at_bound") is True:
+        return finite(r.fitted_value)
+    x, top, bottom, hill, level = r.fitted_value, r.top, r.bottom, r.hill_slope, spec.get("level")
+    if x is None or top is None or bottom is None or not hill or level is None or x <= 0:
+        return None
+    target = level if spec.get("basis") == "absolute" else bottom + level / 100 * (top - bottom)
+    if target == bottom:
+        return None
+    ratio = (top - bottom) / (target - bottom) - 1
+    return finite(x * ratio ** (1 / hill)) if ratio > 0 else None
+
+
 def _dr_labels(rd: ReadoutDefInfo, cs: str) -> tuple[str, str]:
     """("Enzyme · IC50", "Enzyme · pIC50"); just "IC50" when the name already says it."""
-    ct = (rd.curve_type or "").upper()
+    ct = _intercept_label(rd)
     value = rd.name if not ct or ct.lower() in rd.name.lower() else f"{rd.name} · {ct}"
     p = f"{rd.name} · p{ct}" if ct else f"p{rd.name}"
     suffix = f" · {cs}" if cs else ""
@@ -329,6 +368,7 @@ def build_aggregated_dataset(
             ("max_dose", max(doses, default=None)),
             ("ci_low", r.confidence_interval_low),
             ("ci_high", r.confidence_interval_high),
+            ("midpoint", _midpoint(r)),
         ):
             cells[f"{vk}:{stat}"][i] = finite(v)
         cells[f"{vk}:curve_class"][i] = r.curve_class
