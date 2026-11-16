@@ -7,7 +7,12 @@ import uuid
 from datetime import UTC, date, datetime, timedelta
 
 from cellar.application.visualization.dataset import build_wells_dataset
-from cellar.application.visualization.dataset_reader import ReadoutDefInfo, RunInfo, WellValueRow
+from cellar.application.visualization.dataset_reader import (
+    CompoundInfo,
+    ReadoutDefInfo,
+    RunInfo,
+    WellValueRow,
+)
 
 P = uuid.uuid4()
 RD = uuid.uuid4()
@@ -243,6 +248,40 @@ def test_single_run_per_date_has_plain_label_and_revision_is_stable():
     assert ds.values["run"] == ["2026-11-12"]
     assert build_wells_dataset([run], DEFS, rows).revision == ds.revision
     assert ds.level == "wells"
+
+
+def test_siblings_name_their_stat():
+    run = _run()
+    ds = build_wells_dataset(
+        [run], DEFS, [_row(run, value_numeric=10.0, value_qualifier=">", is_outlier=True)]
+    )
+    assert _col(ds, f"{RAW}:q").provenance.stat == "qualifier"
+    assert _col(ds, f"{RAW}:outlier").provenance.stat == "outlier"
+    assert _col(ds, RAW).provenance.stat is None
+
+
+def test_descriptor_columns_follow_each_wells_compound():
+    run = _run()
+    mol = uuid.uuid4()
+    info = CompoundInfo(
+        registration_number="CEL-000001",
+        smiles="CCO",
+        molecular_weight=300.0,
+        logp=1.5,
+        tpsa=40.0,
+        hbd=1,
+        hba=2,
+        rotatable_bonds=3,
+        aromatic_rings=1,
+    )
+    control = _row(run, molecule_id=None, registration_number=None, well_type="negative")
+    ds = build_wells_dataset([run], DEFS, [_row(run, molecule_id=mol), control], {mol: info})
+    assert ds.values["molecular_weight"] == [300.0, None]
+    assert ds.values["rotatable_bonds"] == [3, None]
+    assert _col(ds, "tpsa").group == "Descriptors"
+    assert "molecular_weight" not in {
+        c.key for c in build_wells_dataset([run], DEFS, [control]).columns
+    }
 
 
 def _looks_like_uuid(s: str) -> bool:

@@ -12,10 +12,15 @@ import hashlib
 import math
 import uuid
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Literal
 
-from cellar.application.visualization.dataset_reader import ReadoutDefInfo, RunInfo, WellValueRow
+from cellar.application.visualization.dataset_reader import (
+    CompoundInfo,
+    ReadoutDefInfo,
+    RunInfo,
+    WellValueRow,
+)
 from cellar.domain.screening_assay.enums import unit_for_normalization
 from cellar.domain.screening_assay.plate_geometry import plate_dimensions, well_order
 
@@ -36,6 +41,9 @@ class ColumnProvenance:
     protocol_id: uuid.UUID | None = None
     readout_definition_id: uuid.UUID | None = None
     layer: str | None = None
+    condition_set: str | None = None  # the set's label, when the dataset has several
+    aggregation: str | None = None  # "mean", "replicate_mean", "geomean", "fit", "p"
+    stat: str | None = None  # what a sibling column holds ("qualifier", "n", "sd" …)
 
 
 @dataclass(frozen=True)
@@ -59,7 +67,7 @@ class Dataset:
 
 
 # Identity columns, in display order: (key, label, kind, hidden).
-_IDENTITY: list[tuple[str, str, ColumnKind, bool]] = [
+IDENTITY_COLUMNS: list[tuple[str, str, ColumnKind, bool]] = [
     ("compound", "Compound", "category", False),
     ("structure", "Structure", "structure", False),
     ("molecule_id", "Molecule id", "text", True),
@@ -80,7 +88,68 @@ _IDENTITY: list[tuple[str, str, ColumnKind, bool]] = [
 ]
 
 
-def _run_labels(runs: list[RunInfo]) -> dict[uuid.UUID, str]:
+# Computed descriptors: (key, label, unit).
+_DESCRIPTORS: list[tuple[str, str, str | None]] = [
+    ("molecular_weight", "MW", "Da"),
+    ("logp", "logP", None),
+    ("tpsa", "TPSA", "Å²"),
+    ("hbd", "HBD", None),
+    ("hba", "HBA", None),
+    ("rotatable_bonds", "Rotatable bonds", None),
+    ("aromatic_rings", "Aromatic rings", None),
+]
+
+
+def descriptor_columns(
+    molecule_ids: list[str | None], molecules: dict[uuid.UUID, CompoundInfo]
+) -> tuple[list[DatasetColumn], dict[str, list[Any]]]:
+    """Descriptor columns for rows whose ``molecule_id`` values are given; a
+    descriptor no row has is left out."""
+    by_id = {str(k): v for k, v in molecules.items()}
+    infos = [by_id.get(m) if m else None for m in molecule_ids]
+    columns: list[DatasetColumn] = []
+    values: dict[str, list[Any]] = {}
+    for key, label, unit in _DESCRIPTORS:
+        col = [None if info is None else getattr(info, key) for info in infos]
+        if any(v is not None for v in col):
+            columns.append(
+                DatasetColumn(key=key, label=label, kind="number", unit=unit, group="Descriptors")
+            )
+            values[key] = col
+    return columns, values
+
+
+def condition_columns(
+    runs: list[RunInfo], row_runs: list[uuid.UUID | None]
+) -> tuple[list[DatasetColumn], dict[str, list[Any]]]:
+    """One ``cond:<name>`` category column per condition any run sets, valued from
+    each row's run."""
+    runs_by_id = {r.id: r for r in runs}
+    names = sorted({name for r in runs for name in (r.conditions or {})})
+    columns = [
+        DatasetColumn(key=f"cond:{name}", label=name, kind="category", group="Conditions")
+        for name in names
+    ]
+    values: dict[str, list[Any]] = {f"cond:{name}": [None] * len(row_runs) for name in names}
+    for i, run_id in enumerate(row_runs):
+        run = runs_by_id.get(run_id) if run_id is not None else None
+        for name, v in (run.conditions or {}).items() if run else ():
+            values[f"cond:{name}"][i] = None if v is None else str(v)
+    return columns, values
+
+
+def readout_label(
+    rd: ReadoutDefInfo, layer: str, unit: str | None, condition_set: str | None = None
+) -> str:
+    """Readout → condition set → layer: "Signal (AU)", "Signal · NADP: + · % Inhibition"."""
+    cs = f" · {condition_set}" if condition_set else ""
+    if layer == RAW_LAYER:
+        named = not unit or rd.name.lower().endswith(unit.lower())  # "raw AU" + "AU"
+        return (rd.name if named else f"{rd.name} ({unit})") + cs
+    return f"{rd.name}{cs} · {_LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
+
+
+def run_labels(runs: list[RunInfo]) -> dict[uuid.UUID, str]:
     by_date: dict[Any, list[RunInfo]] = defaultdict(list)
     for r in runs:
         by_date[r.run_date].append(r)
@@ -99,7 +168,7 @@ def _row_key(row: WellValueRow) -> str:
     return f"{row.run_id}:m:{row.molecule_id}:{batch}"
 
 
-def _finite(v: float | None) -> float | None:
+def finite(v: float | None) -> float | None:
     return v if v is not None and math.isfinite(v) else None
 
 
@@ -135,29 +204,34 @@ def _identity_values(
         "well_column": row.well_column,
         "well_order": order,
         "well_type": row.well_type,
-        "dose": _finite(row.dose),
+        "dose": finite(row.dose),
         "label": row.well_label,
     }
 
 
 def build_wells_dataset(
-    runs: list[RunInfo], defs: list[ReadoutDefInfo], rows: list[WellValueRow]
+    runs: list[RunInfo],
+    defs: list[ReadoutDefInfo],
+    rows: list[WellValueRow],
+    molecules: dict[uuid.UUID, CompoundInfo] | None = None,
 ) -> Dataset:
     runs_by_id = {r.id: r for r in runs}
-    run_labels = _run_labels(runs)
+    labels_of_runs = run_labels(runs)
     multi_run = len(runs) > 1
     defs_by_id = {d.id: d for d in defs}
 
     # Row identity follows the reader's order; values resolve latest-created-wins.
     index: dict[str, int] = {}
     identity: list[dict[str, Any]] = []
+    row_runs: list[uuid.UUID | None] = []
     for row in rows:
         key = _row_key(row)
         if key not in index:
             index[key] = len(identity)
+            row_runs.append(row.run_id)
             identity.append(
                 _identity_values(
-                    row, runs_by_id.get(row.run_id), run_labels.get(row.run_id), multi_run
+                    row, runs_by_id.get(row.run_id), labels_of_runs.get(row.run_id), multi_run
                 )
             )
 
@@ -175,7 +249,7 @@ def build_wells_dataset(
         i = index[_row_key(row)]
         col = cells[vkey]
         if rd.data_type in _NUMERIC_DATA_TYPES:
-            value: Any = _finite(row.value_numeric)
+            value: Any = finite(row.value_numeric)
         else:
             value = (
                 row.value_text
@@ -191,21 +265,15 @@ def build_wells_dataset(
 
     columns: list[DatasetColumn] = [
         DatasetColumn(key=k, label=label, kind=kind, hidden=hidden)
-        for k, label, kind, hidden in _IDENTITY
+        for k, label, kind, hidden in IDENTITY_COLUMNS
     ]
-    values: dict[str, list[Any]] = {k: [ident[k] for ident in identity] for k, *_ in _IDENTITY}
+    values: dict[str, list[Any]] = {
+        k: [ident[k] for ident in identity] for k, *_ in IDENTITY_COLUMNS
+    }
 
-    cond_names = sorted({name for r in runs for name in (r.conditions or {})})
-    for name in cond_names:
-        key = f"cond:{name}"
-        columns.append(DatasetColumn(key=key, label=name, kind="category", group="Conditions"))
-        values[key] = [None] * n
-    for row in rows:
-        run = runs_by_id.get(row.run_id)
-        if run and run.conditions:
-            i = index[_row_key(row)]
-            for name, v in run.conditions.items():
-                values[f"cond:{name}"][i] = None if v is None else str(v)
+    cond_cols, cond_values = condition_columns(runs, row_runs)
+    columns += cond_cols
+    values |= cond_values
 
     def _layer_rank(vkey: str) -> tuple[int, int, str]:
         _, rd_id, layer = vkey.split(":", 2)
@@ -216,11 +284,7 @@ def build_wells_dataset(
         _, rd_id, layer = vkey.split(":", 2)
         rd = defs_by_id[uuid.UUID(rd_id)]
         unit = unit_for_normalization(None if layer == RAW_LAYER else layer, rd.unit)
-        if layer == RAW_LAYER:
-            named = not unit or rd.name.lower().endswith(unit.lower())  # "raw AU" + "AU"
-            label = rd.name if named else f"{rd.name} ({unit})"
-        else:
-            label = f"{rd.name} · {_LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
+        label = readout_label(rd, layer, unit)
         prov = ColumnProvenance(
             protocol_id=rd.protocol_id, readout_definition_id=rd.id, layer=layer
         )
@@ -239,7 +303,7 @@ def build_wells_dataset(
                     label=f"{label} qualifier",
                     kind="category",
                     group=rd.name,
-                    provenance=prov,
+                    provenance=replace(prov, stat="qualifier"),
                 )
             )
             values[qkey] = qualifiers[vkey]
@@ -251,10 +315,15 @@ def build_wells_dataset(
                     label=f"{label} outlier",
                     kind="category",
                     group=rd.name,
-                    provenance=prov,
+                    provenance=replace(prov, stat="outlier"),
                 )
             )
             values[okey] = outliers[vkey]
+
+    if molecules is not None:
+        desc_cols, desc_values = descriptor_columns(values["molecule_id"], molecules)
+        columns += desc_cols
+        values |= desc_values
 
     latest = max((r.created_at for r in rows), default=None)
     digest = hashlib.sha1(

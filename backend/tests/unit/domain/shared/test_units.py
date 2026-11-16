@@ -11,6 +11,7 @@ from cellar.domain.shared.units import (
     canonical_unit,
     comparable_magnitude,
     is_concentration_unit,
+    p_scale,
 )
 from cellar.domain.workspace_config.protocol_form import (
     ProtocolFormCondition,
@@ -139,3 +140,17 @@ def test_comparable_magnitude_orders_within_a_unit_family():
 def test_comparable_magnitude_keeps_unknown_units_apart():
     assert comparable_magnitude(5, "RFU") == ("RFU", 5.0)
     assert comparable_magnitude(5, None) == ("", 5.0)
+
+
+@pytest.mark.parametrize(
+    ("value", "unit"), [(100, "nM"), (0.1, "uM"), (0.1, "µM"), (1e-7, "M"), (1e-4, "mM")]
+)
+def test_p_scale_is_minus_log10_of_the_molar_value(value, unit):
+    assert p_scale(value, unit) == pytest.approx(7.0)
+
+
+@pytest.mark.parametrize(
+    ("value", "unit"), [(10, "mg/mL"), (0, "nM"), (-1, "nM"), (5, "%"), (5, None), (5, "RFU")]
+)
+def test_p_scale_needs_a_positive_molar_value(value, unit):
+    assert p_scale(value, unit) is None
