@@ -85,6 +85,47 @@ describe("selectivity guides", () => {
     expect(notes).toEqual([]);
   });
 
+  it("labels each fold guide inside its own region, never between the guides", () => {
+    const { shapes, annotations } = draw({ selectivity: [10] });
+    const [, upper, lower] = shapes as { x0: number; y0: number; x1: number; y1: number }[];
+    // Y (Primary) selective: above-left of the upper guide, from its upper end.
+    expect(annotations[1]).toMatchObject({
+      x: upper.x1,
+      y: upper.y1,
+      xanchor: "right",
+      yanchor: "bottom",
+    });
+    // X (Counter) selective: below-right of the lower guide, from its lower end.
+    expect(annotations[2]).toMatchObject({
+      x: lower.x0,
+      y: lower.y0,
+      xanchor: "left",
+      yanchor: "top",
+    });
+  });
+
+  it("shortens a long protocol name on the label, the full sentence on hover", () => {
+    const name = "Mtb_WCA_mc2-7000_Resazurin counter-screen";
+    const long: Dataset = {
+      ...ds,
+      protocols: [
+        ds.protocols?.[0] ?? { protocol_id: "A", name: "Primary" },
+        { protocol_id: "B", name },
+      ],
+    };
+    const p = scatter({ overlays: { selectivity: [10] } });
+    const mask = pass(long.row_count);
+    const { annotations } = buildOverlays(
+      long,
+      p,
+      mask,
+      buildScatterBase(long, p, mask).facets ?? [],
+    );
+    const counter = annotations[2] as { text: string; hovertext: string };
+    expect(counter.text).toBe("≥10× selective for Mtb_WCA_mc2-7000_Resazu…");
+    expect(counter.hovertext).toBe(`≥10× selective for ${name}`);
+  });
+
   it("says when a fold's guides miss the measured pairs, and leaves folds of 1 or less out", () => {
     const { shapes, notes } = draw({ selectivity: [100000, 1, 0.5] });
     expect(shapes).toHaveLength(1);

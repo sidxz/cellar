@@ -195,12 +195,21 @@ function pointsBox(ds: Dataset, p: PanelConfig, mask: Uint8Array, f: Facet): Box
   return box;
 }
 
-/** A diagonal guide: ``y = x + offset``, labeled ``text``; ``key`` names the value it draws. */
-type Diagonal = { offset: number; text: string; line: Line; key: number };
+/** A diagonal guide: ``y = x + offset``, labeled ``text`` (``hover`` in full); ``key`` names
+ * the value it draws; ``below`` labels it below-right of its lower end instead of above-left
+ * of its upper end. */
+type Diagonal = {
+  offset: number;
+  text: string;
+  hover?: string;
+  line: Line;
+  key: number;
+  below?: boolean;
+};
 
 /** ``guides`` clipped to each facet's plotted points (so they never stretch the axes), each
- * labeled at its upper end, one legend entry ``name``; ``hit`` holds the keys drawn anywhere
- * and ``plotted`` whether any facet plots a point. */
+ * labeled at one end, one legend entry ``name``; ``hit`` holds the keys drawn anywhere and
+ * ``plotted`` whether any facet plots a point. */
 function drawDiagonals(
   ds: Dataset,
   p: PanelConfig,
@@ -225,7 +234,11 @@ function drawDiagonals(
       const [x0, y0, x1, y1] = seg;
       const place = { xref: f.xaxis, yref: f.yaxis };
       shapes.push(mark(name, shown, { ...place, x0, y0, x1, y1 }, g.line));
-      annotations.push(label(g.text, { ...place, x: x1, y: y1 }, g.line));
+      annotations.push({
+        ...label(g.text, { ...place, x: g.below ? x0 : x1, y: g.below ? y0 : y1 }, g.line),
+        ...(g.below && { xanchor: "left", yanchor: "top" }),
+        ...(g.hover && { hovertext: g.hover }),
+      });
     }
   }
   return { shapes, annotations, hit, plotted };
@@ -254,9 +267,15 @@ export function drawLipe(
   return parts({ shapes, annotations, notes });
 }
 
+/** Longest protocol name a guide label shows; the hover has it in full. */
+const NAME_MAX = 24;
+const shortName = (name: string) =>
+  name.length > NAME_MAX ? `${name.slice(0, NAME_MAX - 1)}…` : name;
+
 /** Selectivity guides on a p-potency × p-potency scatter of two protocols: parity (1×) and,
  * per fold k, y = x ± log10 k, each saying for which protocol the points beyond it are at
- * least k× selective. Clipped to the measured pairs. */
+ * least k× selective, labeled inside that region (Y's above-left of the upper guide, X's
+ * below-right of the lower one). Clipped to the measured pairs. */
 export function drawSelectivity(
   ds: Dataset,
   p: PanelConfig,
@@ -270,9 +289,13 @@ export function drawSelectivity(
   const guides: Diagonal[] = [{ offset: 0, text: "1×", line: PARITY, key: 1 }];
   for (const k of folds) {
     const offset = Math.log10(k);
-    const text = (side?: string) => `≥${sig(k)}× selective for ${protocolOf(side)}`;
-    guides.push({ offset, text: text(p.y), line: FOLD, key: k });
-    guides.push({ offset: -offset, text: text(p.x), line: FOLD, key: k });
+    const fold = `≥${sig(k)}× selective for `;
+    const named = (side?: string) => {
+      const name = protocolOf(side);
+      return { text: fold + shortName(name), hover: fold + name, line: FOLD, key: k };
+    };
+    guides.push({ offset, ...named(p.y) });
+    guides.push({ offset: -offset, ...named(p.x), below: true });
   }
   const { shapes, annotations, hit, plotted } = drawDiagonals(
     ds,
