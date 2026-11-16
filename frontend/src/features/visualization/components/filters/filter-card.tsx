@@ -51,6 +51,8 @@ export function FilterCard({
     [ds, filter, gone, label],
   );
   const Icon = open ? ChevronDown : ChevronRight;
+  // A query is no title: "Substructure", the count under it, the query on hover.
+  const stacked = filter.kind === "substructure";
   return (
     <fieldset aria-label={label} className="min-w-0 rounded-md border bg-card">
       <div className="flex items-center gap-1 pr-1">
@@ -58,6 +60,7 @@ export function FilterCard({
           type="button"
           aria-expanded={children ? open : undefined}
           aria-label={summary}
+          title={stacked ? summary : undefined}
           data-active={active}
           className="flex min-w-0 flex-1 items-center gap-1.5 px-2 py-1.5 text-left text-sm"
           onClick={() => setOpen((o) => !o)}
@@ -65,14 +68,19 @@ export function FilterCard({
           <Icon
             className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground", !children && "invisible")}
           />
-          <span className="truncate font-medium">{label}</span>
           <span
-            className={cn(
-              "ml-auto shrink-0 text-xs",
-              active ? "font-semibold text-primary" : "text-muted-foreground",
-            )}
+            className={cn("flex min-w-0 flex-1", stacked ? "flex-col" : "items-center gap-1.5")}
           >
-            {condition}
+            <span className="truncate font-medium">{stacked ? "Substructure" : label}</span>
+            <span
+              className={cn(
+                "shrink-0 text-xs",
+                !stacked && "ml-auto",
+                active ? "font-semibold text-primary" : "text-muted-foreground",
+              )}
+            >
+              {condition}
+            </span>
           </span>
         </button>
         <Button
