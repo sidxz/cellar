@@ -1,13 +1,23 @@
-import type { DatasetRequest } from "@/shared/lib/api/model";
-import type { DatasetSource, Level } from "../types";
+import type { ComparedProtocolBody, DatasetRequest } from "@/shared/lib/api/model";
+import type { ComparedProtocol, DatasetSource, Level } from "../types";
 import { LEVEL_ORDER } from "./levels";
 
 type Params = Record<string, string | string[] | undefined>;
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) || undefined;
+const all = (v: string | string[] | undefined) => (v === undefined ? [] : [v].flat());
+
+/** A protocol id with its run ids when some are named (none named = every run). */
+const withRuns = (protocolId: string, runIds: string[] | null | undefined): ComparedProtocol =>
+  runIds?.length ? { protocolId, runIds } : { protocolId };
+const toBody = (c: ComparedProtocol): ComparedProtocolBody => ({
+  protocol_id: c.protocolId,
+  run_ids: c.runIds ?? null,
+});
 
 /** `/assays/visualize?run=<id>` or `?protocol=<id>[&runs=<id,id>]` (no `runs` = every run),
- * plus `&level=<level>` for any level but wells. With ``viewId``, the saved view's own path
+ * then one `&compare=<id>[:<run id>,<run id>]` per compared protocol, plus `&level=<level>`
+ * for any level but wells. With ``viewId``, the saved view's own path
  * `/assays/visualize/<viewId>?…`, the source and level overriding its saved ones (so the
  * level is always named: left out, the view would reopen at its saved level). */
 export function visualizeHref(
@@ -23,6 +33,14 @@ export function visualizeHref(
           ...(source.runIds ? { runs: source.runIds.join(",") } : {}),
         },
   );
+  if (source.kind === "protocol") {
+    for (const c of source.compare ?? []) {
+      q.append(
+        "compare",
+        c.runIds?.length ? `${c.protocolId}:${c.runIds.join(",")}` : c.protocolId,
+      );
+    }
+  }
   if (level !== "wells" || viewId) q.set("level", level);
   return `/assays/visualize${viewId ? `/${viewId}` : ""}?${q}`;
 }
@@ -34,20 +52,21 @@ export function toDatasetRequest(source: DatasetSource, level: Level): DatasetRe
     source:
       source.kind === "run"
         ? { kind: "run", run_id: source.runId }
-        : { kind: "protocol", protocol_id: source.protocolId, run_ids: source.runIds ?? null },
+        : {
+            kind: "protocol",
+            protocol_id: source.protocolId,
+            run_ids: source.runIds ?? null,
+            ...(source.compare?.length ? { compare: source.compare.map(toBody) } : {}),
+          },
   };
 }
 
 /** The inverse of `toDatasetRequest`. */
 export function fromDatasetRequest(req: DatasetRequest): { source: DatasetSource; level: Level } {
   const s = req.source;
-  const source: DatasetSource =
-    s.kind === "run"
-      ? { kind: "run", runId: s.run_id }
-      : s.run_ids?.length
-        ? { kind: "protocol", protocolId: s.protocol_id, runIds: s.run_ids }
-        : { kind: "protocol", protocolId: s.protocol_id };
-  return { source, level: req.level };
+  if (s.kind === "run") return { source: { kind: "run", runId: s.run_id }, level: req.level };
+  const compare = (s.compare ?? []).map((c) => withRuns(c.protocol_id, c.run_ids));
+  return { source: protocolSource(s.protocol_id, s.run_ids, compare), level: req.level };
 }
 
 /** The URL's level; wells when it names none or one that does not exist. */
@@ -62,8 +81,22 @@ export function sourceFromParams(params: Params): DatasetSource | null {
   if (run) return { kind: "run", runId: run };
   const protocolId = one(params.protocol);
   if (!protocolId) return null;
-  const runIds = one(params.runs)?.split(",").filter(Boolean);
-  return runIds?.length
-    ? { kind: "protocol", protocolId, runIds }
-    : { kind: "protocol", protocolId };
+  const compare = all(params.compare).flatMap((entry) => {
+    const [id, runs = ""] = entry.split(":");
+    return id ? [withRuns(id, runs.split(",").filter(Boolean))] : [];
+  });
+  return protocolSource(protocolId, one(params.runs)?.split(",").filter(Boolean), compare);
+}
+
+/** A protocol source with only the fields that say something (no empty run or compare list). */
+function protocolSource(
+  protocolId: string,
+  runIds: string[] | null | undefined,
+  compare: ComparedProtocol[],
+): DatasetSource {
+  return {
+    kind: "protocol",
+    ...withRuns(protocolId, runIds),
+    ...(compare.length ? { compare } : {}),
+  };
 }

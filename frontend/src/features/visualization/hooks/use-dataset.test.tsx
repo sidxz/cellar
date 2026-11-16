@@ -8,9 +8,40 @@ vi.mock("@/shared/lib/api/custom-instance", () => ({
   customInstance: vi.fn(() => new Promise(() => {})),
 }));
 
+import { customInstance } from "@/shared/lib/api/custom-instance";
 import { useDataset } from "./use-dataset";
 
+const wrapperOf =
+  (client: QueryClient) =>
+  ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+
 describe("useDataset", () => {
+  it("posts the compared protocols with the source", () => {
+    renderHook(
+      () =>
+        useDataset(
+          { kind: "protocol", protocolId: "A", compare: [{ protocolId: "B", runIds: ["r1"] }] },
+          "compounds",
+        ),
+      { wrapper: wrapperOf(new QueryClient()) },
+    );
+    expect(vi.mocked(customInstance)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          level: "compounds",
+          source: {
+            kind: "protocol",
+            protocol_id: "A",
+            run_ids: null,
+            compare: [{ protocol_id: "B", run_ids: ["r1"] }],
+          },
+        },
+      }),
+    );
+  });
+
   it("never refetches a loaded dataset in the background", () => {
     const client = new QueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (

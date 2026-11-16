@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { DatasetSource } from "../types";
+import type { DatasetSource, SavedView } from "../types";
 import {
   fromDatasetRequest,
   levelFromParams,
@@ -85,5 +85,89 @@ describe("dataset request", () => {
       level: "wells",
       source: { kind: "protocol", protocol_id: "p1", run_ids: ["r1", "r2"] },
     });
+  });
+});
+
+describe("compared protocols", () => {
+  const compared: DatasetSource = {
+    kind: "protocol",
+    protocolId: "A",
+    compare: [{ protocolId: "B" }, { protocolId: "C", runIds: ["r1", "r2"] }],
+  };
+  /** The query as Next.js hands it to the page: a repeated key becomes a string array. */
+  const paramsOf = (href: string) => {
+    const params: Record<string, string | string[]> = {};
+    for (const [k, v] of new URL(href, "http://x").searchParams) {
+      const had = params[k];
+      params[k] = had === undefined ? v : [...(Array.isArray(had) ? had : [had]), v];
+    }
+    return params;
+  };
+
+  it("names each compared protocol once, with its runs when not all", () => {
+    expect(visualizeHref(compared, "compounds")).toBe(
+      "/assays/visualize?protocol=A&compare=B&compare=C%3Ar1%2Cr2&level=compounds",
+    );
+    expect(
+      sourceFromParams({ protocol: "A", compare: ["B", "C:r1,r2"], level: "compounds" }),
+    ).toEqual(compared);
+    expect(sourceFromParams(paramsOf(visualizeHref(compared, "compounds")))).toEqual(compared);
+  });
+
+  it("reads a single compare param and ignores blank ones", () => {
+    expect(sourceFromParams({ protocol: "A", compare: "B" })).toEqual({
+      kind: "protocol",
+      protocolId: "A",
+      compare: [{ protocolId: "B" }],
+    });
+    expect(sourceFromParams({ protocol: "A", compare: ["", "B:"] })).toEqual({
+      kind: "protocol",
+      protocolId: "A",
+      compare: [{ protocolId: "B" }],
+    });
+    expect(sourceFromParams({ protocol: "A", compare: "" })).toEqual({
+      kind: "protocol",
+      protocolId: "A",
+    });
+    expect(sourceFromParams({ run: "r1", compare: "B" })).toEqual({ kind: "run", runId: "r1" });
+  });
+
+  it("sends them in the dataset request, all runs as null", () => {
+    expect(toDatasetRequest(compared, "compounds")).toEqual({
+      level: "compounds",
+      source: {
+        kind: "protocol",
+        protocol_id: "A",
+        run_ids: null,
+        compare: [
+          { protocol_id: "B", run_ids: null },
+          { protocol_id: "C", run_ids: ["r1", "r2"] },
+        ],
+      },
+    });
+    expect(fromDatasetRequest(toDatasetRequest(compared, "compounds"))).toEqual({
+      source: compared,
+      level: "compounds",
+    });
+    // Without added protocols the request is what it always was.
+    expect(
+      toDatasetRequest({ kind: "protocol", protocolId: "A" }, "compounds").source,
+    ).not.toHaveProperty("compare");
+  });
+
+  it("survive save and open: URL, source, request, saved view and back", () => {
+    const source = sourceFromParams(paramsOf(visualizeHref(compared, "compounds")));
+    const level = levelFromParams(paramsOf(visualizeHref(compared, "compounds")));
+    if (!source) throw new Error("no source");
+    // Saved as the request's wire dict, read back as JSON.
+    const view = JSON.parse(
+      JSON.stringify({ id: "v1", level, dataset: toDatasetRequest(source, level) }),
+    ) as SavedView;
+    if (!view.dataset) throw new Error("no dataset");
+    const opened = fromDatasetRequest(view.dataset);
+    expect(opened).toEqual({ source: compared, level: "compounds" });
+    const href = visualizeHref(opened.source, opened.level, view.id);
+    expect(sourceFromParams(paramsOf(href))).toEqual(compared);
+    expect(levelFromParams(paramsOf(href))).toBe("compounds");
   });
 });
