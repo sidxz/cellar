@@ -3,7 +3,7 @@
 import { useDecompositionRun } from "@/features/sar-analysis/hooks/use-decomposition-run";
 import { useScaffoldTree } from "@/features/sar-analysis/hooks/use-scaffold-tree";
 import { useUmapCluster } from "@/features/sar-analysis/hooks/use-umap-cluster";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { type Dispatch, useEffect, useMemo, useRef } from "react";
 import type { DerivedAction, DerivedEntry } from "../hooks/use-derived";
 import { useRGroupAssignments } from "../hooks/use-rgroup-assignments";
@@ -49,19 +49,19 @@ export function DerivedRunner(props: Props) {
   }
 }
 
+/** One job per attempt: Retry, Run again or a replacement never reuses an earlier start. */
+const nonceOf = (entry: DerivedEntry) => `${entry.spec.id}:${entry.attempt}`;
+
 /** Reports the job's outcome once known. Leaving before an answer (Cancel, ✕, leaving the
- * page) cancels the server job; leaving without columns also forgets the job's cached
- * start (`startKey`, the job hook's query key), so Retry starts a fresh job. */
+ * page) cancels the server job, even one whose start has not answered yet. */
 function useOutcome(
   { entry, dispatch }: Props,
-  startKey: string | null,
   cancel: () => void,
   failure: string | null,
   set: DerivedSet | null,
 ) {
   const id = entry.spec.id;
   const outcome = useRef<"ready" | "failed" | null>(null);
-  const queryClient = useQueryClient();
   const latestCancel = useRef(cancel);
   latestCancel.current = cancel;
 
@@ -77,20 +77,14 @@ function useOutcome(
 
   useEffect(
     () => () => {
-      if (outcome.current === "ready") return;
       if (outcome.current === null) latestCancel.current();
-      if (startKey === null) return;
-      // Once this unmount has unsubscribed the job's queries.
-      setTimeout(() =>
-        queryClient.removeQueries({ queryKey: [startKey, "start"], type: "inactive" }),
-      );
     },
-    [queryClient, startKey],
+    [],
   );
 }
 
 function NoCompounds(props: Props) {
-  useOutcome(props, null, () => {}, "No compound in this dataset has a structure.", null);
+  useOutcome(props, () => {}, "No compound in this dataset has a structure.", null);
   return null;
 }
 
@@ -99,6 +93,7 @@ function RGroupsRunner(props: Of<"rgroups">) {
   const run = useDecompositionRun({
     moleculeIds: entry.moleculeIds,
     coreSmiles: entry.spec.coreSmiles,
+    nonce: nonceOf(entry),
   });
   const done = run.status === "ready";
   const none = done && run.counts?.matched === 0;
@@ -112,7 +107,7 @@ function RGroupsRunner(props: Of<"rgroups">) {
     () => (assignments.data && ds ? rgroupSet(entry.spec, ds, assignments.data) : null),
     [assignments.data, ds, entry.spec],
   );
-  useOutcome(props, "decomposition-run", run.cancel, failure, set);
+  useOutcome(props, run.cancel, failure, set);
   return null;
 }
 
@@ -123,12 +118,13 @@ function ClustersRunner(props: Of<"clusters">) {
     picker: "butina",
     threshold: entry.spec.threshold,
     enabled: true,
+    nonce: nonceOf(entry),
   });
   const set = useMemo(
     () => (umap.result && ds ? clusterSet(entry.spec, ds, umap.result) : null),
     [umap.result, ds, entry.spec],
   );
-  useOutcome(props, "umap-cluster", umap.cancel, umap.error && plain(umap.error), set);
+  useOutcome(props, umap.cancel, umap.error && plain(umap.error), set);
   return null;
 }
 
@@ -136,12 +132,16 @@ function ClustersRunner(props: Of<"clusters">) {
 function SeriesRunner(props: Of<"series">) {
   const { entry, ds, readySets } = props;
   const needsTree = entry.spec.members.some((m) => m.scaffold);
-  const { tree, error } = useScaffoldTree({ moleculeIds: entry.moleculeIds, enabled: needsTree });
+  const { tree, error } = useScaffoldTree({
+    moleculeIds: entry.moleculeIds,
+    enabled: needsTree,
+    nonce: nonceOf(entry),
+  });
   const set = useMemo(
     () => (ds && (!needsTree || tree) ? seriesSet(entry.spec, ds, tree, readySets) : null),
     [ds, needsTree, tree, entry.spec, readySets],
   );
-  useOutcome(props, "scaffold-tree", () => {}, needsTree && error ? plain(error) : null, set);
+  useOutcome(props, () => {}, needsTree && error ? plain(error) : null, set);
   return null;
 }
 

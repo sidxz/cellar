@@ -27,6 +27,9 @@ export type UseScaffoldTreeParams = {
   pollFn?: (job_id: string) => Promise<ScaffoldTreeJob>;
   pollIntervalMs?: number;
   enabled?: boolean;
+  /** Tells apart starts of the same inputs: a new one starts a fresh job instead of reusing
+   * an earlier cached start (and its cached failure). */
+  nonce?: string;
 };
 
 export type UseScaffoldTreeReturn = {
@@ -51,6 +54,7 @@ export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeR
     pollFn = defaultPollFn,
     pollIntervalMs = DEFAULT_POLL_MS,
     enabled = true,
+    nonce,
   } = params;
 
   // Query key prefers the (stable) collectionId when available — otherwise
@@ -64,7 +68,7 @@ export function useScaffoldTree(params: UseScaffoldTreeParams): UseScaffoldTreeR
   const queryEnabled = enabled && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
   const start = useQuery({
-    queryKey: ["scaffold-tree", "start", key],
+    queryKey: ["scaffold-tree", "start", key, nonce],
     queryFn: () =>
       startFn(collectionId ? { collection_id: collectionId } : { molecule_ids: moleculeIds ?? [] }),
     enabled: queryEnabled,

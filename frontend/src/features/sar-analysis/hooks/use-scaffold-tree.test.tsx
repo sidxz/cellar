@@ -90,4 +90,25 @@ describe("useScaffoldTree", () => {
     renderHook(() => useScaffoldTree({ moleculeIds: [], startFn: startMock as any }), { wrapper });
     expect(startMock).not.toHaveBeenCalled();
   });
+  it("starts again for a new nonce, never reusing the cached start", async () => {
+    const startFn = vi.fn(async () => ({
+      tree: { nodes: [], edges: [], stats: { node_count: 0, elapsed_ms: 5, cache_hit: false } },
+      job: null,
+    }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, rerender } = renderHook(
+      ({ nonce }) => useScaffoldTree({ moleculeIds: ["m1"], startFn, nonce }),
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+        ),
+        initialProps: { nonce: "series:1" },
+      },
+    );
+    await waitFor(() => expect(result.current.tree).toBeTruthy());
+    rerender({ nonce: "series:1" });
+    expect(startFn).toHaveBeenCalledTimes(1);
+    rerender({ nonce: "series:2" });
+    await waitFor(() => expect(startFn).toHaveBeenCalledTimes(2));
+  });
 });

@@ -10,22 +10,28 @@ const state = vi.hoisted(() => ({
   assignments: {} as Record<string, unknown>,
   umap: {} as Record<string, unknown>,
   moleculeIds: [] as unknown[],
+  nonces: [] as unknown[],
 }));
 
 vi.mock("@/features/sar-analysis/hooks/use-decomposition-run", () => ({
-  useDecompositionRun: (p: { moleculeIds: string[] }) => {
+  useDecompositionRun: (p: { moleculeIds: string[]; nonce: string }) => {
     state.moleculeIds.push(p.moleculeIds);
+    state.nonces.push(p.nonce);
     return state.decomposition;
   },
 }));
 vi.mock("@/features/sar-analysis/hooks/use-umap-cluster", () => ({
-  useUmapCluster: (p: { moleculeIds: string[] }) => {
+  useUmapCluster: (p: { moleculeIds: string[]; nonce: string }) => {
     state.moleculeIds.push(p.moleculeIds);
+    state.nonces.push(p.nonce);
     return state.umap;
   },
 }));
 vi.mock("@/features/sar-analysis/hooks/use-scaffold-tree", () => ({
-  useScaffoldTree: () => ({ tree: null, error: null }),
+  useScaffoldTree: (p: { nonce: string }) => {
+    state.nonces.push(p.nonce);
+    return { tree: null, error: null };
+  },
 }));
 vi.mock("../hooks/use-rgroup-assignments", () => ({
   useRGroupAssignments: (runId: string | null) =>
@@ -69,6 +75,7 @@ function wrapper({ children }: { children: ReactNode }) {
 
 beforeEach(() => {
   state.moleculeIds = [];
+  state.nonces = [];
   state.decomposition = decomposition();
   state.assignments = {
     data: {
@@ -133,6 +140,21 @@ describe("DerivedRunner", () => {
     expect(state.moleculeIds.length).toBeGreaterThan(1);
     for (const ids of state.moleculeIds) expect(ids).toBe(rg1.moleculeIds);
     expect(dispatch).not.toHaveBeenCalled();
+  });
+
+  it("starts each attempt of a set as a job of its own", () => {
+    state.decomposition = decomposition({ status: "running", runId: null });
+    const series = running({
+      id: "series",
+      kind: "series",
+      members: [{ name: "A", scaffold: "S" }],
+    });
+    for (const entry of [rg1, { ...rg1, attempt: 2 }, { ...clusters, attempt: 3 }, series]) {
+      render(<DerivedRunner entry={entry} ds={ds} readySets={[]} dispatch={vi.fn()} />, {
+        wrapper,
+      }).unmount();
+    }
+    expect(new Set(state.nonces)).toEqual(new Set(["rg1:1", "rg1:2", "clusters:3", "series:1"]));
   });
 
   it("cancels the job when it stops before an answer", () => {
