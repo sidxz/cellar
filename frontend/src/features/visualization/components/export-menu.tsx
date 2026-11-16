@@ -19,7 +19,8 @@ import type { Dataset } from "../types";
 import { panelTitle } from "./panels/panel-frame";
 import type { WorkbenchTableHandle } from "./workbench-table";
 
-/** Download a drawn panel at its on-screen size; PanelFrame tags its section with the id. */
+/** Download a drawn panel laid out at its on-screen size, at twice the pixels (sharp on
+ * slides); PanelFrame tags its section with the id. */
 function downloadPng(panelId: string, title: string) {
   const el = document.querySelector<HTMLElement>(`[data-panel-id="${panelId}"] .js-plotly-plot`);
   if (!el) return;
@@ -27,6 +28,7 @@ function downloadPng(panelId: string, title: string) {
     format: "png",
     width: el.clientWidth || 1200,
     height: el.clientHeight || 600,
+    scale: 2,
     filename: title.replace(/\W+/g, "-").replace(/^-|-$/g, ""),
   });
 }

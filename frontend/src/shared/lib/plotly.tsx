@@ -73,6 +73,8 @@ interface PlotlyGlobal {
       format: "png" | "svg" | "jpeg" | "webp";
       width: number;
       height: number;
+      /** Pixel multiplier: the layout stays ``width`` × ``height``. */
+      scale?: number;
       filename: string;
     },
   ) => void;

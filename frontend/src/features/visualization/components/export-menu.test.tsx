@@ -54,4 +54,16 @@ describe("ExportMenu", () => {
       expect.objectContaining({ format: "png", filename: "Signal-by-well_order" }),
     );
   });
+
+  it("draws the PNG at twice the on-screen pixels, same layout and aspect", () => {
+    show();
+    const graph = screen.getByTestId("graph");
+    Object.defineProperty(graph, "clientWidth", { value: 571 });
+    Object.defineProperty(graph, "clientHeight", { value: 327 });
+    fireEvent.click(screen.getByRole("menuitem", { name: "Signal by well_order" }));
+    expect(downloadImage).toHaveBeenLastCalledWith(
+      graph,
+      expect.objectContaining({ width: 571, height: 327, scale: 2 }),
+    );
+  });
 });
