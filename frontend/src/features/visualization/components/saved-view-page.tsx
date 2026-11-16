@@ -3,6 +3,7 @@
 import { EmptyState } from "@/shared/components/empty-state";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { ApiError } from "@/shared/lib/api/custom-instance";
+import { useBreadcrumbOverride } from "@/shared/lib/stores/breadcrumb-store";
 import { AlertTriangle, ChartScatter } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
@@ -33,6 +34,8 @@ export function SavedViewPage({
   // Bumped by "Reload view": the workbench remounts on the view as saved now.
   const [reloads, setReloads] = useState(0);
   const view = query.data;
+  // The breadcrumb names the view (generically until it loads), never by its id.
+  useBreadcrumbOverride(viewId, view?.name || "Saved view");
   const { refetch } = query;
   const read = useMemo(() => view && migrateViewConfig(view.config), [view]);
   const open = useMemo(

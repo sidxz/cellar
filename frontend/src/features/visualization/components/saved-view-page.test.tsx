@@ -1,8 +1,9 @@
 import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import type { DecompositionAssignmentsResponse } from "@/shared/lib/api/model";
+import { useBreadcrumbOverrides } from "@/shared/lib/stores/breadcrumb-store";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewConfig } from "../lib/config-schema";
 import { rgroupSet, withDerived } from "../lib/derived";
@@ -263,6 +264,22 @@ describe("SavedViewPage", () => {
     state.view = loaded(savedView({ dataset: null, unresolved: ["Gone."], can_edit: false }));
     show();
     expect(screen.queryByRole("button", { name: "Delete view" })).not.toBeInTheDocument();
+  });
+
+  it("names the view in the breadcrumb, never by its id", () => {
+    const { unmount } = show();
+    const crumbs = renderHook(() => useBreadcrumbOverrides());
+    expect(crumbs.result.current.get("v1")).toBe("Potency by compound");
+    unmount();
+    crumbs.rerender();
+    expect(crumbs.result.current.has("v1")).toBe(false);
+  });
+
+  it("names a view it cannot load generically in the breadcrumb", () => {
+    state.view = { data: undefined, isPending: true, isError: false };
+    show();
+    const crumbs = renderHook(() => useBreadcrumbOverrides());
+    expect(crumbs.result.current.get("v1")).toBe("Saved view");
   });
 
   it("opens with the view's name and Save in the header", () => {
