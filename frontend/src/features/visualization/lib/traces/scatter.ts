@@ -1,8 +1,19 @@
-import type { PanelConfig } from "../../store/workbench-store";
+import { CHART_COLORS } from "@/shared/lib/chart-colors";
+import type { Appearance, PanelConfig } from "../../store/workbench-store";
 import type { Dataset } from "../../types";
 import { colorFor, colorGroups, numericRange, shapeFor, sizeFor, tooltipText } from "../appearance";
-import { column, numberAt } from "../dataset";
-import { type Figure, GRID, axisTitle, baseLayout, facetsOf, lackNote } from "./common";
+import { categoryLabel, column, numberAt } from "../dataset";
+import {
+  type Figure,
+  GRID,
+  OTHER,
+  axisTitle,
+  baseLayout,
+  facetsOf,
+  fieldLabel,
+  lackNote,
+  levels,
+} from "./common";
 
 /** Name of the trace holding rows the filters hide (drawn as faint ×, never selectable). */
 export const FILTERED = "Filtered";
@@ -219,6 +230,8 @@ export function buildScatterBase(
     inLegend.add(g.group);
     scaleShown = true;
   }
+  const key = shapeKey(ds, a, rows, symbols);
+  data.push(...key);
 
   const count = facets.labels.length;
   const gridRows = count > 3 ? 2 : 1;
@@ -234,6 +247,7 @@ export function buildScatterBase(
     const legend = baseLayout(cfg.id).legend as Record<string, unknown>;
     layout.legend = { ...legend, title: { text: coloring.title } };
   }
+  if (key.length) layout.showlegend = true;
   for (let f = 0; f < count; f++) {
     const bottom = f >= (gridRows - 1) * gridCols;
     const left = f % gridCols === 0;
@@ -282,6 +296,46 @@ export function buildScatterBase(
     ...place(f),
   }));
   return { data, layout, skipped, note, facets: facetList };
+}
+
+/** Legend-only entries naming each drawn marker shape, unless the color legend already
+ * shows them (color and shape by one field). A shape several categories share is "Other". */
+function shapeKey(
+  ds: Dataset,
+  a: Appearance,
+  rows: number[],
+  symbols: string[],
+): Record<string, unknown>[] {
+  const key = a.shapeBy;
+  if (!key || key === a.colorBy) return [];
+  const bySymbol = new Map<string, Set<string>>();
+  rows.forEach((i, k) => {
+    const labels = bySymbol.get(symbols[k]) ?? new Set<string>();
+    labels.add(categoryLabel(key, ds.values[key]?.[i]));
+    bySymbol.set(symbols[k], labels);
+  });
+  if (bySymbol.size < 2) return [];
+  const order = levels(ds, key);
+  const title = fieldLabel(ds, key);
+  return [...bySymbol]
+    .map(([symbol, labels]) => {
+      const label = labels.size === 1 ? [...labels][0] : OTHER;
+      return { symbol, label, at: label === OTHER ? order.length : order.indexOf(label) };
+    })
+    .sort((p, q) => p.at - q.at)
+    .map(({ symbol, label }) => ({
+      type: "scatter",
+      mode: "markers",
+      uid: `shape-${symbol}`,
+      name: label,
+      legendgroup: "shape",
+      legendgrouptitle: { text: title },
+      showlegend: true,
+      x: [null],
+      y: [null],
+      hoverinfo: "skip",
+      marker: { symbol, size: 8, color: CHART_COLORS.neutral },
+    }));
 }
 
 /** One value when every entry is the same (Plotly draws it faster), else the array. */

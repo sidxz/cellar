@@ -95,6 +95,39 @@ describe("buildScatterFigure", () => {
     });
   });
 
+  it("keys the shapes when a number colors the points on a scale and a category shapes them", () => {
+    const ds = dataset({
+      well_order: [1, 2, 3],
+      y: [1, 2, 3],
+      well_type: ["sample", "negative_control", "sample"],
+    });
+    const fig = buildScatterFigure(
+      ds,
+      panel({ colorBy: "y", shapeBy: "well_type" }),
+      pass(3),
+      NONE,
+    );
+    const key = traces(fig).filter((t) => !t.customdata && t.name !== FILTERED);
+    // In the color legend's order (natural order of the labels).
+    expect(key.map((t) => [t.name, t.marker.symbol])).toEqual([
+      ["Negative control", "square"],
+      ["Sample", "circle"],
+    ]);
+    // Legend-only: nothing drawn, nothing to hover or select.
+    expect(key.every((t) => t.x.every((v) => v === null))).toBe(true);
+    expect(key[0]).toMatchObject({ legendgrouptitle: { text: "well_type" }, showlegend: true });
+    expect(fig.layout.showlegend).toBe(true);
+    // The color bar stays.
+    expect(plotted(fig).some((t) => (t.marker as { showscale?: boolean }).showscale)).toBe(true);
+  });
+
+  it("adds no shape key when the color legend already shows the shapes", () => {
+    const ds = dataset({ well_order: [1, 2], y: [1, 2], well_type: ["sample", "blank"] });
+    const a = { colorBy: "well_type", shapeBy: "well_type" };
+    const fig = buildScatterFigure(ds, panel(a), pass(2), NONE);
+    expect(traces(fig).every((t) => t.customdata)).toBe(true);
+  });
+
   it("groups numeric color bins into legend entries titled by the field", () => {
     const ds = dataset({ well_order: [1, 2, 3], y: [0.2, 0.4, 0.6] });
     const a = { colorBy: "y", colorMode: "bins" as const, colorBins: [0.3, 0.5] };
