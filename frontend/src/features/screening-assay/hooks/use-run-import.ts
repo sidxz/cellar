@@ -62,7 +62,8 @@ export type ImportRole =
   | "concentration"
   | "batch_ref"
   | "compound_ref"
-  | "readout";
+  | "readout"
+  | "well_role";
 
 export type ImportConfidence = "high" | "medium" | "low";
 
@@ -82,6 +83,7 @@ const IMPORT_ROLES: readonly ImportRole[] = [
   "batch_ref",
   "compound_ref",
   "readout",
+  "well_role",
 ];
 
 const IMPORT_CONFIDENCES: readonly ImportConfidence[] = ["high", "medium", "low"];

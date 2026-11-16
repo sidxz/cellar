@@ -12,5 +12,6 @@ export interface ColumnMappingRequest {
   concentration?: string | null;
   batch_ref?: string | null;
   compound_ref?: string | null;
+  well_role?: string | null;
   readout_columns?: ReadoutColumnRequest[];
 }

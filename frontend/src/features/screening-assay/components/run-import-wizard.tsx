@@ -40,6 +40,7 @@ const ROLE_OPTIONS: Array<{ value: ImportRole | "ignore"; label: string }> = [
   { value: "concentration", label: "Concentration" },
   { value: "batch_ref", label: "Batch Ref" },
   { value: "compound_ref", label: "Compound Ref" },
+  { value: "well_role", label: "Well Role" },
   { value: "readout", label: "Readout" },
   { value: "ignore", label: "Ignore" },
 ];
@@ -89,6 +90,8 @@ export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunIm
     setAutoCreateUnmatchedBatches,
     compoundPicks,
     setCompoundPicks,
+    acknowledgedSwappedControls,
+    setAcknowledgedSwappedControls,
     previewMutation,
     repreviewMutation,
     importMutation,
@@ -159,6 +162,9 @@ export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunIm
             }
             autoCreateUnmatchedBatches={autoCreateUnmatchedBatches}
             onAutoCreateUnmatchedBatches={setAutoCreateUnmatchedBatches}
+            rolesFromFile={Object.values(draft.roles).includes("well_role")}
+            acknowledgedSwappedControls={acknowledgedSwappedControls}
+            onAcknowledgeSwappedControls={setAcknowledgedSwappedControls}
           />
         )}
 
@@ -204,6 +210,7 @@ export function RunImportWizard({ runId, protocolId, open, onOpenChange }: RunIm
                 importMutation.isPending ||
                 (preview?.validation_errors?.length ?? 0) > 0 ||
                 (preview?.errors?.length ?? 0) > 0 ||
+                ((preview?.swapped_controls?.length ?? 0) > 0 && !acknowledgedSwappedControls) ||
                 (preview?.ambiguous_compounds ?? []).some((a) => !compoundPicks[a.molecule_id])
               }
             >
@@ -360,12 +367,19 @@ function PreviewStep({
   onCompoundPick,
   autoCreateUnmatchedBatches,
   onAutoCreateUnmatchedBatches,
+  rolesFromFile,
+  acknowledgedSwappedControls,
+  onAcknowledgeSwappedControls,
 }: {
   preview: PreviewRunFileResponse;
   compoundPicks: Record<string, string>;
   onCompoundPick: (moleculeId: string, batchId: string) => void;
   autoCreateUnmatchedBatches: boolean;
   onAutoCreateUnmatchedBatches: (v: boolean) => void;
+  // The mapping takes well roles from a column of the file.
+  rolesFromFile: boolean;
+  acknowledgedSwappedControls: boolean;
+  onAcknowledgeSwappedControls: (v: boolean) => void;
 }) {
   // The backend marks these count/list fields optional (omitted on no-op
   // previews); normalize to zeros/empties once so the render below stays flat.
@@ -381,6 +395,8 @@ function PreviewStep({
   const ambiguousCompounds = preview.ambiguous_compounds ?? [];
   const errors = preview.errors ?? [];
   const rowsSkipped = preview.rows_skipped;
+  const roleWarnings = preview.warnings ?? [];
+  const swappedControls = preview.swapped_controls ?? [];
 
   const willCreateTotal = willCreatePlates + willCreateWells + willCreateReadouts;
   const willSkipTotal = willSkipWells.length + willSkipReadouts.length;
@@ -436,6 +452,44 @@ function PreviewStep({
 
       {willSkipTotal > 0 && <ConflictPanel wells={willSkipWells} readouts={willSkipReadouts} />}
 
+      {swappedControls.length > 0 && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
+            <AlertCircle className="h-4 w-4" />
+            Controls look swapped
+          </div>
+          <ul className="ml-5 list-disc space-y-1 text-xs text-muted-foreground">
+            {swappedControls.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Every % value would come out inverted. If the file has a role column, map it on the
+            Mapping step; otherwise check the layout named under Roles from.
+          </p>
+          <div className="mt-2 flex items-center gap-2 text-xs">
+            <Checkbox
+              id="ack-swapped-controls"
+              checked={acknowledgedSwappedControls}
+              onCheckedChange={(v) => onAcknowledgeSwappedControls(!!v)}
+            />
+            <label htmlFor="ack-swapped-controls">
+              The roles are right — import with these control roles
+            </label>
+          </div>
+        </div>
+      )}
+
+      {roleWarnings.length > 0 && (
+        <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-muted-foreground">
+          <ul className="space-y-1">
+            {roleWarnings.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       <div>
         <p className="mb-2 text-xs font-medium text-muted-foreground">Per-plate summary</p>
         <div className="overflow-x-auto rounded-md border">
@@ -446,7 +500,11 @@ function PreviewStep({
                 <th className="px-3 py-2 text-left font-medium">Format</th>
                 <th className="px-3 py-2 text-right font-medium">Wells</th>
                 <th className="px-3 py-2 text-right font-medium">Samples</th>
-                <th className="px-3 py-2 text-right font-medium">Blanks</th>
+                <th className="px-3 py-2 text-right font-medium">Positive</th>
+                <th className="px-3 py-2 text-right font-medium">Negative</th>
+                <th className="px-3 py-2 text-right font-medium">Reference</th>
+                <th className="px-3 py-2 text-right font-medium">Blank</th>
+                <th className="px-3 py-2 text-left font-medium">Roles from</th>
               </tr>
             </thead>
             <tbody>
@@ -456,7 +514,13 @@ function PreviewStep({
                   <td className="px-3 py-2">{p.plate_format}</td>
                   <td className="px-3 py-2 text-right">{p.well_count}</td>
                   <td className="px-3 py-2 text-right">{p.sample_count}</td>
+                  <td className="px-3 py-2 text-right">{p.positive_count}</td>
+                  <td className="px-3 py-2 text-right">{p.negative_count}</td>
+                  <td className="px-3 py-2 text-right">{p.reference_count}</td>
                   <td className="px-3 py-2 text-right">{p.blank_count}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {p.roles_from ?? "no layout"}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -468,18 +532,25 @@ function PreviewStep({
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-3 text-sm">
           <div className="mb-1 flex items-center gap-2 font-medium text-destructive">
             <AlertCircle className="h-4 w-4" />
-            Cannot import — protocol setup needed
+            {rolesFromFile ? "Cannot import" : "Cannot import — protocol setup needed"}
           </div>
           <ul className="ml-5 list-disc space-y-1 text-xs text-muted-foreground">
             {validationErrors.map((err, i) => (
               <li key={i}>{err}</li>
             ))}
           </ul>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Configure on the protocol&apos;s <span className="font-medium">Design</span> tab →
-            Control Layouts. You&apos;ll need a Plate Template first (Administration → Screening
-            Setup → Plate Templates).
-          </p>
+          {rolesFromFile ? (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Fix these values in the file and upload it again, or set the column to Ignore on the
+              Mapping step to take the roles from the layout.
+            </p>
+          ) : (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Configure on the protocol&apos;s <span className="font-medium">Design</span> tab →
+              Control Layouts. You&apos;ll need a Plate Template first (Administration → Screening
+              Setup → Plate Templates).
+            </p>
+          )}
         </div>
       )}
 
@@ -720,7 +791,10 @@ function ConfirmStep({
           <p className="font-medium">Import complete</p>
           <p className="mt-1 text-xs text-muted-foreground">
             {result.plates_created} plates · {result.wells_created} wells · {result.values_inserted}{" "}
-            readouts · {result.controls_from_template} controls from layout
+            readouts ·{" "}
+            {result.controls_from_file > 0
+              ? `${result.controls_from_file} controls from the file`
+              : `${result.controls_from_template} controls from layout`}
             {result.controls_unclassified > 0 && (
               <> · {result.controls_unclassified} blank wells unclassified</>
             )}
