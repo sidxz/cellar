@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import uuid
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, cast
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
 from cellar.application.visualization.dataset import Dataset, DatasetColumn
 from cellar.application.visualization.get_dataset import (
+    DatasetLevel,
     GetVisualizationDatasetQuery,
     ProtocolSource,
     RunSource,
@@ -38,13 +39,16 @@ class RunSourceBody(BaseModel):
 
 class DatasetRequest(BaseModel):
     source: Annotated[ProtocolSourceBody | RunSourceBody, Field(discriminator="kind")]
-    level: Literal["wells"]
+    level: DatasetLevel
 
 
 class ColumnProvenanceResponse(BaseModel):
     protocol_id: uuid.UUID | None = None
     readout_definition_id: uuid.UUID | None = None
     layer: str | None = None
+    condition_set: str | None = None
+    aggregation: str | None = None
+    stat: str | None = None
 
 
 class DatasetColumnResponse(BaseModel):
@@ -68,6 +72,9 @@ class DatasetColumnResponse(BaseModel):
                 protocol_id=c.provenance.protocol_id,
                 readout_definition_id=c.provenance.readout_definition_id,
                 layer=c.provenance.layer,
+                condition_set=c.provenance.condition_set,
+                aggregation=c.provenance.aggregation,
+                stat=c.provenance.stat,
             ),
             hidden=c.hidden,
         )
@@ -75,7 +82,7 @@ class DatasetColumnResponse(BaseModel):
 
 class DatasetResponse(BaseModel):
     revision: str
-    level: Literal["wells"]
+    level: DatasetLevel
     row_count: int
     row_ids: list[str]
     columns: list[DatasetColumnResponse]
@@ -85,7 +92,7 @@ class DatasetResponse(BaseModel):
     def from_domain(cls, d: Dataset) -> DatasetResponse:
         return cls(
             revision=d.revision,
-            level="wells",
+            level=cast(DatasetLevel, d.level),
             row_count=len(d.row_ids),
             row_ids=d.row_ids,
             columns=[DatasetColumnResponse.from_domain(c) for c in d.columns],

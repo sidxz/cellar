@@ -220,7 +220,7 @@ async def test_readout_definitions_carry_dose_unit_curve_type_and_melt_measure(
     w = await _dr_world(uow, workspace_id)
     async with uow:
         s = uow.session
-        tm = await seed.readout_def(s, w["p"], name="Tm", unit="C")
+        tm = await seed.readout_def(s, w["p"], name="Tm", unit="C", aggregation="median")
         await s.execute(
             sa.text("UPDATE readout_definitions SET melt_config = :c WHERE id = :id"),
             {"c": '{"measure": "tm"}', "id": tm},
@@ -233,6 +233,7 @@ async def test_readout_definitions_carry_dose_unit_curve_type_and_melt_measure(
     ic50, melt = defs[w["rd"]], defs[tm]
     assert (ic50.dose_unit, ic50.curve_type, ic50.melt_measure) == ("uM", "ic50", None)
     assert (melt.dose_unit, melt.curve_type, melt.melt_measure) == ("uM", None, "tm")
+    assert melt.aggregation == "median"
 
 
 async def test_empty_ids_read_nothing_without_a_query():

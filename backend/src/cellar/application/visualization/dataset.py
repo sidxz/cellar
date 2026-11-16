@@ -42,7 +42,8 @@ class ColumnProvenance:
     readout_definition_id: uuid.UUID | None = None
     layer: str | None = None
     condition_set: str | None = None  # the set's label, when the dataset has several
-    aggregation: str | None = None  # "mean", "replicate_mean", "geomean", "fit", "p"
+    # "mean" / "median" / "geomean" / "min" / "max" ("replicate_…" at Runs), "fit", "p"
+    aggregation: str | None = None
     stat: str | None = None  # what a sibling column holds ("qualifier", "n", "sd" …)
 
 

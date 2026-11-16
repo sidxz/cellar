@@ -9,4 +9,7 @@ export interface ColumnProvenanceResponse {
   protocol_id?: string | null;
   readout_definition_id?: string | null;
   layer?: string | null;
+  condition_set?: string | null;
+  aggregation?: string | null;
+  stat?: string | null;
 }

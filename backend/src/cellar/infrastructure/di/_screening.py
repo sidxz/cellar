@@ -1299,7 +1299,9 @@ def register_screening(container: Container) -> None:
     )
     container.define(
         GetVisualizationDataset,
-        lambda c: GetVisualizationDataset(reader=c[VisualizationDatasetReader]),
+        lambda c: GetVisualizationDataset(
+            reader=c[VisualizationDatasetReader], activity_reader=c[ProtocolActivityReader]
+        ),
     )
     container.define(
         GetRunRowCounts,

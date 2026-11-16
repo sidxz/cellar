@@ -43,7 +43,8 @@ class AggregateScope:
     narrows to those runs. ``grain`` adds the batch (``"batch"``) or batch and
     run (``"run"``) to the group; ``by_conditions`` adds the run's condition set.
     ``exclude_censored`` keeps ``>``/``<`` values out of best/low/mean/n/sd (they
-    are only counted); the Activity summary turns it off to keep averaging them.
+    are only counted) and adds the median and geomean of the unqualified values;
+    the Activity summary turns it off to keep averaging them.
     """
 
     statuses: tuple[str, ...] | None
@@ -79,16 +80,20 @@ class NumericReadoutRow:
     gt_bound: float | None = None  # the largest ">" value
     lt_count: int = 0
     lt_bound: float | None = None  # the smallest "<" value
+    # Only when the scope excludes censored values (the workbench path):
+    median: float | None = None
+    geomean: float | None = None  # over the unqualified values > 0
+    nonpositive_count: int = 0  # unqualified values <= 0, left out of the geomean
 
     def stats(self) -> ReplicateStats:
-        """The group as replicate stats for ``combine_replicates`` (no median/geomean)."""
+        """The group as replicate stats for ``combine_replicates``."""
         return ReplicateStats(
             eq_count=self.n or 0,
             eq_mean=self.mean,
-            eq_median=None,
+            eq_median=self.median,
             eq_min=self.low,
             eq_max=self.best,
-            eq_geomean=None,
+            eq_geomean=self.geomean,
             gt_count=self.gt_count,
             gt_max_bound=self.gt_bound,
             lt_count=self.lt_count,

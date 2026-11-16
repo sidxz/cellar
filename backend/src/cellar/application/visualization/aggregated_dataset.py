@@ -42,7 +42,7 @@ from cellar.application.visualization.dataset_reader import CompoundInfo, Readou
 from cellar.domain.screening_assay.enums import CurveClass, unit_for_normalization
 from cellar.domain.screening_assay.readout_best import best_direction, best_of_range
 from cellar.domain.shared.aggregation_types import ValueQualifier
-from cellar.domain.shared.units import canonical_unit, p_scale
+from cellar.domain.shared.units import canonical_unit, is_concentration_unit, p_scale
 
 AggLevel = Literal["runs", "batches", "compounds"]
 
@@ -57,6 +57,7 @@ _NUMERIC_SIBLINGS: list[_Sibling] = [
     ("sd", "SD", "number", True, False),
     ("best", "best", "number", True, False),
     ("n_censored", "n censored", "number", False, False),
+    ("n_nonpositive", "n ≤ 0 not in geomean", "number", False, False),
 ]
 _DR_SIBLINGS: list[_Sibling] = [
     ("best", "best", "number", True, False),
@@ -77,6 +78,17 @@ _FIT_SIBLINGS: list[_Sibling] = [
     ("points", "points", "text", False, True),
 ]
 _IDENTITY_BY_KEY = {c[0]: c for c in [*IDENTITY_COLUMNS, ("batch_id", "Batch id", "text", True)]}
+# A numeric readout's replicate aggregation (combine_replicates' name) → provenance name.
+# "none" and anything else read as the mean.
+_AGGREGATION_NAMES = {
+    "geometric_mean": "geomean",
+    "median": "median",
+    "min": "min",
+    "max": "max",
+    "mean": "mean",
+}
+# Counted on every row; their columns show only when some count is > 0.
+_COUNTS = ("n_censored", "n_nonpositive")
 
 
 @dataclass
@@ -86,9 +98,14 @@ class _ValueColumn:
     condition_set: str  # canonical JSON of the set
     unit: str | None
     molar: bool = field(init=False)  # gets a p column
+    aggregation: str = field(init=False)  # a numeric value's, as combine_replicates names it
 
     def __post_init__(self) -> None:
         self.molar = p_scale(1.0, self.unit) is not None
+        agg = self.rd.aggregation or "mean"
+        if agg == "geometric_mean" and not is_concentration_unit(self.unit):
+            agg = "mean"  # combine_replicates' rule: a geomean needs a concentration
+        self.aggregation = agg if agg in _AGGREGATION_NAMES else "mean"
 
 
 def _condition_set(conditions: dict[str, Any] | None) -> tuple[str, dict[str, Any]]:
@@ -214,8 +231,10 @@ def build_aggregated_dataset(
             spec = specs.get(vk) or specs.setdefault(
                 vk, _ValueColumn(rd, layer, cs, unit_for_normalization(r.layer, rd.unit))
             )
-            value, q = combine_replicates(r.stats(), "mean", unit=None)
+            value, q = combine_replicates(r.stats(), spec.aggregation, unit=spec.unit)
             put(vk, spec, i, finite(value), q.value if q in _CENSORED else None)
+            if spec.aggregation == "geometric_mean":
+                cells[f"{vk}:n_nonpositive"][i] = r.nonpositive_count
             cells[f"{vk}:n"][i] = r.n
             cells[f"{vk}:sd"][i] = finite(r.sd)
             direction = best_direction(rd.data_type, rd.melt_measure)
@@ -311,7 +330,7 @@ def build_aggregated_dataset(
         col = cells.get(key) or ([None] * n if always else None)
         if col is None or not (always or any(v is not None for v in col)):
             return
-        if prov.stat == "n_censored" and not any(col):  # counted on every row; shown when > 0
+        if prov.stat in _COUNTS and not any(col):
             return
         columns.append(
             DatasetColumn(
@@ -333,7 +352,8 @@ def build_aggregated_dataset(
         if s.layer is not None:
             label = readout_label(rd, s.layer, s.unit, cs_label)
             p_label = "p" + readout_label(rd, s.layer, None, cs_label)
-            aggregation = "replicate_mean" if level == "runs" else "mean"
+            named = _AGGREGATION_NAMES[s.aggregation]
+            aggregation = f"replicate_{named}" if level == "runs" else named
             siblings = _NUMERIC_SIBLINGS
         else:
             label, p_label = _dr_labels(rd, cs_label or "")

@@ -36,6 +36,7 @@ class ReadoutDefInfo:
     dose_unit: str | None = None  # the owning protocol's
     curve_type: str | None = None  # dose_response_config.curve_type
     melt_measure: str | None = None  # melt_config.measure
+    aggregation: str | None = None  # how replicate values combine (ReadoutAggregation)
 
 
 @dataclass(frozen=True)

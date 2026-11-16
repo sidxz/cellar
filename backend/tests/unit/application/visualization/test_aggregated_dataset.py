@@ -135,11 +135,13 @@ def _curve(run: RunInfo, mol: uuid.UUID, batch: uuid.UUID, **kw) -> CurveRow:
     return CurveRow(**base)
 
 
-def _build(level, *, numeric=(), dr=(), curves=(), runs=None, molecules=None, batches=None):
+def _build(
+    level, *, numeric=(), dr=(), curves=(), runs=None, molecules=None, batches=None, defs=DEFS
+):
     return build_aggregated_dataset(
         level,
         runs if runs is not None else [_run()],
-        DEFS,
+        defs,
         ActivityAggregates(numeric_rows=list(numeric), dr_agg_rows=list(dr)),
         list(curves),
         molecules or {},
@@ -243,6 +245,42 @@ def test_mixed_greater_and_less_bounds_say_nothing():
 def test_a_non_molar_numeric_readout_has_no_p_column():
     ds = _build("compounds", numeric=[_num(uuid.uuid4())])
     assert f"{SIG}:p" not in _keys(ds)
+
+
+# --- numeric values: the readout's configured aggregation ---------------------------
+
+
+@pytest.mark.parametrize(
+    ("rd", "aggregation", "level", "value", "named"),
+    [
+        (POT, "geometric_mean", "compounds", 10.0, "geomean"),
+        (POT, "median", "batches", 2.0, "median"),
+        (POT, "mean", "compounds", 15.0, "mean"),
+        (POT, "none", "compounds", 15.0, "mean"),
+        (POT, "geometric_mean", "runs", 10.0, "replicate_geomean"),
+        (RD, "geometric_mean", "compounds", 15.0, "mean"),  # AU: no geomean
+    ],
+)
+def test_numeric_values_follow_the_readouts_aggregation(rd, aggregation, level, value, named):
+    run = _run()
+    defs = [replace(d, aggregation=aggregation) for d in DEFS]
+    row = _num(uuid.uuid4(), rd=rd, run_id=run.id, median=2.0, geomean=10.0)
+    ds = _build(level, numeric=[row], runs=[run], defs=defs)
+    key = f"rd:{rd}:raw"
+    assert ds.values[key] == [value]
+    assert _col(ds, key).provenance.aggregation == named
+
+
+def test_a_geomean_counts_the_values_it_leaves_out():
+    defs = [replace(DEFS[1], aggregation="geometric_mean")]
+    mol = uuid.uuid4()
+    ds = _build(
+        "compounds", numeric=[_num(mol, rd=POT, geomean=10.0, nonpositive_count=2)], defs=defs
+    )
+    assert ds.values[f"{POTK}:n_nonpositive"] == [2]
+    assert _col(ds, f"{POTK}:n_nonpositive").provenance.stat == "n_nonpositive"
+    ds = _build("compounds", numeric=[_num(mol, rd=POT, geomean=10.0)], defs=defs)
+    assert f"{POTK}:n_nonpositive" not in _keys(ds)
 
 
 # --- dose-response at batches / compounds ------------------------------------------

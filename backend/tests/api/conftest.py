@@ -141,6 +141,7 @@ def _create_test_app(
     from cellar.interface.routes.melting_steps import router as melting_steps_router
     from cellar.interface.routes.measured_curves import router as measured_curves_router
     from cellar.interface.routes.visualization import router as visualization_router
+    from cellar.interface.routes.protocol_hub import router as protocol_hub_router
     from cellar.interface.routes.run_positions import router as run_positions_router
     from cellar.interface.routes.run_import import router as run_import_router
     from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
@@ -230,6 +231,7 @@ def _create_test_app(
     app.include_router(tags_router)
     app.include_router(tag_assignment_router)
     app.include_router(protocols_router)
+    app.include_router(protocol_hub_router)  # after protocols, as in create_app
     app.include_router(runs_router)
     app.include_router(targets_router)
     app.include_router(inventory_hub_router)

@@ -112,6 +112,7 @@ class SQLAlchemyVisualizationDatasetReader:
                         ProtocolModel.dose_unit,
                         ReadoutDefinitionModel.dose_response_config["curve_type"].astext,
                         ReadoutDefinitionModel.melt_config["measure"].astext,
+                        ReadoutDefinitionModel.aggregation,
                     )
                     .join(ProtocolModel, ProtocolModel.id == ReadoutDefinitionModel.protocol_id)
                     .where(

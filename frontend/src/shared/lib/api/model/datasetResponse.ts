@@ -5,11 +5,12 @@
  * OpenAPI spec version: 1.4.0-38-gba3012c2-dirty
  */
 import type { DatasetColumnResponse } from './datasetColumnResponse';
+import type { DatasetResponseLevel } from './datasetResponseLevel';
 import type { DatasetResponseValues } from './datasetResponseValues';
 
 export interface DatasetResponse {
   revision: string;
-  level: 'wells';
+  level: DatasetResponseLevel;
   row_count: number;
   row_ids: string[];
   columns: DatasetColumnResponse[];

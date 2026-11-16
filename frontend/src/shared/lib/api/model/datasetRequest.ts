@@ -4,10 +4,11 @@
  * Cellar
  * OpenAPI spec version: 1.4.0-38-gba3012c2-dirty
  */
+import type { DatasetRequestLevel } from './datasetRequestLevel';
 import type { ProtocolSourceBody } from './protocolSourceBody';
 import type { RunSourceBody } from './runSourceBody';
 
 export interface DatasetRequest {
   source: ProtocolSourceBody | RunSourceBody;
-  level: 'wells';
+  level: DatasetRequestLevel;
 }

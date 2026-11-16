@@ -93,10 +93,21 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
     """Non-dose-response readout values per (molecule, readout, layer) + scope keys.
 
     Outlier wells never count. Censored values are counted with their bounds;
-    unless the scope keeps them, they stay out of best/low/mean/n/sd.
+    unless the scope keeps them, they stay out of best/low/mean/n/sd, and the
+    median and geomean (positive values only, the others counted) are added as
+    find_run_stats computes them. The Activity scope's statement has neither.
     """
     v = _rd.value_numeric
     counted = case((_UNQUALIFIED, v)) if scope.exclude_censored else v
+    replicate_stats = (
+        [
+            func.percentile_cont(0.5).within_group(counted).label("median"),
+            func.exp(func.avg(func.ln(case((and_(_UNQUALIFIED, v > 0), v))))).label("geomean"),
+            func.count(v).filter(and_(_UNQUALIFIED, v <= 0)).label("nonpositive_count"),
+        ]
+        if scope.exclude_censored
+        else []
+    )
     keys: dict[str, ColumnElement[Any]] = {
         "molecule_id": _rd.molecule_id,
         "readout_definition_id": _rd.readout_definition_id,
@@ -118,6 +129,7 @@ def _numeric_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Selec
             func.max(v).filter(_GT).label("gt_bound"),
             func.count(v).filter(_LT).label("lt_count"),
             func.min(v).filter(_LT).label("lt_bound"),
+            *replicate_stats,
         )
         .select_from(_rd)
         .join(ReadoutDefinitionModel, _rd.readout_definition_id == ReadoutDefinitionModel.id)
@@ -194,6 +206,9 @@ def _numeric_row(r: Row[Any]) -> NumericReadoutRow:
         gt_bound=r.gt_bound,
         lt_count=r.lt_count,
         lt_bound=r.lt_bound,
+        median=m.get("median"),
+        geomean=m.get("geomean"),
+        nonpositive_count=m.get("nonpositive_count", 0),
     )
 
 

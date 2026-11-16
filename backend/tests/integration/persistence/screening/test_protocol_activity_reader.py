@@ -311,3 +311,26 @@ async def test_run_grain_gives_a_row_per_run_with_the_wells_batch(
     assert rows == {(r1, well_batch): 10.0, (r2, row_batch): 30.0}
     [dr] = agg.dr_agg_rows
     assert dr.run_id == r1 and dr.batch_id is not None
+
+
+async def test_workbench_rows_carry_median_and_geomean_of_unqualified_values(
+    uow, session_factory, workspace_id
+):
+    values = [(1.0, None), (10.0, None), (100.0, None), (0.0, None), (-5.0, None), (1e4, ">")]
+    p, _, _ = await _numeric_world(uow, workspace_id, values)
+
+    [row] = (
+        await _aggregates(session_factory, workspace_id, p, statuses=VALID_STATUSES)
+    ).numeric_rows
+    activity = await _aggregates(
+        session_factory, workspace_id, p, statuses=VALID_STATUSES, exclude_censored=False
+    )
+
+    assert row.median == 1.0  # of -5, 0, 1, 10, 100; the ">" value is only counted
+    assert row.geomean == pytest.approx(10.0)  # positive values only
+    assert row.nonpositive_count == 2
+    stats = row.stats()
+    assert (stats.eq_median, stats.eq_geomean) == (row.median, row.geomean)
+    # The Activity statement is unchanged: no median / geomean columns.
+    [act] = activity.numeric_rows
+    assert (act.median, act.geomean, act.nonpositive_count) == (None, None, 0)
