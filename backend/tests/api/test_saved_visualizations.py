@@ -369,6 +369,19 @@ async def test_a_stale_edit_is_refused(as_user, client, session_factory, workspa
     assert (await owner.get(f"{URL}/{view['id']}")).json()["name"] == "A"
 
 
+async def test_an_edit_that_changes_nothing_keeps_the_version(client, session_factory, fake_auth):
+    w = await _seed(session_factory, fake_auth.workspace_id)
+    view = await _create(client, _protocol(w["p"]))
+
+    same = await client.patch(
+        f"{URL}/{view['id']}",
+        json={"expected_version": 1, "name": view["name"], "config": CONFIG},
+    )
+
+    assert same.status_code == 200 and same.json()["version"] == 1
+    assert (await client.get(f"{URL}/{view['id']}")).json()["version"] == 1
+
+
 async def test_an_edit_needs_the_version_it_was_made_from(client, session_factory, fake_auth):
     w = await _seed(session_factory, fake_auth.workspace_id)
     view = await _create(client, _protocol(w["p"]))

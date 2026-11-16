@@ -255,9 +255,9 @@ class SavedVisualization(AggregateRoot):
         config: dict[str, Any] | None = None,
         visibility: SearchVisibility | None = None,
         project_id: uuid.UUID | EllipsisType | None = ...,
-    ) -> None:
-        """Apply the given fields (``...`` = leave a nullable field as is). All or nothing:
-        a stale version or an invalid value changes nothing."""
+    ) -> bool:
+        """Apply the given fields (``...`` = leave a nullable field as is); whether anything
+        changed. All or nothing: a stale version or an invalid value changes nothing."""
         if expected_version != self.version:
             raise StaleEditError(STALE_VIEW_MESSAGE)
         after: dict[str, Any] = {
@@ -282,7 +282,7 @@ class SavedVisualization(AggregateRoot):
         if "config" in changed:
             changes.append(("config", None, None))
         if not changes:
-            return
+            return False
 
         for field in changed:
             setattr(self, field, after[field])
@@ -295,6 +295,7 @@ class SavedVisualization(AggregateRoot):
                 changes=tuple(changes),
             )
         )
+        return True
 
     def can_be_edited_by(self, user_id: uuid.UUID, *, is_admin: bool) -> bool:
         return is_admin or user_id == self.created_by

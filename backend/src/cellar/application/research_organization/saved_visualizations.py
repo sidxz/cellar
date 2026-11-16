@@ -300,7 +300,7 @@ class UpdateSavedVisualization(_SavedVisualizationUseCase):
                 if denied is not None:
                     return Failure(denied)
             try:
-                view.update(
+                changed = view.update(
                     expected_version=input.expected_version,
                     name=input.name,
                     description=_given(input.description),
@@ -313,7 +313,8 @@ class UpdateSavedVisualization(_SavedVisualizationUseCase):
                 )
             except (StaleEditError, ValidationError) as exc:
                 return Failure(exc)
-            await self._repo.save(view)
+            if changed:  # saving bumps the version: another tab's edit would turn stale
+                await self._repo.save(view)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
