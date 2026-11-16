@@ -209,7 +209,7 @@ describe("WorkbenchTable", () => {
     );
   });
 
-  it("links compounds, leaves control wells blank, and shows qualifiers and outliers", async () => {
+  it("links compounds and shows qualifiers and outliers", async () => {
     show();
     expect(await screen.findByRole("link", { name: "CEL-1" })).toHaveAttribute(
       "href",
@@ -221,7 +221,38 @@ describe("WorkbenchTable", () => {
     expect(screen.getByText("> 12.5")).toBeInTheDocument();
     expect(screen.getByText("≤ 3")).toBeInTheDocument();
     expect(screen.getByText("40")).toHaveClass("line-through");
-    expect(screen.getByText("Negative control")).toBeInTheDocument();
+  });
+
+  it("names a well without a compound by its label, else its role, muted", async () => {
+    const roles: Dataset = {
+      ...ds,
+      row_count: 4,
+      row_ids: ["w0", "w1", "w2", "w3"],
+      columns: [...ds.columns.slice(0, 4), col("label", "text")],
+      values: {
+        compound: ["RIF-1", null, null, null],
+        structure: ["CCO", "", null, ""],
+        molecule_id: ["m9", null, null, null],
+        well_type: ["positive_control", "negative_control", "reference", "sample"],
+        label: [null, null, "MadR", null],
+      },
+    };
+    show([], { table: roles });
+    // A control that names a batch keeps its compound.
+    expect(await screen.findByRole("link", { name: "RIF-1" })).toBeInTheDocument();
+    const cell = (row: string, key: string) =>
+      document.querySelector(`[row-id="${row}"] [col-id="${key}"]`) as HTMLElement;
+    expect(cell("w0", "structure")).toHaveTextContent("structure CCO");
+    for (const [row, text] of [
+      ["w1", "Negative control"],
+      ["w2", "MadR"],
+      ["w3", "no compound"],
+    ]) {
+      expect(within(cell(row, "compound")).getByText(text)).toHaveClass("text-muted-foreground");
+      expect(within(cell(row, "structure")).getByText("no compound")).toHaveClass(
+        "text-muted-foreground",
+      );
+    }
   });
 
   it("keeps rows in the DOM in their shown order, so Tab follows a sort", async () => {

@@ -121,8 +121,20 @@ function SelectCell({ data, rowIds }: ICellRendererParams<Row> & { rowIds: strin
   );
 }
 
+const NoCompound = ({ text = "no compound" }: { text?: string }) => (
+  <span className="truncate text-sm text-muted-foreground">{text}</span>
+);
+
+/** A row's compound, linked; a well without one by its label, else its role in words. */
 function CompoundCell({ data, value, ds }: ICellRendererParams<Row> & { ds: Dataset }) {
-  if (!isData(data) || value == null) return null;
+  if (!isData(data)) return null;
+  if (value == null) {
+    const label = ds.values.label?.[data.i];
+    const role = ds.values.well_type?.[data.i];
+    if (typeof label === "string" && label) return <NoCompound text={label} />;
+    if (role && role !== "sample") return <NoCompound text={categoryLabel("well_type", role)} />;
+    return <NoCompound />;
+  }
   const id = ds.values.molecule_id?.[data.i];
   return typeof id === "string" ? (
     <EntityLink type="compound" id={id} label={String(value)} />
@@ -131,7 +143,15 @@ function CompoundCell({ data, value, ds }: ICellRendererParams<Row> & { ds: Data
   );
 }
 
-function StructureCell({ value }: ICellRendererParams<Row>) {
+function StructureCell({ data, value, ds }: ICellRendererParams<Row> & { ds: Dataset }) {
+  if (!isData(data)) return null;
+  if (ds.values.compound?.[data.i] == null) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <NoCompound />
+      </div>
+    );
+  }
   if (typeof value !== "string" || !value) return null;
   return (
     <Tooltip>
@@ -374,6 +394,7 @@ function tableColumns(
       sortable: false,
       valueGetter: (p) => (isData(p.data) ? (ds.values.structure?.[p.data.i] ?? null) : null),
       cellRenderer: StructureCell,
+      cellRendererParams: { ds },
     });
   }
   for (const c of tableFields(ds)) {
