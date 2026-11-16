@@ -7,6 +7,7 @@ from datetime import date
 from unittest.mock import AsyncMock
 
 import pytest
+from returns.result import Failure, Success
 
 from cellar.application.screening.readout_calculation_engine import (
     ReadoutCalculationEngine,
@@ -14,7 +15,6 @@ from cellar.application.screening.readout_calculation_engine import (
 from cellar.domain.screening_assay.enums import (
     PlateFormat,
     ProtocolType,
-    ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
     WellType,
@@ -24,12 +24,10 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.screening_assay.run import Plate, Run, Well
-from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.value_objects import QualifiedValue
 from cellar.infrastructure.computation.asteval_evaluator import (
     AstevalFormulaEvaluator,
 )
-from returns.result import Failure, Success
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -691,7 +689,10 @@ class TestMultiFormulaNormalization:
         plate = Plate(run_id=run.id, plate_number=1, format=PlateFormat.F96)
         run.plates.append(plate)
         sample_well = Well(
-            plate_id=plate.id, row="A", column=1, well_type=WellType.SAMPLE,
+            plate_id=plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.SAMPLE,
             batch_id=uuid.uuid4(),
         )
         pos1 = Well(plate_id=plate.id, row="A", column=2, well_type=WellType.POSITIVE_CONTROL)
@@ -702,23 +703,32 @@ class TestMultiFormulaNormalization:
         mol_id = uuid.uuid4()
         raw_data = [
             ReadoutData(
-                workspace_id=WS, run_id=run.id, well_id=sample_well.id,
-                molecule_id=mol_id, batch_id=sample_well.batch_id,
+                workspace_id=WS,
+                run_id=run.id,
+                well_id=sample_well.id,
+                molecule_id=mol_id,
+                batch_id=sample_well.batch_id,
                 readout_definition_id=raw_rd.id,
                 value=QualifiedValue(value=50.0),
             ),
             ReadoutData(
-                workspace_id=WS, run_id=run.id, well_id=pos1.id,
+                workspace_id=WS,
+                run_id=run.id,
+                well_id=pos1.id,
                 readout_definition_id=raw_rd.id,
                 value=QualifiedValue(value=100.0),
             ),
             ReadoutData(
-                workspace_id=WS, run_id=run.id, well_id=pos2.id,
+                workspace_id=WS,
+                run_id=run.id,
+                well_id=pos2.id,
                 readout_definition_id=raw_rd.id,
                 value=QualifiedValue(value=90.0),
             ),
             ReadoutData(
-                workspace_id=WS, run_id=run.id, well_id=neg.id,
+                workspace_id=WS,
+                run_id=run.id,
+                well_id=neg.id,
                 readout_definition_id=raw_rd.id,
                 value=QualifiedValue(value=0.0),
             ),
@@ -745,17 +755,101 @@ class TestMultiFormulaNormalization:
         assert isinstance(result, Success)
 
         computed = [
-            r for r in result.unwrap().computed_readouts
-            if r.readout_definition_id == raw_rd.id
+            r for r in result.unwrap().computed_readouts if r.readout_definition_id == raw_rd.id
         ]
-        # 1 sample × 2 formulas = 2 computed rows
-        assert len(computed) == 2
-        formulas = {c.normalization_applied for c in computed}
+        # 4 wells (the sample and the three controls) × 2 formulas = 8 computed rows
+        assert len(computed) == 8
+        formulas = {(c.well_id, c.normalization_applied) for c in computed}
         assert formulas == {
-            ReadoutNormalization.PERCENT_INHIBITION,
-            ReadoutNormalization.Z_SCORE,
+            (w.id, f)
+            for w in (sample_well, pos1, pos2, neg)
+            for f in (ReadoutNormalization.PERCENT_INHIBITION, ReadoutNormalization.Z_SCORE)
         }
-        # Both rows must reference the same well + readout def
-        assert all(c.well_id == sample_well.id for c in computed)
         assert all(c.is_computed for c in computed)
-        assert all(c.molecule_id == mol_id for c in computed)
+        # Each row carries its raw row's compound: the sample's, none for these controls.
+        assert {c.well_id: c.molecule_id for c in computed} == {
+            sample_well.id: mol_id,
+            pos1.id: None,
+            pos2.id: None,
+            neg.id: None,
+        }
+
+
+class TestControlWellsNormalized:
+    @pytest.mark.asyncio
+    async def test_controls_are_stored_beside_samples_with_their_raw_rows_compound(
+        self,
+    ) -> None:
+        """A positive control naming a compound (rifampicin) keeps its molecule and batch on
+        its normalized row; a control without one stays without; a blank gets none."""
+        rd = ReadoutDefinition(
+            protocol_id=_PH,
+            name="Signal",
+            data_type=ReadoutDataType.NUMERIC,
+            normalizations=frozenset({ReadoutNormalization.PERCENT_INHIBITION}),
+        )
+        protocol = _make_protocol([rd])
+        run = Run.create(
+            workspace_id=WS, protocol_id=protocol.id, run_date=date(2026, 4, 6), operator=USER
+        )
+        plate = Plate(run_id=run.id, plate_number=1, format=PlateFormat.F96)
+        run.plates.append(plate)
+        rif_batch, rif = uuid.uuid4(), uuid.uuid4()
+        sample = Well(plate_id=plate.id, row="A", column=1)
+        pos = Well(
+            plate_id=plate.id,
+            row="A",
+            column=2,
+            well_type=WellType.POSITIVE_CONTROL,
+            batch_id=rif_batch,
+        )
+        neg = Well(plate_id=plate.id, row="A", column=3, well_type=WellType.NEGATIVE_CONTROL)
+        blank = Well(plate_id=plate.id, row="A", column=4, well_type=WellType.BLANK)
+        run.wells.extend([sample, pos, neg, blank])
+
+        def raw(well: Well, value: float, molecule=None, batch=None) -> ReadoutData:
+            return ReadoutData(
+                workspace_id=WS,
+                run_id=run.id,
+                well_id=well.id,
+                molecule_id=molecule,
+                batch_id=batch,
+                readout_definition_id=rd.id,
+                value=QualifiedValue(value=value),
+            )
+
+        readout_data_repo, run_repo, protocol_repo = _make_repos()
+        run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
+        protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+        readout_data_repo.find_by_run.return_value = [
+            raw(sample, 50.0, uuid.uuid4()),
+            raw(pos, 100.0, rif, rif_batch),
+            raw(neg, 0.0),
+            raw(blank, 5.0),
+        ]
+        readout_data_repo.delete_computed_for_run.return_value = 0
+        engine = ReadoutCalculationEngine(
+            uow=_fake_uow(),
+            formula_evaluator=AstevalFormulaEvaluator(),
+            plate_normalizer=PlateNormalizer(),
+            replicate_aggregator=ReplicateAggregator(),
+            readout_data_repo=readout_data_repo,
+            run_repo=run_repo,
+            protocol_repo=protocol_repo,
+            dispatcher=AsyncMock(),
+        )
+
+        result = await engine.compute_for_run(run.id, workspace_id=WS)
+
+        assert isinstance(result, Success)
+        stored = {
+            r.well_id: r
+            for r in result.unwrap().computed_readouts
+            if r.normalization_applied == ReadoutNormalization.PERCENT_INHIBITION
+        }
+        assert set(stored) == {sample.id, pos.id, neg.id}
+        assert stored[pos.id].value.value == pytest.approx(0.0)
+        assert stored[neg.id].value.value == pytest.approx(100.0)
+        assert (stored[pos.id].molecule_id, stored[pos.id].batch_id) == (rif, rif_batch)
+        assert (stored[neg.id].molecule_id, stored[neg.id].batch_id) == (None, None)
+        readout_data_repo.save_bulk.assert_awaited_once()

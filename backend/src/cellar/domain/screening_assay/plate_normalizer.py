@@ -18,6 +18,16 @@ from cellar.domain.screening_assay.enums import (
 from cellar.domain.screening_assay.run import Well
 from cellar.domain.shared.errors import ValidationError
 
+# Wells that receive a normalized value. Blanks carry no assay signal to normalize.
+_NORMALIZED_TYPES = frozenset(
+    {
+        WellType.SAMPLE,
+        WellType.POSITIVE_CONTROL,
+        WellType.NEGATIVE_CONTROL,
+        WellType.REFERENCE,
+    }
+)
+
 # ---------------------------------------------------------------------------
 # Output value object
 # ---------------------------------------------------------------------------
@@ -43,12 +53,14 @@ class PlateNormalizer:
     """Applies a normalization strategy to a plate's raw values.
 
     All methods are synchronous and pure (no side effects).
-    Only wells with ``well_type == WellType.SAMPLE`` receive a normalized
-    value; control and blank wells are used only as reference points.
+    Sample, control and reference wells with a raw value each receive a
+    normalized value; the plate's control wells are also the anchors, so a
+    control lands near its anchor's 0 % / 100 % with its own spread. Blank
+    wells are never normalized.
 
     Returns:
-        ``list[NormalizedValue]`` — normalized values for all sample
-        wells that have a raw value entry.
+        ``list[NormalizedValue]`` — normalized values for every sample,
+        control and reference well that has a raw value entry.
 
     Raises:
         ``ValidationError`` — when required controls are missing,
@@ -140,12 +152,12 @@ class PlateNormalizer:
         return pos_label, neg_label
 
     @staticmethod
-    def _sample_wells(
+    def _normalized_wells(
         wells: list[Well],
         raw_values: dict[uuid.UUID, float],
     ) -> list[Well]:
-        """Return sample wells that have a raw value entry."""
-        return [w for w in wells if w.well_type == WellType.SAMPLE and w.id in raw_values]
+        """Return the wells that receive a value: every non-blank well with a raw value."""
+        return [w for w in wells if w.well_type in _NORMALIZED_TYPES and w.id in raw_values]
 
     # ------------------------------------------------------------------
     # Strategies
@@ -190,7 +202,7 @@ class PlateNormalizer:
             )
 
         results: list[NormalizedValue] = []
-        for w in self._sample_wells(wells, raw_values):
+        for w in self._normalized_wells(wells, raw_values):
             sample = raw_values[w.id]
             normalized = 100.0 * (high_mean - sample) / denominator
             results.append(
@@ -231,7 +243,7 @@ class PlateNormalizer:
             )
 
         results: list[NormalizedValue] = []
-        for w in self._sample_wells(wells, raw_values):
+        for w in self._normalized_wells(wells, raw_values):
             sample = raw_values[w.id]
             normalized = 100.0 * (sample - low_mean) / denominator
             results.append(
@@ -270,7 +282,7 @@ class PlateNormalizer:
             )
 
         results: list[NormalizedValue] = []
-        for w in self._sample_wells(wells, raw_values):
+        for w in self._normalized_wells(wells, raw_values):
             sample = raw_values[w.id]
             normalized = 100.0 * sample / high_mean
             results.append(
@@ -310,7 +322,7 @@ class PlateNormalizer:
             )
 
         results: list[NormalizedValue] = []
-        for w in self._sample_wells(wells, raw_values):
+        for w in self._normalized_wells(wells, raw_values):
             sample = raw_values[w.id]
             normalized = (sample - high_mean) / high_stdev
             results.append(

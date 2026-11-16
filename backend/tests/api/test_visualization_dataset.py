@@ -157,6 +157,50 @@ async def test_unknown_level_is_rejected(client, session_factory, fake_auth):
     assert resp.status_code == 422
 
 
+async def test_control_wells_carry_their_normalized_values_after_a_recompute(
+    client, session_factory, fake_auth
+):
+    """NadD-like plate: DMSO positive controls (high signal) and no-enzyme negative controls
+    (low signal) hold no compound. After a recompute their % inhibition is stored beside the
+    sample's, so the Wells dataset shows them near 0 % and 100 % with their own spread."""
+    ws = fake_auth.workspace_id
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(
+            s, p, name="Signal", unit="AU", normalizations=["percent_inhibition"]
+        )
+        run = await seed.run(s, ws, p, date(2026, 11, 5))
+        plate = await seed.plate(s, run, 1)
+        wells = [
+            ("sample", 0.3585, mol),
+            ("positive_control", 0.64, None),
+            ("positive_control", 0.66, None),
+            ("negative_control", 0.06, None),
+            ("negative_control", 0.074, None),
+        ]
+        for col, (well_type, value, molecule) in enumerate(wells, start=1):
+            w = await seed.well(s, plate, "A", col, well_type=well_type)
+            await seed.readout(s, ws, run, rd, molecule, value, well_id=w)  # type: ignore[arg-type]
+        await uow.commit()
+
+    recomputed = await client.post(f"/api/v1/runs/{run}/recompute")
+    resp = await client.post(
+        URL, json={"source": {"kind": "run", "run_id": str(run)}, "level": "wells"}
+    )
+
+    assert recomputed.status_code == 200, recomputed.text
+    assert resp.status_code == 200, resp.text
+    values = resp.json()["values"]
+    inhibition = dict(zip(values["well"], values[f"rd:{rd}:percent_inhibition"], strict=True))
+    # (0.65 - x) / (0.65 - 0.067): the plate's control means are the anchors.
+    assert inhibition == pytest.approx(
+        {"A01": 50.0, "A02": 1.715, "A03": -1.715, "A04": 101.2, "A05": 98.8}, abs=0.01
+    )
+
+
 # --- aggregated levels: Runs / Batches / Compounds ----------------------------------
 
 
