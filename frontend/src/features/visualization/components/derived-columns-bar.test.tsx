@@ -1,11 +1,16 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { DerivedEntry } from "../hooks/use-derived";
 import type { DerivedSet, DerivedSpec } from "../lib/derived";
 import type { Dataset } from "../types";
 
 vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
+vi.mock("../lib/derived", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../lib/derived")>();
+  return { ...actual, coverage: vi.fn(actual.coverage) };
+});
 
+import { coverage } from "../lib/derived";
 import { DerivedColumnsBar } from "./derived-columns-bar";
 
 const ds: Dataset = {
@@ -42,16 +47,18 @@ const setFor = (spec: DerivedSpec, ids: string[], over: Partial<DerivedSet> = {}
   ...over,
 });
 
+const handlers = () => ({
+  onCancel: vi.fn(),
+  onRetry: vi.fn(),
+  onRemove: vi.fn(),
+  onRecompute: vi.fn(),
+  onPlot: vi.fn(),
+});
+
 function renderBar(entries: DerivedEntry[], plotsFull = false) {
-  const handlers = {
-    onCancel: vi.fn(),
-    onRetry: vi.fn(),
-    onRemove: vi.fn(),
-    onRecompute: vi.fn(),
-    onPlot: vi.fn(),
-  };
-  render(<DerivedColumnsBar entries={entries} ds={ds} plotsFull={plotsFull} {...handlers} />);
-  return handlers;
+  const h = handlers();
+  render(<DerivedColumnsBar entries={entries} ds={ds} plotsFull={plotsFull} {...h} />);
+  return h;
 }
 
 describe("DerivedColumnsBar", () => {
@@ -111,6 +118,36 @@ describe("DerivedColumnsBar", () => {
     const h = renderBar([entry(clusters, { status: "ready", set })]);
     fireEvent.click(screen.getByRole("button", { name: "Show map" }));
     expect(h.onPlot).toHaveBeenCalledWith("clusters");
+  });
+
+  it("announces each job's status as it changes, never the ticking clock", () => {
+    const h = handlers();
+    const running = entry(rg1, { startedAt: Date.now() - 5_000 });
+    const { rerender } = render(
+      <DerivedColumnsBar entries={[running]} ds={ds} plotsFull={false} {...h} />,
+    );
+    const status = screen.getByRole("status");
+    expect(status).toHaveTextContent("R-groups · Core A running");
+    expect(status).not.toHaveTextContent("0:05");
+    const failed = { ...running, status: "failed" as const, error: "No compound matches." };
+    rerender(<DerivedColumnsBar entries={[failed]} ds={ds} plotsFull={false} {...h} />);
+    expect(status).toHaveTextContent("R-groups · Core A failed: No compound matches.");
+    const ready = { ...running, status: "ready" as const, set: setFor(rg1, ["m1", "m2"]) };
+    rerender(<DerivedColumnsBar entries={[ready]} ds={ds} plotsFull={false} {...h} />);
+    expect(status).toHaveTextContent("R-groups · Core A ready: R1 · 2 of 3 match");
+  });
+
+  it("counts a ready set's coverage once, not on every tick of a running job's clock", () => {
+    vi.useFakeTimers();
+    try {
+      renderBar([entry(rg1, { status: "ready", set: setFor(rg1, ["m1", "m2"]) }), entry(clusters)]);
+      const before = vi.mocked(coverage).mock.calls.length;
+      act(() => vi.advanceTimersByTime(3_000));
+      expect(screen.getByText("Running · 0:03")).toBeInTheDocument();
+      expect(vi.mocked(coverage).mock.calls.length).toBe(before);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("disables the plot button with four plots open", () => {

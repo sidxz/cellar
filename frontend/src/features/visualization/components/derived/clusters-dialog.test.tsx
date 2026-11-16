@@ -52,6 +52,10 @@ describe("ClustersDialog", () => {
     fireEvent.change(threshold(), { target: { value: "1.2" } });
     expect(apply()).toBeDisabled();
     expect(screen.getByText("Enter a threshold from 0.05 to 0.95.")).toBeInTheDocument();
+    expect(threshold()).toHaveAccessibleDescription(
+      expect.stringContaining("Enter a threshold from 0.05 to 0.95."),
+    );
+    expect(threshold()).toBeInvalid();
     fireEvent.click(apply());
     expect(onApply).not.toHaveBeenCalled();
   });
@@ -60,6 +64,10 @@ describe("ClustersDialog", () => {
     open(9);
     expect(apply()).toBeDisabled();
     expect(screen.getByText("Clustering needs at least 10 compounds.")).toBeInTheDocument();
+    expect(threshold()).toHaveAccessibleDescription(
+      expect.stringContaining("Clustering needs at least 10 compounds."),
+    );
+    expect(threshold()).toBeValid();
   });
 
   it("is disabled above 50,000 compounds, with the count", () => {

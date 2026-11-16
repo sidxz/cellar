@@ -34,12 +34,13 @@ export function ClustersDialog({
   const [text, setText] = useState(String(initialThreshold));
   const id = useId();
   const threshold = Number(text);
+  const badThreshold = text.trim() === "" || !(threshold >= 0.05 && threshold <= 0.95);
   const reason =
     compoundCount < CLUSTER_MIN_COMPOUNDS
       ? `Clustering needs at least ${CLUSTER_MIN_COMPOUNDS} compounds.`
       : compoundCount > CLUSTER_MAX_COMPOUNDS
         ? `${fmt(compoundCount)} compounds; clustering is capped at ${fmt(CLUSTER_MAX_COMPOUNDS)}. Choose fewer runs.`
-        : text.trim() === "" || !(threshold >= 0.05 && threshold <= 0.95)
+        : badThreshold
           ? "Enter a threshold from 0.05 to 0.95."
           : null;
 
@@ -64,15 +65,21 @@ export function ClustersDialog({
             className="w-28"
             value={text}
             onChange={(e) => setText(e.target.value)}
+            aria-invalid={badThreshold}
+            aria-describedby={reason ? `${id}-hint ${id}-reason` : `${id}-hint`}
           />
-          <p className="text-xs text-muted-foreground">
+          <p id={`${id}-hint`} className="text-xs text-muted-foreground">
             Lower = tighter clusters. Butina clustering on Morgan fingerprints; the map is UMAP.
           </p>
         </div>
         <p className="text-sm text-muted-foreground">
           Over 500 compounds run in the background — you can keep working.
         </p>
-        {reason && <p className="text-sm text-warning">{reason}</p>}
+        {reason && (
+          <p id={`${id}-reason`} className="text-sm text-warning">
+            {reason}
+          </p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel

@@ -3,7 +3,7 @@
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { Button } from "@/shared/components/ui/button";
 import { X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DerivedEntry } from "../hooks/use-derived";
 import { type DerivedSpec, coverage } from "../lib/derived";
 import type { Dataset } from "../types";
@@ -42,9 +42,19 @@ type Handlers = {
   onPlot?: (id: string) => void;
 };
 
+/** How a set stands, for screen readers: no clock, so it is read out only when it changes. */
+function statusText(e: DerivedEntry): string {
+  const title = derivedTitle(e.spec);
+  if (e.status === "running") return `${title} running.`;
+  if (e.status === "failed") return `${title} failed: ${e.error}`;
+  if (e.status === "cancelled") return `${title} cancelled.`;
+  return `${title} ready: ${e.set?.summary ?? ""}`;
+}
+
 /** One line per derived column set under the header: running (elapsed time, Cancel),
  * ready (summary, warning, coverage with Recompute, its plot), failed (the server's
- * message, Retry) or cancelled (Run again); each removable. */
+ * message, Retry) or cancelled (Run again); each removable. A status line reads out each
+ * set's status as it changes. */
 export function DerivedColumnsBar({
   entries,
   ds,
@@ -57,6 +67,7 @@ export function DerivedColumnsBar({
       aria-label="Chemistry columns"
       className="flex shrink-0 flex-col divide-y rounded-md border bg-card text-sm"
     >
+      <output className="sr-only">{entries.map(statusText).join(" ")}</output>
       {entries.map((e) => (
         <Line key={e.spec.id} entry={e} ds={ds} now={now} plotsFull={plotsFull} {...on} />
       ))}
@@ -85,7 +96,11 @@ function Line({
       : e.spec.kind === "rgroups"
         ? "Matrix"
         : null;
-  const covered = e.status === "ready" && e.set ? coverage(ds, e.set) : null;
+  // Not on every tick of the clock: it reads every row.
+  const covered = useMemo(
+    () => (e.status === "ready" && e.set ? coverage(ds, e.set) : null),
+    [e.status, e.set, ds],
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1">
