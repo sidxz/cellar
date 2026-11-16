@@ -143,6 +143,46 @@ describe("drift bands", () => {
     expect(notes).toEqual(["No Negative control band in 1 plate row — fewer than 2 wells"]);
   });
 
+  // One negative per plate row: no row can have a drift band.
+  const lone = dataset({
+    well_order: [1, 2, 13, 14],
+    well_row: ["A", "A", "B", "B"],
+    y: [0, 50, 4, 60],
+    well_type: [NEG, "sample", NEG, "sample"],
+  });
+
+  it("falls back to the flat band where no plate row has one, while Control bands is on", () => {
+    const { shapes, notes } = draw(lone, { bands: true, drift: "band" });
+    expect(shapes).toMatchObject([
+      { xref: "x domain", x0: 0, x1: 1, y0: 2 - 6 * Math.SQRT2, name: "Negative control ± 3 SD" },
+    ]);
+    expect(notes).toEqual([
+      "No Negative control band in 2 plate rows — fewer than 2 wells; flat ± 3 SD band instead",
+    ]);
+  });
+
+  it("draws no flat band in place of a drift band when Control bands is off", () => {
+    const { shapes, notes } = draw(lone, { drift: "band" });
+    expect(shapes).toEqual([]);
+    expect(notes).toEqual(["No Negative control band in 2 plate rows — fewer than 2 wells"]);
+  });
+
+  it("says once per control type how many plate rows lack a band, across facets", () => {
+    const ds = dataset({
+      well_order: [1, 2, 13, 1, 2, 13],
+      well_row: ["A", "A", "B", "A", "A", "B"],
+      y: [0, 4, 3, 1, 5, 2],
+      plate: ["Plate 1", "Plate 1", "Plate 1", "Plate 2", "Plate 2", "Plate 2"],
+      well_type: [NEG, NEG, NEG, NEG, NEG, NEG],
+    });
+    const { shapes, notes } = draw(ds, { bands: true, drift: "band" }, byPlate);
+    expect(shapes.map((s) => [s.yref, s.xref])).toEqual([
+      ["y", "x"],
+      ["y2", "x2"],
+    ]);
+    expect(notes).toEqual(["No Negative control band in 2 plate rows — fewer than 2 wells"]);
+  });
+
   it("groups by plate column when X is the column", () => {
     const ds = dataset({
       well_column: [1, 1, 2],

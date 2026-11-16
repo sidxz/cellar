@@ -115,6 +115,19 @@ function band(
   };
 }
 
+/** The flat mean ± 3 SD band of ``c``'s plotted Y across facet ``f``; null below 2 wells. */
+function flatBand(
+  f: Facet,
+  c: Controls,
+  yAt: (i: number) => number | null,
+  shown: Set<string>,
+): Record<string, unknown> | null {
+  const stats = meanSd(c.used.map((i) => yAt(i) as number));
+  if (stats?.sd == null) return null;
+  const place = { xref: `${f.xaxis} domain`, x0: 0, x1: 1, yref: f.yaxis };
+  return band(c.type, `${c.label} ± 3 SD`, shown, place, { ...stats, sd: stats.sd });
+}
+
 /** Mean ± 3 SD of each control type's plotted Y, across each facet. */
 export function drawBands(
   ds: Dataset,
@@ -127,20 +140,18 @@ export function drawBands(
   const shown = new Set<string>();
   const notes = eachFacet(ds, p, mask, facets, (f, controls, notes) => {
     for (const c of controls) {
-      const stats = meanSd(c.used.map((i) => yAt(i) as number));
-      if (stats?.sd == null) {
-        notes.push(say(f, tooFew(c, "band")));
-        continue;
-      }
-      const place = { xref: `${f.xaxis} domain`, x0: 0, x1: 1, yref: f.yaxis };
-      shapes.push(band(c.type, `${c.label} ± 3 SD`, shown, place, { ...stats, sd: stats.sd }));
+      const shape = flatBand(f, c, yAt, shown);
+      if (shape) shapes.push(shape);
+      else notes.push(say(f, tooFew(c, "band")));
     }
   });
   return parts({ shapes, notes });
 }
 
 /** Bands per plate row (X = Well order) or plate column (X = Column): each spans its
- * group's plotted X, so drift along the plate shows as steps. */
+ * group's plotted X, so drift along the plate shows as steps. With Control bands on, a
+ * control type that gets no drift band in a facet keeps its flat band there. The rows
+ * without a band are counted once per control type, across facets. */
 export function drawDriftBands(
   ds: Dataset,
   p: PanelConfig,
@@ -156,9 +167,12 @@ export function drawDriftBands(
   };
   const xAt = plottedX(ds, p);
   const yAt = plottedY(ds, p);
+  const fallback = Boolean(p.overlays?.bands);
   const shapes: Record<string, unknown>[] = [];
   const shown = new Set<string>();
-  const notes = eachFacet(ds, p, mask, facets, (f, controls, notes) => {
+  // Per control type: its label, plate rows/columns without a band, facets on the flat band.
+  const lacking = new Map<string, { label: string; short: number; flat: number }>();
+  const notes = eachFacet(ds, p, mask, facets, (f, controls) => {
     // Each group's span over every plotted row, samples included.
     const span = new Map<string, [number, number]>();
     for (const i of f.rows) {
@@ -190,12 +204,23 @@ export function drawDriftBands(
         const name = `${c.label} ± 3 SD per ${noun}`;
         shapes.push(band(c.type, name, shown, place, { ...stats, sd: stats.sd }));
       }
-      if (short) {
-        const where = `${short} ${noun}${short === 1 ? "" : "s"}`;
-        notes.push(say(f, `no ${c.label} band in ${where} — fewer than 2 wells`));
-      }
+      const flat = short === groups.size && fallback ? flatBand(f, c, yAt, shown) : null;
+      if (flat) shapes.push(flat);
+      const tally = lacking.get(c.type) ?? { label: c.label, short: 0, flat: 0 };
+      lacking.set(c.type, {
+        ...tally,
+        short: tally.short + short,
+        flat: tally.flat + (flat ? 1 : 0),
+      });
     }
   });
+  for (const type of CONTROLS) {
+    const t = lacking.get(type);
+    if (!t?.short) continue;
+    const where = `${t.short} ${noun}${t.short === 1 ? "" : "s"}`;
+    const instead = t.flat ? "; flat ± 3 SD band instead" : "";
+    notes.push(`No ${t.label} band in ${where} — fewer than 2 wells${instead}`);
+  }
   return parts({ shapes, notes });
 }
 
