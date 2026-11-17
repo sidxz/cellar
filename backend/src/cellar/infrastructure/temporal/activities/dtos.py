@@ -236,6 +236,7 @@ class CddStartExportInput:
     max_molecules: int | None = None
     molecule_ids: list[int] | None = None
     modified_after: str | None = None  # ISO 8601 timestamp for sync mode
+    names: list[str] | None = None  # filtered mode: export only the molecules these name
 
 
 @dataclass

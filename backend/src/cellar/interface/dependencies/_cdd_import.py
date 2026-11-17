@@ -8,6 +8,9 @@ from fastapi import Depends
 
 from cellar.application.cdd_import.cancel_cdd_molecule_import import CancelCddMoleculeImport
 from cellar.application.cdd_import.cancel_cdd_plate_import import CancelCddPlateImport
+from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
+    CheckCddMoleculeIdentifiers,
+)
 from cellar.application.cdd_import.force_fail_cdd_molecule_import import (
     ForceFailCddMoleculeImport,
 )
@@ -39,6 +42,7 @@ from ._core import _get_use_case
 __all__ = [
     "CancelCddMoleculeImportDep",
     "CancelCddPlateImportDep",
+    "CheckCddMoleculeIdentifiersDep",
     "ForceFailCddMoleculeImportDep",
     "ForceFailCddPlateImportDep",
     "GetCddMoleculeImportRuntimeStatusDep",
@@ -63,6 +67,9 @@ PreviewCddProtocolImportDep = Annotated[
 ImportCddProtocolDep = Annotated[ImportCddProtocol, Depends(_get_use_case(ImportCddProtocol))]
 StartCddMoleculeImportDep = Annotated[
     StartCddMoleculeImport, Depends(_get_use_case(StartCddMoleculeImport))
+]
+CheckCddMoleculeIdentifiersDep = Annotated[
+    CheckCddMoleculeIdentifiers, Depends(_get_use_case(CheckCddMoleculeIdentifiers))
 ]
 ListCddMoleculeImportsDep = Annotated[
     ListCddMoleculeImports, Depends(_get_use_case(ListCddMoleculeImports))

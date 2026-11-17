@@ -10,6 +10,9 @@ from pydantic import BaseModel
 from cellar.application.cdd_import.cancel_cdd_molecule_import import (
     CancelCddMoleculeImportCommand,
 )
+from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
+    CheckCddMoleculeIdentifiersQuery,
+)
 from cellar.application.cdd_import.get_cdd_molecule_import_runtime_status import (
     GetCddMoleculeImportRuntimeStatusQuery,
 )
@@ -19,6 +22,7 @@ from cellar.application.cdd_import.start_cdd_molecule_import import (
 from cellar.interface.dependencies import (
     AuthDep,
     CancelCddMoleculeImportDep,
+    CheckCddMoleculeIdentifiersDep,
     ForceFailCddMoleculeImportDep,
     GetCddMoleculeImportRuntimeStatusDep,
     ListCddMoleculeImportsDep,
@@ -34,11 +38,24 @@ router = APIRouter(prefix="/api/v1/cdd-import/molecules", tags=["cdd-molecule-im
 # ---------------------------------------------------------------------------
 
 
+class CddMoleculeImportFilter(BaseModel):
+    names: list[str]  # molecule names or synonyms, as the vault knows them
+
+
 class StartCddMoleculeImportBody(BaseModel):
     originating_org_id: uuid.UUID
     import_mode: str = "full_vault"
-    filter_criteria: dict | None = None
+    filter_criteria: CddMoleculeImportFilter | None = None  # with import_mode "filtered"
     max_molecules: int | None = None  # limit for testing; None = import all
+
+
+class CheckCddMoleculeIdentifiersBody(BaseModel):
+    identifiers: list[str]
+
+
+class CddMoleculeIdentifierCheckResponse(BaseModel):
+    found: list[str]
+    not_found: list[str]
 
 
 class CddMoleculeImportAcceptedResponse(BaseModel):
@@ -125,7 +142,7 @@ async def start_cdd_molecule_import(
         submitted_by=auth.user_id,
         originating_org_id=body.originating_org_id,
         import_mode=body.import_mode,
-        filter_criteria=body.filter_criteria,
+        filter_criteria=body.filter_criteria.model_dump() if body.filter_criteria else None,
         max_molecules=body.max_molecules,
     )
     result = await use_case(cmd, auth=auth)
@@ -134,6 +151,24 @@ async def start_cdd_molecule_import(
         workflow_id=outcome.workflow_id,
         status="pending",
     )
+
+
+@router.post("/check", response_model=CddMoleculeIdentifierCheckResponse)
+async def check_cdd_molecule_identifiers(
+    auth: AuthDep,
+    use_case: CheckCddMoleculeIdentifiersDep,
+    body: CheckCddMoleculeIdentifiersBody,
+) -> CddMoleculeIdentifierCheckResponse:
+    """Say which identifiers name a molecule in the vault. Imports nothing."""
+    result = await use_case(
+        CheckCddMoleculeIdentifiersQuery(
+            workspace_id=auth.workspace_id,
+            identifiers=body.identifiers,
+        ),
+        auth=auth,
+    )
+    match = result_to_response(result)
+    return CddMoleculeIdentifierCheckResponse(found=match.found, not_found=match.not_found)
 
 
 @router.get("/{workflow_id}/status", response_model=CddMoleculeImportStatusResponse)

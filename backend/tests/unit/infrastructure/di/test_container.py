@@ -6,8 +6,12 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
 from cellar.application.audit.audit_recording_service import AuditRecordingService
+from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
+    CheckCddMoleculeIdentifiers,
+)
 from cellar.application.screening.instrument_export import InstrumentReaders
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from cellar.infrastructure.cdd.client import CddVaultClient
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.instrument_readers import default_readers
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
@@ -82,3 +86,9 @@ class TestContainer:
         engine = create_container(test_settings)[ReadoutCalculationEngine]
         assert engine._melting_step_repo is not None
         assert engine._batch_repo is not None
+
+    def test_resolves_the_vault_molecule_identifier_check(
+        self, test_settings: DatabaseSettings
+    ) -> None:
+        check = create_container(test_settings)[CheckCddMoleculeIdentifiers]
+        assert isinstance(check._gateway, CddVaultClient)

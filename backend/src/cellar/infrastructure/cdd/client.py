@@ -28,6 +28,11 @@ __all__ = ["CddVaultClient"]
 
 BASE_URL = "https://app.collaborativedrug.com/api/v1"
 
+# The vault returns at most 1000 records per synchronous page.
+_MAX_PAGE_SIZE = 1000
+# Names per lookup query: half a page, so a group normally comes back in one page.
+_NAMES_PER_QUERY = 500
+
 
 class CddVaultClient:
     """HTTP adapter for the CDD Vault REST API.
@@ -197,6 +202,34 @@ class CddVaultClient:
         ids = [obj if isinstance(obj, int) else obj["id"] for obj in raw_objects]
         total = data.get("count", len(ids))
         return ids, total
+
+    async def find_molecules_by_names(
+        self, vault_id: str, api_key: str, names: list[str]
+    ) -> list[dict[str, Any]]:
+        """Molecules whose name or a synonym the vault matches to one of ``names``.
+
+        Synchronous lookup without structures or batch details. The names go out in
+        groups of ``_NAMES_PER_QUERY``; each group is paged until the vault's ``count``
+        is reached, so a group matching more than one page of molecules is not cut short.
+        """
+        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
+        molecules: list[dict[str, Any]] = []
+        for start in range(0, len(names), _NAMES_PER_QUERY):
+            query = {
+                "names": names[start : start + _NAMES_PER_QUERY],
+                "no_structures": True,
+                "only_batch_ids": True,
+                "page_size": _MAX_PAGE_SIZE,
+            }
+            offset = 0
+            while True:
+                data = await self._post_query(url, api_key, {**query, "offset": offset})
+                page = data.get("objects", [])
+                molecules.extend(page)
+                offset += len(page)
+                if not page or offset >= data.get("count", 0):
+                    break
+        return molecules
 
     async def check_export_progress(self, vault_id: str, api_key: str, export_id: int) -> str:
         """Lightweight export status check via /export_progress (no data download).

@@ -8,6 +8,7 @@ CDD uses an async export model:
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass
 from datetime import timedelta
 
@@ -24,6 +25,7 @@ with workflow.unsafe.imports_passed_through():
         CddSyncWatermarkInput,
         ChunkInput,
         ChunkItem,
+        ChunkItemResult,
         CompleteCddImportInput,
         CompleteDiscoveryInput,
         CreateCddImportInput,
@@ -44,7 +46,7 @@ class CddVaultImportWorkflowInput:
     submitted_by: str
     originating_org_id: str
     secret_ref: str
-    filter_criteria: dict | None = None
+    filter_criteria: dict | None = None  # filtered mode: {"names": [...]}
     max_molecules: int | None = None
     entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
     create_batch_on_duplicate: bool | None = None
@@ -80,6 +82,64 @@ _RETRY = RetryPolicy(
 # Continue-as-new every N chunks to keep workflow history small.
 # 50 chunks × ~4 activities × 3 events = ~600 events per execution (limit: 50,000).
 _CHUNKS_PER_EXECUTION = 50
+
+
+def _export_input(
+    input: CddVaultImportWorkflowInput, modified_after: str | None
+) -> CddStartExportInput:
+    """What to export: the whole vault, what changed since a sync, or the named molecules."""
+    return CddStartExportInput(
+        workspace_id=input.workspace_id,
+        secret_ref=input.secret_ref,
+        vault_id=input.cdd_vault_id,
+        max_molecules=input.max_molecules,
+        modified_after=modified_after,
+        names=(input.filter_criteria or {}).get("names"),
+    )
+
+
+def _continue_input(
+    input: CddVaultImportWorkflowInput,
+    *,
+    import_id: str | None,
+    storage_path: str | None,
+    offset: int,
+    chunk_index: int,
+    progress: CddVaultImportProgress,
+) -> CddVaultImportWorkflowInput:
+    """Next run's input: every option of this run (``dataclasses.replace``, so a
+    new option can't be forgotten here) plus the progress to resume from."""
+    return dataclasses.replace(
+        input,
+        import_id=import_id,
+        storage_path=storage_path,
+        resume_offset=offset,
+        resume_chunk_index=chunk_index,
+        total_count=progress.total_count,
+        cumulative_registered=progress.registered_count,
+        cumulative_duplicate=progress.duplicate_count,
+        cumulative_error=progress.error_count,
+        cumulative_skipped=progress.skipped_count,
+    )
+
+
+def _sync_pairs(import_mode: str, results: list[ChunkItemResult]) -> list[dict]:
+    """Vault-to-local molecule mappings to record for the next sync.
+
+    None for a filtered import: sync resumes from the latest modification time on
+    record, and a few chosen molecules would move that past everything not yet imported.
+    """
+    if import_mode == CddImportMode.FILTERED:
+        return []
+    return [
+        {
+            "cdd_molecule_id": r.cdd_molecule_id,
+            "molecule_id": r.molecule_id,
+            "cdd_modified_at": r.cdd_modified_at,
+        }
+        for r in results
+        if r.success and r.molecule_id and r.cdd_molecule_id
+    ]
 
 
 @workflow.defn
@@ -203,15 +263,7 @@ class CddVaultImportWorkflow:
                 )
 
                 # Record sync mappings (for both full and sync modes)
-                sync_pairs = [
-                    {
-                        "cdd_molecule_id": r.cdd_molecule_id,
-                        "molecule_id": r.molecule_id,
-                        "cdd_modified_at": r.cdd_modified_at,
-                    }
-                    for r in reg_result.results
-                    if r.success and r.molecule_id and r.cdd_molecule_id
-                ]
+                sync_pairs = _sync_pairs(input.import_mode, reg_result.results)
                 if sync_pairs:
                     await workflow.execute_activity(
                         BulkTrackingActivities.record_sync_mappings,
@@ -252,27 +304,14 @@ class CddVaultImportWorkflow:
             # Continue-as-new to prevent history size limit crash
             if chunks_this_execution >= _CHUNKS_PER_EXECUTION:
                 workflow.continue_as_new(
-                    CddVaultImportWorkflowInput(
-                        workspace_id=input.workspace_id,
-                        cdd_vault_id=input.cdd_vault_id,
-                        import_mode=input.import_mode,
-                        submitted_by=input.submitted_by,
-                        originating_org_id=input.originating_org_id,
-                        secret_ref=input.secret_ref,
-                        filter_criteria=input.filter_criteria,
-                        max_molecules=input.max_molecules,
-                        entity_mappings=input.entity_mappings,
-                        create_batch_on_duplicate=input.create_batch_on_duplicate,
+                    _continue_input(
+                        input,
                         import_id=import_id,
                         storage_path=storage_path,
-                        resume_offset=offset,
-                        resume_chunk_index=chunk_index,
-                        total_count=self._progress.total_count,
-                        cumulative_registered=self._progress.registered_count,
-                        cumulative_duplicate=self._progress.duplicate_count,
-                        cumulative_error=self._progress.error_count,
-                        cumulative_skipped=self._progress.skipped_count,
-                    ),
+                        offset=offset,
+                        chunk_index=chunk_index,
+                        progress=self._progress,
+                    )
                 )
 
         # --- Phase 5: Complete or cancel ---
@@ -311,13 +350,7 @@ class CddVaultImportWorkflow:
         try:
             export_result = await workflow.execute_activity(
                 CddFetchActivities.start_molecule_export,
-                CddStartExportInput(
-                    workspace_id=input.workspace_id,
-                    secret_ref=input.secret_ref,
-                    vault_id=input.cdd_vault_id,
-                    max_molecules=input.max_molecules,
-                    modified_after=modified_after,
-                ),
+                _export_input(input, modified_after),
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=_RETRY,
             )

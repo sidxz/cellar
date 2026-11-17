@@ -16,6 +16,9 @@ from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
 from cellar.application.cdd_import.cdd_plate_import_orchestrator import (
     CddPlateImportOrchestrator,
 )
+from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
+    CheckCddMoleculeIdentifiers,
+)
 from cellar.application.cdd_import.force_fail_cdd_molecule_import import (
     ForceFailCddMoleculeImport,
 )
@@ -138,6 +141,7 @@ def register_cdd_import(container: Container) -> None:
         )
 
     container.define(StartCddMoleculeImport, _start_cdd_mol_import)
+    container.define(CheckCddMoleculeIdentifiers, _cdd_query(CheckCddMoleculeIdentifiers))
     container.define(ListCddMoleculeImports, _list_cdd_mol_imports)
     container.define(ForceFailCddMoleculeImport, _force_fail_cdd_mol_import)
 
