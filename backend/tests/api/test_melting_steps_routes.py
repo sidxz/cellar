@@ -40,7 +40,7 @@ MELT_FILE = {
         XLSX,
     )
 }
-NOT_EDITABLE = "Melting steps can be changed only while the run is draft or in progress"
+NOT_EDITABLE = "Peaks cannot be changed on an approved run"
 
 
 async def _sql(session_factory: async_sessionmaker[AsyncSession], stmt: str, **params: Any) -> Any:
@@ -267,7 +267,7 @@ async def test_stale_review_returns_409_and_writes_nothing(
     assert audited.scalar_one() == 1
 
 
-async def test_completed_run_returns_409(
+async def test_completed_run_allows_step_changes(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
     fake_auth: FakeAuth,
@@ -275,6 +275,31 @@ async def test_completed_run_returns_409(
     s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
     sample = _step(analysis, 64.0)
     await _sql(session_factory, "UPDATE runs SET status = 'completed' WHERE id = :id", id=s.run_id)
+
+    review = await client.patch(
+        f"/api/v1/melting-steps/{sample['id']}",
+        json={"expected_version": 1, "status": "accepted", "value": 64.0},
+    )
+    assert review.status_code == 200, review.text
+    add = await client.post(
+        f"/api/v1/runs/{s.run_id}/melting-steps",
+        json={"well_id": sample["well_id"], "channel_key": "ratio", "value": 40.0},
+    )
+    assert add.status_code == 201, add.text
+    assert review.json()["recalculated"] and add.json()["recalculated"]
+    after = await _analysis(client, s.run_id)
+    assert after["edit_refusal"] is None
+    assert len(after["steps"]) == 4 and _step(after, 64.0)["status"] == "accepted"
+
+
+async def test_approved_run_returns_409(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+    await _sql(session_factory, "UPDATE runs SET status = 'approved' WHERE id = :id", id=s.run_id)
 
     review = await client.patch(
         f"/api/v1/melting-steps/{sample['id']}",

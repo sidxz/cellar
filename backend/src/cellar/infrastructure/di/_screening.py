@@ -110,7 +110,11 @@ from cellar.application.screening.manage_control_layouts import (
     RemoveControlLayout,
     SetControlLayout,
 )
-from cellar.application.screening.manage_melting_steps import AddMeltingStep, ReviewMeltingStep
+from cellar.application.screening.manage_melting_steps import (
+    AddMeltingStep,
+    AssignMeltingStep,
+    ReviewMeltingStep,
+)
 from cellar.application.screening.manage_ontology_annotations import (
     RemoveOntologyAnnotation,
     SetOntologyAnnotation,
@@ -1147,6 +1151,7 @@ def register_screening(container: Container) -> None:
             return uc_cls(
                 uow=uow,
                 run_repo=SQLAlchemyRunRepository(uow),
+                protocol_repo=SQLAlchemyProtocolRepository(uow),
                 curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
                 step_repo=SQLAlchemyMeltingStepRepository(uow),
                 audit=c[AuditRecordingService],
@@ -1157,6 +1162,7 @@ def register_screening(container: Container) -> None:
 
     container.define(AddMeltingStep, _melting_step_uc(AddMeltingStep))
     container.define(ReviewMeltingStep, _melting_step_uc(ReviewMeltingStep))
+    container.define(AssignMeltingStep, _melting_step_uc(AssignMeltingStep))
 
     def _get_melting_analysis(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

@@ -58,9 +58,7 @@ class SQLAlchemyMeltingStepRepository:
         )  # default session sync keeps an already-loaded row current for later reads
         result = await self._uow.session.execute(stmt)
         if not result.rowcount:
-            raise ConflictError(
-                "This melting step was changed by someone else. Reload and try again."
-            )
+            raise ConflictError("This peak was changed by someone else. Reload and try again.")
 
     async def find_by_id(self, workspace_id: uuid.UUID, step_id: uuid.UUID) -> MeltingStep | None:
         stmt = select(MeltingStepModel).where(

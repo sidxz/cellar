@@ -162,18 +162,24 @@ async def test_rejected_steps_are_listed_but_do_not_count():
 
 
 @pytest.mark.parametrize(
-    ("status", "locked", "expected"),
-    [
-        (RunStatus.DRAFT, False, None),
-        (RunStatus.IN_PROGRESS, False, None),
-        (RunStatus.COMPLETED, False, NOT_EDITABLE),
-        (RunStatus.DRAFT, True, "This run is locked"),
-        (RunStatus.COMPLETED, True, "This run is locked"),
-    ],
+    "status", [RunStatus.DRAFT, RunStatus.IN_PROGRESS, RunStatus.COMPLETED, RunStatus.REJECTED]
 )
-async def test_edit_refusal_on_completed_and_locked_runs(status, locked, expected):
-    h = Harness(status=status, locked=locked)
-    assert (await h.read()).unwrap().edit_refusal == expected
+async def test_edit_refusal_is_none_on_a_completed_run(status):
+    """Peaks can change on every run that can still be recalculated."""
+    h = Harness(status=status)
+    assert (await h.read()).unwrap().edit_refusal is None
+
+
+async def test_edit_refusal_on_an_approved_run():
+    h = Harness(status=RunStatus.APPROVED)
+    refusal = (await h.read()).unwrap().edit_refusal
+    assert refusal == NOT_EDITABLE == "Peaks cannot be changed on an approved run"
+
+
+@pytest.mark.parametrize("status", [RunStatus.DRAFT, RunStatus.COMPLETED, RunStatus.APPROVED])
+async def test_edit_refusal_on_a_locked_run(status):
+    h = Harness(status=status, locked=True)
+    assert (await h.read()).unwrap().edit_refusal == "This run is locked"
 
 
 async def test_run_not_found():

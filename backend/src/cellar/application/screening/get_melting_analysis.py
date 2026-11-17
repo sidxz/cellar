@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
-from cellar.application.screening.manage_melting_steps import NOT_EDITABLE
+from cellar.application.screening.manage_melting_steps import peak_edit_refusal
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.melt_series import SeriesValue, series_points, series_values
@@ -29,8 +29,6 @@ from cellar.domain.screening_assay.repository import (
     RunRepository,
 )
 from cellar.domain.shared.errors import DomainError, NotFoundError
-
-LOCKED = "This run is locked"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -173,7 +171,6 @@ class GetMeltingAnalysis:
             for ch in sorted({s.channel_key for s in steps})
         )
 
-        refusal = None if run.calculated_positions_editable else NOT_EDITABLE
-        if run.is_locked:
-            refusal = LOCKED
-        return Success(MeltingAnalysis(run.id, refusal, steps, windows, step_checks))
+        return Success(
+            MeltingAnalysis(run.id, peak_edit_refusal(run), steps, windows, step_checks)
+        )
