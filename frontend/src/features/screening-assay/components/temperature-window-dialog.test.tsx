@@ -81,6 +81,13 @@ describe("TemperatureWindowDialog", () => {
     readouts = [];
   });
 
+  it("says the readouts come from each position's peaks", () => {
+    renderDialog();
+    expect(
+      screen.getByText("Adds readouts computed from each position's peaks inside the window."),
+    ).toBeInTheDocument();
+  });
+
   it("sends name, channel key, bounds and both measures", async () => {
     customInstance.mockResolvedValue({});
     renderDialog();

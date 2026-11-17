@@ -60,6 +60,7 @@ export function MeltSummaryStrip({
   shown,
   onSelectReferences,
   hasRule,
+  notEvaluated,
   filter,
   onFilterChange,
 }: {
@@ -74,6 +75,8 @@ export function MeltSummaryStrip({
   onSelectReferences?: () => void;
   /** The run's hit rule names a Tm or ΔTm readout, so hits are counted. */
   hasRule: boolean;
+  /** The samples missing a value the hit rule needs. */
+  notEvaluated: number;
   filter: ResultFilter;
   onFilterChange: (f: ResultFilter) => void;
 }) {
@@ -164,6 +167,12 @@ export function MeltSummaryStrip({
             </CountButton>
             <span className="text-muted-foreground">)</span>
           </span>
+          {/* Stays while it is the filter, so a count that fell to zero can still be cleared. */}
+          {(notEvaluated > 0 || filter === "not_evaluated") && (
+            <CountButton value="not_evaluated" count={notEvaluated} {...toggle}>
+              {`Not evaluated ${notEvaluated}`}
+            </CountButton>
+          )}
         </>
       )}
       {shown && (

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
-import { type ApplicableRule, bandFor } from "../lib/melt-hits";
+import { type ApplicableRule, bandFor, notEvaluated } from "../lib/melt-hits";
 import {
   type ResultFilter,
   type WindowSummary,
@@ -14,6 +14,7 @@ import {
   shiftRows,
   windowSummary,
 } from "../lib/melt-results";
+import { windowLabel } from "../lib/window-proposal";
 import type { MeltingAnalysis } from "../types";
 import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
@@ -100,13 +101,18 @@ export function MeltResultsPanel({
     [windows, positions, analysis.steps, analysis.step_checks, analysis.outside_every_window],
   );
   const activeFilter = windowNames.length ? filter : null;
+  // The samples missing a value the run's hit rule needs; empty without a rule.
+  const unevaluated = useMemo(
+    () => notEvaluated(analysis, positions, applicable),
+    [analysis, positions, applicable],
+  );
   const ordered = useMemo(() => {
     const { pinned, body } = orderRows(rows, windowNames);
     return {
       pinned,
-      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, hits)),
+      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
     };
-  }, [rows, windowNames, activeFilter, hits]);
+  }, [rows, windowNames, activeFilter, hits, unevaluated]);
 
   const sampleCount = useMemo(() => rows.filter((r) => r.isSample).length, [rows]);
   const each = useMemo<WindowSummary[]>(
@@ -152,7 +158,7 @@ export function MeltResultsPanel({
               label="Window"
               value={comparing ? COMPARE : (leadName ?? "")}
               options={[
-                ...windows.map((w) => ({ value: w.window, label: w.window })),
+                ...windows.map((w) => ({ value: w.window, label: windowLabel(w) })),
                 ...(windows.length >= 2 ? [{ value: COMPARE, label: "Compare" }] : []),
               ]}
               onChange={(v) => {
@@ -188,6 +194,7 @@ export function MeltResultsPanel({
           }
           onSelectReferences={ordered.pinned.length ? selectReferences : undefined}
           hasRule={applicable.length > 0}
+          notEvaluated={unevaluated.size}
           filter={activeFilter}
           onFilterChange={setFilter}
         />
@@ -205,7 +212,7 @@ export function MeltResultsPanel({
       {view === "plot" && !comparing && lead ? (
         <ShiftPlot
           rows={shiftRows(
-            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits)),
+            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
             lead.window,
           )}
           hits={hits}
@@ -219,6 +226,8 @@ export function MeltResultsPanel({
         <MeltResultsGrid
           rows={ordered}
           windowNames={windowNames}
+          steps={analysis.steps}
+          windows={windows}
           hits={hits}
           doseUnit={doseUnit}
           selection={selection}

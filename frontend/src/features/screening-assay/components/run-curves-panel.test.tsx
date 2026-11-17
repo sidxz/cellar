@@ -30,6 +30,7 @@ vi.mock("../hooks/use-melting-analysis", () => ({
   useMeltingAnalysis: () => ({ ...melting, refetch: vi.fn() }),
   useAddMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
   useReviewMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
+  useAssignMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("../test/test-data-grid")).TableGrid,
@@ -57,6 +58,7 @@ vi.mock("@/shared/hooks/use-workspace-members", () => ({
     data: [
       { user_id: "u1", name: "Ada Lovelace", email: "ada@lab.org" },
       { user_id: "u2", name: "", email: "grace@lab.org" },
+      { user_id: "u3", name: "Mary Anning", email: "mary@lab.org" },
     ],
   }),
 }));
@@ -458,7 +460,8 @@ describe("RunCurvesPanel", () => {
       if (melting.data) {
         melting.data.steps = [
           { changed_by: "u2" } as MeltingAnalysis["steps"][number],
-          { changed_by: null } as MeltingAnalysis["steps"][number],
+          { changed_by: null, assigned_by: "u3" } as MeltingAnalysis["steps"][number],
+          { changed_by: null, assigned_by: null } as MeltingAnalysis["steps"][number],
         ];
       }
       exported.length = 0;
@@ -471,10 +474,40 @@ describe("RunCurvesPanel", () => {
             source: "run",
             format: "pdf",
             filename_hint: expect.stringMatching(/^run-.+-2026-11-13$/),
-            payload: { run_id: "r1", people: { u1: "Ada Lovelace", u2: "grace@lab.org" } },
+            payload: {
+              run_id: "r1",
+              people: { u1: "Ada Lovelace", u2: "grace@lab.org", u3: "Mary Anning" },
+            },
           },
         },
       ]);
+    });
+
+    it("offers the peak actions on a completed run", () => {
+      withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
+      (melting.data as MeltingAnalysis).steps = [
+        {
+          id: "s1",
+          well_id: "w2",
+          channel_key: "a",
+          source: "instrument",
+          value: 59,
+          instrument_value: 59,
+          instrument_label: null,
+          status: "unreviewed",
+          reason: null,
+          changed_by: null,
+          changed_at: null,
+          assigned_window: null,
+          assignment_reason: null,
+          assigned_by: null,
+          assigned_at: null,
+          version: 1,
+        },
+      ];
+      render(<RunCurvesPanel runId="r1" run={{ ...RUN, status: "completed" }} />);
+      for (const name of ["Accept", "Reject", "Correct", "Assign", "Add peak"])
+        expect(screen.getByRole("button", { name })).toBeEnabled();
     });
 
     it("selects the first position needing review on load", () => {
@@ -630,8 +663,79 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
     setup();
     fireEvent.click(gridRow("Position 2"));
     expect(screen.getByText("REG-1 · B2 — ΔTm (Main) by concentration")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt 10–30 °C" }));
     expect(screen.getByText("REG-1 · B2 — ΔTm (Alt) by concentration")).toBeInTheDocument();
+  });
+
+  describe("concentrations without a ΔTm", () => {
+    /** Batch b1 at 10, 50 and 100 µM (positions 2 to 4). */
+    const three = {
+      ...dosed,
+      positions: dosed.positions.map((p, i) =>
+        i === 3
+          ? {
+              ...p,
+              registration_number: "REG-1",
+              batch_id: "b1",
+              batch_number: "REG-1-B2",
+              dose: 100,
+            }
+          : p,
+      ),
+    };
+    const show = (cells: Parameters<typeof withAnalysis>[0]) => {
+      useRunCurves.mockImplementation(() => ({
+        data: three,
+        isLoading: false,
+        isPlaceholderData: false,
+      }));
+      withAnalysis(cells);
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(gridRow("Position 2"));
+    };
+
+    it("the chart's caption counts them", () => {
+      show({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 } });
+      expect(screen.getByText("No ΔTm at 1 of 3 concentrations")).toBeInTheDocument();
+    });
+
+    it("joins the count to the batch's series values", () => {
+      useRunCurves.mockImplementation(() => ({
+        data: three,
+        isLoading: false,
+        isPlaceholderData: false,
+      }));
+      withAnalysis({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 } });
+      (melting.data as MeltingAnalysis).windows[0].series = [
+        {
+          readout_id: "rd-max",
+          readout_name: "Max ΔTm (Main)",
+          measure: "max_delta_tm",
+          threshold: null,
+          concentration: null,
+          values: [{ batch_id: "b1", value: 4, qualifier: "=", concentration: 50 }],
+        },
+      ];
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(gridRow("Position 2"));
+      expect(
+        screen.getByText("Max ΔTm +4.0 °C at 50 µM · No ΔTm at 1 of 3 concentrations"),
+      ).toBeInTheDocument();
+    });
+
+    it("says so in place of the chart when fewer than two have one", () => {
+      show({ w2: { delta_tm: 2.5 } });
+      expect(
+        screen.getByText("No ΔTm at 2 of 3 concentrations; nothing to chart"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
+    });
+
+    it("says nothing when every concentration has a ΔTm", () => {
+      show({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 }, w4: { delta_tm: 5 } });
+      expect(screen.getByText(/by concentration/)).toBeInTheDocument();
+      expect(screen.queryByText(/No ΔTm at/)).not.toBeInTheDocument();
+    });
   });
 
   it("shows the batch's stored series values under the chart title", () => {
@@ -692,7 +796,7 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       ["Main", true],
       ["Alt", false],
     ]);
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt 10–30 °C" }));
     expect(bands()).toEqual([
       ["Main", false],
       ["Alt", true],

@@ -228,7 +228,7 @@ export function TemperatureWindowDialog({
         <DialogHeader>
           <DialogTitle>Add temperature window</DialogTitle>
           <DialogDescription>
-            Adds readouts computed from each position's melting steps inside the window.
+            Adds readouts computed from each position's peaks inside the window.
           </DialogDescription>
         </DialogHeader>
 

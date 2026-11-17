@@ -27,6 +27,7 @@ import {
   resultRows,
   sampleTextOf,
   seriesCaption,
+  seriesGaps,
 } from "../lib/melt-results";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
@@ -108,13 +109,16 @@ export function RunCurvesPanel({
     [analysis, data, applicable],
   );
   // The run's export: results, steps and traces, built from what this tab reads.
-  // The names shown here (operator, step reviewers) ride along: the export
-  // worker can't look people up without the person's sign-in.
+  // The names shown here (operator, step reviewers and assigners) ride along:
+  // the export worker can't look people up without the person's sign-in.
   const { data: members } = useWorkspaceMembers();
   const buildExport = useCallback(
     (format: ExportFormat): ExportRequest | null => {
       if (!run) return null;
-      const ids = [run.operator, ...(analysis?.steps ?? []).map((s) => s.changed_by)];
+      const ids = [
+        run.operator,
+        ...(analysis?.steps ?? []).flatMap((s) => [s.changed_by, s.assigned_by]),
+      ];
       const people: Record<string, string> = {};
       for (const id of ids) {
         const m = id ? members?.find((u) => u.user_id === id) : undefined;
@@ -198,6 +202,11 @@ export function RunCurvesPanel({
       ? batchSeries(lead, data.positions, anchorBatch, analysis.steps)
       : [];
   const oneDose = !!anchorBatch && batchDoseCount(data.positions, anchorBatch) === 1;
+  // The batch's concentrations that have no ΔTm in the lead window.
+  const gaps = lead && anchorBatch ? seriesGaps(lead, data.positions, anchorBatch) : null;
+  const gapNote = gaps?.missing
+    ? `No ΔTm at ${gaps.missing} of ${gaps.total} concentrations`
+    : null;
   const selectedPositions = orderedPositions(set).filter((p) => selection.selected.has(p.well_id));
   const editRefusal = run ? labellingEditRefusal(run) : null;
 
@@ -210,6 +219,7 @@ export function RunCurvesPanel({
         analysis={analysis}
         positions={selectedPositions}
         channel={set.channel}
+        windows={analysis.windows.filter((w) => w.channel_key === set.channel)}
         unit={currentChannel(set)?.x_unit ?? ""}
         value={stepValue}
         onValueChange={setStepValue}
@@ -218,7 +228,9 @@ export function RunCurvesPanel({
       {lead && anchor && series.length > 0 ? (
         <ConcentrationChart
           title={`${[sampleTextOf(anchor), batchSuffix(anchor)].filter(Boolean).join(" · ")} — ΔTm (${lead.window}) by concentration`}
-          caption={anchorBatch ? seriesCaption(lead, anchorBatch, doseUnit) : undefined}
+          caption={[anchorBatch && seriesCaption(lead, anchorBatch, doseUnit), gapNote]
+            .filter(Boolean)
+            .join(" · ")}
           points={series}
           doseUnit={doseUnit}
           hits={hits}
@@ -228,12 +240,12 @@ export function RunCurvesPanel({
             setSelection(applyClick(selection, [id], id, { shift: false, toggle: false }))
           }
         />
+      ) : oneDose ? (
+        <p className="text-sm text-muted-foreground">
+          Only one concentration of this batch in this run.
+        </p>
       ) : (
-        oneDose && (
-          <p className="text-sm text-muted-foreground">
-            Only one concentration of this batch in this run.
-          </p>
-        )
+        gapNote && <p className="text-sm text-muted-foreground">{`${gapNote}; nothing to chart`}</p>
       )}
     </>
   );

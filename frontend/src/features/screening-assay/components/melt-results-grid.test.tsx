@@ -37,6 +37,8 @@ const show = (windowNames: string[]) =>
     <MeltResultsGrid
       rows={{ pinned: [], body: [row] }}
       windowNames={windowNames}
+      steps={[]}
+      windows={[]}
       hits={new Set()}
       doseUnit="µM"
       selection={EMPTY_SELECTION}

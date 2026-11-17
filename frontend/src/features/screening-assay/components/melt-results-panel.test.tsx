@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { formatDateTime } from "@/shared/lib/format-date";
 import type { CurvePosition } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState } from "../lib/curve-selection";
 import type { ApplicableRule } from "../lib/melt-hits";
@@ -21,6 +22,11 @@ vi.mock("@/shared/lib/plotly", () => ({
 
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("../test/test-data-grid")).TableGrid,
+}));
+vi.mock("@/shared/hooks/use-workspace-members", () => ({
+  useWorkspaceMembers: () => ({
+    data: [{ user_id: "u1", name: "Ada Lovelace", email: "ada@lab.org" }],
+  }),
 }));
 
 import { MeltResultsPanel } from "./melt-results-panel";
@@ -129,7 +135,10 @@ function Harness({
   data = analysis,
   hits = HITS,
   applicable = OUTSIDE_MAIN,
+  at = positions,
 }: {
+  /** The run's positions. */
+  at?: CurvePosition[];
   channel?: string;
   onChange?: (s: SelectionState) => void;
   onLead?: (w: string | null) => void;
@@ -141,7 +150,7 @@ function Harness({
   return (
     <MeltResultsPanel
       analysis={data}
-      positions={positions}
+      positions={at}
       channel={channel}
       doseUnit="µM"
       selection={selection}
@@ -179,13 +188,16 @@ describe("MeltResultsPanel", () => {
   it("lists only the windows of the current signal and keeps the chosen one across a signal change", () => {
     const onLead = vi.fn();
     const { rerender } = render(<Harness channel="a" onLead={onLead} />);
-    expect(tabNames()).toEqual(["Main", "Low", "Compare"]);
+    expect(tabNames()).toEqual(["Main 50–85 °C", "Low 30–50 °C", "Compare"]);
     expect(onLead).toHaveBeenLastCalledWith("Main");
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Low" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Low 30–50 °C" }));
     expect(onLead).toHaveBeenLastCalledWith("Low");
     rerender(<Harness channel="b" onLead={onLead} />);
-    expect(tabNames()).toEqual(["High", "Low", "Compare"]);
-    expect(screen.getByRole("tab", { name: "Low" })).toHaveAttribute("aria-selected", "true");
+    expect(tabNames()).toEqual(["High 60–90 °C", "Low 30–50 °C", "Compare"]);
+    expect(screen.getByRole("tab", { name: "Low 30–50 °C" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
     // Compare keeps the lead window.
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
     expect(onLead).toHaveBeenLastCalledWith("Low");
@@ -364,6 +376,153 @@ describe("MeltResultsPanel", () => {
     const calls = onChange.mock.calls.length;
     fireEvent.keyDown(row("s4"), { key: "a" });
     expect(onChange.mock.calls.length).toBe(calls);
+  });
+
+  it("marks a Tm named by assignment and says who, when, why and where it falls", () => {
+    const assigned = {
+      id: "a1",
+      well_id: "s1",
+      channel_key: "a",
+      value: 42,
+      status: "accepted",
+      assigned_window: "Main",
+      assignment_reason: "main transition, shifted low",
+      assigned_by: "u1",
+      assigned_at: "2026-11-13T10:00:00Z",
+    } as unknown as MeltingStep;
+    const named = (value: number, reason: string | null) =>
+      ({
+        ...analysis,
+        windows: analysis.windows.map((w) =>
+          w.window === "Main" && w.channel_key === "a"
+            ? {
+                ...w,
+                positions: w.positions.map((p) =>
+                  p.well_id === "s1"
+                    ? { ...p, tm: value, named_by: "assignment", step_id: "a1" }
+                    : p,
+                ),
+              }
+            : w,
+        ),
+        steps: [...analysis.steps, { ...assigned, value, assignment_reason: reason }],
+      }) as MeltingAnalysis;
+    const mark = () => within(row("s1")).getByRole("img", { name: "Assigned peak" });
+
+    const { unmount } = render(<Harness data={named(42, "main transition, shifted low")} />);
+    // Named by range: no marker.
+    expect(within(row("s2")).queryByRole("img", { name: "Assigned peak" })).toBeNull();
+    expect(mark().closest("td")).toHaveTextContent("42.0");
+    fireEvent.focus(mark());
+    const tip = screen.getByRole("tooltip");
+    expect(tip).toHaveTextContent(
+      `Assigned by Ada Lovelace · ${formatDateTime("2026-11-13T10:00:00Z")}`,
+    );
+    expect(tip).toHaveTextContent("main transition, shifted low");
+    expect(tip).toHaveTextContent("By temperature: in Low");
+    unmount();
+
+    render(<Harness data={named(92.4, null)} />);
+    fireEvent.focus(mark());
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      /^Assigned by Ada Lovelace · [^·]+By temperature: outside every window$/,
+    );
+  });
+
+  it("No peak says which peaks lie outside every window", () => {
+    const outside = (...values: number[]) =>
+      ({
+        ...analysis,
+        steps: [
+          ...analysis.steps,
+          ...values.map((v, i) => ({ ...step("s4", v, "unreviewed"), id: `o${i}` })),
+        ],
+        outside_every_window: values.map((_, i) => `o${i}`),
+      }) as MeltingAnalysis;
+    const noPeak = () => within(row("s4")).getByText("No peak");
+
+    const { unmount } = render(<Harness />);
+    fireEvent.focus(noPeak());
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    unmount();
+
+    const one = render(<Harness data={outside(92.44)} />);
+    fireEvent.focus(noPeak());
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Peak at 92.4 °C is outside every window. Pick it on the graph to assign it.",
+    );
+    one.unmount();
+
+    render(<Harness data={outside(92.44, 20.5)} />);
+    fireEvent.focus(noPeak());
+    expect(screen.getByRole("tooltip")).toHaveTextContent(
+      "Peaks at 20.5 °C and 92.4 °C are outside every window. Pick one on the graph to assign it.",
+    );
+  });
+
+  it("Not evaluated counts the samples a rule has no value for and filters to them", () => {
+    render(<Harness />);
+    // s4 has no ΔTm in Main, so the rule on it cannot be judged.
+    const button = screen.getByRole("button", { name: "Not evaluated 1" });
+    const hits = screen.getByRole("button", { name: "Hits 2" });
+    expect(hits.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(button);
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    expect(bodyIds()).toEqual(["r1", "s4"]);
+    expect(screen.getByText("1 of 4 samples")).toBeInTheDocument();
+    // The shift plot follows the same filter: s4 has no ΔTm to draw.
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Shift plot" }));
+    expect(plots[plots.length - 1].data[0].customdata).toEqual([]);
+  });
+
+  it("shows no Not evaluated count without a rule, or when every sample has its value", () => {
+    const { unmount } = render(<Harness hits={new Set()} applicable={[]} />);
+    expect(screen.queryByRole("button", { name: /^Not evaluated/ })).toBeNull();
+    unmount();
+    const complete = {
+      ...analysis,
+      windows: analysis.windows.map((w) =>
+        w.window === "Main" && w.channel_key === "a"
+          ? { ...w, positions: w.positions.map((p) => (p.well_id === "s4" ? wp("s4", 70, 1) : p)) }
+          : w,
+      ),
+    } as MeltingAnalysis;
+    render(<Harness data={complete} />);
+    expect(screen.queryByRole("button", { name: /^Not evaluated/ })).toBeNull();
+  });
+
+  it("without a reference, Not evaluated counts each sample once across the windows", () => {
+    const noReference = {
+      ...analysis,
+      windows: analysis.windows.map((w) => ({
+        ...w,
+        reference_tm: null,
+        reference_count: 0,
+        positions: w.positions
+          .filter((p) => p.well_id !== "r1")
+          .map((p) => ({ ...p, delta_tm: null, flags: ["no_reference_value"] })),
+      })),
+    } as MeltingAnalysis;
+    const rules: ApplicableRule[] = [
+      ...OUTSIDE_MAIN,
+      {
+        rule: { readout_name: "ΔTm (Low)", operator: "gt", value: 1 },
+        window: "Low",
+        measure: "delta_tm",
+      },
+    ];
+    render(
+      <Harness
+        data={noReference}
+        at={positions.filter((p) => p.well_id !== "r1")}
+        hits={new Set()}
+        applicable={rules}
+      />,
+    );
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
+    fireEvent.click(screen.getByRole("button", { name: "Not evaluated 4" }));
+    expect(bodyIds()).toEqual(["s1", "s2", "s3", "s4"]);
+    expect(screen.getByText("4 of 4 samples")).toBeInTheDocument();
   });
 
   it("focusing a registration number shows the structure", () => {
