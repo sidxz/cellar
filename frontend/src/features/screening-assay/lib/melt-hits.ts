@@ -123,6 +123,19 @@ export function notEvaluated(
   return sampleIds(positions, (id) => applicable.some((a) => value(a, id) == null));
 }
 
+/** The numbers the applicable rules on a window's measure compare a value against. */
+export function limitsFor(
+  applicable: readonly ApplicableRule[],
+  windowName: string,
+  measure: PerPosition,
+): number[] {
+  return applicable
+    .filter((a) => a.window === windowName && a.measure === measure)
+    .flatMap(({ rule }) =>
+      typeof rule.value === "number" ? [rule.value] : (bounds(rule.value) ?? []),
+    );
+}
+
 /** The band to draw on a window's ΔTm figures, from the first rule on its ΔTm. */
 export function bandFor(applicable: readonly ApplicableRule[], windowName: string): Band | null {
   const r = applicable.find((a) => a.window === windowName && a.measure === "delta_tm")?.rule;

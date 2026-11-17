@@ -6,6 +6,7 @@ import {
   bandFor,
   hitWells,
   isSeriesReadout,
+  limitsFor,
   meetsRule,
   notEvaluated,
   runRulesOf,
@@ -201,6 +202,20 @@ describe("bandFor", () => {
   it("has no band for another window or a rule on Tm", () => {
     expect(bandFor(split(outside("ΔTm (Main)")), "Low")).toBeNull();
     expect(bandFor(split(rule("Tm (Main)", "gt", 60)), "Main")).toBeNull();
+  });
+});
+
+describe("limitsFor", () => {
+  it("lists the numbers the rules on a window's measure compare against", () => {
+    const { applicable } = splitRunRules(
+      [outside("ΔTm (Main)"), rule("Tm (Main)", "gt", 60), rule("ΔTm (Low)", "lt", -1)],
+      READOUTS,
+    );
+    expect(limitsFor(applicable, "Main", "delta_tm")).toEqual([-2, 2]);
+    expect(limitsFor(applicable, "Main", "tm")).toEqual([60]);
+    expect(limitsFor(applicable, "Low", "delta_tm")).toEqual([-1]);
+    expect(limitsFor(applicable, "Low", "tm")).toEqual([]);
+    expect(limitsFor([], "Main", "delta_tm")).toEqual([]);
   });
 });
 

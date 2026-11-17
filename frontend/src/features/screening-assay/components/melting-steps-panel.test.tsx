@@ -539,6 +539,41 @@ describe("MeltingStepsPanel", () => {
       });
     });
 
+    it("a peak added at a picked spot is the picked peak before the analysis is read again", async () => {
+      const added = step({
+        id: "s9",
+        well_id: "w3",
+        source: "manual",
+        value: 52.3,
+        instrument_value: null,
+        instrument_label: null,
+      });
+      let saved = false;
+      api.mockImplementation((req: { url: string; method: string }) => {
+        if (req.method === "POST") {
+          saved = true;
+          return Promise.resolve(change(added));
+        }
+        // The read that follows the save does not come back.
+        if (req.url.endsWith("/melting-analysis"))
+          return saved ? new Promise(() => {}) : Promise.resolve(analysis);
+        return Promise.resolve([]);
+      });
+      renderPanel();
+      await select("Position 3");
+      act(() => plotProps.at(-1)?.onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] }));
+      fireEvent.click(
+        within(screen.getByRole("region", { name: "Spot picked" })).getByRole("button", {
+          name: "Add a peak here",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(await screen.findByRole("region", { name: "Peak picked" })).toHaveTextContent(
+        "Position 3 · peak at 52.3 °C · Manual · Unreviewed",
+      );
+      expect(screen.queryByRole("button", { name: "Add a peak here" })).not.toBeInTheDocument();
+    });
+
     it("adding a peak says which assigned peak the chosen window replaces", async () => {
       analysis = { ...analysis, steps: ASSIGNED };
       renderPanel();
@@ -594,6 +629,79 @@ describe("MeltingStepsPanel", () => {
         method: "PUT",
         data: { expected_version: 4, window: null },
       });
+    });
+  });
+
+  describe("rejecting one of a position's two counted peaks", () => {
+    const HINT = /^The other peak, at /;
+    /** Position 2's counted peaks on the shown signal, beside ones that do not
+     *  count: a rejected one, one on the other signal, another position's. */
+    const withPeaks = (values: number[], windows = WINDOWS) => {
+      analysis = {
+        ...analysis,
+        windows,
+        steps: [
+          ...values.map((value, i) =>
+            step({ id: `q${i}`, well_id: "w2", value, instrument_value: value }),
+          ),
+          step({ id: "qr", well_id: "w2", value: 70.1, status: "rejected", reason: "noise" }),
+          step({ id: "qb", well_id: "w2", channel_key: "b", value: 55.5 }),
+          step({ id: "qo", well_id: "w3", value: 61.2 }),
+        ],
+      };
+    };
+    const reject = async (value: string) => {
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, value)).getByRole("button", { name: "Reject" }));
+      expect(screen.getByLabelText("Reason")).toBeInTheDocument();
+    };
+
+    it("says the other peak may then be read as the Tm", async () => {
+      withPeaks([36.93, 41.2]);
+      await reject("41.2");
+      expect(
+        screen.getByText(
+          "The other peak, at 36.93 °C, may then be read as this position's Tm. Reject it too if it is not a real transition.",
+        ),
+      ).toBeInTheDocument();
+      // A hint only: the save is as it was.
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "false mark" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0].data).toEqual({
+        expected_version: 1,
+        status: "rejected",
+        value: 41.2,
+        reason: "false mark",
+      });
+    });
+
+    it("says nothing with three counted peaks", async () => {
+      withPeaks([36.93, 41.2, 64]);
+      await reject("41.2");
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it("says nothing with one counted peak", async () => {
+      withPeaks([41.2]);
+      await reject("41.2");
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it("says nothing when the signal has no window", async () => {
+      // "Wide" is on the other signal.
+      withPeaks([36.93, 41.2], [WINDOWS[2]]);
+      await reject("41.2");
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it("says nothing in another form of the same peak", async () => {
+      withPeaks([36.93, 41.2]);
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, "41.2")).getByRole("button", { name: "Correct" }));
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
     });
   });
 });

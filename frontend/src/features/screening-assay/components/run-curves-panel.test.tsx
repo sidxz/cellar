@@ -1004,6 +1004,64 @@ describe("RunCurvesPanel picking on the plot", () => {
     );
   });
 
+  it("a click on the reference's trace where the selected trace runs through it picks on the selected position", () => {
+    setup();
+    const click = (wellId: string, y: number) =>
+      act(() => attached().onClick?.({ points: [{ x: 55, y, data: { meta: wellId } }] }));
+    // Every trace runs through 2 at 55 °C; Position 2 is selected, the reference only drawn.
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 55 °C");
+    // Away from the selected trace, the click is the reference's.
+    click("w1", 2.5);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 55 °C");
+    // Zoomed in on y, the same distance is no longer the same spot.
+    zoom({ "yaxis.range[0]": 1.9, "yaxis.range[1]": 2.1 });
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 55 °C");
+    zoom({ "yaxis.autorange": true });
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 55 °C");
+    // Another view draws its y axis anew: a zoom of the old one went with it.
+    zoom({ "yaxis.range[0]": 1.9, "yaxis.range[1]": 2.1 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 55 °C");
+  });
+
+  describe("after a peak is added by hand", () => {
+    /** The save answers with the new peak, and the analysis read after it has the peak. */
+    const saved = (value: number) => {
+      const added = { ...peak("p3", value), source: "manual" as const, instrument_value: null };
+      const a = melting.data as MeltingAnalysis;
+      melting.data = { ...a, steps: [...a.steps, added] };
+      const callbacks = saveStep.mock.calls.at(-1)?.[1];
+      act(() => callbacks.onSuccess({ step: added, recalculated: true, compute_warning: null }));
+    };
+
+    it("the spot it was added at becomes the picked peak, with nothing more to add there", () => {
+      setup();
+      clickTrace("w2", 52.3046);
+      inBar("Spot", "Add a peak here");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      saved(52.3);
+      expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 52.3 °C · Manual · Unreviewed");
+      expect(screen.queryByRole("region", { name: "Spot picked" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add a peak here" })).toBeNull();
+      expect(pickedRows()).toHaveLength(1);
+      expect(pickedRows()[0]).toContain("52.3");
+    });
+
+    it("from the list's Add peak with nothing picked, nothing is picked", () => {
+      setup();
+      fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
+      fireEvent.change(screen.getByLabelText("Value"), { target: { value: "52.3" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      saved(52.3);
+      expect(noBar()).toBe(true);
+      expect(pickedRows()).toEqual([]);
+    });
+  });
+
   it("picks in the derivative view too", () => {
     setup();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));

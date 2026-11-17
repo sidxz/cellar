@@ -144,6 +144,28 @@ describe("ShiftPlot", () => {
     expect(last().layout.annotations.map((a: any) => a.text)).toEqual(["ΔTm = 0 (reference)"]);
   });
 
+  it("the hover text shows a ΔTm beside a limit of the rule to two decimals", () => {
+    render(
+      <ShiftPlot
+        rows={[
+          { wellId: "a", label: "A", deltaTm: -2.02 },
+          { wellId: "b", label: "B", deltaTm: 0.5 },
+          { wellId: "c", label: "C", deltaTm: 2 },
+        ]}
+        hits={new Set(["a"])}
+        band={OUTSIDE}
+        limits={[-2, 2]}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(last().data[0].text).toEqual(["−2.02", "+0.5", "+2.0"]);
+    expect(last().data[0].hovertemplate).toBe("%{y}: %{text} °C<extra></extra>");
+    // Without limits, one decimal as before.
+    show();
+    expect(last().data[0].text).toEqual(["−5.0", "+0.5", "+3.0"]);
+  });
+
   it("click selects the position", () => {
     const onSelect = vi.fn();
     const { getByTestId } = show([], onSelect);

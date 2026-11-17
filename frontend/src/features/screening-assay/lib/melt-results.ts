@@ -6,10 +6,24 @@ import type { CurvePosition } from "./curve-plot";
 
 // ---- Results table derivations (Traces tab) ----
 
-/** `+1.4`, `−8.5` (true minus), `0.0`. */
-export function formatDelta(d: number): string {
-  const r = Number(d.toFixed(1));
-  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)}`;
+/** One decimal, or two when one would show the value as a limit (of a hit
+ *  rule) that it is not on: −2.02 under "outside −2 to 2" must not read −2.0. */
+function decimals(v: number, limits: readonly number[]): 1 | 2 {
+  const shown = Number(v.toFixed(1));
+  // ponytail: two decimals at most, so −2.004 still reads −2.00; more digits if that turns up.
+  return limits.some((l) => l !== v && Number(l.toFixed(1)) === shown) ? 2 : 1;
+}
+
+/** `+1.4`, `−8.5` (true minus), `0.0`; `−2.02` beside a limit of −2. */
+export function formatDelta(d: number, limits: readonly number[] = []): string {
+  const n = decimals(d, limits);
+  const r = Number(d.toFixed(n));
+  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(n)}`;
+}
+
+/** `63.4`; `59.96` beside a limit of 60. */
+export function formatTm(v: number, limits: readonly number[] = []): string {
+  return v.toFixed(decimals(v, limits));
 }
 
 export type CellStatus =

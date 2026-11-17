@@ -6,6 +6,8 @@ import {
   batchDoseCount,
   batchSeries,
   batchSuffix,
+  formatDelta,
+  formatTm,
   matchesFilter,
   maxAbsDelta,
   orderRows,
@@ -441,5 +443,31 @@ describe("seriesCaption", () => {
       "Max ΔTm +1.2 °C · Lowest shifting conc. > 50 µM",
     );
     expect(seriesCaption(window, "other", "µM")).toBe("");
+  });
+});
+
+describe("formatDelta and formatTm", () => {
+  it("show one decimal, a ΔTm with its sign", () => {
+    expect(formatDelta(1.44)).toBe("+1.4");
+    expect(formatDelta(-8.5)).toBe("−8.5");
+    expect(formatDelta(0.04)).toBe("0.0");
+    expect(formatDelta(-0.04)).toBe("0.0");
+    expect(formatDelta(-2.02)).toBe("−2.0");
+    expect(formatDelta(-2.02, [])).toBe("−2.0");
+    expect(formatTm(57.98)).toBe("58.0");
+  });
+
+  it("show two decimals where one would read as a limit the value is not on", () => {
+    const limits = [-2, 2];
+    expect(formatDelta(-2.02, limits)).toBe("−2.02");
+    expect(formatDelta(-1.96, limits)).toBe("−1.96");
+    expect(formatDelta(2.03, limits)).toBe("+2.03");
+    // On the limit, or clear of it at one decimal, nothing is hidden.
+    expect(formatDelta(-2, limits)).toBe("−2.0");
+    expect(formatDelta(-2.4, limits)).toBe("−2.4");
+    expect(formatDelta(1.44, limits)).toBe("+1.4");
+    expect(formatTm(59.96, [60])).toBe("59.96");
+    expect(formatTm(60, [60])).toBe("60.0");
+    expect(formatTm(61.2, [60])).toBe("61.2");
   });
 });

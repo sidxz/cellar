@@ -318,6 +318,14 @@ export function RunCurvesPanel({
         request={request}
         onRequestHandled={() => setRequest(null)}
         pickedId={picked?.stepId ?? null}
+        // A spot picked on the new peak's trace has become that peak: nothing more to add there.
+        onAdded={(step) =>
+          setPick((p) =>
+            p && p.stepId === null && p.wellId === step.well_id
+              ? { wellId: p.wellId, x: step.value, stepId: step.id }
+              : p,
+          )
+        }
         onReload={melting.refetch}
       />
       {lead && anchor && series.length > 0 ? (

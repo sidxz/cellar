@@ -121,6 +121,8 @@ export interface MeltingStepsPanelProps {
   onRequestHandled: () => void;
   /** The peak picked on the plot; its row is highlighted. */
   pickedId: string | null;
+  /** A peak added by hand was saved. */
+  onAdded?: (step: MeltingStep) => void;
   onReload: () => Promise<unknown>;
 }
 
@@ -139,6 +141,7 @@ export function MeltingStepsPanel({
   request,
   onRequestHandled,
   pickedId,
+  onAdded,
   onReload,
 }: MeltingStepsPanelProps) {
   const canEdit = useCanEdit();
@@ -236,7 +239,13 @@ export function MeltingStepsPanel({
           ...(reason ? { reason } : {}),
           ...(form.window ? { assigned_window: form.window } : {}),
         },
-        callbacks,
+        {
+          ...callbacks,
+          onSuccess: (change) => {
+            callbacks.onSuccess(change);
+            onAdded?.(change.step);
+          },
+        },
       );
     } else if (form.kind === "reject") {
       send(form.step, review(form.step, "rejected", form.step.value, reason));
@@ -309,6 +318,19 @@ export function MeltingStepsPanel({
           o.assigned_window === naming.window,
       )
     : undefined;
+
+  // Rejecting one of a position's two counted peaks leaves one, which a window
+  // may then take as the Tm. A hint only: the server names the peaks.
+  const leftAlone = (() => {
+    if (form?.kind !== "reject" || windows.length === 0) return undefined;
+    const counted = analysis.steps.filter(
+      (o) =>
+        o.well_id === form.step.well_id && o.channel_key === channel && o.status !== "rejected",
+    );
+    return counted.length === 2 && counted.some((o) => o.id === form.step.id)
+      ? counted.find((o) => o.id !== form.step.id)
+      : undefined;
+  })();
 
   return (
     <section className="space-y-3">
@@ -485,6 +507,11 @@ export function MeltingStepsPanel({
             <p className="text-xs text-muted-foreground">
               The reason below was given when the peak was rejected. Clear it or change it if it no
               longer applies.
+            </p>
+          )}
+          {leftAlone && (
+            <p className="text-xs text-muted-foreground">
+              {`The other peak, at ${fmt(leftAlone.value)} ${unit}, may then be read as this position's Tm. Reject it too if it is not a real transition.`}
             </p>
           )}
           <div className="flex flex-wrap items-end gap-3">

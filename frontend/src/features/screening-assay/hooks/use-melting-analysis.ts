@@ -32,9 +32,12 @@ function useInvalidateAfterStepChange(runId: string) {
   };
 }
 
-/** POST /api/v1/runs/{runId}/melting-steps: a step added by hand. */
+/** POST /api/v1/runs/{runId}/melting-steps: a step added by hand. The step
+ *  returned joins the cached analysis at once, so what names it (a pick on the
+ *  plot) need not wait; the read that follows brings the results. */
 export function useAddMeltingStep(runId: string) {
-  const onSuccess = useInvalidateAfterStepChange(runId);
+  const qc = useQueryClient();
+  const invalidate = useInvalidateAfterStepChange(runId);
   return useMutation({
     mutationFn: (body: AddMeltingStepRequest) =>
       customInstance<MeltingStepChange>({
@@ -42,7 +45,13 @@ export function useAddMeltingStep(runId: string) {
         method: "POST",
         data: body,
       }),
-    onSuccess,
+    onSuccess: ({ step }) => {
+      qc.setQueryData<MeltingAnalysis>(
+        [...MELTING_ANALYSIS_KEY, runId],
+        (a) => a && { ...a, steps: [...a.steps.filter((s) => s.id !== step.id), step] },
+      );
+      invalidate();
+    },
   });
 }
 

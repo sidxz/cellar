@@ -179,7 +179,7 @@ beforeEach(() => {
   customInstance.mockResolvedValue({});
   onOpenChange.mockReset();
   qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  qc.setQueryData(ANALYSIS_KEY, {});
+  qc.setQueryData(ANALYSIS_KEY, analysisOf());
   qc.setQueryData(PROTOCOL_KEY, {});
 });
 
@@ -284,11 +284,13 @@ describe("NamePeaksDialog", () => {
   });
 
   it("offers to add a peak where the trace has none, and gives it a row", async () => {
+    const added = step("p7", "r1", 45.12, { source: "manual" });
     const view = renderDialog();
     clickTrace(71.3);
     expect(screen.queryByRole("button", { name: "Add a peak here" })).not.toBeInTheDocument();
     clickTrace(45.123);
     expect(customInstance).not.toHaveBeenCalled();
+    customInstance.mockResolvedValue({ step: added, recalculated: true, compute_warning: null });
     fireEvent.click(screen.getByRole("button", { name: "Add a peak here" }));
     await waitFor(() =>
       expect(customInstance).toHaveBeenCalledWith({
@@ -301,7 +303,6 @@ describe("NamePeaksDialog", () => {
       expect(screen.queryByRole("button", { name: "Add a peak here" })).not.toBeInTheDocument(),
     );
     // The page reloads the analysis; the new peak has a row and the ranges follow.
-    const added = step("p7", "r1", 45.12, { source: "manual" });
     view.rerender(dialog({ analysis: analysisOf({ steps: [...STEPS, added] }) }));
     expect(rowNames()).toEqual(["Peak at 36.6 °C", "Peak at 45.12 °C", "Peak at 71.3 °C"]);
     expect(peakRow("45.12").getByText("Manual")).toBeInTheDocument();

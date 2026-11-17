@@ -20,18 +20,21 @@ import type {
   FullWidthCellKeyDownEvent,
   GridApi,
   ICellRendererParams,
+  OverlayType,
   RowClassParams,
   RowClickedEvent,
 } from "ag-grid-community";
 import { Pin, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
 import type { SelectionState } from "../lib/curve-selection";
+import { type ApplicableRule, limitsFor } from "../lib/melt-hits";
 import {
   type CellStatus,
   type ResultRow,
   STATUS_ORDER,
   type WindowCell,
   formatDelta,
+  formatTm,
   worstStatus,
 } from "../lib/melt-results";
 import { type MeltingStep, WELL_TYPE_LABELS, type WellType } from "../types";
@@ -68,7 +71,12 @@ const STATUS: Record<
   reviewed: { label: "Reviewed", variant: "ghost", className: "px-0 text-muted-foreground" },
 };
 
-const fmtTm = (v: number | null | undefined) => (v == null ? "" : v.toFixed(1));
+const fmtTm = (v: number | null | undefined, limits?: readonly number[]) =>
+  v == null ? "" : formatTm(v, limits);
+const NO_RULES: readonly ApplicableRule[] = [];
+// The line above the grid counts what a filter leaves; AG Grid's own notices
+// would be drawn over the pinned reference rows.
+const NO_EMPTY_NOTICE: OverlayType[] = ["noRows", "noMatchingRows"];
 
 /** `Peak at 48.1 °C is outside every window. Pick it on the graph to assign it.` */
 function outsideText(peaks: readonly number[]): string {
@@ -245,8 +253,12 @@ function windowColumns(
   grouped: boolean,
   steps: readonly MeltingStep[],
   windows: readonly Range[],
+  applicable: readonly ApplicableRule[],
 ): ColDef<ResultRow>[] {
   const cell = (r: ResultRow | undefined): WindowCell | undefined => r?.cells[name];
+  // A value beside a limit of the run's hit rule is shown to two decimals.
+  const tmLimits = limitsFor(applicable, name, "tm");
+  const deltaLimits = limitsFor(applicable, name, "delta_tm");
   return [
     {
       colId: `${name}:tm`,
@@ -256,15 +268,15 @@ function windowColumns(
       cellClass: NUMERIC,
       getQuickFilterText: NOT_SEARCHED,
       valueGetter: (p) => cell(p.data)?.tm ?? null,
-      valueFormatter: (p) => fmtTm(p.value),
+      valueFormatter: (p) => fmtTm(p.value, tmLimits),
       // A Tm named by assignment carries a marker; the rest read as plain numbers.
       cellRenderer: (p: Params) => {
         const c = cell(p.data);
-        if (c?.namedBy !== "assignment") return fmtTm(c?.tm);
+        if (c?.namedBy !== "assignment") return fmtTm(c?.tm, tmLimits);
         return (
           <span className="inline-flex items-center gap-1">
             <AssignedMark step={steps.find((s) => s.id === c.stepId)} windows={windows} />
-            {fmtTm(c.tm)}
+            {fmtTm(c.tm, tmLimits)}
           </span>
         );
       },
@@ -278,7 +290,11 @@ function windowColumns(
       valueGetter: (p) =>
         p.data?.wellType === "reference" ? null : (cell(p.data)?.deltaTm ?? null),
       valueFormatter: (p) =>
-        p.data?.wellType === "reference" ? "—" : p.value == null ? "" : formatDelta(p.value),
+        p.data?.wellType === "reference"
+          ? "—"
+          : p.value == null
+            ? ""
+            : formatDelta(p.value, deltaLimits),
       cellClass: (p) =>
         cn(
           NUMERIC,
@@ -306,6 +322,7 @@ export function MeltResultsGrid({
   steps,
   windows,
   hits,
+  applicable = NO_RULES,
   doseUnit,
   selection,
   onRowClick,
@@ -318,6 +335,8 @@ export function MeltResultsGrid({
   windows: readonly Range[];
   /** The positions the run's hit rule calls hits. */
   hits: ReadonlySet<string>;
+  /** The run's rules on Tm/ΔTm: a value beside one of their limits is shown to two decimals. */
+  applicable?: readonly ApplicableRule[];
   doseUnit: string;
   selection: SelectionState;
   onRowClick: (
@@ -364,9 +383,9 @@ export function MeltResultsGrid({
     const values: Col[] = compare
       ? windowNames.map((n) => ({
           headerName: n,
-          children: windowColumns(n, hits, true, steps, windows),
+          children: windowColumns(n, hits, true, steps, windows, applicable),
         }))
-      : windowColumns(windowNames[0], hits, false, steps, windows);
+      : windowColumns(windowNames[0], hits, false, steps, windows, applicable);
     return [
       ...identity,
       ...values,
@@ -393,7 +412,7 @@ export function MeltResultsGrid({
           p.data ? <StatusCell row={p.data} windowNames={windowNames} /> : null,
       },
     ];
-  }, [windowNames, compare, hits, doseUnit, steps, windows]);
+  }, [windowNames, compare, hits, doseUnit, steps, windows, applicable]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
   // classes) when they change, so the highlight follows the selection.
@@ -454,6 +473,7 @@ export function MeltResultsGrid({
         groupHeaderHeight={GROUP_HEADER_HEIGHT}
         height={gridHeight(rows.pinned.length + rows.body.length, compare)}
         suppressFilters
+        suppressOverlays={NO_EMPTY_NOTICE}
         searchPlaceholder={SEARCH}
       />
     </TooltipProvider>

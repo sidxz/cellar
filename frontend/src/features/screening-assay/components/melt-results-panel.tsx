@@ -4,7 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
-import { type ApplicableRule, bandFor, notEvaluated } from "../lib/melt-hits";
+import { type ApplicableRule, bandFor, limitsFor, notEvaluated } from "../lib/melt-hits";
 import {
   type ResultFilter,
   type WindowSummary,
@@ -39,7 +39,8 @@ export interface MeltResultsPanelProps {
   onShownWindowsChange?: (names: readonly string[]) => void;
   /** The positions the run's hit rule calls hits (empty without a rule). */
   hits: ReadonlySet<string>;
-  /** The run's rules that apply to Tm/ΔTm; they draw the shift plot's band. */
+  /** The run's rules that apply to Tm/ΔTm; they draw the shift plot's band, and
+   *  a value beside one of their limits is shown to two decimals. */
   applicable: readonly ApplicableRule[];
   /** The run's hit rule line, shown above the counts. */
   hitRule?: ReactNode;
@@ -232,6 +233,7 @@ export function MeltResultsPanel({
           )}
           hits={hits}
           band={bandFor(applicable, lead.window)}
+          limits={limitsFor(applicable, lead.window, "delta_tm")}
           selected={selection.selected}
           onSelect={(id) =>
             onSelectionChange(applyClick(selection, [id], id, { shift: false, toggle: false }))
@@ -244,6 +246,7 @@ export function MeltResultsPanel({
           steps={analysis.steps}
           windows={windows}
           hits={hits}
+          applicable={applicable}
           doseUnit={doseUnit}
           selection={selection}
           onRowClick={(id, mods, order) =>
