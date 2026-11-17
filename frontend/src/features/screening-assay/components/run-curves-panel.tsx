@@ -8,7 +8,7 @@ import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { cn, shortId } from "@/shared/lib/utils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMeltingAnalysis } from "../hooks/use-melting-analysis";
+import { useMeltingAnalysis, usePeakCandidates } from "../hooks/use-melting-analysis";
 import { useProtocol } from "../hooks/use-protocols";
 import { type CurveView, useRunCurves } from "../hooks/use-run-curves";
 import {
@@ -17,6 +17,7 @@ import {
   curveSetFromRun,
   nearestPeak,
   orderedPositions,
+  pickReach,
 } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState, applyClick } from "../lib/curve-selection";
 import { bandFor, hitWells, splitRunRules } from "../lib/melt-hits";
@@ -30,6 +31,7 @@ import {
   seriesCaption,
   seriesGaps,
 } from "../lib/melt-results";
+import { hintsFor, snapTarget } from "../lib/peak-candidates";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
 import { ConcentrationChart } from "./concentration-chart";
@@ -80,17 +82,15 @@ export function RunCurvesPanel({
   const [view, setView] = useState<CurveView>("measured");
   // The committed window; undefined lets the API choose.
   const [derivativeWindow, setDerivativeWindow] = useState<number | undefined>();
+  // The smoothing in use: the one set in the Derivative view, else the API's default.
+  const smoothing = view === "derivative" ? derivativeWindow : undefined;
   const {
     data: fetched,
     isLoading,
     isPlaceholderData,
     error,
     refetch,
-  } = useRunCurves(runId, {
-    channel,
-    view,
-    window: view === "derivative" ? derivativeWindow : undefined,
-  });
+  } = useRunCurves(runId, { channel, view, window: smoothing });
   // A failed request keeps the last curves' toolbar on screen, so the user can
   // change the window or the view instead of being left with only an error.
   const lastGood = useRef(fetched);
@@ -142,11 +142,26 @@ export function RunCurvesPanel({
   );
   // The value field of the open step form; a plot click fills it.
   const [stepValue, setStepValue] = useState("");
-  // What the last click on a trace picked. It selects only: every change is
-  // made through the step list, which this asks for a form (or Accept).
-  const [pick, setPick] = useState<PeakPick | null>(null);
+  // What the last click on a trace picked, and how far that click reached. It
+  // selects only: every change is made through the step list, which this asks
+  // for a form (or Accept).
+  const [pick, setPick] = useState<(PeakPick & { reach: number }) | null>(null);
   const [moving, setMoving] = useState(false);
   const [request, setRequest] = useState<StepRequest | null>(null);
+  // The peaks found in the traces of the position looked at (the one selected
+  // last) and, when a spot or a peak is picked on another's trace, of that
+  // one: never of every position. One read per position and smoothing serves
+  // the snap and the hint alike.
+  const lookedAt =
+    analysis && selection.anchor !== null && selection.selected.has(selection.anchor)
+      ? selection.anchor
+      : undefined;
+  const found = usePeakCandidates(runId, lookedAt, smoothing);
+  const foundAtPick = usePeakCandidates(
+    runId,
+    pick && pick.wellId !== lookedAt ? pick.wellId : undefined,
+    smoothing,
+  );
   const clearPick = useCallback(() => {
     setPick(null);
     setMoving(false);
@@ -252,6 +267,18 @@ export function RunCurvesPanel({
     pick && pickPosition && (pick.stepId === null || pickedStep)
       ? { ...pick, position: pickPosition, step: pickedStep }
       : null;
+  /** What a form opened from a click at x on a position's trace offers: the
+   *  found peak of the shown signal nearest within the click's reach, with the
+   *  temperature clicked beside it; else (none there, or the found peaks are
+   *  not loaded) the temperature clicked. */
+  const offered = (wellId: string, x: number, reach: number) => {
+    const read = wellId === lookedAt ? found : wellId === pick?.wellId ? foundAtPick : null;
+    const onSignal = read?.data?.signals.find((s) => s.channel_key === set.channel);
+    const clicked = stepInput(x);
+    const peak = snapTarget(onSignal?.candidates ?? [], x, reach);
+    const value = peak ? stepInput(peak.value) : clicked;
+    return value === clicked ? { value } : { value, clicked };
+  };
   // A click on a trace picks the nearest drawn peak of that position, else the
   // spot; an open Add or Correct form takes the temperature either way.
   // ponytail: with Markers off the peaks are not drawn yet can still be picked;
@@ -260,22 +287,73 @@ export function RunCurvesPanel({
     setStepValue(stepInput(at.x));
     if (!analysis) return;
     setMoving(false);
+    // As far as a click reaches for a drawn peak, it reaches for a found one.
+    const reach = pickReach(at.visibleSpan);
     if (moving && picked?.step && picked.wellId === at.wellId) {
-      setRequest({ kind: "correct", stepId: picked.step.id, value: stepInput(at.x) });
+      setRequest({
+        kind: "correct",
+        stepId: picked.step.id,
+        ...offered(at.wellId, at.x, reach),
+      });
       return;
     }
     const peak = nearestPeak(drawnPeaks(at.wellId), at.x, at.visibleSpan);
-    setPick({ wellId: at.wellId, x: at.x, stepId: peak?.id ?? null });
+    setPick({ wellId: at.wellId, x: at.x, stepId: peak?.id ?? null, reach });
   };
   const ask = (next: StepRequest) => {
     setMoving(false);
     setRequest(next);
   };
+  const showSignal = (key: string) => {
+    setChannel(key);
+    // The peaks, and so what a spot is, belong to the signal.
+    clearPick();
+  };
+
+  // Where the position looked at reads "No peak" in the lead window, the other
+  // signals that show a step inside that window's range.
+  const lookedAtPosition = data.positions.find((p) => p.well_id === lookedAt);
+  // As the results table reads it.
+  const reading =
+    analysis && lead && lookedAtPosition
+      ? resultRows(
+          [lead],
+          [lookedAtPosition],
+          analysis.steps,
+          analysis.step_checks,
+          analysis.outside_every_window,
+        )[0]?.cells[lead.window]?.status
+      : undefined;
+  const foundSignals = found.data?.signals;
+  const hints =
+    lead && reading === "no_step" && foundSignals
+      ? hintsFor(
+          lead,
+          new Map(
+            set.channels
+              .filter((c) => c.key !== set.channel)
+              .map((c) => [
+                c.key,
+                foundSignals.find((s) => s.channel_key === c.key)?.candidates ?? [],
+              ]),
+          ),
+        ).map((h) => ({
+          ...h,
+          // The signal's name as the signal switch shows it.
+          label: set.channels.find((c) => c.key === h.signal)?.label ?? h.signal,
+        }))
+      : [];
 
   // The grid is the selector; without an analysis (it failed) the viewer's own stays.
   const fallback = !analysis && !melting.isLoading;
   const signalWindows = analysis?.windows.filter((w) => w.channel_key === set.channel) ?? [];
   const unit = currentChannel(set)?.x_unit ?? "";
+  // A picked reference trace is drawn without being selected: its peaks are
+  // listed while it is picked, so the forms have their position.
+  const listed =
+    picked && !selection.selected.has(picked.wellId)
+      ? [...selectedPositions, picked.position]
+      : selectedPositions;
   const underPlot = analysis && selectedPositions.length > 0 && (
     <>
       {picked && (
@@ -295,7 +373,12 @@ export function RunCurvesPanel({
           onReject={() => ask({ kind: "reject", stepId: picked.step?.id })}
           onMove={() => setMoving((on) => !on)}
           onAdd={(window) =>
-            ask({ kind: "add", wellId: picked.wellId, value: stepInput(picked.x), window })
+            ask({
+              kind: "add",
+              wellId: picked.wellId,
+              window,
+              ...offered(picked.wellId, picked.x, picked.reach),
+            })
           }
           onClear={clearPick}
         />
@@ -303,13 +386,7 @@ export function RunCurvesPanel({
       <MeltingStepsPanel
         runId={runId}
         analysis={analysis}
-        // A picked reference trace is drawn without being selected: its peaks
-        // are listed while it is picked, so the forms have their position.
-        positions={
-          picked && !selection.selected.has(picked.wellId)
-            ? [...selectedPositions, picked.position]
-            : selectedPositions
-        }
+        positions={listed}
         channel={set.channel}
         windows={signalWindows}
         unit={unit}
@@ -322,8 +399,33 @@ export function RunCurvesPanel({
         onAdded={(step) =>
           setPick((p) =>
             p && p.stepId === null && p.wellId === step.well_id
-              ? { wellId: p.wellId, x: step.value, stepId: step.id }
+              ? { ...p, x: step.value, stepId: step.id }
               : p,
+          )
+        }
+        underList={
+          hints.length > 0 && (
+            <ul aria-label="Steps on other signals" className="space-y-1 text-sm">
+              {hints.map((h) => (
+                <li key={h.signal} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  {/* Named, as the list names its peaks' positions, when it lists several. */}
+                  {listed.length > 1 && (
+                    <span className="font-medium">{lookedAtPosition?.position_label}</span>
+                  )}
+                  <span className="text-muted-foreground">
+                    {`${h.label} shows a step near ${h.value.toFixed(1)} ${unit}.`}
+                  </span>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => showSignal(h.signal)}
+                  >
+                    {`Show ${h.label}`}
+                  </Button>
+                </li>
+              ))}
+            </ul>
           )
         }
         onReload={melting.refetch}
@@ -442,11 +544,8 @@ export function RunCurvesPanel({
             onShowReferencesChange={setShowReferences}
             selection={selection}
             onSelectionChange={setSelection}
-            onChannelChange={(key) => {
-              setChannel(key);
-              // The peaks, and so what a spot is, belong to the signal.
-              clearPick();
-            }}
+            channel={channel}
+            onChannelChange={showSignal}
             onViewChange={setView}
             onWindowChange={setDerivativeWindow}
             pending={isPlaceholderData}
