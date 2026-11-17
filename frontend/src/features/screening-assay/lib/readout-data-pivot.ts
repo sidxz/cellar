@@ -45,8 +45,11 @@ export function hasRawLayer(rd: Pick<ReadoutDefinition, "is_calculated" | "melt_
 }
 
 /** Aliases for a row from its enriched name + synonyms, deduped against the
- * registration number so the Compound column doesn't echo Aliases. */
-function buildAliases(row: ReadoutData): string[] {
+ * registration number so the Compound column doesn't echo Aliases. Shared with
+ * the Traces results, whose positions carry the same three fields. */
+export function buildAliases(
+  row: Pick<ReadoutData, "molecule_name" | "registration_number" | "synonyms">,
+): string[] {
   const aliases: string[] = [];
   if (
     row.molecule_name &&

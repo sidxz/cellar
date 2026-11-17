@@ -4,6 +4,7 @@
 import type { MeltWindow, MeltWindowPosition, MeltingStep, StepCheck } from "../types";
 import type { CurvePosition } from "./curve-plot";
 import { holderOrder } from "./curve-selection";
+import { buildAliases } from "./readout-data-pivot";
 
 // ---- Results table derivations (Traces tab) ----
 
@@ -56,6 +57,8 @@ export interface SampleIdentity {
   batchSuffix: string | null;
   label: string | null;
   smiles: string | null;
+  /** A registered compound's name and synonyms, as the Readouts view lists them. */
+  aliases: string[];
 }
 
 export interface ResultRow {
@@ -196,6 +199,7 @@ export function resultRows(
         batchSuffix: batchSuffix(p),
         label: p.label ?? null,
         smiles: p.smiles ?? null,
+        aliases: p.registration_number ? buildAliases(p) : [],
       },
       sampleText: sampleTextOf(p),
       concentration: p.dose ?? null,

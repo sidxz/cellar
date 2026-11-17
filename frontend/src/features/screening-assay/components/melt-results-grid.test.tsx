@@ -34,6 +34,7 @@ const row = {
     batchSuffix: null,
     smiles: null,
     label: "Long sample",
+    aliases: [],
   },
   sampleText: "Long sample",
   concentration: 1,

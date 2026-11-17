@@ -137,7 +137,7 @@ function deltaTint(d: number, isHit: boolean): string {
 }
 
 function SampleCell({ row }: { row: ResultRow }) {
-  const { registrationNumber, moleculeId, batchSuffix, smiles, label } = row.identity;
+  const { registrationNumber, moleculeId, batchSuffix, smiles, label, aliases } = row.identity;
   if (registrationNumber) {
     const id = moleculeId ? (
       <EntityLink
@@ -175,6 +175,16 @@ function SampleCell({ row }: { row: ResultRow }) {
           id
         )}
         {batchSuffix && <span className="text-xs text-muted-foreground">{`·${batchSuffix}`}</span>}
+        {aliases.length > 0 && (
+          // The first alias gives way to the rest of the cell; "+N" never does.
+          <span
+            className="flex min-w-0 gap-1 text-xs text-muted-foreground"
+            title={aliases.join(", ")}
+          >
+            <span className="truncate">{aliases[0]}</span>
+            {aliases.length > 1 && <span>{`+${aliases.length - 1}`}</span>}
+          </span>
+        )}
       </span>
     );
   }
@@ -356,7 +366,12 @@ export function MeltResultsGrid({
         valueGetter: (p) => p.data?.sampleText ?? "",
         getQuickFilterText: (p) =>
           p.data
-            ? [p.data.sampleText, p.data.identity.label, p.data.identity.batchSuffix]
+            ? [
+                p.data.sampleText,
+                p.data.identity.label,
+                p.data.identity.batchSuffix,
+                ...p.data.identity.aliases,
+              ]
                 .filter(Boolean)
                 .join(" ")
             : "",

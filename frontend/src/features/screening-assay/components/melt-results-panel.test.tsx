@@ -558,6 +558,50 @@ describe("MeltResultsPanel", () => {
   });
 });
 
+describe("aliases in the Sample cell", () => {
+  /** s1 has one alias; s3 has its compound's name and two synonyms. */
+  const withAliases = positions.map((p) =>
+    p.well_id === "s1"
+      ? { ...p, synonyms: ["SACC-0455096"] }
+      : p.well_id === "s3"
+        ? { ...p, molecule_name: "Isoniazid", synonyms: ["SACC-0000002", "INH"] }
+        : p,
+  );
+  const sample = (id: string) => (row(id) as HTMLTableRowElement).cells[0];
+
+  it("shows one alias in full, and of several the first with how many more", () => {
+    render(<Harness at={withAliases} />);
+    const one = within(row("s1")).getByTitle("SACC-0455096");
+    expect(one).toHaveTextContent(/^SACC-0455096$/);
+    expect(one).toHaveClass("text-muted-foreground");
+    // The registration number still links, with its batch suffix.
+    expect(sample("s1")).toHaveTextContent(/^CC-014538·001SACC-0455096$/);
+    expect(within(row("s1")).getByRole("link", { name: "CC-014538" })).toBeInTheDocument();
+    // The tooltip lists every alias.
+    const several = within(row("s3")).getByTitle("Isoniazid, SACC-0000002, INH");
+    expect(within(several).getByText("Isoniazid")).toBeInTheDocument();
+    expect(within(several).getByText("+2")).toBeInTheDocument();
+    expect(several).not.toHaveTextContent("INH");
+  });
+
+  it("leaves a sample without aliases and an unregistered one as they were", () => {
+    render(<Harness at={withAliases.map((p) => (p.well_id === "s1" ? positions[1] : p))} />);
+    expect(sample("s1")).toHaveTextContent(/^CC-014538·001$/);
+    expect(within(row("s2")).getByTitle("16:0-CoA (unregistered)")).toHaveTextContent(/^16:0-CoA$/);
+    expect(sample("s2")).toHaveTextContent(/^16:0-CoA$/);
+  });
+
+  it("the search box finds a sample by any of its aliases", () => {
+    render(<Harness at={withAliases} />);
+    const search = screen.getByPlaceholderText("Find sample, position or batch");
+    fireEvent.change(search, { target: { value: "sacc-0455" } });
+    expect(bodyIds()).toEqual(["r1", "s1"]);
+    // An alias behind "+2" is found too.
+    fireEvent.change(search, { target: { value: "INH" } });
+    expect(bodyIds()).toEqual(["r1", "s3"]);
+  });
+});
+
 describe("shift plot toggle", () => {
   it("shows the plot for one window and selects a clicked point", () => {
     const onChange = vi.fn();

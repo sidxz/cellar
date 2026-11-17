@@ -407,6 +407,21 @@ describe("melt-results", () => {
     expect(inHolderOrder([...plate].sort(asText))).toEqual(plate.map((p) => p.position_label));
   });
 
+  it("a registered sample lists its compound's name and synonyms as aliases, once each", () => {
+    const positions = [
+      pos("a", {
+        registration_number: "CC-1",
+        molecule_name: "Aspirin",
+        synonyms: ["SACC-0455096", "CC-1", "Aspirin"],
+      }),
+      // A name that only repeats the registration number is no alias.
+      pos("b", { registration_number: "CC-2", molecule_name: "CC-2" }),
+      pos("c", { label: "Lipid X" }),
+    ];
+    const rows = resultRows([], positions, [], noChecks, []);
+    expect(rows.map((r) => r.identity.aliases)).toEqual([["Aspirin", "SACC-0455096"], [], []]);
+  });
+
   it("shiftRows excludes references, non-samples and missing values, ascending", () => {
     const { w, positions } = fixture();
     const rows = resultRows([w], positions, [], noChecks, []);
