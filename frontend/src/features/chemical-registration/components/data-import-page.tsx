@@ -32,6 +32,7 @@ import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-re
 import { useEffect, useState } from "react";
 import { MOLECULES_KEY } from "../hooks/query-keys";
 import {
+  type CddMoleculeIdentifierCheck,
   useCancelCddMoleculeImport,
   useCddMoleculeImportStatus,
   useForceFailImport,
@@ -47,7 +48,10 @@ import {
 } from "../hooks/use-cdd-plate-import";
 import { NotFoundIdentifiers, SelectedMoleculesImport } from "./selected-molecules-import";
 
-/** History badge per import mode; "filtered" is the import of specific molecules. */
+/** The Import Mode choices; "filtered" is "Specific molecules", the import of a pasted list. */
+type ImportMode = "full_vault" | "sync" | "filtered";
+
+/** History badge per import mode. */
 const IMPORT_MODE_LABELS: Record<string, string> = {
   full_vault: "Full",
   sync: "Sync",
@@ -60,8 +64,16 @@ export function DataImportPage() {
 
   // Form state
   const [orgId, setOrgId] = useState("");
-  const [importMode, setImportMode] = useState<"full_vault" | "sync">("full_vault");
+  const [importMode, setImportMode] = useState<ImportMode>("full_vault");
   const [maxMolecules, setMaxMolecules] = useState("");
+  // "Specific molecules": the pasted list, held here so that switching modes keeps it, and the
+  // last check's answer with the list and the organization it was made for.
+  const [identifiers, setIdentifiers] = useState("");
+  const [lastCheck, setLastCheck] = useState<{
+    text: string;
+    orgId: string;
+    result: CddMoleculeIdentifierCheck;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
   // Identifiers the vault did not know, for the "specific molecules" import now running or just done.
@@ -125,16 +137,38 @@ export function DataImportPage() {
       const result = await startMutation.mutateAsync(params);
       setWorkflowId(result.workflow_id);
       refetchHistory();
+      if (params.importMode === "filtered") {
+        // That list is being imported now: the form comes back empty, ready for the next one.
+        setIdentifiers("");
+        setLastCheck(null);
+      }
     } catch (err: unknown) {
       setNotFound([]);
       setError(err instanceof Error ? err.message : "Failed to start import");
     }
   };
 
+  const isSpecific = importMode === "filtered";
+  // A check answers for one list and one organization: once either changes it is stale.
+  const checked =
+    lastCheck?.text === identifiers && lastCheck.orgId === orgId ? lastCheck.result : null;
+
   const handleStart = async () => {
     if (!orgId) {
       setCompletionMessage(null);
       setError("Organization is required");
+      return;
+    }
+    if (isSpecific) {
+      if (!checked?.found.length) return;
+      await startImport(
+        {
+          originatingOrgId: orgId,
+          importMode: "filtered",
+          filterCriteria: { names: checked.found },
+        },
+        checked.not_found,
+      );
       return;
     }
     const limit = maxMolecules ? Number.parseInt(maxMolecules, 10) : undefined;
@@ -144,12 +178,6 @@ export function DataImportPage() {
       maxMolecules: limit && !Number.isNaN(limit) ? limit : undefined,
     });
   };
-
-  const handleImportSelected = (found: string[], identifiersNotFound: string[]) =>
-    startImport(
-      { originatingOrgId: orgId, importMode: "filtered", filterCriteria: { names: found } },
-      identifiersNotFound,
-    );
 
   const handleCancel = async () => {
     if (workflowId) {
@@ -249,16 +277,28 @@ export function DataImportPage() {
                 <div className="max-w-lg space-y-5">
                   <div className="rounded-md border p-4 text-sm space-y-2">
                     <p>This will:</p>
-                    <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
-                      <li>Discover all molecules in your CDD Vault</li>
-                      <li>Register each molecule with structure processing and deduplication</li>
-                      <li>Import associated batches (lots, amounts, salts)</li>
-                      <li>Register molecules without SMILES as undisclosed</li>
-                    </ul>
-                    <p className="text-muted-foreground">
-                      For large vaults (100K+ molecules), this may take several hours. You can
-                      navigate away and check back later.
-                    </p>
+                    {isSpecific ? (
+                      <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                        <li>Import only the molecules you list below, and their batches</li>
+                        <li>Match each one by the name or a synonym it has in CDD Vault</li>
+                        <li>Touch nothing else in the vault</li>
+                      </ul>
+                    ) : (
+                      <>
+                        <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+                          <li>Discover all molecules in your CDD Vault</li>
+                          <li>
+                            Register each molecule with structure processing and deduplication
+                          </li>
+                          <li>Import associated batches (lots, amounts, salts)</li>
+                          <li>Register molecules without SMILES as undisclosed</li>
+                        </ul>
+                        <p className="text-muted-foreground">
+                          For large vaults (100K+ molecules), this may take several hours. You can
+                          navigate away and check back later.
+                        </p>
+                      </>
+                    )}
                   </div>
 
                   <div className="grid gap-2">
@@ -281,8 +321,8 @@ export function DataImportPage() {
                     <Label>Import Mode</Label>
                     <RadioGroup
                       value={importMode}
-                      onValueChange={(v) => setImportMode(v as "full_vault" | "sync")}
-                      className="flex gap-6"
+                      onValueChange={(v) => setImportMode(v as ImportMode)}
+                      className="flex flex-wrap gap-x-6 gap-y-2"
                     >
                       <div className="flex items-center gap-2">
                         <RadioGroupItem value="full_vault" id="mode-full" />
@@ -296,41 +336,68 @@ export function DataImportPage() {
                           Sync (new molecules only)
                         </Label>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <RadioGroupItem value="filtered" id="mode-specific" />
+                        <Label htmlFor="mode-specific" className="font-normal">
+                          Specific molecules
+                        </Label>
+                      </div>
                     </RadioGroup>
                   </div>
 
-                  <div className="grid gap-2">
-                    <Label htmlFor="max-molecules">
-                      Max molecules{" "}
-                      <span className="font-normal text-muted-foreground">
-                        (optional, for testing)
-                      </span>
-                    </Label>
-                    <Input
-                      id="max-molecules"
-                      type="number"
-                      min={1}
-                      placeholder="Leave blank to import all"
-                      value={maxMolecules}
-                      onChange={(e) => setMaxMolecules(e.target.value)}
+                  {isSpecific ? (
+                    <SelectedMoleculesImport
+                      text={identifiers}
+                      onTextChange={setIdentifiers}
+                      checked={checked}
+                      onChecked={(text, result) => setLastCheck({ text, orgId, result })}
                     />
+                  ) : (
+                    <div className="grid gap-2">
+                      <Label htmlFor="max-molecules">
+                        Max molecules{" "}
+                        <span className="font-normal text-muted-foreground">
+                          (optional, for testing)
+                        </span>
+                      </Label>
+                      <Input
+                        id="max-molecules"
+                        type="number"
+                        min={1}
+                        placeholder="Leave blank to import all"
+                        value={maxMolecules}
+                        onChange={(e) => setMaxMolecules(e.target.value)}
+                      />
+                    </div>
+                  )}
+
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Button
+                        onClick={handleStart}
+                        disabled={
+                          !orgId ||
+                          startMutation.isPending ||
+                          (isSpecific && !checked?.found.length)
+                        }
+                      >
+                        {startMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Start Import
+                      </Button>
+                      {isSpecific && checked && (
+                        <span className="text-sm tabular-nums text-muted-foreground">
+                          {checked.found.length.toLocaleString()} found
+                        </span>
+                      )}
+                    </div>
+                    {isSpecific && !orgId && !!checked?.found.length && (
+                      <p className="text-xs text-muted-foreground">
+                        Select the originating organization above, then check the identifiers again.
+                      </p>
+                    )}
                   </div>
-
-                  <Button onClick={handleStart} disabled={!orgId || startMutation.isPending}>
-                    {startMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                    Start Import
-                  </Button>
-                </div>
-              )}
-
-              {/* A separate way in: only the molecules a pasted list names */}
-              {!isImportActive && (
-                <div className="border-t pt-6">
-                  <SelectedMoleculesImport
-                    organizationSelected={!!orgId}
-                    isImporting={startMutation.isPending}
-                    onImport={handleImportSelected}
-                  />
                 </div>
               )}
 
