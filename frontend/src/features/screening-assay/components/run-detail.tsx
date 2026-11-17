@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { useMemberNames } from "@/shared/hooks/use-workspace-members";
 import { cn } from "@/shared/lib/utils";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import {
@@ -64,10 +65,9 @@ import {
   useStartRun,
   useUnlockRun,
 } from "../hooks/use-runs";
-import type { RunStatus } from "../types";
+import type { Run, RunStatus } from "../types";
 import { ResetRunDataDialog } from "./reset-run-data-dialog";
 import { RunDataPanel } from "./run-data-panel";
-import { RunDataSummary } from "./run-data-summary";
 import { RunSummaryCard } from "./run-summary-card";
 
 interface RunDetailProps {
@@ -76,8 +76,8 @@ interface RunDetailProps {
 
 export function RunDetail({ runId }: RunDetailProps) {
   const router = useRouter();
+  const memberName = useMemberNames();
   const isAdmin = useAuthzHasRole("admin");
-  const canEditTags = useAuthzHasRole("editor");
   const query = useRun(runId);
   const { data: protocol } = useProtocol(query.data?.protocol_id ?? "");
   // plate_count counts plates only; a run whose holder is another kind still has data to
@@ -196,13 +196,223 @@ export function RunDetail({ runId }: RunDetailProps) {
     );
   };
 
+  const resultActions = (r: Run) => (
+    <>
+      <VisualizeButton runId={r.id} />
+      {!r.is_locked && (r.plate_count > 0 || holderCount > 0) && (
+        <div className="inline-flex">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleRecompute(false)}
+            disabled={recomputeMutation.isPending}
+            title="Re-run normalization, replicate aggregation, calculated readouts, and dose-response fitting on existing raw data"
+            className="rounded-r-none border-r-0"
+          >
+            <Calculator className="size-4" />
+            {recomputeMutation.isPending ? "Recomputing..." : "Recompute"}
+          </Button>
+          <Popover open={recomputePopoverOpen} onOpenChange={setRecomputePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={recomputeMutation.isPending}
+                title="Recompute with one-time fit constraint overrides"
+                aria-label="Recompute options"
+                className="rounded-l-none px-2"
+              >
+                <ChevronDown className="size-4" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[28rem] max-w-[calc(100vw-2rem)] space-y-3" align="end">
+              <div>
+                <p className="text-sm font-medium">Override fit constraints</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  One-time overrides for this recompute. &ldquo;Inherit&rdquo; uses the
+                  protocol&apos;s setting (Free, Range, or Lock). Not saved on the run or the
+                  protocol.
+                </p>
+              </div>
+
+              {/* Top */}
+              <div className="rounded-md border bg-background p-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Top</Label>
+                  <RecomputeModeToggle
+                    mode={recomputeTopMode}
+                    onChange={(v) => updateOverride("topMode", v)}
+                    idPrefix="rec-top"
+                  />
+                </div>
+                {recomputeTopMode === "lock" && (
+                  <Input
+                    type="number"
+                    className="h-8 text-xs"
+                    placeholder="e.g., 100"
+                    value={recomputeTop}
+                    onChange={(e) => updateOverride("top", e.target.value)}
+                  />
+                )}
+                {recomputeTopMode === "range" && (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      className="h-8 text-xs"
+                      placeholder="85"
+                      value={recomputeTopMin}
+                      onChange={(e) => updateOverride("topMin", e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="number"
+                      className="h-8 text-xs"
+                      placeholder="110"
+                      value={recomputeTopMax}
+                      onChange={(e) => updateOverride("topMax", e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom */}
+              <div className="rounded-md border bg-background p-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-medium">Bottom</Label>
+                  <RecomputeModeToggle
+                    mode={recomputeBottomMode}
+                    onChange={(v) => updateOverride("bottomMode", v)}
+                    idPrefix="rec-bot"
+                  />
+                </div>
+                {recomputeBottomMode === "lock" && (
+                  <Input
+                    type="number"
+                    className="h-8 text-xs"
+                    placeholder="e.g., 0"
+                    value={recomputeBottom}
+                    onChange={(e) => updateOverride("bottom", e.target.value)}
+                  />
+                )}
+                {recomputeBottomMode === "range" && (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      className="h-8 text-xs"
+                      placeholder="-10"
+                      value={recomputeBottomMin}
+                      onChange={(e) => updateOverride("bottomMin", e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="number"
+                      className="h-8 text-xs"
+                      placeholder="10"
+                      value={recomputeBottomMax}
+                      onChange={(e) => updateOverride("bottomMax", e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Hill */}
+              <div className="rounded-md border bg-background p-2 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <Label className="text-xs font-medium">Hill Slope</Label>
+                  <Select
+                    value={recomputeHillMode}
+                    onValueChange={(v) =>
+                      updateOverride("hillMode", v as "inherit" | "enum" | "range")
+                    }
+                  >
+                    <SelectTrigger className="h-7 w-36 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="inherit" className="text-xs">
+                        Inherit
+                      </SelectItem>
+                      <SelectItem value="enum" className="text-xs">
+                        Use preset
+                      </SelectItem>
+                      <SelectItem value="range" className="text-xs">
+                        Custom range
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {recomputeHillMode === "enum" && (
+                  <Select
+                    value={recomputeHillEnum}
+                    onValueChange={(v) =>
+                      updateOverride(
+                        "hillEnum",
+                        v as "unconstrained" | "negative_only" | "positive_only" | "fixed_at_one",
+                      )
+                    }
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="unconstrained">Unconstrained</SelectItem>
+                      <SelectItem value="negative_only">Negative only</SelectItem>
+                      <SelectItem value="positive_only">Positive only</SelectItem>
+                      <SelectItem value="fixed_at_one">Fixed at 1</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+                {recomputeHillMode === "range" && (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="h-8 text-xs"
+                      placeholder="0.9"
+                      value={recomputeHillMin}
+                      onChange={(e) => updateOverride("hillMin", e.target.value)}
+                    />
+                    <span className="text-xs text-muted-foreground">to</span>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      className="h-8 text-xs"
+                      placeholder="1.1"
+                      value={recomputeHillMax}
+                      onChange={(e) => updateOverride("hillMax", e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <Button size="sm" variant="ghost" onClick={clearRecomputeOverrides}>
+                  Clear
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => handleRecompute(true)}
+                  disabled={recomputeMutation.isPending}
+                >
+                  Recompute with overrides
+                </Button>
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
+    </>
+  );
+
   return (
     <>
       <DetailShell
+        compact
         query={query}
         backHref={protocol ? `/assays/protocols/${protocol.id}` : "/assays"}
         backLabel={protocol ? `Back to ${protocol.name}` : "Back to Protocols"}
-        title={(r) => `Run ${r.run_date}`}
+        title={(r) => `Run ${r.run_date} · ${memberName(r.operator) || "Scientist unavailable"}`}
+        subtitle={(r) => <RunSummaryCard run={r} />}
         breadcrumbTrail={(r) => [
           { label: "Protocols", href: "/assays" },
           { label: protocol?.name ?? "...", href: `/assays/protocols/${r.protocol_id}` },
@@ -211,9 +421,8 @@ export function RunDetail({ runId }: RunDetailProps) {
         notFoundMessage="Run not found."
         actions={(r) => {
           const status = r.status as RunStatus;
-          // Frequent forward action (Start/Complete/Approve) + Recompute stay
-          // prominent; occasional + destructive actions move into "More", and
-          // the admin hard-delete into a separate role-gated menu.
+          // Routine workflow actions use the same neutral style as the results tools.
+          // Occasional and destructive actions live in More and the role-gated admin menu.
           const canLockToggle = status !== "draft";
           const canReject = status === "completed";
           const canReset =
@@ -225,20 +434,21 @@ export function RunDetail({ runId }: RunDetailProps) {
           const hasMore = canLockToggle || hasDestructive;
           return (
             <>
-              <VisualizeButton runId={r.id} />
               {status === "draft" && (
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() => startMutation.mutate(runId)}
                   disabled={startMutation.isPending}
                 >
-                  <Play className="mr-2 h-4 w-4" />
+                  <Play className="size-4" />
                   {startMutation.isPending ? "Starting..." : "Start"}
                 </Button>
               )}
               {status === "in_progress" && (
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() =>
                     completeMutation.mutate({
                       id: runId,
@@ -248,243 +458,39 @@ export function RunDetail({ runId }: RunDetailProps) {
                   }
                   disabled={completeMutation.isPending}
                 >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  <CheckCircle2 className="size-4" />
                   {completeMutation.isPending ? "Completing..." : "Complete"}
                 </Button>
               )}
               {status === "completed" && (
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() => approveMutation.mutate(runId)}
                   disabled={approveMutation.isPending}
                 >
-                  <ThumbsUp className="mr-2 h-4 w-4" />
+                  <ThumbsUp className="size-4" />
                   {approveMutation.isPending ? "Approving..." : "Approve"}
                 </Button>
-              )}
-              {!r.is_locked && (r.plate_count > 0 || holderCount > 0) && (
-                <div className="inline-flex">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => handleRecompute(false)}
-                    disabled={recomputeMutation.isPending}
-                    title="Re-run normalization, replicate aggregation, calculated readouts, and dose-response fitting on existing raw data"
-                    className="rounded-r-none border-r-0"
-                  >
-                    <Calculator className="mr-2 h-4 w-4" />
-                    {recomputeMutation.isPending ? "Recomputing..." : "Recompute"}
-                  </Button>
-                  <Popover open={recomputePopoverOpen} onOpenChange={setRecomputePopoverOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={recomputeMutation.isPending}
-                        title="Recompute with one-time fit constraint overrides"
-                        className="rounded-l-none px-2"
-                      >
-                        ▾
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[28rem] space-y-3" align="end">
-                      <div>
-                        <p className="text-sm font-medium">Override fit constraints</p>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          One-time overrides for this recompute. &ldquo;Inherit&rdquo; uses the
-                          protocol&apos;s setting (Free, Range, or Lock). Not saved on the run or
-                          the protocol.
-                        </p>
-                      </div>
-
-                      {/* Top */}
-                      <div className="rounded-md border bg-background p-2 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium">Top</Label>
-                          <RecomputeModeToggle
-                            mode={recomputeTopMode}
-                            onChange={(v) => updateOverride("topMode", v)}
-                            idPrefix="rec-top"
-                          />
-                        </div>
-                        {recomputeTopMode === "lock" && (
-                          <Input
-                            type="number"
-                            className="h-8 text-xs"
-                            placeholder="e.g., 100"
-                            value={recomputeTop}
-                            onChange={(e) => updateOverride("top", e.target.value)}
-                          />
-                        )}
-                        {recomputeTopMode === "range" && (
-                          <div className="flex items-center gap-1.5">
-                            <Input
-                              type="number"
-                              className="h-8 text-xs"
-                              placeholder="85"
-                              value={recomputeTopMin}
-                              onChange={(e) => updateOverride("topMin", e.target.value)}
-                            />
-                            <span className="text-xs text-muted-foreground">to</span>
-                            <Input
-                              type="number"
-                              className="h-8 text-xs"
-                              placeholder="110"
-                              value={recomputeTopMax}
-                              onChange={(e) => updateOverride("topMax", e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Bottom */}
-                      <div className="rounded-md border bg-background p-2 space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-xs font-medium">Bottom</Label>
-                          <RecomputeModeToggle
-                            mode={recomputeBottomMode}
-                            onChange={(v) => updateOverride("bottomMode", v)}
-                            idPrefix="rec-bot"
-                          />
-                        </div>
-                        {recomputeBottomMode === "lock" && (
-                          <Input
-                            type="number"
-                            className="h-8 text-xs"
-                            placeholder="e.g., 0"
-                            value={recomputeBottom}
-                            onChange={(e) => updateOverride("bottom", e.target.value)}
-                          />
-                        )}
-                        {recomputeBottomMode === "range" && (
-                          <div className="flex items-center gap-1.5">
-                            <Input
-                              type="number"
-                              className="h-8 text-xs"
-                              placeholder="-10"
-                              value={recomputeBottomMin}
-                              onChange={(e) => updateOverride("bottomMin", e.target.value)}
-                            />
-                            <span className="text-xs text-muted-foreground">to</span>
-                            <Input
-                              type="number"
-                              className="h-8 text-xs"
-                              placeholder="10"
-                              value={recomputeBottomMax}
-                              onChange={(e) => updateOverride("bottomMax", e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Hill */}
-                      <div className="rounded-md border bg-background p-2 space-y-1.5">
-                        <div className="flex items-center justify-between gap-2">
-                          <Label className="text-xs font-medium">Hill Slope</Label>
-                          <Select
-                            value={recomputeHillMode}
-                            onValueChange={(v) =>
-                              updateOverride("hillMode", v as "inherit" | "enum" | "range")
-                            }
-                          >
-                            <SelectTrigger className="h-7 w-36 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="inherit" className="text-xs">
-                                Inherit
-                              </SelectItem>
-                              <SelectItem value="enum" className="text-xs">
-                                Use preset
-                              </SelectItem>
-                              <SelectItem value="range" className="text-xs">
-                                Custom range
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {recomputeHillMode === "enum" && (
-                          <Select
-                            value={recomputeHillEnum}
-                            onValueChange={(v) =>
-                              updateOverride(
-                                "hillEnum",
-                                v as
-                                  | "unconstrained"
-                                  | "negative_only"
-                                  | "positive_only"
-                                  | "fixed_at_one",
-                              )
-                            }
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="unconstrained">Unconstrained</SelectItem>
-                              <SelectItem value="negative_only">Negative only</SelectItem>
-                              <SelectItem value="positive_only">Positive only</SelectItem>
-                              <SelectItem value="fixed_at_one">Fixed at 1</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        )}
-                        {recomputeHillMode === "range" && (
-                          <div className="flex items-center gap-1.5">
-                            <Input
-                              type="number"
-                              step="0.1"
-                              className="h-8 text-xs"
-                              placeholder="0.9"
-                              value={recomputeHillMin}
-                              onChange={(e) => updateOverride("hillMin", e.target.value)}
-                            />
-                            <span className="text-xs text-muted-foreground">to</span>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              className="h-8 text-xs"
-                              placeholder="1.1"
-                              value={recomputeHillMax}
-                              onChange={(e) => updateOverride("hillMax", e.target.value)}
-                            />
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="flex justify-end gap-2 pt-1">
-                        <Button size="sm" variant="ghost" onClick={clearRecomputeOverrides}>
-                          Clear
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={() => handleRecompute(true)}
-                          disabled={recomputeMutation.isPending}
-                        >
-                          Recompute with overrides
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </div>
               )}
               {hasMore && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="sm" variant="outline">
                       More
-                      <ChevronDown className="ml-1.5 h-4 w-4" />
+                      <ChevronDown className="size-4" />
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-48">
                     {canLockToggle &&
                       (r.is_locked ? (
                         <DropdownMenuItem onClick={() => setUnlockDialogOpen(true)}>
-                          <Unlock className="mr-2 h-4 w-4" />
+                          <Unlock className="size-4" />
                           Unlock
                         </DropdownMenuItem>
                       ) : (
                         <DropdownMenuItem onClick={() => setLockDialogOpen(true)}>
-                          <Lock className="mr-2 h-4 w-4" />
+                          <Lock className="size-4" />
                           Lock
                         </DropdownMenuItem>
                       ))}
@@ -494,7 +500,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                         className="text-destructive focus:text-destructive"
                         onClick={() => setRejectDialogOpen(true)}
                       >
-                        <ThumbsDown className="mr-2 h-4 w-4" />
+                        <ThumbsDown className="size-4" />
                         Reject
                       </DropdownMenuItem>
                     )}
@@ -503,7 +509,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                         className="text-destructive focus:text-destructive"
                         onClick={() => setResetDialogOpen(true)}
                       >
-                        <RotateCcw className="mr-2 h-4 w-4" />
+                        <RotateCcw className="size-4" />
                         Reset data
                       </DropdownMenuItem>
                     )}
@@ -512,7 +518,7 @@ export function RunDetail({ runId }: RunDetailProps) {
                         className="text-destructive focus:text-destructive"
                         onClick={() => setDeleteDialogOpen(true)}
                       >
-                        <Trash2 className="mr-2 h-4 w-4" />
+                        <Trash2 className="size-4" />
                         Delete
                       </DropdownMenuItem>
                     )}
@@ -549,23 +555,7 @@ export function RunDetail({ runId }: RunDetailProps) {
           );
         }}
       >
-        {(run) => (
-          <>
-            {/* Condensed header: facts + targets/collections/tags in one card */}
-            <RunSummaryCard
-              run={run}
-              protocol={protocol}
-              canEditMeta={canEditTags && !run.is_locked}
-              canEditTags={canEditTags}
-            />
-
-            {/* Plate QC per readout x layer, with the protocol's averages */}
-            <RunDataSummary run={run} protocol={protocol} />
-
-            {/* Data visualizations + files */}
-            <RunDataPanel run={run} />
-          </>
-        )}
+        {(run) => <RunDataPanel key={run.id} run={run} resultActions={resultActions(run)} />}
       </DetailShell>
 
       {/* Reject Dialog */}
@@ -713,7 +703,7 @@ function RecomputeModeToggle({
           aria-checked={mode === opt}
           onClick={() => onChange(opt)}
           className={cn(
-            "px-2 py-0.5 text-[10px] capitalize first:rounded-l-md last:rounded-r-md",
+            "px-2 py-0.5 text-xs capitalize first:rounded-l-md last:rounded-r-md",
             mode === opt ? "bg-primary text-primary-foreground" : "bg-background hover:bg-muted",
           )}
         >

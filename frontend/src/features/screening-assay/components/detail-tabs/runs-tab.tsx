@@ -1,6 +1,5 @@
 "use client";
 
-import { useOrganizations } from "@/features/workspace-config/hooks/use-organizations";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EmptyState } from "@/shared/components/empty-state";
 import { StatusBadge } from "@/shared/components/status-badge";
@@ -30,6 +29,7 @@ import { deriveConditionColumns, readConditionCell } from "../../lib/conditions"
 import { compareCurvesChoice } from "../../lib/curve-selection";
 import { worstZPrime } from "../../lib/qc-metrics";
 import { type Protocol, RUN_STATUS_LABELS, type Run } from "../../types";
+import { RunColumnsMenu, useRunColumnChoices } from "./run-columns-menu";
 
 const NO_FILTER = {};
 
@@ -71,6 +71,7 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
   const router = useRouter();
   const { data: runs, isLoading } = useRunsByProtocol(protocolId);
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const { choices, toggle: toggleColumn, reset: resetColumns } = useRunColumnChoices(protocolId);
   // Ticked rows (the checkbox column); a row click still opens the run.
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const hasCurves = protocol.has_measured_curves === true;
@@ -85,15 +86,10 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
     setSelectedIds(e.api.getSelectedRows().map((r) => r.id));
   }, []);
   const { data: members } = useWorkspaceMembers();
-  const { data: orgs } = useOrganizations();
 
   const memberName = useCallback(
     (userId: string) => members?.find((m) => m.user_id === userId)?.name ?? null,
     [members],
-  );
-  const orgName = useCallback(
-    (orgId: string) => orgs?.find((o) => o.id === orgId)?.name ?? null,
-    [orgs],
   );
 
   const filteredRuns = useMemo(() => {
@@ -115,8 +111,10 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
         headerName:
           spec.type === "numeric" && spec.unit ? `${spec.label} (${spec.unit})` : spec.label,
         headerTooltip: spec.unit ? `${spec.label} (${spec.unit})` : spec.label,
-        width: 140,
-        minWidth: 110,
+        width: 170,
+        minWidth: 150,
+        wrapText: true,
+        autoHeight: true,
         // Per-column override: the grid sets suppressFilters, but condition
         // columns are sortable + filterable via the header menu.
         sortable: true,
@@ -143,11 +141,12 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
         colId: "targets",
         headerName: "Target",
         flex: 1,
-        minWidth: 140,
+        minWidth: 150,
+        wrapText: true,
+        autoHeight: true,
         cellClass: "text-sm",
         filter: "agTextColumnFilter",
-        // Plain text (with native ellipsis) reads cleaner in a dense grid than
-        // pills; chips stay on the run-detail header.
+        // Keep associations as wrapping text; chips stay on the run-detail header.
         valueGetter: (p) => (p.data?.targets ?? []).map((t) => t.name).join(", "),
         valueFormatter: (p) => p.value || "—",
         tooltipValueGetter: (p) => (p.value as string) || null,
@@ -158,7 +157,9 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
         colId: "collections",
         headerName: "Collection",
         flex: 1,
-        minWidth: 150,
+        minWidth: 170,
+        wrapText: true,
+        autoHeight: true,
         cellClass: "text-sm",
         filter: "agTextColumnFilter",
         // "<library> (<coverage>%)" — names the library and keeps the coverage
@@ -185,13 +186,18 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
       {
         headerName: "Run Date",
         field: "run_date",
-        width: 110,
-        cellClass: "font-mono text-sm",
+        width: 140,
+        minWidth: 140,
+        pinned: "left",
+        cellClass: "tabular-nums",
       },
       {
         headerName: "Scientist",
         field: "operator",
-        width: 130,
+        width: 180,
+        minWidth: 180,
+        wrapText: true,
+        autoHeight: true,
         filter: "agTextColumnFilter",
         valueGetter: (p) =>
           p.data ? (memberName(p.data.operator) ?? shortId(p.data.operator)) : null,
@@ -199,57 +205,101 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
       ...associationColumns,
       ...(conditionGroup ? [conditionGroup] : []),
       {
-        headerName: "Lab",
-        field: "performed_at_org_id",
-        width: 100,
-        valueGetter: (p) =>
-          p.data?.performed_at_org_id ? (orgName(p.data.performed_at_org_id) ?? null) : null,
-        valueFormatter: (p) => p.value ?? "\u2014",
-      },
-      {
         headerName: "Molecules",
         field: "molecule_count",
-        width: 90,
+        width: 110,
+        minWidth: 110,
+        cellClass: "tabular-nums",
         valueFormatter: (p) => (p.value != null && p.value > 0 ? String(p.value) : "\u2014"),
       },
-      { headerName: "Plates", field: "plate_count", width: 80 },
+      {
+        headerName: "Plates",
+        field: "plate_count",
+        width: 90,
+        minWidth: 90,
+        cellClass: "tabular-nums",
+      },
       {
         headerName: "Z\u2032",
         field: "qc_metrics",
         width: 90,
+        minWidth: 90,
         cellRenderer: (params: ICellRendererParams<Run>) => zPrimeBadge(params.value),
       },
       {
         headerName: "Status",
         field: "status",
         width: 110,
+        minWidth: 110,
         cellRenderer: (params: ICellRendererParams<Run>) => <StatusBadge status={params.value} />,
       },
       {
         headerName: "Notes",
         field: "notes",
-        flex: 1,
-        minWidth: 160,
+        pinned: "right",
+        width: 360,
+        minWidth: 320,
+        wrapText: true,
+        autoHeight: true,
         cellRenderer: (params: ICellRendererParams<Run>) => {
           const text = params.value as string | null;
           if (!text) return <span className="text-muted-foreground">&mdash;</span>;
           return (
-            <span className="text-sm" title={text}>
-              {text.length > 80 ? `${text.slice(0, 80)}...` : text}
+            <span className="block whitespace-pre-wrap break-words text-sm leading-relaxed">
+              {text}
             </span>
           );
         },
       },
     ],
-    [memberName, orgName, conditionGroup, associationColumns],
+    [memberName, conditionGroup, associationColumns],
   );
+
+  const { visibleColumns, columnOptions } = useMemo(() => {
+    const options: { id: string; label: string; visible: boolean; locked: boolean }[] = [];
+    const configure = (column: ColDef<Run>, group?: string): ColDef<Run> => {
+      const id = column.colId ?? column.field ?? "";
+      const locked = id === "run_date";
+      const optional = id === "targets" || id === "collections" || id.startsWith("cond:");
+      const visible = locked || (choices[id] ?? !optional);
+      options.push({
+        id,
+        label: group ? `${group} · ${column.headerName}` : (column.headerName ?? id),
+        visible,
+        locked,
+      });
+      return { ...column, hide: !visible, lockVisible: locked };
+    };
+    const columns = columnDefs.map((column) =>
+      "children" in column
+        ? {
+            ...column,
+            children: column.children.map((child) =>
+              configure(child as ColDef<Run>, column.headerName),
+            ),
+          }
+        : configure(column),
+    );
+    return { visibleColumns: columns, columnOptions: options };
+  }, [columnDefs, choices]);
 
   return (
     <DataGrid<Run>
       rowData={filteredRuns}
-      columnDefs={columnDefs}
+      columnDefs={visibleColumns}
       loading={isLoading}
-      height="500px"
+      height="min(70vh, 48rem)"
+      rowHeight={52}
+      defaultColDef={{
+        sortable: true,
+        resizable: true,
+        suppressMovable: true,
+        filter: false,
+        minWidth: 100,
+        wrapHeaderText: true,
+        autoHeaderHeight: true,
+        cellStyle: { lineHeight: "1.5", paddingTop: 12, paddingBottom: 12 },
+      }}
       suppressFilters
       enableMultiSelect
       onSelectionChanged={handleSelectionChanged}
@@ -274,6 +324,7 @@ export function RunsTab({ protocol, protocolId, onCompareCurves }: RunsTabProps)
               </Button>
             </>
           )}
+          <RunColumnsMenu columns={columnOptions} onToggle={toggleColumn} onReset={resetColumns} />
           <Select value={statusFilter} onValueChange={setStatusFilter}>
             <SelectTrigger className="w-[160px]">
               <SelectValue placeholder="Filter by status" />

@@ -25,7 +25,7 @@ export function VisualizeButton({ protocolId, runId }: { protocolId?: string; ru
     return (
       <Button size="sm" variant="outline" asChild>
         <Link href={visualizeHref({ kind: "run", runId })}>
-          <ChartScatter className="mr-2 h-4 w-4" />
+          <ChartScatter className="size-4" />
           Visualize
         </Link>
       </Button>
@@ -40,7 +40,7 @@ export function VisualizeButton({ protocolId, runId }: { protocolId?: string; ru
         className="rounded-r-none border-r-0"
         onClick={() => setOpen(true)}
       >
-        <ChartScatter className="mr-2 h-4 w-4" />
+        <ChartScatter className="size-4" />
         Visualize
       </Button>
       <DropdownMenu>

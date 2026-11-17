@@ -30,7 +30,7 @@ interface PlateMapViewProps {
 }
 
 /** Read-only static plate grid renderer. Use for surfacing a configured
- *  control layout on the Design tab, in protocol viewers, and anywhere
+ *  control layout on the Setup tab, in protocol viewers, and anywhere
  *  else we need a non-interactive preview of a `template_map`. The
  *  editable counterpart is `PlateMapEditor`.
  */

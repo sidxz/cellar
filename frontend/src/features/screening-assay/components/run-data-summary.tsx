@@ -135,7 +135,7 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
     ];
   };
 
-  const cell = "whitespace-nowrap px-3 py-1.5 text-right font-mono text-xs tabular-nums";
+  const cell = "whitespace-nowrap px-3 py-1.5 text-right text-sm tabular-nums";
   return (
     <Card>
       <CardContent className="space-y-3 p-4 sm:p-5">
@@ -175,7 +175,7 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
             <tbody>
               {plateIds.map((pid) => (
                 <tr key={pid} className="border-b">
-                  <th scope="row" className="px-3 py-1.5 text-left text-xs font-medium">
+                  <th scope="row" className="px-3 py-1.5 text-left text-sm font-medium">
                     Plate {plateNumber.get(pid) ?? "?"}
                   </th>
                   {groups.map((g) =>
@@ -191,9 +191,9 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
                 </tr>
               ))}
               <tr className="bg-muted/20">
-                <th scope="row" className="px-3 py-1.5 text-left text-xs font-medium">
+                <th scope="row" className="px-3 py-1.5 text-left text-sm font-medium">
                   Protocol averages
-                  <span className="block font-normal text-muted-foreground">
+                  <span className="block text-xs font-normal text-muted-foreground">
                     all runs except rejected
                   </span>
                 </th>

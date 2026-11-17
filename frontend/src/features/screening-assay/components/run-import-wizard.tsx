@@ -339,7 +339,7 @@ function MappingStep({
       <div className="rounded-md border border-muted bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         Dose values in this file are interpreted as{" "}
         <span className="font-mono font-medium text-foreground">{doseUnit}</span> (per protocol). To
-        change the unit, edit the protocol&apos;s Dose Unit on the Design tab.
+        change the unit, edit the protocol&apos;s Dose Unit on the Setup tab.
       </div>
 
       {lowConfidenceHeaders.length > 0 && (

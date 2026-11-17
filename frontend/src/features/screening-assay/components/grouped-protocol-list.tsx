@@ -56,7 +56,7 @@ export function GroupedProtocolList({
                 {groupBy === "none" ? "Sort by" : "Sort within groups"}
               </span>
               <Select value={sort} onValueChange={(v) => onSortChange(v as ProtocolSort)}>
-                <SelectTrigger className="w-48" aria-label="Sort protocols">
+                <SelectTrigger size="sm" className="w-48" aria-label="Sort protocols">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -72,7 +72,7 @@ export function GroupedProtocolList({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm text-muted-foreground">Group by</span>
             <Select value={groupBy} onValueChange={(v) => onGroupByChange(v as GroupBy)}>
-              <SelectTrigger className="w-[160px]" aria-label="Group protocols by">
+              <SelectTrigger size="sm" className="w-[160px]" aria-label="Group protocols by">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

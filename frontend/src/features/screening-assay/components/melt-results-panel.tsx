@@ -21,7 +21,7 @@ import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
 
 const COMPARE = "__compare__";
-const NO_WINDOW = "No temperature window on this signal — add one on the protocol's Design tab";
+const NO_WINDOW = "No temperature window on this signal — add one on the protocol's Setup tab";
 
 export interface MeltResultsPanelProps {
   analysis: MeltingAnalysis;
@@ -43,7 +43,7 @@ export interface MeltResultsPanelProps {
   applicable: readonly ApplicableRule[];
   /** The run's hit rule line, shown above the counts. */
   hitRule?: ReactNode;
-  /** The protocol's Design tab, where windows are added; links the no-window note. */
+  /** The protocol's Setup tab, where windows are added; links the no-window note. */
   designHref?: string;
 }
 

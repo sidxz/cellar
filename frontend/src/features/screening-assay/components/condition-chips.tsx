@@ -45,7 +45,7 @@ export function ConditionChips({
         <Badge
           key={e.key}
           variant="secondary"
-          className={cn("max-w-[16rem] truncate font-normal text-[10px]", chipClassName)}
+          className={cn("max-w-[16rem] truncate font-normal text-xs", chipClassName)}
           title={chipLabel(e)}
         >
           <span className="text-muted-foreground">{e.key}:</span>
@@ -55,7 +55,7 @@ export function ConditionChips({
       {hidden.length > 0 && (
         <Badge
           variant="outline"
-          className={cn("font-normal text-[10px] text-muted-foreground", chipClassName)}
+          className={cn("font-normal text-xs text-muted-foreground", chipClassName)}
           title={hidden.map(chipLabel).join(", ")}
         >
           +{hidden.length}

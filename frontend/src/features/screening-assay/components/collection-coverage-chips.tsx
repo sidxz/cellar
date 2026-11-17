@@ -33,7 +33,7 @@ export function CollectionCoverageChips({
           <Badge
             key={c.id}
             variant="secondary"
-            className="gap-1 font-normal text-[10px]"
+            className="gap-1 font-normal text-xs"
             title={`${c.name}: ${fmt(c.covered)} / ${fmt(c.total)}`}
           >
             <CollectionTypeIcon type={c.type as CollectionType} className="h-3 w-3" />
@@ -44,7 +44,7 @@ export function CollectionCoverageChips({
       {hidden.length > 0 && (
         <Badge
           variant="outline"
-          className="font-normal text-[10px] text-muted-foreground"
+          className="font-normal text-xs text-muted-foreground"
           title={hidden.map((c) => c.name).join(", ")}
         >
           +{hidden.length}

@@ -23,7 +23,7 @@ import { CoverageBar } from "../coverage-bar";
 import { CoverageGapDialog } from "../coverage-gap-dialog";
 import { ProtocolAliasesCard } from "../protocol-aliases-card";
 import { ProtocolReferencesCard } from "../protocol-references";
-import { ProtocolConditionsCard } from "./protocol-conditions-card";
+import { ProtocolIdentityCards } from "./protocol-identity-cards";
 import { ProtocolMethodCard } from "./protocol-method-card";
 
 // ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ function zPrimeBadge(zPrime: number | null) {
 
 const FLAG_TEXT: Record<string, string> = {
   needs_facts:
-    "This protocol's name is missing a field its category needs. Fill it in on the Design tab; it cannot be published until then.",
+    "This protocol's name is missing a field its category needs. Complete Targets and Ontology Annotations below before publishing.",
   needs_discriminator:
     "Other protocols share this name. Add a discriminator (the method, or a fixed condition) so each one reads differently.",
   name_conflict:
@@ -68,11 +68,9 @@ const FLAG_TEXT: Record<string, string> = {
 
 function NameFlagNotice({
   protocol,
-  onTabChange,
   onEditName,
 }: {
   protocol: Protocol;
-  onTabChange: (tab: string) => void;
   onEditName?: () => void;
 }) {
   if (!protocol.name_flag) return null;
@@ -82,11 +80,6 @@ function NameFlagNotice({
       className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200"
     >
       {FLAG_TEXT[protocol.name_flag] ?? protocol.name_flag}{" "}
-      {protocol.name_flag === "needs_facts" && (
-        <button type="button" className="underline" onClick={() => onTabChange("design")}>
-          Open the Design tab
-        </button>
-      )}
       {protocol.name_flag !== "needs_facts" && onEditName && (
         <button type="button" className="underline" onClick={onEditName}>
           {protocol.discriminator ? "Change the discriminator" : "Add a discriminator"}
@@ -148,9 +141,7 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
 
   return (
     <div className="space-y-6">
-      <NameFlagNotice protocol={protocol} onTabChange={onTabChange} onEditName={onEditName} />
-      <ProtocolMethodCard protocol={protocol} onOpenFiles={() => onTabChange("files")} />
-      <ProtocolConditionsCard protocol={protocol} onOpenDesign={() => onTabChange("design")} />
+      <NameFlagNotice protocol={protocol} onEditName={onEditName} />
       {/* Stats Cards */}
       {isLoading ? (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -175,14 +166,14 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
             icon={Beaker}
             label="Compounds"
             value={stats.compound_count}
-            onClick={() => onTabChange("activity")}
+            onClick={() => onTabChange("results")}
           />
           <StatsCard
             icon={Target}
             label="Hits"
             value={stats.hit_criteria_applied ? (stats.hit_count ?? 0) : "\u2014"}
             subtext={!stats.hit_criteria_applied ? "No criteria set" : undefined}
-            onClick={() => onTabChange("activity")}
+            onClick={() => onTabChange("results")}
           />
           <StatsCard
             icon={Clock}
@@ -192,6 +183,11 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
           />
         </div>
       ) : null}
+
+      <ProtocolMethodCard protocol={protocol} onOpenFiles={() => onTabChange("files")} />
+      <div className="grid items-start gap-4 lg:grid-cols-2">
+        <ProtocolIdentityCards protocol={protocol} protocolId={protocolId} />
+      </div>
 
       {/* Latest Run Card */}
       <Card>
@@ -272,7 +268,7 @@ export function OverviewTab({ protocol, protocolId, onTabChange, onEditName }: O
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <p className="text-sm text-muted-foreground">Code</p>
-              <p className="font-mono font-medium">{protocol.code ?? "\u2014"}</p>
+              <p className="tabular-nums font-medium">{protocol.code ?? "\u2014"}</p>
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Distinguished by</p>

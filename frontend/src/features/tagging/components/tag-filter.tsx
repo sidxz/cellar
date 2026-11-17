@@ -60,7 +60,7 @@ export function TagFilter({ value, onChange, entityType, alphabetical = false }:
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant={value.tagIds.length ? "secondary" : "outline"} size="sm">
-          <TagIcon className="mr-2 h-4 w-4" />
+          <TagIcon className="size-4" />
           Tags{value.tagIds.length ? ` (${value.tagIds.length})` : ""}
         </Button>
       </PopoverTrigger>

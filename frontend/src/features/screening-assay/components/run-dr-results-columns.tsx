@@ -73,7 +73,7 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
               type="compound"
               id={molecule_id}
               label={registration_number}
-              className="font-medium"
+              className="font-sans font-medium"
             />
             {aliases.length > 0 && (
               <div
@@ -84,7 +84,7 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
               </div>
             )}
             {batch_number && (
-              <div className="text-[10px] text-muted-foreground">Batch: {batch_number}</div>
+              <div className="text-xs text-muted-foreground">Batch: {batch_number}</div>
             )}
           </div>
         );
@@ -97,7 +97,7 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
       field: "r_squared",
       width: 80,
       valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(3) : "--"),
-      cellClass: "font-mono",
+      cellClass: "tabular-nums",
     },
     {
       headerName: "Class",
@@ -111,7 +111,7 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
       field: "hill_slope",
       width: 90,
       valueFormatter: (p) => (p.value != null ? Number(p.value).toFixed(2) : "--"),
-      cellClass: "font-mono",
+      cellClass: "tabular-nums",
     },
     {
       headerName: "Curve",
@@ -176,7 +176,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
         cellRenderer: (params: ICellRendererParams<CompoundCurveRow>) => {
           if (!params.data) return null;
           return (
-            <span className="font-mono">
+            <span className="tabular-nums">
               {params.data.fitted_value.toPrecision(4)} {params.data.fitted_unit}
             </span>
           );
@@ -230,7 +230,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
               className="text-xs border-amber-500 text-amber-700"
               title={display.tooltip}
             >
-              <span className="font-mono">
+              <span className="tabular-nums">
                 {display.text}
                 {unitSuffix}
               </span>
@@ -238,7 +238,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
           );
         }
         const className =
-          display.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground";
+          display.kind === "scalar" ? "tabular-nums" : "tabular-nums text-muted-foreground";
         return (
           <span className={className} title={display.tooltip || undefined}>
             {display.text}

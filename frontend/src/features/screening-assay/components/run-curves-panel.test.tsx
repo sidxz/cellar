@@ -567,14 +567,14 @@ describe("RunCurvesPanel", () => {
       expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
     });
 
-    it("links the no-window note to the protocol's Design tab", () => {
+    it("links the no-window note to the protocol's Setup tab", () => {
       withAnalysis({}, 0);
       render(<RunCurvesPanel runId="r1" run={RUN} />);
       expect(
         screen.getByRole("link", {
-          name: "No temperature window on this signal — add one on the protocol's Design tab",
+          name: "No temperature window on this signal — add one on the protocol's Setup tab",
         }),
-      ).toHaveAttribute("href", "/assays/protocols/p1#design");
+      ).toHaveAttribute("href", "/assays/protocols/p1#setup");
     });
 
     it("shows a placeholder while the results load", () => {

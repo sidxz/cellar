@@ -35,7 +35,7 @@ export function RunPlateLink({ runId, plate, readOnly }: RunPlateLinkProps) {
       <span className="inline-flex items-center gap-2 text-xs">
         <Link
           href={`/inventory/plates/${plate.registered_plate_id}`}
-          className="font-mono text-primary hover:underline"
+          className="text-primary hover:underline"
           title={plate.registered_plate_label ?? undefined}
         >
           {plate.registered_plate_barcode}

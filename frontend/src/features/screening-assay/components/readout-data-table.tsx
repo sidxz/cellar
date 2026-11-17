@@ -135,7 +135,7 @@ export function ReadoutDataTable({
               type="compound"
               id={row.moleculeId}
               label={row.registrationNumber}
-              className="text-xs"
+              className="font-sans text-sm"
             />
           );
         },
@@ -155,7 +155,7 @@ export function ReadoutDataTable({
           const visible = aliases.slice(0, 2);
           const overflow = aliases.length - visible.length;
           return (
-            <span className="text-xs text-muted-foreground" title={aliases.join(", ")}>
+            <span className="text-muted-foreground" title={aliases.join(", ")}>
               {visible.join(" · ")}
               {overflow > 0 && ` +${overflow}`}
             </span>
@@ -253,7 +253,7 @@ export function ReadoutDataTable({
                       className="text-xs border-amber-500 text-amber-700"
                       title={display.tooltip}
                     >
-                      <span className="font-mono">
+                      <span className="tabular-nums">
                         {display.text}
                         {unitSuffix}
                       </span>
@@ -268,7 +268,7 @@ export function ReadoutDataTable({
                 return (
                   <span
                     className={cn(
-                      "font-mono",
+                      "tabular-nums",
                       display.kind !== "scalar" && "text-muted-foreground",
                     )}
                     title={baseTooltip}

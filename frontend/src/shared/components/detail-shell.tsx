@@ -8,6 +8,7 @@ import {
   useBreadcrumbOverride,
   useBreadcrumbTrail,
 } from "@/shared/lib/stores/breadcrumb-store";
+import { cn } from "@/shared/lib/utils";
 import { AlertCircle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -17,6 +18,8 @@ interface DetailShellProps<T> {
   query: { data: T | undefined; isLoading: boolean };
   backHref?: string;
   backLabel?: string;
+  /** Use the breadcrumbs for back navigation and keep the workspace near the title. */
+  compact?: boolean;
   title: (entity: T) => string;
   /** Secondary line under the title (e.g. a protocol's code). */
   subtitle?: (entity: T) => ReactNode;
@@ -33,6 +36,7 @@ export function DetailShell<T>({
   query,
   backHref,
   backLabel = "Back",
+  compact = false,
   title,
   subtitle,
   breadcrumbTrail,
@@ -87,8 +91,11 @@ export function DetailShell<T>({
   const badgeProps = badge?.(entity);
 
   return (
-    <div className="space-y-6">
-      {backHref && (
+    <div
+      className={compact ? "space-y-4 overflow-y-auto [scrollbar-gutter:stable]" : "space-y-6"}
+      style={compact ? { maxHeight: "calc(100dvh - 4.5rem)" } : undefined}
+    >
+      {backHref && !compact && (
         <Button variant="ghost" size="sm" asChild>
           <Link href={backHref}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -97,8 +104,8 @@ export function DetailShell<T>({
         </Button>
       )}
 
-      <div className="flex items-start justify-between">
-        <div>
+      <div className={cn("flex items-start justify-between", compact && "flex-wrap gap-3")}>
+        <div className="min-w-0">
           <div className="flex items-center gap-3 flex-wrap">
             <h1 className="text-2xl font-bold tracking-tight">{entityTitle}</h1>
             {badgeProps && <StatusBadge status={badgeProps.status} label={badgeProps.label} />}
@@ -107,7 +114,11 @@ export function DetailShell<T>({
             <div className="mt-1 text-sm text-muted-foreground">{subtitle(entity)}</div>
           ) : null}
         </div>
-        {actions && <div className="flex items-center gap-2">{actions(entity)}</div>}
+        {actions && (
+          <div className={cn("flex items-center gap-2", compact && "flex-wrap")}>
+            {actions(entity)}
+          </div>
+        )}
       </div>
 
       {children(entity)}

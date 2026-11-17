@@ -42,7 +42,7 @@ import { TargetMultiSelect } from "./target-multi-select";
 
 function RelLabel({ children }: { children: ReactNode }) {
   return (
-    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
       {children}
     </span>
   );
@@ -101,7 +101,7 @@ export function TargetsRelation({ run, canEdit }: { run: Run; canEdit: boolean }
   return (
     <span className="inline-flex items-center gap-2">
       <RelLabel>Targets</RelLabel>
-      <TargetChips targets={run.targets} max={6} chipClassName="text-base" />
+      <TargetChips targets={run.targets} max={6} chipClassName="text-sm" />
       {canEdit && (
         <Popover>
           <EditTrigger empty={run.targets.length === 0} label="targets" />
@@ -157,14 +157,14 @@ export function CollectionsRelation({
     <span className="inline-flex min-w-0 items-center gap-2">
       <RelLabel>{collections.length === 1 ? "Collection" : "Collections"}</RelLabel>
       {collections.length === 0 ? (
-        <span className="text-base text-muted-foreground">None</span>
+        <span className="text-sm text-muted-foreground">None</span>
       ) : (
         <span className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
           {collections.map((c) => (
             <CoverageChip
               key={c.id}
               coverage={c}
-              className="text-base"
+              className="text-sm"
               onViewGap={() =>
                 setGap({ path: `/runs/${run.id}/collections/${c.id}`, name: c.name })
               }
@@ -208,7 +208,7 @@ export function CollectionsRelation({
  *
  * Renders nothing when the protocol declares no conditions and the run carries
  * none — there's nothing to record or add (conditions are declared on the
- * protocol's Design tab).
+ * protocol's Setup tab).
  */
 export function ConditionsRelation({
   run,
@@ -252,8 +252,8 @@ export function ConditionsRelation({
       <ConditionChips
         conditions={run.conditions}
         max={6}
-        chipClassName="text-base"
-        emptyFallback={<span className="text-base text-muted-foreground">None</span>}
+        chipClassName="text-sm"
+        emptyFallback={<span className="text-sm text-muted-foreground">None</span>}
       />
       {canEdit && (
         <Popover open={open} onOpenChange={handleOpenChange}>
@@ -312,14 +312,14 @@ export function TagsRelation({ runId, canEdit }: { runId: string; canEdit: boole
     <span className="inline-flex flex-wrap items-center gap-2">
       <RelLabel>Tags</RelLabel>
       {list.length === 0 && (
-        <span className="text-base italic text-muted-foreground/70">No tags</span>
+        <span className="text-sm italic text-muted-foreground/70">No tags</span>
       )}
       {list.map((t) => (
         <TagChip
           key={t.id}
           tagKey={t.key}
           value={t.value}
-          className="text-base"
+          className="text-sm"
           title={`${t.value ? `${t.key}=${t.value}` : t.key} · added ${formatRelativeDate(t.assigned_at)}`}
           onRemove={canEdit ? () => unassign.mutate(t.id) : undefined}
         />

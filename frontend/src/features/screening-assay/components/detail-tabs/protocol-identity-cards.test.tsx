@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Protocol } from "../../types";
-import { DesignTabProtocolCard } from "./design-tab-protocol-card";
+import { ProtocolIdentityCards } from "./protocol-identity-cards";
 
-// The design tab's direct/inherited partition MUST come from the rich
+// The Overview's direct/inherited partition MUST come from the rich
 // GET /protocols/{id}/targets payload (is_direct / run_count) — the
 // lightweight protocol.targets has no provenance. Regression guard for the
 // bug where it filtered protocol.targets by an is_direct field that is never
@@ -99,9 +99,9 @@ function makeProtocol(overrides: Partial<Protocol> = {}): Protocol {
   } as Protocol;
 }
 
-describe("DesignTabProtocolCard targets partition", () => {
+describe("ProtocolIdentityCards targets partition", () => {
   it("classifies direct vs inherited from the rich targets payload", () => {
-    render(<DesignTabProtocolCard protocol={makeProtocol({ status: "draft" })} protocolId="p-1" />);
+    render(<ProtocolIdentityCards protocol={makeProtocol({ status: "draft" })} protocolId="p-1" />);
 
     // The direct target seeds the multi-select (1 selected), not the
     // inherited section.
@@ -115,7 +115,7 @@ describe("DesignTabProtocolCard targets partition", () => {
   });
 
   it("renders direct targets as plain badges when editing is blocked", () => {
-    render(<DesignTabProtocolCard protocol={makeProtocol({ is_locked: true })} protocolId="p-1" />);
+    render(<ProtocolIdentityCards protocol={makeProtocol({ is_locked: true })} protocolId="p-1" />);
     // Locked: no target multi-select; the direct target shows as a badge.
     // (queryByRole("combobox") would match the Control Convention select.)
     expect(screen.queryByText(/add a target/i)).not.toBeInTheDocument();
@@ -125,7 +125,7 @@ describe("DesignTabProtocolCard targets partition", () => {
 
   it("a published protocol changes targets through a correction, not here", () => {
     render(
-      <DesignTabProtocolCard protocol={makeProtocol({ status: "active" })} protocolId="p-1" />,
+      <ProtocolIdentityCards protocol={makeProtocol({ status: "active" })} protocolId="p-1" />,
     );
     expect(screen.queryByText(/targets selected|target selected/i)).not.toBeInTheDocument();
     expect(screen.getByText("Pks13")).toBeInTheDocument();
@@ -136,7 +136,7 @@ describe("DesignTabProtocolCard targets partition", () => {
 // The standard facets (Organism, Assay format, Detection method) are always
 // offered on create; the protocol page must show them too, or a workspace with
 // no admin-configured slots has no way to see or edit a protocol's BAO terms.
-describe("DesignTabProtocolCard ontology annotations", () => {
+describe("ProtocolIdentityCards ontology annotations", () => {
   it("shows the standard facets when the workspace configured no slots", () => {
     const protocol = makeProtocol({
       status: "draft",
@@ -151,7 +151,7 @@ describe("DesignTabProtocolCard ontology annotations", () => {
         ],
       },
     });
-    render(<DesignTabProtocolCard protocol={protocol} protocolId="p-1" />);
+    render(<ProtocolIdentityCards protocol={protocol} protocolId="p-1" />);
 
     expect(screen.getByText("Ontology Annotations")).toBeInTheDocument();
     expect(screen.getByText("Organism")).toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("DesignTabProtocolCard ontology annotations", () => {
         strain: [{ term_id: "H37Rv", label: "H37Rv", ontology_source: "local", uri: null }],
       },
     });
-    render(<DesignTabProtocolCard protocol={protocol} protocolId="p-1" />);
+    render(<ProtocolIdentityCards protocol={protocol} protocolId="p-1" />);
     // Active and biochemical: a cell line adds nothing; the organism still filters the library.
     expect(screen.queryByText("Cell line")).not.toBeInTheDocument();
     expect(screen.getByText("Organism")).toBeInTheDocument();

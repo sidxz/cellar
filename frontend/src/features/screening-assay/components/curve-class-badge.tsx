@@ -70,9 +70,7 @@ export function CurveClassBadge({
     const cls = COMPACT_STYLES[key] ?? COMPACT_STYLES.inactive;
     const letter = key.charAt(0).toUpperCase();
     return (
-      <Badge className={cn("ml-1.5 text-[10px] px-1 py-0 border-0", cls, className)}>
-        {letter}
-      </Badge>
+      <Badge className={cn("ml-1.5 text-xs px-1 py-0 border-0", cls, className)}>{letter}</Badge>
     );
   }
 

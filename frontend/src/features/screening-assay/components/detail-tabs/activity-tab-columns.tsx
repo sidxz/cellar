@@ -60,7 +60,14 @@ function CompoundCell({
   flag: CompoundFlagType | undefined;
   onToggleFlag: ActivityColumnOptions["onToggleFlag"];
 }) {
-  const link = <EntityLink type="compound" id={row.molecule_id} label={row.registration_number} />;
+  const link = (
+    <EntityLink
+      type="compound"
+      id={row.molecule_id}
+      label={row.registration_number}
+      className="font-sans"
+    />
+  );
   return (
     <div className="flex h-full items-center gap-2 leading-tight">
       <button
@@ -188,13 +195,13 @@ function interceptColumn(
             className="border-amber-500 text-xs text-amber-700"
             title={d.tooltip}
           >
-            <span className="font-mono">{d.text}</span>
+            <span className="tabular-nums">{d.text}</span>
           </Badge>
         );
       }
       return (
         <span
-          className={d.kind === "scalar" ? "font-mono" : "font-mono text-muted-foreground"}
+          className={d.kind === "scalar" ? "tabular-nums" : "tabular-nums text-muted-foreground"}
           title={d.tooltip || undefined}
         >
           {d.text}

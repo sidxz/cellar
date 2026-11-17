@@ -494,14 +494,14 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                           <tbody>
                             {compoundCurves.map((curve) => (
                               <tr key={curve.id} className="border-b last:border-0">
-                                <td className="px-3 py-2 font-mono text-xs">
-                                  {shortId(curve.run_id)}
-                                </td>
-                                <td className="px-3 py-2 text-xs text-muted-foreground">
+                                <td className="px-3 py-2 tabular-nums">{shortId(curve.run_id)}</td>
+                                <td className="px-3 py-2 text-muted-foreground">
                                   {curve.batch_number ?? shortId(curve.batch_id)}
                                 </td>
-                                <td className="px-3 py-2 font-mono">{curvePotencyText(curve)}</td>
-                                <td className="px-3 py-2 font-mono">
+                                <td className="px-3 py-2 tabular-nums">
+                                  {curvePotencyText(curve)}
+                                </td>
+                                <td className="px-3 py-2 tabular-nums">
                                   {curve.r_squared.toFixed(3)}
                                 </td>
                                 <td className="px-3 py-2">
@@ -509,7 +509,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                                     ? curveClassBadge(curve.curve_class as CurveClass)
                                     : "--"}
                                 </td>
-                                <td className="px-3 py-2 font-mono">
+                                <td className="px-3 py-2 tabular-nums">
                                   {curve.hill_slope.toFixed(2)}
                                 </td>
                               </tr>

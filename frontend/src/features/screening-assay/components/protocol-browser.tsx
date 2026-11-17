@@ -96,102 +96,105 @@ export function ProtocolBrowser({ onSelect, onNewFrom }: ProtocolBrowserProps) {
 
   return (
     <div className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="space-y-3 p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <SearchInput
-            value={search}
-            onChange={setSearch}
-            placeholder="Search names, codes, targets…"
-            className="min-w-48 flex-1"
-          />
-          <Tabs value={view} onValueChange={onViewChange}>
-            <TabsList aria-label="Protocol view">
-              <TabsTrigger value="grid">
-                <Table2 className="mr-1.5 h-4 w-4" />
-                Table
-              </TabsTrigger>
-              <TabsTrigger value="library">
-                <ListTree className="mr-1.5 h-4 w-4" />
-                Library
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {(["status", "type"] as const).map((dim) => {
-            const selected = selections[dim];
-            const value = selected?.size
-              ? selected.size === 1
-                ? [...selected][0]
-                : "__multiple__"
-              : "__all__";
-            const labels = dim === "status" ? PROTOCOL_STATUS_LABELS : PROTOCOL_TYPE_LABELS;
-            return (
-              <Select
-                key={dim}
-                value={value}
-                onValueChange={(v) =>
-                  setSelections((prev) => ({ ...prev, [dim]: new Set(v === "__all__" ? [] : [v]) }))
+      <div className="flex flex-wrap items-center gap-2 border-b p-3">
+        <SearchInput
+          value={search}
+          onChange={setSearch}
+          placeholder="Search names, codes, targets…"
+          className="min-w-56 flex-1"
+          inputClassName="h-8"
+        />
+        {(["status", "type"] as const).map((dim) => {
+          const selected = selections[dim];
+          const value = selected?.size
+            ? selected.size === 1
+              ? [...selected][0]
+              : "__multiple__"
+            : "__all__";
+          const labels = dim === "status" ? PROTOCOL_STATUS_LABELS : PROTOCOL_TYPE_LABELS;
+          return (
+            <Select
+              key={dim}
+              value={value}
+              onValueChange={(v) =>
+                setSelections((prev) => ({ ...prev, [dim]: new Set(v === "__all__" ? [] : [v]) }))
+              }
+            >
+              <SelectTrigger
+                size="sm"
+                aria-label={dim === "status" ? "Protocol status" : "Assay type"}
+                className={
+                  dim === "status" ? "w-[calc(50%-4px)] sm:w-36" : "w-[calc(50%-4px)] sm:w-44"
                 }
               >
-                <SelectTrigger
-                  aria-label={dim === "status" ? "Protocol status" : "Assay type"}
-                  className={
-                    dim === "status" ? "w-[calc(50%-4px)] sm:w-36" : "w-[calc(50%-4px)] sm:w-44"
-                  }
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__all__">
-                    {dim === "status" ? "All statuses" : "All assay types"}
-                  </SelectItem>
-                  {value === "__multiple__" && (
-                    <SelectItem value="__multiple__" disabled>
-                      Multiple {dim === "status" ? "statuses" : "types"}
-                    </SelectItem>
-                  )}
-                  {Object.entries(labels)
-                    .sort((a, b) => a[1].localeCompare(b[1]))
-                    .map(([key, label]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-            );
-          })}
-          {projects && projects.length > 0 && (
-            <Select value={projectFilter} onValueChange={setProjectFilter}>
-              <SelectTrigger aria-label="Project" className="w-48">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
-                {[...projects]
-                  .sort((a, b) =>
-                    a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }),
-                  )
-                  .map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
+                <SelectItem value="__all__">
+                  {dim === "status" ? "All statuses" : "All assay types"}
+                </SelectItem>
+                {value === "__multiple__" && (
+                  <SelectItem value="__multiple__" disabled>
+                    Multiple {dim === "status" ? "statuses" : "types"}
+                  </SelectItem>
+                )}
+                {Object.entries(labels)
+                  .sort((a, b) => a[1].localeCompare(b[1]))
+                  .map(([key, label]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
                     </SelectItem>
                   ))}
               </SelectContent>
             </Select>
-          )}
-          <TagFilter value={tagFilter} onChange={setTagFilter} alphabetical />
-          {extraFacetCount > 0 && (
-            <Button size="sm" variant="secondary" onClick={() => onViewChange("library")}>
-              {extraFacetCount} library {extraFacetCount === 1 ? "filter" : "filters"}
-            </Button>
-          )}
-          {hasFilters && (
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear filters
-            </Button>
-          )}
+          );
+        })}
+        {projects && projects.length > 0 && (
+          <Select value={projectFilter} onValueChange={setProjectFilter}>
+            <SelectTrigger size="sm" aria-label="Project" className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_PROJECTS}>All projects</SelectItem>
+              {[...projects]
+                .sort((a, b) =>
+                  a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" }),
+                )
+                .map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+        )}
+        <TagFilter value={tagFilter} onChange={setTagFilter} alphabetical />
+        <Tabs value={view} onValueChange={onViewChange}>
+          <TabsList
+            aria-label="Protocol view"
+            className="group-data-[orientation=horizontal]/tabs:h-8"
+          >
+            <TabsTrigger value="grid">
+              <Table2 className="size-4" />
+              Table
+            </TabsTrigger>
+            <TabsTrigger value="library">
+              <ListTree className="size-4" />
+              Library
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+        {extraFacetCount > 0 && (
+          <Button size="sm" variant="outline" onClick={() => onViewChange("library")}>
+            {extraFacetCount} library {extraFacetCount === 1 ? "filter" : "filters"}
+          </Button>
+        )}
+        {hasFilters && (
+          <Button variant="ghost" size="sm" onClick={clearFilters}>
+            Clear filters
+          </Button>
+        )}
+        {view === "grid" && (
           <output className="ml-auto text-sm text-muted-foreground">
             {error ? (
               "Unable to load"
@@ -205,7 +208,7 @@ export function ProtocolBrowser({ onSelect, onNewFrom }: ProtocolBrowserProps) {
               </>
             )}
           </output>
-        </div>
+        )}
       </div>
       {error ? (
         <ErrorState message="Could not load protocols. Please try again." />

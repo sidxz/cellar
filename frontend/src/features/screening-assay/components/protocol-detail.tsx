@@ -3,6 +3,7 @@
 import { VisualizeButton } from "@/features/visualization/components/visualize-button";
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
+import { DetailTabsContent, DetailTabsList } from "@/shared/components/detail-tabs";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -21,7 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
 import { Label } from "@/shared/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
@@ -33,7 +34,6 @@ import {
   Copy,
   FlaskConical,
   LayoutDashboard,
-  LineChart,
   Lock,
   LockOpen,
   Paperclip,
@@ -46,7 +46,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import {
   useDeleteProtocol,
@@ -88,12 +88,44 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   const lockMutation = useLockProtocol();
   const unlockMutation = useUnlockProtocol();
 
-  const [hashTab, setActiveTab] = useHashTab("overview");
-  // The Curves tab exists only on a protocol with measured curves; a hash naming
-  // it elsewhere shows the overview.
+  const [hashTab, setHashTab] = useHashTab("overview");
   const hasCurves = protocol?.has_measured_curves === true;
-  const activeTab = hashTab === "curves" && !hasCurves ? "overview" : hashTab;
-  // The runs chosen on the Curves tab, held here so the Runs tab can set them.
+  const [resultsView, setResultsView] = useState(hashTab === "curves" ? "curves" : "activity");
+  const activeResultsView =
+    hasCurves &&
+    (hashTab === "curves" ||
+      (hashTab !== "activity" && hashTab !== "results" && resultsView === "curves"))
+      ? "curves"
+      : "activity";
+  const activeTab =
+    hashTab === "design"
+      ? "setup"
+      : hashTab === "activity"
+        ? "results"
+        : hashTab === "curves"
+          ? hasCurves
+            ? "results"
+            : "overview"
+          : ["overview", "runs", "results", "setup", "files"].includes(hashTab)
+            ? hashTab
+            : "overview";
+
+  useEffect(() => {
+    if (hashTab === "curves") setResultsView("curves");
+    if (hashTab === "activity" || hashTab === "results") setResultsView("activity");
+  }, [hashTab]);
+
+  const openResultsView = (view: string) => {
+    setResultsView(view);
+    setHashTab(view === "curves" ? "curves" : "results");
+  };
+  const setActiveTab = (tab: string) => {
+    if (tab === "activity" || tab === "curves") openResultsView(tab);
+    else if (tab === "results") openResultsView(activeResultsView);
+    else setHashTab(tab === "design" ? "setup" : tab);
+  };
+
+  // Shared with Runs so comparing selected runs opens the same Results view.
   const [curveRunIds, setCurveRunIds] = useState<string[]>([]);
 
   const [createRunOpen, setCreateRunOpen] = useState(false);
@@ -149,11 +181,12 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
   return (
     <>
       <DetailShell
+        compact
         query={query}
         backHref="/assays"
         backLabel="Back to Protocols"
         title={(p) => p.name}
-        subtitle={(p) => (p.code ? <span className="font-mono">{p.code}</span> : null)}
+        subtitle={(p) => (p.code ? <span className="tabular-nums">{p.code}</span> : null)}
         breadcrumbTrail={() => [{ label: "Protocols", href: "/assays" }]}
         badge={(p) => ({ status: p.status })}
         notFoundMessage="Protocol not found."
@@ -280,7 +313,6 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
 
           return (
             <>
-              <VisualizeButton protocolId={p.id} />
               {primary}
               {hasMore && (
                 <DropdownMenu>
@@ -330,72 +362,77 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         }}
       >
         {(protocol) => (
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList variant="line">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
+            <DetailTabsList aria-label="Protocol sections">
               <TabsTrigger value="overview">
-                <LayoutDashboard className="mr-1.5 h-4 w-4" />
+                <LayoutDashboard className="h-4 w-4" />
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="activity">
-                <Activity className="mr-1.5 h-4 w-4" />
-                Activity
-              </TabsTrigger>
-              <TabsTrigger value="design">
-                <Settings2 className="mr-1.5 h-4 w-4" />
-                Design
-              </TabsTrigger>
               <TabsTrigger value="runs">
-                <FlaskConical className="mr-1.5 h-4 w-4" />
+                <FlaskConical className="h-4 w-4" />
                 Runs
               </TabsTrigger>
-              {hasCurves && (
-                <TabsTrigger value="curves">
-                  <LineChart className="mr-1.5 h-4 w-4" />
-                  Compare traces
-                </TabsTrigger>
-              )}
+              <TabsTrigger value="results">
+                <Activity className="h-4 w-4" />
+                Results
+              </TabsTrigger>
+              <TabsTrigger value="setup">
+                <Settings2 className="h-4 w-4" />
+                Setup
+              </TabsTrigger>
               <TabsTrigger value="files">
-                <Paperclip className="mr-1.5 h-4 w-4" />
+                <Paperclip className="h-4 w-4" />
                 Files
               </TabsTrigger>
-            </TabsList>
+            </DetailTabsList>
 
-            <TabsContent value="overview">
+            <DetailTabsContent value="overview" activeValue={activeTab}>
               <OverviewTab
                 protocol={protocol}
                 protocolId={protocolId}
                 onTabChange={setActiveTab}
                 onEditName={editName(protocol)}
               />
-            </TabsContent>
-            <TabsContent value="activity">
-              <ActivityTab protocol={protocol} protocolId={protocolId} />
-            </TabsContent>
-            <TabsContent value="design">
-              <DesignTab protocol={protocol} protocolId={protocolId} />
-            </TabsContent>
-            <TabsContent value="runs">
+            </DetailTabsContent>
+            <DetailTabsContent value="runs" activeValue={activeTab}>
               <RunsTab
                 protocol={protocol}
                 protocolId={protocolId}
                 onCompareCurves={(ids) => {
                   setCurveRunIds(ids);
-                  setActiveTab("curves");
+                  openResultsView("curves");
                 }}
               />
-            </TabsContent>
-            {hasCurves && (
-              <TabsContent value="curves">
-                <CurvesTab
-                  protocolId={protocolId}
-                  runIds={curveRunIds}
-                  onRunIdsChange={setCurveRunIds}
-                />
-              </TabsContent>
-            )}
-            <TabsContent value="files">
+            </DetailTabsContent>
+            <DetailTabsContent value="results" activeValue={activeTab}>
+              <Tabs value={activeResultsView} onValueChange={openResultsView} className="gap-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <TabsList aria-label="Protocol result view">
+                    <TabsTrigger value="activity">Compound activity</TabsTrigger>
+                    {hasCurves && <TabsTrigger value="curves">Compare traces</TabsTrigger>}
+                  </TabsList>
+                  <VisualizeButton protocolId={protocol.id} />
+                </div>
+                <DetailTabsContent value="activity" activeValue={activeResultsView}>
+                  <ActivityTab protocol={protocol} protocolId={protocolId} />
+                </DetailTabsContent>
+                {hasCurves && (
+                  <DetailTabsContent value="curves" activeValue={activeResultsView}>
+                    <CurvesTab
+                      protocolId={protocolId}
+                      runIds={curveRunIds}
+                      onRunIdsChange={setCurveRunIds}
+                    />
+                  </DetailTabsContent>
+                )}
+              </Tabs>
+            </DetailTabsContent>
+            <DetailTabsContent value="setup" activeValue={activeTab}>
+              <DesignTab protocol={protocol} protocolId={protocolId} />
+            </DetailTabsContent>
+            <DetailTabsContent value="files" activeValue={activeTab}>
               <FilesTab protocolId={protocolId} />
-            </TabsContent>
+            </DetailTabsContent>
           </Tabs>
         )}
       </DetailShell>

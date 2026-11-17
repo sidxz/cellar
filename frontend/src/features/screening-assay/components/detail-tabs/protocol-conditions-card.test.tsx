@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ConditionDefinition, Protocol } from "../../types";
 import { ProtocolConditionsCard } from "./protocol-conditions-card";
@@ -13,11 +13,16 @@ const cond = (over: Partial<ConditionDefinition>): ConditionDefinition => ({
   ...over,
 });
 
-const card = (conditions: ConditionDefinition[], onOpenDesign = vi.fn()) =>
+const card = (
+  conditions: ConditionDefinition[],
+  actions = { onAdd: vi.fn(), onEdit: vi.fn(), onRemove: vi.fn() },
+) =>
   render(
     <ProtocolConditionsCard
       protocol={{ condition_definitions: conditions } as unknown as Protocol}
-      onOpenDesign={onOpenDesign}
+      canAdd
+      canEdit
+      {...actions}
     />,
   );
 
@@ -44,17 +49,12 @@ describe("ProtocolConditionsCard", () => {
         fixed_value: "25",
       }),
     ]);
-    expect(
-      screen.getByText("Recorded with every run; they tell its runs apart."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Incubation time").nextSibling).toHaveTextContent(/^h$/);
-    expect(screen.getByText("Atmosphere").nextSibling).toHaveTextContent(/^aerobic, hypoxic$/);
-    expect(screen.getByText("Medium").nextSibling).toHaveTextContent(/^$/);
-    expect(screen.getByText("Hypoxia").nextSibling).toHaveTextContent("Fixed: yes");
-    expect(screen.getByText("Substrate concentration").nextSibling).toHaveTextContent(
-      "Fixed: 25 µM",
-    );
-    expect(screen.queryByText(/varies per run/i)).not.toBeInTheDocument();
+    const row = (name: string) => within(screen.getByText(name).closest("tr") as HTMLElement);
+    expect(row("Incubation time").getByText("h")).toBeInTheDocument();
+    expect(row("Atmosphere").getByText("aerobic, hypoxic")).toBeInTheDocument();
+    expect(row("Medium").getByText("Varies per run")).toBeInTheDocument();
+    expect(row("Hypoxia").getByText("yes")).toBeInTheDocument();
+    expect(row("Substrate concentration").getByText("25 µM")).toBeInTheDocument();
   });
 
   it("says when none are recorded", () => {
@@ -62,10 +62,14 @@ describe("ProtocolConditionsCard", () => {
     expect(screen.getByText(/None yet. Add what each run records/)).toBeInTheDocument();
   });
 
-  it("opens the Design tab, where conditions are edited", () => {
-    const onOpenDesign = vi.fn();
-    card([], onOpenDesign);
-    fireEvent.click(screen.getByRole("button", { name: /Open in Design/ }));
-    expect(onOpenDesign).toHaveBeenCalled();
+  it("provides add, edit and delete directly in Assay conditions", () => {
+    const actions = { onAdd: vi.fn(), onEdit: vi.fn(), onRemove: vi.fn() };
+    card([cond({ id: "c1", name: "Medium" })], actions);
+    fireEvent.click(screen.getByRole("button", { name: "Add condition" }));
+    expect(actions.onAdd).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: "Edit Medium" }));
+    expect(actions.onEdit).toHaveBeenCalledWith("c1");
+    fireEvent.click(screen.getByRole("button", { name: "Delete Medium" }));
+    expect(actions.onRemove).toHaveBeenCalledWith("c1");
   });
 });
