@@ -66,6 +66,7 @@ from cellar.application.screening.manage_protocol_references import (
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinitionCommand,
     AddTemperatureWindowCommand,
+    GetReadoutUsageQuery,
     RemoveReadoutDefinitionCommand,
     UpdateReadoutDefinitionCommand,
 )
@@ -104,6 +105,7 @@ from cellar.interface.dependencies import (
     GetProtocolCollectionGapDep,
     GetProtocolDep,
     GetProtocolTargetsDep,
+    GetReadoutUsageDep,
     ListDiscriminatorsDep,
     ListProtocolsByProjectDep,
     ListProtocolsDep,
@@ -1261,7 +1263,9 @@ async def update_readout_definition(
     targets_uc: ResolveProtocolTargetsDep,
     uc: UpdateReadoutDefinitionDep,
 ) -> ProtocolResponse:
-    """Edit a readout definition on a DRAFT protocol. Partial-update semantics."""
+    """Edit a readout definition. Partial-update semantics. Once published, cosmetic
+    fields always; structural ones only while nothing uses the readout (409 names
+    what does)."""
     sent = body.model_fields_set
     cmd_kwargs: dict = {}
     # Mandatory IDs
@@ -1340,7 +1344,8 @@ async def remove_readout_definition(
     targets_uc: ResolveProtocolTargetsDep,
     uc: RemoveReadoutDefinitionDep,
 ) -> ProtocolResponse:
-    """Remove a readout definition from a DRAFT protocol."""
+    """Remove a readout definition: any on a DRAFT, an unused one once published
+    (409 names what uses it)."""
     cmd = RemoveReadoutDefinitionCommand(
         workspace_id=auth.workspace_id,
         protocol_id=protocol_id,
@@ -1348,6 +1353,37 @@ async def remove_readout_definition(
     )
     result = await uc(cmd, auth=auth)
     return await _protocol_response(targets_uc, auth, result)
+
+
+class ReadoutUsageResponse(BaseModel):
+    readout_definition_id: uuid.UUID
+    in_use: bool
+    #: Why, as short phrases ("has values in 3 runs"); empty when unused.
+    reasons: list[str]
+
+
+@router.get(
+    "/protocols/{protocol_id}/readout-usage",
+    response_model=list[ReadoutUsageResponse],
+    tags=["protocols"],
+)
+async def get_readout_usage(
+    protocol_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetReadoutUsageDep,
+) -> list[ReadoutUsageResponse]:
+    """What uses each readout of a protocol. On a published, unlocked protocol a
+    readout nothing uses can still be renamed, restructured or removed."""
+    usage = result_to_response(
+        await uc(
+            GetReadoutUsageQuery(workspace_id=auth.workspace_id, protocol_id=protocol_id),
+            auth=auth,
+        )
+    )
+    return [
+        ReadoutUsageResponse(readout_definition_id=rd_id, in_use=u.in_use, reasons=list(u.reasons))
+        for rd_id, u in usage.items()
+    ]
 
 
 # ---------------------------------------------------------------------------

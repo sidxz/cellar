@@ -1,4 +1,8 @@
-"""Use cases for managing readout definitions on DRAFT protocols."""
+"""Use cases for managing a protocol's readout definitions.
+
+A draft changes freely. A published, unlocked protocol can add readouts, and can
+rename, restructure or remove a readout nothing uses (``ReadoutUsageReader`` and
+``Protocol.readout_usage`` say what does)."""
 
 from __future__ import annotations
 
@@ -7,21 +11,29 @@ from dataclasses import dataclass
 
 from returns.result import Failure, Result, Success
 
-from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.auth import (
+    AuthContext,
+    require_editor,
+    require_same_workspace,
+    require_workspace_role,
+)
 from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
 )
+from cellar.application.screening.readout_usage_reader import ReadoutUsageReader
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
+from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.enums import (
+    ProtocolStatus,
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
 )
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
-from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition, ReadoutUsage
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.units import canonical_unit
@@ -84,6 +96,12 @@ class UpdateReadoutDefinitionCommand(Command):
     dose_response_config: dict | object | None = _UNSET
     # dict -> MeltReadoutConfig.from_dict; None clears; _UNSET leaves unchanged.
     melt_config: dict | object | None = _UNSET
+
+
+@dataclass(frozen=True, kw_only=True)
+class GetReadoutUsageQuery(Query):
+    workspace_id: uuid.UUID
+    protocol_id: uuid.UUID
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -175,18 +193,31 @@ class AddReadoutDefinition:
         return Success(protocol)
 
 
+async def _stored_usage(
+    reader: ReadoutUsageReader | None, protocol: Protocol, definition_id: uuid.UUID
+) -> ReadoutUsage | None:
+    """What outside a published, unlocked protocol uses the readout. None (a draft
+    needs no answer, a locked or retired protocol changes nothing, or no reader)
+    leaves the protocol to its draft-only rule."""
+    if reader is None or protocol.status != ProtocolStatus.ACTIVE or protocol.is_locked:
+        return None
+    return await reader.for_readout(protocol.workspace_id, protocol.id, definition_id)
+
+
 class RemoveReadoutDefinition:
-    """Remove a readout definition from a DRAFT protocol."""
+    """Remove a readout definition: any on a draft, an unused one once published."""
 
     def __init__(
         self,
         uow: UnitOfWork,
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
+        usage_reader: ReadoutUsageReader | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
+        self._usage_reader = usage_reader
 
     async def __call__(
         self, input: RemoveReadoutDefinitionCommand, auth: AuthContext | None = None
@@ -200,7 +231,15 @@ class RemoveReadoutDefinition:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
-            protocol.remove_readout_definition(input.definition_id)
+            # ponytail: check-then-delete in one transaction, no row lock. A value
+            # written in the same instant makes the database refuse the delete (the
+            # unit of work answers 409); a curve fitted in that instant goes with the
+            # readout. Lock the readout row if that ever shows up.
+            usage = await _stored_usage(self._usage_reader, protocol, input.definition_id)
+            try:
+                protocol.remove_readout_definition(input.definition_id, usage)
+            except DomainError as exc:
+                return Failure(exc)
             await self._repo.save(protocol)
             events = await self._uow.commit()
 
@@ -209,7 +248,8 @@ class RemoveReadoutDefinition:
 
 
 class UpdateReadoutDefinition:
-    """Edit a readout definition on a DRAFT protocol."""
+    """Edit a readout definition: any field on a draft; once published, cosmetic
+    fields always and structural ones while nothing uses the readout."""
 
     def __init__(
         self,
@@ -217,11 +257,13 @@ class UpdateReadoutDefinition:
         repo: ProtocolRepository,
         dispatcher: EventDispatcherProtocol,
         formula_evaluator: FormulaEvaluator | None = None,
+        usage_reader: ReadoutUsageReader | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._dispatcher = dispatcher
         self._formula_evaluator = formula_evaluator
+        self._usage_reader = usage_reader
 
     async def __call__(
         self, input: UpdateReadoutDefinitionCommand, auth: AuthContext | None = None
@@ -297,8 +339,9 @@ class UpdateReadoutDefinition:
                 except DomainError as exc:
                     return Failure(exc)
 
+            usage = await _stored_usage(self._usage_reader, protocol, input.definition_id)
             try:
-                protocol.update_readout_definition(input.definition_id, **kwargs)
+                protocol.update_readout_definition(input.definition_id, usage=usage, **kwargs)
             except DomainError as exc:
                 return Failure(exc)
 
@@ -307,6 +350,36 @@ class UpdateReadoutDefinition:
 
         await self._dispatcher.dispatch_all(events)
         return Success(protocol)
+
+
+class GetReadoutUsage:
+    """What uses each readout of a protocol, in the protocol's readout order."""
+
+    def __init__(
+        self, uow: UnitOfWork, repo: ProtocolRepository, usage_reader: ReadoutUsageReader
+    ) -> None:
+        self._uow = uow
+        self._repo = repo
+        self._usage_reader = usage_reader
+
+    async def __call__(
+        self, input: GetReadoutUsageQuery, auth: AuthContext | None = None
+    ) -> Result[dict[uuid.UUID, ReadoutUsage], DomainError]:
+        require_workspace_role(auth, "viewer")
+        require_same_workspace(auth, input.workspace_id)
+        async with self._uow:
+            protocol = await self._repo.find_by_id_in_workspace(
+                input.workspace_id, input.protocol_id
+            )
+            if protocol is None:
+                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+            stored = await self._usage_reader.for_protocol(input.workspace_id, protocol.id)
+            return Success(
+                {
+                    rd.id: protocol.readout_usage(rd.id, stored.get(rd.id))
+                    for rd in protocol.readout_definitions
+                }
+            )
 
 
 def _window_readout(

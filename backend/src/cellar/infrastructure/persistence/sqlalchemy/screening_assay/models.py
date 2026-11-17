@@ -496,8 +496,11 @@ class DoseResponseCurveModel(Base, EntityModelMixin, WorkspaceIdMixin):
     # protocol can hold many DR readouts (target IC50, counter-screen IC50,
     # cytotoxicity LD50, ...) and each one's curve is its own row.
     # ``curve_type`` is descriptive (display label + intercept language),
-    # never identifying. Cascade on delete: readout-def removal is draft-only
-    # so cascading is safe (no live runs can reference a draft readout-def).
+    # never identifying. Cascade on delete: a readout-def is only removed from
+    # a draft (no runs yet) or, once published, while it is unused — which
+    # includes having no curve (ReadoutUsageReader). So the cascade has nothing
+    # to take, short of a curve fitted in the instant between that check and
+    # the delete.
     readout_definition_id: Mapped[uuid.UUID] = mapped_column(
         Uuid,
         ForeignKey("readout_definitions.id", ondelete="CASCADE"),
