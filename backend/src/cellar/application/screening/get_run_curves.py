@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from returns.pipeline import is_successful
@@ -158,14 +159,26 @@ def apply_view(
         return Success((series, None))
     if not series:
         return Success((series, window))
-    ranges = [(min(s.x), max(s.x)) for s in series]
-    widest = max(hi - lo for lo, hi in ranges)
-    if window is not None and not (math.isfinite(window) and window > 0):
-        return Failure(ValidationError("Enter a smoothing window greater than 0."))
-    used = min(window, widest) if window else default_window(ranges)
+    chosen = smoothing_window([s.x for s in series], window)
+    if not is_successful(chosen):
+        return Failure(chosen.failure())
+    used = chosen.unwrap()
     out = []
     for s in series:
         d = derivative.derivative(s.x, s.y, window=used)
         if d.x:
             out.append(CurveSeries(well_id=s.well_id, x=d.x, y=d.y, reported=s.reported))
     return Success((out, used))
+
+
+def smoothing_window(
+    xs: Sequence[Sequence[float]], window: float | None
+) -> Result[float, ValidationError]:
+    """The one smoothing window for traces with these x values (at least one trace): by
+    default 5% of their widest x range; the one asked for, clamped to that range."""
+    if window is not None and not (math.isfinite(window) and window > 0):
+        return Failure(ValidationError("Enter a smoothing window greater than 0."))
+    ranges = [(min(x), max(x)) for x in xs]
+    if window is None:
+        return Success(default_window(ranges))
+    return Success(min(window, max(hi - lo for lo, hi in ranges)))

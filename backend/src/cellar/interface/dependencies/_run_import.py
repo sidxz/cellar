@@ -8,6 +8,7 @@ from fastapi import Depends
 
 from cellar.application.screening.flag_run_outliers import FlagRunOutliers
 from cellar.application.screening.get_melting_analysis import GetMeltingAnalysis
+from cellar.application.screening.get_peak_candidates import GetPeakCandidates
 from cellar.application.screening.import_instrument_file import ImportInstrumentFile
 from cellar.application.screening.import_run_file import (
     ImportRunFile,
@@ -41,6 +42,7 @@ __all__ = [
     "DeleteRunImportTemplateDep",
     "FlagRunOutliersDep",
     "GetMeltingAnalysisDep",
+    "GetPeakCandidatesDep",
     "ImportInstrumentFileDep",
     "ImportRunFileDep",
     "ListInstrumentFileFormatsDep",
@@ -90,6 +92,7 @@ ListInstrumentFileFormatsDep = Annotated[
     ListInstrumentFileFormats, Depends(_get_use_case(ListInstrumentFileFormats))
 ]
 GetMeltingAnalysisDep = Annotated[GetMeltingAnalysis, Depends(_get_use_case(GetMeltingAnalysis))]
+GetPeakCandidatesDep = Annotated[GetPeakCandidates, Depends(_get_use_case(GetPeakCandidates))]
 AddMeltingStepDep = Annotated[AddMeltingStep, Depends(_get_use_case(AddMeltingStep))]
 ReviewMeltingStepDep = Annotated[ReviewMeltingStep, Depends(_get_use_case(ReviewMeltingStep))]
 AssignMeltingStepDep = Annotated[AssignMeltingStep, Depends(_get_use_case(AssignMeltingStep))]

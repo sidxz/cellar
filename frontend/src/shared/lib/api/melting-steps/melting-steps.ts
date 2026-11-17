@@ -26,9 +26,11 @@ import type {
 import type {
   AddMeltingStepRequest,
   AssignMeltingStepRequest,
+  GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,
   HTTPValidationError,
   MeltingAnalysisResponse,
   MeltingStepChangeResponse,
+  PeakCandidatesResponse,
   ReviewMeltingStepRequest
 } from '../model';
 
@@ -146,6 +148,141 @@ export function useGetMeltingAnalysisApiV1RunsRunIdMeltingAnalysisGet<TData = Aw
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetMeltingAnalysisApiV1RunsRunIdMeltingAnalysisGetQueryOptions(runId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export const getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet = (
+    runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<PeakCandidatesResponse>(
+      {url: `/api/v1/runs/${runId}/wells/${wellId}/peak-candidates`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+
+
+
+
+export const getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryKey = (runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,) => {
+    return [
+    `/api/v1/runs/${runId}/wells/${wellId}/peak-candidates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryOptions = <TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryKey(runId,wellId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>> = ({ signal }) => getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet(runId,wellId,params, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined && wellId !== null && wellId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryResult = NonNullable<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>>
+export type GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryError = HTTPValidationError
+
+
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params: undefined |  GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryOptions(runId,wellId,params,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

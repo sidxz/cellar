@@ -65,6 +65,7 @@ from cellar.application.screening.get_measured_curves_batch import GetMeasuredCu
 from cellar.application.screening.get_melting_analysis import GetMeltingAnalysis
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
 from cellar.application.screening.get_molecule_test_counts import GetMoleculeTestCounts
+from cellar.application.screening.get_peak_candidates import GetPeakCandidates
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
@@ -236,6 +237,7 @@ from cellar.domain.screening_assay.curve_derivative import CurveDerivativeServic
 from cellar.domain.screening_assay.curve_fitting import CurveFittingService
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
+from cellar.domain.screening_assay.peak_detection import PeakDetectionService
 from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer
 from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
@@ -1204,6 +1206,17 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(GetMeltingAnalysis, _get_melting_analysis)
+
+    def _get_peak_candidates(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetPeakCandidates(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            curve_repo=SQLAlchemyMeasuredCurveRepository(uow),
+            detection=c[PeakDetectionService],
+        )
+
+    container.define(GetPeakCandidates, _get_peak_candidates)
     container.define(
         ListInstrumentFileFormats,
         lambda c: ListInstrumentFileFormats(readers=c[InstrumentReaders]),
