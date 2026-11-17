@@ -45,6 +45,14 @@ import {
   usePlateImportHistory,
   useStartCddPlateImport,
 } from "../hooks/use-cdd-plate-import";
+import { NotFoundIdentifiers, SelectedMoleculesImport } from "./selected-molecules-import";
+
+/** History badge per import mode; "filtered" is the import of specific molecules. */
+const IMPORT_MODE_LABELS: Record<string, string> = {
+  full_vault: "Full",
+  sync: "Sync",
+  filtered: "Selected",
+};
 
 export function DataImportPage() {
   const qc = useQueryClient();
@@ -56,6 +64,10 @@ export function DataImportPage() {
   const [maxMolecules, setMaxMolecules] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  // Identifiers the vault did not know, for the "specific molecules" import now running or just done.
+  // ponytail: page state only, so reloading mid-import drops the list; keep it on the import
+  // record if it has to outlive the page.
+  const [notFound, setNotFound] = useState<string[]>([]);
 
   // Active import tracking
   const [workflowId, setWorkflowId] = useState<string | null>(null);
@@ -102,26 +114,42 @@ export function DataImportPage() {
     }
   }, [liveStatus, qc]);
 
-  const handleStart = async () => {
+  const startImport = async (
+    params: Parameters<typeof startMutation.mutateAsync>[0],
+    identifiersNotFound: string[] = [],
+  ) => {
     setError(null);
     setCompletionMessage(null);
-    if (!orgId) {
-      setError("Organization is required");
-      return;
-    }
+    setNotFound(identifiersNotFound);
     try {
-      const limit = maxMolecules ? Number.parseInt(maxMolecules, 10) : undefined;
-      const result = await startMutation.mutateAsync({
-        originatingOrgId: orgId,
-        importMode: importMode,
-        maxMolecules: limit && !Number.isNaN(limit) ? limit : undefined,
-      });
+      const result = await startMutation.mutateAsync(params);
       setWorkflowId(result.workflow_id);
       refetchHistory();
     } catch (err: unknown) {
+      setNotFound([]);
       setError(err instanceof Error ? err.message : "Failed to start import");
     }
   };
+
+  const handleStart = async () => {
+    if (!orgId) {
+      setCompletionMessage(null);
+      setError("Organization is required");
+      return;
+    }
+    const limit = maxMolecules ? Number.parseInt(maxMolecules, 10) : undefined;
+    await startImport({
+      originatingOrgId: orgId,
+      importMode: importMode,
+      maxMolecules: limit && !Number.isNaN(limit) ? limit : undefined,
+    });
+  };
+
+  const handleImportSelected = (found: string[], identifiersNotFound: string[]) =>
+    startImport(
+      { originatingOrgId: orgId, importMode: "filtered", filterCriteria: { names: found } },
+      identifiersNotFound,
+    );
 
   const handleCancel = async () => {
     if (workflowId) {
@@ -207,6 +235,15 @@ export function DataImportPage() {
                 </div>
               )}
 
+              {(isImportActive || completionMessage) && (
+                <NotFoundIdentifiers
+                  title={`${notFound.length.toLocaleString()} ${
+                    notFound.length === 1 ? "identifier was" : "identifiers were"
+                  } not found in CDD Vault and left out of this import`}
+                  identifiers={notFound}
+                />
+              )}
+
               {/* Configuration form (hidden when import active) */}
               {!isImportActive && (
                 <div className="max-w-lg space-y-5">
@@ -283,6 +320,17 @@ export function DataImportPage() {
                     {startMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Start Import
                   </Button>
+                </div>
+              )}
+
+              {/* A separate way in: only the molecules a pasted list names */}
+              {!isImportActive && (
+                <div className="border-t pt-6">
+                  <SelectedMoleculesImport
+                    organizationSelected={!!orgId}
+                    isImporting={startMutation.isPending}
+                    onImport={handleImportSelected}
+                  />
                 </div>
               )}
 
@@ -394,7 +442,7 @@ export function DataImportPage() {
                         </TableCell>
                         <TableCell>
                           <Badge variant="outline">
-                            {imp.import_mode === "full_vault" ? "Full" : "Sync"}
+                            {IMPORT_MODE_LABELS[imp.import_mode] ?? "Sync"}
                           </Badge>
                         </TableCell>
                         <TableCell>
