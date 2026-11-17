@@ -21,8 +21,8 @@ from cellar.application.screening.instrument_export import (
     read_instrument_file,
 )
 from cellar.application.screening.instrument_import_plan import (
+    LabelMoleculeLookup,
     ReportedSeries,
-    label_lookup_candidates,
     missing_curve_warnings,
     refuse_instrument_import,
     reported_series,
@@ -201,21 +201,13 @@ class _Suggester:
         self, ws: uuid.UUID, molecule_repo: MoleculeRepository, batch_repo: BatchRepository
     ) -> None:
         self._ws = ws
-        self._molecule_repo = molecule_repo
+        self._find_molecule = LabelMoleculeLookup(ws, molecule_repo)
         self._batch_repo = batch_repo
-        self._molecules: dict[str, Molecule | None] = {}
         self._suggestions: dict[uuid.UUID, PositionSuggestion] = {}
 
     async def __call__(self, label: str) -> PositionSuggestion | None:
-        for candidate in label_lookup_candidates(label):
-            if candidate not in self._molecules:
-                self._molecules[candidate] = await self._molecule_repo.find_by_identifier(
-                    self._ws, candidate
-                )
-            molecule = self._molecules[candidate]
-            if molecule is not None:
-                return await self._suggestion(molecule)
-        return None
+        molecule = await self._find_molecule(label)
+        return await self._suggestion(molecule) if molecule is not None else None
 
     async def _suggestion(self, molecule: Molecule) -> PositionSuggestion:
         if molecule.id not in self._suggestions:

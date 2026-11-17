@@ -29,40 +29,64 @@ async def matches(h: Harness, *labels: str) -> tuple[LabelMatch, ...]:
     return out
 
 
-async def test_label_resolves_by_registration_number_then_by_identifier():
-    by_reg, by_alias = _molecule("REG-0001", "A"), _molecule("REG-0002", "B")
-    h = Harness(by_reg={"REG-0001": by_reg}, by_identifier={"SACC-0457698": by_alias})
-    first, second = await matches(h, "REG-0001", "SACC-0457698")
-    assert (first.label, second.label) == ("REG-0001", "SACC-0457698")
-    assert first.compound is not None and second.compound is not None
+async def test_label_resolves_by_any_registered_identifier():
+    molecule = _molecule("REG-0001", "A")
+    h = Harness(by_identifier={"SACC-0457698": molecule})
+    (match,) = await matches(h, "SACC-0457698")
+    assert match.label == "SACC-0457698" and match.compound is not None
     assert (
-        first.compound.molecule_id,
-        first.compound.molecule_name,
-        first.compound.registration_number,
-    ) == (by_reg.id, "A", "REG-0001")
-    assert (second.compound.molecule_id, second.compound.registration_number) == (
-        by_alias.id,
-        "REG-0002",
-    )
+        match.compound.molecule_id,
+        match.compound.molecule_name,
+        match.compound.registration_number,
+    ) == (molecule.id, "A", "REG-0001")
     h.molecule_repo.find_by_identifier.assert_awaited_once_with(h.ws, "SACC-0457698")
 
 
-async def test_label_that_names_no_compound_comes_back_without_one():
+async def test_label_with_a_bracketed_suffix_resolves_by_the_part_before_it_as_at_import():
+    molecule = _molecule("REG-0001")
+    h = Harness(by_identifier={"SACC-0457698": molecule})
+    (match,) = await matches(h, " SACC-0457698 (50 µM) ")
+    # The answer carries the label as written, for the table to find its rows by.
+    assert match.label == "SACC-0457698 (50 µM)"
+    assert match.compound is not None and match.compound.molecule_id == molecule.id
+    # The whole label first, then the part before the brackets: the import's order.
+    assert [c.args for c in h.molecule_repo.find_by_identifier.await_args_list] == [
+        (h.ws, "SACC-0457698 (50 µM)"),
+        (h.ws, "SACC-0457698"),
+    ]
+
+
+async def test_whole_label_wins_over_the_part_before_its_brackets():
+    whole, stripped = _molecule("REG-0001"), _molecule("REG-0002")
+    h = Harness(by_identifier={"ABC-1 (Old)": whole, "ABC-1": stripped})
+    (match,) = await matches(h, "ABC-1 (Old)")
+    assert match.compound is not None and match.compound.molecule_id == whole.id
+    h.molecule_repo.find_by_identifier.assert_awaited_once_with(h.ws, "ABC-1 (Old)")
+
+
+async def test_label_that_names_no_compound_comes_back_as_written_without_one():
     h = Harness()
-    assert await matches(h, "DMSO", "160 CoA") == (
+    assert await matches(h, "DMSO", "160 CoA (ref)") == (
         LabelMatch("DMSO", None),
-        LabelMatch("160 CoA", None),
+        LabelMatch("160 CoA (ref)", None),
     )
+
+
+async def test_registration_number_is_not_an_identifier_here_as_it_is_not_at_import():
+    molecule = _molecule("REG-0001")
+    h = Harness(by_reg={"REG-0001": molecule})
+    assert await matches(h, "REG-0001") == (LabelMatch("REG-0001", None),)
+    h.molecule_repo.find_by_registration_number.assert_not_awaited()
 
 
 async def test_one_batch_is_filled_and_several_need_a_choice():
     m1, m2, m3 = _molecule("REG-0001"), _molecule("REG-0002"), _molecule("REG-0003")
     only = _batch(m1, "B-1")
     h = Harness(
-        by_reg={"REG-0001": m1, "REG-0002": m2, "REG-0003": m3},
+        by_identifier={"ID-1": m1, "ID-2": m2, "ID-3": m3},
         batches=[only, _batch(m2, "B-2"), _batch(m2, "B-3")],
     )
-    one, many, none = (m.compound for m in await matches(h, "REG-0001", "REG-0002", "REG-0003"))
+    one, many, none = (m.compound for m in await matches(h, "ID-1", "ID-2", "ID-3"))
     assert one is not None and many is not None and none is not None
     assert (one.batch_id, one.batch_number, one.needs_batch_choice) == (only.id, "B-1", False)
     assert (many.batch_id, many.batch_number, many.needs_batch_choice) == (None, None, True)
@@ -71,17 +95,19 @@ async def test_one_batch_is_filled_and_several_need_a_choice():
 
 async def test_a_label_is_never_read_as_a_batch():
     molecule = _molecule("REG-0001")
-    h = Harness(by_reg={"REG-0001": molecule}, batches=[_batch(molecule, "B-1")])
+    h = Harness(by_identifier={"ID-1": molecule}, batches=[_batch(molecule, "B-1")])
     assert await matches(h, "B-1") == (LabelMatch("B-1", None),)
     h.batch_repo.find_by_batch_number.assert_not_awaited()
 
 
 async def test_repeated_and_padded_labels_answer_once_and_blank_ones_not_at_all():
     molecule = _molecule("REG-0001")
-    h = Harness(by_reg={"REG-0001": molecule})
-    out = await matches(h, "REG-0001", " REG-0001 ", "", "   ", "DMSO", "REG-0001", "DMSO")
-    assert [m.label for m in out] == ["REG-0001", "DMSO"]
-    assert h.molecule_repo.find_by_registration_number.await_count == 2
+    h = Harness(by_identifier={"ID-1": molecule}, batches=[_batch(molecule, "B-1")])
+    out = await matches(h, "ID-1", " ID-1 ", "", "   ", "DMSO", "ID-1 (a)", "ID-1 (b)", "DMSO")
+    assert [m.label for m in out] == ["ID-1", "DMSO", "ID-1 (a)", "ID-1 (b)"]
+    # One lookup per distinct identifier tried, and one batch read for the compound.
+    assert h.molecule_repo.find_by_identifier.await_count == 4
+    assert h.batch_repo.find_by_molecule.await_count == 1
 
 
 async def test_more_labels_than_the_cap_are_refused_before_any_lookup():
@@ -97,20 +123,20 @@ async def test_more_labels_than_the_cap_are_refused_before_any_lookup():
 
 async def test_run_not_found():
     h = Harness(run_missing=True)
-    assert isinstance((await resolve(h, "REG-0001")).failure(), NotFoundError)
+    assert isinstance((await resolve(h, "ID-1")).failure(), NotFoundError)
     h.run_repo.find_by_id_in_workspace.assert_awaited_once_with(h.ws, h.run.id)
-    h.molecule_repo.find_by_registration_number.assert_not_awaited()
+    h.molecule_repo.find_by_identifier.assert_not_awaited()
 
 
 async def test_viewer_raises_authorization_error():
     h = Harness()
     with pytest.raises(AuthorizationError):
-        await resolve(h, "REG-0001", auth=FakeAuth(role="viewer", workspace_id=h.ws))
+        await resolve(h, "ID-1", auth=FakeAuth(role="viewer", workspace_id=h.ws))
     h.run_repo.find_by_id_in_workspace.assert_not_awaited()
 
 
 async def test_other_workspace_raises_not_found():
     h = Harness()
     with pytest.raises(NotFoundError):
-        await resolve(h, "REG-0001", auth=FakeAuth())
+        await resolve(h, "ID-1", auth=FakeAuth())
     h.run_repo.find_by_id_in_workspace.assert_not_awaited()

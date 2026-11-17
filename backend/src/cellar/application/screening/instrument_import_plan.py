@@ -1,7 +1,8 @@
 """Planning helpers shared by the instrument file preview and import.
 
-Pure functions over an ``InstrumentExport`` plus the one refusal both requests
-apply before reading the file.
+Pure functions over an ``InstrumentExport``, the one refusal both requests apply
+before reading the file, and the lookup of the compound a position label names
+(also used to match a run's labels again after the import).
 """
 
 from __future__ import annotations
@@ -13,6 +14,8 @@ from dataclasses import dataclass, replace
 
 from cellar.application.screening.instrument_export import InstrumentExport
 from cellar.application.screening.run_shape import refuse_if_wellless
+from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.screening_assay.enums import ReadoutDataType, RunStatus
 from cellar.domain.screening_assay.holder import position_label, row_letters
 from cellar.domain.screening_assay.melt_window import STEP_KIND
@@ -133,6 +136,27 @@ def label_lookup_candidates(label: str) -> list[str]:
     if match and match.group(1):
         return [text, match.group(1)]
     return [text]
+
+
+class LabelMoleculeLookup:
+    """Position label -> the compound it names: each of ``label_lookup_candidates`` in
+    order, by registered identifier. One lookup per distinct identifier."""
+
+    def __init__(self, ws: uuid.UUID, molecule_repo: MoleculeRepository) -> None:
+        self._ws = ws
+        self._molecule_repo = molecule_repo
+        self._molecules: dict[str, Molecule | None] = {}
+
+    async def __call__(self, label: str) -> Molecule | None:
+        for candidate in label_lookup_candidates(label):
+            if candidate not in self._molecules:
+                self._molecules[candidate] = await self._molecule_repo.find_by_identifier(
+                    self._ws, candidate
+                )
+            molecule = self._molecules[candidate]
+            if molecule is not None:
+                return molecule
+        return None
 
 
 async def refuse_instrument_import(

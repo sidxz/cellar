@@ -1,7 +1,7 @@
 """Edit a run's positions after an instrument import: label, note, role, batch, concentration.
 
-Also reads a labelling layout file, or the positions' labels as compound identifiers, for
-the labelling table to fill itself from, and flags wells as outliers.
+Also reads a labelling layout file, or matches the positions' labels to compounds again,
+for the labelling table to fill itself from, and flags wells as outliers.
 """
 
 from __future__ import annotations
@@ -206,9 +206,9 @@ class ResolvePositionLabelsRequest(BaseModel):
 
 
 class PositionLabelMatchModel(BaseModel):
-    # The label, trimmed.
+    # The label as given, trimmed.
     label: str
-    # Null when the label is not the identifier of a registered compound.
+    # Null when the label names no registered compound.
     compound: LayoutCompoundModel | None
 
     @classmethod
@@ -235,8 +235,8 @@ async def resolve_position_labels(
     body: ResolvePositionLabelsRequest,
     uc: ResolvePositionLabelsDep,
 ) -> PositionLabelMatchesResponse:
-    """Read position labels as compound identifiers, as a layout file's Compound column is
-    read: by registration number or any registered identifier. Writes nothing."""
+    """Match position labels to registered compounds as the instrument import suggests them:
+    the whole label, then the part before a "(...)", by registered identifier. Writes nothing."""
     query = ResolvePositionLabelsQuery(
         workspace_id=auth.workspace_id, run_id=run_id, labels=tuple(body.labels)
     )

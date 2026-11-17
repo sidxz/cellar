@@ -174,8 +174,8 @@ export const useResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePost = <TError =
       return useMutation(getResolveLayoutFileApiV1RunsRunIdResolveLayoutFilePostMutationOptions(options), queryClient);
     }
     /**
- * Read position labels as compound identifiers, as a layout file's Compound column is
- * read: by registration number or any registered identifier. Writes nothing.
+ * Match position labels to registered compounds as the instrument import suggests them:
+ * the whole label, then the part before a "(...)", by registered identifier. Writes nothing.
  * @summary Resolve Position Labels
  */
 export const resolvePositionLabelsApiV1RunsRunIdResolvePositionLabelsPost = (
@@ -231,8 +231,8 @@ const {mutation: mutationOptions} = options ?
     export type ResolvePositionLabelsApiV1RunsRunIdResolvePositionLabelsPostMutationVariables = {runId: string;data: ResolvePositionLabelsRequest}
 
     /**
- * Read position labels as compound identifiers, as a layout file's Compound column is
- * read: by registration number or any registered identifier. Writes nothing.
+ * Match position labels to registered compounds as the instrument import suggests them:
+ * the whole label, then the part before a "(...)", by registered identifier. Writes nothing.
  * @summary Resolve Position Labels
  */
 export const useResolvePositionLabelsApiV1RunsRunIdResolvePositionLabelsPost = <TError = HTTPValidationError,

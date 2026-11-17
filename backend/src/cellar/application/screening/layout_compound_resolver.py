@@ -1,9 +1,9 @@
 """Compound and Batch text of a labelling table resolved to a compound and its batch.
 
-Shared by the layout file's Compound and Batch columns and by position labels read as
-compound identifiers. A compound is found by its registration number, then by any
-registered identifier; named without a batch, it takes its only batch, or is marked as
-needing a choice when it has several.
+A layout file's Compound cell names a compound by its registration number, then by any
+registered identifier. A compound named without a batch takes its only batch, or is
+marked as needing a choice when it has several; that rule is also applied to the
+compound a position label names (``ResolvePositionLabels``).
 """
 
 from __future__ import annotations
@@ -70,8 +70,10 @@ class LayoutCompoundResolver:
                 return None
             return _compound(molecule, batch, needs_batch_choice=False)
 
-        if molecule is None:
-            return None
+        return await self.for_molecule(molecule) if molecule is not None else None
+
+    async def for_molecule(self, molecule: Molecule) -> LayoutCompound:
+        """A compound named without a batch: its only batch, or a choice among several."""
         batches = await self._batches_of_molecule(molecule.id)
         if len(batches) == 1:
             return _compound(molecule, batches[0], needs_batch_choice=False)

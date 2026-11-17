@@ -1,8 +1,10 @@
-"""ResolvePositionLabels: read a run's position labels as compound identifiers.
+"""ResolvePositionLabels: match a run's position labels to registered compounds again.
 
-Each label is resolved the way a layout file's Compound cell with an empty Batch cell
-is. One answer comes back per distinct label, in the order first given; blank labels
-get none. Writes nothing; filling the table's positions is the browser's job.
+A label names a compound exactly when the instrument import would have suggested it:
+the whole label, then the part before a "(...)", by registered identifier. The compound
+takes its batch the way a layout file's Compound cell with an empty Batch cell does.
+One answer comes back per distinct label, in the order first given; blank labels get
+none. Writes nothing; filling the table's positions is the browser's job.
 """
 
 from __future__ import annotations
@@ -13,6 +15,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.screening.instrument_import_plan import LabelMoleculeLookup
 from cellar.application.screening.layout_compound_resolver import (
     LayoutCompound,
     LayoutCompoundResolver,
@@ -29,8 +32,9 @@ MAX_POSITION_LABELS = 500
 
 @dataclass(frozen=True)
 class LabelMatch:
+    # The label as given, trimmed.
     label: str
-    # None when the label is not the identifier of a registered compound.
+    # None when the label names no registered compound.
     compound: LayoutCompound | None
 
 
@@ -68,11 +72,14 @@ class ResolvePositionLabels:
             if run is None:
                 return Failure(NotFoundError("Run", str(input.run_id)))
 
-            resolver = LayoutCompoundResolver(
+            find_molecule = LabelMoleculeLookup(input.workspace_id, self._molecule_repo)
+            compounds = LayoutCompoundResolver(
                 input.workspace_id, self._molecule_repo, self._batch_repo
             )
-            labels = dict.fromkeys(text for label in input.labels if (text := label.strip()))
-            # A label that names no compound is an answer, not a problem to report.
-            matches = tuple([LabelMatch(label, await resolver(label, "", [])) for label in labels])
+            matches = []
+            for label in dict.fromkeys(text for raw in input.labels if (text := raw.strip())):
+                molecule = await find_molecule(label)
+                compound = await compounds.for_molecule(molecule) if molecule is not None else None
+                matches.append(LabelMatch(label, compound))
 
-        return Success(matches)
+        return Success(tuple(matches))
