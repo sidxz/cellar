@@ -76,13 +76,26 @@ describe("ConcentrationChart", () => {
     expect(pts.marker.line.color).toBe(selectedOutline(undefined));
   });
 
-  it("draws provisional points hollow and says so on hover", () => {
+  it("draws every point alike, whatever its review", () => {
     show();
     const pts = last().data[0];
-    expect(pts.marker.symbol).toEqual(["circle", "circle-open", "circle", "circle"]);
-    expect(pts.marker.line.width).toEqual([0, 2, 0, 0]);
-    expect(pts.text).toEqual(["Reviewed", "Provisional", "Reviewed", "Reviewed"]);
-    expect(pts.hovertemplate).toContain("%{text}");
+    expect(pts.marker.symbol).toBeUndefined();
+    expect(pts.marker.line.width).toEqual([0, 0, 0, 0]);
+    // Only being selected outlines a point, an unreviewed one (b) as any other.
+    show(["b", "c"]);
+    expect(last().data[0].marker.line.width).toEqual([0, 2, 2, 0]);
+  });
+
+  it("says Reviewed on hover for a reviewed point and nothing about review otherwise", () => {
+    show();
+    const pts = last().data[0];
+    expect(pts.text).toBeUndefined();
+    expect(pts.hovertemplate).toEqual([
+      "%{x} µM: %{y:.1f} °C · Reviewed<extra></extra>",
+      "%{x} µM: %{y:.1f} °C<extra></extra>",
+      "%{x} µM: %{y:.1f} °C · Reviewed<extra></extra>",
+      "%{x} µM: %{y:.1f} °C · Reviewed<extra></extra>",
+    ]);
   });
 
   it("joins means in dose order with a tick where a dose repeats", () => {

@@ -8,6 +8,7 @@ import {
   batchSuffix,
   formatDelta,
   formatTm,
+  knownFilter,
   matchesFilter,
   maxAbsDelta,
   orderRows,
@@ -231,7 +232,7 @@ describe("melt-results", () => {
     expect(body.map((r) => r.wellId)).toEqual(["big", "up", "m1", "n", "bl"]);
   });
 
-  it("filters by needs review, provisional, up and down", () => {
+  it("filters by needs review, up and down", () => {
     const { w, positions } = fixture();
     const rows = resultRows([w], positions, [step("up", 73)], noChecks, []);
     const by = (id: string) => rows.find((r) => r.wellId === id) as (typeof rows)[number];
@@ -241,8 +242,7 @@ describe("melt-results", () => {
     expect(m("up", "up")).toBe(true);
     expect(m("big", "down")).toBe(true);
     expect(m("m1", "up") || m("m1", "down")).toBe(false);
-    expect(m("up", "provisional")).toBe(true);
-    expect(m("ref", "up") || m("ref", "provisional") || m("ref", "needs_review")).toBe(false);
+    expect(m("ref", "up") || m("ref", "needs_review")).toBe(false);
     expect(m("bl", "down")).toBe(false);
     expect(m("m1", null)).toBe(true);
     // Not evaluated: the samples the caller lists, never another role.
@@ -250,6 +250,15 @@ describe("melt-results", () => {
     const ne = (id: string) => matchesFilter(by(id), ["Main"], "not_evaluated", hits, unevaluated);
     expect([ne("n"), ne("m1"), ne("bl")]).toEqual([true, false, false]);
     expect(m("n", "not_evaluated")).toBe(false);
+  });
+
+  it("a remembered filter that is no longer offered shows all rows", () => {
+    expect(knownFilter("provisional")).toBeNull();
+    expect(knownFilter(undefined)).toBeNull();
+    expect(knownFilter(null)).toBeNull();
+    for (const f of ["needs_review", "hits", "up", "down", "not_evaluated"]) {
+      expect(knownFilter(f)).toBe(f);
+    }
   });
 
   it("summary counts samples only and flags an unreviewed reference", () => {

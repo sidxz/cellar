@@ -58,7 +58,6 @@ export function MeltSummaryStrip({
   scope,
   perWindow,
   shown,
-  onSelectReferences,
   hasRule,
   notEvaluated,
   filter,
@@ -71,8 +70,6 @@ export function MeltSummaryStrip({
   perWindow?: readonly Pick<WindowSummary, "window" | "referenceTm">[];
   /** While a filter is on: the samples it shows, of all of them. */
   shown?: { count: number; total: number };
-  /** Selects the reference positions, so their steps can be reviewed. */
-  onSelectReferences?: () => void;
   /** The run's hit rule names a Tm or ΔTm readout, so hits are counted. */
   hasRule: boolean;
   /** The samples missing a value the hit rule needs. */
@@ -111,19 +108,6 @@ export function MeltSummaryStrip({
         </span>
       )}
       {summary.referencesDiffer && <Note>References have different numbers of peaks</Note>}
-      {summary.referenceUnreviewed &&
-        (onSelectReferences ? (
-          <button
-            type="button"
-            className={cn(NOTE, "underline-offset-4 hover:underline")}
-            title="Select the reference to review its peaks"
-            onClick={onSelectReferences}
-          >
-            Reference not reviewed
-          </button>
-        ) : (
-          <Note>Reference not reviewed</Note>
-        ))}
       <Dot />
       <span className="font-medium">{scope}</span>
       <Dot />
@@ -134,9 +118,6 @@ export function MeltSummaryStrip({
         {...toggle}
       >
         {`${STEP_ISSUES} ${summary.needsReview}`}
-      </CountButton>
-      <CountButton value="provisional" count={summary.provisional} {...toggle}>
-        {`Provisional ${summary.provisional}`}
       </CountButton>
       {hasRule && (
         <>

@@ -58,19 +58,17 @@ const SEARCH = "Find sample, position or batch";
 // Only the identity columns feed the search box; numbers and status do not.
 const NOT_SEARCHED = () => "";
 
+/** A value whose peak nobody has reviewed counts as any other and is not
+ *  flagged, so "provisional" has no chip: the column speaks of peak problems
+ *  and of the reviews that were made. */
 const STATUS: Record<
-  CellStatus,
-  { label: string; variant: "secondary" | "warning" | "outline" | "ghost"; className?: string }
+  Exclude<CellStatus, "provisional">,
+  { label: string; variant: "secondary" | "warning" | "ghost"; className?: string }
 > = {
   reference: { label: "Reference", variant: "secondary" },
   several_steps: { label: "Several peaks", variant: "warning" },
   no_step: { label: "No peak", variant: "warning" },
   no_reference: { label: "No reference", variant: "warning" },
-  provisional: {
-    label: "Provisional",
-    variant: "outline",
-    className: "border-dashed text-muted-foreground",
-  },
   reviewed: { label: "Reviewed", variant: "ghost", className: "px-0 text-muted-foreground" },
 };
 
@@ -238,25 +236,27 @@ function SampleWithStructure({ row }: { row: ResultRow }) {
   );
 }
 
-/** A reference's own step review in the shown windows: provisional if any is. */
-function referenceReview(row: ResultRow, windowNames: readonly string[]): string | null {
+/** Whether a reference's own peaks in the shown windows were reviewed: all of
+ *  those that gave a Tm, and at least one. */
+function referenceReviewed(row: ResultRow, windowNames: readonly string[]): boolean {
   const reviews = windowNames.map((n) => row.cells[n]?.review);
-  if (reviews.includes("provisional")) return "Provisional";
-  return reviews.includes("reviewed") ? "Reviewed" : null;
+  return reviews.includes("reviewed") && !reviews.includes("provisional");
 }
 
 function StatusCell({ row, windowNames }: { row: ResultRow; windowNames: readonly string[] }) {
   const status = worstStatus(row, windowNames);
   const differs = windowNames.some((n) => row.cells[n]?.differs);
-  const review = status === "reference" ? referenceReview(row, windowNames) : null;
+  const chip = status && status !== "provisional" ? STATUS[status] : null;
   // The same for every window of the signal, so the first shown one speaks.
   const outside =
     status === "no_step"
       ? (windowNames.map((n) => row.cells[n]?.outsidePeaks).find((peaks) => peaks?.length) ?? [])
       : [];
-  const badge = status && (
-    <Badge variant={STATUS[status].variant} className={STATUS[status].className}>
-      {review ? `${STATUS[status].label} · ${review}` : STATUS[status].label}
+  const badge = chip && (
+    <Badge variant={chip.variant} className={chip.className}>
+      {status === "reference" && referenceReviewed(row, windowNames)
+        ? `${chip.label} · Reviewed`
+        : chip.label}
     </Badge>
   );
   return (

@@ -8,6 +8,7 @@ import { type ApplicableRule, bandFor, limitsFor, notEvaluated } from "../lib/me
 import {
   type ResultFilter,
   type WindowSummary,
+  knownFilter,
   matchesFilter,
   orderRows,
   resultRows,
@@ -117,7 +118,7 @@ export function MeltResultsPanel({
       ),
     [windows, positions, analysis.steps, analysis.step_checks, analysis.outside_every_window],
   );
-  const activeFilter = windowNames.length ? filter : null;
+  const activeFilter = windowNames.length ? knownFilter(filter) : null;
   // The samples missing a value the run's hit rule needs; empty without a rule.
   const unevaluated = useMemo(
     () => notEvaluated(analysis, positions, applicable),
@@ -151,18 +152,15 @@ export function MeltResultsPanel({
       referencesDiffer: each.some((s) => s.referencesDiffer),
       referenceUnreviewed: each.some((s) => s.referenceUnreviewed),
       needsReview: n("needs_review"),
-      provisional: n("provisional"),
+      // Not shown; kept for what will act on the peaks nobody has reviewed.
+      provisional: samples.filter((r) =>
+        windowNames.some((w) => r.cells[w]?.status === "provisional"),
+      ).length,
       hits: n("hits"),
       up: n("up"),
       down: n("down"),
     };
   }, [each, rows, hits, windowNames]);
-  // The references with a value in the shown windows (all of them if none has).
-  const selectReferences = () => {
-    const inShown = ordered.pinned.filter((r) => windowNames.some((n) => r.cells[n]));
-    const ids = (inShown.length ? inShown : ordered.pinned).map((r) => r.wellId);
-    if (ids.length) onSelectionChange({ selected: new Set(ids), anchor: ids[0] });
-  };
 
   return (
     <section className="space-y-3">
@@ -233,7 +231,6 @@ export function MeltResultsPanel({
               ? { count: ordered.body.filter((r) => r.isSample).length, total: sampleCount }
               : undefined
           }
-          onSelectReferences={ordered.pinned.length ? selectReferences : undefined}
           hasRule={applicable.length > 0}
           notEvaluated={unevaluated.size}
           filter={activeFilter}
