@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  AcceptMeltingStepsRequest,
+  AcceptMeltingStepsResponse,
   AddMeltingStepRequest,
   AssignMeltingStepRequest,
   ReviewMeltingStepRequest,
@@ -64,6 +66,22 @@ export function useReviewMeltingStep(runId: string) {
       customInstance<MeltingStepChange>({
         url: `${API_V1}/melting-steps/${stepId}`,
         method: "PATCH",
+        data: body,
+      }),
+    onSuccess,
+  });
+}
+
+/** POST /api/v1/runs/{runId}/melting-steps/accept: many peaks recorded as
+ *  reviewed in one request. A 409 means a peak changed since it was loaded, or
+ *  the run no longer allows edits. */
+export function useAcceptMeltingSteps(runId: string) {
+  const onSuccess = useInvalidateAfterStepChange(runId);
+  return useMutation({
+    mutationFn: (body: AcceptMeltingStepsRequest) =>
+      customInstance<AcceptMeltingStepsResponse>({
+        url: `${API_V1}/runs/${runId}/melting-steps/accept`,
+        method: "POST",
         data: body,
       }),
     onSuccess,

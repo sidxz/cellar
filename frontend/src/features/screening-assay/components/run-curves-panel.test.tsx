@@ -35,6 +35,7 @@ vi.mock("../hooks/use-melting-analysis", () => ({
   useAddMeltingStep: () => ({ mutate: saveStep, isPending: false }),
   useReviewMeltingStep: () => ({ mutate: saveStep, isPending: false }),
   useAssignMeltingStep: () => ({ mutate: saveStep, isPending: false }),
+  useAcceptMeltingSteps: () => ({ mutate: saveStep, isPending: false, isError: false }),
 }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("../test/test-data-grid")).TableGrid,

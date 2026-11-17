@@ -32,6 +32,7 @@ import {
 } from "../lib/melt-results";
 import { labellingEditRefusal } from "../lib/position-edits";
 import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
+import { AcceptAllPeaks } from "./accept-all-peaks";
 import { ConcentrationChart } from "./concentration-chart";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
@@ -423,6 +424,11 @@ export function RunCurvesPanel({
               }
               // Naming changes the protocol, not the run: offered on any run status.
               onNamePeaks={run && canEdit ? () => setNamingOpen(true) : undefined}
+              reviewAction={
+                canEdit && (
+                  <AcceptAllPeaks runId={runId} analysis={analysis} channel={set.channel} />
+                )
+              }
             />
           ) : melting.isLoading ? (
             <Skeleton data-testid="results-loading" className={cn("w-full", PLOT_HEIGHT)} />

@@ -50,6 +50,8 @@ export interface MeltResultsPanelProps {
   /** Opens the setting up of windows (naming the reference's peaks); given to
    *  editors. A button while there is something to set up, else a quiet Edit. */
   onNamePeaks?: () => void;
+  /** Accepting every peak at once; given to editors, shown at the end of the counts. */
+  reviewAction?: ReactNode;
 }
 
 /** The run's results for the signal on screen: a window picker, the counts
@@ -68,6 +70,7 @@ export function MeltResultsPanel({
   applicable,
   hitRule,
   onNamePeaks,
+  reviewAction,
 }: MeltResultsPanelProps) {
   // The window last chosen by name; kept across signals and used where it exists.
   const [chosen, setChosen] = useState<string | null>(null);
@@ -235,6 +238,7 @@ export function MeltResultsPanel({
           notEvaluated={unevaluated.size}
           filter={activeFilter}
           onFilterChange={setFilter}
+          action={reviewAction}
         />
       ) : (
         <p className="text-sm text-muted-foreground">

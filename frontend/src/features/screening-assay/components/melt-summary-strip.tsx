@@ -62,7 +62,10 @@ export function MeltSummaryStrip({
   notEvaluated,
   filter,
   onFilterChange,
+  action,
 }: {
+  /** Shown at the end of the line: accepting every peak at once. */
+  action?: ReactNode;
   summary: WindowSummary;
   /** What the counts cover: the window's name, or "All windows" in Compare. */
   scope: string;
@@ -159,6 +162,7 @@ export function MeltSummaryStrip({
       {shown && (
         <span className="text-muted-foreground">{`${shown.count} of ${shown.total} samples`}</span>
       )}
+      {action}
     </div>
   );
 }
