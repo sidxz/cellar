@@ -218,10 +218,12 @@ export function currentChannel(set: CurveSet) {
   return set.channels.find((c) => c.key === set.channel);
 }
 
-/** A counted melting step; reviewed ones are drawn solid, the rest dashed. */
+/** A counted melting step; reviewed ones are drawn solid, the rest dashed, and
+ *  the one picked on the plot wider. */
 export interface PlotStep {
   value: number;
   reviewed: boolean;
+  picked?: boolean;
 }
 
 /** A temperature window, drawn as a shaded band. */
@@ -319,12 +321,19 @@ export function buildCurveFigure(
         );
       continue;
     }
-    for (const st of steps.get(p.well_id) ?? [])
+    for (const st of steps.get(p.well_id) ?? []) {
+      // The pick is the screen's, not the figure's: an export draws it like the rest.
+      const picked = !!st.picked && !exporting;
       line(
         st.value,
-        { color: style.color, width: focused ? 2.5 : 1.5, dash: st.reviewed ? "solid" : "dash" },
-        0.9 * style.opacity,
+        {
+          color: style.color,
+          width: picked ? 4 : focused ? 2.5 : 1.5,
+          dash: st.reviewed ? "solid" : "dash",
+        },
+        picked ? 1 : 0.9 * style.opacity,
       );
+    }
     for (const r of reported.filter((r) => r.kind !== STEP_KIND))
       line(r.value, { color: CHART_AXIS.tick, width: 1, dash: "dot" }, 0.5);
   }
@@ -401,11 +410,93 @@ export function buildCurveFigure(
   };
 }
 
-/** The x of the clicked point, from a Plotly click event. */
-export function xFromClick(event: unknown): number | null {
-  const x = (event as { points?: { x?: unknown }[] } | null)?.points?.[0]?.x;
-  return typeof x === "number" ? x : null;
+/** The position of the clicked trace and the point clicked, from a Plotly click
+ *  event; `y` is null when the event carries none. */
+export function pickFromClick(
+  event: unknown,
+): { wellId: string; x: number; y: number | null } | null {
+  const point = (
+    event as { points?: { x?: unknown; y?: unknown; data?: { meta?: unknown } }[] } | null
+  )?.points?.[0];
+  const wellId = point?.data?.meta;
+  return typeof point?.x === "number" && typeof wellId === "string"
+    ? { wellId, x: point.x, y: typeof point.y === "number" ? point.y : null }
+    : null;
 }
+
+/** A trace's y at x, read between its two neighboring points; null outside its x range. */
+function yAt(curve: { x: readonly number[]; y: readonly number[] }, x: number): number | null {
+  for (let i = 1; i < curve.x.length; i++) {
+    const x0 = curve.x[i - 1];
+    const x1 = curve.x[i];
+    if (x < Math.min(x0, x1) || x > Math.max(x0, x1)) continue;
+    if (x1 === x0) return curve.y[i];
+    return curve.y[i - 1] + ((x - x0) / (x1 - x0)) * (curve.y[i] - curve.y[i - 1]);
+  }
+  return null;
+}
+
+/** The position a click belongs to: the clicked trace, unless it is an unselected trace and a
+ *  selected position's trace passes within `tolerance` of the clicked y at that x. Then the
+ *  nearest such selected trace wins. */
+export function preferSelectedTrace(
+  clicked: { wellId: string; x: number; y: number },
+  selected: ReadonlySet<string>,
+  curves: ReadonlyMap<string, { x: readonly number[]; y: readonly number[] }>,
+  tolerance: number,
+): string {
+  if (selected.has(clicked.wellId)) return clicked.wellId;
+  let nearest = clicked.wellId;
+  let distance = tolerance;
+  for (const id of selected) {
+    const curve = curves.get(id);
+    const y = curve ? yAt(curve, clicked.x) : null;
+    if (y === null) continue;
+    const d = Math.abs(y - clicked.y);
+    if (d <= distance) {
+      nearest = id;
+      distance = d;
+    }
+  }
+  return nearest;
+}
+
+/** The peak nearest to a clicked x, if the click is near enough to mean it: within
+ *  2% of the x range in view, so zooming in picks finer, and never under 0.3. */
+export function nearestPeak<T extends { value: number }>(
+  peaks: readonly T[],
+  x: number,
+  visibleSpan: number,
+): T | null {
+  let nearest: T | null = null;
+  let distance = Math.max(0.3, 0.02 * visibleSpan);
+  for (const peak of peaks) {
+    const d = Math.abs(peak.value - x);
+    if (d <= distance) {
+      nearest = peak;
+      distance = d;
+    }
+  }
+  return nearest;
+}
+
+function axisSpan(traces: readonly Record<string, unknown>[], axis: "x" | "y"): number {
+  let low = Number.POSITIVE_INFINITY;
+  let high = Number.NEGATIVE_INFINITY;
+  for (const trace of traces) {
+    for (const v of trace[axis] as number[]) {
+      if (v < low) low = v;
+      if (v > high) high = v;
+    }
+  }
+  return high > low ? high - low : 0;
+}
+
+/** The x range a figure's traces cover; 0 without traces. */
+export const xSpan = (traces: readonly Record<string, unknown>[]) => axisSpan(traces, "x");
+
+/** The y range a figure's traces cover; 0 without traces. */
+export const ySpan = (traces: readonly Record<string, unknown>[]) => axisSpan(traces, "y");
 
 /** The position id of the curve under the pointer, from a Plotly hover event. */
 export function focusIdFromHover(event: unknown): string | null {

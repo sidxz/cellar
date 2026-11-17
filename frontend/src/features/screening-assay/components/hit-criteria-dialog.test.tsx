@@ -149,6 +149,35 @@ describe("outside operator", () => {
     expect(within(screen.getByRole("listbox")).getByText("outside")).toBeInTheDocument();
   });
 
+  it("offers Curve Class only on a protocol with a dose-response readout", () => {
+    const options = (readoutDefinitions: ReadoutDefinition[]) => {
+      const view = render(
+        <RunHitCriteriaDialog
+          runId="r1"
+          readoutDefinitions={readoutDefinitions}
+          currentCriteria={[{ readout_name: "ΔTm (Main)", operator: "gt", value: 1 }]}
+          recommendation={null}
+          open
+          onOpenChange={() => {}}
+        />,
+      );
+      fireEvent.click(screen.getAllByRole("combobox")[0]);
+      const labels = within(screen.getByRole("listbox"))
+        .getAllByRole("option")
+        .map((o) => o.textContent);
+      view.unmount();
+      return labels;
+    };
+    expect(options([dtm])).toEqual(["ΔTm (Main)"]);
+    const ic50 = {
+      id: "rd3",
+      name: "IC50",
+      data_type: "dose_response",
+      normalizations: [],
+    } as unknown as ReadoutDefinition;
+    expect(options([dtm, ic50])).toEqual(["ΔTm (Main)", "IC50", "Curve Class"]);
+  });
+
   it("run dialog leaves series values out of its readouts", () => {
     const max = {
       id: "rd2",

@@ -19,6 +19,8 @@ export interface PlotProps {
   onClick?: (event: unknown) => void;
   onHover?: (event: unknown) => void;
   onUnhover?: (event: unknown) => void;
+  /** A layout change made on the plot itself: a zoom, a pan, an axis reset. */
+  onRelayout?: (event: unknown) => void;
   /** Called once the graph is first drawn, with the graph div. */
   onInitialized?: (figure: unknown, graphDiv: HTMLElement) => void;
   className?: string;

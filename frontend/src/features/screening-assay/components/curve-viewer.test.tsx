@@ -635,7 +635,7 @@ describe("CurveViewer compactControls", () => {
     fireEvent.click(screen.getByRole("switch", { name: "Reference traces" }));
     expect(screen.getByRole("switch", { name: "Reference traces" })).toBeChecked();
     expect(
-      screen.getByText("Select a sample in the results to see its trace and steps."),
+      screen.getByText("Select a sample in the results to see its trace and peaks."),
     ).toBeInTheDocument();
   });
 

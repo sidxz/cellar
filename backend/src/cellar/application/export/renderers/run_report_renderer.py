@@ -1,10 +1,10 @@
 """A run's report in the standard export formats.
 
 CSV is the results table alone, a file other tools read. Excel holds the records
-(Results, Steps, and each signal's traces, measured and as the derivative) with
+(Results, Peaks, and each signal's traces, measured and as the derivative) with
 the ChemCellar mark, run details and who exported it on its Notes sheet, apart
 from them. The PDF is the run report: details, the traces and shift figures as
-vector SVG, the results and the step review log.
+vector SVG, the results and the peak review log.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from __future__ import annotations
 import base64
 import csv
 import re
+from datetime import datetime
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
@@ -42,7 +43,7 @@ async def render_run_report(
 
 
 # ---------------------------------------------------------------------------
-# The records: results and steps as tables of raw values
+# The records: results and peaks as tables of raw values
 # ---------------------------------------------------------------------------
 
 
@@ -57,7 +58,12 @@ def results_table(report: RunReport) -> tuple[list[str], list[list]]:
         "Role",
     ]
     for w in report.windows:
-        headers += [f"{w.name} Tm (°C)", f"{w.name} ΔTm (°C)", f"{w.name} status"]
+        headers += [
+            f"{w.name} Tm (°C)",
+            f"{w.name} ΔTm (°C)",
+            f"{w.name} status",
+            f"{w.name} Tm named",
+        ]
     headers += ["Hit", "Note"]
     rows = []
     for r in report.rows:
@@ -72,7 +78,7 @@ def results_table(report: RunReport) -> tuple[list[str], list[list]]:
         ]
         for w in report.windows:
             cell = r.cells.get(w.name)
-            row += [cell.tm, cell.delta_tm, cell.status] if cell else [None, None, None]
+            row += [cell.tm, cell.delta_tm, cell.status, cell.named_by] if cell else [None] * 4
         row += [HIT_TEXT[r.hit], r.note]
         rows.append(row)
     return headers, rows
@@ -83,13 +89,17 @@ def steps_table(report: RunReport) -> tuple[list[str], list[list]]:
         "Position",
         "Sample",
         "Signal",
-        "Step (°C)",
+        "Peak (°C)",
         "Source",
         "Status",
         "Instrument value (°C)",
         "Reason",
         "Changed by",
         "Changed at (UTC)",
+        "Assigned to",
+        "Assignment reason",
+        "Assigned by",
+        "Assigned at (UTC)",
     ]
     rows = [
         [
@@ -102,11 +112,19 @@ def steps_table(report: RunReport) -> tuple[list[str], list[list]]:
             s.instrument_value,
             s.reason,
             s.changed_by,
-            s.changed_at.strftime("%Y-%m-%d %H:%M") if s.changed_at else None,
+            _when(s.changed_at),
+            s.assigned_window,
+            s.assignment_reason,
+            s.assigned_by,
+            _when(s.assigned_at),
         ]
         for s in report.steps
     ]
     return headers, rows
+
+
+def _when(at: datetime | None) -> str | None:
+    return at.strftime("%Y-%m-%d %H:%M") if at else None
 
 
 def _write_csv(report: RunReport, out_path: Path) -> None:
@@ -121,7 +139,7 @@ def _write_xlsx(report: RunReport, out_path: Path, options: RenderOptions) -> No
     wb = Workbook()
     for title, (headers, rows) in (
         ("Results", results_table(report)),
-        ("Steps", steps_table(report)),
+        ("Peaks", steps_table(report)),
     ):
         ws = wb.active if title == "Results" else wb.create_sheet(title)
         ws.title = title
@@ -215,7 +233,7 @@ def _delta(v: float | None) -> str:
     return f"{'+' if r > 0 else '\u2212' if r < 0 else ''}{abs(r):.1f}"
 
 
-def _write_pdf(report: RunReport, out_path: Path, options: RenderOptions) -> None:
+def _pdf_html(report: RunReport, options: RenderOptions) -> str:
     env = Environment(
         loader=FileSystemLoader(str(PDF_TEMPLATE_DIR)), autoescape=select_autoescape(["j2"])
     )
@@ -223,7 +241,7 @@ def _write_pdf(report: RunReport, out_path: Path, options: RenderOptions) -> Non
     env.filters["delta"] = _delta
     env.filters["num"] = lambda v: "—" if v is None else f"{v:g}"
     _, steps = steps_table(report)
-    html = env.get_template("run_report.html.j2").render(
+    return env.get_template("run_report.html.j2").render(
         brand=BRAND,
         logo_src=LOGO_SVG.as_uri(),
         title=options.title,
@@ -236,9 +254,12 @@ def _write_pdf(report: RunReport, out_path: Path, options: RenderOptions) -> Non
         hit_text=HIT_TEXT,
         steps=steps,
     )
+
+
+def _write_pdf(report: RunReport, out_path: Path, options: RenderOptions) -> None:
     from weasyprint import CSS, HTML
 
-    HTML(string=html, base_url=str(PDF_TEMPLATE_DIR)).write_pdf(
+    HTML(string=_pdf_html(report, options), base_url=str(PDF_TEMPLATE_DIR)).write_pdf(
         target=str(out_path),
         stylesheets=[
             CSS(filename=str(PDF_TEMPLATE_DIR / "search_report.css")),

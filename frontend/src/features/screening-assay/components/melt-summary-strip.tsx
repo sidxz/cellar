@@ -7,7 +7,7 @@ import type { ResultFilter, WindowSummary } from "../lib/melt-results";
 
 const NOTE = "font-medium text-amber-700 dark:text-amber-400";
 const Note = ({ children }: { children: ReactNode }) => <span className={NOTE}>{children}</span>;
-const STEP_ISSUES = "Step issues";
+const STEP_ISSUES = "Peak issues";
 
 const Dot = () => (
   <span aria-hidden className="text-muted-foreground">
@@ -60,6 +60,7 @@ export function MeltSummaryStrip({
   shown,
   onSelectReferences,
   hasRule,
+  notEvaluated,
   filter,
   onFilterChange,
 }: {
@@ -74,6 +75,8 @@ export function MeltSummaryStrip({
   onSelectReferences?: () => void;
   /** The run's hit rule names a Tm or ΔTm readout, so hits are counted. */
   hasRule: boolean;
+  /** The samples missing a value the hit rule needs. */
+  notEvaluated: number;
   filter: ResultFilter;
   onFilterChange: (f: ResultFilter) => void;
 }) {
@@ -107,13 +110,13 @@ export function MeltSummaryStrip({
           {`${reference} ${summary.referenceTm.toFixed(1)} °C (n=${summary.referenceCount})`}
         </span>
       )}
-      {summary.referencesDiffer && <Note>References disagree in step count</Note>}
+      {summary.referencesDiffer && <Note>References have different numbers of peaks</Note>}
       {summary.referenceUnreviewed &&
         (onSelectReferences ? (
           <button
             type="button"
             className={cn(NOTE, "underline-offset-4 hover:underline")}
-            title="Select the reference to review its steps"
+            title="Select the reference to review its peaks"
             onClick={onSelectReferences}
           >
             Reference not reviewed
@@ -164,6 +167,12 @@ export function MeltSummaryStrip({
             </CountButton>
             <span className="text-muted-foreground">)</span>
           </span>
+          {/* Stays while it is the filter, so a count that fell to zero can still be cleared. */}
+          {(notEvaluated > 0 || filter === "not_evaluated") && (
+            <CountButton value="not_evaluated" count={notEvaluated} {...toggle}>
+              {`Not evaluated ${notEvaluated}`}
+            </CountButton>
+          )}
         </>
       )}
       {shown && (

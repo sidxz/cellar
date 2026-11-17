@@ -50,14 +50,26 @@ function drConfig(
 }
 
 describe("buildHitCriterionOptions", () => {
-  it("emits one option per non-DR readout plus Curve Class", () => {
+  it("emits one option per non-DR readout, and no Curve Class without a dose-response readout", () => {
     const rds = [
       rd({ id: "a", name: "OD600", data_type: "numeric" }),
       rd({ id: "b", name: "Z'", data_type: "numeric" }),
     ];
     const options = buildHitCriterionOptions(rds);
-    expect(options.map((o) => o.label)).toEqual(["OD600", "Z'", "Curve Class"]);
+    expect(options.map((o) => o.label)).toEqual(["OD600", "Z'"]);
     expect(options.every((o) => o.intercept_key === null)).toBe(true);
+  });
+
+  it("ends with Curve Class when any readout is dose-response", () => {
+    const rds = [
+      rd({ id: "a", name: "OD600", data_type: "numeric" }),
+      rd({ id: "b", name: "Resazurin", data_type: "dose_response" }),
+    ];
+    expect(buildHitCriterionOptions(rds).map((o) => o.label)).toEqual([
+      "OD600",
+      "Resazurin",
+      "Curve Class",
+    ]);
   });
 
   it("emits one option per intercept for a DR readout with declared intercepts", () => {

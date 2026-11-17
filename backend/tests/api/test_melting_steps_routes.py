@@ -40,7 +40,7 @@ MELT_FILE = {
         XLSX,
     )
 }
-NOT_EDITABLE = "Melting steps can be changed only while the run is draft or in progress"
+NOT_EDITABLE = "Peaks cannot be changed on an approved run"
 
 
 async def _sql(session_factory: async_sessionmaker[AsyncSession], stmt: str, **params: Any) -> Any:
@@ -136,6 +136,10 @@ async def test_analysis_after_import_lists_steps_and_window_results(
         "reason": None,
         "changed_by": None,
         "changed_at": None,
+        "assigned_window": None,
+        "assignment_reason": None,
+        "assigned_by": None,
+        "assigned_at": None,
         "version": 1,
     }
     assert sample["instrument_label"]
@@ -156,6 +160,8 @@ async def test_analysis_after_import_lists_steps_and_window_results(
         "tm": None,
         "delta_tm": None,
         "flags": ["no_step_in_window"],
+        "named_by": None,
+        "step_id": None,
     }
     assert analysis["step_checks"] == [
         {"channel_key": "ratio", "differs": [sample["well_id"]], "references_differ": False}
@@ -267,7 +273,7 @@ async def test_stale_review_returns_409_and_writes_nothing(
     assert audited.scalar_one() == 1
 
 
-async def test_completed_run_returns_409(
+async def test_completed_run_allows_step_changes(
     client: AsyncClient,
     session_factory: async_sessionmaker[AsyncSession],
     fake_auth: FakeAuth,
@@ -275,6 +281,31 @@ async def test_completed_run_returns_409(
     s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
     sample = _step(analysis, 64.0)
     await _sql(session_factory, "UPDATE runs SET status = 'completed' WHERE id = :id", id=s.run_id)
+
+    review = await client.patch(
+        f"/api/v1/melting-steps/{sample['id']}",
+        json={"expected_version": 1, "status": "accepted", "value": 64.0},
+    )
+    assert review.status_code == 200, review.text
+    add = await client.post(
+        f"/api/v1/runs/{s.run_id}/melting-steps",
+        json={"well_id": sample["well_id"], "channel_key": "ratio", "value": 40.0},
+    )
+    assert add.status_code == 201, add.text
+    assert review.json()["recalculated"] and add.json()["recalculated"]
+    after = await _analysis(client, s.run_id)
+    assert after["edit_refusal"] is None
+    assert len(after["steps"]) == 4 and _step(after, 64.0)["status"] == "accepted"
+
+
+async def test_approved_run_returns_409(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+    await _sql(session_factory, "UPDATE runs SET status = 'approved' WHERE id = :id", id=s.run_id)
 
     review = await client.patch(
         f"/api/v1/melting-steps/{sample['id']}",
@@ -407,3 +438,253 @@ async def test_analysis_lists_series_values_with_their_qualifier(
     )
     [(well_id, batch_id, value)] = list(stored)
     assert (well_id, batch_id) == (None, s.batch_id) and value == pytest.approx(-7.3)
+
+
+async def _assign(
+    client: AsyncClient, step: dict[str, Any], window: str | None, **extra: Any
+) -> Any:
+    return await client.put(
+        f"/api/v1/melting-steps/{step['id']}/assignment",
+        json={"expected_version": step["version"], "window": window} | extra,
+    )
+
+
+def _named(analysis: dict[str, Any], window: str, well_id: str) -> tuple[Any, Any, Any]:
+    p = _position(_window(analysis, window), well_id)
+    return (p["tm"], p["named_by"], p["step_id"])
+
+
+async def test_assign_and_clear(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample, well = _step(analysis, 64.0), _step(analysis, 64.0)["well_id"]
+    main, lower = _window(analysis, "Main"), _window(analysis, "Lower")
+
+    resp = await _assign(client, sample, "Lower", reason="merged peak")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert (body["recalculated"], body["compute_warning"]) == (True, None)
+    assigned = body["step"]
+    assert (assigned["assigned_window"], assigned["assignment_reason"]) == ("Lower", "merged peak")
+    assert assigned["assigned_by"] == str(fake_auth.user_id) and assigned["assigned_at"]
+    # Assigning is a judgment on the peak: it is accepted. The review's own reason is untouched.
+    assert (assigned["status"], assigned["reason"], assigned["version"]) == ("accepted", None, 2)
+
+    after = await _analysis(client, s.run_id)
+    assert _named(after, "Lower", well) == (64.0, "assignment", sample["id"])
+    assert _position(_window(after, "Lower"), well)["delta_tm"] == pytest.approx(27.4)
+    assert _named(after, "Main", well) == (None, None, None)
+    assert await _rows(session_factory, well, lower["delta_tm_readout_id"]) == [
+        pytest.approx(27.4)
+    ]
+    assert await _rows(session_factory, well, main["tm_readout_id"]) == []
+
+    resp = await _assign(client, assigned, None)
+    assert resp.status_code == 200, resp.text
+    cleared = resp.json()["step"]
+    assert [
+        cleared[k] for k in ("assigned_window", "assignment_reason", "assigned_by", "assigned_at")
+    ] == [None] * 4
+    assert (cleared["status"], cleared["version"]) == ("accepted", 3)
+
+    after = await _analysis(client, s.run_id)
+    assert _named(after, "Main", well) == (64.0, "range", sample["id"])
+    assert _named(after, "Lower", well) == (None, None, None)
+    assert await _rows(session_factory, well, main["delta_tm_readout_id"]) == [pytest.approx(-7.3)]
+    assert await _rows(session_factory, well, lower["tm_readout_id"]) == []
+
+
+async def test_assign_on_completed_run_ok(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+    await _sql(session_factory, "UPDATE runs SET status = 'completed' WHERE id = :id", id=s.run_id)
+
+    resp = await _assign(client, sample, "Lower")
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["recalculated"] is True
+    after = await _analysis(client, s.run_id)
+    assert _named(after, "Lower", sample["well_id"]) == (64.0, "assignment", sample["id"])
+
+
+async def _assign_refused(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    ws: uuid.UUID,
+    state: str,
+    sentence: str,
+) -> None:
+    s, analysis = await _setup(client, session_factory, ws)
+    sample = _step(analysis, 64.0)
+    await _sql(session_factory, f"UPDATE runs SET {state} WHERE id = :id", id=s.run_id)
+
+    resp = await _assign(client, sample, "Lower")
+    assert resp.status_code == 409, resp.text
+    assert sentence in resp.text
+    after = await _analysis(client, s.run_id)
+    assert after["edit_refusal"] == sentence
+    assert (_step(after, 64.0)["assigned_window"], _step(after, 64.0)["version"]) == (None, 1)
+
+
+async def test_assign_on_approved_run_409(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    await _assign_refused(
+        client, session_factory, fake_auth.workspace_id, "status = 'approved'", NOT_EDITABLE
+    )
+
+
+async def test_assign_on_locked_run_409(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    await _assign_refused(
+        client,
+        session_factory,
+        fake_auth.workspace_id,
+        "status = 'completed', is_locked = true",
+        "This run is locked",
+    )
+
+
+async def test_assign_unknown_window_422(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+
+    resp = await _assign(client, sample, "Upper")
+    assert resp.status_code == 422, resp.text
+    assert "'Upper' is not a window on this signal" in resp.text
+    too_long = await _assign(client, sample, "Lower", reason="x" * 501)
+    assert too_long.status_code == 422, too_long.text
+    assert _step(await _analysis(client, s.run_id), 64.0)["version"] == 1
+
+
+async def test_assign_stale_version_409(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+    assert (await _assign(client, sample, "Lower")).status_code == 200
+
+    stale = await _assign(client, sample, None)  # still carries version 1
+    assert stale.status_code == 409, stale.text
+    now = _step(await _analysis(client, s.run_id), 64.0)
+    assert (now["assigned_window"], now["version"]) == ("Lower", 2)
+
+
+async def test_assign_viewer_403(
+    client: AsyncClient,
+    viewer_client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+
+    resp = await _assign(viewer_client, sample, "Lower")
+    assert resp.status_code == 403, resp.text
+    assert _step(await _analysis(client, s.run_id), 64.0)["assigned_window"] is None
+
+
+async def test_assign_other_workspace_404(
+    client: AsyncClient,
+    database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)
+    stranger = FakeAuth(role="admin", workspace_id=uuid.uuid4(), user_id=uuid.uuid4())
+    async with _client_as(database_url, stranger) as other:
+        resp = await _assign(other, sample, "Lower")
+    assert resp.status_code == 404, resp.text
+    missing = await _assign(client, sample | {"id": str(uuid.uuid4())}, "Lower")
+    assert missing.status_code == 404, missing.text
+    assert _step(await _analysis(client, s.run_id), 64.0)["version"] == 1
+
+
+async def test_add_with_assigned_window(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    well, main = _step(analysis, 64.0)["well_id"], _window(analysis, "Main")
+
+    resp = await client.post(
+        f"/api/v1/runs/{s.run_id}/melting-steps",
+        json={
+            "well_id": well,
+            "channel_key": "ratio",
+            "value": 40.0,
+            "reason": "shoulder",
+            "assigned_window": "Main",
+        },
+    )
+    assert resp.status_code == 201, resp.text
+    added = resp.json()["step"]
+    # The form's one reason serves the peak and its assignment.
+    assert (added["reason"], added["assigned_window"], added["assignment_reason"]) == (
+        "shoulder",
+        "Main",
+        "shoulder",
+    )
+    assert added["assigned_by"] == str(fake_auth.user_id) and added["assigned_at"]
+
+    after = await _analysis(client, s.run_id)
+    assert _named(after, "Main", well) == (40.0, "assignment", added["id"])
+    assert _named(after, "Lower", well) == (None, None, None)
+    assert await _rows(session_factory, well, main["delta_tm_readout_id"]) == [
+        pytest.approx(-31.3)
+    ]
+
+    unknown = await client.post(
+        f"/api/v1/runs/{s.run_id}/melting-steps",
+        json={"well_id": well, "channel_key": "ratio", "value": 41.0, "assigned_window": "Upper"},
+    )
+    assert unknown.status_code == 422, unknown.text
+    assert len((await _analysis(client, s.run_id))["steps"]) == 4
+
+
+async def test_analysis_carries_assignment_fields(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample, reference = _step(analysis, 64.0), _step(analysis, 71.3)
+    assert analysis["outside_every_window"] == []
+    assert _named(analysis, "Main", sample["well_id"]) == (64.0, "range", sample["id"])
+    assert _named(analysis, "Main", reference["well_id"]) == (71.3, "range", reference["id"])
+
+    # 85.2 °C is on the trace but above Main's upper limit: in no window.
+    add = await client.post(
+        f"/api/v1/runs/{s.run_id}/melting-steps",
+        json={"well_id": sample["well_id"], "channel_key": "ratio", "value": 85.2},
+    )
+    assert add.status_code == 201, add.text
+    unplaced = add.json()["step"]
+    assert (await _analysis(client, s.run_id))["outside_every_window"] == [unplaced["id"]]
+
+    assert (await _assign(client, unplaced, "Lower", reason="late melt")).status_code == 200
+    after = await _analysis(client, s.run_id)
+    assert after["outside_every_window"] == []
+    read = _step(after, 85.2)
+    assert (read["assigned_window"], read["assignment_reason"]) == ("Lower", "late melt")
+    assert read["assigned_by"] == str(fake_auth.user_id) and read["assigned_at"]
+    assert _named(after, "Lower", sample["well_id"]) == (85.2, "assignment", unplaced["id"])

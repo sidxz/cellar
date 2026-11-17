@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
-from cellar.application.screening.manage_melting_steps import NOT_EDITABLE
+from cellar.application.screening.manage_melting_steps import peak_edit_refusal
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.melt_series import SeriesValue, series_points, series_values
@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.melt_window import (
     WindowResult,
     check_step_counts,
     evaluate_window,
+    outside_every_window,
     window_positions,
 )
 from cellar.domain.screening_assay.melting_step import MeltingStep
@@ -29,8 +30,6 @@ from cellar.domain.screening_assay.repository import (
     RunRepository,
 )
 from cellar.domain.shared.errors import DomainError, NotFoundError
-
-LOCKED = "This run is locked"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -76,6 +75,8 @@ class MeltingAnalysis:
     steps: tuple[MeltingStep, ...]  # ordered by well, channel, value
     windows: tuple[WindowAnalysis, ...]  # ordered by low
     step_checks: tuple[ChannelStepCheck, ...]  # one per channel that has steps
+    # Counted steps no window of their channel takes (not assigned, inside none).
+    outside_every_window: tuple[uuid.UUID, ...] = ()
 
 
 class GetMeltingAnalysis:
@@ -115,7 +116,7 @@ class GetMeltingAnalysis:
             sorted(found, key=lambda s: (order.get(s.well_id, len(order)), s.channel_key, s.value))
         )
         wells = [(w.id, w.well_type) for w in run.wells]
-        counted = [(s.well_id, s.channel_key, s.value, s.counts) for s in steps]
+        facts = [s.fact for s in steps]
 
         batch_and_dose = {w.id: (w.batch_id, w.dose) for w in run.wells}
 
@@ -133,7 +134,14 @@ class GetMeltingAnalysis:
                 per_position.setdefault(mc.window, {})[mc.measure] = rd.id
 
         def analyse(name: str, channel: str, low: float, high: float) -> WindowAnalysis:
-            result = evaluate_window(low, high, window_positions(wells, counted, channel, traced))
+            result = evaluate_window(
+                name,
+                low,
+                high,
+                window_positions(wells, facts, channel, traced),
+                # Window names on this channel: an assignment to any other name is stale.
+                {n for n, (ch, _, _) in shape.items() if ch == channel},
+            )
             points = series_points(result, batch_and_dose)
             ids = per_position.get(name, {})
             return WindowAnalysis(
@@ -161,12 +169,21 @@ class GetMeltingAnalysis:
             analyse(name, channel, low, high)
             for name, (channel, low, high) in sorted(shape.items(), key=lambda kv: kv[1][1])
         )
-        step_checks = tuple(
-            ChannelStepCheck(ch, check_step_counts(window_positions(wells, counted, ch, traced)))
+        positions = {
+            ch: window_positions(wells, facts, ch, traced)
             for ch in sorted({s.channel_key for s in steps})
+        }
+        step_checks = tuple(
+            ChannelStepCheck(ch, check_step_counts(ps)) for ch, ps in positions.items()
+        )
+        outside = tuple(
+            step_id
+            for ch, ps in positions.items()
+            for step_id in outside_every_window(
+                ps, [(name, low, high) for name, (c, low, high) in shape.items() if c == ch]
+            )
         )
 
-        refusal = None if run.calculated_positions_editable else NOT_EDITABLE
-        if run.is_locked:
-            refusal = LOCKED
-        return Success(MeltingAnalysis(run.id, refusal, steps, windows, step_checks))
+        return Success(
+            MeltingAnalysis(run.id, peak_edit_refusal(run), steps, windows, step_checks, outside)
+        )

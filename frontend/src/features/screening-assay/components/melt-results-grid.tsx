@@ -3,6 +3,7 @@
 import { StructureThumbnail } from "@/shared/components/chemistry/structure-thumbnail";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
+import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import {
   Tooltip,
@@ -10,6 +11,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
+import { formatDateTime } from "@/shared/lib/format-date";
 import { cn } from "@/shared/lib/utils";
 import type {
   CellKeyDownEvent,
@@ -18,28 +20,33 @@ import type {
   FullWidthCellKeyDownEvent,
   GridApi,
   ICellRendererParams,
+  OverlayType,
   RowClassParams,
   RowClickedEvent,
 } from "ag-grid-community";
-import { TriangleAlert } from "lucide-react";
+import { Pin, TriangleAlert } from "lucide-react";
 import { useMemo } from "react";
 import type { SelectionState } from "../lib/curve-selection";
+import { type ApplicableRule, limitsFor } from "../lib/melt-hits";
 import {
   type CellStatus,
   type ResultRow,
   STATUS_ORDER,
   type WindowCell,
   formatDelta,
+  formatTm,
   worstStatus,
 } from "../lib/melt-results";
-import { WELL_TYPE_LABELS, type WellType } from "../types";
+import { type MeltingStep, WELL_TYPE_LABELS, type WellType } from "../types";
 
+type Range = { window: string; low: number; high: number };
 type Col = ColDef<ResultRow> | ColGroupDef<ResultRow>;
 type Params = ICellRendererParams<ResultRow>;
 
 const ROW_HEIGHT = 36;
 const GROUP_HEADER_HEIGHT = 32;
-const DIFFERS_TEXT = "Step count differs from the reference";
+const DIFFERS_TEXT = "Different number of peaks than the reference";
+const LIST = new Intl.ListFormat("en-US", { type: "conjunction" });
 // AG Grid's row colours are unlayered CSS, so row-level utilities need `!`.
 const SELECTED_ROW = "bg-primary/10! shadow-[inset_3px_0_0_var(--primary)]";
 const MUTED_ROW = "text-muted-foreground!";
@@ -53,8 +60,8 @@ const STATUS: Record<
   { label: string; variant: "secondary" | "warning" | "outline" | "ghost"; className?: string }
 > = {
   reference: { label: "Reference", variant: "secondary" },
-  several_steps: { label: "Several steps", variant: "warning" },
-  no_step: { label: "No step", variant: "warning" },
+  several_steps: { label: "Several peaks", variant: "warning" },
+  no_step: { label: "No peak", variant: "warning" },
   no_reference: { label: "No reference", variant: "warning" },
   provisional: {
     label: "Provisional",
@@ -64,7 +71,62 @@ const STATUS: Record<
   reviewed: { label: "Reviewed", variant: "ghost", className: "px-0 text-muted-foreground" },
 };
 
-const fmtTm = (v: number | null | undefined) => (v == null ? "" : v.toFixed(1));
+const fmtTm = (v: number | null | undefined, limits?: readonly number[]) =>
+  v == null ? "" : formatTm(v, limits);
+const NO_RULES: readonly ApplicableRule[] = [];
+// The line above the grid counts what a filter leaves; AG Grid's own notices
+// would be drawn over the pinned reference rows.
+const NO_EMPTY_NOTICE: OverlayType[] = ["noRows", "noMatchingRows"];
+
+/** `Peak at 48.1 °C is outside every window. Pick it on the graph to assign it.` */
+function outsideText(peaks: readonly number[]): string {
+  const at = LIST.format(peaks.map((v) => `${fmtTm(v)} °C`));
+  return peaks.length === 1
+    ? `Peak at ${at} is outside every window. Pick it on the graph to assign it.`
+    : `Peaks at ${at} are outside every window. Pick one on the graph to assign it.`;
+}
+
+/** Marks a Tm that a person named by assigning its peak. The tooltip says
+ *  who, when and why, and where the peak falls by temperature. */
+function AssignedMark({
+  step,
+  windows,
+}: {
+  step: MeltingStep | undefined;
+  windows: readonly Range[];
+}) {
+  const inside = step
+    ? windows.filter((w) => step.value >= w.low && step.value <= w.high).map((w) => w.window)
+    : [];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span role="img" aria-label="Assigned peak" className="inline-flex text-muted-foreground">
+          <Pin className="size-3" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>
+          {step?.assigned_by ? (
+            <>
+              {"Assigned by "}
+              <MemberName id={step.assigned_by} />
+            </>
+          ) : (
+            "Assigned"
+          )}
+          {step?.assigned_at && ` · ${formatDateTime(step.assigned_at)}`}
+        </p>
+        {step?.assignment_reason && <p>{step.assignment_reason}</p>}
+        {step && (
+          <p>
+            {`By temperature: ${inside.length ? `in ${LIST.format(inside)}` : "outside every window"}`}
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
 
 /** A hit is blue up (stabilising) or red down; everything else is muted. The
  *  sign says the same without colour. */
@@ -151,12 +213,25 @@ function StatusCell({ row, windowNames }: { row: ResultRow; windowNames: readonl
   const status = worstStatus(row, windowNames);
   const differs = windowNames.some((n) => row.cells[n]?.differs);
   const review = status === "reference" ? referenceReview(row, windowNames) : null;
+  // The same for every window of the signal, so the first shown one speaks.
+  const outside =
+    status === "no_step"
+      ? (windowNames.map((n) => row.cells[n]?.outsidePeaks).find((peaks) => peaks?.length) ?? [])
+      : [];
+  const badge = status && (
+    <Badge variant={STATUS[status].variant} className={STATUS[status].className}>
+      {review ? `${STATUS[status].label} · ${review}` : STATUS[status].label}
+    </Badge>
+  );
   return (
     <span className="flex h-full items-center gap-1.5">
-      {status && (
-        <Badge variant={STATUS[status].variant} className={STATUS[status].className}>
-          {review ? `${STATUS[status].label} · ${review}` : STATUS[status].label}
-        </Badge>
+      {outside.length > 0 ? (
+        <Tooltip>
+          <TooltipTrigger asChild>{badge}</TooltipTrigger>
+          <TooltipContent>{outsideText(outside)}</TooltipContent>
+        </Tooltip>
+      ) : (
+        badge
       )}
       {differs && (
         <Tooltip>
@@ -176,18 +251,35 @@ function windowColumns(
   name: string,
   hits: ReadonlySet<string>,
   grouped: boolean,
+  steps: readonly MeltingStep[],
+  windows: readonly Range[],
+  applicable: readonly ApplicableRule[],
 ): ColDef<ResultRow>[] {
   const cell = (r: ResultRow | undefined): WindowCell | undefined => r?.cells[name];
+  // A value beside a limit of the run's hit rule is shown to two decimals.
+  const tmLimits = limitsFor(applicable, name, "tm");
+  const deltaLimits = limitsFor(applicable, name, "delta_tm");
   return [
     {
       colId: `${name}:tm`,
       headerName: "Tm (°C)",
-      width: 80,
+      width: 92,
       headerClass: "ag-right-aligned-header",
       cellClass: NUMERIC,
       getQuickFilterText: NOT_SEARCHED,
       valueGetter: (p) => cell(p.data)?.tm ?? null,
-      valueFormatter: (p) => fmtTm(p.value),
+      valueFormatter: (p) => fmtTm(p.value, tmLimits),
+      // A Tm named by assignment carries a marker; the rest read as plain numbers.
+      cellRenderer: (p: Params) => {
+        const c = cell(p.data);
+        if (c?.namedBy !== "assignment") return fmtTm(c?.tm, tmLimits);
+        return (
+          <span className="inline-flex items-center gap-1">
+            <AssignedMark step={steps.find((s) => s.id === c.stepId)} windows={windows} />
+            {fmtTm(c.tm, tmLimits)}
+          </span>
+        );
+      },
     },
     {
       colId: `${name}:delta`,
@@ -198,7 +290,11 @@ function windowColumns(
       valueGetter: (p) =>
         p.data?.wellType === "reference" ? null : (cell(p.data)?.deltaTm ?? null),
       valueFormatter: (p) =>
-        p.data?.wellType === "reference" ? "—" : p.value == null ? "" : formatDelta(p.value),
+        p.data?.wellType === "reference"
+          ? "—"
+          : p.value == null
+            ? ""
+            : formatDelta(p.value, deltaLimits),
       cellClass: (p) =>
         cn(
           NUMERIC,
@@ -223,15 +319,24 @@ const gridHeight = (rows: number, grouped: boolean) =>
 export function MeltResultsGrid({
   rows,
   windowNames,
+  steps,
+  windows,
   hits,
+  applicable = NO_RULES,
   doseUnit,
   selection,
   onRowClick,
 }: {
   rows: { pinned: ResultRow[]; body: ResultRow[] };
   windowNames: readonly string[];
+  /** The run's peaks: the one that gave an assigned Tm says who assigned it. */
+  steps: readonly MeltingStep[];
+  /** The temperature windows on the shown signal. */
+  windows: readonly Range[];
   /** The positions the run's hit rule calls hits. */
   hits: ReadonlySet<string>;
+  /** The run's rules on Tm/ΔTm: a value beside one of their limits is shown to two decimals. */
+  applicable?: readonly ApplicableRule[];
   doseUnit: string;
   selection: SelectionState;
   onRowClick: (
@@ -278,9 +383,9 @@ export function MeltResultsGrid({
     const values: Col[] = compare
       ? windowNames.map((n) => ({
           headerName: n,
-          children: windowColumns(n, hits, true),
+          children: windowColumns(n, hits, true, steps, windows, applicable),
         }))
-      : windowColumns(windowNames[0], hits, false);
+      : windowColumns(windowNames[0], hits, false, steps, windows, applicable);
     return [
       ...identity,
       ...values,
@@ -307,7 +412,7 @@ export function MeltResultsGrid({
           p.data ? <StatusCell row={p.data} windowNames={windowNames} /> : null,
       },
     ];
-  }, [windowNames, compare, hits, doseUnit]);
+  }, [windowNames, compare, hits, doseUnit, steps, windows, applicable]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
   // classes) when they change, so the highlight follows the selection.
@@ -368,6 +473,7 @@ export function MeltResultsGrid({
         groupHeaderHeight={GROUP_HEADER_HEIGHT}
         height={gridHeight(rows.pinned.length + rows.body.length, compare)}
         suppressFilters
+        suppressOverlays={NO_EMPTY_NOTICE}
         searchPlaceholder={SEARCH}
       />
     </TooltipProvider>

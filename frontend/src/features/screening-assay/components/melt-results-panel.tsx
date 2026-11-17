@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
+import { Button } from "@/shared/components/ui/button";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
-import { type ApplicableRule, bandFor } from "../lib/melt-hits";
+import { type ApplicableRule, bandFor, limitsFor, notEvaluated } from "../lib/melt-hits";
 import {
   type ResultFilter,
   type WindowSummary,
@@ -14,6 +14,7 @@ import {
   shiftRows,
   windowSummary,
 } from "../lib/melt-results";
+import { windowLabel } from "../lib/window-proposal";
 import type { MeltingAnalysis } from "../types";
 import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
@@ -21,7 +22,6 @@ import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
 
 const COMPARE = "__compare__";
-const NO_WINDOW = "No temperature window on this signal — add one on the protocol's Setup tab";
 
 export interface MeltResultsPanelProps {
   analysis: MeltingAnalysis;
@@ -39,12 +39,13 @@ export interface MeltResultsPanelProps {
   onShownWindowsChange?: (names: readonly string[]) => void;
   /** The positions the run's hit rule calls hits (empty without a rule). */
   hits: ReadonlySet<string>;
-  /** The run's rules that apply to Tm/ΔTm; they draw the shift plot's band. */
+  /** The run's rules that apply to Tm/ΔTm; they draw the shift plot's band, and
+   *  a value beside one of their limits is shown to two decimals. */
   applicable: readonly ApplicableRule[];
   /** The run's hit rule line, shown above the counts. */
   hitRule?: ReactNode;
-  /** The protocol's Setup tab, where windows are added; links the no-window note. */
-  designHref?: string;
+  /** Opens the naming of the reference's peaks, which adds windows; given to editors. */
+  onNamePeaks?: () => void;
 }
 
 /** The run's results for the signal on screen: a window picker, the counts
@@ -62,7 +63,7 @@ export function MeltResultsPanel({
   hits,
   applicable,
   hitRule,
-  designHref,
+  onNamePeaks,
 }: MeltResultsPanelProps) {
   // The window last chosen by name; kept across signals and used where it exists.
   const [chosen, setChosen] = useState<string | null>(null);
@@ -89,25 +90,37 @@ export function MeltResultsPanel({
   }, [windowNames, onShownWindowsChange]);
 
   const rows = useMemo(
-    () => resultRows(windows, positions, analysis.steps, analysis.step_checks),
-    [windows, positions, analysis.steps, analysis.step_checks],
+    () =>
+      resultRows(
+        windows,
+        positions,
+        analysis.steps,
+        analysis.step_checks,
+        analysis.outside_every_window,
+      ),
+    [windows, positions, analysis.steps, analysis.step_checks, analysis.outside_every_window],
   );
   const activeFilter = windowNames.length ? filter : null;
+  // The samples missing a value the run's hit rule needs; empty without a rule.
+  const unevaluated = useMemo(
+    () => notEvaluated(analysis, positions, applicable),
+    [analysis, positions, applicable],
+  );
   const ordered = useMemo(() => {
     const { pinned, body } = orderRows(rows, windowNames);
     return {
       pinned,
-      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, hits)),
+      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
     };
-  }, [rows, windowNames, activeFilter, hits]);
+  }, [rows, windowNames, activeFilter, hits, unevaluated]);
 
   const sampleCount = useMemo(() => rows.filter((r) => r.isSample).length, [rows]);
   const each = useMemo<WindowSummary[]>(
     () =>
       (comparing ? windows : lead ? [lead] : []).map((w) =>
-        windowSummary(w, rows, positions, analysis.steps, analysis.step_checks, hits),
+        windowSummary(w, rows, positions, analysis.step_checks, hits),
       ),
-    [comparing, windows, lead, rows, positions, analysis, hits],
+    [comparing, windows, lead, rows, positions, analysis.step_checks, hits],
   );
   const summary = useMemo<WindowSummary | null>(() => {
     if (each.length === 0) return null;
@@ -145,7 +158,7 @@ export function MeltResultsPanel({
               label="Window"
               value={comparing ? COMPARE : (leadName ?? "")}
               options={[
-                ...windows.map((w) => ({ value: w.window, label: w.window })),
+                ...windows.map((w) => ({ value: w.window, label: windowLabel(w) })),
                 ...(windows.length >= 2 ? [{ value: COMPARE, label: "Compare" }] : []),
               ]}
               onChange={(v) => {
@@ -166,7 +179,16 @@ export function MeltResultsPanel({
             onChange={setView}
           />
         </div>
-        {headerAction && <div className="ml-auto flex items-center gap-2">{headerAction}</div>}
+        {(onNamePeaks || headerAction) && (
+          <div className="ml-auto flex items-center gap-2">
+            {onNamePeaks && (
+              <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
+                Name peaks
+              </Button>
+            )}
+            {headerAction}
+          </div>
+        )}
       </div>
       {hitRule}
       {summary ? (
@@ -181,28 +203,37 @@ export function MeltResultsPanel({
           }
           onSelectReferences={ordered.pinned.length ? selectReferences : undefined}
           hasRule={applicable.length > 0}
+          notEvaluated={unevaluated.size}
           filter={activeFilter}
           onFilterChange={setFilter}
         />
       ) : (
         <p className="text-sm text-muted-foreground">
-          {designHref ? (
-            <Link href={designHref} className="underline-offset-4 hover:underline">
-              {NO_WINDOW}
-            </Link>
-          ) : (
-            NO_WINDOW
+          No temperature window on this signal.
+          {onNamePeaks && (
+            <>
+              {" "}
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 font-normal"
+                onClick={onNamePeaks}
+              >
+                Name the reference's peaks.
+              </Button>
+            </>
           )}
         </p>
       )}
       {view === "plot" && !comparing && lead ? (
         <ShiftPlot
           rows={shiftRows(
-            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits)),
+            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
             lead.window,
           )}
           hits={hits}
           band={bandFor(applicable, lead.window)}
+          limits={limitsFor(applicable, lead.window, "delta_tm")}
           selected={selection.selected}
           onSelect={(id) =>
             onSelectionChange(applyClick(selection, [id], id, { shift: false, toggle: false }))
@@ -212,7 +243,10 @@ export function MeltResultsPanel({
         <MeltResultsGrid
           rows={ordered}
           windowNames={windowNames}
+          steps={analysis.steps}
+          windows={windows}
           hits={hits}
+          applicable={applicable}
           doseUnit={doseUnit}
           selection={selection}
           onRowClick={(id, mods, order) =>

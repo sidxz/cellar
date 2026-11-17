@@ -164,6 +164,67 @@ async def test_update_is_scoped_to_workspace(session_factory, workspace_id):
             await SQLAlchemyMeltingStepRepository(uow).update(step, expected_version=1)
 
 
+async def test_assignment_round_trips(session_factory, workspace_id):
+    run_id, steps = await _seed_steps(session_factory, workspace_id)
+    alice = uuid.uuid4()
+    created = MeltingStep.manual(
+        workspace_id=workspace_id,
+        run_id=run_id,
+        well_id=steps[0].well_id,
+        channel_key="ratio",
+        value=20.5,
+        x_range=RANGE,
+        reason="shoulder",
+        by=alice,
+        assigned_window="Main",
+    )
+    updated = steps[1]
+    updated.assign(window="Low", reason="first peak", by=alice)
+
+    uow = AsyncUnitOfWork(session_factory)
+    async with uow:
+        repo = SQLAlchemyMeltingStepRepository(uow)
+        await repo.add(created)
+        await repo.update(updated, expected_version=1)
+        await uow.commit()
+
+    async with uow:
+        repo = SQLAlchemyMeltingStepRepository(uow)
+        for sent in (created, updated):
+            got = await repo.find_by_id(workspace_id, sent.id)
+            assert got is not None
+            assert (
+                got.assigned_window,
+                got.assignment_reason,
+                got.assigned_by,
+                got.assigned_at,
+            ) == (
+                sent.assigned_window,
+                sent.assignment_reason,
+                alice,
+                sent.assigned_at,
+            )
+            assert got.status is MeltingStepStatus.ACCEPTED and got.version == sent.version
+        untouched = await repo.find_by_id(workspace_id, steps[2].id)
+        assert untouched is not None and untouched.assigned_window is None
+        assert untouched.assigned_by is None and untouched.assigned_at is None
+
+    # Cleared: the four columns go back to empty.
+    updated.assign(window=None, reason=None, by=alice)
+    async with uow:
+        await SQLAlchemyMeltingStepRepository(uow).update(updated, expected_version=2)
+        await uow.commit()
+    async with uow:
+        got = await SQLAlchemyMeltingStepRepository(uow).find_by_id(workspace_id, updated.id)
+    assert got is not None and got.version == 3
+    assert (got.assigned_window, got.assignment_reason, got.assigned_by, got.assigned_at) == (
+        None,
+        None,
+        None,
+        None,
+    )
+
+
 async def test_delete_by_run_and_cascade_on_run_delete(session_factory, workspace_id):
     run_id, _ = await _seed_steps(session_factory, workspace_id)
 

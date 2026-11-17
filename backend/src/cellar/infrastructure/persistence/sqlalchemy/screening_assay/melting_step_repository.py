@@ -48,15 +48,17 @@ class SQLAlchemyMeltingStepRepository:
                 reason=step.reason,
                 changed_by=step.changed_by,
                 changed_at=step.changed_at,
+                assigned_window=step.assigned_window,
+                assignment_reason=step.assignment_reason,
+                assigned_by=step.assigned_by,
+                assigned_at=step.assigned_at,
                 version=step.version,
                 updated_at=step.updated_at,
             )
         )  # default session sync keeps an already-loaded row current for later reads
         result = await self._uow.session.execute(stmt)
         if not result.rowcount:
-            raise ConflictError(
-                "This melting step was changed by someone else. Reload and try again."
-            )
+            raise ConflictError("This peak was changed by someone else. Reload and try again.")
 
     async def find_by_id(self, workspace_id: uuid.UUID, step_id: uuid.UUID) -> MeltingStep | None:
         stmt = select(MeltingStepModel).where(
@@ -105,6 +107,10 @@ class SQLAlchemyMeltingStepRepository:
             reason=model.reason,
             changed_by=model.changed_by,
             changed_at=model.changed_at,
+            assigned_window=model.assigned_window,
+            assignment_reason=model.assignment_reason,
+            assigned_by=model.assigned_by,
+            assigned_at=model.assigned_at,
             version=model.version,
             created_at=model.created_at,
             updated_at=model.updated_at,
@@ -126,5 +132,9 @@ class SQLAlchemyMeltingStepRepository:
             reason=entity.reason,
             changed_by=entity.changed_by,
             changed_at=entity.changed_at,
+            assigned_window=entity.assigned_window,
+            assignment_reason=entity.assignment_reason,
+            assigned_by=entity.assigned_by,
+            assigned_at=entity.assigned_at,
             version=entity.version,
         )

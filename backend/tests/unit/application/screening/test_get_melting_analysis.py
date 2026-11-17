@@ -21,7 +21,12 @@ from cellar.domain.screening_assay.enums import (
     RunStatus,
     WellType,
 )
-from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig, WindowFlag
+from cellar.domain.screening_assay.melt_window import (
+    MeltMeasure,
+    MeltReadoutConfig,
+    NamedBy,
+    WindowFlag,
+)
 from cellar.domain.screening_assay.melting_step import (
     MeltingStep,
     MeltingStepSource,
@@ -99,15 +104,24 @@ class Harness:
             curve_repo=self.curve_repo,
         )
 
-    def step(self, well: Well, value: float, status=MeltingStepStatus.UNREVIEWED) -> MeltingStep:
+    def step(
+        self,
+        well: Well,
+        value: float,
+        status=MeltingStepStatus.UNREVIEWED,
+        *,
+        channel: str = CH,
+        assigned_window: str | None = None,
+    ) -> MeltingStep:
         s = MeltingStep(
             workspace_id=WS,
             run_id=self.run.id,
             well_id=well.id,
-            channel_key=CH,
+            channel_key=channel,
             source=MeltingStepSource.MANUAL,
             value=value,
             status=status,
+            assigned_window=assigned_window,
         )
         self.steps.append(s)
         return s
@@ -161,19 +175,64 @@ async def test_rejected_steps_are_listed_but_do_not_count():
     assert sample.flags == (WindowFlag.NO_STEP,)
 
 
+async def test_analysis_reports_how_each_tm_was_named():
+    h = Harness()
+    reference = h.step(h.ref, 71.0)
+    assigned = h.step(h.sample, 40.0, assigned_window="Main")  # by temperature: in Low
+    h.step(h.sample, 70.0)  # inside Main, but the assigned peak wins
+    low, main = (await h.read()).unwrap().windows
+
+    def named(window, well):  # type: ignore[no-untyped-def]
+        p = next(p for p in window.result.positions if p.well_id == well.id)
+        return (p.tm, p.named_by, p.step_id)
+
+    assert named(main, h.sample) == (40.0, NamedBy.ASSIGNMENT, assigned.id)
+    assert named(main, h.ref) == (71.0, NamedBy.RANGE, reference.id)
+    assert named(low, h.sample) == (None, None, None)
+
+
+async def test_analysis_lists_peaks_outside_every_window():
+    h = Harness()
+    h.step(h.ref, 71.0)
+    h.step(h.sample, 70.0)
+    unplaced = h.step(h.sample, 90.0)
+    stale = h.step(h.sample, 92.0, assigned_window="Gone")
+    h.step(h.sample, 94.0, assigned_window="Main")
+    h.step(h.sample, 20.0, MeltingStepStatus.REJECTED)
+    # A signal is judged against its own windows: this one has none.
+    h.traced.add((h.sample.id, "330nm"))
+    other_signal = h.step(h.sample, 70.0, channel="330nm")
+
+    out = (await h.read()).unwrap()
+    assert out.outside_every_window == (other_signal.id, unplaced.id, stale.id)
+
+
+async def test_no_peak_is_outside_when_every_peak_is_in_a_window():
+    h = Harness()
+    h.step(h.ref, 71.0)
+    h.step(h.sample, 36.0)
+    assert (await h.read()).unwrap().outside_every_window == ()
+
+
 @pytest.mark.parametrize(
-    ("status", "locked", "expected"),
-    [
-        (RunStatus.DRAFT, False, None),
-        (RunStatus.IN_PROGRESS, False, None),
-        (RunStatus.COMPLETED, False, NOT_EDITABLE),
-        (RunStatus.DRAFT, True, "This run is locked"),
-        (RunStatus.COMPLETED, True, "This run is locked"),
-    ],
+    "status", [RunStatus.DRAFT, RunStatus.IN_PROGRESS, RunStatus.COMPLETED, RunStatus.REJECTED]
 )
-async def test_edit_refusal_on_completed_and_locked_runs(status, locked, expected):
-    h = Harness(status=status, locked=locked)
-    assert (await h.read()).unwrap().edit_refusal == expected
+async def test_edit_refusal_is_none_on_a_completed_run(status):
+    """Peaks can change on every run that can still be recalculated."""
+    h = Harness(status=status)
+    assert (await h.read()).unwrap().edit_refusal is None
+
+
+async def test_edit_refusal_on_an_approved_run():
+    h = Harness(status=RunStatus.APPROVED)
+    refusal = (await h.read()).unwrap().edit_refusal
+    assert refusal == NOT_EDITABLE == "Peaks cannot be changed on an approved run"
+
+
+@pytest.mark.parametrize("status", [RunStatus.DRAFT, RunStatus.COMPLETED, RunStatus.APPROVED])
+async def test_edit_refusal_on_a_locked_run(status):
+    h = Harness(status=status, locked=True)
+    assert (await h.read()).unwrap().edit_refusal == "This run is locked"
 
 
 async def test_run_not_found():

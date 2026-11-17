@@ -1,15 +1,29 @@
 /** A temperature window's results as grid rows and ΔTm-against-concentration
  *  series. Pure. */
 
-import type { MeltWindow, MeltingStep, StepCheck } from "../types";
+import type { MeltWindow, MeltWindowPosition, MeltingStep, StepCheck } from "../types";
 import type { CurvePosition } from "./curve-plot";
 
 // ---- Results table derivations (Traces tab) ----
 
-/** `+1.4`, `−8.5` (true minus), `0.0`. */
-export function formatDelta(d: number): string {
-  const r = Number(d.toFixed(1));
-  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(1)}`;
+/** One decimal, or two when one would show the value as a limit (of a hit
+ *  rule) that it is not on: −2.02 under "outside −2 to 2" must not read −2.0. */
+function decimals(v: number, limits: readonly number[]): 1 | 2 {
+  const shown = Number(v.toFixed(1));
+  // ponytail: two decimals at most, so −2.004 still reads −2.00; more digits if that turns up.
+  return limits.some((l) => l !== v && Number(l.toFixed(1)) === shown) ? 2 : 1;
+}
+
+/** `+1.4`, `−8.5` (true minus), `0.0`; `−2.02` beside a limit of −2. */
+export function formatDelta(d: number, limits: readonly number[] = []): string {
+  const n = decimals(d, limits);
+  const r = Number(d.toFixed(n));
+  return `${r > 0 ? "+" : r < 0 ? "−" : ""}${Math.abs(r).toFixed(n)}`;
+}
+
+/** `63.4`; `59.96` beside a limit of 60. */
+export function formatTm(v: number, limits: readonly number[] = []): string {
+  return v.toFixed(decimals(v, limits));
 }
 
 export type CellStatus =
@@ -25,8 +39,14 @@ export interface WindowCell {
   deltaTm: number | null;
   status: CellStatus;
   differs: boolean;
-  /** The counting step's review; null without one. */
+  /** The review of the peak that gave the Tm; null without one. */
   review: "reviewed" | "provisional" | null;
+  /** How the server named the Tm, and the peak that gave it. */
+  namedBy: "range" | "assignment" | null;
+  stepId: string | null;
+  /** The position's counted peaks on this signal that lie outside every
+   *  window, ascending. */
+  outsidePeaks: number[];
 }
 
 export interface SampleIdentity {
@@ -64,7 +84,14 @@ export interface WindowSummary {
   down: number;
 }
 
-export type ResultFilter = "needs_review" | "provisional" | "hits" | "up" | "down" | null;
+export type ResultFilter =
+  | "needs_review"
+  | "provisional"
+  | "hits"
+  | "up"
+  | "down"
+  | "not_evaluated"
+  | null;
 
 /** Worst first; references sit outside this ranking. */
 export const STATUS_ORDER: readonly CellStatus[] = [
@@ -80,21 +107,13 @@ function hitSign(cells: readonly WindowCell[], sign: "up" | "down"): boolean {
   return cells.some((c) => c.deltaTm != null && (sign === "up" ? c.deltaTm > 0 : c.deltaTm < 0));
 }
 
-/** The step that gives a position its Tm in a window: non-rejected, on the
- *  window's channel, inside the window. */
-function countingStep(
-  window: MeltWindow,
-  wellId: string,
+/** The peak that gave a position its Tm in a window. The server names it (by
+ *  range or by assignment); nothing here works it out again. */
+function namedStep(
+  r: Pick<MeltWindowPosition, "step_id">,
   steps: readonly MeltingStep[],
 ): MeltingStep | undefined {
-  return steps.find(
-    (s) =>
-      s.well_id === wellId &&
-      s.channel_key === window.channel_key &&
-      s.status !== "rejected" &&
-      s.value >= window.low &&
-      s.value <= window.high,
-  );
+  return r.step_id ? steps.find((s) => s.id === r.step_id) : undefined;
 }
 
 /** The batch number without its registration-number prefix (`001`). */
@@ -124,13 +143,16 @@ function cellStatus(
 
 /** One row per position, in `positions` order, whether or not any window
  *  lists it (the grid doubles as the position picker). A window a position is
- *  missing from simply has no entry in `cells`. */
+ *  missing from simply has no entry in `cells`. `outside` is the analysis's
+ *  `outside_every_window`: the ids of the counted peaks in no window. */
 export function resultRows(
   windows: readonly MeltWindow[],
   positions: readonly CurvePosition[],
   steps: readonly MeltingStep[],
   checks: readonly StepCheck[],
+  outside: readonly string[],
 ): ResultRow[] {
+  const outsideIds = new Set(outside);
   return positions.flatMap((p) => {
     const cells: Record<string, WindowCell> = {};
     for (const w of windows) {
@@ -139,13 +161,22 @@ export function resultRows(
       const differs = checks.some(
         (c) => c.channel_key === w.channel_key && c.differs.includes(p.well_id),
       );
-      const counting = countingStep(w, p.well_id, steps);
+      const counting = namedStep(r, steps);
       cells[w.window] = {
         tm: r.tm ?? null,
         deltaTm: r.delta_tm ?? null,
         status: cellStatus(p.well_type === "reference", r.flags, counting),
         differs,
         review: counting ? (counting.status === "unreviewed" ? "provisional" : "reviewed") : null,
+        namedBy: r.named_by ?? null,
+        stepId: r.step_id ?? null,
+        outsidePeaks: steps
+          .filter(
+            (s) =>
+              s.well_id === p.well_id && s.channel_key === w.channel_key && outsideIds.has(s.id),
+          )
+          .map((s) => s.value)
+          .sort((a, b) => a - b),
       };
     }
     return {
@@ -217,11 +248,14 @@ export function firstToSelect(
   return (review ?? body.find((r) => r.isSample) ?? rows[0])?.wellId ?? null;
 }
 
+/** `notEvaluated` (the samples missing a value the hit rule needs) is read
+ *  only by the filter of that name. */
 export function matchesFilter(
   row: ResultRow,
   windowNames: readonly string[],
   filter: ResultFilter,
   hits: ReadonlySet<string>,
+  notEvaluated: ReadonlySet<string> = new Set(),
 ): boolean {
   if (filter === null) return true;
   if (!row.isSample) return false;
@@ -236,6 +270,8 @@ export function matchesFilter(
     case "up":
     case "down":
       return hits.has(row.wellId) && hitSign(cells, filter);
+    case "not_evaluated":
+      return notEvaluated.has(row.wellId);
   }
 }
 
@@ -243,7 +279,6 @@ export function windowSummary(
   window: MeltWindow,
   rows: readonly ResultRow[],
   positions: readonly CurvePosition[],
-  steps: readonly MeltingStep[],
   checks: readonly StepCheck[],
   hits: ReadonlySet<string>,
 ): WindowSummary {
@@ -263,8 +298,8 @@ export function windowSummary(
     referencesDiffer: checks.some(
       (c) => c.channel_key === window.channel_key && c.references_differ,
     ),
-    referenceUnreviewed: refs.some(
-      (p) => countingStep(window, p.well_id, steps)?.status === "unreviewed",
+    referenceUnreviewed: rows.some(
+      (r) => r.wellType === "reference" && r.cells[window.window]?.review === "provisional",
     ),
     needsReview: n((c) => c.status === "several_steps" || c.status === "no_step"),
     provisional: n((c) => c.status === "provisional"),
@@ -298,7 +333,7 @@ export interface SeriesPoint {
   wellId: string;
   dose: number;
   deltaTm: number;
-  /** The counting step is unreviewed. */
+  /** The peak that gave the Tm is unreviewed. */
   provisional: boolean;
 }
 
@@ -315,7 +350,7 @@ export function batchSeries(
       const p = byId.get(r.well_id);
       if (!p || p.well_type !== "sample" || p.batch_id !== batchId) return [];
       if (r.delta_tm == null || p.dose == null || p.dose <= 0) return [];
-      const provisional = countingStep(window, r.well_id, steps)?.status === "unreviewed";
+      const provisional = namedStep(r, steps)?.status === "unreviewed";
       return [{ wellId: r.well_id, dose: p.dose, deltaTm: r.delta_tm, provisional }];
     })
     .sort((a, b) => a.dose - b.dose);
@@ -329,6 +364,26 @@ export function batchDoseCount(positions: readonly CurvePosition[], batchId: str
       .filter((p) => p.well_type === "sample" && p.batch_id === batchId && (p.dose ?? 0) > 0)
       .map((p) => p.dose),
   ).size;
+}
+
+/** Of the distinct doses above zero at which the run tests a batch's samples,
+ *  how many have no ΔTm in the window at any of their positions. */
+export function seriesGaps(
+  window: MeltWindow,
+  positions: readonly CurvePosition[],
+  batchId: string,
+): { missing: number; total: number } {
+  const hasDelta = new Set(
+    window.positions.flatMap((r) => (r.delta_tm == null ? [] : [r.well_id])),
+  );
+  const doses = new Set<number>();
+  const withDelta = new Set<number>();
+  for (const p of positions) {
+    if (p.well_type !== "sample" || p.batch_id !== batchId || !p.dose || p.dose <= 0) continue;
+    doses.add(p.dose);
+    if (hasDelta.has(p.well_id)) withDelta.add(p.dose);
+  }
+  return { missing: doses.size - withDelta.size, total: doses.size };
 }
 
 /** One batch's stored series values for a window, as a line under its

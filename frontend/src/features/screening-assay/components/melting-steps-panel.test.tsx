@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MeltingAnalysis, MeltingStep, RunCurves } from "../types";
@@ -87,6 +87,10 @@ function step(over: Partial<MeltingStep> & Pick<MeltingStep, "id" | "well_id">):
     reason: null,
     changed_by: null,
     changed_at: null,
+    assigned_window: null,
+    assignment_reason: null,
+    assigned_by: null,
+    assigned_at: null,
     version: 1,
     ...over,
   };
@@ -122,11 +126,53 @@ const steps: MeltingStep[] = [
 
 let analysis: MeltingAnalysis;
 
+function win(window: string, low: number, high: number, channel = "a") {
+  return {
+    window,
+    channel_key: channel,
+    low,
+    high,
+    tm_readout_id: null,
+    delta_tm_readout_id: null,
+    reference_tm: null,
+    reference_count: 0,
+    flags: [],
+    positions: [],
+    series: [],
+  };
+}
+/** Two windows on the shown signal and one on the other. */
+const WINDOWS = [win("Low", 25, 50), win("Main", 50, 85), win("Wide", 20, 95, "b")];
+/** Position 2 with a peak assigned to Main and one below it. */
+const ASSIGNED = [
+  step({
+    id: "p1",
+    well_id: "w2",
+    value: 63.4,
+    instrument_value: 63.4,
+    status: "accepted",
+    assigned_window: "Main",
+    assignment_reason: "main transition",
+    assigned_by: "u1",
+    assigned_at: "2026-11-13T10:00:00Z",
+    version: 4,
+  }),
+  step({ id: "p2", well_id: "w2", value: 48.1, instrument_value: 48.1 }),
+];
+
+/** Opens a Radix select by keyboard and picks an option. */
+function choose(name: string, option: string) {
+  fireEvent.keyDown(screen.getByRole("combobox", { name }), { key: "Enter" });
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
+
 function change(s: MeltingStep, warning: string | null = null) {
   return { step: s, recalculated: true, compute_warning: warning };
 }
 
 beforeEach(() => {
+  // Radix Select scrolls its listbox into view; jsdom has no such method.
+  Element.prototype.scrollIntoView = vi.fn();
   plotProps.length = 0;
   analysis = {
     run_id: "r1",
@@ -134,6 +180,7 @@ beforeEach(() => {
     steps,
     windows: [],
     step_checks: [],
+    outside_every_window: [],
   };
   useRunCurves.mockReset();
   useRunCurves.mockReturnValue({ data: curves, isLoading: false, isPlaceholderData: false });
@@ -163,7 +210,7 @@ async function select(...names: string[]) {
   for (const [i, name] of names.entries()) {
     fireEvent.click(gridRow(name), { metaKey: i > 0 });
   }
-  return screen.findByRole("list", { name: "Melting steps" });
+  return screen.findByRole("list", { name: "Peaks" });
 }
 
 function row(table: HTMLElement, text: string) {
@@ -272,8 +319,8 @@ describe("MeltingStepsPanel", () => {
   it("a plot click fills two decimals", async () => {
     renderPanel();
     await select("Position 3");
-    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
-    plotProps.at(-1)?.onClick?.({ points: [{ x: 32.646001, y: 2 }] });
+    fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
+    plotProps.at(-1)?.onClick?.({ points: [{ x: 32.646001, y: 2, data: { meta: "w3" } }] });
     await waitFor(() => expect(screen.getByLabelText("Value")).toHaveValue(32.65));
   });
 
@@ -348,10 +395,10 @@ describe("MeltingStepsPanel", () => {
   it("a plot click fills the open form's value without saving", async () => {
     renderPanel();
     await select("Position 3");
-    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
     const onClick = plotProps.at(-1)?.onClick;
     expect(onClick).toBeDefined();
-    onClick?.({ points: [{ x: 52.3, y: 2 }] });
+    onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] });
     await waitFor(() => expect(screen.getByLabelText("Value")).toHaveValue(52.3));
     expect(writes()).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -364,7 +411,7 @@ describe("MeltingStepsPanel", () => {
   });
 
   it("shows the conflict message and Reload", async () => {
-    const message = "The melting step was changed by someone else. Reload and try again.";
+    const message = "This peak was changed by someone else. Reload and try again.";
     api.mockImplementation((req: { url: string; method: string }) => {
       if (req.url.endsWith("/melting-analysis")) return Promise.resolve(analysis);
       return Promise.reject(new ApiError(`API error: 409 — ${message}`, 409, { detail: message }));
@@ -380,15 +427,281 @@ describe("MeltingStepsPanel", () => {
     await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument());
   });
 
-  it("hides actions and shows the refusal on a completed run", async () => {
-    const refusal = "Melting steps can be changed only while the run is draft or in progress";
-    analysis = { ...analysis, edit_refusal: refusal };
+  it("hides actions and shows the refusal on an approved run", async () => {
+    const refusal = "Peaks cannot be changed on an approved run";
+    analysis = {
+      ...analysis,
+      edit_refusal: refusal,
+      steps: [{ ...steps[0], assigned_window: "Gone" }],
+    };
     renderPanel();
     const table = await select("Position 1");
     expect(screen.getByText(refusal)).toBeInTheDocument();
-    for (const name of ["Accept", "Reject", "Correct", "Mark unreviewed", "Add step"]) {
+    for (const name of [
+      "Accept",
+      "Reject",
+      "Correct",
+      "Mark unreviewed",
+      "Add peak",
+      "Assign",
+      "Clear",
+    ]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(within(table).getByText("36.6")).toBeInTheDocument();
+    expect(within(table).getByText(/^Assigned to 'Gone'/)).toBeInTheDocument();
+  });
+
+  describe("assigning", () => {
+    beforeEach(() => {
+      analysis = { ...analysis, windows: WINDOWS };
+    });
+
+    it("assigns a peak to a window of the shown signal, with no reason needed", async () => {
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Assign" }));
+      expect(screen.getByText("Assign the peak at 64 °C on Position 2")).toBeInTheDocument();
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      expect(screen.getByLabelText("Reason")).toHaveAttribute("placeholder", "Optional");
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Window" }), { key: "Enter" });
+      expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "Low 25–50 °C",
+        "Main 50–85 °C",
+        "By temperature",
+      ]);
+      fireEvent.click(screen.getByRole("option", { name: "Low 25–50 °C" }));
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/melting-steps/s2/assignment",
+        method: "PUT",
+        data: { expected_version: 2, window: "Low" },
+      });
+    });
+
+    it("offers Assign on a rejected peak and sends the reason when one is given", async () => {
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, "70.1")).getByRole("button", { name: "Assign" }));
+      choose("Window", "Main 50–85 °C");
+      // The rejection reason is the peak's, not the assignment's.
+      expect(screen.getByLabelText("Reason")).toHaveValue("");
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: " late transition " } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/melting-steps/s3/assignment",
+        method: "PUT",
+        data: { expected_version: 3, window: "Main", reason: "late transition" },
+      });
+    });
+
+    it("shows an assigned peak's window, and says which peak a save replaces", async () => {
+      analysis = { ...analysis, steps: ASSIGNED };
+      renderPanel();
+      const table = await select("Position 2");
+      expect(within(row(table, "63.4")).getByText("→ Main (assigned)")).toBeInTheDocument();
+      expect(within(row(table, "48.1")).queryByText(/assigned/i)).not.toBeInTheDocument();
+
+      const replaces =
+        "Main is currently the peak at 63.4 °C on this position; saving replaces it.";
+      fireEvent.click(within(row(table, "48.1")).getByRole("button", { name: "Assign" }));
+      expect(screen.queryByText(replaces)).not.toBeInTheDocument();
+      choose("Window", "Main 50–85 °C");
+      expect(screen.getByText(replaces)).toBeInTheDocument();
+      choose("Window", "Low 25–50 °C");
+      expect(screen.queryByText(replaces)).not.toBeInTheDocument();
+
+      // The assigned peak opens on its own window and reason; nothing is replaced.
+      fireEvent.click(within(row(table, "63.4")).getByRole("button", { name: "Assign" }));
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+      expect(screen.getByLabelText("Reason")).toHaveValue("main transition");
+      expect(screen.queryByText(replaces)).not.toBeInTheDocument();
+    });
+
+    it("a spot picked on the plot adds a peak and names it in the same save", async () => {
+      renderPanel();
+      await select("Position 3");
+      act(() => plotProps.at(-1)?.onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] }));
+      const spot = screen.getByRole("region", { name: "Spot picked" });
+      fireEvent.click(within(spot).getByRole("button", { name: "Main 50–85 °C" }));
+      expect(screen.getByLabelText("Value")).toHaveValue(52.3);
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+      expect(writes()).toHaveLength(0);
+      choose("Window", "Low 25–50 °C");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/runs/r1/melting-steps",
+        method: "POST",
+        data: { well_id: "w3", channel_key: "a", value: 52.3, assigned_window: "Low" },
+      });
+    });
+
+    it("a peak added at a picked spot is the picked peak before the analysis is read again", async () => {
+      const added = step({
+        id: "s9",
+        well_id: "w3",
+        source: "manual",
+        value: 52.3,
+        instrument_value: null,
+        instrument_label: null,
+      });
+      let saved = false;
+      api.mockImplementation((req: { url: string; method: string }) => {
+        if (req.method === "POST") {
+          saved = true;
+          return Promise.resolve(change(added));
+        }
+        // The read that follows the save does not come back.
+        if (req.url.endsWith("/melting-analysis"))
+          return saved ? new Promise(() => {}) : Promise.resolve(analysis);
+        return Promise.resolve([]);
+      });
+      renderPanel();
+      await select("Position 3");
+      act(() => plotProps.at(-1)?.onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] }));
+      fireEvent.click(
+        within(screen.getByRole("region", { name: "Spot picked" })).getByRole("button", {
+          name: "Add a peak here",
+        }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      expect(await screen.findByRole("region", { name: "Peak picked" })).toHaveTextContent(
+        "Position 3 · peak at 52.3 °C · Manual · Unreviewed",
+      );
+      expect(screen.queryByRole("button", { name: "Add a peak here" })).not.toBeInTheDocument();
+    });
+
+    it("adding a peak says which assigned peak the chosen window replaces", async () => {
+      analysis = { ...analysis, steps: ASSIGNED };
+      renderPanel();
+      await select("Position 2");
+      fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
+      // Untouched, the window is left to the temperature and nothing is replaced.
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      expect(screen.queryByText(/saving replaces it/)).not.toBeInTheDocument();
+      choose("Window", "Main 50–85 °C");
+      expect(
+        screen.getByText(
+          "Main is currently the peak at 63.4 °C on this position; saving replaces it.",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("By temperature clears the assignment", async () => {
+      analysis = { ...analysis, steps: ASSIGNED };
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, "63.4")).getByRole("button", { name: "Assign" }));
+      choose("Window", "By temperature");
+      // The stored reason explained the assignment that is being given up.
+      expect(screen.getByLabelText("Reason")).toHaveValue("");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/melting-steps/p1/assignment",
+        method: "PUT",
+        data: { expected_version: 4, window: null },
+      });
+    });
+
+    it("an assignment to a name that is no window on the signal says so, with Clear", async () => {
+      // "Wide" is a window, but on the other signal.
+      analysis = { ...analysis, steps: [{ ...ASSIGNED[0], assigned_window: "Wide" }] };
+      renderPanel();
+      const table = await select("Position 2");
+      const stale = row(table, "63.4");
+      expect(
+        within(stale).getByText("Assigned to 'Wide', which is not a window on this signal"),
+      ).toBeInTheDocument();
+      expect(within(stale).queryByText(/→/)).not.toBeInTheDocument();
+      // It counts as unassigned: the form opens on By temperature.
+      fireEvent.click(within(stale).getByRole("button", { name: "Assign" }));
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      fireEvent.click(within(stale).getByRole("button", { name: "Clear" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/melting-steps/p1/assignment",
+        method: "PUT",
+        data: { expected_version: 4, window: null },
+      });
+    });
+  });
+
+  describe("rejecting one of a position's two counted peaks", () => {
+    const HINT = /^The other peak, at /;
+    /** Position 2's counted peaks on the shown signal, beside ones that do not
+     *  count: a rejected one, one on the other signal, another position's. */
+    const withPeaks = (values: number[], windows = WINDOWS) => {
+      analysis = {
+        ...analysis,
+        windows,
+        steps: [
+          ...values.map((value, i) =>
+            step({ id: `q${i}`, well_id: "w2", value, instrument_value: value }),
+          ),
+          step({ id: "qr", well_id: "w2", value: 70.1, status: "rejected", reason: "noise" }),
+          step({ id: "qb", well_id: "w2", channel_key: "b", value: 55.5 }),
+          step({ id: "qo", well_id: "w3", value: 61.2 }),
+        ],
+      };
+    };
+    const reject = async (value: string) => {
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, value)).getByRole("button", { name: "Reject" }));
+      expect(screen.getByLabelText("Reason")).toBeInTheDocument();
+    };
+
+    it("says the other peak may then be read as the Tm", async () => {
+      withPeaks([36.93, 41.2]);
+      await reject("41.2");
+      expect(
+        screen.getByText(
+          "The other peak, at 36.93 °C, may then be read as this position's Tm. Reject it too if it is not a real transition.",
+        ),
+      ).toBeInTheDocument();
+      // A hint only: the save is as it was.
+      fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "false mark" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0].data).toEqual({
+        expected_version: 1,
+        status: "rejected",
+        value: 41.2,
+        reason: "false mark",
+      });
+    });
+
+    it("says nothing with three counted peaks", async () => {
+      withPeaks([36.93, 41.2, 64]);
+      await reject("41.2");
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it("says nothing with one counted peak", async () => {
+      withPeaks([41.2]);
+      await reject("41.2");
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it("says nothing when the signal has no window", async () => {
+      // "Wide" is on the other signal.
+      withPeaks([36.93, 41.2], [WINDOWS[2]]);
+      await reject("41.2");
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+
+    it("says nothing in another form of the same peak", async () => {
+      withPeaks([36.93, 41.2]);
+      renderPanel();
+      const table = await select("Position 2");
+      fireEvent.click(within(row(table, "41.2")).getByRole("button", { name: "Correct" }));
+      expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
   });
 });

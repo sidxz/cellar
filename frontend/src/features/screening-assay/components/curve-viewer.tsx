@@ -51,13 +51,16 @@ import {
   curveStyle,
   focusIdFromHover,
   orderedPositions,
+  pickFromClick,
   positionName,
   positionsNotShown,
+  preferSelectedTrace,
   reportedColumns,
   runHeading,
   sameDateTags,
   tableRows,
-  xFromClick,
+  xSpan,
+  ySpan,
 } from "../lib/curve-plot";
 import {
   COLOUR_SLOT_COUNT,
@@ -79,7 +82,7 @@ const PLOT_HEIGHT = "h-[400px]";
 // The run tab's narrow column: shorter, so the steps under it are on the first screen.
 const COMPACT_PLOT_STYLE = { width: "100%", height: 340 };
 const COMPACT_PLOT_HEIGHT = "h-[340px]";
-const NOTHING_SELECTED = "Select a sample in the results to see its trace and steps.";
+const NOTHING_SELECTED = "Select a sample in the results to see its trace and peaks.";
 
 function Field({
   label,
@@ -184,8 +187,10 @@ export interface CurveViewerProps {
   collapseReportedTable?: boolean;
   /** Temperature windows on the current signal, drawn as shaded bands. */
   windows?: readonly CurveBand[];
-  /** The x of a clicked point on the plot. */
-  onPlotClick?: (x: number) => void;
+  /** A click on a trace: its position (a selected one's, where its trace runs
+   *  through the spot clicked on an unselected trace), the x clicked, and the x
+   *  range in view (what the user zoomed to, else all the drawn traces cover). */
+  onPlotPick?: (pick: { wellId: string; x: number; visibleSpan: number }) => void;
   /** Narrow layout: Signal, View, the reference switch (with hideSelector) and
    *  a "Display" button (Markers, Color, Export) on one row; a shorter plot;
    *  a line naming the selection and a compact key instead of the legend. */
@@ -234,7 +239,7 @@ function CurveViewerBody({
   hideSelector = false,
   collapseReportedTable = false,
   windows,
-  onPlotClick,
+  onPlotPick,
   compactControls = false,
   belowPlot,
   scientistOf,
@@ -367,15 +372,59 @@ function CurveViewerBody({
     [],
   );
   const onUnhover = useCallback(() => flushSync(() => setFocusedId(null)), []);
+  // react-plotly re-attaches event handlers only on a render that changes the
+  // figure, so the plot's handlers never change and read what is current here.
+  // The y axis is drawn anew for each signal and view (its uirevision).
+  const yAxis = `${set.channel}:${set.view}`;
+  const latest = useRef({ onPlotPick, traces: figure?.data, selection, curves: set.curves, yAxis });
+  latest.current = { onPlotPick, traces: figure?.data, selection, curves: set.curves, yAxis };
+  // The ranges the user zoomed to; null while the plot shows all of an axis. Refs:
+  // a zoom changes what a click reaches, not anything drawn here.
+  const zoomSpan = useRef<number | null>(null);
+  const zoomY = useRef<{ span: number; axis: string } | null>(null);
+  const onRelayout = useCallback((ev: unknown) => {
+    const change = (ev ?? {}) as Record<string, unknown>;
+    /** The new span of an axis; null when it shows all again; undefined when left alone. */
+    const spanOf = (axis: "xaxis" | "yaxis") => {
+      const low = change[`${axis}.range[0]`];
+      const high = change[`${axis}.range[1]`];
+      if (typeof low === "number" && typeof high === "number") return Math.abs(high - low);
+      return change[`${axis}.autorange`] ? null : undefined;
+    };
+    const x = spanOf("xaxis");
+    if (x !== undefined) zoomSpan.current = x;
+    const y = spanOf("yaxis");
+    if (y !== undefined)
+      zoomY.current = y === null ? null : { span: y, axis: latest.current.yAxis };
+  }, []);
+  // A plot drawn anew (after the placeholder stood in for it) starts unzoomed.
+  const onInitialized = useCallback(() => {
+    zoomSpan.current = null;
+    zoomY.current = null;
+  }, []);
   // ponytail: Plotly fires a click only on a drawn point, so the value is the
   // nearest measured x; a click on empty plot area does nothing.
-  const onClick = useCallback(
-    (ev: unknown) => {
-      const x = xFromClick(ev);
-      if (x !== null) onPlotClick?.(x);
-    },
-    [onPlotClick],
-  );
+  const onClick = useCallback((ev: unknown) => {
+    const pick = pickFromClick(ev);
+    const { onPlotPick, traces = [], selection, curves, yAxis } = latest.current;
+    if (!pick || !onPlotPick) return;
+    // Plotly reports the nearest trace; where a selected trace runs through the
+    // same spot, the click is meant for the selection.
+    // ponytail: "the same spot" is within 4% of the y range in view, a tunable heuristic.
+    const ySpanInView = zoomY.current?.axis === yAxis ? zoomY.current.span : ySpan(traces);
+    const wellId =
+      pick.y === null
+        ? pick.wellId
+        : preferSelectedTrace(
+            { ...pick, y: pick.y },
+            selection.selected,
+            curves,
+            0.04 * ySpanInView,
+          );
+    flushSync(() =>
+      onPlotPick({ wellId, x: pick.x, visibleSpan: zoomSpan.current ?? xSpan(traces) }),
+    );
+  }, []);
 
   const colourOf = (id: string) => {
     const p = byId.get(id);
@@ -745,6 +794,8 @@ function CurveViewerBody({
             onHover={onHover}
             onUnhover={onUnhover}
             onClick={onClick}
+            onRelayout={onRelayout}
+            onInitialized={onInitialized}
           />
         </div>
       ) : (
@@ -795,11 +846,11 @@ function CurveViewerBody({
                 <>
                   <span>
                     <Swatch line colour={colours.neutral} />
-                    Reviewed step
+                    Reviewed peak
                   </span>
                   <span>
                     <Swatch line dash="dashed" colour={colours.neutral} />
-                    Unreviewed step
+                    Unreviewed peak
                   </span>
                   <span>
                     <Swatch line dash="dotted" colour={colours.neutral} />

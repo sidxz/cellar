@@ -4,8 +4,9 @@
  * Spec: docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md (Surface #7)
  *
  * Today's hit-criteria dialog shows one entry per readout-definition name
- * plus "Curve Class". A criterion for a DR readout silently meant "primary
- * intercept (the headline fitted_value)". With the protocol now declaring
+ * plus "Curve Class" (when the protocol has a dose-response readout). A
+ * criterion for a DR readout silently meant "primary intercept (the headline
+ * fitted_value)". With the protocol now declaring
  * multiple intercepts per DR readout (EC50, EC90, IC10, …), the LHS picker
  * needs to surface each intercept as its own option so a chemist can author
  * an "EC90 < 50" rule directly.
@@ -84,7 +85,9 @@ export function buildHitCriterionOptions(readouts: ReadoutDefinition[]): HitCrit
       });
     }
   }
-  out.push(CURVE_CLASS_OPTION);
+  // A curve class belongs to a fitted curve: without a dose-response readout
+  // no rule on it can apply.
+  if (readouts.some((rd) => rd.data_type === "dose_response")) out.push(CURVE_CLASS_OPTION);
   return out;
 }
 

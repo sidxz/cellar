@@ -6,7 +6,9 @@ import {
   bandFor,
   hitWells,
   isSeriesReadout,
+  limitsFor,
   meetsRule,
+  notEvaluated,
   runRulesOf,
   splitRunRules,
 } from "./melt-hits";
@@ -50,6 +52,9 @@ const cell = (well_id: string, tm: number | null, delta_tm: number | null) => ({
   tm,
   delta_tm,
   flags: [],
+  // With a Tm the server names the peak that gave it.
+  named_by: tm == null ? null : ("range" as const),
+  step_id: tm == null ? null : `${well_id}-peak`,
 });
 function analysis(windows: Record<string, ReturnType<typeof cell>[]>): MeltingAnalysis {
   return {
@@ -57,6 +62,7 @@ function analysis(windows: Record<string, ReturnType<typeof cell>[]>): MeltingAn
     edit_refusal: null,
     steps: [],
     step_checks: [],
+    outside_every_window: [],
     windows: Object.entries(windows).map(([window, positions]) => ({
       window,
       channel_key: window === "Other signal" ? "350nm" : "ratio",
@@ -148,6 +154,35 @@ describe("hitWells", () => {
   });
 });
 
+describe("notEvaluated", () => {
+  it("lists the samples missing a value an applicable rule needs", () => {
+    const data = analysis({
+      Main: [
+        cell("ref", 71.3, null),
+        cell("s1", 62.7, -8.6),
+        cell("s2", 70.5, -0.8),
+        cell("s3", null, null),
+        cell("c1", null, null),
+      ],
+    });
+    const { applicable } = splitRunRules([outside("ΔTm (Main)")], READOUTS);
+    // s3 has no ΔTm; the reference and the control are never listed.
+    expect([...notEvaluated(data, POSITIONS, applicable)]).toEqual(["s3"]);
+    expect(notEvaluated(data, POSITIONS, []).size).toBe(0);
+  });
+
+  it("with no reference lists every sample once, but not under a rule on Tm alone", () => {
+    const data = analysis({
+      Main: [cell("s1", 62.7, null), cell("s2", 70.5, null), cell("s3", 61, null)],
+      Low: [cell("s1", 30, null), cell("s2", 30, null)],
+    });
+    const rules = (...r: HitCriterion[]) => splitRunRules(r, READOUTS).applicable;
+    const both = rules(outside("ΔTm (Main)"), outside("ΔTm (Low)"));
+    expect([...notEvaluated(data, POSITIONS, both)]).toEqual(["s1", "s2", "s3"]);
+    expect(notEvaluated(data, POSITIONS, rules(rule("Tm (Main)", "gt", 65))).size).toBe(0);
+  });
+});
+
 describe("bandFor", () => {
   const split = (r: HitCriterion) => splitRunRules([r], READOUTS).applicable;
   it("draws the outside band from a not_between rule on the window's ΔTm", () => {
@@ -167,6 +202,20 @@ describe("bandFor", () => {
   it("has no band for another window or a rule on Tm", () => {
     expect(bandFor(split(outside("ΔTm (Main)")), "Low")).toBeNull();
     expect(bandFor(split(rule("Tm (Main)", "gt", 60)), "Main")).toBeNull();
+  });
+});
+
+describe("limitsFor", () => {
+  it("lists the numbers the rules on a window's measure compare against", () => {
+    const { applicable } = splitRunRules(
+      [outside("ΔTm (Main)"), rule("Tm (Main)", "gt", 60), rule("ΔTm (Low)", "lt", -1)],
+      READOUTS,
+    );
+    expect(limitsFor(applicable, "Main", "delta_tm")).toEqual([-2, 2]);
+    expect(limitsFor(applicable, "Main", "tm")).toEqual([60]);
+    expect(limitsFor(applicable, "Low", "delta_tm")).toEqual([-1]);
+    expect(limitsFor(applicable, "Low", "tm")).toEqual([]);
+    expect(limitsFor([], "Main", "delta_tm")).toEqual([]);
   });
 });
 

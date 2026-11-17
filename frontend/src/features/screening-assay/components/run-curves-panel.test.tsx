@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
@@ -8,6 +8,8 @@ const plotCalls: Array<{
   data: Array<Record<string, unknown>>;
   layout: Record<string, unknown>;
   style?: { height?: number };
+  onClick?: (ev: unknown) => void;
+  onRelayout?: (ev: unknown) => void;
 }> = [];
 const downloadImage = vi.fn();
 vi.mock("@/shared/lib/plotly", () => ({
@@ -26,10 +28,13 @@ vi.mock("../hooks/use-run-curves", () => ({
 // Melting steps are covered in melting-steps-panel.test.tsx. Without an
 // analysis (it failed to load) the viewer keeps its own position selector.
 const melting: { data?: MeltingAnalysis; isLoading?: boolean } = {};
+/** One spy for the three saves: add, review and assign. */
+const saveStep = vi.fn();
 vi.mock("../hooks/use-melting-analysis", () => ({
   useMeltingAnalysis: () => ({ ...melting, refetch: vi.fn() }),
-  useAddMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
-  useReviewMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
+  useAddMeltingStep: () => ({ mutate: saveStep, isPending: false }),
+  useReviewMeltingStep: () => ({ mutate: saveStep, isPending: false }),
+  useAssignMeltingStep: () => ({ mutate: saveStep, isPending: false }),
 }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("../test/test-data-grid")).TableGrid,
@@ -57,12 +62,23 @@ vi.mock("@/shared/hooks/use-workspace-members", () => ({
     data: [
       { user_id: "u1", name: "Ada Lovelace", email: "ada@lab.org" },
       { user_id: "u2", name: "", email: "grace@lab.org" },
+      { user_id: "u3", name: "Mary Anning", email: "mary@lab.org" },
     ],
   }),
 }));
 vi.mock("./edit-labelling-dialog", () => ({
   EditLabellingDialog: ({ open }: { open: boolean }) =>
     open ? <div data-testid="edit-labelling">edit labelling dialog</div> : null,
+}));
+
+// The naming dialog is covered in name-peaks-dialog.test.tsx; here, what it is given.
+const naming: { open: boolean; canRecalculate: boolean; set: { curves: Map<string, unknown> } }[] =
+  [];
+vi.mock("./name-peaks-dialog", () => ({
+  NamePeaksDialog: (props: (typeof naming)[number]) => {
+    naming.push(props);
+    return props.open ? <div data-testid="name-peaks" /> : null;
+  },
 }));
 
 const protocolData: { value: unknown } = { value: undefined };
@@ -173,6 +189,8 @@ function withAnalysis(cells: Record<string, Cell>, windows = 1) {
       tm: null,
       delta_tm: null,
       flags: [],
+      named_by: null,
+      step_id: null,
       ...cells[p.well_id],
     })),
   });
@@ -182,6 +200,7 @@ function withAnalysis(cells: Record<string, Cell>, windows = 1) {
     steps: [],
     windows: windows ? [win("Main")] : [],
     step_checks: [],
+    outside_every_window: [],
   };
 }
 
@@ -209,8 +228,10 @@ beforeEach(() => {
   canEdit.value = true;
   protocolData.value = PROTOCOL;
   setHitCriteria.mockReset();
+  saveStep.mockReset();
   melting.data = undefined;
   melting.isLoading = false;
+  naming.length = 0;
   plotCalls.length = 0;
   downloadImage.mockReset();
   useRunCurves.mockReset();
@@ -455,7 +476,8 @@ describe("RunCurvesPanel", () => {
       if (melting.data) {
         melting.data.steps = [
           { changed_by: "u2" } as MeltingAnalysis["steps"][number],
-          { changed_by: null } as MeltingAnalysis["steps"][number],
+          { changed_by: null, assigned_by: "u3" } as MeltingAnalysis["steps"][number],
+          { changed_by: null, assigned_by: null } as MeltingAnalysis["steps"][number],
         ];
       }
       exported.length = 0;
@@ -468,10 +490,40 @@ describe("RunCurvesPanel", () => {
             source: "run",
             format: "pdf",
             filename_hint: expect.stringMatching(/^run-.+-2026-11-13$/),
-            payload: { run_id: "r1", people: { u1: "Ada Lovelace", u2: "grace@lab.org" } },
+            payload: {
+              run_id: "r1",
+              people: { u1: "Ada Lovelace", u2: "grace@lab.org", u3: "Mary Anning" },
+            },
           },
         },
       ]);
+    });
+
+    it("offers the peak actions on a completed run", () => {
+      withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
+      (melting.data as MeltingAnalysis).steps = [
+        {
+          id: "s1",
+          well_id: "w2",
+          channel_key: "a",
+          source: "instrument",
+          value: 59,
+          instrument_value: 59,
+          instrument_label: null,
+          status: "unreviewed",
+          reason: null,
+          changed_by: null,
+          changed_at: null,
+          assigned_window: null,
+          assignment_reason: null,
+          assigned_by: null,
+          assigned_at: null,
+          version: 1,
+        },
+      ];
+      render(<RunCurvesPanel runId="r1" run={{ ...RUN, status: "completed" }} />);
+      for (const name of ["Accept", "Reject", "Correct", "Assign", "Add peak"])
+        expect(screen.getByRole("button", { name })).toBeEnabled();
     });
 
     it("selects the first position needing review on load", () => {
@@ -517,7 +569,7 @@ describe("RunCurvesPanel", () => {
       render(<RunCurvesPanel runId="r1" />);
       expect(lastPlot().style?.height).toBe(340);
       const line = screen.getByText("ABC-0000002 · Position 2 · 50 µM");
-      const steps = screen.getByRole("heading", { name: "Melting steps" });
+      const steps = screen.getByRole("heading", { name: "Peaks" });
       const values = screen.getByRole("button", { name: "Instrument values" });
       const follows = (a: Node, b: Node) =>
         !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -526,7 +578,7 @@ describe("RunCurvesPanel", () => {
       expect(follows(steps, values)).toBe(true);
       // A compact key stands in for the generic legend.
       const key = screen.getByTestId("curve-key");
-      for (const t of ["Reference", "Reviewed step", "Unreviewed step", "Onset"])
+      for (const t of ["Reference", "Reviewed peak", "Unreviewed peak", "Onset"])
         expect(within(key).getByText(t)).toBeInTheDocument();
       expect(screen.queryByText("Other positions")).toBeNull();
       fireEvent.click(gridRow("Position 3"), { metaKey: true });
@@ -546,15 +598,15 @@ describe("RunCurvesPanel", () => {
       withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
       render(<RunCurvesPanel runId="r1" />);
       expect(
-        screen.queryByText("Select a sample in the results to see its trace and steps."),
+        screen.queryByText("Select a sample in the results to see its trace and peaks."),
       ).not.toBeInTheDocument();
       fireEvent.click(gridRow("Position 2"), { metaKey: true });
       expect(selectedRows()).toEqual([]);
       // One message; no steps panel and no chart.
       expect(
-        screen.getAllByText("Select a sample in the results to see its trace and steps."),
+        screen.getAllByText("Select a sample in the results to see its trace and peaks."),
       ).toHaveLength(1);
-      expect(screen.queryByRole("heading", { name: "Melting steps" })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "Peaks" })).toBeNull();
       expect(screen.queryByText(/positions above/)).toBeNull();
     });
 
@@ -567,14 +619,47 @@ describe("RunCurvesPanel", () => {
       expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
     });
 
-    it("links the no-window note to the protocol's Setup tab", () => {
+    it("the no-window note opens the naming of the reference's peaks", () => {
       withAnalysis({}, 0);
       render(<RunCurvesPanel runId="r1" run={RUN} />);
-      expect(
-        screen.getByRole("link", {
-          name: "No temperature window on this signal — add one on the protocol's Setup tab",
-        }),
-      ).toHaveAttribute("href", "/assays/protocols/p1#setup");
+      expect(screen.queryByTestId("name-peaks")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
+      expect(screen.getByTestId("name-peaks")).toBeInTheDocument();
+    });
+
+    it("an editor names peaks on any run status, with every trace of the signal", () => {
+      withAnalysis({});
+      const draft = render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+      expect(naming.at(-1)).toMatchObject({
+        open: true,
+        runId: "r1",
+        protocolId: "p1",
+        analysis: melting.data,
+        canRecalculate: true,
+      });
+      // Nothing is selected or drawn, yet the reference's trace is there to propose from.
+      expect(naming.at(-1)?.set.curves.has("w1")).toBe(true);
+      draft.unmount();
+      // Naming changes the protocol, not the run: offered, but the run is not recalculated.
+      for (const run of [
+        { ...RUN, status: "approved" as const },
+        { ...RUN, is_locked: true },
+      ]) {
+        const view = render(<RunCurvesPanel runId="r1" run={run} />);
+        fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+        expect(naming.at(-1)).toMatchObject({ open: true, canRecalculate: false });
+        view.unmount();
+      }
+    });
+
+    it("a viewer is not offered the naming", () => {
+      canEdit.value = false;
+      withAnalysis({}, 0);
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
+      expect(naming).toHaveLength(0);
     });
 
     it("shows a placeholder while the results load", () => {
@@ -627,8 +712,79 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
     setup();
     fireEvent.click(gridRow("Position 2"));
     expect(screen.getByText("REG-1 · B2 — ΔTm (Main) by concentration")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt 10–30 °C" }));
     expect(screen.getByText("REG-1 · B2 — ΔTm (Alt) by concentration")).toBeInTheDocument();
+  });
+
+  describe("concentrations without a ΔTm", () => {
+    /** Batch b1 at 10, 50 and 100 µM (positions 2 to 4). */
+    const three = {
+      ...dosed,
+      positions: dosed.positions.map((p, i) =>
+        i === 3
+          ? {
+              ...p,
+              registration_number: "REG-1",
+              batch_id: "b1",
+              batch_number: "REG-1-B2",
+              dose: 100,
+            }
+          : p,
+      ),
+    };
+    const show = (cells: Parameters<typeof withAnalysis>[0]) => {
+      useRunCurves.mockImplementation(() => ({
+        data: three,
+        isLoading: false,
+        isPlaceholderData: false,
+      }));
+      withAnalysis(cells);
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(gridRow("Position 2"));
+    };
+
+    it("the chart's caption counts them", () => {
+      show({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 } });
+      expect(screen.getByText("No ΔTm at 1 of 3 concentrations")).toBeInTheDocument();
+    });
+
+    it("joins the count to the batch's series values", () => {
+      useRunCurves.mockImplementation(() => ({
+        data: three,
+        isLoading: false,
+        isPlaceholderData: false,
+      }));
+      withAnalysis({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 } });
+      (melting.data as MeltingAnalysis).windows[0].series = [
+        {
+          readout_id: "rd-max",
+          readout_name: "Max ΔTm (Main)",
+          measure: "max_delta_tm",
+          threshold: null,
+          concentration: null,
+          values: [{ batch_id: "b1", value: 4, qualifier: "=", concentration: 50 }],
+        },
+      ];
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(gridRow("Position 2"));
+      expect(
+        screen.getByText("Max ΔTm +4.0 °C at 50 µM · No ΔTm at 1 of 3 concentrations"),
+      ).toBeInTheDocument();
+    });
+
+    it("says so in place of the chart when fewer than two have one", () => {
+      show({ w2: { delta_tm: 2.5 } });
+      expect(
+        screen.getByText("No ΔTm at 2 of 3 concentrations; nothing to chart"),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
+    });
+
+    it("says nothing when every concentration has a ΔTm", () => {
+      show({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 }, w4: { delta_tm: 5 } });
+      expect(screen.getByText(/by concentration/)).toBeInTheDocument();
+      expect(screen.queryByText(/No ΔTm at/)).not.toBeInTheDocument();
+    });
   });
 
   it("shows the batch's stored series values under the chart title", () => {
@@ -689,7 +845,7 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       ["Main", true],
       ["Alt", false],
     ]);
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt" }));
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt 10–30 °C" }));
     expect(bands()).toEqual([
       ["Main", false],
       ["Alt", true],
@@ -733,5 +889,304 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       expect(get).not.toHaveBeenCalledWith("cellar.thermalShift.threshold");
       get.mockRestore();
     });
+  });
+});
+
+describe("RunCurvesPanel picking on the plot", () => {
+  // Traces from 20 to 90 °C, so a click reaches 1.4 °C while all of it is in view.
+  const wide = { ...curves, curves: curves.curves.map((c) => ({ ...c, x: [20, 55, 90] })) };
+  const peak = (id: string, value: number, status = "unreviewed") =>
+    ({
+      id,
+      well_id: "w2",
+      channel_key: "a",
+      source: "instrument",
+      value,
+      instrument_value: value,
+      instrument_label: null,
+      status,
+      reason: null,
+      changed_by: null,
+      changed_at: null,
+      assigned_window: null,
+      assignment_reason: null,
+      assigned_by: null,
+      assigned_at: null,
+      version: 1,
+    }) as MeltingAnalysis["steps"][number];
+
+  /** Position 2 selected, with peaks at 63.4 (accepted) and 48.1; the reference
+   *  (Position 1) is drawn too and has no peaks. Windows Main and Low. */
+  const setup = (over: Partial<MeltingAnalysis> = {}) => {
+    useRunCurves.mockImplementation((_runId: string, params: { view?: string }) => ({
+      data: params.view === "derivative" ? { ...wide, view: "derivative", window: 3.5 } : wide,
+      isLoading: false,
+      isPlaceholderData: false,
+    }));
+    withAnalysis({ w2: { tm: 63.4, delta_tm: 3.4 } });
+    const a = melting.data as MeltingAnalysis;
+    a.windows = [
+      { ...a.windows[0], low: 50, high: 85 },
+      { ...a.windows[0], window: "Low", low: 25, high: 50 },
+    ];
+    a.steps = [peak("p1", 63.4, "accepted"), peak("p2", 48.1)];
+    Object.assign(a, over);
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
+  };
+
+  /** The props whose handlers the plot has: react-plotly attaches the event
+   *  handlers of a render only when that render changes the figure. */
+  const attached = () => {
+    let at = plotCalls[0];
+    let previous = at;
+    for (const call of plotCalls) {
+      if (call.data !== previous.data || call.layout !== previous.layout) at = call;
+      previous = call;
+    }
+    return at;
+  };
+  const clickTrace = (wellId: string, x: number) =>
+    act(() => attached().onClick?.({ points: [{ x, y: 1, data: { meta: wellId } }] }));
+  const zoom = (event: Record<string, unknown>) => act(() => attached().onRelayout?.(event));
+  const bar = (kind: "Peak" | "Spot") => screen.getByRole("region", { name: `${kind} picked` });
+  const noBar = () => screen.queryByRole("region", { name: /picked$/ }) === null;
+  const inBar = (kind: "Peak" | "Spot", name: string) =>
+    fireEvent.click(within(bar(kind)).getByRole("button", { name }));
+  /** The width of each peak line of Position 2, by temperature. */
+  const peakWidths = () =>
+    Object.fromEntries(
+      (lastPlot().layout.shapes as { type: string; x0: number; line: { width: number } }[])
+        .filter((sh) => sh.type === "line" && [48.1, 63.4].includes(sh.x0))
+        .map((sh) => [sh.x0, sh.line.width]),
+    );
+  const pickedRows = () =>
+    [...document.querySelectorAll("li[data-picked]")].map((li) => li.textContent);
+
+  it("a click near a peak picks it: the bar, a wider line, the list row; nothing is saved", () => {
+    setup();
+    expect(noBar()).toBe(true);
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · Instrument · Unreviewed");
+    expect(peakWidths()).toEqual({ 48.1: 4, 63.4: 1.5 });
+    expect(pickedRows()).toHaveLength(1);
+    expect(pickedRows()[0]).toContain("48.1");
+    // Picking another peak moves the pick.
+    clickTrace("w2", 63);
+    expect(bar("Peak")).toHaveTextContent("peak at 63.4 °C · Instrument · Accepted");
+    expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 4 });
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("a click away from every peak picks the spot", () => {
+    setup();
+    clickTrace("w2", 52.3046);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 52.3 °C");
+    expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 1.5 });
+    expect(pickedRows()).toEqual([]);
+  });
+
+  it("a click on a reference trace with no peaks picks a spot there, and can add a peak", () => {
+    setup();
+    clickTrace("w1", 52.3046);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 52.3 °C");
+    inBar("Spot", "Low 25–50 °C");
+    expect(screen.getByText("Add a peak")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Position" })).toHaveTextContent(
+      "Position 1 · Protein alone",
+    );
+    expect(screen.getByLabelText("Value")).toHaveValue(52.3);
+    expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Low 25–50 °C");
+    expect(saveStep).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(saveStep).toHaveBeenCalledWith(
+      { well_id: "w1", channel_key: "a", value: 52.3, assigned_window: "Low" },
+      expect.anything(),
+    );
+  });
+
+  it("a click on the reference's trace where the selected trace runs through it picks on the selected position", () => {
+    setup();
+    const click = (wellId: string, y: number) =>
+      act(() => attached().onClick?.({ points: [{ x: 55, y, data: { meta: wellId } }] }));
+    // Every trace runs through 2 at 55 °C; Position 2 is selected, the reference only drawn.
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 55 °C");
+    // Away from the selected trace, the click is the reference's.
+    click("w1", 2.5);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 55 °C");
+    // Zoomed in on y, the same distance is no longer the same spot.
+    zoom({ "yaxis.range[0]": 1.9, "yaxis.range[1]": 2.1 });
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 55 °C");
+    zoom({ "yaxis.autorange": true });
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 55 °C");
+    // Another view draws its y axis anew: a zoom of the old one went with it.
+    zoom({ "yaxis.range[0]": 1.9, "yaxis.range[1]": 2.1 });
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    click("w1", 2.05);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 55 °C");
+  });
+
+  describe("after a peak is added by hand", () => {
+    /** The save answers with the new peak, and the analysis read after it has the peak. */
+    const saved = (value: number) => {
+      const added = { ...peak("p3", value), source: "manual" as const, instrument_value: null };
+      const a = melting.data as MeltingAnalysis;
+      melting.data = { ...a, steps: [...a.steps, added] };
+      const callbacks = saveStep.mock.calls.at(-1)?.[1];
+      act(() => callbacks.onSuccess({ step: added, recalculated: true, compute_warning: null }));
+    };
+
+    it("the spot it was added at becomes the picked peak, with nothing more to add there", () => {
+      setup();
+      clickTrace("w2", 52.3046);
+      inBar("Spot", "Add a peak here");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      saved(52.3);
+      expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 52.3 °C · Manual · Unreviewed");
+      expect(screen.queryByRole("region", { name: "Spot picked" })).toBeNull();
+      expect(screen.queryByRole("button", { name: "Add a peak here" })).toBeNull();
+      expect(pickedRows()).toHaveLength(1);
+      expect(pickedRows()[0]).toContain("52.3");
+    });
+
+    it("from the list's Add peak with nothing picked, nothing is picked", () => {
+      setup();
+      fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
+      fireEvent.change(screen.getByLabelText("Value"), { target: { value: "52.3" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      saved(52.3);
+      expect(noBar()).toBe(true);
+      expect(pickedRows()).toEqual([]);
+    });
+  });
+
+  it("picks in the derivative view too", () => {
+    setup();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+  });
+
+  it('"This is Main" opens the assign form with Main chosen', () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Main 50–85 °C");
+    expect(screen.getByText("Assign the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+    expect(saveStep).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(saveStep).toHaveBeenCalledWith(
+      { stepId: "p2", body: { expected_version: 1, window: "Main" } },
+      expect.anything(),
+    );
+  });
+
+  it("Reject opens the reject form; Accept saves at once, as in the list", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Reject");
+    expect(screen.getByText("Reject the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(saveStep).not.toHaveBeenCalled();
+    inBar("Peak", "Accept");
+    expect(saveStep).toHaveBeenCalledWith(
+      { stepId: "p2", body: { expected_version: 1, status: "accepted", value: 48.1 } },
+      expect.anything(),
+    );
+  });
+
+  it("Move, then a click on the same trace, opens Correct with that temperature", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Move");
+    expect(
+      within(bar("Peak")).getByText("Click the new temperature on this position's trace."),
+    ).toBeInTheDocument();
+    clickTrace("w2", 52.3046);
+    expect(screen.getByText("Correct the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Value")).toHaveValue(52.3);
+    // The pick stays on the peak, and moving is over: the next click fills the form's value.
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+    expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
+    clickTrace("w2", 52.6);
+    expect(screen.getByLabelText("Value")).toHaveValue(52.6);
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("while moving, a click on another position's trace picks there instead", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Move");
+    clickTrace("w1", 52.3);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 52.3 °C");
+    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+    // Moving was given up: a click back on Position 2 only picks.
+    clickTrace("w2", 60);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 60 °C");
+    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+  });
+
+  it("Escape clears the pick", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Move");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(noBar()).toBe(true);
+    expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 1.5 });
+    expect(pickedRows()).toEqual([]);
+    // Moving went with it.
+    clickTrace("w2", 48.4);
+    expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
+    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+  });
+
+  it("the pick goes when its position is no longer drawn, or the signal changes", () => {
+    setup();
+    clickTrace("w1", 52.3);
+    expect(bar("Spot")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Reference traces" }));
+    expect(noBar()).toBe(true);
+    clickTrace("w2", 52.3);
+    expect(bar("Spot")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Signal B" }));
+    expect(noBar()).toBe(true);
+  });
+
+  it("zooming in makes picking finer; resetting the zoom makes it coarse again", () => {
+    setup();
+    clickTrace("w2", 48.6);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+    zoom({ "xaxis.range[0]": 46, "xaxis.range[1]": 51 });
+    clickTrace("w2", 48.6);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 48.6 °C");
+    // A zoom of the other axis leaves the reach as it is.
+    zoom({ "yaxis.range[0]": 0, "yaxis.range[1]": 1 });
+    clickTrace("w2", 48.6);
+    expect(bar("Spot")).toBeInTheDocument();
+    zoom({ "xaxis.autorange": true, "yaxis.autorange": true });
+    clickTrace("w2", 48.6);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+  });
+
+  it("on a run that cannot be edited, the bar shows the facts and why, and no buttons", () => {
+    const refusal = "Peaks cannot be changed on an approved run";
+    setup({ edit_refusal: refusal });
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · Instrument · Unreviewed");
+    expect(bar("Peak")).toHaveTextContent(refusal);
+    expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
+    clickTrace("w1", 52.3);
+    expect(bar("Spot")).toHaveTextContent(refusal);
+    expect(within(bar("Spot")).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("for a viewer, the bar shows the facts and that access is read-only, and no buttons", () => {
+    canEdit.value = false;
+    setup();
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+    expect(bar("Peak")).toHaveTextContent("Read-only access — peaks cannot be changed.");
+    expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
   });
 });

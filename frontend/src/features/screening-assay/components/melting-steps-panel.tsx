@@ -18,10 +18,15 @@ import type { ReviewMeltingStepRequest } from "@/shared/lib/api/model";
 import { formatDateTime } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { cn } from "@/shared/lib/utils";
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { apiReason } from "../hooks/use-instrument-import-wizard";
-import { useAddMeltingStep, useReviewMeltingStep } from "../hooks/use-melting-analysis";
+import {
+  useAddMeltingStep,
+  useAssignMeltingStep,
+  useReviewMeltingStep,
+} from "../hooks/use-melting-analysis";
 import type { CurvePosition } from "../lib/curve-plot";
+import { windowLabel } from "../lib/window-proposal";
 import type { MeltingAnalysis, MeltingStep, MeltingStepChange } from "../types";
 import { Notice } from "./labelling-table";
 
@@ -32,12 +37,34 @@ const STATUS_LABELS: Record<MeltingStep["status"], string> = {
 };
 
 type Form =
-  | { kind: "add"; wellId: string; reason: string }
+  /** A window named here is assigned in the same save. */
+  | { kind: "add"; wellId: string; window: string | null; reason: string }
   | { kind: "correct" | "reject"; step: MeltingStep; reason: string }
   /** Taking a rejected step back: the rejection reason is shown, not silently kept. */
-  | { kind: "restore"; step: MeltingStep; status: "accepted" | "unreviewed"; reason: string };
+  | { kind: "restore"; step: MeltingStep; status: "accepted" | "unreviewed"; reason: string }
+  /** Saying which window the step is the peak of; null leaves it to its temperature. */
+  | { kind: "assign"; step: MeltingStep; window: string | null; reason: string };
+
+/** The select's value for "no assignment"; Radix allows no empty value. */
+const BY_TEMPERATURE = "__by_temperature__";
 
 const baseline = (s: MeltingStep) => s.instrument_value ?? s.value;
+
+/** `Instrument · Unreviewed`. */
+export function peakKind(s: MeltingStep): string {
+  return `${s.source === "manual" ? "Manual" : "Instrument"} · ${STATUS_LABELS[s.status]}`;
+}
+
+/** What the plot's pick bar asks of the peak list: one of its forms, opened on
+ *  the peak (or, to add, the position) with the value or window given, or its
+ *  Accept. The list keeps the only forms and the only saves. */
+export type StepRequest = {
+  kind: "assign" | "correct" | "reject" | "add" | "accept";
+  stepId?: string;
+  wellId?: string;
+  value?: string;
+  window?: string | null;
+};
 
 /** A temperature as the value field shows it: two decimals, no trailing zeros. */
 export function stepInput(v: number): string {
@@ -54,6 +81,7 @@ function entered(step: MeltingStep, parsed: number): number {
 const FORM_TITLES = {
   reject: "Reject",
   correct: "Correct",
+  assign: "Assign",
   accepted: "Accept",
   unreviewed: "Mark unreviewed",
 } as const;
@@ -80,37 +108,54 @@ export interface MeltingStepsPanelProps {
   positions: readonly CurvePosition[];
   /** The current signal's key. */
   channel: string | null;
+  /** The temperature windows on the current signal. */
+  windows: readonly { window: string; low: number; high: number }[];
   /** The x unit of the current signal. */
   unit: string;
   /** The value field of the open Add or Correct form; held by the parent so a
    *  plot click can fill it. */
   value: string;
   onValueChange: (value: string) => void;
+  /** Taken once, then reported handled. */
+  request: StepRequest | null;
+  onRequestHandled: () => void;
+  /** The peak picked on the plot; its row is highlighted. */
+  pickedId: string | null;
+  /** A peak added by hand was saved. */
+  onAdded?: (step: MeltingStep) => void;
   onReload: () => Promise<unknown>;
 }
 
 /** Review the melting steps of the selected positions on the current signal:
- *  accept, reject, correct, or add one by hand. Nothing saves until Save or Accept. */
+ *  accept, reject, correct, assign to a window, or add one by hand. Nothing
+ *  saves until Save, Accept or Clear. */
 export function MeltingStepsPanel({
   runId,
   analysis,
   positions,
   channel,
+  windows,
   unit,
   value,
   onValueChange,
+  request,
+  onRequestHandled,
+  pickedId,
+  onAdded,
   onReload,
 }: MeltingStepsPanelProps) {
   const canEdit = useCanEdit();
   const editable = canEdit && !analysis.edit_refusal;
   const add = useAddMeltingStep(runId);
   const reviewStep = useReviewMeltingStep(runId);
+  const assign = useAssignMeltingStep(runId);
   const [form, setForm] = useState<Form | null>(null);
   const [error, setError] = useState<{ message: string; conflict: boolean } | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
   const ids = useId();
-  const busy = add.isPending || reviewStep.isPending || reloading;
+  const busy = add.isPending || reviewStep.isPending || assign.isPending || reloading;
+  const isWindow = (name: string | null) => windows.some((w) => w.window === name);
 
   const order = new Map(positions.map((p, i) => [p.well_id, i]));
   const byWell = new Map(positions.map((p) => [p.well_id, p]));
@@ -137,6 +182,17 @@ export function MeltingStepsPanel({
     start();
     reviewStep.mutate({ stepId: step.id, body }, callbacks);
   };
+  /** A null window clears the assignment; a blank reason is left out. */
+  const sendAssignment = (step: MeltingStep, window: string | null, why = "") => {
+    start();
+    assign.mutate(
+      {
+        stepId: step.id,
+        body: { expected_version: step.version, window, ...(why ? { reason: why } : {}) },
+      },
+      callbacks,
+    );
+  };
 
   const open = (next: Form, initialValue: string) => {
     start();
@@ -161,13 +217,15 @@ export function MeltingStepsPanel({
   const canSave =
     !busy &&
     !!form &&
-    (form.kind === "reject"
-      ? reason !== ""
-      : form.kind === "restore"
-        ? reason !== "" || form.step.value === baseline(form.step)
-        : form.kind === "add"
-          ? validValue && byWell.has(form.wellId)
-          : validValue && (reason !== "" || entered(form.step, parsed) === baseline(form.step)));
+    // An assignment needs no reason, and the server takes an unchanged one as no change.
+    (form.kind === "assign" ||
+      (form.kind === "reject"
+        ? reason !== ""
+        : form.kind === "restore"
+          ? reason !== "" || form.step.value === baseline(form.step)
+          : form.kind === "add"
+            ? validValue && byWell.has(form.wellId)
+            : validValue && (reason !== "" || entered(form.step, parsed) === baseline(form.step))));
 
   const save = () => {
     if (!form || !canSave) return;
@@ -179,13 +237,22 @@ export function MeltingStepsPanel({
           channel_key: channel ?? "",
           value: parsed,
           ...(reason ? { reason } : {}),
+          ...(form.window ? { assigned_window: form.window } : {}),
         },
-        callbacks,
+        {
+          ...callbacks,
+          onSuccess: (change) => {
+            callbacks.onSuccess(change);
+            onAdded?.(change.step);
+          },
+        },
       );
     } else if (form.kind === "reject") {
       send(form.step, review(form.step, "rejected", form.step.value, reason));
     } else if (form.kind === "restore") {
       send(form.step, review(form.step, form.status, form.step.value, reason));
+    } else if (form.kind === "assign") {
+      sendAssignment(form.step, form.window, reason);
     } else {
       send(form.step, review(form.step, "accepted", entered(form.step, parsed), reason));
     }
@@ -200,12 +267,75 @@ export function MeltingStepsPanel({
     }
   };
 
+  /** Opens on the window given, else on the step's own; a name that is no longer
+   *  a window counts as none. The stored reason goes with the stored window only. */
+  const openAssign = (
+    s: MeltingStep,
+    window = isWindow(s.assigned_window) ? s.assigned_window : null,
+  ) => {
+    const stored = window !== null && window === s.assigned_window;
+    open(
+      { kind: "assign", step: s, window, reason: stored ? (s.assignment_reason ?? "") : "" },
+      "",
+    );
+  };
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per request; the peaks and forms are read as they are when it arrives.
+  useEffect(() => {
+    if (!request) return;
+    onRequestHandled();
+    // As for the list's own buttons, which are off during a save.
+    if (!editable || busy) return;
+    if (request.kind === "add") {
+      const { wellId, window = null, value: at = "" } = request;
+      if (wellId) open({ kind: "add", wellId, window, reason: "" }, at);
+      return;
+    }
+    const s = analysis.steps.find((o) => o.id === request.stepId);
+    if (!s) return;
+    if (request.kind === "accept") setStatus(s, "accepted");
+    else if (request.kind === "assign") openAssign(s, request.window);
+    else {
+      const initial = request.kind === "correct" ? (request.value ?? stepInput(s.value)) : "";
+      open({ kind: request.kind, step: s, reason: s.reason ?? "" }, initial);
+    }
+  }, [request]);
+
   const formPosition = form && byWell.get(form.kind === "add" ? form.wellId : form.step.well_id);
+  // One peak per position and window: saving takes the window from the peak that has it.
+  const naming =
+    form?.kind === "assign"
+      ? { id: form.step.id, wellId: form.step.well_id, window: form.window }
+      : form?.kind === "add"
+        ? { id: null, wellId: form.wellId, window: form.window }
+        : null;
+  const replaced = naming?.window
+    ? analysis.steps.find(
+        (o) =>
+          o.id !== naming.id &&
+          o.well_id === naming.wellId &&
+          o.channel_key === channel &&
+          o.assigned_window === naming.window,
+      )
+    : undefined;
+
+  // Rejecting one of a position's two counted peaks leaves one, which a window
+  // may then take as the Tm. A hint only: the server names the peaks.
+  const leftAlone = (() => {
+    if (form?.kind !== "reject" || windows.length === 0) return undefined;
+    const counted = analysis.steps.filter(
+      (o) =>
+        o.well_id === form.step.well_id && o.channel_key === channel && o.status !== "rejected",
+    );
+    return counted.length === 2 && counted.some((o) => o.id === form.step.id)
+      ? counted.find((o) => o.id !== form.step.id)
+      : undefined;
+  })();
 
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-3">
-        <h3 className="text-sm font-medium">Melting steps</h3>
+        <h3 className="text-sm font-medium">Peaks</h3>
         {editable && positions.length > 0 && (
           <Button
             type="button"
@@ -213,9 +343,11 @@ export function MeltingStepsPanel({
             size="sm"
             className="ml-auto"
             disabled={busy}
-            onClick={() => open({ kind: "add", wellId: positions[0].well_id, reason: "" }, "")}
+            onClick={() =>
+              open({ kind: "add", wellId: positions[0].well_id, window: null, reason: "" }, "")
+            }
           >
-            Add step
+            Add peak
           </Button>
         )}
       </div>
@@ -224,12 +356,12 @@ export function MeltingStepsPanel({
         <p className="text-sm text-muted-foreground">{analysis.edit_refusal}</p>
       )}
 
-      <ul aria-label="Melting steps" className="divide-y rounded-md border text-sm">
+      <ul aria-label="Peaks" className="divide-y rounded-md border text-sm">
         {rows.length === 0 ? (
           <li className="p-2 text-muted-foreground">
             {positions.length === 0
-              ? "Select a position to review its melting steps."
-              : "The selected positions have no melting steps on this signal."}
+              ? "Select a position to review its peaks."
+              : "The selected positions have no peaks on this signal."}
           </li>
         ) : (
           rows.map((s) => {
@@ -238,8 +370,10 @@ export function MeltingStepsPanel({
             return (
               <li
                 key={s.id}
+                data-picked={s.id === pickedId || undefined}
                 className={cn(
                   "space-y-0.5 px-2 py-1.5",
+                  s.id === pickedId && "bg-primary/10",
                   rejected && "text-muted-foreground line-through",
                 )}
               >
@@ -252,11 +386,32 @@ export function MeltingStepsPanel({
                     title={s.instrument_label ?? undefined}
                     className="no-underline"
                   >
-                    {`${s.source === "manual" ? "Manual" : "Instrument"} · ${STATUS_LABELS[s.status]}`}
+                    {peakKind(s)}
                   </Badge>
                   {s.instrument_value !== null && s.instrument_value !== s.value && (
                     <span className="text-xs text-muted-foreground">{`was ${fmt(s.instrument_value)}`}</span>
                   )}
+                  {s.assigned_window &&
+                    (isWindow(s.assigned_window) ? (
+                      <Badge variant="secondary" className="no-underline">
+                        {`→ ${s.assigned_window} (assigned)`}
+                      </Badge>
+                    ) : (
+                      <span className="flex items-center gap-x-1 text-xs text-muted-foreground no-underline">
+                        {`Assigned to '${s.assigned_window}', which is not a window on this signal`}
+                        {editable && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => sendAssignment(s, null)}
+                          >
+                            Clear
+                          </Button>
+                        )}
+                      </span>
+                    ))}
                   {editable && (
                     <span className="ml-auto flex flex-wrap gap-x-1 no-underline">
                       {s.status !== "accepted" && (
@@ -308,6 +463,15 @@ export function MeltingStepsPanel({
                       >
                         Correct
                       </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => openAssign(s)}
+                      >
+                        Assign
+                      </Button>
                     </span>
                   )}
                 </div>
@@ -336,13 +500,18 @@ export function MeltingStepsPanel({
         <div className="space-y-3 rounded-md border p-3">
           <p className="text-sm font-medium">
             {form.kind === "add"
-              ? "Add a melting step"
-              : `${FORM_TITLES[form.kind === "restore" ? form.status : form.kind]} the step at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
+              ? "Add a peak"
+              : `${FORM_TITLES[form.kind === "restore" ? form.status : form.kind]} the peak at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
           </p>
           {form.kind === "restore" && (
             <p className="text-xs text-muted-foreground">
-              The reason below was given when the step was rejected. Clear it or change it if it no
+              The reason below was given when the peak was rejected. Clear it or change it if it no
               longer applies.
+            </p>
+          )}
+          {leftAlone && (
+            <p className="text-xs text-muted-foreground">
+              {`The other peak, at ${fmt(leftAlone.value)} ${unit}, may then be read as this position's Tm. Reject it too if it is not a real transition.`}
             </p>
           )}
           <div className="flex flex-wrap items-end gap-3">
@@ -396,6 +565,33 @@ export function MeltingStepsPanel({
                 </div>
               </div>
             )}
+            {(form.kind === "assign" || (form.kind === "add" && windows.length > 0)) && (
+              <div className="flex flex-col gap-1.5">
+                <Label htmlFor={`${ids}-window`}>Window</Label>
+                <Select
+                  value={form.window ?? BY_TEMPERATURE}
+                  onValueChange={(v) => {
+                    const window = v === BY_TEMPERATURE ? null : v;
+                    // An untouched stored reason explained the assignment being given up.
+                    const givenUp =
+                      form.kind === "assign" && form.reason === (form.step.assignment_reason ?? "");
+                    setForm({ ...form, window, reason: givenUp ? "" : form.reason });
+                  }}
+                >
+                  <SelectTrigger id={`${ids}-window`} size="sm" className="w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {windows.map((w) => (
+                      <SelectItem key={w.window} value={w.window}>
+                        {windowLabel(w)}
+                      </SelectItem>
+                    ))}
+                    <SelectItem value={BY_TEMPERATURE}>By temperature</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="flex min-w-64 flex-1 flex-col gap-1.5">
               <Label htmlFor={`${ids}-reason`}>Reason</Label>
               <Input
@@ -406,6 +602,7 @@ export function MeltingStepsPanel({
                   form.kind === "reject"
                     ? "Required"
                     : form.kind === "add" ||
+                        form.kind === "assign" ||
                         (form.kind === "restore" && form.step.value === baseline(form.step))
                       ? "Optional"
                       : "Required when the value differs from the instrument's"
@@ -415,6 +612,11 @@ export function MeltingStepsPanel({
               />
             </div>
           </div>
+          {replaced && (
+            <p className="text-xs text-muted-foreground">
+              {`${replaced.assigned_window} is currently the peak at ${fmt(replaced.value)} ${unit} on this position; saving replaces it.`}
+            </p>
+          )}
           <div className="flex items-center gap-2">
             {(form.kind === "add" || form.kind === "correct") && (
               <span className="text-xs text-muted-foreground">

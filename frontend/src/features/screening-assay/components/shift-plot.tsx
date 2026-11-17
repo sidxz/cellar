@@ -4,13 +4,14 @@ import { CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
 import type { Band } from "../lib/melt-hits";
-import type { ShiftRow } from "../lib/melt-results";
+import { type ShiftRow, formatDelta } from "../lib/melt-results";
 import { GRID, saveAsSvg, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
 export function ShiftPlot({
   rows,
   hits,
   band,
+  limits,
   selected,
   onSelect,
 }: {
@@ -19,6 +20,9 @@ export function ShiftPlot({
   hits: ReadonlySet<string>;
   /** The rule on this window's ΔTm, drawn as a band or line; null draws none. */
   band: Band | null;
+  /** The numbers the run's rules compare this window's ΔTm against: a value
+   *  beside one is shown to two decimals. */
+  limits?: readonly number[];
   selected: ReadonlySet<string>;
   onSelect: (wellId: string) => void;
 }) {
@@ -36,6 +40,7 @@ export function ShiftPlot({
           x: rows.map((r) => r.deltaTm),
           y: rows.map((r) => r.label),
           customdata: rows.map((r) => r.wellId),
+          text: rows.map((r) => formatDelta(r.deltaTm, limits)),
           marker: {
             color: rows.map((r) => shiftColour(r.deltaTm, hits.has(r.wellId))),
             size: rows.map((r) => (selected.has(r.wellId) ? 11 : 8)),
@@ -44,7 +49,7 @@ export function ShiftPlot({
               color: selectedOutline(resolvedTheme),
             },
           },
-          hovertemplate: "%{y}: %{x:.1f} °C<extra></extra>",
+          hovertemplate: "%{y}: %{text} °C<extra></extra>",
         },
       ]}
       layout={{

@@ -1,4 +1,4 @@
-"""A run's melting analysis, and adding and reviewing its melting steps."""
+"""A run's melting analysis, and adding, reviewing and assigning its melting steps."""
 
 from __future__ import annotations
 
@@ -17,10 +17,15 @@ from cellar.application.screening.get_melting_analysis import (
 )
 from cellar.application.screening.manage_melting_steps import (
     AddMeltingStepCommand,
+    AssignMeltingStepCommand,
     MeltingStepChange,
     ReviewMeltingStepCommand,
 )
-from cellar.domain.screening_assay.melt_window import MeltMeasure, PositionWindowResult
+from cellar.domain.screening_assay.melt_window import (
+    MeltMeasure,
+    NamedBy,
+    PositionWindowResult,
+)
 from cellar.domain.screening_assay.melting_step import (
     MeltingStep,
     MeltingStepSource,
@@ -28,6 +33,7 @@ from cellar.domain.screening_assay.melting_step import (
 )
 from cellar.interface.dependencies import (
     AddMeltingStepDep,
+    AssignMeltingStepDep,
     AuthDep,
     GetMeltingAnalysisDep,
     ReviewMeltingStepDep,
@@ -49,6 +55,11 @@ class MeltingStepModel(BaseModel):
     reason: str | None
     changed_by: uuid.UUID | None
     changed_at: datetime | None
+    # The temperature window this step was assigned to by hand; null when it is named by range.
+    assigned_window: str | None
+    assignment_reason: str | None
+    assigned_by: uuid.UUID | None
+    assigned_at: datetime | None
     version: int
 
     @classmethod
@@ -65,6 +76,10 @@ class MeltingStepModel(BaseModel):
             reason=s.reason,
             changed_by=s.changed_by,
             changed_at=s.changed_at,
+            assigned_window=s.assigned_window,
+            assignment_reason=s.assignment_reason,
+            assigned_by=s.assigned_by,
+            assigned_at=s.assigned_at,
             version=s.version,
         )
 
@@ -74,11 +89,19 @@ class MeltWindowPositionModel(BaseModel):
     tm: float | None
     delta_tm: float | None
     flags: list[str]
+    # How the Tm was named and the step that supplied it; both null when there is no Tm.
+    named_by: NamedBy | None
+    step_id: uuid.UUID | None
 
     @classmethod
     def from_domain(cls, p: PositionWindowResult) -> MeltWindowPositionModel:
         return cls(
-            well_id=p.well_id, tm=p.tm, delta_tm=p.delta_tm, flags=[f.value for f in p.flags]
+            well_id=p.well_id,
+            tm=p.tm,
+            delta_tm=p.delta_tm,
+            flags=[f.value for f in p.flags],
+            named_by=p.named_by,
+            step_id=p.step_id,
         )
 
 
@@ -175,6 +198,8 @@ class MeltingAnalysisResponse(BaseModel):
     steps: list[MeltingStepModel]
     windows: list[MeltWindowModel]
     step_checks: list[StepCheckModel]
+    # Ids of counted steps that are assigned to no window and lie inside none on their signal.
+    outside_every_window: list[uuid.UUID]
 
     @classmethod
     def from_domain(cls, a: MeltingAnalysis) -> MeltingAnalysisResponse:
@@ -184,6 +209,7 @@ class MeltingAnalysisResponse(BaseModel):
             steps=[MeltingStepModel.from_domain(s) for s in a.steps],
             windows=[MeltWindowModel.from_domain(w) for w in a.windows],
             step_checks=[StepCheckModel.from_domain(c) for c in a.step_checks],
+            outside_every_window=list(a.outside_every_window),
         )
 
 
@@ -192,6 +218,8 @@ class AddMeltingStepRequest(BaseModel):
     channel_key: str = Field(min_length=1)
     value: float = Field(allow_inf_nan=False)
     reason: str | None = Field(None, max_length=500)
+    # Assign the new step to this window in the same save; the reason then serves both.
+    assigned_window: str | None = Field(None, max_length=60)
 
 
 class ReviewMeltingStepRequest(BaseModel):
@@ -199,6 +227,14 @@ class ReviewMeltingStepRequest(BaseModel):
     expected_version: int = Field(ge=1)
     status: MeltingStepStatus
     value: float = Field(allow_inf_nan=False)
+    reason: str | None = Field(None, max_length=500)
+
+
+class AssignMeltingStepRequest(BaseModel):
+    # The version the user read; a save over someone else's change is refused.
+    expected_version: int = Field(ge=1)
+    # A window of the run's protocol on the step's signal; null clears the assignment.
+    window: str | None = Field(max_length=60)
     reason: str | None = Field(None, max_length=500)
 
 
@@ -241,6 +277,7 @@ async def add_melting_step(
         channel_key=body.channel_key,
         value=body.value,
         reason=body.reason,
+        assigned_window=body.assigned_window,
     )
     return MeltingStepChangeResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
 
@@ -256,6 +293,21 @@ async def review_melting_step(
         expected_version=body.expected_version,
         status=body.status,
         value=body.value,
+        reason=body.reason,
+    )
+    return MeltingStepChangeResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
+
+
+@router.put("/melting-steps/{step_id}/assignment", response_model=MeltingStepChangeResponse)
+async def assign_melting_step(
+    step_id: uuid.UUID, body: AssignMeltingStepRequest, auth: AuthDep, uc: AssignMeltingStepDep
+) -> MeltingStepChangeResponse:
+    """Assign a melting step to a temperature window, or clear the assignment, then recalculate."""
+    cmd = AssignMeltingStepCommand(
+        workspace_id=auth.workspace_id,
+        step_id=step_id,
+        expected_version=body.expected_version,
+        window=body.window,
         reason=body.reason,
     )
     return MeltingStepChangeResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))

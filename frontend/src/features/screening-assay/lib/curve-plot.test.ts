@@ -11,12 +11,17 @@ import {
   curveSetFromPositions,
   curveSetFromRun,
   focusIdFromHover,
+  nearestPeak,
   orderedPositions,
+  pickFromClick,
   positionsNotShown,
+  preferSelectedTrace,
   reportedColumns,
   runHeading,
   sameDateTags,
   tableRows,
+  xSpan,
+  ySpan,
 } from "./curve-plot";
 
 function position(id: string, column: number, wellType: string, label: string | null) {
@@ -233,6 +238,25 @@ describe("buildCurveFigure", () => {
       expect(unrev.line).toMatchObject({ dash: "dash", width: 1.5, color: dark.reference });
       expect(rev.opacity).toBeCloseTo(0.9 * 1);
       expect(draw({ steps }, "w1")[0].line.width).toBe(2.5);
+    });
+
+    it("draws the picked step wider and undimmed, on screen only", () => {
+      const picked = new Map([
+        [
+          "w1",
+          [
+            { value: 36.6, reviewed: true, picked: true },
+            { value: 71.3, reviewed: false },
+          ],
+        ],
+      ]);
+      // Another position is under the pointer, so w1 is dimmed.
+      const [p, other] = draw({ steps: picked }, "w3");
+      expect(p.line).toMatchObject({ dash: "solid", width: 4 });
+      expect(p.opacity).toBe(1);
+      expect(other.line.width).toBe(1.5);
+      expect(other.opacity).toBeLessThan(0.5);
+      expect(draw({ steps: picked, canvas: "export" })[0].line.width).toBe(1.5);
     });
 
     it("other reported values are thin grey dots when steps are given", () => {
@@ -482,6 +506,90 @@ describe("focusIdFromHover", () => {
   it("reads the position id from the hovered trace", () => {
     expect(focusIdFromHover({ points: [{ data: { meta: "w3" } }] })).toBe("w3");
     expect(focusIdFromHover({})).toBeNull();
+  });
+});
+
+describe("picking on the plot", () => {
+  it("pickFromClick reads the position, the x and the y of the clicked point", () => {
+    expect(pickFromClick({ points: [{ x: 48.4, y: 2, data: { meta: "w2" } }] })).toEqual({
+      wellId: "w2",
+      x: 48.4,
+      y: 2,
+    });
+    expect(pickFromClick({ points: [{ x: 48.4, data: { meta: "w2" } }] })).toEqual({
+      wellId: "w2",
+      x: 48.4,
+      y: null,
+    });
+    expect(pickFromClick({ points: [{ x: 48.4, y: 2 }] })).toBeNull();
+    expect(pickFromClick({ points: [{ data: { meta: "w2" } }] })).toBeNull();
+    expect(pickFromClick({})).toBeNull();
+    expect(pickFromClick(null)).toBeNull();
+  });
+
+  it("nearestPeak picks the nearest peak within reach of the click", () => {
+    const peaks = [
+      { id: "low", value: 48.1 },
+      { id: "main", value: 63.4 },
+    ];
+    expect(nearestPeak(peaks, 48.4, 70)).toBe(peaks[0]);
+    expect(nearestPeak(peaks, 52, 70)).toBeNull();
+    expect(nearestPeak([], 48.4, 70)).toBeNull();
+    const close = [{ value: 48.1 }, { value: 49 }];
+    expect(nearestPeak(close, 48.7, 70)).toBe(close[1]);
+  });
+
+  it("nearestPeak reaches less far when zoomed in, and never under 0.3", () => {
+    const peaks = [{ value: 48.1 }];
+    expect(nearestPeak(peaks, 48.9, 70)).toBe(peaks[0]);
+    expect(nearestPeak(peaks, 48.9, 5)).toBeNull();
+    expect(nearestPeak(peaks, 48.3, 5)).toBe(peaks[0]);
+  });
+
+  it("xSpan and ySpan are the ranges the figure's traces cover", () => {
+    expect(xSpan(buildCurveFigure(base).data)).toBe(3);
+    expect(xSpan([])).toBe(0);
+    expect(ySpan(buildCurveFigure(base).data)).toBe(8);
+    expect(ySpan([])).toBe(0);
+  });
+});
+
+describe("preferSelectedTrace", () => {
+  // The reference rises from 1 to 3 while the sample falls from 3 to 1: they cross at 50, 2.
+  const traces = new Map([
+    ["ref", { x: [20, 80], y: [1, 3] }],
+    ["sample", { x: [20, 80], y: [3, 1] }],
+    ["other", { x: [20, 80], y: [2.05, 2.05] }],
+  ]);
+  const TOLERANCE = 0.08;
+  const at = (wellId: string, x: number, y: number, selected: string[]) =>
+    preferSelectedTrace({ wellId, x, y }, new Set(selected), traces, TOLERANCE);
+
+  it("a click where a selected trace crosses the clicked one belongs to the selected position", () => {
+    expect(at("ref", 50, 2, ["sample"])).toBe("sample");
+    // Between two measured points: the selected trace is read by interpolation.
+    expect(at("ref", 51, 2.033, ["sample"])).toBe("sample");
+  });
+
+  it("a click where the traces are far apart stays on the clicked position", () => {
+    expect(at("ref", 30, 1.333, ["sample"])).toBe("ref");
+    // Past the end of the selected trace there is nothing of it to mean.
+    expect(at("ref", 90, 2, ["sample"])).toBe("ref");
+  });
+
+  it("a click on a selected position's trace always stays", () => {
+    expect(at("ref", 50, 2, ["ref", "sample"])).toBe("ref");
+  });
+
+  it("skips a selected position with no curve on the signal", () => {
+    expect(at("ref", 50, 2, ["gone", "sample"])).toBe("sample");
+    expect(at("ref", 50, 2, ["gone"])).toBe("ref");
+  });
+
+  it("takes the nearest of several selected traces within reach", () => {
+    expect(at("ref", 50, 2, ["other", "sample"])).toBe("sample");
+    expect(at("ref", 50.3, 2.01, ["sample", "other"])).toBe("sample");
+    expect(at("ref", 51.4, 2.047, ["sample", "other"])).toBe("other");
   });
 });
 

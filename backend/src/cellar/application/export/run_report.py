@@ -3,8 +3,10 @@
 The results table (lib/melt-results.ts): one row per position with its Tm and ΔTm
 per window, the window status the page shows, and the run's hit call
 (lib/melt-hits.ts: a sample meeting every rule on a per-position Tm or ΔTm; a
-missing value fails its rule). Then the melting steps with their review, and
-every signal's traces, measured and as the derivative.
+missing value fails its rule). Then the peaks (melting steps) with their review
+and their assignment to a window, and every signal's traces, measured and as the
+derivative. Which peak gives a Tm, and how it was named, is the domain rule's
+answer (melt_window.evaluate_window); nothing here works it out again.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from cellar.application.screening.get_melting_analysis import (
 from cellar.application.screening.get_run_curves import GetRunCurves, GetRunCurvesQuery
 from cellar.application.screening.plate_map_reader import WellMapEntry
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.screening_assay.melt_window import MeltMeasure, WindowFlag
+from cellar.domain.screening_assay.melt_window import MeltMeasure, NamedBy, WindowFlag
 from cellar.domain.screening_assay.melting_step import MeltingStep, MeltingStepStatus
 from cellar.domain.screening_assay.repository import ProtocolRepository, RunRepository
 from cellar.domain.shared.errors import NotFoundError
@@ -34,12 +36,15 @@ from cellar.domain.shared.hit_criterion import HitCriterion
 
 # The page's status badges (melt-results-grid.tsx STATUS).
 REFERENCE = "Reference"
-SEVERAL_STEPS = "Several steps"
-NO_STEP = "No step"
+SEVERAL_STEPS = "Several peaks"
+NO_STEP = "No peak"
 NO_REFERENCE = "No reference"
 PROVISIONAL = "Provisional"
 REVIEWED = "Reviewed"
-DIFFERS = "step count differs from the reference"
+DIFFERS = "different number of peaks than the reference"
+
+# How a Tm was named; empty when the position has no Tm in the window.
+_NAMED = {NamedBy.RANGE: "By range", NamedBy.ASSIGNMENT: "Assigned", None: ""}
 
 _OPERATORS = {"gt": ">", "gte": "≥", "lt": "<", "lte": "≤"}
 
@@ -63,6 +68,7 @@ class RunCell:
     tm: float | None
     delta_tm: float | None
     status: str
+    named_by: str = ""  # "By range", "Assigned", or empty without a Tm
 
 
 @dataclass(frozen=True)
@@ -92,6 +98,11 @@ class RunStep:
     reason: str | None
     changed_by: str | None
     changed_at: datetime | None
+    # Set when the peak is assigned to a current window of its signal.
+    assigned_window: str | None = None
+    assignment_reason: str | None = None
+    assigned_by: str | None = None
+    assigned_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -270,7 +281,7 @@ class BuildRunReport:
             ),
             hit_rule=tuple(rule_text(r, units.get(r.readout_name)) for r in rules),
             rows=tuple(rows),
-            steps=tuple(_steps(analysis.steps, names, channels, people)),
+            steps=tuple(_steps(analysis, names, channels, people)),
             signals=tuple(signals),
         )
 
@@ -309,6 +320,7 @@ def _rows(
 ) -> list[RunRow]:
     differs = {c.channel_key: c.check.differs for c in analysis.step_checks}
     by_window = {w.window: w for w in analysis.windows}
+    peaks = {s.id: s for s in analysis.steps}
     rows: list[RunRow] = []
     for p in positions:
         cells: dict[str, RunCell] = {}
@@ -316,10 +328,13 @@ def _rows(
             r = next((x for x in w.result.positions if x.well_id == p.well_id), None)
             if r is None:
                 continue
-            status = _status(p.well_type, r.flags, _counting(w, p.well_id, analysis.steps))
+            # The peak behind the Tm is the one the rule names (r.step_id).
+            status = _status(p.well_type, r.flags, peaks.get(r.step_id))
             if p.well_id in differs.get(w.channel_key, ()):
                 status = f"{status} · {DIFFERS}"
-            cells[w.window] = RunCell(tm=r.tm, delta_tm=r.delta_tm, status=status)
+            cells[w.window] = RunCell(
+                tm=r.tm, delta_tm=r.delta_tm, status=status, named_by=_NAMED[r.named_by]
+            )
         rows.append(
             RunRow(
                 well_id=p.well_id,
@@ -354,22 +369,6 @@ def _hit(
     return True
 
 
-def _counting(w: WindowAnalysis, well_id: uuid.UUID, steps: tuple[MeltingStep, ...]):
-    """The step giving a position its Tm in a window: not rejected, on the
-    window's signal, inside it."""
-    return next(
-        (
-            s
-            for s in steps
-            if s.well_id == well_id
-            and s.channel_key == w.channel_key
-            and s.status != MeltingStepStatus.REJECTED
-            and w.low <= s.value <= w.high
-        ),
-        None,
-    )
-
-
 def _status(well_type: str, flags, counting: MeltingStep | None) -> str:
     if well_type == "reference":
         return REFERENCE
@@ -395,13 +394,21 @@ def _batch_suffix(p: WellMapEntry) -> str | None:
 
 
 def _steps(
-    steps: tuple[MeltingStep, ...],
+    analysis: MeltingAnalysis,
     names: Mapping[uuid.UUID, tuple[str, str]],
     channels: Mapping,
     people: Mapping[str, str],
 ) -> list[RunStep]:
-    return [
-        RunStep(
+    # An assignment to a name that is not a window of the peak's signal is stale:
+    # the rule ignores it, so the export shows the peak as unassigned.
+    current = {(w.channel_key, w.window) for w in analysis.windows}
+
+    def person(user_id: uuid.UUID | None) -> str | None:
+        return people.get(str(user_id)) or (str(user_id) if user_id else None)
+
+    def run_step(s: MeltingStep) -> RunStep:
+        assigned = (s.channel_key, s.assigned_window) in current
+        return RunStep(
             position=names.get(s.well_id, ("", ""))[0],
             sample=names.get(s.well_id, ("", ""))[1],
             signal=channels[s.channel_key].label if s.channel_key in channels else s.channel_key,
@@ -410,12 +417,15 @@ def _steps(
             status=s.status.value.capitalize(),
             instrument_value=s.instrument_value,
             reason=s.reason,
-            changed_by=people.get(str(s.changed_by))
-            or (str(s.changed_by) if s.changed_by else None),
+            changed_by=person(s.changed_by),
             changed_at=s.changed_at,
+            assigned_window=s.assigned_window if assigned else None,
+            assignment_reason=s.assignment_reason if assigned else None,
+            assigned_by=person(s.assigned_by) if assigned else None,
+            assigned_at=s.assigned_at if assigned else None,
         )
-        for s in steps
-    ]
+
+    return [run_step(s) for s in analysis.steps]
 
 
 def _unwrap(result):
