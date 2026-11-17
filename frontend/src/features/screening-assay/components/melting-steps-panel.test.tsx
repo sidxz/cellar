@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MeltingAnalysis, MeltingStep, RunCurves } from "../types";
@@ -320,7 +320,7 @@ describe("MeltingStepsPanel", () => {
     renderPanel();
     await select("Position 3");
     fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
-    plotProps.at(-1)?.onClick?.({ points: [{ x: 32.646001, y: 2 }] });
+    plotProps.at(-1)?.onClick?.({ points: [{ x: 32.646001, y: 2, data: { meta: "w3" } }] });
     await waitFor(() => expect(screen.getByLabelText("Value")).toHaveValue(32.65));
   });
 
@@ -398,7 +398,7 @@ describe("MeltingStepsPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
     const onClick = plotProps.at(-1)?.onClick;
     expect(onClick).toBeDefined();
-    onClick?.({ points: [{ x: 52.3, y: 2 }] });
+    onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] });
     await waitFor(() => expect(screen.getByLabelText("Value")).toHaveValue(52.3));
     expect(writes()).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -518,6 +518,41 @@ describe("MeltingStepsPanel", () => {
       expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
       expect(screen.getByLabelText("Reason")).toHaveValue("main transition");
       expect(screen.queryByText(replaces)).not.toBeInTheDocument();
+    });
+
+    it("a spot picked on the plot adds a peak and names it in the same save", async () => {
+      renderPanel();
+      await select("Position 3");
+      act(() => plotProps.at(-1)?.onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] }));
+      const spot = screen.getByRole("region", { name: "Spot picked" });
+      fireEvent.click(within(spot).getByRole("button", { name: "Main 50–85 °C" }));
+      expect(screen.getByLabelText("Value")).toHaveValue(52.3);
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+      expect(writes()).toHaveLength(0);
+      choose("Window", "Low 25–50 °C");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/runs/r1/melting-steps",
+        method: "POST",
+        data: { well_id: "w3", channel_key: "a", value: 52.3, assigned_window: "Low" },
+      });
+    });
+
+    it("adding a peak says which assigned peak the chosen window replaces", async () => {
+      analysis = { ...analysis, steps: ASSIGNED };
+      renderPanel();
+      await select("Position 2");
+      fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
+      // Untouched, the window is left to the temperature and nothing is replaced.
+      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      expect(screen.queryByText(/saving replaces it/)).not.toBeInTheDocument();
+      choose("Window", "Main 50–85 °C");
+      expect(
+        screen.getByText(
+          "Main is currently the peak at 63.4 °C on this position; saving replaces it.",
+        ),
+      ).toBeInTheDocument();
     });
 
     it("By temperature clears the assignment", async () => {

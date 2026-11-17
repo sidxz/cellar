@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
@@ -8,6 +8,8 @@ const plotCalls: Array<{
   data: Array<Record<string, unknown>>;
   layout: Record<string, unknown>;
   style?: { height?: number };
+  onClick?: (ev: unknown) => void;
+  onRelayout?: (ev: unknown) => void;
 }> = [];
 const downloadImage = vi.fn();
 vi.mock("@/shared/lib/plotly", () => ({
@@ -26,11 +28,13 @@ vi.mock("../hooks/use-run-curves", () => ({
 // Melting steps are covered in melting-steps-panel.test.tsx. Without an
 // analysis (it failed to load) the viewer keeps its own position selector.
 const melting: { data?: MeltingAnalysis; isLoading?: boolean } = {};
+/** One spy for the three saves: add, review and assign. */
+const saveStep = vi.fn();
 vi.mock("../hooks/use-melting-analysis", () => ({
   useMeltingAnalysis: () => ({ ...melting, refetch: vi.fn() }),
-  useAddMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
-  useReviewMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
-  useAssignMeltingStep: () => ({ mutate: vi.fn(), isPending: false }),
+  useAddMeltingStep: () => ({ mutate: saveStep, isPending: false }),
+  useReviewMeltingStep: () => ({ mutate: saveStep, isPending: false }),
+  useAssignMeltingStep: () => ({ mutate: saveStep, isPending: false }),
 }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("../test/test-data-grid")).TableGrid,
@@ -214,6 +218,7 @@ beforeEach(() => {
   canEdit.value = true;
   protocolData.value = PROTOCOL;
   setHitCriteria.mockReset();
+  saveStep.mockReset();
   melting.data = undefined;
   melting.isLoading = false;
   plotCalls.length = 0;
@@ -840,5 +845,246 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       expect(get).not.toHaveBeenCalledWith("cellar.thermalShift.threshold");
       get.mockRestore();
     });
+  });
+});
+
+describe("RunCurvesPanel picking on the plot", () => {
+  // Traces from 20 to 90 °C, so a click reaches 1.4 °C while all of it is in view.
+  const wide = { ...curves, curves: curves.curves.map((c) => ({ ...c, x: [20, 55, 90] })) };
+  const peak = (id: string, value: number, status = "unreviewed") =>
+    ({
+      id,
+      well_id: "w2",
+      channel_key: "a",
+      source: "instrument",
+      value,
+      instrument_value: value,
+      instrument_label: null,
+      status,
+      reason: null,
+      changed_by: null,
+      changed_at: null,
+      assigned_window: null,
+      assignment_reason: null,
+      assigned_by: null,
+      assigned_at: null,
+      version: 1,
+    }) as MeltingAnalysis["steps"][number];
+
+  /** Position 2 selected, with peaks at 63.4 (accepted) and 48.1; the reference
+   *  (Position 1) is drawn too and has no peaks. Windows Main and Low. */
+  const setup = (over: Partial<MeltingAnalysis> = {}) => {
+    useRunCurves.mockImplementation((_runId: string, params: { view?: string }) => ({
+      data: params.view === "derivative" ? { ...wide, view: "derivative", window: 3.5 } : wide,
+      isLoading: false,
+      isPlaceholderData: false,
+    }));
+    withAnalysis({ w2: { tm: 63.4, delta_tm: 3.4 } });
+    const a = melting.data as MeltingAnalysis;
+    a.windows = [
+      { ...a.windows[0], low: 50, high: 85 },
+      { ...a.windows[0], window: "Low", low: 25, high: 50 },
+    ];
+    a.steps = [peak("p1", 63.4, "accepted"), peak("p2", 48.1)];
+    Object.assign(a, over);
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
+  };
+
+  /** The props whose handlers the plot has: react-plotly attaches the event
+   *  handlers of a render only when that render changes the figure. */
+  const attached = () => {
+    let at = plotCalls[0];
+    let previous = at;
+    for (const call of plotCalls) {
+      if (call.data !== previous.data || call.layout !== previous.layout) at = call;
+      previous = call;
+    }
+    return at;
+  };
+  const clickTrace = (wellId: string, x: number) =>
+    act(() => attached().onClick?.({ points: [{ x, y: 1, data: { meta: wellId } }] }));
+  const zoom = (event: Record<string, unknown>) => act(() => attached().onRelayout?.(event));
+  const bar = (kind: "Peak" | "Spot") => screen.getByRole("region", { name: `${kind} picked` });
+  const noBar = () => screen.queryByRole("region", { name: /picked$/ }) === null;
+  const inBar = (kind: "Peak" | "Spot", name: string) =>
+    fireEvent.click(within(bar(kind)).getByRole("button", { name }));
+  /** The width of each peak line of Position 2, by temperature. */
+  const peakWidths = () =>
+    Object.fromEntries(
+      (lastPlot().layout.shapes as { type: string; x0: number; line: { width: number } }[])
+        .filter((sh) => sh.type === "line" && [48.1, 63.4].includes(sh.x0))
+        .map((sh) => [sh.x0, sh.line.width]),
+    );
+  const pickedRows = () =>
+    [...document.querySelectorAll("li[data-picked]")].map((li) => li.textContent);
+
+  it("a click near a peak picks it: the bar, a wider line, the list row; nothing is saved", () => {
+    setup();
+    expect(noBar()).toBe(true);
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · Instrument · Unreviewed");
+    expect(peakWidths()).toEqual({ 48.1: 4, 63.4: 1.5 });
+    expect(pickedRows()).toHaveLength(1);
+    expect(pickedRows()[0]).toContain("48.1");
+    // Picking another peak moves the pick.
+    clickTrace("w2", 63);
+    expect(bar("Peak")).toHaveTextContent("peak at 63.4 °C · Instrument · Accepted");
+    expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 4 });
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("a click away from every peak picks the spot", () => {
+    setup();
+    clickTrace("w2", 52.3046);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 52.3 °C");
+    expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 1.5 });
+    expect(pickedRows()).toEqual([]);
+  });
+
+  it("a click on a reference trace with no peaks picks a spot there, and can add a peak", () => {
+    setup();
+    clickTrace("w1", 52.3046);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 52.3 °C");
+    inBar("Spot", "Low 25–50 °C");
+    expect(screen.getByText("Add a peak")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Position" })).toHaveTextContent(
+      "Position 1 · Protein alone",
+    );
+    expect(screen.getByLabelText("Value")).toHaveValue(52.3);
+    expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Low 25–50 °C");
+    expect(saveStep).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(saveStep).toHaveBeenCalledWith(
+      { well_id: "w1", channel_key: "a", value: 52.3, assigned_window: "Low" },
+      expect.anything(),
+    );
+  });
+
+  it("picks in the derivative view too", () => {
+    setup();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+  });
+
+  it('"This is Main" opens the assign form with Main chosen', () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Main 50–85 °C");
+    expect(screen.getByText("Assign the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+    expect(saveStep).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(saveStep).toHaveBeenCalledWith(
+      { stepId: "p2", body: { expected_version: 1, window: "Main" } },
+      expect.anything(),
+    );
+  });
+
+  it("Reject opens the reject form; Accept saves at once, as in the list", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Reject");
+    expect(screen.getByText("Reject the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(saveStep).not.toHaveBeenCalled();
+    inBar("Peak", "Accept");
+    expect(saveStep).toHaveBeenCalledWith(
+      { stepId: "p2", body: { expected_version: 1, status: "accepted", value: 48.1 } },
+      expect.anything(),
+    );
+  });
+
+  it("Move, then a click on the same trace, opens Correct with that temperature", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Move");
+    expect(
+      within(bar("Peak")).getByText("Click the new temperature on this position's trace."),
+    ).toBeInTheDocument();
+    clickTrace("w2", 52.3046);
+    expect(screen.getByText("Correct the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Value")).toHaveValue(52.3);
+    // The pick stays on the peak, and moving is over: the next click fills the form's value.
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+    expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
+    clickTrace("w2", 52.6);
+    expect(screen.getByLabelText("Value")).toHaveValue(52.6);
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("while moving, a click on another position's trace picks there instead", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Move");
+    clickTrace("w1", 52.3);
+    expect(bar("Spot")).toHaveTextContent("Position 1 · 52.3 °C");
+    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+    // Moving was given up: a click back on Position 2 only picks.
+    clickTrace("w2", 60);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 60 °C");
+    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+  });
+
+  it("Escape clears the pick", () => {
+    setup();
+    clickTrace("w2", 48.4);
+    inBar("Peak", "Move");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(noBar()).toBe(true);
+    expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 1.5 });
+    expect(pickedRows()).toEqual([]);
+    // Moving went with it.
+    clickTrace("w2", 48.4);
+    expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
+    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+  });
+
+  it("the pick goes when its position is no longer drawn, or the signal changes", () => {
+    setup();
+    clickTrace("w1", 52.3);
+    expect(bar("Spot")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Reference traces" }));
+    expect(noBar()).toBe(true);
+    clickTrace("w2", 52.3);
+    expect(bar("Spot")).toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Signal B" }));
+    expect(noBar()).toBe(true);
+  });
+
+  it("zooming in makes picking finer; resetting the zoom makes it coarse again", () => {
+    setup();
+    clickTrace("w2", 48.6);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+    zoom({ "xaxis.range[0]": 46, "xaxis.range[1]": 51 });
+    clickTrace("w2", 48.6);
+    expect(bar("Spot")).toHaveTextContent("Position 2 · 48.6 °C");
+    // A zoom of the other axis leaves the reach as it is.
+    zoom({ "yaxis.range[0]": 0, "yaxis.range[1]": 1 });
+    clickTrace("w2", 48.6);
+    expect(bar("Spot")).toBeInTheDocument();
+    zoom({ "xaxis.autorange": true, "yaxis.autorange": true });
+    clickTrace("w2", 48.6);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+  });
+
+  it("on a run that cannot be edited, the bar shows the facts and why, and no buttons", () => {
+    const refusal = "Peaks cannot be changed on an approved run";
+    setup({ edit_refusal: refusal });
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · Instrument · Unreviewed");
+    expect(bar("Peak")).toHaveTextContent(refusal);
+    expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
+    clickTrace("w1", 52.3);
+    expect(bar("Spot")).toHaveTextContent(refusal);
+    expect(within(bar("Spot")).queryAllByRole("button")).toHaveLength(0);
+  });
+
+  it("for a viewer, the bar shows the facts and that access is read-only, and no buttons", () => {
+    canEdit.value = false;
+    setup();
+    clickTrace("w2", 48.4);
+    expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
+    expect(bar("Peak")).toHaveTextContent("Read-only access — peaks cannot be changed.");
+    expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
   });
 });

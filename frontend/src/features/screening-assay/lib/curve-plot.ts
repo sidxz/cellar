@@ -218,10 +218,12 @@ export function currentChannel(set: CurveSet) {
   return set.channels.find((c) => c.key === set.channel);
 }
 
-/** A counted melting step; reviewed ones are drawn solid, the rest dashed. */
+/** A counted melting step; reviewed ones are drawn solid, the rest dashed, and
+ *  the one picked on the plot wider. */
 export interface PlotStep {
   value: number;
   reviewed: boolean;
+  picked?: boolean;
 }
 
 /** A temperature window, drawn as a shaded band. */
@@ -319,12 +321,19 @@ export function buildCurveFigure(
         );
       continue;
     }
-    for (const st of steps.get(p.well_id) ?? [])
+    for (const st of steps.get(p.well_id) ?? []) {
+      // The pick is the screen's, not the figure's: an export draws it like the rest.
+      const picked = !!st.picked && !exporting;
       line(
         st.value,
-        { color: style.color, width: focused ? 2.5 : 1.5, dash: st.reviewed ? "solid" : "dash" },
-        0.9 * style.opacity,
+        {
+          color: style.color,
+          width: picked ? 4 : focused ? 2.5 : 1.5,
+          dash: st.reviewed ? "solid" : "dash",
+        },
+        picked ? 1 : 0.9 * style.opacity,
       );
+    }
     for (const r of reported.filter((r) => r.kind !== STEP_KIND))
       line(r.value, { color: CHART_AXIS.tick, width: 1, dash: "dot" }, 0.5);
   }
@@ -401,10 +410,44 @@ export function buildCurveFigure(
   };
 }
 
-/** The x of the clicked point, from a Plotly click event. */
-export function xFromClick(event: unknown): number | null {
-  const x = (event as { points?: { x?: unknown }[] } | null)?.points?.[0]?.x;
-  return typeof x === "number" ? x : null;
+/** The position of the clicked trace and the x clicked, from a Plotly click event. */
+export function pickFromClick(event: unknown): { wellId: string; x: number } | null {
+  const point = (event as { points?: { x?: unknown; data?: { meta?: unknown } }[] } | null)
+    ?.points?.[0];
+  const wellId = point?.data?.meta;
+  return typeof point?.x === "number" && typeof wellId === "string" ? { wellId, x: point.x } : null;
+}
+
+/** The peak nearest to a clicked x, if the click is near enough to mean it: within
+ *  2% of the x range in view, so zooming in picks finer, and never under 0.3. */
+export function nearestPeak<T extends { value: number }>(
+  peaks: readonly T[],
+  x: number,
+  visibleSpan: number,
+): T | null {
+  let nearest: T | null = null;
+  let distance = Math.max(0.3, 0.02 * visibleSpan);
+  for (const peak of peaks) {
+    const d = Math.abs(peak.value - x);
+    if (d <= distance) {
+      nearest = peak;
+      distance = d;
+    }
+  }
+  return nearest;
+}
+
+/** The x range a figure's traces cover; 0 without traces. */
+export function xSpan(traces: readonly Record<string, unknown>[]): number {
+  let low = Number.POSITIVE_INFINITY;
+  let high = Number.NEGATIVE_INFINITY;
+  for (const trace of traces) {
+    for (const x of trace.x as number[]) {
+      if (x < low) low = x;
+      if (x > high) high = x;
+    }
+  }
+  return high > low ? high - low : 0;
 }
 
 /** The position id of the curve under the pointer, from a Plotly hover event. */

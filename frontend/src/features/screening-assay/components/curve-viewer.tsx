@@ -51,13 +51,14 @@ import {
   curveStyle,
   focusIdFromHover,
   orderedPositions,
+  pickFromClick,
   positionName,
   positionsNotShown,
   reportedColumns,
   runHeading,
   sameDateTags,
   tableRows,
-  xFromClick,
+  xSpan,
 } from "../lib/curve-plot";
 import {
   COLOUR_SLOT_COUNT,
@@ -184,8 +185,9 @@ export interface CurveViewerProps {
   collapseReportedTable?: boolean;
   /** Temperature windows on the current signal, drawn as shaded bands. */
   windows?: readonly CurveBand[];
-  /** The x of a clicked point on the plot. */
-  onPlotClick?: (x: number) => void;
+  /** A click on a trace: its position, the x clicked, and the x range in view
+   *  (what the user zoomed to, else all the drawn traces cover). */
+  onPlotPick?: (pick: { wellId: string; x: number; visibleSpan: number }) => void;
   /** Narrow layout: Signal, View, the reference switch (with hideSelector) and
    *  a "Display" button (Markers, Color, Export) on one row; a shorter plot;
    *  a line naming the selection and a compact key instead of the legend. */
@@ -234,7 +236,7 @@ function CurveViewerBody({
   hideSelector = false,
   collapseReportedTable = false,
   windows,
-  onPlotClick,
+  onPlotPick,
   compactControls = false,
   belowPlot,
   scientistOf,
@@ -367,15 +369,35 @@ function CurveViewerBody({
     [],
   );
   const onUnhover = useCallback(() => flushSync(() => setFocusedId(null)), []);
+  // The x range the user zoomed to; null while the plot shows all of it. A ref:
+  // a zoom changes what a click reaches, not anything drawn here.
+  const zoomSpan = useRef<number | null>(null);
+  const onRelayout = useCallback((ev: unknown) => {
+    const change = (ev ?? {}) as Record<string, unknown>;
+    const low = change["xaxis.range[0]"];
+    const high = change["xaxis.range[1]"];
+    if (typeof low === "number" && typeof high === "number") {
+      zoomSpan.current = Math.abs(high - low);
+    } else if (change["xaxis.autorange"]) {
+      zoomSpan.current = null;
+    }
+  }, []);
+  // A plot drawn anew (after the placeholder stood in for it) starts unzoomed.
+  const onInitialized = useCallback(() => {
+    zoomSpan.current = null;
+  }, []);
+  // react-plotly re-attaches event handlers only on a render that changes the
+  // figure, so the click handler never changes and reads what is current here.
+  const latest = useRef({ onPlotPick, traces: figure?.data });
+  latest.current = { onPlotPick, traces: figure?.data };
   // ponytail: Plotly fires a click only on a drawn point, so the value is the
   // nearest measured x; a click on empty plot area does nothing.
-  const onClick = useCallback(
-    (ev: unknown) => {
-      const x = xFromClick(ev);
-      if (x !== null) onPlotClick?.(x);
-    },
-    [onPlotClick],
-  );
+  const onClick = useCallback((ev: unknown) => {
+    const pick = pickFromClick(ev);
+    const { onPlotPick, traces = [] } = latest.current;
+    if (!pick || !onPlotPick) return;
+    flushSync(() => onPlotPick({ ...pick, visibleSpan: zoomSpan.current ?? xSpan(traces) }));
+  }, []);
 
   const colourOf = (id: string) => {
     const p = byId.get(id);
@@ -745,6 +767,8 @@ function CurveViewerBody({
             onHover={onHover}
             onUnhover={onUnhover}
             onClick={onClick}
+            onRelayout={onRelayout}
+            onInitialized={onInitialized}
           />
         </div>
       ) : (

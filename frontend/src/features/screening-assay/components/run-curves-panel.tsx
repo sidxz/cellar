@@ -15,6 +15,7 @@ import {
   type PlotStep,
   currentChannel,
   curveSetFromRun,
+  nearestPeak,
   orderedPositions,
 } from "../lib/curve-plot";
 import { EMPTY_SELECTION, type SelectionState, applyClick } from "../lib/curve-selection";
@@ -36,16 +37,18 @@ import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
 import { MeltHitRule } from "./melt-hit-rule";
 import { MeltResultsPanel } from "./melt-results-panel";
-import { MeltingStepsPanel, stepInput } from "./melting-steps-panel";
+import { MeltingStepsPanel, type StepRequest, stepInput } from "./melting-steps-panel";
+import { type PeakPick, PeakPickBar } from "./peak-pick-bar";
 
 const PLOT_HEIGHT = "h-[400px]";
 
 /** The Traces tab: the results grid beside the trace viewer, one linked
  *  workspace. The grid picks the positions; the viewer overlays their traces
  *  for one signal with their melting steps as lines and the temperature
- *  windows as bands; under the plot, the steps are reviewed and the batch's
- *  ΔTm is charted by concentration. Without an analysis (it failed to load)
- *  the viewer keeps its own position selector. */
+ *  windows as bands; a click on a trace picks a peak or a spot, which a line
+ *  under the plot acts on through the step list's forms; under the plot, the
+ *  steps are reviewed and the batch's ΔTm is charted by concentration. Without
+ *  an analysis (it failed to load) the viewer keeps its own position selector. */
 const RUN_FORMATS: readonly ExportFormat[] = ["xlsx", "csv", "pdf"];
 
 export function RunCurvesPanel({
@@ -135,7 +138,26 @@ export function RunCurvesPanel({
   );
   // The value field of the open step form; a plot click fills it.
   const [stepValue, setStepValue] = useState("");
+  // What the last click on a trace picked. It selects only: every change is
+  // made through the step list, which this asks for a form (or Accept).
+  const [pick, setPick] = useState<PeakPick | null>(null);
+  const [moving, setMoving] = useState(false);
+  const [request, setRequest] = useState<StepRequest | null>(null);
+  const clearPick = useCallback(() => {
+    setPick(null);
+    setMoving(false);
+  }, []);
+  useEffect(() => {
+    if (!pick) return;
+    const onKey = (e: KeyboardEvent) => {
+      // An Escape that closed a menu or a dialog was meant for that.
+      if (e.key === "Escape" && !e.defaultPrevented) clearPick();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [pick, clearPick]);
   const channelKey = set?.channel ?? null;
+  const pickedId = pick?.stepId ?? null;
   const steps = useMemo(() => {
     if (!analysis) return undefined;
     const byWell = new Map<string, PlotStep[]>();
@@ -143,11 +165,11 @@ export function RunCurvesPanel({
       if (s.channel_key !== channelKey || s.status === "rejected") continue;
       byWell.set(s.well_id, [
         ...(byWell.get(s.well_id) ?? []),
-        { value: s.value, reviewed: s.status === "accepted" },
+        { value: s.value, reviewed: s.status === "accepted", picked: s.id === pickedId },
       ]);
     }
     return byWell;
-  }, [analysis, channelKey]);
+  }, [analysis, channelKey, pickedId]);
   // Once per run: with nothing selected yet, start on the row most worth a look.
   const [leadWindow, setLeadWindow] = useState<string | null>(null);
   const [shown, setShown] = useState<readonly string[]>([]);
@@ -210,19 +232,88 @@ export function RunCurvesPanel({
   const selectedPositions = orderedPositions(set).filter((p) => selection.selected.has(p.well_id));
   const editRefusal = run ? labellingEditRefusal(run) : null;
 
+  /** The peaks drawn for a position: counted, on the shown signal. */
+  const drawnPeaks = (wellId: string) =>
+    (analysis?.steps ?? []).filter(
+      (s) => s.well_id === wellId && s.channel_key === set.channel && s.status !== "rejected",
+    );
+  // The pick shows while its position is drawn and, for a peak, while the peak is.
+  const pickPosition = data.positions.find(
+    (p) =>
+      p.well_id === pick?.wellId &&
+      (selection.selected.has(p.well_id) || (showReferences && p.well_type === "reference")),
+  );
+  const pickedStep = (pick && drawnPeaks(pick.wellId).find((s) => s.id === pick.stepId)) ?? null;
+  const picked =
+    pick && pickPosition && (pick.stepId === null || pickedStep)
+      ? { ...pick, position: pickPosition, step: pickedStep }
+      : null;
+  // A click on a trace picks the nearest drawn peak of that position, else the
+  // spot; an open Add or Correct form takes the temperature either way.
+  // ponytail: with Markers off the peaks are not drawn yet can still be picked;
+  // telling would need the viewer to report its switch.
+  const onPlotPick = (at: { wellId: string; x: number; visibleSpan: number }) => {
+    setStepValue(stepInput(at.x));
+    if (!analysis) return;
+    setMoving(false);
+    if (moving && picked?.step && picked.wellId === at.wellId) {
+      setRequest({ kind: "correct", stepId: picked.step.id, value: stepInput(at.x) });
+      return;
+    }
+    const peak = nearestPeak(drawnPeaks(at.wellId), at.x, at.visibleSpan);
+    setPick({ wellId: at.wellId, x: at.x, stepId: peak?.id ?? null });
+  };
+  const ask = (next: StepRequest) => {
+    setMoving(false);
+    setRequest(next);
+  };
+
   // The grid is the selector; without an analysis (it failed) the viewer's own stays.
   const fallback = !analysis && !melting.isLoading;
+  const signalWindows = analysis?.windows.filter((w) => w.channel_key === set.channel) ?? [];
+  const unit = currentChannel(set)?.x_unit ?? "";
   const underPlot = analysis && selectedPositions.length > 0 && (
     <>
+      {picked && (
+        <PeakPickBar
+          pick={picked}
+          position={picked.position}
+          step={picked.step}
+          windows={signalWindows}
+          unit={unit}
+          refusal={
+            analysis.edit_refusal ||
+            (canEdit ? null : "Read-only access — peaks cannot be changed.")
+          }
+          moving={moving}
+          onAssign={(window) => ask({ kind: "assign", stepId: picked.step?.id, window })}
+          onAccept={() => ask({ kind: "accept", stepId: picked.step?.id })}
+          onReject={() => ask({ kind: "reject", stepId: picked.step?.id })}
+          onMove={() => setMoving((on) => !on)}
+          onAdd={(window) =>
+            ask({ kind: "add", wellId: picked.wellId, value: stepInput(picked.x), window })
+          }
+          onClear={clearPick}
+        />
+      )}
       <MeltingStepsPanel
         runId={runId}
         analysis={analysis}
-        positions={selectedPositions}
+        // A picked reference trace is drawn without being selected: its peaks
+        // are listed while it is picked, so the forms have their position.
+        positions={
+          picked && !selection.selected.has(picked.wellId)
+            ? [...selectedPositions, picked.position]
+            : selectedPositions
+        }
         channel={set.channel}
-        windows={analysis.windows.filter((w) => w.channel_key === set.channel)}
-        unit={currentChannel(set)?.x_unit ?? ""}
+        windows={signalWindows}
+        unit={unit}
         value={stepValue}
         onValueChange={setStepValue}
+        request={request}
+        onRequestHandled={() => setRequest(null)}
+        pickedId={picked?.stepId ?? null}
         onReload={melting.refetch}
       />
       {lead && anchor && series.length > 0 ? (
@@ -321,12 +412,16 @@ export function RunCurvesPanel({
             set={set}
             steps={steps}
             windows={windows}
-            onPlotClick={(x) => setStepValue(stepInput(x))}
+            onPlotPick={onPlotPick}
             showReferences={showReferences}
             onShowReferencesChange={setShowReferences}
             selection={selection}
             onSelectionChange={setSelection}
-            onChannelChange={setChannel}
+            onChannelChange={(key) => {
+              setChannel(key);
+              // The peaks, and so what a spot is, belong to the signal.
+              clearPick();
+            }}
             onViewChange={setView}
             onWindowChange={setDerivativeWindow}
             pending={isPlaceholderData}
