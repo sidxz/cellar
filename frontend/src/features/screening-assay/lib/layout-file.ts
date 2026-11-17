@@ -155,6 +155,8 @@ export interface LabelMatchApplication<T extends LabellingRow> {
   rows: T[];
   /** Table rows that took a compound. */
   matched: number;
+  /** Used table rows that had a compound before the answer was applied. */
+  alreadyMatched: number;
   /** Labels that named no registered compound, each once, in table order. */
   unmatched: string[];
 }
@@ -193,5 +195,10 @@ export function applyLabelMatches<T extends LabellingRow>(
     { rows: found, unrecognised_columns: [], calculated_columns_ignored: false },
     { allowUse: false, calculatedLocked: false },
   );
-  return { rows: applied.rows, matched: applied.filled, unmatched: [...unmatched] };
+  return {
+    rows: applied.rows,
+    matched: applied.filled,
+    alreadyMatched: rows.filter((r) => r.used && r.moleculeId).length,
+    unmatched: [...unmatched],
+  };
 }

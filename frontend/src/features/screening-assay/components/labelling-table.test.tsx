@@ -394,10 +394,13 @@ describe("LabellingTable Match from labels", () => {
     fireEvent.click(button());
   }
 
-  it("is enabled only when a position has a label and no compound", () => {
+  it("is enabled only when a position has a label and no compound, and says so when disabled", () => {
     // Position 1 has a label and a compound; 2 and 3 have no label.
     renderTable();
     expect(button()).toBeDisabled();
+    expect(button()).toHaveAttribute("title", "Every labeled position already has a compound.");
+    // The title of a disabled button shows only while it takes the pointer.
+    expect(button()).toHaveClass("disabled:pointer-events-auto");
     cleanup();
     renderTable({ rows: labelled });
     expect(button()).toBeEnabled();
@@ -439,11 +442,18 @@ describe("LabellingTable Match from labels", () => {
     for (const i of [0, 2, 4, 5]) expect(filled[i]).toBe(labelled[i]);
   });
 
-  it("says how many positions matched, that nothing is saved yet, and which labels found no compound", () => {
+  /** A second position that has a compound already. */
+  const alsoMatched: LabellingRow = { ...rows[0], key: "p0", positionLabel: "Position 0" };
+  const noneFound: PositionLabelMatchesResponse = {
+    matches: answer.matches.map((m) => ({ ...m, compound: null })),
+  };
+  const AMBER = "border-amber-500/30";
+
+  it("says how many positions matched, how many already were, that nothing is saved yet, and which labels found no compound", () => {
     renderTable({ rows: labelled });
     matchFromLabels((o) => o.onSuccess?.(answer));
     const notice = screen.getByText(
-      "Matched 2 positions from their labels. Nothing is saved until you press Import.",
+      "Matched 2 positions from their labels. 1 was already matched. Nothing is saved until you press Import.",
     );
     const unmatched = within(notice).getByText("No compound found for: DMSO, 160 CoA");
     expect(unmatched).toHaveClass("text-muted-foreground");
@@ -457,19 +467,81 @@ describe("LabellingTable Match from labels", () => {
     renderTable({ rows: labelled.slice(0, 2), showUse: false });
     matchFromLabels((o) => o.onSuccess?.(answer));
     expect(
-      screen.getByText("Matched 1 position from its label. Nothing is saved until you press Save."),
+      screen.getByText(
+        "Matched 1 position from its label. 1 was already matched. Nothing is saved until you press Save.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/No compound found for/)).not.toBeInTheDocument();
   });
 
-  it("says no label matched, and leaves the table alone, when none did", () => {
-    const { onReplaceRows } = renderTable({ rows: labelled });
-    matchFromLabels((o) =>
-      o.onSuccess?.({ matches: answer.matches.map((m) => ({ ...m, compound: null })) }),
+  it("counts several positions that were already matched in the plural", () => {
+    renderTable({ rows: [alsoMatched, ...labelled.slice(0, 2)] });
+    matchFromLabels((o) => o.onSuccess?.(answer));
+    expect(
+      screen.getByText(
+        "Matched 1 position from its label. 2 were already matched. Nothing is saved until you press Import.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("does not speak of positions already matched when there were none", () => {
+    renderTable({ rows: labelled.slice(1) });
+    matchFromLabels((o) => o.onSuccess?.(answer));
+    expect(
+      screen.getByText(
+        "Matched 2 positions from their labels. Nothing is saved until you press Import.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  // The wizard matches on its own when the file is read: pressing the button afterwards
+  // finds nothing new, which is not a failure.
+  it("says, without a warning, how many positions are already matched when no label found a new compound", () => {
+    const { onReplaceRows } = renderTable({
+      rows: [alsoMatched, rows[0], labelled[2], labelled[4]],
+    });
+    matchFromLabels((o) => o.onSuccess?.(noneFound));
+    const notice = screen.getByText(
+      "2 positions are already matched. No compound found for: DMSO, 160 CoA.",
     );
-    expect(screen.getByText("No label matched a registered compound.")).toBeInTheDocument();
-    expect(screen.queryByText(/No compound found for/)).not.toBeInTheDocument();
+    expect(notice).not.toHaveClass(AMBER);
+    expect(notice.className).not.toMatch(/amber|green|destructive/);
+    expect(screen.queryByText(/No label matched/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(onReplaceRows).not.toHaveBeenCalled();
+  });
+
+  it("counts one position that is already matched in the singular", () => {
+    renderTable({ rows: labelled });
+    matchFromLabels((o) => o.onSuccess?.(noneFound));
+    expect(
+      screen.getByText(
+        "1 position is already matched. No compound found for: SACC-0000002, DMSO, SACC-0000004, 160 CoA.",
+      ),
+    ).not.toHaveClass(AMBER);
+  });
+
+  it("warns that no label matched, lists the labels, and leaves the table alone, when no position has a compound", () => {
+    const { onReplaceRows } = renderTable({ rows: labelled.slice(1) });
+    matchFromLabels((o) => o.onSuccess?.(noneFound));
+    expect(
+      screen.getByText(
+        "No label matched a registered compound. No compound found for: SACC-0000002, DMSO, SACC-0000004, 160 CoA.",
+      ),
+    ).toHaveClass(AMBER);
+    expect(screen.queryByText(/already matched/)).not.toBeInTheDocument();
+    expect(onReplaceRows).not.toHaveBeenCalled();
+  });
+
+  it("leaves the list out when no label is left to report", () => {
+    // As when every label was edited while the answer was on its way.
+    renderTable({ rows: labelled.slice(1) });
+    matchFromLabels((o) => o.onSuccess?.({ matches: [] }));
+    expect(screen.getByText("No label matched a registered compound.")).toHaveClass(AMBER);
+    cleanup();
+    renderTable({ rows: labelled });
+    matchFromLabels((o) => o.onSuccess?.({ matches: [] }));
+    expect(screen.getByText("1 position is already matched.")).not.toHaveClass(AMBER);
   });
 
   it("lists the first 20 labels that found no compound and counts the rest", () => {
@@ -479,19 +551,36 @@ describe("LabellingTable Match from labels", () => {
       positionLabel: `Position ${i + 10}`,
       label: `U${i + 1}`,
     }));
-    renderTable({ rows: [...labelled, ...many] });
-    matchFromLabels((o) =>
-      o.onSuccess?.({
-        matches: [answer.matches[0], ...many.map((r) => ({ label: r.label, compound: null }))],
-      }),
-    );
+    const unknown = many.map((r) => ({ label: r.label, compound: null }));
     const listed = Array.from({ length: 20 }, (_, i) => `U${i + 1}`).join(", ");
+    renderTable({ rows: [...labelled, ...many] });
+    matchFromLabels((o) => o.onSuccess?.({ matches: [answer.matches[0], ...unknown] }));
     expect(screen.getByText(`No compound found for: ${listed} and 5 more`)).toBeInTheDocument();
+    cleanup();
+    renderTable({ rows: [rows[0], ...many] });
+    matchFromLabels((o) => o.onSuccess?.({ matches: unknown }));
+    expect(
+      screen.getByText(
+        `1 position is already matched. No compound found for: ${listed} and 5 more.`,
+      ),
+    ).toBeInTheDocument();
+    cleanup();
+    renderTable({ rows: many });
+    matchFromLabels((o) => o.onSuccess?.({ matches: unknown }));
+    expect(
+      screen.getByText(
+        `No label matched a registered compound. No compound found for: ${listed} and 5 more.`,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("is disabled, with the reason as its title, where the compound cannot change", () => {
     renderTable({ rows: labelled, showUse: false, calculatedLocked: "These cannot change now." });
     expect(button()).toBeDisabled();
+    expect(button()).toHaveAttribute("title", "These cannot change now.");
+    cleanup();
+    // With nothing to match either, the lock is still the reason given.
+    renderTable({ showUse: false, calculatedLocked: "These cannot change now." });
     expect(button()).toHaveAttribute("title", "These cannot change now.");
   });
 
