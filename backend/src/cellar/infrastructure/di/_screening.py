@@ -143,6 +143,7 @@ from cellar.application.screening.manage_protocol_references import (
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     AddTemperatureWindow,
+    GetReadoutUsage,
     RemoveReadoutDefinition,
     UpdateReadoutDefinition,
 )
@@ -316,6 +317,9 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_e
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_data_repository import (
     SQLAlchemyReadoutDataRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.readout_usage_reader import (
+    SQLAlchemyReadoutUsageReader,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.run_import_template_repository import (  # noqa: E501
     SQLAlchemyRunImportTemplateRepository,
@@ -522,15 +526,39 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(AddReadoutDefinition, _add_readout_def)
-    container.define(RemoveReadoutDefinition, _protocol_cmd(RemoveReadoutDefinition))
+
+    # The usage reader shares the use case's unit of work: the check and the
+    # change it allows are one transaction.
+    def _remove_readout_def(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return RemoveReadoutDefinition(
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            c[EventDispatcher],
+            usage_reader=SQLAlchemyReadoutUsageReader(uow),
+        )
+
+    container.define(RemoveReadoutDefinition, _remove_readout_def)
 
     def _update_readout_def(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return UpdateReadoutDefinition(
-            uow, SQLAlchemyProtocolRepository(uow), c[EventDispatcher], c[FormulaEvaluator]
+            uow,
+            SQLAlchemyProtocolRepository(uow),
+            c[EventDispatcher],
+            c[FormulaEvaluator],
+            usage_reader=SQLAlchemyReadoutUsageReader(uow),
         )
 
     container.define(UpdateReadoutDefinition, _update_readout_def)
+
+    def _get_readout_usage(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetReadoutUsage(
+            uow, SQLAlchemyProtocolRepository(uow), SQLAlchemyReadoutUsageReader(uow)
+        )
+
+    container.define(GetReadoutUsage, _get_readout_usage)
     container.define(AddTemperatureWindow, _protocol_cmd(AddTemperatureWindow))
 
     container.define(AddConditionDefinition, _protocol_cmd(AddConditionDefinition))

@@ -86,6 +86,7 @@ from cellar.application.screening.manage_protocol_references import (
 from cellar.application.screening.manage_readout_definitions import (
     AddReadoutDefinition,
     AddTemperatureWindow,
+    GetReadoutUsage,
     RemoveReadoutDefinition,
     UpdateReadoutDefinition,
 )
@@ -195,6 +196,7 @@ __all__ = [
     "GetProtocolPlateQcAveragesDep",
     "GetProtocolStatsDep",
     "GetProtocolTargetsDep",
+    "GetReadoutUsageDep",
     "GetRunCollectionGapDep",
     "GetRunCurvesDep",
     "GetRunDep",
@@ -351,6 +353,7 @@ RemoveReadoutDefinitionDep = Annotated[
 UpdateReadoutDefinitionDep = Annotated[
     UpdateReadoutDefinition, Depends(_get_use_case(UpdateReadoutDefinition))
 ]
+GetReadoutUsageDep = Annotated[GetReadoutUsage, Depends(_get_use_case(GetReadoutUsage))]
 AddTemperatureWindowDep = Annotated[
     AddTemperatureWindow, Depends(_get_use_case(AddTemperatureWindow))
 ]

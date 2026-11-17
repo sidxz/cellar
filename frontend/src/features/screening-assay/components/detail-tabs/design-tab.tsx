@@ -37,6 +37,7 @@ import {
   useAddConditionDefinition,
   useAddReadoutDefinition,
   useProtocols,
+  useReadoutUsage,
   useRemoveConditionDefinition,
   useRemoveControlLayout,
   useRemoveReadoutDefinition,
@@ -97,6 +98,14 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
   // Destructive / structural ops (remove, rename, replace existing
   // layout, ontology edits) — strict DRAFT only. Lock blocks DRAFT too.
   const canStructurallyEdit = isDraft && !isLocked;
+
+  // A published, unlocked protocol can still rename, restructure or remove a
+  // readout nothing uses. Until the usage has loaded, every readout counts as used.
+  const usageApplies = status === "active" && !isLocked;
+  const { data: readoutUsage } = useReadoutUsage(protocolId, usageApplies);
+  const usageOf = (rdId: string) => readoutUsage?.find((u) => u.readout_definition_id === rdId);
+  const canRestructureReadout = (rdId: string) =>
+    canStructurallyEdit || (usageApplies && usageOf(rdId)?.in_use === false);
 
   // --- Mutations ---
   const addReadoutDef = useAddReadoutDefinition(protocolId);
@@ -326,15 +335,19 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                             className="h-8 w-8"
                             onClick={() => openEditReadout(rd.id)}
                             title={
-                              isDraft
+                              canRestructureReadout(rd.id)
                                 ? "Edit"
-                                : "Edit (cosmetic fields only — rename / structural changes require a new version)"
+                                : `Edit (cosmetic fields only — rename / structural changes require a new version)${
+                                    usageOf(rd.id)?.in_use
+                                      ? `. In use: ${usageOf(rd.id)?.reasons.join("; ")}.`
+                                      : ""
+                                  }`
                             }
                           >
                             <Pencil className="h-4 w-4" />
                           </Button>
                         )}
-                        {canStructurallyEdit && (
+                        {canRestructureReadout(rd.id) && (
                           <Button
                             variant="ghost"
                             size="icon"
@@ -550,7 +563,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         protocol={protocol}
         protocolId={protocolId}
         editingReadoutId={null}
-        isDraft={isDraft}
+        canRestructure
         protocols={crossProtocols}
         form={rdForm}
         isSaving={addReadoutDef.isPending}
@@ -630,7 +643,8 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         protocol={protocol}
         protocolId={protocolId}
         editingReadoutId={editingReadoutId}
-        isDraft={isDraft}
+        canRestructure={editingReadoutId !== null && canRestructureReadout(editingReadoutId)}
+        inUseReasons={editingReadoutId ? usageOf(editingReadoutId)?.reasons : undefined}
         protocols={crossProtocols}
         form={rdForm}
         isSaving={updateReadoutDef.isPending}

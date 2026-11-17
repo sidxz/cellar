@@ -32,6 +32,11 @@ _CODE = r"[A-Z]{2,8}-\d+"
 _REF_RE = re.compile(rf"@(?:\{{({_CODE})\}}|({_CODE}))\.(?:\{{([^}}]+)\}}|(\w+))")
 
 
+def formula_refs(formula: str) -> list[tuple[str, str]]:
+    """The distinct ``(protocol code, readout name)`` pairs a formula refers to."""
+    return list(dict.fromkeys((m[1] or m[2], m[3] or m[4]) for m in _REF_RE.finditer(formula)))
+
+
 def binding_key(code: str, readout: str) -> str:
     """asteval identifier for a reference: PRT-00142 + IC50 nM -> PRT_00142__IC50_nM."""
     return re.sub(r"\W", "_", f"{code}__{readout}")
@@ -172,15 +177,4 @@ class CrossProtocolResolver:
 
     def _extract_refs(self, formula: str) -> list[tuple[str, str]]:
         """Return a deduplicated list of (protocol_name, readout_name) pairs."""
-        seen: set[tuple[str, str]] = set()
-        refs: list[tuple[str, str]] = []
-
-        for match in _REF_RE.finditer(formula):
-            protocol_name = match.group(1) or match.group(2)
-            readout_name = match.group(3) or match.group(4)
-            key = (protocol_name, readout_name)
-            if key not in seen:
-                seen.add(key)
-                refs.append(key)
-
-        return refs
+        return formula_refs(formula)
