@@ -418,7 +418,7 @@ class AcceptMeltingSteps(_StepUseCase):
                             step, changes, expected_version=expected_version, user_id=user_id
                         )
                         accepted.append(step)
-            except ConflictError as exc:
+            except (ConflictError, ValidationError) as exc:
                 return Failure(exc)  # leaves without a commit: nothing is saved
             skipped = len(input.steps) - len(accepted)
             if not accepted:
