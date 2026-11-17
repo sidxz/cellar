@@ -11,7 +11,7 @@ import type { ColDef, ICellRendererParams } from "ag-grid-community";
 // ---------------------------------------------------------------------------
 
 /** Default rendered thumbnail size (px) for the Structure column. */
-const STRUCTURE_THUMBNAIL_SIZE = 104;
+export const STRUCTURE_THUMBNAIL_SIZE = 104;
 
 /**
  * A non-sortable "Structure" column rendering a {@link StructureThumbnail}

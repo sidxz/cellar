@@ -20,8 +20,10 @@ import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
 import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
+import { StructuresToggle, useStructuresChoice } from "./structures-toggle";
 
 const COMPARE = "__compare__";
+const STRUCTURES_KEY = "cellar.traces.structures";
 
 export interface MeltResultsPanelProps {
   analysis: MeltingAnalysis;
@@ -70,6 +72,7 @@ export function MeltResultsPanel({
   const [compare, setCompare] = useState(false);
   const [filter, setFilter] = useState<ResultFilter>(null);
   const [view, setView] = useState<"table" | "plot">("table");
+  const [showStructures, setShowStructures] = useStructuresChoice(STRUCTURES_KEY);
 
   const windows = useMemo(
     () => analysis.windows.filter((w) => w.channel_key === channel),
@@ -82,6 +85,7 @@ export function MeltResultsPanel({
     [comparing, windows, lead],
   );
   const leadName = lead?.window ?? null;
+  const plotShown = view === "plot" && !comparing && !!lead;
   useEffect(() => {
     onLeadWindowChange?.(leadName);
   }, [leadName, onLeadWindowChange]);
@@ -179,16 +183,20 @@ export function MeltResultsPanel({
             onChange={setView}
           />
         </div>
-        {(onNamePeaks || headerAction) && (
-          <div className="ml-auto flex items-center gap-2">
-            {onNamePeaks && (
-              <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
-                Name peaks
-              </Button>
-            )}
-            {headerAction}
-          </div>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <StructuresToggle
+            pressed={showStructures}
+            onPressedChange={setShowStructures}
+            // The shift plot draws no structures.
+            disabled={plotShown}
+          />
+          {onNamePeaks && (
+            <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
+              Name peaks
+            </Button>
+          )}
+          {headerAction}
+        </div>
       </div>
       {hitRule}
       {summary ? (
@@ -225,7 +233,7 @@ export function MeltResultsPanel({
           )}
         </p>
       )}
-      {view === "plot" && !comparing && lead ? (
+      {plotShown ? (
         <ShiftPlot
           rows={shiftRows(
             rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
@@ -248,6 +256,7 @@ export function MeltResultsPanel({
           hits={hits}
           applicable={applicable}
           doseUnit={doseUnit}
+          showStructures={showStructures}
           selection={selection}
           onRowClick={(id, mods, order) =>
             onSelectionChange(applyClick(selection, order, id, mods))

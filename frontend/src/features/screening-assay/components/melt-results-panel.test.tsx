@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { formatDateTime } from "@/shared/lib/format-date";
 import type { CurvePosition } from "../lib/curve-plot";
@@ -555,6 +555,76 @@ describe("MeltResultsPanel", () => {
     expect(screen.queryByTestId("structure")).toBeNull();
     act(() => within(row("s1")).getByRole("link", { name: "CC-014538" }).focus());
     expect(screen.getAllByTestId("structure").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the Structures switch", () => {
+  beforeEach(() => localStorage.clear());
+  const toggle = () => screen.getByRole("button", { name: "Structures" });
+  const drawn = (id: string) => within(row(id)).queryAllByTestId("structure").length;
+
+  it("draws the structure in the Sample cell of each registered compound that has one", () => {
+    render(<Harness />);
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("structure")).toBeNull();
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(drawn("s1")).toBe(1);
+    // Registered without a structure, unregistered, and a reference without a compound.
+    expect([drawn("s3"), drawn("s2"), drawn("r1")]).toEqual([0, 0, 0]);
+    expect(within(row("s3")).getByRole("link", { name: "CC-000002" })).toBeInTheDocument();
+    expect(within(row("s2")).getByTitle("16:0-CoA (unregistered)")).toHaveTextContent(/^16:0-CoA$/);
+    expect(within(row("r1")).getByText("MadR")).toBeInTheDocument();
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("structure")).toBeNull();
+  });
+
+  it("draws a pinned reference's structure when the reference is a registered compound", () => {
+    const registered = positions.map((p) =>
+      p.well_id === "r1" ? { ...p, registration_number: "CC-000009", smiles: "c1ccccc1" } : p,
+    );
+    render(<Harness at={registered} />);
+    fireEvent.click(toggle());
+    expect(drawn("r1")).toBe(1);
+  });
+
+  it("remembers the choice in this browser", () => {
+    const first = render(<Harness />);
+    fireEvent.click(toggle());
+    expect(localStorage.getItem("cellar.traces.structures")).toBe("1");
+    first.unmount();
+
+    const second = render(<Harness />);
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(drawn("s1")).toBe(1);
+    fireEvent.click(toggle());
+    expect(localStorage.getItem("cellar.traces.structures")).toBe("0");
+    second.unmount();
+
+    render(<Harness />);
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("works for this visit when the browser refuses storage", () => {
+    const refuse = () => {
+      throw new Error("denied");
+    };
+    const get = vi.spyOn(localStorage, "getItem").mockImplementation(refuse);
+    const set = vi.spyOn(localStorage, "setItem").mockImplementation(refuse);
+    render(<Harness />);
+    fireEvent.click(toggle());
+    expect(drawn("s1")).toBe(1);
+    get.mockRestore();
+    set.mockRestore();
+  });
+
+  it("is off for the shift plot, which draws no structures", () => {
+    render(<Harness />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Shift plot" }));
+    expect(toggle()).toBeDisabled();
   });
 });
 

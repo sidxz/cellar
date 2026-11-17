@@ -4,15 +4,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ApplicableRule } from "../lib/melt-hits";
 import type { ResultRow } from "../lib/melt-results";
 
+vi.mock("@/shared/components/chemistry/structure-thumbnail", () => ({
+  StructureThumbnail: () => <div data-testid="structure" />,
+}));
+
 let defs: any[] = [];
+let height = 0;
 /** Draw the grid itself, not only capture its columns. */
 let drawGrid = false;
 vi.mock("@/shared/components/data-grid/data-grid", async (importOriginal) => {
   const { DataGrid } =
     await importOriginal<typeof import("@/shared/components/data-grid/data-grid")>();
   return {
-    DataGrid: (p: { columnDefs: any[]; rowData: unknown[] }) => {
+    DataGrid: (p: { columnDefs: any[]; rowData: unknown[]; height: number }) => {
       defs = p.columnDefs;
+      height = p.height;
       // jsdom has no layout, so the real grid draws every row instead of a screenful.
       return drawGrid ? <DataGrid {...p} suppressRowVirtualisation /> : null;
     },
@@ -118,6 +124,36 @@ describe("MeltResultsGrid values beside a limit of the hit rule", () => {
     show(["Main"], { applicable: [{ ...applicable[0], window: "Low" }] });
     expect(column("Main:delta").valueFormatter({ data: near, value: -2.02 })).toBe("−2.0");
     expect(column("Main:tm").cellRenderer({ data: near })).toBe("60.0");
+  });
+});
+
+describe("MeltResultsGrid with structures", () => {
+  const registered = {
+    ...row,
+    wellId: "w2",
+    identity: { ...row.identity, registrationNumber: "CC-1", smiles: "CCO" },
+  } as ResultRow;
+  const rows = { pinned: [], body: [row, registered] };
+
+  it("lets the Sample column size the rows only while structures are shown", () => {
+    show(["Main"], { rows });
+    expect(column("sample").autoHeight).toBeFalsy();
+    const plain = height;
+    show(["Main"], { rows, showStructures: true });
+    expect(column("sample").autoHeight).toBe(true);
+    // The grid makes room for the one row that carries a structure.
+    expect(height).toBeGreaterThan(plain + 100);
+    // Rows without a structure add nothing.
+    show(["Main"], { rows: { pinned: [], body: [row, row] }, showStructures: true });
+    expect(height).toBe(plain);
+  });
+
+  it("draws the structure in the Sample cell of the row that has one", async () => {
+    drawGrid = true;
+    show(["Main"], { rows, showStructures: true });
+    const drawing = await screen.findByTestId("structure");
+    expect(drawing.closest('[col-id="sample"]')).toHaveTextContent("CC-1");
+    expect(screen.getAllByTestId("structure")).toHaveLength(1);
   });
 });
 
