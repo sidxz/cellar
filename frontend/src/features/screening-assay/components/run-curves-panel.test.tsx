@@ -529,8 +529,10 @@ describe("RunCurvesPanel", () => {
         },
       ];
       render(<RunCurvesPanel runId="r1" run={{ ...RUN, status: "completed" }} />);
-      for (const name of ["Accept", "Reject", "Correct", "Assign", "Add peak"])
+      for (const name of ["Mark reviewed", "Exclude", "Edit temperature", "Add peak"])
         expect(screen.getByRole("button", { name })).toBeEnabled();
+      // The only peak, inside the only transition: there is nothing to choose.
+      expect(screen.queryByRole("button", { name: "Use as Tm" })).not.toBeInTheDocument();
     });
 
     it("selects the first position needing review on load", () => {
@@ -640,15 +642,15 @@ describe("RunCurvesPanel", () => {
       withAnalysis({}, 0);
       render(<RunCurvesPanel runId="r1" run={RUN} />);
       expect(screen.queryByTestId("name-peaks")).not.toBeInTheDocument();
-      const note = screen.getByText(/^No temperature window on this signal\./);
-      fireEvent.click(within(note).getByRole("button", { name: "Set up windows" }));
+      const note = screen.getByText(/^No transition named on this signal\./);
+      fireEvent.click(within(note).getByRole("button", { name: "Name transitions" }));
       expect(screen.getByTestId("name-peaks")).toBeInTheDocument();
     });
 
     it("an editor sets up windows on any run status, with every trace of the signal", () => {
       withAnalysis({});
       const draft = render(<RunCurvesPanel runId="r1" run={RUN} />);
-      fireEvent.click(screen.getByRole("button", { name: "Set up windows" }));
+      fireEvent.click(screen.getByRole("button", { name: "Name transitions" }));
       expect(naming.at(-1)).toMatchObject({
         open: true,
         runId: "r1",
@@ -665,7 +667,7 @@ describe("RunCurvesPanel", () => {
         { ...RUN, is_locked: true },
       ]) {
         const view = render(<RunCurvesPanel runId="r1" run={run} />);
-        fireEvent.click(screen.getByRole("button", { name: "Set up windows" }));
+        fireEvent.click(screen.getByRole("button", { name: "Name transitions" }));
         expect(naming.at(-1)).toMatchObject({ open: true, canRecalculate: false });
         view.unmount();
       }
@@ -675,14 +677,14 @@ describe("RunCurvesPanel", () => {
       canEdit.value = false;
       withAnalysis({}, 0);
       const none = render(<RunCurvesPanel runId="r1" run={RUN} />);
-      expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
+      expect(screen.getByText("No transition named on this signal.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /name transitions/i })).not.toBeInTheDocument();
       expect(naming).toHaveLength(0);
       none.unmount();
       // Nor the quiet Edit beside a window that is already there.
       withAnalysis({});
       render(<RunCurvesPanel runId="r1" run={RUN} />);
-      expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /name transitions/i })).not.toBeInTheDocument();
       expect(screen.queryByText("Edit")).not.toBeInTheDocument();
     });
 
@@ -990,13 +992,13 @@ describe("RunCurvesPanel picking on the plot", () => {
     setup();
     expect(noBar()).toBe(true);
     clickTrace("w2", 48.4);
-    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · Instrument · Unreviewed");
+    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · From instrument");
     expect(peakWidths()).toEqual({ 48.1: 4, 63.4: 1.5 });
     expect(pickedRows()).toHaveLength(1);
     expect(pickedRows()[0]).toContain("48.1");
     // Picking another peak moves the pick.
     clickTrace("w2", 63);
-    expect(bar("Peak")).toHaveTextContent("peak at 63.4 °C · Instrument · Accepted");
+    expect(bar("Peak")).toHaveTextContent("peak at 63.4 °C · From instrument · Reviewed");
     expect(peakWidths()).toEqual({ 48.1: 1.5, 63.4: 4 });
     expect(saveStep).not.toHaveBeenCalled();
   });
@@ -1013,13 +1015,13 @@ describe("RunCurvesPanel picking on the plot", () => {
     setup();
     clickTrace("w1", 52.3046);
     expect(bar("Spot")).toHaveTextContent("Position 1 · 52.3 °C");
-    inBar("Spot", "Low 25–50 °C");
+    inBar("Spot", "Add and use as Tm (Low)");
     expect(screen.getByText("Add a peak")).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Position" })).toHaveTextContent(
       "Position 1 · Protein alone",
     );
     expect(screen.getByLabelText("Value")).toHaveValue(52.3);
-    expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Low 25–50 °C");
+    expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent("Low 25–50 °C");
     expect(saveStep).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(saveStep).toHaveBeenCalledWith(
@@ -1068,7 +1070,7 @@ describe("RunCurvesPanel picking on the plot", () => {
       inBar("Spot", "Add a peak here");
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
       saved(52.3);
-      expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 52.3 °C · Manual · Unreviewed");
+      expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 52.3 °C · Placed by hand");
       expect(screen.queryByRole("region", { name: "Spot picked" })).toBeNull();
       expect(screen.queryByRole("button", { name: "Add a peak here" })).toBeNull();
       expect(pickedRows()).toHaveLength(1);
@@ -1093,12 +1095,12 @@ describe("RunCurvesPanel picking on the plot", () => {
     expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
   });
 
-  it('"This is Main" opens the assign form with Main chosen', () => {
+  it("Use as Tm (Main) opens that form with Main chosen", () => {
     setup();
     clickTrace("w2", 48.4);
-    inBar("Peak", "Main 50–85 °C");
-    expect(screen.getByText("Assign the peak at 48.1 °C on Position 2")).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+    inBar("Peak", "Use as Tm (Main)");
+    expect(screen.getByText("Use the peak at 48.1 °C on Position 2 as Tm")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent("Main 50–85 °C");
     expect(saveStep).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(saveStep).toHaveBeenCalledWith(
@@ -1107,20 +1109,20 @@ describe("RunCurvesPanel picking on the plot", () => {
     );
   });
 
-  it("Reject opens the reject form; Accept saves at once, as in the list", () => {
+  it("Exclude opens that form; Mark reviewed saves at once, as in the list", () => {
     setup();
     clickTrace("w2", 48.4);
-    inBar("Peak", "Reject");
-    expect(screen.getByText("Reject the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    inBar("Peak", "Exclude");
+    expect(screen.getByText("Exclude the peak at 48.1 °C on Position 2")).toBeInTheDocument();
     expect(saveStep).not.toHaveBeenCalled();
-    inBar("Peak", "Accept");
+    inBar("Peak", "Mark reviewed");
     expect(saveStep).toHaveBeenCalledWith(
       { stepId: "p2", body: { expected_version: 1, status: "accepted", value: 48.1 } },
       expect.anything(),
     );
   });
 
-  it("Move, then a click on the same trace, opens Correct with that temperature", () => {
+  it("Move, then a click on the same trace, opens Edit temperature with that temperature", () => {
     setup();
     clickTrace("w2", 48.4);
     inBar("Peak", "Move");
@@ -1128,7 +1130,9 @@ describe("RunCurvesPanel picking on the plot", () => {
       within(bar("Peak")).getByText("Click the new temperature on this position's trace."),
     ).toBeInTheDocument();
     clickTrace("w2", 52.3046);
-    expect(screen.getByText("Correct the peak at 48.1 °C on Position 2")).toBeInTheDocument();
+    expect(
+      screen.getByText("Edit the temperature of the peak at 48.1 °C on Position 2"),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Value")).toHaveValue(52.3);
     // The pick stays on the peak, and moving is over: the next click fills the form's value.
     expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
@@ -1144,11 +1148,11 @@ describe("RunCurvesPanel picking on the plot", () => {
     inBar("Peak", "Move");
     clickTrace("w1", 52.3);
     expect(bar("Spot")).toHaveTextContent("Position 1 · 52.3 °C");
-    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+    expect(screen.queryByText(/^Edit the temperature of the peak/)).toBeNull();
     // Moving was given up: a click back on Position 2 only picks.
     clickTrace("w2", 60);
     expect(bar("Spot")).toHaveTextContent("Position 2 · 60 °C");
-    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+    expect(screen.queryByText(/^Edit the temperature of the peak/)).toBeNull();
   });
 
   it("Escape clears the pick", () => {
@@ -1162,7 +1166,7 @@ describe("RunCurvesPanel picking on the plot", () => {
     // Moving went with it.
     clickTrace("w2", 48.4);
     expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
-    expect(screen.queryByText(/^Correct the peak/)).toBeNull();
+    expect(screen.queryByText(/^Edit the temperature of the peak/)).toBeNull();
   });
 
   it("the pick goes when its position is no longer drawn, or the signal changes", () => {
@@ -1197,7 +1201,7 @@ describe("RunCurvesPanel picking on the plot", () => {
     const refusal = "Peaks cannot be changed on an approved run";
     setup({ edit_refusal: refusal });
     clickTrace("w2", 48.4);
-    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · Instrument · Unreviewed");
+    expect(bar("Peak")).toHaveTextContent("Position 2 · peak at 48.1 °C · From instrument");
     expect(bar("Peak")).toHaveTextContent(refusal);
     expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
     clickTrace("w1", 52.3);

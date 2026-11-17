@@ -226,24 +226,25 @@ export function TemperatureWindowDialog({
     >
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>Add temperature window</DialogTitle>
+          <DialogTitle>Add transition</DialogTitle>
           <DialogDescription>
-            Adds readouts computed from each position's peaks inside the window.
+            Adds readouts computed from each position's peaks inside the transition's temperature
+            range.
           </DialogDescription>
         </DialogHeader>
 
         {channels.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            Import a run with traces first; the window's signal comes from its traces.
+            Import a run with traces first; the transition's signal comes from its traces.
           </p>
         ) : (
           <div className="grid gap-4 py-2">
             {windows.length > 0 && (
               <Segmented
-                label="Window"
+                label="Transition"
                 value={target}
                 options={[
-                  { value: NEW, label: "New window" },
+                  { value: NEW, label: "New transition" },
                   ...windows.map((w) => ({ value: w.window, label: w.window })),
                 ]}
                 onChange={chooseTarget}
@@ -341,7 +342,7 @@ export function TemperatureWindowDialog({
                 <span className="text-sm text-muted-foreground">{doseUnit}</span>
               </div>
               {(hasLowest || hasAt) && (
-                <p className="text-sm text-muted-foreground">This window already has it.</p>
+                <p className="text-sm text-muted-foreground">This transition already has it.</p>
               )}
             </fieldset>
             {add.error && (
@@ -359,7 +360,7 @@ export function TemperatureWindowDialog({
           {channels.length > 0 && (
             <Button onClick={submit} disabled={!canSave}>
               {add.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {fixed ? "Add values" : "Add window"}
+              {fixed ? "Add values" : "Add transition"}
             </Button>
           )}
         </DialogFooter>

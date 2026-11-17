@@ -370,7 +370,7 @@ export function ReadoutDataTable({
             }
             if (rd.melt_config) {
               const { window, low, high } = rd.melt_config;
-              return `From the peak named ${window} on each position (by range ${low}–${high} °C, or assigned). See the Traces tab.`;
+              return `From the peak named ${window} on each position (by temperature range ${low}–${high} °C, or chosen by hand). See the Traces tab.`;
             }
             const norm = primaryNormalization(rd);
             if (norm) {

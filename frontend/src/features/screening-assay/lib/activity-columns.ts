@@ -71,7 +71,7 @@ function meltLabel(rd: CatalogReadout): string {
 
 const windowHeader = (rd: CatalogReadout) => {
   const mc = rd.melt_config;
-  return mc ? `${mc.window} window · ${mc.low}–${mc.high} °C` : "";
+  return mc ? `${mc.window} transition · ${mc.low}–${mc.high} °C` : "";
 };
 
 export function activityCatalog(

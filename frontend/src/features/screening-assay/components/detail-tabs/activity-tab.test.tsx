@@ -104,7 +104,7 @@ describe("Activity grid", () => {
   it("groups a window under one header, one column per result, extras on demand", () => {
     show();
     const h = headers();
-    expect(h).toContain("Main window · 50–85 °C");
+    expect(h).toContain("Main transition · 50–85 °C");
     expect(h).toContain("Max ΔTm (°C)");
     expect(h).not.toContain("Tm (°C)");
     expect(h).not.toContain("Inflection Point #1 for Ratio (°C)");

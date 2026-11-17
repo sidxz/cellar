@@ -194,7 +194,7 @@ export function useAddTemperatureWindow(protocolId: string) {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
       // Every run of the protocol reads its windows' results from the protocol's windows.
       qc.invalidateQueries({ queryKey: MELTING_ANALYSIS_KEY });
-      showSuccess("Temperature window readouts added");
+      showSuccess("Transition readouts added");
     },
   });
 }

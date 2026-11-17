@@ -34,11 +34,11 @@ export function AcceptAllPeaks({
             disabled={accept.isPending || !!analysis.edit_refusal}
             title={
               analysis.edit_refusal ??
-              "Marks every peak that gives a Tm on this signal as reviewed. Positions with a peak issue are left out."
+              "Marks every peak that gives a Tm on this signal as reviewed. Positions that need a look are left out."
             }
             onClick={() => accept.mutate({ steps })}
           >
-            Accept all
+            Mark all reviewed
           </Button>
           <span className="text-muted-foreground tabular-nums">
             {steps.length === 1 ? "1 peak" : `${steps.length} peaks`}

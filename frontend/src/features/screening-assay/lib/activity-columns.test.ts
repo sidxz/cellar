@@ -65,17 +65,19 @@ describe("activityCatalog for a thermal-shift protocol", () => {
 
   it("groups a window's readouts under one header with short labels", () => {
     expect(by("Max ΔTm (Main)")).toMatchObject({
-      group: "Main window · 50–85 °C",
+      group: "Main transition · 50–85 °C",
       label: "Max ΔTm (°C)",
     });
     expect(by("Lowest shifting conc. (Main, ±2 °C)").label).toBe("Lowest shift ±2 °C (µM)");
     expect(by("ΔTm at 50 µM (Main)").label).toBe("ΔTm at 50 µM (°C)");
-    expect(by("Tm (Low)").group).toBe("Low window · 25–50 °C");
+    expect(by("Tm (Low)").group).toBe("Low transition · 25–50 °C");
     expect(by("Instrument Tm 2").group).toBe("Other readouts");
   });
 
   it("orders a window's series values first", () => {
-    const main = catalog.filter((c) => c.group === "Main window · 50–85 °C").map((c) => c.readout);
+    const main = catalog
+      .filter((c) => c.group === "Main transition · 50–85 °C")
+      .map((c) => c.readout);
     expect(main).toEqual([
       "Max ΔTm (Main)",
       "Lowest shifting conc. (Main, ±2 °C)",

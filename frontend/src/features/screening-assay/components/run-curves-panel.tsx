@@ -40,7 +40,7 @@ import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
 import { MeltHitRule } from "./melt-hit-rule";
 import { MeltResultsPanel } from "./melt-results-panel";
-import { MeltingStepsPanel, type StepRequest, stepInput } from "./melting-steps-panel";
+import { MeltingStepsPanel, type StepRequest, canUseAsTm, stepInput } from "./melting-steps-panel";
 import { NamePeaksDialog } from "./name-peaks-dialog";
 import { type PeakPick, PeakPickBar } from "./peak-pick-bar";
 
@@ -363,6 +363,12 @@ export function RunCurvesPanel({
           position={picked.position}
           step={picked.step}
           windows={signalWindows}
+          useAsTm={canUseAsTm(
+            picked.step ?? { well_id: picked.wellId, value: picked.x },
+            analysis,
+            set.channel,
+            signalWindows,
+          )}
           unit={unit}
           refusal={
             analysis.edit_refusal ||
@@ -390,6 +396,8 @@ export function RunCurvesPanel({
         positions={listed}
         channel={set.channel}
         windows={signalWindows}
+        lookedAt={lookedAt}
+        lead={lead}
         unit={unit}
         value={stepValue}
         onValueChange={setStepValue}

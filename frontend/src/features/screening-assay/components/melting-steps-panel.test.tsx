@@ -247,7 +247,7 @@ describe("MeltingStepsPanel", () => {
     const s1 = row(table, "36.6");
     expect(within(s1).getAllByText("36.6")).toHaveLength(1);
     expect(within(s1).getByText("Position 1")).toBeInTheDocument();
-    expect(within(s1).getByText("Instrument · Unreviewed")).toBeInTheDocument();
+    expect(within(s1).getByText("From instrument")).toBeInTheDocument();
     expect(within(s1).queryByText("B-001")).not.toBeInTheDocument();
     expect(within(s1).queryByText(/was/)).not.toBeInTheDocument();
 
@@ -258,7 +258,7 @@ describe("MeltingStepsPanel", () => {
 
     const s3 = row(table, "70.1");
     expect(s3.className).toContain("line-through");
-    expect(within(s3).getByText("Manual · Rejected")).toBeInTheDocument();
+    expect(within(s3).getByText("Placed by hand · Excluded")).toBeInTheDocument();
   });
 
   it("names the position only when several are selected", async () => {
@@ -278,7 +278,7 @@ describe("MeltingStepsPanel", () => {
     });
     renderPanel();
     const table = await select("Position 1");
-    fireEvent.click(within(row(table, "36.6")).getByRole("button", { name: "Reject" }));
+    fireEvent.click(within(row(table, "36.6")).getByRole("button", { name: "Exclude" }));
     const save = screen.getByRole("button", { name: "Save" });
     expect(save).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "bubble" } });
@@ -295,7 +295,7 @@ describe("MeltingStepsPanel", () => {
   it("Use instrument value needs no reason", async () => {
     renderPanel();
     const table = await select("Position 2");
-    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Correct" }));
+    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Edit temperature" }));
     expect(screen.getByLabelText("Value")).toHaveValue(64);
     expect(screen.getByLabelText("Reason")).toHaveValue("shoulder peak");
     fireEvent.click(screen.getByRole("button", { name: "Use instrument value" }));
@@ -317,7 +317,7 @@ describe("MeltingStepsPanel", () => {
     };
     renderPanel();
     const table = await select("Position 1");
-    fireEvent.click(within(row(table, "36.61")).getByRole("button", { name: "Correct" }));
+    fireEvent.click(within(row(table, "36.61")).getByRole("button", { name: "Edit temperature" }));
     expect(screen.getByLabelText("Value")).toHaveValue(36.61);
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(writes()).toHaveLength(1));
@@ -349,11 +349,11 @@ describe("MeltingStepsPanel", () => {
     expect(cell.className).toContain("truncate");
   });
 
-  it("re-sends the current value and reason on Accept", async () => {
+  it("re-sends the current value and reason on Mark reviewed", async () => {
     analysis = { ...analysis, steps: [{ ...steps[1], status: "unreviewed" }] };
     renderPanel();
     const table = await select("Position 2");
-    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Accept" }));
+    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Mark reviewed" }));
     await waitFor(() => expect(writes()).toHaveLength(1));
     expect(writes()[0].data).toEqual({
       expected_version: 2,
@@ -363,11 +363,15 @@ describe("MeltingStepsPanel", () => {
     });
   });
 
-  it("Accept on a rejected step pre-fills the rejection reason and lets it be cleared", async () => {
+  it("Mark reviewed on an excluded step pre-fills the exclusion reason and lets it be cleared", async () => {
     renderPanel();
     const table = await select("Position 2");
-    fireEvent.click(within(row(table, "70.1")).getByRole("button", { name: "Accept" }));
+    fireEvent.click(within(row(table, "70.1")).getByRole("button", { name: "Mark reviewed" }));
     expect(writes()).toHaveLength(0);
+    expect(screen.getByText("Mark the peak at 70.1 °C on Position 2 reviewed")).toBeInTheDocument();
+    expect(
+      screen.getByText(/^The reason below was given when the peak was excluded\./),
+    ).toBeInTheDocument();
     expect(screen.getByLabelText("Reason")).toHaveValue("noise");
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -379,10 +383,10 @@ describe("MeltingStepsPanel", () => {
     });
   });
 
-  it("Mark unreviewed sets an accepted step back, keeping its value and reason", async () => {
+  it("Unmark sets a reviewed step back, keeping its value and reason", async () => {
     renderPanel();
     const table = await select("Position 2");
-    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Mark unreviewed" }));
+    fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Unmark" }));
     await waitFor(() => expect(writes()).toHaveLength(1));
     expect(writes()[0].data).toEqual({
       expected_version: 2,
@@ -392,11 +396,11 @@ describe("MeltingStepsPanel", () => {
     });
   });
 
-  it("an unreviewed step offers no Mark unreviewed", async () => {
+  it("an unreviewed step offers no Unmark", async () => {
     renderPanel();
     const table = await select("Position 1");
     expect(
-      within(row(table, "36.6")).queryByRole("button", { name: "Mark unreviewed" }),
+      within(row(table, "36.6")).queryByRole("button", { name: "Unmark" }),
     ).not.toBeInTheDocument();
   });
 
@@ -426,7 +430,7 @@ describe("MeltingStepsPanel", () => {
     });
     renderPanel();
     const table = await select("Position 1");
-    fireEvent.click(within(row(table, "36.6")).getByRole("button", { name: "Accept" }));
+    fireEvent.click(within(row(table, "36.6")).getByRole("button", { name: "Mark reviewed" }));
     expect(await screen.findByText(message)).toBeInTheDocument();
     const reads = () => api.mock.calls.filter(([r]) => r.url.endsWith("/melting-analysis")).length;
     const before = reads();
@@ -446,18 +450,18 @@ describe("MeltingStepsPanel", () => {
     const table = await select("Position 1");
     expect(screen.getByText(refusal)).toBeInTheDocument();
     for (const name of [
-      "Accept",
-      "Reject",
-      "Correct",
-      "Mark unreviewed",
+      "Mark reviewed",
+      "Exclude",
+      "Edit temperature",
+      "Unmark",
       "Add peak",
-      "Assign",
+      "Use as Tm",
       "Clear",
     ]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(within(table).getByText("36.6")).toBeInTheDocument();
-    expect(within(table).getByText(/^Assigned to 'Gone'/)).toBeInTheDocument();
+    expect(within(table).getByText(/^Set as Tm of 'Gone'/)).toBeInTheDocument();
   });
 
   describe("assigning", () => {
@@ -468,15 +472,18 @@ describe("MeltingStepsPanel", () => {
     it("assigns a peak to a window of the shown signal, with no reason needed", async () => {
       renderPanel();
       const table = await select("Position 2");
-      fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Assign" }));
-      expect(screen.getByText("Assign the peak at 64 °C on Position 2")).toBeInTheDocument();
-      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      fireEvent.click(within(row(table, "64")).getByRole("button", { name: "Use as Tm" }));
+      expect(screen.getByText("Use the peak at 64 °C on Position 2 as Tm")).toBeInTheDocument();
+      // It starts on the transition whose range holds the peak.
+      expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent(
+        "Main 50–85 °C",
+      );
       expect(screen.getByLabelText("Reason")).toHaveAttribute("placeholder", "Optional");
-      fireEvent.keyDown(screen.getByRole("combobox", { name: "Window" }), { key: "Enter" });
+      fireEvent.keyDown(screen.getByRole("combobox", { name: "Transition" }), { key: "Enter" });
+      // No transition was set by hand, so there is none to give back to the temperature range.
       expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual([
         "Low 25–50 °C",
         "Main 50–85 °C",
-        "By temperature",
       ]);
       fireEvent.click(screen.getByRole("option", { name: "Low 25–50 °C" }));
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -488,12 +495,14 @@ describe("MeltingStepsPanel", () => {
       });
     });
 
-    it("offers Assign on a rejected peak and sends the reason when one is given", async () => {
+    it("offers Use as Tm on an excluded peak and sends the reason when one is given", async () => {
       renderPanel();
       const table = await select("Position 2");
-      fireEvent.click(within(row(table, "70.1")).getByRole("button", { name: "Assign" }));
-      choose("Window", "Main 50–85 °C");
-      // The rejection reason is the peak's, not the assignment's.
+      fireEvent.click(within(row(table, "70.1")).getByRole("button", { name: "Use as Tm" }));
+      expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent(
+        "Main 50–85 °C",
+      );
+      // The exclusion reason is the peak's, not the choice's.
       expect(screen.getByLabelText("Reason")).toHaveValue("");
       fireEvent.change(screen.getByLabelText("Reason"), { target: { value: " late transition " } });
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -509,21 +518,24 @@ describe("MeltingStepsPanel", () => {
       analysis = { ...analysis, steps: ASSIGNED };
       renderPanel();
       const table = await select("Position 2");
-      expect(within(row(table, "63.4")).getByText("→ Main (assigned)")).toBeInTheDocument();
-      expect(within(row(table, "48.1")).queryByText(/assigned/i)).not.toBeInTheDocument();
+      expect(within(row(table, "63.4")).getByText("Used as Tm (Main)")).toBeInTheDocument();
+      expect(within(row(table, "48.1")).queryByText(/Used as Tm/)).not.toBeInTheDocument();
 
       const replaces =
         "Main is currently the peak at 63.4 °C on this position; saving replaces it.";
-      fireEvent.click(within(row(table, "48.1")).getByRole("button", { name: "Assign" }));
+      fireEvent.click(within(row(table, "48.1")).getByRole("button", { name: "Use as Tm" }));
+      // It starts on Low, whose range holds it.
       expect(screen.queryByText(replaces)).not.toBeInTheDocument();
-      choose("Window", "Main 50–85 °C");
+      choose("Transition", "Main 50–85 °C");
       expect(screen.getByText(replaces)).toBeInTheDocument();
-      choose("Window", "Low 25–50 °C");
+      choose("Transition", "Low 25–50 °C");
       expect(screen.queryByText(replaces)).not.toBeInTheDocument();
 
-      // The assigned peak opens on its own window and reason; nothing is replaced.
-      fireEvent.click(within(row(table, "63.4")).getByRole("button", { name: "Assign" }));
-      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+      // The peak set by hand opens on its own transition and reason; nothing is replaced.
+      fireEvent.click(within(row(table, "63.4")).getByRole("button", { name: "Use as Tm" }));
+      expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent(
+        "Main 50–85 °C",
+      );
       expect(screen.getByLabelText("Reason")).toHaveValue("main transition");
       expect(screen.queryByText(replaces)).not.toBeInTheDocument();
     });
@@ -533,11 +545,13 @@ describe("MeltingStepsPanel", () => {
       await select("Position 3");
       act(() => plotProps.at(-1)?.onClick?.({ points: [{ x: 52.3, y: 2, data: { meta: "w3" } }] }));
       const spot = screen.getByRole("region", { name: "Spot picked" });
-      fireEvent.click(within(spot).getByRole("button", { name: "Main 50–85 °C" }));
+      fireEvent.click(within(spot).getByRole("button", { name: "Add and use as Tm (Main)" }));
       expect(screen.getByLabelText("Value")).toHaveValue(52.3);
-      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("Main 50–85 °C");
+      expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent(
+        "Main 50–85 °C",
+      );
       expect(writes()).toHaveLength(0);
-      choose("Window", "Low 25–50 °C");
+      choose("Transition", "Low 25–50 °C");
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
       await waitFor(() => expect(writes()).toHaveLength(1));
       expect(writes()[0]).toEqual({
@@ -577,7 +591,7 @@ describe("MeltingStepsPanel", () => {
       );
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
       expect(await screen.findByRole("region", { name: "Peak picked" })).toHaveTextContent(
-        "Position 3 · peak at 52.3 °C · Manual · Unreviewed",
+        "Position 3 · peak at 52.3 °C · Placed by hand",
       );
       expect(screen.queryByRole("button", { name: "Add a peak here" })).not.toBeInTheDocument();
     });
@@ -587,10 +601,12 @@ describe("MeltingStepsPanel", () => {
       renderPanel();
       await select("Position 2");
       fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
-      // Untouched, the window is left to the temperature and nothing is replaced.
-      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      // Untouched, the transition is left to the temperature range and nothing is replaced.
+      expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent(
+        "By temperature range",
+      );
       expect(screen.queryByText(/saving replaces it/)).not.toBeInTheDocument();
-      choose("Window", "Main 50–85 °C");
+      choose("Transition", "Main 50–85 °C");
       expect(
         screen.getByText(
           "Main is currently the peak at 63.4 °C on this position; saving replaces it.",
@@ -598,12 +614,12 @@ describe("MeltingStepsPanel", () => {
       ).toBeInTheDocument();
     });
 
-    it("By temperature clears the assignment", async () => {
+    it("By temperature range undoes a transition set by hand", async () => {
       analysis = { ...analysis, steps: ASSIGNED };
       renderPanel();
       const table = await select("Position 2");
-      fireEvent.click(within(row(table, "63.4")).getByRole("button", { name: "Assign" }));
-      choose("Window", "By temperature");
+      fireEvent.click(within(row(table, "63.4")).getByRole("button", { name: "Use as Tm" }));
+      choose("Transition", "By temperature range");
       // The stored reason explained the assignment that is being given up.
       expect(screen.getByLabelText("Reason")).toHaveValue("");
       fireEvent.click(screen.getByRole("button", { name: "Save" }));
@@ -622,12 +638,16 @@ describe("MeltingStepsPanel", () => {
       const table = await select("Position 2");
       const stale = row(table, "63.4");
       expect(
-        within(stale).getByText("Assigned to 'Wide', which is not a window on this signal"),
+        within(stale).getByText(
+          "Set as Tm of 'Wide', which is no longer a transition on this signal",
+        ),
       ).toBeInTheDocument();
-      expect(within(stale).queryByText(/→/)).not.toBeInTheDocument();
-      // It counts as unassigned: the form opens on By temperature.
-      fireEvent.click(within(stale).getByRole("button", { name: "Assign" }));
-      expect(screen.getByRole("combobox", { name: "Window" })).toHaveTextContent("By temperature");
+      expect(within(stale).queryByText(/^Used as Tm/)).not.toBeInTheDocument();
+      // It counts as none set: the form opens on the transition whose range holds the peak.
+      fireEvent.click(within(stale).getByRole("button", { name: "Use as Tm" }));
+      expect(screen.getByRole("combobox", { name: "Transition" })).toHaveTextContent(
+        "Main 50–85 °C",
+      );
       fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
       fireEvent.click(within(stale).getByRole("button", { name: "Clear" }));
@@ -661,7 +681,7 @@ describe("MeltingStepsPanel", () => {
     const reject = async (value: string) => {
       renderPanel();
       const table = await select("Position 2");
-      fireEvent.click(within(row(table, value)).getByRole("button", { name: "Reject" }));
+      fireEvent.click(within(row(table, value)).getByRole("button", { name: "Exclude" }));
       expect(screen.getByLabelText("Reason")).toBeInTheDocument();
     };
 
@@ -670,7 +690,7 @@ describe("MeltingStepsPanel", () => {
       await reject("41.2");
       expect(
         screen.getByText(
-          "The other peak, at 36.93 °C, may then be read as this position's Tm. Reject it too if it is not a real transition.",
+          "The other peak, at 36.93 °C, may then be read as this position's Tm. Exclude it too if it is not a real transition.",
         ),
       ).toBeInTheDocument();
       // A hint only: the save is as it was.
@@ -708,8 +728,243 @@ describe("MeltingStepsPanel", () => {
       withPeaks([36.93, 41.2]);
       renderPanel();
       const table = await select("Position 2");
-      fireEvent.click(within(row(table, "41.2")).getByRole("button", { name: "Correct" }));
+      fireEvent.click(within(row(table, "41.2")).getByRole("button", { name: "Edit temperature" }));
       expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Use as Tm is offered only where it can change something", () => {
+    /** One transition, Main, on the shown signal. */
+    const ONE = [win("Main", 50, 85), WINDOWS[2]];
+    const at = (id: string, value: number, over: Partial<MeltingStep> = {}) =>
+      step({ id, well_id: "w2", value, instrument_value: value, ...over });
+    const pickOn = (wellId: string, x: number) =>
+      act(() => plotProps.at(-1)?.onClick?.({ points: [{ x, y: 2, data: { meta: wellId } }] }));
+    const barButtons = (kind: "Peak" | "Spot") =>
+      within(screen.getByRole("region", { name: `${kind} picked` }))
+        .getAllByRole("button")
+        .map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    const offered = (li: HTMLElement) =>
+      within(li).queryByRole("button", { name: "Use as Tm" }) !== null;
+    const useAsTm = (li: HTMLElement) =>
+      fireEvent.click(within(li).getByRole("button", { name: "Use as Tm" }));
+    const transition = () => screen.getByRole("combobox", { name: "Transition" });
+    /** The choices of the open form's Transition field; the field is left open. */
+    const choices = () => {
+      fireEvent.keyDown(transition(), { key: "Enter" });
+      return screen.getAllByRole("option").map((o) => o.textContent);
+    };
+
+    it("not for the only counted peak inside the only transition, in the list or on the pick bar", async () => {
+      analysis = { ...analysis, windows: ONE };
+      renderPanel();
+      // Position 2: the peak at 64 °C counts, the one at 70.1 °C is excluded.
+      const table = await select("Position 2");
+      expect(offered(row(table, "64"))).toBe(false);
+      expect(offered(row(table, "70.1"))).toBe(false);
+      pickOn("w2", 64);
+      expect(barButtons("Peak")).toEqual(["Clear the pick", "Exclude", "Move"]);
+    });
+
+    it("a spot inside the only transition, on a position with no counted peak, offers only to add a peak", async () => {
+      analysis = { ...analysis, windows: ONE, steps: steps.filter((s) => s.well_id !== "w3") };
+      renderPanel();
+      await select("Position 3");
+      pickOn("w3", 60);
+      expect(barButtons("Spot")).toEqual(["Clear the pick", "Add a peak here"]);
+    });
+
+    it("never without a transition on the signal", async () => {
+      // "Wide" is on the other signal; Position 2 has two counted peaks on this one.
+      analysis = { ...analysis, windows: [WINDOWS[2]], steps: [at("n1", 55), at("n2", 64)] };
+      renderPanel();
+      const table = await select("Position 2");
+      expect(offered(row(table, "55"))).toBe(false);
+      pickOn("w2", 64);
+      expect(barButtons("Peak")).toEqual(["Clear the pick", "Mark reviewed", "Exclude", "Move"]);
+      pickOn("w2", 75);
+      expect(barButtons("Spot")).toEqual(["Clear the pick", "Add a peak here"]);
+    });
+
+    it("for each of a position's several counted peaks, and for a peak added beside them", async () => {
+      analysis = { ...analysis, windows: ONE, steps: [at("a1", 55), at("a2", 64)] };
+      renderPanel();
+      const table = await select("Position 2");
+      expect(offered(row(table, "55"))).toBe(true);
+      expect(offered(row(table, "64"))).toBe(true);
+      pickOn("w2", 64);
+      expect(barButtons("Peak")).toEqual([
+        "Clear the pick",
+        "Use as Tm",
+        "Mark reviewed",
+        "Exclude",
+        "Move",
+      ]);
+      pickOn("w2", 75);
+      expect(barButtons("Spot")).toEqual([
+        "Clear the pick",
+        "Add a peak here",
+        "Add and use as Tm",
+      ]);
+    });
+
+    it("for a peak outside every transition's range, and for a spot outside it; the form starts on the first transition and saves untouched", async () => {
+      // The reference's peak at 36.6 °C lies below Main, as the analysis says; Position 3 has no peak.
+      analysis = { ...analysis, windows: ONE, steps: [steps[0]], outside_every_window: ["s1"] };
+      renderPanel();
+      const table = await select("Position 1", "Position 3");
+      pickOn("w3", 30);
+      expect(barButtons("Spot")).toEqual([
+        "Clear the pick",
+        "Add a peak here",
+        "Add and use as Tm",
+      ]);
+      pickOn("w1", 36.6);
+      expect(barButtons("Peak")).toContain("Use as Tm");
+      useAsTm(row(table, "36.6"));
+      expect(screen.getByText("Use the peak at 36.6 °C on Position 1 as Tm")).toBeInTheDocument();
+      expect(transition()).toHaveTextContent("Main 50–85 °C");
+      const save = screen.getByRole("button", { name: "Save" });
+      expect(save).toBeEnabled();
+      fireEvent.click(save);
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/melting-steps/s1/assignment",
+        method: "PUT",
+        data: { expected_version: 1, window: "Main" },
+      });
+    });
+
+    it("for any peak where the signal has more than one transition, each named on the pick bar", async () => {
+      analysis = { ...analysis, windows: WINDOWS };
+      renderPanel();
+      const table = await select("Position 3");
+      expect(offered(row(table, "61.2"))).toBe(true);
+      pickOn("w3", 61.2);
+      expect(barButtons("Peak")).toEqual([
+        "Clear the pick",
+        "Use as Tm (Low)",
+        "Use as Tm (Main)",
+        "Mark reviewed",
+        "Exclude",
+        "Move",
+      ]);
+    });
+
+    it("for a peak that has its transition set by hand, which By temperature range undoes", async () => {
+      analysis = {
+        ...analysis,
+        windows: ONE,
+        steps: [steps[0], at("d1", 64, { assigned_window: "Main" })],
+      };
+      renderPanel();
+      const table = await select("Position 2");
+      expect(within(row(table, "64")).getByText("Used as Tm (Main)")).toBeInTheDocument();
+      pickOn("w2", 64);
+      expect(screen.getByRole("region", { name: "Peak picked" })).toHaveTextContent(
+        "Position 2 · peak at 64 °C · From instrument · used as Tm (Main)",
+      );
+      expect(barButtons("Peak")).toEqual([
+        "Clear the pick",
+        "Use as Tm",
+        "By temperature range",
+        "Mark reviewed",
+        "Exclude",
+        "Move",
+      ]);
+      useAsTm(row(table, "64"));
+      expect(transition()).toHaveTextContent("Main 50–85 °C");
+      expect(choices()).toEqual(["Main 50–85 °C", "By temperature range"]);
+    });
+
+    it("the form starts on the transition whose range holds the peak, else on the first", async () => {
+      analysis = {
+        ...analysis,
+        windows: WINDOWS,
+        steps: [at("f1", 48.1), at("f2", 64), at("f3", 88)],
+      };
+      renderPanel();
+      const table = await select("Position 2");
+      for (const [value, starts] of [
+        ["48.1", "Low 25–50 °C"],
+        ["64", "Main 50–85 °C"],
+        ["88", "Low 25–50 °C"],
+      ]) {
+        useAsTm(row(table, value));
+        expect(transition()).toHaveTextContent(starts);
+      }
+      // No transition was set by hand: there is none to give back to the temperature range.
+      expect(choices()).toEqual(["Low 25–50 °C", "Main 50–85 °C"]);
+    });
+  });
+
+  describe("several counted peaks in the lead transition's range", () => {
+    const LINE = /Pick the one to use as Tm\.$/;
+    const at = (id: string, value: number, over: Partial<MeltingStep> = {}) =>
+      step({ id, well_id: "w2", value, instrument_value: value, ...over });
+    /** Main is the only, so the lead, transition; the reference has one peak below it. */
+    const withPeaks = (...peaks: MeltingStep[]) => {
+      analysis = { ...analysis, windows: [win("Main", 50, 85)], steps: [steps[0], ...peaks] };
+    };
+    const texts = (table: HTMLElement) =>
+      within(table)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent ?? "");
+
+    it("says how many there are to pick from, above the peaks of the position looked at", async () => {
+      // 48.1 °C is below Main's range, and the excluded peak does not count.
+      withPeaks(
+        at("m1", 48.1),
+        at("m2", 55),
+        at("m3", 64),
+        at("m4", 70.1),
+        at("m5", 80, { status: "rejected", reason: "noise" }),
+      );
+      renderPanel();
+      const [reference, line, first, ...rest] = texts(await select("Position 1", "Position 2"));
+      expect(reference).toContain("36.6");
+      expect(line).toBe("3 peaks here. Pick the one to use as Tm.");
+      expect(first).toContain("48.1");
+      expect(rest).toHaveLength(4);
+    });
+
+    it("counts two", async () => {
+      withPeaks(at("m1", 55), at("m2", 64));
+      renderPanel();
+      expect(texts(await select("Position 2"))[0]).toBe("2 peaks here. Pick the one to use as Tm.");
+    });
+
+    it("says nothing with one counted peak in the range", async () => {
+      withPeaks(
+        at("m1", 48.1),
+        at("m2", 64),
+        at("m3", 70.1, { status: "rejected", reason: "noise" }),
+      );
+      renderPanel();
+      await select("Position 2");
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument();
+    });
+
+    it("says nothing once one of them is set by hand", async () => {
+      withPeaks(at("m1", 55), at("m2", 64, { assigned_window: "Main" }));
+      renderPanel();
+      await select("Position 2");
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument();
+    });
+
+    it("says nothing once a peak outside the range is set by hand as that transition's Tm", async () => {
+      withPeaks(at("m1", 48.1, { assigned_window: "Main" }), at("m2", 55), at("m3", 64));
+      renderPanel();
+      await select("Position 2");
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument();
+    });
+
+    it("says nothing for a position that is listed but not the one looked at", async () => {
+      withPeaks(at("m1", 55), at("m2", 64));
+      renderPanel();
+      // Position 3, selected last, is the one looked at.
+      await select("Position 2", "Position 3");
+      expect(screen.queryByText(LINE)).not.toBeInTheDocument();
     });
   });
 });
@@ -788,7 +1043,7 @@ describe("the peaks found in a position's traces", () => {
       });
     });
 
-    it("Move, then a click, offers the found peak within reach in Correct", async () => {
+    it("Move, then a click, offers the found peak within reach in Edit temperature", async () => {
       found.mockResolvedValue(peaksOn({ a: [[72.71, 30]] }));
       renderPanel();
       await select("Position 2");
@@ -796,7 +1051,9 @@ describe("the peaks found in a position's traces", () => {
       clickTrace("w2", 64.2);
       inBar("Peak", "Move");
       clickTrace("w2", 72.53);
-      expect(screen.getByText("Correct the peak at 64 °C on Position 2")).toBeInTheDocument();
+      expect(
+        screen.getByText("Edit the temperature of the peak at 64 °C on Position 2"),
+      ).toBeInTheDocument();
       expect(value()).toHaveValue(72.71);
       expect(snapLine()?.textContent).toBe(SNAPPED);
       // A later click fills the open form with the temperature clicked, as before.

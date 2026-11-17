@@ -153,11 +153,11 @@ function Closing() {
 
 const peakRow = (temperature: string) =>
   within(screen.getByRole("group", { name: `Peak at ${temperature} °C` }));
-const freeRows = () => screen.getAllByRole("group", { name: "Window without a peak" });
+const freeRows = () => screen.getAllByRole("group", { name: "Transition without a peak" });
 const rowNames = () => screen.getAllByRole("group").map((g) => g.getAttribute("aria-label"));
 const type = (row: ReturnType<typeof within>, label: string, value: string) =>
   fireEvent.change(row.getByLabelText(label), { target: { value } });
-const save = () => screen.getByRole("button", { name: "Save windows" });
+const save = () => screen.getByRole("button", { name: "Save transitions" });
 const existing = () => screen.getByTestId("existing-windows");
 const lastPlot = () => {
   const plot = plots.at(-1);
@@ -186,9 +186,9 @@ beforeEach(() => {
 describe("NamePeaksDialog", () => {
   it("names the signal and starts on the first reference in holder order", () => {
     renderDialog();
-    expect(screen.getByRole("heading", { name: "Set up windows · Ratio" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Name transitions · Ratio" })).toBeInTheDocument();
     expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-      "Name the reference's peaks. Each named row becomes a temperature window on the protocol. A row without a name creates nothing.",
+      "Name the reference's peaks. Each named row becomes a transition on the protocol, with the temperature range it is looked for in. A row without a name creates nothing.",
     );
     const chooser = screen.getByLabelText("Reference");
     expect(chooser).toHaveValue("r1");
@@ -207,7 +207,7 @@ describe("NamePeaksDialog", () => {
     // Not the rejected peak, the other signal's, or another position's.
     expect(rowNames()).toEqual(["Peak at 36.6 °C", "Peak at 71.3 °C"]);
     const first = peakRow("36.6");
-    expect(first.getByText("Instrument")).toBeInTheDocument();
+    expect(first.getByText("From instrument")).toBeInTheDocument();
     expect(first.getByLabelText("Name")).toHaveValue("");
     expect(first.getByLabelText("Name")).not.toHaveAttribute("placeholder");
     expect(first.getByLabelText("Low (°C)")).toHaveValue(25);
@@ -224,7 +224,7 @@ describe("NamePeaksDialog", () => {
     fireEvent.change(screen.getByLabelText("Reference"), { target: { value: "r2" } });
     expect(rowNames()).toEqual(["Peak at 64.2 °C"]);
     const row = peakRow("64.2");
-    expect(row.getByText("Manual")).toBeInTheDocument();
+    expect(row.getByText("Placed by hand")).toBeInTheDocument();
     expect(row.getByLabelText("Low (°C)")).toHaveValue(30);
     expect(row.getByLabelText("High (°C)")).toHaveValue(90);
     expect(lastPlot().data.map((t) => t.meta)).toEqual(["r2"]);
@@ -238,7 +238,7 @@ describe("NamePeaksDialog", () => {
     expect(within(existing()).queryByText(/Other/)).not.toBeInTheDocument();
     expect(
       screen.getByRole("link", {
-        name: "Changing a published window's limits needs a new protocol version",
+        name: "Changing a published transition's range needs a new protocol version",
       }),
     ).toHaveAttribute("href", "/assays/protocols/p1#setup");
     // 71.3 is in Main; the other range is cut back to Main's limit.
@@ -248,7 +248,7 @@ describe("NamePeaksDialog", () => {
 
   it("says when the signal has no window", () => {
     renderDialog();
-    expect(existing()).toHaveTextContent("Existing windows on this signal: none");
+    expect(existing()).toHaveTextContent("Transitions already named on this signal: none");
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -306,7 +306,7 @@ describe("NamePeaksDialog", () => {
     // The page reloads the analysis; the new peak has a row and the ranges follow.
     view.rerender(dialog({ analysis: analysisOf({ steps: [...STEPS, added] }) }));
     expect(rowNames()).toEqual(["Peak at 36.6 °C", "Peak at 45.12 °C", "Peak at 71.3 °C"]);
-    expect(peakRow("45.12").getByText("Manual")).toBeInTheDocument();
+    expect(peakRow("45.12").getByText("Placed by hand")).toBeInTheDocument();
     expect(peakRow("36.6").getByLabelText("High (°C)")).toHaveValue(40.9);
   });
 
@@ -328,7 +328,7 @@ describe("NamePeaksDialog", () => {
 
   it("adds a window without a peak as an empty row", () => {
     renderDialog();
-    fireEvent.click(screen.getByRole("button", { name: "Add a window without a peak" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a transition without a peak" }));
     const [row] = freeRows();
     expect(within(row).getByLabelText("Name")).toHaveValue("");
     expect(within(row).getByLabelText("Low (°C)")).toHaveValue(null);
@@ -343,13 +343,13 @@ describe("NamePeaksDialog", () => {
     });
     expect(
       screen.getByText(
-        "This run has no reference position. Mark one in Edit labeling, or add a window by typing its range.",
+        "This run has no reference position. Mark one in Edit labeling, or add a transition by typing its range.",
       ),
     ).toBeInTheDocument();
     expect(within(existing()).getByText("Main 50–85 °C")).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Add a window without a peak" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a transition without a peak" }));
     const row = within(freeRows()[0]);
     type(row, "Name", "Low");
     type(row, "Low (°C)", "30");
@@ -370,7 +370,7 @@ describe("NamePeaksDialog", () => {
     renderDialog({ analysis: analysisOf({ steps: [] }) });
     expect(
       screen.getByText(
-        "The reference has no peak on this signal. Click its trace to add one, or add a window by typing its range.",
+        "The reference has no peak on this signal. Click its trace to add one, or add a transition by typing its range.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
@@ -392,7 +392,7 @@ describe("NamePeaksDialog", () => {
     render(<Closing />, { wrapper });
     type(peakRow("71.3"), "Name", " Main ");
     fireEvent.click(peakRow("71.3").getByLabelText("ΔTm"));
-    fireEvent.click(screen.getByRole("button", { name: "Add a window without a peak" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add a transition without a peak" }));
     const free = within(freeRows()[0]);
     type(free, "Name", "Late");
     type(free, "Low (°C)", "95");
@@ -482,7 +482,7 @@ describe("NamePeaksDialog", () => {
     fireEvent.click(save());
     expect(
       await screen.findByText(
-        "This run is approved (or locked), so its stored results do not change. The new windows apply to later runs; the values shown here are for viewing.",
+        "This run is approved (or locked), so its stored results do not change. The new transitions apply to later runs; the values shown here are for viewing.",
       ),
     ).toBeInTheDocument();
     expect(within(existing()).getByText("Main 54–95 °C")).toBeInTheDocument();

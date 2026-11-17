@@ -99,12 +99,12 @@ const NO_RULES: readonly ApplicableRule[] = [];
 // would be drawn over the pinned reference rows.
 const NO_EMPTY_NOTICE: OverlayType[] = ["noRows", "noMatchingRows"];
 
-/** `Peak at 48.1 °C is outside every window. Pick it on the graph to assign it.` */
+/** `Peak at 48.1 °C is outside every transition's range. Pick it on the graph to use it as Tm.` */
 function outsideText(peaks: readonly number[]): string {
   const at = LIST.format(peaks.map((v) => `${fmtTm(v)} °C`));
   return peaks.length === 1
-    ? `Peak at ${at} is outside every window. Pick it on the graph to assign it.`
-    : `Peaks at ${at} are outside every window. Pick one on the graph to assign it.`;
+    ? `Peak at ${at} is outside every transition's range. Pick it on the graph to use it as Tm.`
+    : `Peaks at ${at} are outside every transition's range. Pick one on the graph to use it as Tm.`;
 }
 
 /** Marks a Tm that a person named by assigning its peak. The tooltip says
@@ -122,7 +122,11 @@ function AssignedMark({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span role="img" aria-label="Assigned peak" className="inline-flex text-muted-foreground">
+        <span
+          role="img"
+          aria-label="Peak chosen by hand"
+          className="inline-flex text-muted-foreground"
+        >
           <Pin className="size-3" />
         </span>
       </TooltipTrigger>
@@ -130,18 +134,18 @@ function AssignedMark({
         <p>
           {step?.assigned_by ? (
             <>
-              {"Assigned by "}
+              {"Chosen as Tm by "}
               <MemberName id={step.assigned_by} />
             </>
           ) : (
-            "Assigned"
+            "Chosen as Tm"
           )}
           {step?.assigned_at && ` · ${formatDateTime(step.assigned_at)}`}
         </p>
         {step?.assignment_reason && <p>{step.assignment_reason}</p>}
         {step && (
           <p>
-            {`By temperature: ${inside.length ? `in ${LIST.format(inside)}` : "outside every window"}`}
+            {`By temperature range: ${inside.length ? `in ${LIST.format(inside)}` : "outside every transition's range"}`}
           </p>
         )}
       </TooltipContent>

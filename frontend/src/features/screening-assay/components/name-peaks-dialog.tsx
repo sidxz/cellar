@@ -328,10 +328,10 @@ function NamePeaks({
     >
       <DialogContent className="flex max-h-[90vh] w-[min(95vw,1000px)] max-w-[1000px] flex-col overflow-y-auto sm:max-w-[1000px]">
         <DialogHeader>
-          <DialogTitle>{`Set up windows · ${currentChannel(set)?.label ?? ""}`}</DialogTitle>
+          <DialogTitle>{`Name transitions · ${currentChannel(set)?.label ?? ""}`}</DialogTitle>
           <DialogDescription>
-            Name the reference's peaks. Each named row becomes a temperature window on the protocol.
-            A row without a name creates nothing.
+            Name the reference's peaks. Each named row becomes a transition on the protocol, with
+            the temperature range it is looked for in. A row without a name creates nothing.
           </DialogDescription>
         </DialogHeader>
 
@@ -357,7 +357,7 @@ function NamePeaks({
           )}
           <div data-testid="existing-windows" className="flex flex-wrap items-center gap-2">
             <span className="text-muted-foreground">
-              {`Existing windows on this signal:${existing.length ? "" : " none"}`}
+              {`Transitions already named on this signal:${existing.length ? "" : " none"}`}
             </span>
             {existing.map((w) => (
               <span key={w.window} className="rounded border px-1.5 py-0.5 tabular-nums">
@@ -369,7 +369,7 @@ function NamePeaks({
                 href={`/assays/protocols/${protocolId}#setup`}
                 className="text-muted-foreground underline underline-offset-4"
               >
-                Changing a published window's limits needs a new protocol version
+                Changing a published transition's range needs a new protocol version
               </Link>
             )}
           </div>
@@ -379,7 +379,7 @@ function NamePeaks({
         <div className="min-h-24 flex-1 space-y-2 overflow-y-auto pr-1">
           {!reference ? (
             <p className="text-sm text-muted-foreground">
-              This run has no reference position. Mark one in Edit labeling, or add a window by
+              This run has no reference position. Mark one in Edit labeling, or add a transition by
               typing its range.
             </p>
           ) : (
@@ -387,7 +387,7 @@ function NamePeaks({
               <p className="text-sm text-muted-foreground">
                 {`The reference has no peak on this signal. ${
                   canRecalculate ? "Click its trace to add one, or add" : "Add"
-                } a window by typing its range.`}
+                } a transition by typing its range.`}
               </p>
             )
           )}
@@ -396,19 +396,21 @@ function NamePeaks({
             return (
               <fieldset
                 key={r.key}
-                aria-label={r.peak ? `Peak at ${fmt(r.peak.value)} °C` : "Window without a peak"}
+                aria-label={
+                  r.peak ? `Peak at ${fmt(r.peak.value)} °C` : "Transition without a peak"
+                }
                 className="min-w-0 rounded-md border px-3 py-2"
               >
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
                   {r.peak ? (
-                    <span className="flex w-40 gap-2">
+                    <span className="flex w-52 gap-2">
                       <span className="font-medium tabular-nums">{`${fmt(r.peak.value)} °C`}</span>
                       <span className="text-muted-foreground">
-                        {r.peak.source === "manual" ? "Manual" : "Instrument"}
+                        {r.peak.source === "manual" ? "Placed by hand" : "From instrument"}
                       </span>
                     </span>
                   ) : (
-                    <span className="w-40 text-muted-foreground">No peak</span>
+                    <span className="w-52 text-muted-foreground">No peak</span>
                   )}
                   <div className="flex items-center gap-2">
                     <Label htmlFor={`${id}-name`}>Name</Label>
@@ -450,7 +452,7 @@ function NamePeaks({
             }}
           >
             <Plus className="size-4" />
-            Add a window without a peak
+            Add a transition without a peak
           </Button>
         </div>
 
@@ -495,8 +497,8 @@ function NamePeaks({
         )}
         {saved.length > 0 && !canRecalculate && (
           <p className="text-sm">
-            This run is approved (or locked), so its stored results do not change. The new windows
-            apply to later runs; the values shown here are for viewing.
+            This run is approved (or locked), so its stored results do not change. The new
+            transitions apply to later runs; the values shown here are for viewing.
           </p>
         )}
 
@@ -506,7 +508,7 @@ function NamePeaks({
           </Button>
           <Button onClick={save} disabled={!canSave}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save windows
+            Save transitions
           </Button>
         </DialogFooter>
       </DialogContent>

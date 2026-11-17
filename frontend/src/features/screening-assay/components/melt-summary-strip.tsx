@@ -7,7 +7,7 @@ import type { ResultFilter, WindowSummary } from "../lib/melt-results";
 
 const NOTE = "font-medium text-amber-700 dark:text-amber-400";
 const Note = ({ children }: { children: ReactNode }) => <span className={NOTE}>{children}</span>;
-const STEP_ISSUES = "Peak issues";
+const STEP_ISSUES = "Needs a look";
 
 const Dot = () => (
   <span aria-hidden className="text-muted-foreground">

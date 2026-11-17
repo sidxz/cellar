@@ -73,9 +73,9 @@ import { useReadoutDefinitionForm } from "./use-readout-definition-form";
 
 const NO_FILTER = {};
 
-/** "Window Main: 50–85 °C, Ratio 350/330" from a readout's melt_config. */
+/** "Transition Main: 50–85 °C, Ratio 350/330" from a readout's melt_config. */
 function windowText(cfg: MeltConfig, label: (key: string) => string) {
-  return `Window ${cfg.window}: ${cfg.low}–${cfg.high} °C, ${label(cfg.channel_key)}`;
+  return `Transition ${cfg.window}: ${cfg.low}–${cfg.high} °C, ${label(cfg.channel_key)}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +214,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
               {protocol.has_measured_curves && (
                 <Button size="sm" variant="outline" onClick={() => setAddWindowOpen(true)}>
                   <Plus className="mr-1 h-4 w-4" />
-                  Temperature window
+                  Transition
                 </Button>
               )}
               <Button size="sm" variant="outline" onClick={() => setAddReadoutOpen(true)}>

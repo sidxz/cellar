@@ -4,7 +4,6 @@ import { Button } from "@/shared/components/ui/button";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { X } from "lucide-react";
 import type { CurvePosition } from "../lib/curve-plot";
-import { windowLabel } from "../lib/window-proposal";
 import type { MeltingStep } from "../types";
 import { peakKind, stepInput } from "./melting-steps-panel";
 
@@ -21,6 +20,9 @@ export interface PeakPickBarProps {
   windows: readonly { window: string; low: number; high: number }[];
   /** The x unit of the shown signal. */
   unit: string;
+  /** Saying which window the peak (or one added at the spot) is the Tm of can
+   *  change something: see `canUseAsTm`. Without it those choices are not shown. */
+  useAsTm: boolean;
   /** Why nothing can be changed; given, the bar has no buttons. */
   refusal: string | null;
   /** Move was chosen: the next click on this position's trace gives the new temperature. */
@@ -41,6 +43,7 @@ export function PeakPickBar({
   position,
   step,
   windows,
+  useAsTm,
   unit,
   refusal,
   moving,
@@ -59,9 +62,12 @@ export function PeakPickBar({
         position.position_label,
         `peak at ${formatMeasurementValue(step.value, 4)} ${unit}`,
         peakKind(step),
-        assigned && `assigned to ${assigned}`,
+        assigned && `used as Tm (${assigned})`,
       ]
     : [position.position_label, `${stepInput(pick.x)} ${unit}`];
+  /** `Use as Tm`, naming the window when the signal has several. */
+  const named = (verb: string, w: { window: string }) =>
+    windows.length > 1 ? `${verb} (${w.window})` : verb;
   /** `current` marks the choice the peak has now. */
   const choice = (label: string, onClick: () => void, current = false) => (
     <Button
@@ -99,23 +105,20 @@ export function PeakPickBar({
         <p className="text-xs text-muted-foreground">{refusal}</p>
       ) : step ? (
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
-          {windows.length > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground">This is</span>
-              {windows.map((w) =>
-                choice(windowLabel(w), () => onAssign(w.window), w.window === assigned),
-              )}
-              {choice("by temperature", () => onAssign(null), assigned === null)}
-            </>
-          )}
+          {useAsTm &&
+            windows.map((w) =>
+              choice(named("Use as Tm", w), () => onAssign(w.window), w.window === assigned),
+            )}
+          {/* Undoes a choice made by hand. */}
+          {useAsTm && assigned !== null && choice("By temperature range", () => onAssign(null))}
           <span className="ml-auto flex gap-x-1">
             {step.status !== "accepted" && (
               <Button type="button" size="xs" variant="ghost" onClick={onAccept}>
-                Accept
+                Mark reviewed
               </Button>
             )}
             <Button type="button" size="xs" variant="ghost" onClick={onReject}>
-              Reject
+              Exclude
             </Button>
             <Button
               type="button"
@@ -133,13 +136,8 @@ export function PeakPickBar({
           <Button type="button" size="xs" variant="outline" onClick={() => onAdd(null)}>
             Add a peak here
           </Button>
-          {windows.length > 0 && (
-            <>
-              <span className="text-xs text-muted-foreground">and name it</span>
-              {windows.map((w) => choice(windowLabel(w), () => onAdd(w.window)))}
-              {choice("not yet", () => onAdd(null))}
-            </>
-          )}
+          {useAsTm &&
+            windows.map((w) => choice(named("Add and use as Tm", w), () => onAdd(w.window)))}
         </div>
       )}
       {step && moving && !refusal && (

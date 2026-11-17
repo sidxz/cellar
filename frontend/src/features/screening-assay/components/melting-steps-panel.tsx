@@ -30,10 +30,13 @@ import { windowLabel } from "../lib/window-proposal";
 import type { MeltingAnalysis, MeltingStep, MeltingStepChange } from "../types";
 import { Notice } from "./labelling-table";
 
-const STATUS_LABELS: Record<MeltingStep["status"], string> = {
-  unreviewed: "Unreviewed",
-  accepted: "Accepted",
-  rejected: "Rejected",
+type Range = { window: string; low: number; high: number };
+
+/** An unreviewed peak has no status word: its chip reads only where it came from. */
+const STATUS_LABELS: Record<MeltingStep["status"], string | null> = {
+  unreviewed: null,
+  accepted: "Reviewed",
+  rejected: "Excluded",
 };
 
 type Form =
@@ -50,9 +53,34 @@ const BY_TEMPERATURE = "__by_temperature__";
 
 const baseline = (s: MeltingStep) => s.instrument_value ?? s.value;
 
-/** `Instrument · Unreviewed`. */
+/** `From instrument · Reviewed`; `Placed by hand` while unreviewed. */
 export function peakKind(s: MeltingStep): string {
-  return `${s.source === "manual" ? "Manual" : "Instrument"} · ${STATUS_LABELS[s.status]}`;
+  const source = s.source === "manual" ? "Placed by hand" : "From instrument";
+  return [source, STATUS_LABELS[s.status]].filter(Boolean).join(" · ");
+}
+
+const inRange = (value: number, w: Range) => value >= w.low && value <= w.high;
+
+/** Whether saying which transition a peak is the Tm of can change anything on
+ *  the signal: there are several transitions, the peak has one set by hand
+ *  (which can be undone), its position has more than one counted peak, or it
+ *  lies outside every transition's range. Never without a transition. A peak
+ *  without an id is one that would be added at `value`. */
+export function canUseAsTm(
+  peak: Pick<MeltingStep, "well_id" | "value"> &
+    Partial<Pick<MeltingStep, "id" | "assigned_window">>,
+  analysis: Pick<MeltingAnalysis, "steps" | "outside_every_window">,
+  channel: string | null,
+  windows: readonly Range[],
+): boolean {
+  if (windows.length !== 1) return windows.length > 1;
+  if (peak.assigned_window === windows[0].window) return true;
+  const counted = analysis.steps.filter(
+    (s) => s.well_id === peak.well_id && s.channel_key === channel && s.status !== "rejected",
+  ).length;
+  return peak.id === undefined
+    ? counted > 0 || !inRange(peak.value, windows[0])
+    : counted > 1 || analysis.outside_every_window.includes(peak.id);
 }
 
 /** What the plot's pick bar asks of the peak list: one of its forms, opened on
@@ -81,12 +109,13 @@ function entered(step: MeltingStep, parsed: number): number {
   return parsed;
 }
 
+/** A form's title; `peak` reads "the peak at 68.4 °C on Capillary 8". */
 const FORM_TITLES = {
-  reject: "Reject",
-  correct: "Correct",
-  assign: "Assign",
-  accepted: "Accept",
-  unreviewed: "Mark unreviewed",
+  reject: (peak: string) => `Exclude ${peak}`,
+  correct: (peak: string) => `Edit the temperature of ${peak}`,
+  assign: (peak: string) => `Use ${peak} as Tm`,
+  accepted: (peak: string) => `Mark ${peak} reviewed`,
+  unreviewed: (peak: string) => `Unmark ${peak}`,
 } as const;
 
 function fmt(v: number): string {
@@ -115,7 +144,11 @@ export interface MeltingStepsPanelProps {
   /** The current signal's key. */
   channel: string | null;
   /** The temperature windows on the current signal. */
-  windows: readonly { window: string; low: number; high: number }[];
+  windows: readonly Range[];
+  /** The position being looked at and the lead window: where that position has
+   *  several counted peaks in the window's range, the list says to pick one. */
+  lookedAt?: string;
+  lead?: Range;
   /** The x unit of the current signal. */
   unit: string;
   /** The value field of the open Add or Correct form; held by the parent so a
@@ -143,6 +176,8 @@ export function MeltingStepsPanel({
   positions,
   channel,
   windows,
+  lookedAt,
+  lead,
   unit,
   value,
   onValueChange,
@@ -174,6 +209,19 @@ export function MeltingStepsPanel({
   const rows = analysis.steps
     .filter((s) => s.channel_key === channel && order.has(s.well_id))
     .sort((a, b) => (order.get(a.well_id) ?? 0) - (order.get(b.well_id) ?? 0) || a.value - b.value);
+  // How many counted peaks the position looked at has in the lead window's
+  // range, while none of them (and no peak for that window) is set by hand.
+  const toPickFrom = (() => {
+    if (!lead || !lookedAt) return 0;
+    const counted = rows.filter((s) => s.well_id === lookedAt && s.status !== "rejected");
+    const inside = counted.filter((s) => inRange(s.value, lead));
+    const byHand = counted.some(
+      (s) =>
+        isWindow(s.assigned_window) && (s.assigned_window === lead.window || inside.includes(s)),
+    );
+    return byHand ? 0 : inside.length;
+  })();
+  const firstLookedAt = rows.find((s) => s.well_id === lookedAt)?.id;
 
   const callbacks = {
     onSuccess: (change: MeltingStepChange) => {
@@ -281,12 +329,15 @@ export function MeltingStepsPanel({
     }
   };
 
-  /** Opens on the window given, else on the step's own; a name that is no longer
-   *  a window counts as none. The stored reason goes with the stored window only. */
-  const openAssign = (
-    s: MeltingStep,
-    window = isWindow(s.assigned_window) ? s.assigned_window : null,
-  ) => {
+  /** Opens on the window asked for, else on the step's own (a name that is no
+   *  longer a window counts as none), else on the one whose range holds the
+   *  peak, else the first. No window (by temperature range) is a choice only
+   *  for a step that has one set by hand. The stored reason goes with the
+   *  stored window only. */
+  const openAssign = (s: MeltingStep, asked?: string | null) => {
+    const own = isWindow(s.assigned_window) ? s.assigned_window : null;
+    const start = own ?? (windows.find((w) => inRange(s.value, w)) ?? windows[0])?.window ?? null;
+    const window = asked === undefined || (asked === null && own === null) ? start : asked;
     const stored = window !== null && window === s.assigned_window;
     open(
       { kind: "assign", step: s, window, reason: stored ? (s.assignment_reason ?? "") : "" },
@@ -381,10 +432,15 @@ export function MeltingStepsPanel({
               : "The selected positions have no peaks on this signal."}
           </li>
         ) : (
-          rows.map((s) => {
+          rows.flatMap((s) => {
             const rejected = s.status === "rejected";
             const p = byWell.get(s.well_id);
-            return (
+            return [
+              toPickFrom > 1 && s.id === firstLookedAt && (
+                <li key="to-pick-from" className="px-2 py-1 text-xs text-muted-foreground">
+                  {`${toPickFrom} peaks here. Pick the one to use as Tm.`}
+                </li>
+              ),
               <li
                 key={s.id}
                 data-picked={s.id === pickedId || undefined}
@@ -411,11 +467,11 @@ export function MeltingStepsPanel({
                   {s.assigned_window &&
                     (isWindow(s.assigned_window) ? (
                       <Badge variant="secondary" className="no-underline">
-                        {`→ ${s.assigned_window} (assigned)`}
+                        {`Used as Tm (${s.assigned_window})`}
                       </Badge>
                     ) : (
                       <span className="flex items-center gap-x-1 text-xs text-muted-foreground no-underline">
-                        {`Assigned to '${s.assigned_window}', which is not a window on this signal`}
+                        {`Set as Tm of '${s.assigned_window}', which is no longer a transition on this signal`}
                         {editable && (
                           <Button
                             type="button"
@@ -439,7 +495,7 @@ export function MeltingStepsPanel({
                           disabled={busy}
                           onClick={() => setStatus(s, "accepted")}
                         >
-                          Accept
+                          Mark reviewed
                         </Button>
                       )}
                       {s.status !== "unreviewed" && (
@@ -450,7 +506,7 @@ export function MeltingStepsPanel({
                           disabled={busy}
                           onClick={() => setStatus(s, "unreviewed")}
                         >
-                          Mark unreviewed
+                          Unmark
                         </Button>
                       )}
                       {!rejected && (
@@ -463,7 +519,7 @@ export function MeltingStepsPanel({
                             open({ kind: "reject", step: s, reason: s.reason ?? "" }, "")
                           }
                         >
-                          Reject
+                          Exclude
                         </Button>
                       )}
                       <Button
@@ -478,17 +534,19 @@ export function MeltingStepsPanel({
                           )
                         }
                       >
-                        Correct
+                        Edit temperature
                       </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() => openAssign(s)}
-                      >
-                        Assign
-                      </Button>
+                      {canUseAsTm(s, analysis, channel, windows) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => openAssign(s)}
+                        >
+                          Use as Tm
+                        </Button>
+                      )}
                     </span>
                   )}
                 </div>
@@ -507,8 +565,8 @@ export function MeltingStepsPanel({
                     )}
                   </div>
                 )}
-              </li>
-            );
+              </li>,
+            ];
           })
         )}
       </ul>
@@ -519,17 +577,19 @@ export function MeltingStepsPanel({
           <p className="text-sm font-medium">
             {form.kind === "add"
               ? "Add a peak"
-              : `${FORM_TITLES[form.kind === "restore" ? form.status : form.kind]} the peak at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
+              : FORM_TITLES[form.kind === "restore" ? form.status : form.kind](
+                  `the peak at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`,
+                )}
           </p>
           {form.kind === "restore" && (
             <p className="text-xs text-muted-foreground">
-              The reason below was given when the peak was rejected. Clear it or change it if it no
+              The reason below was given when the peak was excluded. Clear it or change it if it no
               longer applies.
             </p>
           )}
           {leftAlone && (
             <p className="text-xs text-muted-foreground">
-              {`The other peak, at ${fmt(leftAlone.value)} ${unit}, may then be read as this position's Tm. Reject it too if it is not a real transition.`}
+              {`The other peak, at ${fmt(leftAlone.value)} ${unit}, may then be read as this position's Tm. Exclude it too if it is not a real transition.`}
             </p>
           )}
           <div className="flex flex-wrap items-end gap-3">
@@ -588,7 +648,7 @@ export function MeltingStepsPanel({
             )}
             {(form.kind === "assign" || (form.kind === "add" && windows.length > 0)) && (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor={`${ids}-window`}>Window</Label>
+                <Label htmlFor={`${ids}-window`}>Transition</Label>
                 <Select
                   value={form.window ?? BY_TEMPERATURE}
                   onValueChange={(v) => {
@@ -608,7 +668,10 @@ export function MeltingStepsPanel({
                         {windowLabel(w)}
                       </SelectItem>
                     ))}
-                    <SelectItem value={BY_TEMPERATURE}>By temperature</SelectItem>
+                    {/* Undoes a choice made by hand; a new peak may be left to its temperature. */}
+                    {(form.kind === "add" || isWindow(form.step.assigned_window)) && (
+                      <SelectItem value={BY_TEMPERATURE}>By temperature range</SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

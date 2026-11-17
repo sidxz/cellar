@@ -173,9 +173,9 @@ export function MeltResultsPanel({
         <h3 className="text-sm font-semibold">Results</h3>
         {windows.length > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Window</span>
+            <span className="text-xs font-medium text-muted-foreground">Transition</span>
             <Segmented
-              label="Window"
+              label="Transition"
               value={comparing ? COMPARE : (leadName ?? "")}
               options={[
                 ...windows.map((w) => ({ value: w.window, label: windowLabel(w) })),
@@ -190,7 +190,7 @@ export function MeltResultsPanel({
               <Button
                 type="button"
                 variant="link"
-                aria-label="Set up windows"
+                aria-label="Name transitions"
                 className="h-auto p-0 text-xs font-normal text-muted-foreground"
                 onClick={onNamePeaks}
               >
@@ -199,7 +199,7 @@ export function MeltResultsPanel({
             )}
           </div>
         )}
-        <div title={comparing ? "Shift plot shows one window" : undefined}>
+        <div title={comparing ? "Shift plot shows one transition" : undefined}>
           <Segmented
             label="View"
             value={view === "plot" && !comparing ? "plot" : "table"}
@@ -219,7 +219,7 @@ export function MeltResultsPanel({
           />
           {onNamePeaks && needsSetup && (
             <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
-              Set up windows
+              Name transitions
             </Button>
           )}
           {headerAction}
@@ -229,7 +229,7 @@ export function MeltResultsPanel({
       {summary ? (
         <MeltSummaryStrip
           summary={summary}
-          scope={comparing ? "All windows" : (leadName ?? "")}
+          scope={comparing ? "All transitions" : (leadName ?? "")}
           perWindow={comparing ? each : undefined}
           shown={
             activeFilter
@@ -244,7 +244,7 @@ export function MeltResultsPanel({
         />
       ) : (
         <p className="text-sm text-muted-foreground">
-          No temperature window on this signal.
+          No transition named on this signal.
           {onNamePeaks && (
             <>
               {" "}
@@ -254,7 +254,7 @@ export function MeltResultsPanel({
                 className="h-auto p-0 font-normal"
                 onClick={onNamePeaks}
               >
-                Set up windows
+                Name transitions
               </Button>
               .
             </>

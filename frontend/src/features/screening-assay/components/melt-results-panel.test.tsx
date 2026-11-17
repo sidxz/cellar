@@ -188,7 +188,7 @@ const stripButtons = () =>
     .getAllByRole("button")
     .map((b) => b.textContent);
 const tabNames = () =>
-  within(screen.getByRole("tablist", { name: "Window" }))
+  within(screen.getByRole("tablist", { name: "Transition" }))
     .getAllByRole("tab")
     .map((t) => t.textContent);
 
@@ -218,17 +218,17 @@ describe("MeltResultsPanel", () => {
   it("lists positions and the no-window sentence when the signal has no window", () => {
     const onLead = vi.fn();
     render(<Harness channel="c" onLead={onLead} />);
-    expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
+    expect(screen.getByText("No transition named on this signal.")).toBeInTheDocument();
     // A viewer is offered nothing to do about it.
     expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);
     expect(within(table()).queryByText("Tm (°C)")).not.toBeInTheDocument();
-    expect(screen.queryByRole("tablist", { name: "Window" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tablist", { name: "Transition" })).not.toBeInTheDocument();
     expect(onLead).toHaveBeenLastCalledWith(null);
   });
 
   describe("setting up windows", () => {
-    const setUp = () => screen.queryAllByRole("button", { name: "Set up windows" });
+    const setUp = () => screen.queryAllByRole("button", { name: "Name transitions" });
     /** The analysis with one more counted peak, outside every window of signal a. */
     const outside = (well: string, channel = "a") =>
       ({
@@ -241,16 +241,16 @@ describe("MeltResultsPanel", () => {
       const onNamePeaks = vi.fn();
       render(<Harness channel="c" onNamePeaks={onNamePeaks} />);
       const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
-      const button = within(header).getByRole("button", { name: "Set up windows" });
-      expect(button).toHaveTextContent(/^Set up windows$/);
+      const button = within(header).getByRole("button", { name: "Name transitions" });
+      expect(button).toHaveTextContent(/^Name transitions$/);
       expect(button).toHaveAttribute("data-variant", "outline");
       fireEvent.click(button);
       expect(onNamePeaks).toHaveBeenCalledTimes(1);
 
-      const note = screen.getByText(/^No temperature window on this signal\./);
-      expect(note).toHaveTextContent(/^No temperature window on this signal\. Set up windows\.$/);
-      const link = within(note).getByRole("button", { name: "Set up windows" });
-      expect(link).toHaveTextContent(/^Set up windows$/);
+      const note = screen.getByText(/^No transition named on this signal\./);
+      expect(note).toHaveTextContent(/^No transition named on this signal\. Name transitions\.$/);
+      const link = within(note).getByRole("button", { name: "Name transitions" });
+      expect(link).toHaveTextContent(/^Name transitions$/);
       fireEvent.click(link);
       expect(onNamePeaks).toHaveBeenCalledTimes(2);
       expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
@@ -266,17 +266,17 @@ describe("MeltResultsPanel", () => {
       expect(edit).toHaveAttribute("data-variant", "link");
       const precedes = (a: Element, b: Element) =>
         !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      expect(precedes(screen.getByRole("tablist", { name: "Window" }), edit)).toBe(true);
+      expect(precedes(screen.getByRole("tablist", { name: "Transition" }), edit)).toBe(true);
       expect(precedes(edit, screen.getByRole("tablist", { name: "View" }))).toBe(true);
       fireEvent.click(edit);
       expect(onNamePeaks).toHaveBeenCalledTimes(1);
-      expect(screen.queryByText(/No temperature window/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/No transition named/)).not.toBeInTheDocument();
     });
 
     it("is the button again when a reference has a peak outside every window", () => {
       render(<Harness data={outside("r1")} onNamePeaks={() => {}} />);
       expect(setUp()).toHaveLength(1);
-      expect(setUp()[0]).toHaveTextContent(/^Set up windows$/);
+      expect(setUp()[0]).toHaveTextContent(/^Name transitions$/);
       expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
     });
 
@@ -294,8 +294,8 @@ describe("MeltResultsPanel", () => {
       expect(screen.queryByText("Edit")).not.toBeInTheDocument();
       rerender(<Harness channel="c" />);
       expect(setUp()).toHaveLength(0);
-      expect(screen.getByText("No temperature window on this signal.")).toHaveTextContent(
-        /^No temperature window on this signal\.$/,
+      expect(screen.getByText("No transition named on this signal.")).toHaveTextContent(
+        /^No transition named on this signal\.$/,
       );
     });
   });
@@ -334,7 +334,7 @@ describe("MeltResultsPanel", () => {
     expect(screen.queryByText(/of 4 samples/)).toBeNull();
     // Nothing counts, or filters to, the peaks nobody has reviewed (s3's).
     expect(stripButtons()).toEqual([
-      "Peak issues 1",
+      "Needs a look 1",
       "Hits 2",
       "1 up",
       "1 down",
@@ -345,7 +345,7 @@ describe("MeltResultsPanel", () => {
     expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Shift threshold (°C)")).toBeNull();
-    const needs = screen.getByRole("button", { name: "Peak issues 1" });
+    const needs = screen.getByRole("button", { name: "Needs a look 1" });
     fireEvent.click(needs);
     expect(needs).toHaveAttribute("aria-pressed", "true");
     expect(bodyIds()).toEqual(["r1", "s4"]);
@@ -396,7 +396,7 @@ describe("MeltResultsPanel", () => {
     expect(status("s3")).toBe("");
     expect(within(row("s3")).getByText("−10.0").closest("td")).toHaveClass("text-red-700");
     // The strip names what it counts and gives each window's reference.
-    expect(screen.getByText("All windows", { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("All transitions", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText("Reference MadR · Main 71.3 °C · Low 71.3 °C")).toBeInTheDocument();
   });
 
@@ -441,7 +441,7 @@ describe("MeltResultsPanel", () => {
     expect(status("r1")).toBe("Reference");
     expect(screen.queryByText(/not reviewed/i)).toBeNull();
     expect(stripButtons()).toEqual([
-      "Peak issues 1",
+      "Needs a look 1",
       "Hits 2",
       "1 up",
       "1 down",
@@ -516,25 +516,25 @@ describe("MeltResultsPanel", () => {
         ),
         steps: [...analysis.steps, { ...assigned, value, assignment_reason: reason }],
       }) as MeltingAnalysis;
-    const mark = () => within(row("s1")).getByRole("img", { name: "Assigned peak" });
+    const mark = () => within(row("s1")).getByRole("img", { name: "Peak chosen by hand" });
 
     const { unmount } = render(<Harness data={named(42, "main transition, shifted low")} />);
     // Named by range: no marker.
-    expect(within(row("s2")).queryByRole("img", { name: "Assigned peak" })).toBeNull();
+    expect(within(row("s2")).queryByRole("img", { name: "Peak chosen by hand" })).toBeNull();
     expect(mark().closest("td")).toHaveTextContent("42.0");
     fireEvent.focus(mark());
     const tip = screen.getByRole("tooltip");
     expect(tip).toHaveTextContent(
-      `Assigned by Ada Lovelace · ${formatDateTime("2026-11-13T10:00:00Z")}`,
+      `Chosen as Tm by Ada Lovelace · ${formatDateTime("2026-11-13T10:00:00Z")}`,
     );
     expect(tip).toHaveTextContent("main transition, shifted low");
-    expect(tip).toHaveTextContent("By temperature: in Low");
+    expect(tip).toHaveTextContent("By temperature range: in Low");
     unmount();
 
     render(<Harness data={named(92.4, null)} />);
     fireEvent.focus(mark());
     expect(screen.getByRole("tooltip")).toHaveTextContent(
-      /^Assigned by Ada Lovelace · [^·]+By temperature: outside every window$/,
+      /^Chosen as Tm by Ada Lovelace · [^·]+By temperature range: outside every transition's range$/,
     );
   });
 
@@ -558,14 +558,14 @@ describe("MeltResultsPanel", () => {
     const one = render(<Harness data={outside(92.44)} />);
     fireEvent.focus(noPeak());
     expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Peak at 92.4 °C is outside every window. Pick it on the graph to assign it.",
+      "Peak at 92.4 °C is outside every transition's range. Pick it on the graph to use it as Tm.",
     );
     one.unmount();
 
     render(<Harness data={outside(92.44, 20.5)} />);
     fireEvent.focus(noPeak());
     expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Peaks at 20.5 °C and 92.4 °C are outside every window. Pick one on the graph to assign it.",
+      "Peaks at 20.5 °C and 92.4 °C are outside every transition's range. Pick one on the graph to use it as Tm.",
     );
   });
 

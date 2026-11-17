@@ -34,7 +34,7 @@ describe("AcceptAllPeaks", () => {
     customInstance.mockResolvedValue({ steps: [], skipped: 0, compute_warning: null });
     show(analysis(["unreviewed", "accepted", "unreviewed"]));
     expect(screen.getByText("2 peaks")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark all reviewed" }));
     await waitFor(() => expect(customInstance).toHaveBeenCalledTimes(1));
     expect(customInstance).toHaveBeenCalledWith({
       url: "/api/v1/runs/r1/melting-steps/accept",
@@ -60,7 +60,7 @@ describe("AcceptAllPeaks", () => {
 
   it("is disabled, with the reason as its title, on a run that refuses peak edits", () => {
     show(analysis(["unreviewed"], "Peaks cannot be changed on an approved run"));
-    const button = screen.getByRole("button", { name: "Accept all" });
+    const button = screen.getByRole("button", { name: "Mark all reviewed" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Peaks cannot be changed on an approved run");
   });
@@ -68,7 +68,7 @@ describe("AcceptAllPeaks", () => {
   it("shows the server's reason when the request fails", async () => {
     customInstance.mockRejectedValueOnce(new Error("API error: 409 — A peak changed. Reload."));
     show(analysis(["unreviewed"]));
-    fireEvent.click(screen.getByRole("button", { name: "Accept all" }));
+    fireEvent.click(screen.getByRole("button", { name: "Mark all reviewed" }));
     expect(await screen.findByText("A peak changed. Reload.")).toBeInTheDocument();
   });
 });

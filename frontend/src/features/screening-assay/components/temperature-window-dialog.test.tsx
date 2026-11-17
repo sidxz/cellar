@@ -72,7 +72,7 @@ function fill(name = "Main", low = "50", high = "85") {
   fireEvent.change(screen.getByLabelText("High (°C)"), { target: { value: high } });
 }
 
-const save = () => screen.getByRole("button", { name: /^add (window|values)$/i });
+const save = () => screen.getByRole("button", { name: /^add (transition|values)$/i });
 
 describe("TemperatureWindowDialog", () => {
   beforeEach(() => {
@@ -84,7 +84,9 @@ describe("TemperatureWindowDialog", () => {
   it("says the readouts come from each position's peaks", () => {
     renderDialog();
     expect(
-      screen.getByText("Adds readouts computed from each position's peaks inside the window."),
+      screen.getByText(
+        "Adds readouts computed from each position's peaks inside the transition's temperature range.",
+      ),
     ).toBeInTheDocument();
   });
 
@@ -158,7 +160,7 @@ describe("TemperatureWindowDialog", () => {
     renderDialog();
     expect(
       screen.getByText(
-        "Import a run with traces first; the window's signal comes from its traces.",
+        "Import a run with traces first; the transition's signal comes from its traces.",
       ),
     ).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
@@ -235,7 +237,7 @@ describe("TemperatureWindowDialog", () => {
     expect(screen.getByLabelText("Max ΔTm")).toBeDisabled();
     fireEvent.click(screen.getByLabelText("ΔTm at a stated concentration"));
     fireEvent.change(screen.getByLabelText("Concentration (µM)"), { target: { value: "50" } });
-    expect(screen.getByText("This window already has it.")).toBeInTheDocument();
+    expect(screen.getByText("This transition already has it.")).toBeInTheDocument();
     expect(save()).toBeDisabled();
   });
 });
