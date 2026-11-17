@@ -8,7 +8,7 @@ import type { SeriesPoint } from "../lib/melt-results";
 import { GRID, saveAsSvg, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
 
 /** ΔTm against dose for one batch: a dose-dependent shift rises, then plateaus.
- *  Points whose step is not reviewed yet are drawn hollow. */
+ *  Every point is drawn alike, whether or not its peak was reviewed. */
 export function ConcentrationChart({
   title,
   caption,
@@ -53,20 +53,19 @@ export function ConcentrationChart({
             x: points.map((p) => p.dose),
             y: points.map((p) => p.deltaTm),
             customdata: points.map((p) => p.wellId),
-            text: points.map((p) => (p.provisional ? "Provisional" : "Reviewed")),
             marker: {
               color: points.map((p) => shiftColour(p.deltaTm, hits.has(p.wellId))),
-              symbol: points.map((p) => (p.provisional ? "circle-open" : "circle")),
               size: points.map((p) => (selected.has(p.wellId) ? 11 : 8)),
-              // An open marker is stroked in its own colour at this width.
               line: {
-                width: points.map((p) =>
-                  p.provisional ? (selected.has(p.wellId) ? 3 : 2) : selected.has(p.wellId) ? 2 : 0,
-                ),
+                width: points.map((p) => (selected.has(p.wellId) ? 2 : 0)),
                 color: selectedOutline(resolvedTheme),
               },
             },
-            hovertemplate: `%{x} ${doseUnit}: %{y:.1f} °C · %{text}<extra></extra>`,
+            // A template per point: only a reviewed one says so.
+            hovertemplate: points.map(
+              (p) =>
+                `%{x} ${doseUnit}: %{y:.1f} °C${p.provisional ? "" : " · Reviewed"}<extra></extra>`,
+            ),
           },
           {
             type: "scatter",

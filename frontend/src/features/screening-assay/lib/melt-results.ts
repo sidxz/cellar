@@ -90,14 +90,14 @@ export interface WindowSummary {
   down: number;
 }
 
-export type ResultFilter =
-  | "needs_review"
-  | "provisional"
-  | "hits"
-  | "up"
-  | "down"
-  | "not_evaluated"
-  | null;
+const RESULT_FILTERS = ["needs_review", "hits", "up", "down", "not_evaluated"] as const;
+
+export type ResultFilter = (typeof RESULT_FILTERS)[number] | null;
+
+/** A filter as it was remembered: one no longer offered (an older
+ *  "provisional") is no filter, so all rows show. */
+export const knownFilter = (f: unknown): ResultFilter =>
+  RESULT_FILTERS.find((known) => known === f) ?? null;
 
 /** Worst first; references sit outside this ranking. */
 export const STATUS_ORDER: readonly CellStatus[] = [
@@ -272,8 +272,6 @@ export function matchesFilter(
   switch (filter) {
     case "needs_review":
       return cells.some((c) => c.status === "several_steps" || c.status === "no_step");
-    case "provisional":
-      return cells.some((c) => c.status === "provisional");
     case "hits":
       return hits.has(row.wellId);
     case "up":

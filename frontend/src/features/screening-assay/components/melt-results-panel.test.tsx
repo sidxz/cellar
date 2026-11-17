@@ -180,6 +180,13 @@ const row = (id: string) => {
   if (!el) throw new Error(`row ${id} not shown`);
   return el as HTMLElement;
 };
+/** What a row's Status cell (the last) reads. */
+const status = (id: string) => [...(row(id) as HTMLTableRowElement).cells].at(-1)?.textContent;
+/** The counts of the line above the grid, each a filter. */
+const stripButtons = () =>
+  within(screen.getByText(/^Reference MadR/).parentElement as HTMLElement)
+    .getAllByRole("button")
+    .map((b) => b.textContent);
 const tabNames = () =>
   within(screen.getByRole("tablist", { name: "Window" }))
     .getAllByRole("tab")
@@ -300,11 +307,12 @@ describe("MeltResultsPanel", () => {
     expect(delta("s2", "+3.0")).toHaveClass("text-blue-700", "font-semibold");
     expect(delta("s2", "+3.0")?.className).not.toMatch(/bg-/);
     expect(delta("s3", "−1.0")).toHaveClass("text-muted-foreground");
-    expect(within(row("s3")).getByText("Provisional")).toBeInTheDocument();
-    expect(within(row("s1")).getByText("Reviewed")).toBeInTheDocument();
-    expect(within(row("s4")).getByText("No peak")).toBeInTheDocument();
+    // A peak nobody has reviewed (s3's) gives its value with no word about review.
+    expect(status("s3")).toBe("");
+    expect(status("s1")).toBe("Reviewed");
+    expect(status("s4")).toBe("No peak");
     // The peak that gave the reference its Tm in the shown window is accepted.
-    expect(within(row("r1")).getByText("Reference · Reviewed")).toBeInTheDocument();
+    expect(status("r1")).toBe("Reference · Reviewed");
     expect(within(row("r1")).getByText("—")).toBeInTheDocument();
     // Identity: registered links to the compound with the batch suffix; unregistered
     // reads plain, the tag in its title.
@@ -324,7 +332,15 @@ describe("MeltResultsPanel", () => {
     expect(screen.getByText("Reference MadR 71.3 °C (n=1)")).toBeInTheDocument();
     expect(screen.getByText("Main", { selector: "span" })).toBeInTheDocument();
     expect(screen.queryByText(/of 4 samples/)).toBeNull();
-    expect(screen.getByRole("button", { name: "Provisional 1" })).toBeInTheDocument();
+    // Nothing counts, or filters to, the peaks nobody has reviewed (s3's).
+    expect(stripButtons()).toEqual([
+      "Peak issues 1",
+      "Hits 2",
+      "1 up",
+      "1 down",
+      "Not evaluated 1",
+    ]);
+    expect(screen.queryByText(/provisional/i)).toBeNull();
     expect(screen.getByRole("button", { name: "Hits 2" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
@@ -376,8 +392,8 @@ describe("MeltResultsPanel", () => {
     expect(t.getAllByRole("columnheader", { name: "Tm (°C)" })).toHaveLength(2);
     expect(t.getAllByRole("columnheader", { name: "ΔTm (°C)" })).toHaveLength(2);
     expect(bodyIds()).toEqual(["r1", "s3", "s1", "s2", "s4"]);
-    // Worst status across windows: provisional in Main beats reviewed in Low.
-    expect(within(row("s3")).getByText("Provisional")).toBeInTheDocument();
+    // Worst status across windows: unreviewed in Main beats reviewed in Low, and reads as nothing.
+    expect(status("s3")).toBe("");
     expect(within(row("s3")).getByText("−10.0").closest("td")).toHaveClass("text-red-700");
     // The strip names what it counts and gives each window's reference.
     expect(screen.getByText("All windows", { selector: "span" })).toBeInTheDocument();
@@ -416,16 +432,33 @@ describe("MeltResultsPanel", () => {
     expect(within(row("s2")).getByText("+3.0").closest("td")).toHaveClass("text-muted-foreground");
   });
 
-  it("an unreviewed reference is a button that selects it, and its chip says Provisional", () => {
-    const onChange = vi.fn();
+  it("an unreviewed reference reads Reference, and nothing asks for its review", () => {
     const data = {
       ...analysis,
       steps: analysis.steps.map((s) => (s.well_id === "r1" ? step("r1", 71.3, "unreviewed") : s)),
     } as MeltingAnalysis;
-    render(<Harness data={data} onChange={onChange} />);
-    expect(within(row("r1")).getByText("Reference · Provisional")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Reference not reviewed" }));
-    expect(lastSelected(onChange)).toEqual(["r1"]);
+    render(<Harness data={data} />);
+    expect(status("r1")).toBe("Reference");
+    expect(screen.queryByText(/not reviewed/i)).toBeNull();
+    expect(stripButtons()).toEqual([
+      "Peak issues 1",
+      "Hits 2",
+      "1 up",
+      "1 down",
+      "Not evaluated 1",
+    ]);
+  });
+
+  it("an unreviewed value still warns that its peaks differ from the reference's", () => {
+    const data = {
+      ...analysis,
+      step_checks: [{ channel_key: "a", differs: ["s3"], references_differ: false }],
+    } as unknown as MeltingAnalysis;
+    render(<Harness data={data} />);
+    expect(status("s3")).toBe("");
+    expect(
+      within(row("s3")).getByRole("img", { name: "Different number of peaks than the reference" }),
+    ).toBeInTheDocument();
   });
 
   it("the search box finds a sample by label, position or batch", () => {
