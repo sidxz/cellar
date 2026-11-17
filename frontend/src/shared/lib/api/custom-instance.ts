@@ -41,6 +41,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A refused edit made from a version someone has since replaced (409 `StaleEditError`).
+ * With `race`, also two saves from the same version racing (409 `ConcurrencyConflictError`):
+ * to an editor that explains a stale edit, the same thing — someone saved first.
+ */
+export function isStaleEdit(error: unknown, { race = false } = {}): boolean {
+  if (!(error instanceof ApiError)) return false;
+  const kind = (error.body as { error?: unknown } | null)?.error;
+  return kind === "StaleEditError" || (race && kind === "ConcurrencyConflictError");
+}
+
 /** Called by AuthProvider after fetching runtime AppConfig. */
 export function setApiBaseUrl(url: string) {
   _baseUrl = url;

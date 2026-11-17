@@ -227,6 +227,17 @@ class SQLAlchemyDecompositionRowReader:
             for row in result.all()
         ]
 
+    async def fetch_assignments(
+        self, run_id: UUID, *, workspace_id: UUID
+    ) -> dict[UUID, dict[str, str]]:
+        stmt = self._scoped_join(
+            select(RGroupAssignmentModel.molecule_id, RGroupAssignmentModel.rgroups),
+            run_id,
+            workspace_id,
+        )
+        result = await self._uow.session.execute(stmt)
+        return {row[0]: dict(row[1]) for row in result.all()}
+
     async def count_rows(
         self,
         run_id: UUID,

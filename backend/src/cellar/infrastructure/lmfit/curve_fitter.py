@@ -27,6 +27,7 @@ import numpy as np
 from returns.result import Failure, Result, Success
 
 from cellar.domain.screening_assay.curve_fitting import (
+    DOSE_ZERO_LEFT_OUT,
     ConcentrationResponsePoint,
     FittedCurveResult,
     InterceptValue,
@@ -142,7 +143,14 @@ class LmfitCurveFitter:
         points: list[ConcentrationResponsePoint],
         config: DoseResponseConfig,
     ) -> Result[FittedCurveResult, DomainError]:
-        """Fit a direction-agnostic 4PL curve to the provided data points."""
+        """Fit a direction-agnostic 4PL curve to the provided data points.
+
+        A point at dose <= 0 (a vehicle well in a titration) has no place on the log-dose
+        axis: it is left out of the fit and counted in a ``DOSE_ZERO_LEFT_OUT`` note.
+        """
+        left_out = sum(1 for p in points if not p.concentration > 0)
+        notes = [f"{DOSE_ZERO_LEFT_OUT}:{left_out}"] if left_out else []
+        points = [p for p in points if p.concentration > 0]
         active_points = [p for p in points if not p.is_excluded]
         excluded_points = [p for p in points if p.is_excluded]
 
@@ -154,19 +162,19 @@ class LmfitCurveFitter:
                 )
             )
 
-        concentrations = np.array([p.concentration for p in active_points], dtype=float)
-        responses = np.array([p.response for p in active_points], dtype=float)
-
-        # All concentrations must be positive (we fit in log space).
-        if not np.all(concentrations > 0):
-            bad = [float(c) for c in concentrations if not (c > 0)]
+        # Replicates stacked at fewer doses than the 4PL has parameters (a control
+        # column at one dose) are never a curve, however many points they hold.
+        doses = len({p.concentration for p in active_points})
+        if doses < _MIN_FITTING_POINTS:
             return Failure(
                 ValidationError(
-                    f"Cannot fit dose-response: {len(bad)} point(s) have "
-                    f"non-positive concentration (e.g., {bad[0]}). Dose-response "
-                    f"curves require all doses > 0."
+                    f"Curve fitting requires at least {_MIN_FITTING_POINTS} distinct doses; "
+                    f"got {doses}"
                 )
             )
+
+        concentrations = np.array([p.concentration for p in active_points], dtype=float)
+        responses = np.array([p.response for p in active_points], dtype=float)
 
         raw_data = [
             {"concentration": p.concentration, "response": p.response} for p in active_points
@@ -205,7 +213,7 @@ class LmfitCurveFitter:
                     num_points=len(active_points),
                     raw_data=raw_data,
                     excluded_points=excluded_data,
-                    fit_quality_warnings=[],
+                    fit_quality_warnings=notes,
                     outlier_suggestions=(),
                 )
             )
@@ -290,7 +298,7 @@ class LmfitCurveFitter:
         # ──────────────────────────────────────────────────────────────────
         # Fit quality warnings — compute first so CI logic can consult them
         # ──────────────────────────────────────────────────────────────────
-        warnings: list[str] = []
+        warnings: list[str] = list(notes)
         ec50_at_bound = (
             abs(fitted_log_ec50 - log_ec50_min) < _BOUND_EPSILON_LOG10
             or abs(log_ec50_max - fitted_log_ec50) < _BOUND_EPSILON_LOG10
@@ -337,7 +345,8 @@ class LmfitCurveFitter:
 
         curve_class = _classify_curve(
             responses=responses,
-            predicted=predicted,
+            # In dose order: the points arrive in well order, which says nothing about shape.
+            predicted=predicted[np.argsort(log_concentrations, kind="stable")],
             r_squared=r_squared,
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,

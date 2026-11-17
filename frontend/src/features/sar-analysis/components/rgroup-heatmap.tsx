@@ -19,7 +19,6 @@ import {
   type ExpandedCurve,
 } from "@/features/screen-campaign/components/grid/curve-expand-dialog";
 import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
-import { StructureThumbnail } from "@/shared/components/chemistry";
 import {
   Select,
   SelectContent,
@@ -29,49 +28,19 @@ import {
 } from "@/shared/components/ui/select";
 import type { HeatmapCellView } from "@/shared/lib/api/model";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
-import { cn } from "@/shared/lib/utils";
 import { useEffect, useMemo, useState } from "react";
 import { useHeatmapAggregation } from "../hooks/use-heatmap-aggregation";
 import { potencyShade } from "../lib/sar-activity-display";
 import type { SarColorSpec } from "../lib/sar-color-spec";
-import { fragmentDisplay } from "../lib/sar-fragment-label";
+import { type MatrixGridCell, PotencyRamp, RGroupMatrixGrid, cellKey } from "./rgroup-matrix-grid";
+
+export { cellKey };
 
 export interface RGroupHeatmapProps {
   runId: string;
   projectionId: string;
   labels: string[];
   colorSpec: SarColorSpec;
-}
-
-const GAP_CLASS =
-  "bg-[repeating-linear-gradient(45deg,transparent,transparent_5px,var(--color-muted)_5px,var(--color-muted)_7px)]";
-
-/** Stable, collision-free key for a (y, x) cell. */
-export function cellKey(y: string, x: string): string {
-  return JSON.stringify([y, x]);
-}
-
-function AxisFragment({ smiles, orientation }: { smiles: string; orientation: "col" | "row" }) {
-  const frag = fragmentDisplay(smiles);
-  return (
-    <div
-      className={cn(
-        orientation === "col"
-          ? "flex w-20 flex-col items-center gap-0.5"
-          : "flex w-24 items-center gap-1",
-      )}
-      title={frag.title}
-    >
-      {frag.thumbnailSmiles && (
-        <StructureThumbnail
-          smiles={frag.thumbnailSmiles}
-          size={32}
-          className={orientation === "row" ? "shrink-0" : undefined}
-        />
-      )}
-      <span className="break-all text-[9px] leading-tight text-muted-foreground">{frag.label}</span>
-    </div>
-  );
 }
 
 export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroupHeatmapProps) {
@@ -101,6 +70,22 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
     for (const c of data?.cells ?? []) m.set(cellKey(c.y, c.x), c);
     return m;
   }, [data]);
+  const gridCells = useMemo(() => {
+    const m = new Map<string, MatrixGridCell>();
+    for (const [key, cell] of cellsByKey) {
+      const unit = (cell.best_snapshot as { unit?: string | null })?.unit
+        ? ` ${(cell.best_snapshot as { unit?: string | null }).unit}`
+        : "";
+      const extra = cell.count - 1;
+      m.set(key, {
+        text: cell.best_scalar != null ? `${formatMeasurementValue(cell.best_scalar)}${unit}` : "—",
+        badge: extra > 0 ? `+${extra}` : undefined,
+        shade: shadeByPotency ? potencyShade(cell.best_scalar ?? null, reference) : "",
+        title: `${cell.count} compound(s)`,
+      });
+    }
+    return m;
+  }, [cellsByKey, shadeByPotency, reference]);
 
   if (labels.length < 2) {
     return (
@@ -172,95 +157,22 @@ export function RGroupHeatmap({ runId, projectionId, labels, colorSpec }: RGroup
         )}
       </div>
 
-      <div className="overflow-auto">
-        <table className="border-separate border-spacing-1 text-xs">
-          <thead>
-            <tr>
-              <th className="sticky left-0 z-10 bg-background p-1 text-left align-bottom font-medium text-muted-foreground">
-                {axisY} ↓ / {axisX} →
-              </th>
-              {data.x_values.map((x) => (
-                <th key={x} className="p-1 align-bottom font-normal" scope="col">
-                  <AxisFragment smiles={x} orientation="col" />
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.y_values.map((y) => (
-              <tr key={y}>
-                <th
-                  scope="row"
-                  className="sticky left-0 z-10 bg-background p-1 text-left align-middle font-normal"
-                >
-                  <AxisFragment smiles={y} orientation="row" />
-                </th>
-                {data.x_values.map((x) => {
-                  const cell = cellsByKey.get(cellKey(y, x));
-                  if (!cell) {
-                    return (
-                      <td
-                        key={x}
-                        className={cn(
-                          "h-16 w-20 rounded border border-dashed border-muted-foreground/30 text-center align-middle text-muted-foreground/50",
-                          GAP_CLASS,
-                        )}
-                        title="No compound with this combination — make?"
-                      >
-                        <span className="text-[10px]">make?</span>
-                      </td>
-                    );
-                  }
-                  const shade = shadeByPotency
-                    ? potencyShade(cell.best_scalar ?? null, reference)
-                    : "";
-                  const unit = (cell.best_snapshot as { unit?: string | null })?.unit
-                    ? ` ${(cell.best_snapshot as { unit?: string | null }).unit}`
-                    : "";
-                  const extra = cell.count - 1;
-                  return (
-                    <td key={x} className="p-0">
-                      <button
-                        type="button"
-                        className={cn(
-                          "flex h-16 w-20 cursor-pointer flex-col items-center justify-center gap-0.5 rounded border border-border text-center",
-                          shade || "bg-muted/30",
-                        )}
-                        onClick={() => handleCellClick(cell)}
-                        title={`${cell.count} compound(s)`}
-                      >
-                        <span className="font-medium tabular-nums">
-                          {cell.best_scalar != null
-                            ? `${formatMeasurementValue(cell.best_scalar)}${unit}`
-                            : "—"}
-                        </span>
-                        {extra > 0 && (
-                          <span className="rounded-full bg-foreground/10 px-1.5 text-[10px] text-muted-foreground">
-                            +{extra}
-                          </span>
-                        )}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <RGroupMatrixGrid
+        yLabel={axisY}
+        xLabel={axisX}
+        yValues={data.y_values}
+        xValues={data.x_values}
+        cells={gridCells}
+        onCellClick={(y, x) => {
+          const cell = cellsByKey.get(cellKey(y, x));
+          if (cell) handleCellClick(cell);
+        }}
+      />
 
       <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
         <span className="font-medium text-foreground">{colorSpec.label}</span>
         {shadeByPotency ? (
-          <>
-            <span>potent</span>
-            <span className="h-3 w-5 rounded bg-green-600/30" />
-            <span className="h-3 w-5 rounded bg-green-500/20" />
-            <span className="h-3 w-5 rounded bg-amber-500/20" />
-            <span className="h-3 w-5 rounded bg-orange-500/25" />
-            <span className="h-3 w-5 rounded bg-red-600/30" />
-            <span>weak</span>
-          </>
+          <PotencyRamp />
         ) : (
           <span>higher-is-better readout — cells show the best value (uncolored).</span>
         )}

@@ -61,3 +61,38 @@ export function worstZPrime(qcMetrics: Record<string, unknown> | null | undefine
   }
   return values.length > 0 ? Math.min(...values) : null;
 }
+
+/** A control compound's per-plate potency, stored as plate QC (never as its curve). */
+export interface PlateControlFit {
+  role: string; // "positive_control" | "reference"
+  molecule_id: string;
+  label: string; // the primary intercept, e.g. "IC50"
+  value: number | null;
+  curve_class: string;
+}
+
+/** One readout layer's QC on one plate. */
+export interface PlateLayerQc {
+  z_prime?: number | null;
+  classification?: string;
+  pos_mean?: number;
+  pos_sd?: number | null;
+  pos_n?: number;
+  neg_mean?: number;
+  neg_sd?: number | null;
+  neg_n?: number;
+  s2b?: number | null;
+  control_fits?: PlateControlFit[];
+}
+
+/** plate id → readout definition id → layer ("raw" or a normalization) → QC. */
+export type PlateLayerQcMap = Record<string, Record<string, Record<string, PlateLayerQc>>>;
+
+/** ``qc_metrics.plates`` as the calc engine stores it (per readout x layer); {} when
+ * absent — runs computed before it, or a hand-edited value. */
+export function readPlateLayerQc(
+  qcMetrics: Record<string, unknown> | null | undefined,
+): PlateLayerQcMap {
+  const raw = qcMetrics?.plates;
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as PlateLayerQcMap) : {};
+}

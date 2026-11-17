@@ -105,6 +105,13 @@ from cellar.application.research_organization.remove_campaign_channel import Rem
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
+from cellar.application.research_organization.saved_visualizations import (
+    CreateSavedVisualization,
+    DeleteSavedVisualization,
+    GetSavedVisualization,
+    ListSavedVisualizations,
+    UpdateSavedVisualization,
+)
 from cellar.application.research_organization.search_reference_resolution import (
     SearchReferenceResolver,
 )
@@ -123,6 +130,7 @@ from cellar.application.research_organization.update_project import UpdateProjec
 from cellar.application.research_organization.update_saved_search import UpdateSavedSearch
 from cellar.application.screening.molecule_activity_service import MoleculeActivityService
 from cellar.application.shared.molecule_resolver import MoleculeResolver
+from cellar.application.visualization.dataset_reader import VisualizationDatasetReader
 from cellar.domain.research_organization.repository import (
     CampaignRepository,
     CollectionImportTemplateRepository,
@@ -160,6 +168,9 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_search_repository import (  # noqa: E501
     SQLAlchemySavedSearchRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.saved_visualization_repository import (  # noqa: E501
+    SQLAlchemySavedVisualizationRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.coverage_query import (
     SQLAlchemyCollectionCoverageQuery,
@@ -298,7 +309,16 @@ def register_research_organization(container: Container) -> None:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return DeleteCollection(uow, SQLAlchemyCollectionRepository(uow), c[EventDispatcher])
 
-    container.define(CreateCollection, _collection_cmd(CreateCollection))
+    def _create_collection(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return CreateCollection(
+            uow,
+            SQLAlchemyCollectionRepository(uow),
+            c[EventDispatcher],
+            MoleculeResolver(SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]),
+        )
+
+    container.define(CreateCollection, _create_collection)
     container.define(ComposeCollections, _collection_cmd(ComposeCollections))
     container.define(UpdateCollection, _collection_cmd(UpdateCollection))
     container.define(DeleteCollection, _delete_collection)
@@ -413,6 +433,31 @@ def register_research_organization(container: Container) -> None:
     container.define(DeleteSavedSearch, _delete_saved_search)
     container.define(GetSavedSearch, _ss_query(GetSavedSearch))
     container.define(ListSavedSearches, _ss_query(ListSavedSearches))
+
+    # --- Saved Visualizations ---
+    def _saved_visualization(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            members = SQLAlchemyProjectMemberRepository(uow)
+            return uc_cls(
+                uow,
+                SQLAlchemySavedVisualizationRepository(uow),
+                members,
+                ProjectAccess(SQLAlchemyProjectRepository(uow), members),
+                c[VisualizationDatasetReader],
+                c[EventDispatcher],
+            )
+
+        return _f
+
+    for uc_cls in (
+        CreateSavedVisualization,
+        UpdateSavedVisualization,
+        DeleteSavedVisualization,
+        GetSavedVisualization,
+        ListSavedVisualizations,
+    ):
+        container.define(uc_cls, _saved_visualization(uc_cls))
 
     # --- Execute Search ---
     def _search_reference_resolver(c: Container, uow: AsyncUnitOfWork) -> SearchReferenceResolver:

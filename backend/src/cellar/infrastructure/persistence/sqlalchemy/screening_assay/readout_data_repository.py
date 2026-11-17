@@ -6,6 +6,7 @@ ReadoutData is not an AggregateRoot — standalone repo with manual CRUD.
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 
 import sqlalchemy as sa
 from sqlalchemy import delete, func, select
@@ -24,6 +25,9 @@ from cellar.domain.screening_assay.run_scope import RunScope
 from cellar.domain.shared.enums import Qualifier
 from cellar.domain.shared.value_objects import QualifiedValue
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
     run_scope_filters,
@@ -75,13 +79,15 @@ class SQLAlchemyReadoutDataRepository:
     async def find_by_molecule(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID
     ) -> list[ReadoutData]:
-        """All non-outlier readout data for a molecule, ordered by created_at desc."""
+        """The molecule's non-outlier results (sample wells and well-less rows), newest
+        first."""
         stmt = (
             select(ReadoutDataModel)
             .where(
                 ReadoutDataModel.workspace_id == workspace_id,
                 ReadoutDataModel.molecule_id == molecule_id,
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
+                COMPOUND_RESULT,
             )
             .order_by(ReadoutDataModel.created_at.desc())
         )
@@ -146,6 +152,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.molecule_id.in_(molecule_ids),
                 ReadoutDataModel.readout_definition_id.in_(rd_def_ids),
                 ReadoutDataModel.is_outlier == False,  # noqa: E712
+                COMPOUND_RESULT,
                 *([ReadoutDataModel.well_id.is_(None)] if wellless_only else []),
             )
             .group_by(
@@ -207,7 +214,7 @@ class SQLAlchemyReadoutDataRepository:
         The SQL only counts and summarises; ``run_aggregation.combine_replicates``
         decides what a run's value is. Unqualified = no qualifier, ``=`` or ``~``;
         ``>``/``>=`` and ``<``/``<=`` contribute their bounds. Rejected runs,
-        outlier wells and non-numeric rows never appear.
+        outlier wells, control/reference wells and non-numeric rows never appear.
         """
         if not molecule_ids or not specs:
             return []
@@ -249,6 +256,7 @@ class SQLAlchemyReadoutDataRepository:
                 any_id(rd.molecule_id, molecule_ids),
                 any_id(rd.readout_definition_id, list({rd_id for rd_id, _ in specs})),
                 rd.is_outlier.is_(False),
+                COMPOUND_RESULT,
                 v.is_not(None),
                 NOT_REJECTED,
                 *run_scope_filters(run_scope, workspace_id),
@@ -335,7 +343,8 @@ class SQLAlchemyReadoutDataRepository:
         molecule_id: uuid.UUID,
         readout_definition_id: uuid.UUID,
     ) -> list[ReadoutData]:
-        """Non-outlier, non-computed readout data for a molecule+definition pair."""
+        """Non-outlier, non-computed results (sample wells and well-less rows) for a
+        molecule+definition pair."""
         stmt = (
             select(ReadoutDataModel)
             .where(
@@ -344,6 +353,7 @@ class SQLAlchemyReadoutDataRepository:
                 ReadoutDataModel.readout_definition_id == readout_definition_id,
                 ReadoutDataModel.is_outlier.is_(False),
                 ReadoutDataModel.is_computed.is_(False),
+                COMPOUND_RESULT,
             )
             .order_by(ReadoutDataModel.created_at.desc())
         )
@@ -462,7 +472,7 @@ class SQLAlchemyReadoutDataRepository:
     async def get_molecule_counts(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, int]:
-        """Return {run_id: distinct_molecule_count} for the given runs."""
+        """Return {run_id: compounds tested} for the given runs (``COMPOUND_RESULT`` rows)."""
         if not run_ids:
             return {}
         stmt = (
@@ -473,6 +483,7 @@ class SQLAlchemyReadoutDataRepository:
             .where(
                 ReadoutDataModel.run_id.in_(run_ids),
                 ReadoutDataModel.molecule_id.is_not(None),
+                COMPOUND_RESULT,
             )
             .group_by(ReadoutDataModel.run_id)
         )
@@ -518,6 +529,31 @@ class SQLAlchemyReadoutDataRepository:
         )
         result = await self._uow.session.execute(stmt)
         return result.rowcount
+
+    async def set_outlier(
+        self,
+        workspace_id: uuid.UUID,
+        run_id: uuid.UUID,
+        well_ids: Sequence[uuid.UUID],
+        *,
+        outlier: bool,
+    ) -> set[uuid.UUID]:
+        if not well_ids:
+            return set()
+        stmt = (
+            sa.update(ReadoutDataModel)
+            .where(
+                ReadoutDataModel.workspace_id == workspace_id,
+                ReadoutDataModel.run_id == run_id,
+                ReadoutDataModel.well_id.in_(well_ids),
+                ReadoutDataModel.is_computed.is_(False),
+                ReadoutDataModel.is_outlier.is_not(outlier),
+            )
+            .values(is_outlier=outlier, updated_at=sa.func.now())
+            .returning(ReadoutDataModel.well_id)
+        )
+        result = await self._uow.session.execute(stmt)
+        return set(result.scalars())
 
     async def save(self, entity: ReadoutData) -> None:
         existing = await self._uow.session.get(ReadoutDataModel, entity.id)

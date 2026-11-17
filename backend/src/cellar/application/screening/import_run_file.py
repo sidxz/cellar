@@ -88,8 +88,9 @@ from cellar.application.screening.import_run_file_preview_store import (
     _StoredPreview,
 )
 from cellar.application.screening.import_run_file_validator import (
-    _load_templates_by_format,
-    _validate_controls_required,
+    _load_layouts,
+    _validate_well_roles,
+    protocol_effect_roles,
 )
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
@@ -286,24 +287,28 @@ class ImportRunFile:
             batch_ref=cmd.mapping.batch_ref,
             compound_ref=cmd.mapping.compound_ref,
             readout_columns=tuple(typed_readouts),
+            well_role=cmd.mapping.well_role,
         )
 
         # 4. Normalize.
-        normalized_result = normalize(preview.table, typed_mapping)
+        # Role words read by effect, as the preview read them.
+        normalized_result = normalize(
+            preview.table, typed_mapping, full_effect=protocol_effect_roles(protocol)[0]
+        )
         if isinstance(normalized_result, Failure):
             return normalized_result
         normalized: NormalizedTable = normalized_result.unwrap()
 
-        # 5. Pre-flight: control-layout coverage.
-        templates_by_format = await _load_templates_by_format(
+        # 5. Pre-flight: control-layout coverage, or known values in the
+        # file's role column when it supplies the roles.
+        layouts = await _load_layouts(
             protocol,
+            run,
             normalized.plate_formats,
             cmd.workspace_id,
             self._plate_template_repo,
         )
-        control_errors = _validate_controls_required(
-            protocol, normalized.plate_formats, templates_by_format
-        )
+        control_errors = _validate_well_roles(protocol, normalized, layouts)
         if control_errors:
             return Failure(ValidationError("; ".join(control_errors)))
 
@@ -396,7 +401,7 @@ class ImportRunFile:
             normalized,
             run,
             existing_readouts,
-            templates_by_format,
+            layouts,
             resolutions=resolutions,
             rd_name_by_id=rd_name_by_id,
             pick_list_allowed=pick_list_allowed,
@@ -426,6 +431,7 @@ class ImportRunFile:
             well_conflicts=list(plan.well_conflicts),
             readout_conflicts=list(plan.readout_conflicts),
             controls_from_template=plan.controls_from_template,
+            controls_from_file=plan.controls_from_file,
             controls_unclassified=plan.controls_unclassified,
             matched_compound_count=resolutions.matched_compound_count,
             unmatched_batch_refs=sorted(resolutions.unmatched_batch_refs),
@@ -455,7 +461,11 @@ class ImportRunFile:
 
         # The resolver has already attached molecule_id + batch_id to
         # each row; the conflict scan threaded those through into the
-        # _ReadoutWrite records. Just forward them to ReadoutData.
+        # _ReadoutWrite records. Just forward them to ReadoutData. A well
+        # flagged as an outlier stays flagged: its new readouts take the flag.
+        flagged_wells = {
+            r.well_id for r in existing_readouts if r.is_outlier and not r.is_computed
+        }
         new_readouts: list[ReadoutData] = []
         for rd_write in plan.new_readouts:
             new_readouts.append(
@@ -468,6 +478,7 @@ class ImportRunFile:
                     readout_definition_id=rd_write.readout_definition_id,
                     value=rd_write.value,
                     value_text=rd_write.value_text,
+                    is_outlier=rd_write.well_id in flagged_wells,
                 )
             )
 
@@ -491,6 +502,7 @@ class ImportRunFile:
             result.compute_warning = str(compute_result.failure())
         else:
             result.fit_warnings = list(compute_result.unwrap().fit_warnings)
+            result.fit_notes = list(compute_result.unwrap().fit_notes)
 
     async def _maybe_attach_raw_file(
         self,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 
 import {
   type UmapJob,
@@ -33,6 +33,9 @@ export interface UseUmapClusterInput {
   /** Override for tests — defaults to the orval-generated cancel POST. */
   cancelFn?: (jobId: string) => Promise<void>;
   pollIntervalMs?: number;
+  /** Tells apart starts of the same inputs: a new one starts a fresh job instead of reusing
+   * the cached start of an earlier (perhaps cancelled) one. */
+  nonce?: string;
 }
 
 export interface UseUmapClusterReturn {
@@ -90,6 +93,7 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
     pollFn = defaultPollFn,
     cancelFn = defaultCancelFn,
     pollIntervalMs = DEFAULT_POLL_MS,
+    nonce,
   } = input;
 
   // Stable cache key — prefer collectionId, fall back to sorted mol-ids hash.
@@ -101,17 +105,22 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
   // Only enable when there is something to fetch.
   const queryEnabled = enabled && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
+  // The start in flight, so a cancel before it answers can still reach the job.
+  const pendingStart = useRef<Promise<StartUmapClusterResponse> | null>(null);
+
   // Start query — fire the POST and cache the response.
   const start = useQuery({
-    queryKey: ["umap-cluster", "start", key, picker, n, threshold],
-    queryFn: () =>
-      startFn({
+    queryKey: ["umap-cluster", "start", key, picker, n, threshold, nonce],
+    queryFn: () => {
+      pendingStart.current = startFn({
         collection_id: collectionId,
         molecule_ids: moleculeIds,
         picker,
         n: n ?? null,
         threshold: threshold ?? null,
-      }),
+      });
+      return pendingStart.current;
+    },
     enabled: queryEnabled,
     staleTime: STALE_TIME.MEDIUM,
   });
@@ -160,7 +169,13 @@ export function useUmapCluster(input: UseUmapClusterInput): UseUmapClusterReturn
   // Cancel handler — best-effort fire-and-forget.
   const cancel = () => {
     const jobId = asyncJob?.id;
-    if (!jobId) return;
+    if (!jobId) {
+      // Not answered yet: cancel the job once the start names it.
+      if (start.isFetching) {
+        void pendingStart.current?.then((r) => r.job && cancelFn(r.job.id)).catch(() => {});
+      }
+      return;
+    }
     cancelFn(jobId).catch(() => {
       // Cancel is best-effort; swallow errors.
     });

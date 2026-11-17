@@ -32,6 +32,9 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.screening_assay.enums import unit_for_normalization
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     ProtocolModel,
@@ -129,11 +132,12 @@ def _readout_stmt(
             # Skip outliers — they would otherwise corrupt MEAN / GEOMEAN
             # aggregations.
             ReadoutDataModel.is_outlier.is_(False),
-            # Control / blank wells carry molecule_id=NULL on readout_data —
-            # they're not attributable to a compound and would crash the
-            # downstream CampaignResult insert (campaign_result.molecule_id
-            # is NOT NULL).
+            # A row with no compound would crash the downstream CampaignResult
+            # insert (campaign_result.molecule_id is NOT NULL).
             ReadoutDataModel.molecule_id.is_not(None),
+            # Sample wells and well-less rows only: control and reference wells
+            # that name a compound are plate QC, never one of its picks.
+            COMPOUND_RESULT,
             # Restrict to one normalization layer so a raw readout's computed
             # siblings (percent_inhibition / z_score) don't bleed into the
             # aggregate.

@@ -22,7 +22,9 @@ vi.mock("../../hooks/use-protocols", () => {
 });
 vi.mock("../../hooks/use-plate-templates", () => ({ usePlateTemplates: () => ({ data: [] }) }));
 vi.mock("@/shared/hooks/use-units", () => ({ useUnits: () => ({ data: [] }) }));
-vi.mock("./design-tab-protocol-card", () => ({ DesignTabProtocolCard: () => null }));
+vi.mock("./protocol-control-convention-card", () => ({
+  ProtocolControlConventionCard: () => null,
+}));
 vi.mock("../condition-group-table", () => ({ ConditionGroupTable: () => null }));
 vi.mock("../temperature-window-dialog", () => ({ TemperatureWindowDialog: () => null }));
 vi.mock("../../hooks/use-curve-positions", () => ({
@@ -120,7 +122,7 @@ describe("DesignTab condition dialog", () => {
 
   it("adds a condition with a fixed value", () => {
     render(<DesignTab protocol={protocol} protocolId="p1" />);
-    const header = screen.getByText("Condition Definitions").parentElement?.parentElement;
+    const header = screen.getByText("Assay conditions").parentElement?.parentElement;
     fireEvent.click(within(header as HTMLElement).getByRole("button", { name: /Add/ }));
     fireEvent.change(screen.getByPlaceholderText(/Cell Passage/), { target: { value: "Medium" } });
     fireEvent.change(screen.getByLabelText("Fixed for this protocol"), {
@@ -137,12 +139,20 @@ describe("DesignTab condition dialog", () => {
 
   it("on a published protocol, adds without a fixed value and points to Correct details", () => {
     render(<DesignTab protocol={{ ...protocol, status: "active" } as Protocol} protocolId="p1" />);
-    const header = screen.getByText("Condition Definitions").parentElement?.parentElement;
+    expect(screen.queryByRole("button", { name: "Edit S9" })).not.toBeInTheDocument();
+    const header = screen.getByText("Assay conditions").parentElement?.parentElement;
     fireEvent.click(within(header as HTMLElement).getByRole("button", { name: /Add/ }));
     expect(screen.queryByLabelText("Fixed for this protocol")).not.toBeInTheDocument();
     expect(
       screen.getByText("Add the condition, then set its fixed value with Correct details."),
     ).toBeInTheDocument();
+  });
+
+  it("keeps condition management unavailable on a locked protocol", () => {
+    render(<DesignTab protocol={{ ...protocol, is_locked: true }} protocolId="p1" />);
+    expect(screen.getByText("with, without")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add condition" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit S9" })).not.toBeInTheDocument();
   });
 });
 

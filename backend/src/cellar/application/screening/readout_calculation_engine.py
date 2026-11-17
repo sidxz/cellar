@@ -14,6 +14,7 @@ Pipeline steps (in order):
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 from collections import defaultdict
@@ -22,6 +23,9 @@ from typing import Any
 
 from returns.result import Failure, Result, Success
 
+from cellar.application.screening._dose_response_config_serde import (
+    serialize_dose_response_config,
+)
 from cellar.application.screening.fit_dose_response import (
     FitDoseResponseCurves,
     FitOverrides,
@@ -29,10 +33,18 @@ from cellar.application.screening.fit_dose_response import (
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.inventory.repository import BatchRepository
-from cellar.domain.screening_assay.enums import (
-    ReadoutAggregation,
-    WellType,
+from cellar.domain.screening_assay.curve_fitting import (
+    ConcentrationResponsePoint,
+    CurveFittingService,
 )
+from cellar.domain.screening_assay.enums import (
+    CurveClass,
+    ReadoutAggregation,
+    ReadoutDataType,
+    WellType,
+    primary_normalization,
+)
+from cellar.domain.screening_assay.excluded_point_detail import ExclusionSource
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from cellar.domain.screening_assay.melt_series import series_points, series_values
 from cellar.domain.screening_assay.melt_window import (
@@ -47,6 +59,7 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.screening_assay.repository import (
+    DoseResponseCurveRepository,
     MeasuredCurveRepository,
     MeltingStepRepository,
     ProtocolRepository,
@@ -56,6 +69,24 @@ from cellar.domain.screening_assay.repository import (
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
+
+RAW_LAYER = "raw"
+_CONTROL_TYPES = frozenset({WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL})
+# Control roles whose compound gets a per-plate potency, and the doses a curve needs.
+_FITTED_CONTROL_TYPES = (WellType.POSITIVE_CONTROL, WellType.REFERENCE)
+_MIN_FIT_DOSES = 4
+# A curve's own fit settings, as its config snapshot stores them.
+_CONSTRAINTS = (
+    "top_constraint",
+    "top_constraint_min",
+    "top_constraint_max",
+    "bottom_constraint",
+    "bottom_constraint_min",
+    "bottom_constraint_max",
+    "hill_slope_constraint",
+    "hill_slope_min",
+    "hill_slope_max",
+)
 
 # Regex to detect cross-protocol references: @ProtocolName.ReadoutName or @{Protocol Name}.Readout
 _CROSS_PROTOCOL_RE = re.compile(r"@\{?[A-Z]{2,8}-\d+\}?\.")
@@ -67,11 +98,13 @@ class ComputeRunResult:
 
     ``computed_readouts`` is the list of newly persisted ``ReadoutData`` rows.
     ``fit_warnings`` accumulates any per-compound dose-response fit failures
-    so callers can surface them instead of silently swallowing them.
+    so callers can surface them instead of silently swallowing them;
+    ``fit_notes`` are the fit's neutral facts (compounds tested at too few doses).
     """
 
     computed_readouts: list[ReadoutData]
     fit_warnings: list[str] = field(default_factory=list)
+    fit_notes: list[str] = field(default_factory=list)
 
 
 class ReadoutCalculationEngine:
@@ -99,6 +132,8 @@ class ReadoutCalculationEngine:
         melting_step_repo: MeltingStepRepository | None = None,
         measured_curve_repo: MeasuredCurveRepository | None = None,
         batch_repo: BatchRepository | None = None,
+        curve_fitter: CurveFittingService | None = None,
+        curve_repo: DoseResponseCurveRepository | None = None,
     ) -> None:
         self._uow = uow
         self._formula_evaluator = formula_evaluator
@@ -113,6 +148,8 @@ class ReadoutCalculationEngine:
         self._melting_step_repo = melting_step_repo
         self._measured_curve_repo = measured_curve_repo
         self._batch_repo = batch_repo
+        self._curve_fitter = curve_fitter
+        self._curve_repo = curve_repo
 
     async def compute_for_run(
         self,
@@ -120,8 +157,12 @@ class ReadoutCalculationEngine:
         *,
         workspace_id: uuid.UUID,
         fit_overrides: FitOverrides | None = None,
+        refit_curves: bool = True,
     ) -> Result[ComputeRunResult, DomainError]:
         """Execute the full computation pipeline for *run_id*.
+
+        ``refit_curves=False`` leaves the dose-response curves to the caller (an outlier
+        flag refits only the curves it touches, keeping their edits).
 
         Returns:
             Success(ComputeRunResult) — newly computed readouts + any
@@ -131,12 +172,18 @@ class ReadoutCalculationEngine:
         if self._uow.is_active:
             # Caller owns the transaction; they will commit and dispatch.
             return await self._execute(
-                run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
+                run_id,
+                workspace_id=workspace_id,
+                fit_overrides=fit_overrides,
+                refit_curves=refit_curves,
             )
         events: list = []
         async with self._uow:
             result = await self._execute(
-                run_id, workspace_id=workspace_id, fit_overrides=fit_overrides
+                run_id,
+                workspace_id=workspace_id,
+                fit_overrides=fit_overrides,
+                refit_curves=refit_curves,
             )
             # Computed readouts and qc_metrics live in the session until we
             # commit. Without this commit they were silently rolled back on
@@ -153,6 +200,7 @@ class ReadoutCalculationEngine:
         *,
         workspace_id: uuid.UUID,
         fit_overrides: FitOverrides | None = None,
+        refit_curves: bool = True,
     ) -> Result[ComputeRunResult, DomainError]:
         # ------------------------------------------------------------------
         # 1. Load context + workspace ownership check
@@ -200,6 +248,12 @@ class ReadoutCalculationEngine:
             # Group raw data by plate for this readout definition
             plate_wells: dict[uuid.UUID, list] = defaultdict(list)
             plate_raw_values: dict[uuid.UUID, dict[uuid.UUID, float]] = defaultdict(dict)
+            # Outlier-flagged wells are no anchor, but still get a normalized value.
+            outliers = frozenset(
+                r.well_id
+                for r in raw_data
+                if r.readout_definition_id == rd.id and r.is_outlier and r.well_id is not None
+            )
 
             for readout in raw_data:
                 if readout.readout_definition_id != rd.id:
@@ -221,6 +275,7 @@ class ReadoutCalculationEngine:
                         plate_raw_values[plate_id],
                         rd.normalizations,
                         protocol.pos_control_signal,
+                        outlier_well_ids=outliers,
                     )
                 except DomainError as exc:
                     return Failure(exc)
@@ -240,57 +295,28 @@ class ReadoutCalculationEngine:
                                 batch_id=original.batch_id,
                                 readout_definition_id=rd.id,
                                 value=QualifiedValue(value=nv.normalized_value),
+                                is_outlier=original.is_outlier,
                                 is_computed=True,
                                 normalization_applied=formula,
                             )
                         )
 
         # ------------------------------------------------------------------
-        # 4.5. Z-prime QC from controls
+        # 4.5. Plate QC from controls, per readout x layer
         # ------------------------------------------------------------------
         if self._plate_quality is not None and run.plates:
-            # Map well_id to its first non-null raw readout once, instead of
-            # rescanning raw_data per well per plate.
-            first_value_by_well: dict[uuid.UUID, ReadoutData] = {}
-            for r in raw_data:
-                if r.well_id is None or r.value is None:
-                    continue
-                if r.well_id not in first_value_by_well:
-                    first_value_by_well[r.well_id] = r
-            wells_by_plate: dict[uuid.UUID, list] = defaultdict(list)
-            for w in run.wells:
-                wells_by_plate[w.plate_id].append(w)
-
-            z_prime_results = {}
-            for plate in run.plates:
-                pos_vals = []
-                neg_vals = []
-                for w in wells_by_plate.get(plate.id, []):
-                    well_readout = first_value_by_well.get(w.id)
-                    if well_readout is None:
-                        continue
-                    if w.well_type == WellType.POSITIVE_CONTROL:
-                        pos_vals.append(well_readout.value.value)
-                    elif w.well_type == WellType.NEGATIVE_CONTROL:
-                        neg_vals.append(well_readout.value.value)
-
-                if pos_vals and neg_vals:
-                    qc = self._plate_quality.compute(pos_vals, neg_vals)
-                    z_prime_results[str(plate.id)] = {
-                        "z_prime": round(qc.z_prime, 3),
-                        "classification": qc.classification,
-                        "pos_mean": round(qc.positive_control_mean, 2),
-                        "pos_sd": round(qc.positive_control_sd, 2),
-                        "neg_mean": round(qc.negative_control_mean, 2),
-                        "neg_sd": round(qc.negative_control_sd, 2),
-                        "s2b": round(qc.signal_to_background, 2),
-                    }
-
-            if z_prime_results:
-                # Re-bind to a fresh dict so SQLAlchemy detects the change
-                # (in-place mutation on a JSONB column is not auto-tracked).
-                run.qc_metrics = {**(run.qc_metrics or {}), "z_prime": z_prime_results}
-                await self._run_repo.save(run)
+            plates = self._plate_qc(run, protocol, raw_data + computed)
+            self._add_control_fits(plates, run, protocol, raw_data + computed, fit_overrides)
+            # The engine owns both blocks: replaced even when no plate qualifies, so
+            # flags or roles that leave a plate without controls drop its stale QC.
+            # Re-bind to a fresh dict so SQLAlchemy detects the change
+            # (in-place mutation on a JSONB column is not auto-tracked).
+            run.qc_metrics = {
+                **(run.qc_metrics or {}),
+                "z_prime": _legacy_z_prime(plates),
+                "plates": plates,
+            }
+            await self._run_repo.save(run)
 
         # ------------------------------------------------------------------
         # 4.6. Tm and ΔTm per temperature window
@@ -301,8 +327,14 @@ class ReadoutCalculationEngine:
         computed.extend(window_rows + series_rows)
         # Per-position window rows aggregate like raw rows, so formulas can name
         # them. Series rows do not: the in-run aggregator ignores qualifiers, and
-        # a censored "> 50" from one lot would be averaged as 50.
-        source_rows = raw_data + window_rows
+        # a censored "> 50" from one lot would be averaged as 50. A formula reads a
+        # compound's results only: unflagged sample wells and well-less rows.
+        plate_qc_wells = {w.id for w in run.wells if w.well_type != WellType.SAMPLE}
+        source_rows = [
+            r
+            for r in raw_data + window_rows
+            if not r.is_outlier and r.well_id not in plate_qc_wells
+        ]
 
         # ------------------------------------------------------------------
         # 5. Aggregate replicates (in-memory)
@@ -395,7 +427,9 @@ class ReadoutCalculationEngine:
         # 7.5. Auto-fit dose-response curves
         # ------------------------------------------------------------------
         fit_warnings: list[str] = []
-        if self._fit_dose_response is not None:
+        fit_notes: list[str] = []
+        if self._fit_dose_response is not None and refit_curves:
+            edited = await self._edited_curves(run, protocol, fit_overrides)
             fit_outcome = await self._fit_dose_response.fit_for_run(
                 run=run,
                 protocol=protocol,
@@ -405,6 +439,14 @@ class ReadoutCalculationEngine:
             )
             if isinstance(fit_outcome, Success):
                 fit_warnings = list(fit_outcome.unwrap().warnings)
+                fit_notes = list(fit_outcome.unwrap().notes)
+            if edited and self._curve_repo is not None:
+                kept = {c.id for c in await self._curve_repo.find_by_run(workspace_id, run_id)}
+                if n := len(edited - kept):
+                    fit_notes.append(
+                        f"{n} curve{'' if n == 1 else 's'} with excluded points or fit settings "
+                        "of their own refitted with these settings; those edits were reset"
+                    )
 
         # ------------------------------------------------------------------
         # 7. Persist
@@ -412,7 +454,182 @@ class ReadoutCalculationEngine:
         if computed:
             await self._readout_data_repo.save_bulk(computed)
 
-        return Success(ComputeRunResult(computed_readouts=computed, fit_warnings=fit_warnings))
+        return Success(
+            ComputeRunResult(
+                computed_readouts=computed, fit_warnings=fit_warnings, fit_notes=fit_notes
+            )
+        )
+
+    async def _edited_curves(
+        self, run: Run, protocol: Protocol, fit_overrides: FitOverrides | None
+    ) -> set[uuid.UUID]:
+        """The run's curves a chemist changed: points excluded by hand (or an accepted 3σ
+        suggestion), or fit constraints other than the ones this refit uses."""
+        if self._curve_repo is None:
+            return set()
+        configs = {
+            rd.id: serialize_dose_response_config(
+                fit_overrides.apply(rd.dose_response_config)
+                if fit_overrides is not None
+                else rd.dose_response_config
+            )
+            for rd in protocol.readout_definitions
+            if rd.dose_response_config is not None
+        }
+        edited = set()
+        for c in await self._curve_repo.find_by_run(run.workspace_id, run.id):
+            config = configs.get(c.readout_definition_id)
+            snapshot = c.dose_response_config_snapshot or {}
+            if any(
+                e.excluded and e.source != ExclusionSource.WELL_FLAG
+                for e in c.excluded_points or []
+            ) or (
+                config is not None
+                and snapshot
+                and any(snapshot.get(k) != config.get(k) for k in _CONSTRAINTS)
+            ):
+                edited.add(c.id)
+        return edited
+
+    def _plate_qc(
+        self, run: Run, protocol: Protocol, rows: list[ReadoutData]
+    ) -> dict[str, dict[str, dict[str, dict[str, Any]]]]:
+        """``plates[plate_id][readout_definition_id][layer]``: Z′, each control's mean,
+        SD and n, and S/B (raw layer only), for every readout x layer whose plate has
+        both control types. Layers are ``raw`` and each normalization. Outlier-flagged
+        wells are left out."""
+        assert self._plate_quality is not None
+        wells = {w.id: w for w in run.wells}
+        # (plate, readout, layer) -> control type -> well -> value (the last row wins)
+        values: dict[tuple[uuid.UUID, uuid.UUID, str], dict[WellType, dict[uuid.UUID, float]]]
+        values = defaultdict(lambda: defaultdict(dict))
+        for r in rows:
+            if r.well_id is None or r.value is None or r.readout_definition_id is None:
+                continue
+            if r.is_outlier:
+                continue
+            if r.is_computed and r.normalization_applied is None:
+                continue  # formula and melt-window rows are not plate layers
+            well = wells.get(r.well_id)
+            if well is None or well.well_type not in _CONTROL_TYPES:
+                continue
+            layer = str(r.normalization_applied or RAW_LAYER)
+            key = (well.plate_id, r.readout_definition_id, layer)
+            values[key][well.well_type][well.id] = r.value.value
+
+        order = {rd.id: i for i, rd in enumerate(protocol.readout_definitions)}
+        plate_order = {p.id: p.plate_number for p in run.plates}
+        out: dict[str, dict[str, dict[str, dict[str, Any]]]] = {}
+        for plate_id, rd_id, layer in sorted(
+            values,
+            key=lambda k: (plate_order.get(k[0], 0), order.get(k[1], 0), k[2] != RAW_LAYER, k[2]),
+        ):
+            by_type = values[(plate_id, rd_id, layer)]
+            pos = list(by_type[WellType.POSITIVE_CONTROL].values())
+            neg = list(by_type[WellType.NEGATIVE_CONTROL].values())
+            if not pos or not neg:
+                continue
+            qc = self._plate_quality.compute(pos, neg)
+            enough = qc.classification != "insufficient_data"
+            entry = {
+                "z_prime": qc.z_prime if enough else None,
+                "classification": qc.classification,
+                "pos_mean": qc.positive_control_mean,
+                "pos_sd": qc.positive_control_sd if len(pos) >= 2 else None,
+                "pos_n": len(pos),
+                "neg_mean": qc.negative_control_mean,
+                "neg_sd": qc.negative_control_sd if len(neg) >= 2 else None,
+                "neg_n": len(neg),
+                # A ratio of means only reads on the raw signal.
+                "s2b": qc.signal_to_background if enough and layer == RAW_LAYER else None,
+            }
+            out.setdefault(str(plate_id), {}).setdefault(str(rd_id), {})[layer] = entry
+        return out
+
+    def _add_control_fits(
+        self,
+        plates: dict[str, dict[str, dict[str, dict[str, Any]]]],
+        run: Run,
+        protocol: Protocol,
+        rows: list[ReadoutData],
+        fit_overrides: FitOverrides | None,
+    ) -> None:
+        """Fit each positive-control and reference compound with a dose series of
+        at least four doses, per plate, on the layer the samples' curves read; the
+        primary intercept and curve class go into that layer's plate QC as
+        ``control_fits`` — QC, never the compound's curve. Outlier-flagged wells are left out."""
+        if self._curve_fitter is None:
+            return
+        wells = {w.id: w for w in run.wells}
+        rd_by_name = {rd.name: rd for rd in protocol.readout_definitions}
+        for dr_def in protocol.readout_definitions:
+            base = dr_def.dose_response_config
+            if dr_def.data_type != ReadoutDataType.DOSE_RESPONSE or base is None:
+                continue
+            config = fit_overrides.apply(base) if fit_overrides is not None else base
+            y_rd = rd_by_name.get(config.y_readout_name)
+            if y_rd is None or y_rd.is_calculated:
+                continue  # formula values are per compound, not per well
+            layer = (
+                str(config.y_normalization or primary_normalization(y_rd.normalizations))
+                if y_rd.normalizations
+                else RAW_LAYER
+            )
+            # (plate, role, molecule) -> well -> (dose, value)
+            series: dict[
+                tuple[uuid.UUID, WellType, uuid.UUID], dict[uuid.UUID, tuple[float, float]]
+            ] = defaultdict(dict)
+            for r in rows:
+                if (
+                    r.readout_definition_id != y_rd.id
+                    or str(r.normalization_applied or RAW_LAYER) != layer
+                    or r.is_outlier
+                ):
+                    continue
+                if r.is_computed and r.normalization_applied is None:
+                    continue
+                well = wells.get(r.well_id) if r.well_id is not None else None
+                if (
+                    well is None
+                    or well.well_type not in _FITTED_CONTROL_TYPES
+                    or well.dose is None
+                    or r.molecule_id is None
+                    or r.value is None
+                ):
+                    continue
+                series[(well.plate_id, well.well_type, r.molecule_id)][well.id] = (
+                    well.dose,
+                    r.value.value,
+                )
+            for (plate_id, role, molecule_id), by_well in series.items():
+                if len({dose for dose, _ in by_well.values()}) < _MIN_FIT_DOSES:
+                    continue
+                points = [
+                    ConcentrationResponsePoint(concentration=d, response=v)
+                    for d, v in by_well.values()
+                ]
+                fit = self._curve_fitter.fit(points, config)
+                if isinstance(fit, Failure):
+                    continue
+                fitted = fit.unwrap()
+                entry = (
+                    plates.setdefault(str(plate_id), {})
+                    .setdefault(str(y_rd.id), {})
+                    .setdefault(layer, {})
+                )
+                entry.setdefault("control_fits", []).append(
+                    {
+                        "role": str(role),
+                        "molecule_id": str(molecule_id),
+                        "label": config.intercepts[0].display_label,
+                        # An inactive series has no potency (the fitter reports 0).
+                        "value": fitted.fitted_value
+                        if math.isfinite(fitted.fitted_value)
+                        and fitted.curve_class != CurveClass.INACTIVE
+                        else None,
+                        "curve_class": str(fitted.curve_class),
+                    }
+                )
 
     async def _window_rows(
         self, run: Run, protocol: Protocol, workspace_id: uuid.UUID
@@ -535,3 +752,25 @@ class ReadoutCalculationEngine:
             visit(rd.name)
 
         return order
+
+
+def _legacy_z_prime(
+    plates: dict[str, dict[str, dict[str, dict[str, Any]]]],
+) -> dict[str, dict[str, Any]]:
+    """``qc_metrics.z_prime`` as its readers know it: per plate, the raw layer of the
+    first readout (protocol order) that has one, rounded as before."""
+    legacy: dict[str, dict[str, Any]] = {}
+    for plate_id, readouts in plates.items():
+        raw = next((r[RAW_LAYER] for r in readouts.values() if RAW_LAYER in r), None)
+        if raw is None:
+            continue
+        legacy[plate_id] = {
+            "z_prime": round(raw["z_prime"] or 0.0, 3),
+            "classification": raw["classification"],
+            "pos_mean": round(raw["pos_mean"], 2),
+            "pos_sd": round(raw["pos_sd"] or 0.0, 2),
+            "neg_mean": round(raw["neg_mean"], 2),
+            "neg_sd": round(raw["neg_sd"] or 0.0, 2),
+            "s2b": round(raw["s2b"] or 0.0, 2),
+        }
+    return legacy

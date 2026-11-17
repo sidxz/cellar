@@ -94,7 +94,7 @@ export function CurvesTab({
                     aria-label={runHeading(run, { scientist, tag })}
                     onCheckedChange={() => onRunIdsChange(toggleRun(runIds, run.runId))}
                   />
-                  <span className="font-mono">{run.runDate}</span>
+                  <span className="tabular-nums">{run.runDate}</span>
                   <span>{scientist}</span>
                   <StatusBadge
                     status={run.status}

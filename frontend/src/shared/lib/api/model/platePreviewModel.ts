@@ -10,5 +10,9 @@ export interface PlatePreviewModel {
   plate_format: string;
   well_count: number;
   sample_count: number;
+  positive_count: number;
+  negative_count: number;
+  reference_count: number;
   blank_count: number;
+  roles_from?: string | null;
 }

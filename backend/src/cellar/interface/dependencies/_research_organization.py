@@ -98,6 +98,13 @@ from cellar.application.research_organization.remove_campaign_channel import Rem
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
+from cellar.application.research_organization.saved_visualizations import (
+    CreateSavedVisualization,
+    DeleteSavedVisualization,
+    GetSavedVisualization,
+    ListSavedVisualizations,
+    UpdateSavedVisualization,
+)
 from cellar.application.research_organization.set_result_notes import SetResultNotes
 from cellar.application.research_organization.set_stage_override import SetStageOverride
 from cellar.application.research_organization.supersede_campaign import (
@@ -152,9 +159,11 @@ __all__ = [
     "CreateProjectDep",
     # Saved searches
     "CreateSavedSearchDep",
+    "CreateSavedVisualizationDep",
     "DeleteCollectionDep",
     "DeleteCollectionImportTemplateDep",
     "DeleteSavedSearchDep",
+    "DeleteSavedVisualizationDep",
     "ExecuteSearchDep",
     "GetCampaignCollectionCoverageDep",
     "GetCampaignCollectionGapDep",
@@ -165,6 +174,7 @@ __all__ = [
     "GetProjectScopeStatsDep",
     "GetPublishedCampaignDep",
     "GetSavedSearchDep",
+    "GetSavedVisualizationDep",
     "ListCampaignResultsDep",
     "ListCampaignsDep",
     "ListCollectionImportTemplatesDep",
@@ -175,6 +185,7 @@ __all__ = [
     "ListProjectMembersDep",
     "ListProjectsDep",
     "ListSavedSearchesDep",
+    "ListSavedVisualizationsDep",
     "MirrorProtocolChannelsDep",
     "OverrideResultCellDep",
     "PreviewRunImportDep",
@@ -199,6 +210,7 @@ __all__ = [
     "UpdateProjectDep",
     "UpdateProjectMemberRoleDep",
     "UpdateSavedSearchDep",
+    "UpdateSavedVisualizationDep",
     # Campaigns
     "get_campaign_repo",
     # Collection repository (for the unregistered-rows handoff endpoint)
@@ -252,6 +264,21 @@ UpdateSavedSearchDep = Annotated[UpdateSavedSearch, Depends(_get_use_case(Update
 DeleteSavedSearchDep = Annotated[DeleteSavedSearch, Depends(_get_use_case(DeleteSavedSearch))]
 GetSavedSearchDep = Annotated[GetSavedSearch, Depends(_get_use_case(GetSavedSearch))]
 ListSavedSearchesDep = Annotated[ListSavedSearches, Depends(_get_use_case(ListSavedSearches))]
+CreateSavedVisualizationDep = Annotated[
+    CreateSavedVisualization, Depends(_get_use_case(CreateSavedVisualization))
+]
+UpdateSavedVisualizationDep = Annotated[
+    UpdateSavedVisualization, Depends(_get_use_case(UpdateSavedVisualization))
+]
+DeleteSavedVisualizationDep = Annotated[
+    DeleteSavedVisualization, Depends(_get_use_case(DeleteSavedVisualization))
+]
+GetSavedVisualizationDep = Annotated[
+    GetSavedVisualization, Depends(_get_use_case(GetSavedVisualization))
+]
+ListSavedVisualizationsDep = Annotated[
+    ListSavedVisualizations, Depends(_get_use_case(ListSavedVisualizations))
+]
 ExecuteSearchDep = Annotated[ExecuteSearch, Depends(_get_use_case(ExecuteSearch))]
 CountSearchDep = Annotated[CountSearch, Depends(_get_use_case(CountSearch))]
 AddProjectMemberDep = Annotated[AddProjectMember, Depends(_get_use_case(AddProjectMember))]

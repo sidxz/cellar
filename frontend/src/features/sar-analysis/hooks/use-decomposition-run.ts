@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import { useJobPoll } from "@/shared/hooks/use-job-poll";
 import type { DecompositionRunResponse } from "@/shared/lib/api/model";
@@ -15,6 +15,9 @@ export type UseDecompositionRunParams = {
   cancelFn?: (runId: string) => Promise<DecompositionRunResponse>;
   pollIntervalMs?: number;
   enabled?: boolean;
+  /** Tells apart starts of the same inputs: a new one starts a fresh job instead of reusing
+   * the cached start of an earlier (perhaps cancelled) one. */
+  nonce?: string;
 };
 
 export type UseDecompositionRunReturn = {
@@ -46,24 +49,32 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
     cancelFn = defaultCancelFn,
     pollIntervalMs = DEFAULT_POLL_MS,
     enabled = true,
+    nonce = "",
   } = params;
 
   const [runNonce, setRunNonce] = useState(0);
   const [cancelledRunId, setCancelledRunId] = useState<string | null>(null);
 
-  const sourceKey = collectionId ? `coll:${collectionId}` : `ids:${sortedKey(moleculeIds ?? [])}`;
-  const key = `${sourceKey}|core:${coreSmiles ?? ""}|n:${runNonce}`;
+  const sourceKey = useMemo(
+    () => (collectionId ? `coll:${collectionId}` : `ids:${sortedKey(moleculeIds ?? [])}`),
+    [collectionId, moleculeIds],
+  );
+  const key = `${sourceKey}|core:${coreSmiles ?? ""}|n:${runNonce}|${nonce}`;
+  // The start in flight, so a cancel before it answers can still reach the job.
+  const pendingStart = useRef<Promise<DecompositionRunResponse> | null>(null);
   const queryEnabled =
     enabled && !!coreSmiles && (collectionId !== undefined || (moleculeIds ?? []).length > 0);
 
   const start = useQuery({
     queryKey: ["decomposition-run", "start", key],
-    queryFn: () =>
-      startFn(
+    queryFn: () => {
+      pendingStart.current = startFn(
         collectionId
           ? { collection_id: collectionId, core_smiles: coreSmiles as string }
           : { molecule_ids: moleculeIds ?? [], core_smiles: coreSmiles as string },
-      ),
+      );
+      return pendingStart.current;
+    },
     enabled: queryEnabled,
     // "start" is a side-effecting POST modeled as a query: never auto-refetch it
     // (window focus / reconnect / remount) or it would re-POST and re-stream the
@@ -103,13 +114,18 @@ export function useDecompositionRun(params: UseDecompositionRunParams): UseDecom
   const serverCancelled = polledData?.status === "cancelled" || startRun?.status === "cancelled";
   const isCancelled = serverCancelled || (cancelledRunId != null && cancelledRunId === runId);
 
+  const starting = start.isFetching;
   const cancel = useCallback(() => {
-    if (!runId) return;
+    if (!runId) {
+      // Not answered yet: cancel the job once the start names it.
+      if (starting) void pendingStart.current?.then((r) => cancelFn(r.run_id)).catch(() => {});
+      return;
+    }
     setCancelledRunId(runId);
     // Optimistic: the flag drives the UI now; the poll confirms the cancel, and
     // a failed cancel POST resolves itself on the next poll — nothing to surface.
     void cancelFn(runId).catch(() => {});
-  }, [runId, cancelFn]);
+  }, [runId, starting, cancelFn]);
 
   const runAgain = useCallback(() => {
     setCancelledRunId(null);

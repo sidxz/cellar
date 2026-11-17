@@ -15,13 +15,17 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.application.screening._dr_point_reconstruction import (
+    CapturedPoint,
     build_points_with_exclusions,
+    captured_set,
+    is_well_flag,
+    with_captured_positions,
 )
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.enums import AuditAction, OperationType
 from cellar.domain.audit_compliance.models import AuditEntry
-from cellar.domain.screening_assay.curve_fitting import CurveFittingService
+from cellar.domain.screening_assay.curve_fitting import DOSE_ZERO_LEFT_OUT, CurveFittingService
 from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
@@ -106,6 +110,7 @@ class RefitDoseResponseCurveCommand(Command):
 def _build_excluded_points_from_payload(
     payload: list[ExclusionPayloadEntry],
     *,
+    captured: list[CapturedPoint],
     author_id: uuid.UUID,
     now: datetime,
 ) -> list[ExcludedPointDetail]:
@@ -113,10 +118,22 @@ def _build_excluded_points_from_payload(
 
     Manual rows get ``author_id``+``ts`` stamped here (the wire shape doesn't
     carry these — the BE is the trusted source for who/when). AUTO_3SIGMA
-    rows have no author_id (the fitter wrote them).
+    rows have no author_id (the fitter wrote them). An entry's idx addresses
+    the curve's captured set, so its point's coordinates are read there.
+
+    The run's well flags are not the editor's to change: an entry from the
+    payload on a flagged point is dropped (the curve keeps the flag's own).
     """
+    flagged_at = {k for k, (_, _, e) in enumerate(captured) if is_well_flag(e)}
     out: list[ExcludedPointDetail] = []
     for entry in payload:
+        if entry.source == ExclusionSource.WELL_FLAG or entry.idx in flagged_at:
+            continue
+        point = (
+            captured[entry.idx]
+            if entry.idx is not None and 0 <= entry.idx < len(captured)
+            else None
+        )
         if entry.source == ExclusionSource.MANUAL:
             stamped_author: uuid.UUID | None = author_id
         else:
@@ -130,8 +147,8 @@ def _build_excluded_points_from_payload(
                 author_id=stamped_author,
                 ts=now,
                 note=entry.note,
-                concentration=entry.concentration,
-                response=entry.response,
+                concentration=point[0] if point else entry.concentration,
+                response=point[1] if point else entry.response,
             )
         )
     return out
@@ -216,6 +233,9 @@ class RefitDoseResponseCurve:
             # shared helper. Preview and commit MUST use the same reconstruction
             # — otherwise the FE sees a different fit on Save than during edit.
             points = build_points_with_exclusions(curve, excluded_indices)
+            captured = captured_set(curve.raw_data, curve.excluded_points)
+            # The run's outlier wells stay out of the fit and on the curve, whatever is sent.
+            well_flags = [e for _, _, e in captured if e is not None and is_well_flag(e)]
 
             config = await self._resolve_config(input, curve)
 
@@ -232,13 +252,27 @@ class RefitDoseResponseCurve:
             new_excluded_points: list[ExcludedPointDetail] | None
             if input.exclusions is not None:
                 assert auth is not None  # checked above
-                new_excluded_points = _build_excluded_points_from_payload(
+                chemist = _build_excluded_points_from_payload(
                     input.exclusions,
+                    captured=captured,
                     author_id=auth.user_id,
                     now=datetime.now(UTC),
                 )
+                new_excluded_points = with_captured_positions(
+                    fitted.raw_data, [*chemist, *well_flags]
+                )
             else:
-                new_excluded_points = fitted.excluded_points  # legacy dict shape
+                # The rest keep the legacy dict shape this path has always written;
+                # the well flags keep their typed entries.
+                legacy = list(fitted.excluded_points)
+                for e in well_flags:
+                    point = {"concentration": e.concentration, "response": e.response}
+                    if point in legacy:
+                        legacy.remove(point)
+                new_excluded_points = [
+                    *with_captured_positions(fitted.raw_data, well_flags),
+                    *legacy,
+                ]
 
             curve.update_fit(
                 fitted_value=fitted.fitted_value,
@@ -252,7 +286,12 @@ class RefitDoseResponseCurve:
                 curve_class=fitted.curve_class,
                 raw_data=fitted.raw_data,
                 excluded_points=new_excluded_points,
-                fit_quality_warnings=fitted.fit_quality_warnings,
+                # Points left out at dose 0 never reached raw_data, so this fit cannot
+                # see them: keep the curve's note of them.
+                fit_quality_warnings=[
+                    *fitted.fit_quality_warnings,
+                    *(w for w in curve.fit_quality_warnings if w.startswith(DOSE_ZERO_LEFT_OUT)),
+                ],
                 intercept_values=fitted.intercept_values,
                 dose_response_config_snapshot=serialize_dose_response_config(config),
             )

@@ -35,6 +35,42 @@ class SavedSearchCreated(DomainEvent):
     name: str
 
 
+def _view_facts(name: str, visibility: str, project_id: uuid.UUID | None) -> list[tuple[str, str]]:
+    facts = [("name", name), ("visibility", visibility)]
+    return facts + ([("project_id", str(project_id))] if project_id else [])
+
+
+@dataclass(frozen=True, kw_only=True)
+class SavedVisualizationCreated(DomainEvent):
+    name: str
+    visibility: str
+    project_id: uuid.UUID | None = None
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [(f, None, v) for f, v in _view_facts(self.name, self.visibility, self.project_id)]
+
+
+@dataclass(frozen=True, kw_only=True)
+class SavedVisualizationUpdated(DomainEvent):
+    """Old and new value per changed field; ``source`` and ``config`` are named without
+    values (they are JSON documents, not audit text)."""
+
+    changes: tuple[tuple[str, str | None, str | None], ...]
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return list(self.changes)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SavedVisualizationDeleted(DomainEvent):
+    name: str
+    visibility: str
+    project_id: uuid.UUID | None = None
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        return [(f, v, None) for f, v in _view_facts(self.name, self.visibility, self.project_id)]
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProjectMemberAdded(DomainEvent):
     """Fired when a user is added to a project."""

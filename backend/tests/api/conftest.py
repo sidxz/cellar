@@ -30,6 +30,7 @@ from cellar.application.shared.org_directory import OrgDirectoryPort
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.duar.org_directory import OrgSummary
 from cellar.infrastructure.persistence.settings import DatabaseSettings
+from cellar.interface.app import add_compression
 from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.dependencies import get_auth
 from tests.fakes.fake_auth import FakeAuth
@@ -79,6 +80,7 @@ def _create_test_app(
 
     # Error handlers (so DomainError → proper HTTP status)
     register_error_handlers(app)
+    add_compression(app)  # as in production
 
     # Import routes
     from cellar.interface.routes.user import router as user_router
@@ -113,6 +115,9 @@ def _create_test_app(
         router as collection_import_templates_router,
     )
     from cellar.interface.routes.saved_searches import router as saved_search_router
+    from cellar.interface.routes.saved_visualizations import (
+        router as saved_visualization_router,
+    )
     from cellar.interface.routes.search import router as search_router
     from cellar.interface.routes.search_algorithms import router as search_algorithms_router
     from cellar.interface.routes.audit import router as audit_router
@@ -138,6 +143,8 @@ def _create_test_app(
     from cellar.interface.routes.readout_data import router as readout_data_router
     from cellar.interface.routes.melting_steps import router as melting_steps_router
     from cellar.interface.routes.measured_curves import router as measured_curves_router
+    from cellar.interface.routes.visualization import router as visualization_router
+    from cellar.interface.routes.protocol_hub import router as protocol_hub_router
     from cellar.interface.routes.run_positions import router as run_positions_router
     from cellar.interface.routes.run_import import router as run_import_router
     from cellar.interface.routes.scaffold_tree import router as scaffold_tree_router
@@ -197,6 +204,7 @@ def _create_test_app(
     app.include_router(collection_import_previews_router)
     app.include_router(collection_import_templates_router)
     app.include_router(saved_search_router)
+    app.include_router(saved_visualization_router)
     app.include_router(search_router)
     app.include_router(search_algorithms_router)
     app.include_router(batch_router)
@@ -221,11 +229,13 @@ def _create_test_app(
     app.include_router(readout_data_router)
     app.include_router(run_import_router)
     app.include_router(measured_curves_router)
+    app.include_router(visualization_router)
     app.include_router(melting_steps_router)
     app.include_router(run_positions_router)
     app.include_router(tags_router)
     app.include_router(tag_assignment_router)
     app.include_router(protocols_router)
+    app.include_router(protocol_hub_router)  # after protocols, as in create_app
     app.include_router(runs_router)
     app.include_router(targets_router)
     app.include_router(inventory_hub_router)

@@ -25,6 +25,7 @@ from cellar.application.screening.import_run_file import (
     PreviewRunFileResult,
     RepreviewRunFileQuery,
 )
+from cellar.application.screening.import_run_file_preview_store import MAX_RUN_FILE_BYTES
 from cellar.application.screening.import_summary_file import ImportSummaryFileCommand
 from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
 from cellar.application.screening.list_instrument_file_formats import (
@@ -160,8 +161,16 @@ class PlatePreviewModel(BaseModel):
     plate_name: str
     plate_format: str
     well_count: int
+    # Wells by role, as the import would write them (file role column, else the
+    # run's own layout, else the protocol default; a well nothing classifies
+    # counts as a blank).
     sample_count: int
+    positive_count: int
+    negative_count: int
+    reference_count: int
     blank_count: int
+    # Where the roles come from, e.g. 'this run's layout "NadD 384"'; null = nowhere.
+    roles_from: str | None = None
 
 
 class WellConflictModel(BaseModel):
@@ -215,6 +224,12 @@ class PreviewRunFileResponse(ImportForecastModel):
     # auto_create_unmatched_batches=True is passed to the import step.
     # Always 0 when the preview query doesn't set that flag.
     auto_created_batches: int = 0
+    # Non-blocking notes, e.g. role sources (file column, run layout, protocol
+    # default) that differ from one another.
+    warnings: list[str] = Field(default_factory=list)
+    # Plates whose controls read the wrong way round for the protocol's
+    # pos_control_signal. The wizard makes the chemist acknowledge them.
+    swapped_controls: list[str] = Field(default_factory=list)
 
 
 @router.post(
@@ -231,14 +246,21 @@ async def preview_run_file(
     """Parse a long-format run file and return a preview + ``preview_id``.
 
     Accepts ``.xlsx`` or ``.csv`` uploads. The returned ``preview_id`` is
-    valid for ~60 seconds and must be passed to ``POST /import-file`` to
-    actually persist the data.
+    valid for 30 minutes from its last use (``expires_in_seconds``) and must
+    be passed to ``POST /import-file`` to actually persist the data. A 404
+    for it means the server no longer holds the file: upload it again.
 
     The dose unit is sourced from the run's protocol (``protocol.dose_unit``)
     — the wizard does not need to ask. Wells in the file are interpreted in
     that unit.
     """
-    content = await file.read()
+    # One byte past the limit is enough to refuse the file.
+    content = await file.read(MAX_RUN_FILE_BYTES + 1)
+    if len(content) > MAX_RUN_FILE_BYTES:
+        raise ValidationError(
+            f"The file is larger than {MAX_RUN_FILE_BYTES // (1024 * 1024)} MB; "
+            "split it into several imports"
+        )
     query = PreviewRunFileQuery(
         workspace_id=auth.workspace_id,
         run_id=run_id,
@@ -267,7 +289,24 @@ class ColumnMappingRequest(BaseModel):
     concentration: str | None = None
     batch_ref: str | None = None
     compound_ref: str | None = None
+    # The file's per-well role column ("Control State"); when set it decides
+    # every well's role instead of the protocol's control layout.
+    well_role: str | None = None
     readout_columns: list[ReadoutColumnRequest] = Field(default_factory=list)
+
+    def to_domain(self) -> ColumnMapping:
+        return ColumnMapping(
+            well=self.well,
+            plate_name=self.plate_name,
+            concentration=self.concentration,
+            batch_ref=self.batch_ref,
+            compound_ref=self.compound_ref,
+            well_role=self.well_role,
+            readout_columns=tuple(
+                ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
+                for rc in self.readout_columns
+            ),
+        )
 
 
 class RepreviewRunFileRequest(BaseModel):
@@ -296,7 +335,11 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
                 plate_format=p.plate_format,
                 well_count=p.well_count,
                 sample_count=p.sample_count,
+                positive_count=p.positive_count,
+                negative_count=p.negative_count,
+                reference_count=p.reference_count,
                 blank_count=p.blank_count,
+                roles_from=p.roles_from,
             )
             for p in preview.plates
         ],
@@ -350,6 +393,8 @@ def _to_preview_response(preview: PreviewRunFileResult) -> PreviewRunFileRespons
         errors=_row_errors(list(preview.errors)),
         rows_skipped=preview.rows_skipped,
         auto_created_batches=preview.auto_created_batches,
+        warnings=list(preview.warnings),
+        swapped_controls=list(preview.swapped_controls),
     )
 
 
@@ -371,17 +416,7 @@ async def repreview_run_file(
     is reused without re-uploading the file; the response shape mirrors
     ``preview_run_file`` so the wizard can swap state in place.
     """
-    mapping = ColumnMapping(
-        well=body.mapping.well,
-        plate_name=body.mapping.plate_name,
-        concentration=body.mapping.concentration,
-        batch_ref=body.mapping.batch_ref,
-        compound_ref=body.mapping.compound_ref,
-        readout_columns=tuple(
-            ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
-            for rc in body.mapping.readout_columns
-        ),
-    )
+    mapping = body.mapping.to_domain()
     query = RepreviewRunFileQuery(
         workspace_id=auth.workspace_id,
         run_id=run_id,
@@ -423,11 +458,13 @@ class ImportRunFileResponse(ImportResultModel):
     plates_created: int
     wells_created: int
     controls_from_template: int
+    controls_from_file: int
     controls_unclassified: int
     well_conflicts: list[WellConflictModel] = Field(default_factory=list)
     readout_conflicts: list[ReadoutConflictModel] = Field(default_factory=list)
     compute_warning: str | None = None
     fit_warnings: list[str] = Field(default_factory=list)
+    fit_notes: list[str] = Field(default_factory=list)
     # Number of placeholder batches auto-created during this import.
     # Always 0 when auto_create_unmatched_batches=False on the request.
     auto_created_batches: int = 0
@@ -445,17 +482,7 @@ async def import_run_file(
     uc: ImportRunFileDep,
 ) -> ImportRunFileResponse:
     """Persist a previously-previewed long-format run file to the run."""
-    mapping = ColumnMapping(
-        well=body.mapping.well,
-        plate_name=body.mapping.plate_name,
-        concentration=body.mapping.concentration,
-        batch_ref=body.mapping.batch_ref,
-        compound_ref=body.mapping.compound_ref,
-        readout_columns=tuple(
-            ReadoutColumn(header=rc.header, readout_definition_id=rc.readout_definition_id)
-            for rc in body.mapping.readout_columns
-        ),
-    )
+    mapping = body.mapping.to_domain()
     overrides = {o.molecule_id: o.batch_id for o in body.compound_batch_overrides}
     cmd = ImportRunFileCommand(
         workspace_id=auth.workspace_id,
@@ -477,6 +504,7 @@ async def import_run_file(
         unmatched_batch_refs=out.unmatched_batch_refs,
         unmatched_compound_refs=out.unmatched_compound_refs,
         controls_from_template=out.controls_from_template,
+        controls_from_file=out.controls_from_file,
         controls_unclassified=out.controls_unclassified,
         rows_skipped=out.rows_skipped,
         well_conflicts=[
@@ -500,6 +528,7 @@ async def import_run_file(
         compute_warning=out.compute_warning,
         attachment_warning=out.attachment_warning,
         fit_warnings=out.fit_warnings,
+        fit_notes=out.fit_notes,
         auto_created_batches=out.auto_created_batches,
     )
 

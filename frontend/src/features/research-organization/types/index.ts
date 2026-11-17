@@ -7,6 +7,7 @@ import type {
   CollectionResponse,
   CollectionType,
   ColumnGroupResponse,
+  CreateCollectionBody,
   MembershipResultResponse,
   MoleculeReferenceBody,
   ProjectMemberResponse,
@@ -137,14 +138,10 @@ export interface UpdateMemberRoleInput {
   role: ProjectRole;
 }
 
-export interface CreateCollectionInput {
-  name: string;
-  description?: string | null;
-  project_id?: string | null;
-  owned_by_org_id?: string | null;
+/** The generated body, with `visibility` re-narrowed to the values the BE accepts. */
+export type CreateCollectionInput = Omit<CreateCollectionBody, "visibility"> & {
   visibility?: "private" | "shared";
-  type?: CollectionType;
-}
+};
 
 export interface UpdateCollectionInput {
   name?: string;

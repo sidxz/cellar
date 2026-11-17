@@ -45,3 +45,39 @@ describe("RunHistoryTooltip — single-point runs", () => {
     expect(screen.getByText("ND")).toBeInTheDocument();
   });
 });
+
+describe("RunHistoryTooltip — dose-response runs", () => {
+  it("reads each run's reported value: an inactive curve is a bound, never ND", () => {
+    const av = {
+      ...singlePoint([]),
+      source: "dose_response",
+      run_count: 2,
+      runs: [
+        {
+          run_id: "r1",
+          run_date: "2026-04-01",
+          curve_id: "c1",
+          curve_class: "inactive",
+          r_squared: 0.1,
+          intercept_values: [
+            { spec: { kind: "ic", level: 50 }, value: 500, qualifier: ">", at_bound: false },
+          ],
+        },
+        {
+          run_id: "r2",
+          run_date: "2026-01-01",
+          curve_id: "c2",
+          curve_class: "partial",
+          r_squared: 0.9,
+          intercept_values: [
+            { spec: { kind: "ic", level: 50 }, value: 500, qualifier: ">", at_bound: true },
+          ],
+        },
+      ],
+    } as ActivityValue;
+    render(<RunHistoryTooltip av={av} interceptKey={null} unit="uM" />);
+    expect(screen.getAllByText("> 500 uM")).toHaveLength(2);
+    expect(screen.queryByText("ND")).toBeNull();
+    expect(screen.queryByText("Bound fit")).toBeNull();
+  });
+});

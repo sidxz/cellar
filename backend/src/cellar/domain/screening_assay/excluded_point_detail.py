@@ -21,6 +21,7 @@ from cellar.domain.shared.errors import ValidationError
 class ExclusionSource(StrEnum):
     MANUAL = "manual"
     AUTO_3SIGMA = "auto_3sigma"
+    WELL_FLAG = "well_flag"  # the point's well is flagged as an outlier on the run
 
 
 class ExclusionReason(StrEnum):
@@ -31,6 +32,7 @@ class ExclusionReason(StrEnum):
     QC_FAILURE = "qc_failure"
     OTHER = "other"
     AUTO_3SIGMA = "auto_3sigma"  # only valid when source == AUTO_3SIGMA
+    OUTLIER_WELL = "outlier_well"
 
 
 @dataclass(frozen=True)

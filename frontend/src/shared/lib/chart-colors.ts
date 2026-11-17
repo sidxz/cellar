@@ -75,13 +75,56 @@ export const MEASURED_CURVE_COLORS = {
 } as const;
 
 /* ── Plate well types ──────────────────────────────────────── */
+/** Controls are coloured by effect, not by name: the full-effect (hit) control red, the
+ * no-effect control blue — the ends of the platform's blue → red activity scale, never a
+ * red/green pair. Which role is which depends on the protocol (`wellTypeColors`); this
+ * default is cellar's default convention (positive control = no effect, % inhibition).
+ * Samples stay neutral. */
+export const FULL_EFFECT_COLOR = "#dc2626";
+export const NO_EFFECT_COLOR = "#2563eb";
 export const WELL_TYPE_COLORS: Record<string, string> = {
-  sample: "#3b6fb6",
-  positive_control: "#18974c",
-  negative_control: "#d41645",
-  blank: "#707372",
+  sample: "#64748b",
+  positive_control: NO_EFFECT_COLOR,
+  negative_control: FULL_EFFECT_COLOR,
+  blank: "#a3a3a3",
   reference: "#734595",
 };
+
+export type ControlRole = "positive_control" | "negative_control";
+
+/** The control anchoring the full-effect end, as the backend normalizer puts it: the high
+ * anchor (positive under "high", negative under "low") is 0 % for inhibition, % control and
+ * z-score, and 100 % for activation. */
+export function fullEffectControl(signal?: string | null, activation = false): ControlRole {
+  const highIsPositive = signal !== "low";
+  return highIsPositive === activation ? "positive_control" : "negative_control";
+}
+
+/** The full effect is the 100 % end: % activation, without % inhibition beside it. */
+export function isActivation(normalizations: Iterable<string | null | undefined>): boolean {
+  const ns = new Set(normalizations);
+  return ns.has("percent_activation") && !ns.has("percent_inhibition");
+}
+
+/** Well-type colours with the two controls coloured by effect. */
+export function wellTypeColors(signal?: string | null, activation = false): Record<string, string> {
+  const full = fullEffectControl(signal, activation);
+  const none = full === "positive_control" ? "negative_control" : "positive_control";
+  return { ...WELL_TYPE_COLORS, [full]: FULL_EFFECT_COLOR, [none]: NO_EFFECT_COLOR };
+}
+
+/** A protocol's well-type colours: its signal, activation over all its readouts. */
+export function protocolWellTypeColors(
+  protocol?: {
+    pos_control_signal?: string | null;
+    readout_definitions?: ReadonlyArray<{ normalizations?: ReadonlyArray<string> | null }>;
+  } | null,
+): Record<string, string> {
+  const normalizations = (protocol?.readout_definitions ?? []).flatMap(
+    (d) => d.normalizations ?? [],
+  );
+  return wellTypeColors(protocol?.pos_control_signal, isActivation(normalizations));
+}
 export const WELL_EMPTY_COLOR = "#1e293b";
 
 /* ── Compound group rotation palette (12 distinct) ─────────── */

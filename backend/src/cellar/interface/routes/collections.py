@@ -98,6 +98,8 @@ class CreateCollectionBody(BaseModel):
     owned_by_org_id: uuid.UUID | None = None
     visibility: str = "private"
     type: CollectionType = CollectionType.GENERIC
+    # Seed members in the same transaction; every id must be in the workspace.
+    molecule_ids: list[uuid.UUID] | None = None
 
 
 class UpdateCollectionBody(BaseModel):
@@ -267,6 +269,7 @@ async def create_collection(
         created_by=auth.user_id,
         visibility=body.visibility,
         type=body.type.value,
+        molecule_ids=tuple(body.molecule_ids or ()),
     )
     collection = result_to_response(await use_case(command, auth=auth))
     return CollectionResponse.from_domain(collection)

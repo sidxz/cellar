@@ -23,6 +23,7 @@ import type {
   ActivitySummaryV2Response,
   GetCompoundDoseResponseApiV1ProtocolsProtocolIdCompoundsMoleculeIdDoseResponseGet200Item,
   HTTPValidationError,
+  ProtocolPlateQcAveragesResponse,
   ProtocolStatsResponse
 } from '../model';
 
@@ -140,6 +141,111 @@ export function useGetProtocolStatsApiV1ProtocolsProtocolIdStatsGet<TData = Awai
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getGetProtocolStatsApiV1ProtocolsProtocolIdStatsGetQueryOptions(protocolId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
+ * Plate QC per readout x layer averaged over the protocol's plates (mean ± SD, n).
+ * @summary Get Protocol Plate Qc Averages
+ */
+export const getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet = (
+    protocolId: string,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<ProtocolPlateQcAveragesResponse>(
+      {url: `/api/v1/protocols/${protocolId}/plate-qc-averages`, method: 'GET', signal
+    },
+      );
+    }
+
+
+
+
+export const getGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGetQueryKey = (protocolId: string,) => {
+    return [
+    `/api/v1/protocols/${protocolId}/plate-qc-averages`
+    ] as const;
+    }
+
+
+export const getGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGetQueryOptions = <TData = Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError = HTTPValidationError>(protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGetQueryKey(protocolId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>> = ({ signal }) => getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet(protocolId, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: protocolId !== null && protocolId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGetQueryResult = NonNullable<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>>
+export type GetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGetQueryError = HTTPValidationError
+
+
+/**
+ * Plate QC per readout x layer averaged over the protocol's plates (mean ± SD, n).
+ * @summary Get Protocol Plate Qc Averages
+ */
+export function useGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet<TData = Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError = HTTPValidationError>(
+ protocolId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>,
+          TError,
+          Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Plate QC per readout x layer averaged over the protocol's plates (mean ± SD, n).
+ * @summary Get Protocol Plate Qc Averages
+ */
+export function useGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet<TData = Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>,
+          TError,
+          Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Plate QC per readout x layer averaged over the protocol's plates (mean ± SD, n).
+ * @summary Get Protocol Plate Qc Averages
+ */
+export function useGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet<TData = Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * Plate QC per readout x layer averaged over the protocol's plates (mean ± SD, n).
+ * @summary Get Protocol Plate Qc Averages
+ */
+export function useGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet<TData = Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetProtocolPlateQcAveragesApiV1ProtocolsProtocolIdPlateQcAveragesGetQueryOptions(protocolId,options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 

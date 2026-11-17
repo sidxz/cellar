@@ -6,9 +6,10 @@ import os
 import uuid
 
 import pytest
-from returns.result import Failure, Success
+from returns.result import Failure
 
 from cellar.application.screening.long_format_normalizer import (
+    CALCULATED_BY_SOURCE,
     ColumnMapping,
     NormalizedTable,
     ReadoutColumn,
@@ -17,10 +18,9 @@ from cellar.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
-from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.enums import PlateFormat, WellType
 from cellar.domain.shared.errors import ValidationError
 from cellar.infrastructure.parsers.tabular_file import ParsedTable, parse_tabular
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,8 +67,16 @@ class TestInferMappingSynonyms:
     def test_nadd_headers_resolved_via_synonyms(self) -> None:
         table = _make_table(
             ["Plate Name", "Well", "Concentration", "LGCY BATCH NAME", "Raw Data", "Scientist"],
-            [{"Plate Name": "P1", "Well": "A01", "Concentration": "100",
-              "LGCY BATCH NAME": "LG-001", "Raw Data": "0.6", "Scientist": "Dan"}],
+            [
+                {
+                    "Plate Name": "P1",
+                    "Well": "A01",
+                    "Concentration": "100",
+                    "LGCY BATCH NAME": "LG-001",
+                    "Raw Data": "0.6",
+                    "Scientist": "Dan",
+                }
+            ],
         )
         suggestion = infer_mapping(table)
         roles = {s.header: (s.role, s.confidence) for s in suggestion.suggestions}
@@ -220,6 +228,214 @@ class TestInferMappingReadoutDefMatch:
 
 
 # ---------------------------------------------------------------------------
+# infer_mapping — exports from an external screening platform
+# ---------------------------------------------------------------------------
+
+_RAW_AU = ReadoutDefRef(
+    id=uuid.UUID("77777777-7777-7777-7777-777777777777"),
+    name="raw AU",
+    data_type="numeric",
+    normalizations=("percent_inhibition",),
+)
+_SCIENTIST = ReadoutDefRef(
+    id=uuid.UUID("88888888-8888-8888-8888-888888888888"), name="Scientist", data_type="text"
+)
+_IC50 = ReadoutDefRef(
+    id=uuid.UUID("99999999-9999-9999-9999-999999999999"),
+    name="IC50",
+    data_type="dose_response",
+)
+
+# A real 60-column export's header row (with its repeated curve-statistic block).
+_EXPORT_HEADERS = [
+    "Molecule Name",
+    "Structure (CXSMILES)",
+    "Batch Name",
+    "LGCY Batch Name",
+    "Run Date",
+    "Plate",
+    "Well",
+    "Control State",
+    "% inhibition_calc (%)",
+    "% inhibition_calc (%) Z'-factor",
+    "Concentration_calc (uM)",
+    "Concentration_calc (uM) Z'-factor",
+    "IC50calc (uM)",
+    "IC50calc CI (Lower) (uM)",
+    "IC50calc CI (Upper) (uM)",
+    "IC50calc Fold Change",
+    "Baseline response (%)",
+    "Curve class",
+    "Hill slope",
+    "Maximum measured (%) Summary",
+    "Maximum measured (%)",
+    "Maximum measured (%) Standard Deviation (±)",
+    "Maximum measured (%) Count",
+    "Maximum response (%)",
+    "Minimum measured (%) Summary",
+    "Minimum measured (%)",
+    "Minimum measured (%) Standard Deviation (±)",
+    "Minimum measured (%) Count",
+    "N",
+    "R squared",
+    "Span (%)",
+    "inhibition-50uM (%)",
+    "inhibition-50uM (%) Z'-factor",
+    "inhibition- 100uM (%)",
+    "inhibition- 100uM (%) Z'-factor",
+    "Area under the curve",
+    "Scientist",
+    "concentration (uM)",
+    "concentration (uM) Z'-factor",
+    "raw AU (AU)",
+    "raw AU (AU) Z'-factor",
+    "% inhibition (%)",
+    "IC50 (uM)",
+    "IC50 CI (Lower) (uM)",
+    "IC50 CI (Upper) (uM)",
+    "IC50 Fold Change",
+    "Baseline response (%)",
+    "Curve class",
+    "Hill slope",
+    "Maximum measured (%) Summary",
+    "Maximum measured (%)",
+    "Maximum measured (%) Standard Deviation (±)",
+    "Maximum measured (%) Count",
+    "Maximum response (%)",
+    "Minimum measured (%) Summary",
+    "Minimum measured (%)",
+    "Minimum measured (%) Standard Deviation (±)",
+    "Minimum measured (%) Count",
+    "N",
+    "R squared",
+    "Span (%)",
+]
+
+
+def _export_row(i: int) -> dict[str, str]:
+    row = dict.fromkeys(_EXPORT_HEADERS, "")
+    row.update(
+        {
+            "Molecule Name": f"CPD-{i:04d}",
+            "Structure (CXSMILES)": "c1ccccc1",
+            "Batch Name": "002",
+            "LGCY Batch Name": f"Z{i:010d}",
+            "Run Date": "2026-10-08",
+            "Plate": "NADD_HITS_PLATE",
+            "Well": f"A{i:02d}",
+            "Area under the curve": "0.0",
+            "Scientist": "A. Chemist",
+            "concentration (uM)": "50",
+            "raw AU (AU)": f"0.{40 + i}",
+            "raw AU (AU) Z'-factor": "0.68",
+            "% inhibition (%)": str(45 - i),
+            "IC50 (uM)": "(IC50 requires additional points to generate a curve)",
+            "Maximum measured (%) Summary": "18 ± 38 (n=2)",
+            "Maximum measured (%)": str(18 + i),
+            "Maximum measured (%) Standard Deviation (±)": "38",
+            "Maximum measured (%) Count": "2",
+            "Minimum measured (%) Summary": "18 ± 38 (n=2)",
+            "Minimum measured (%)": str(18 - i),
+            "Minimum measured (%) Standard Deviation (±)": "38",
+            "Minimum measured (%) Count": "2",
+            "N": "N = 2",
+        }
+    )
+    return row
+
+
+class TestInferMappingSourceExport:
+    def _suggest(self, defs=(_RAW_AU, _SCIENTIST, _IC50)):
+        table = _make_table(_EXPORT_HEADERS, [_export_row(i) for i in range(1, 13)])
+        return {s.header: s for s in infer_mapping(table, readout_defs=defs).suggestions}
+
+    def test_core_columns(self) -> None:
+        s = self._suggest()
+        roles = {h: s[h].role for h in s}
+        assert roles["Molecule Name"] == "compound_ref"
+        assert roles["Batch Name"] == "batch_ref"
+        assert roles["Well"] == "well"
+        assert roles["Control State"] == "well_role"
+        assert roles["concentration (uM)"] == "concentration"
+
+    def test_plate_is_plate_name_and_the_run_date_is_not(self) -> None:
+        s = self._suggest()
+        assert (s["Plate"].role, s["Plate"].confidence) == ("plate_name", "high")
+        assert s["Run Date"].role is None
+
+    def test_readouts_bind_by_name_ignoring_a_trailing_unit(self) -> None:
+        s = self._suggest()
+        bound = {h: x.readout_definition_id for h, x in s.items() if x.role == "readout"}
+        assert bound == {"Scientist": _SCIENTIST.id, "raw AU (AU)": _RAW_AU.id}
+
+    @pytest.mark.parametrize(
+        "header",
+        [
+            "% inhibition (%)",
+            "IC50 (uM)",
+            "IC50 CI (Lower) (uM)",
+            "IC50 Fold Change",
+            "Curve class",
+            "Hill slope",
+            "R squared",
+            "N",
+            "Span (%)",
+            "Baseline response (%)",
+            "Maximum measured (%)",
+            "Maximum measured (%) Count",
+            "Area under the curve",
+            "raw AU (AU) Z'-factor",
+        ],
+    )
+    def test_columns_the_source_calculated_default_to_ignore(self, header: str) -> None:
+        s = self._suggest()[header]
+        assert (s.role, s.confidence, s.reason) == (None, "high", CALCULATED_BY_SOURCE)
+
+    def test_a_percent_column_is_a_readout_when_nothing_normalizes_to_it(self) -> None:
+        raw = ReadoutDefRef(id=_RAW_AU.id, name="raw AU", data_type="numeric")
+        s = self._suggest(defs=(raw, _SCIENTIST))
+        assert s["% inhibition (%)"].role == "readout"
+
+
+class TestInferMappingPlateAndDates:
+    @pytest.mark.parametrize("header", ["Plate", "Plate Name", "Barcode", "Plate Barcode"])
+    def test_plate_synonyms(self, header: str) -> None:
+        table = _make_table(
+            ["Run Date", header, "Well"],
+            [
+                {"Run Date": "2026-10-08", header: "PLATE_000001", "Well": "A01"},
+                {"Run Date": "2026-10-08", header: "PLATE_000001", "Well": "A02"},
+            ],
+        )
+        s = {x.header: x for x in infer_mapping(table).suggestions}
+        assert (s[header].role, s[header].confidence) == ("plate_name", "high")
+
+    @pytest.mark.parametrize(
+        "value", ["2026-10-08", "2026/10/08", "10/08/2026", "2026-10-08 14:32"]
+    )
+    def test_a_date_column_is_never_plate_name(self, value: str) -> None:
+        table = _make_table(
+            ["Read on", "Well", "Raw"],
+            [{"Read on": value, "Well": f"A{i:02d}", "Raw": "0.5"} for i in range(1, 9)],
+        )
+        s = {x.header: x for x in infer_mapping(table).suggestions}
+        assert s["Read on"].role is None
+
+
+class TestInferMappingUnitSuffix:
+    def test_a_unit_suffix_does_not_bind_a_qc_column(self) -> None:
+        table = _make_table(["Well", "raw AU (AU) Z'-factor"], [])
+        s = {x.header: x for x in infer_mapping(table, readout_defs=[_RAW_AU]).suggestions}
+        assert s["raw AU (AU) Z'-factor"].readout_definition_id is None
+
+    def test_percent_readout_binds_with_its_unit(self) -> None:
+        pct = ReadoutDefRef(id=uuid.uuid4(), name="% inhibition", data_type="numeric")
+        table = _make_table(["Well", "% inhibition (%)"], [])
+        s = {x.header: x for x in infer_mapping(table, readout_defs=[pct]).suggestions}
+        assert s["% inhibition (%)"].readout_definition_id == pct.id
+
+
+# ---------------------------------------------------------------------------
 # infer_mapping — value-based fallback
 # ---------------------------------------------------------------------------
 
@@ -291,9 +507,7 @@ class TestNormalizeWellCoords:
 
 class TestNormalizePlateFormat:
     def _table(self, wells: list[str]) -> ParsedTable:
-        return _make_table(
-            ["Well", "Raw"], [{"Well": w, "Raw": "1.0"} for w in wells]
-        )
+        return _make_table(["Well", "Raw"], [{"Well": w, "Raw": "1.0"} for w in wells])
 
     def _mapping(self, rd_id: uuid.UUID) -> ColumnMapping:
         return ColumnMapping(
@@ -313,9 +527,7 @@ class TestNormalizePlateFormat:
 
     def test_1536_well_plate_inferred(self) -> None:
         rd_id = uuid.uuid4()
-        out = normalize(
-            self._table(["A1", "AF48"]), self._mapping(rd_id)
-        ).unwrap()
+        out = normalize(self._table(["A1", "AF48"]), self._mapping(rd_id)).unwrap()
         assert out.plate_formats == {"Plate-1": PlateFormat.F1536}
 
 
@@ -417,14 +629,11 @@ class TestNormalizeTextReadouts:
         )
         mapping = ColumnMapping(
             well="Well",
-            readout_columns=(
-                ReadoutColumn(header="Raw", readout_definition_id=rd_id),
-            ),
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
         )
         out = normalize(table, mapping).unwrap()
         assert out.rows[0].readouts[rd_id] == 0.5
         assert rd_id not in out.rows[1].readouts
-
 
     @pytest.mark.parametrize("cell", ["nan", "NaN", "inf", "-Infinity"])
     def test_non_finite_cells_are_not_stored(self, cell: str) -> None:
@@ -478,9 +687,7 @@ class TestNormalizeErrors:
         assert isinstance(result.failure(), ValidationError)
 
     def test_no_valid_rows_returns_failure(self) -> None:
-        table = _make_table(
-            ["Well", "Raw"], [{"Well": "garbage", "Raw": "1"}]
-        )
+        table = _make_table(["Well", "Raw"], [{"Well": "garbage", "Raw": "1"}])
         rd_id = uuid.uuid4()
         mapping = ColumnMapping(
             well="Well",
@@ -519,18 +726,14 @@ class TestNadDFixture:
             plate_name=s.first("plate_name"),
             concentration=s.first("concentration"),
             batch_ref=s.first("batch_ref"),
-            readout_columns=(
-                ReadoutColumn(header=readout_header, readout_definition_id=rd_id),
-            ),
+            readout_columns=(ReadoutColumn(header=readout_header, readout_definition_id=rd_id),),
         )
         out: NormalizedTable = normalize(fixture_table, mapping).unwrap()
         assert len(out.plate_formats) == 2
         for fmt in out.plate_formats.values():
             assert fmt == PlateFormat.F384
 
-    def test_normalize_separates_sample_and_blank_rows(
-        self, fixture_table: ParsedTable
-    ) -> None:
+    def test_normalize_separates_sample_and_blank_rows(self, fixture_table: ParsedTable) -> None:
         s = infer_mapping(fixture_table)
         rd_id = uuid.uuid4()
         readout_header = s.first("readout")
@@ -540,12 +743,124 @@ class TestNadDFixture:
             plate_name=s.first("plate_name"),
             concentration=s.first("concentration"),
             batch_ref=s.first("batch_ref"),
-            readout_columns=(
-                ReadoutColumn(header=readout_header, readout_definition_id=rd_id),
-            ),
+            readout_columns=(ReadoutColumn(header=readout_header, readout_definition_id=rd_id),),
         )
         out = normalize(fixture_table, mapping).unwrap()
         sample_rows = [r for r in out.rows if r.batch_ref]
         blank_rows = [r for r in out.rows if not r.batch_ref]
         assert len(sample_rows) > 0
         assert len(blank_rows) > 0
+
+
+# ---------------------------------------------------------------------------
+# Well role column ("Control State")
+# ---------------------------------------------------------------------------
+
+
+class TestWellRoleColumn:
+    def test_role_headers_are_suggested_as_well_role(self) -> None:
+        for header in ("Control State", "control state", "Well Type", "Well Role", "CONTROL"):
+            table = _make_table(["Well", header, "Raw"], [])
+            roles = {s.header: (s.role, s.confidence) for s in infer_mapping(table).suggestions}
+            assert roles[header] == ("well_role", "high"), header
+
+    def _normalize(
+        self, values: list[str], full_effect: WellType = WellType.NEGATIVE_CONTROL
+    ) -> NormalizedTable:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Control State", "Raw"],
+            [
+                {"Well": f"A{i + 1}", "Control State": v, "Raw": "1.0"}
+                for i, v in enumerate(values)
+            ],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            well_role="Control State",
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
+        )
+        return normalize(table, mapping, full_effect=full_effect).unwrap()
+
+    def test_values_map_to_well_types(self) -> None:
+        out = self._normalize(
+            [
+                "negative control",
+                "positive control",
+                "Positive Control",
+                "reference",
+                "Reference Molecule",
+                "blank",
+                "",
+            ]
+        )
+        assert [r.well_role for r in out.rows] == [
+            WellType.NEGATIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+            WellType.REFERENCE,
+            WellType.REFERENCE,
+            WellType.BLANK,
+            WellType.SAMPLE,
+        ]
+        assert out.unknown_well_roles == ()
+        assert out.roles_by_effect == ()
+
+    # The external platform names its controls by effect: "positive control (hit)" is the
+    # full-effect control, and beside it "negative control" the no-effect one.
+    def test_platform_words_under_a_high_protocol(self) -> None:
+        out = self._normalize(
+            ["Positive Control (Hit)", "negative control", "hit control", ""],
+            full_effect=WellType.NEGATIVE_CONTROL,
+        )
+        assert [r.well_role for r in out.rows] == [
+            WellType.NEGATIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+            WellType.NEGATIVE_CONTROL,
+            WellType.SAMPLE,
+        ]
+        assert out.roles_by_effect == (
+            ("Positive Control (Hit)", WellType.NEGATIVE_CONTROL),
+            ("negative control", WellType.POSITIVE_CONTROL),
+            ("hit control", WellType.NEGATIVE_CONTROL),
+        )
+
+    def test_platform_words_under_a_low_protocol(self) -> None:
+        out = self._normalize(
+            ["positive control (hit)", "negative control"], full_effect=WellType.POSITIVE_CONTROL
+        )
+        assert [r.well_role for r in out.rows] == [
+            WellType.POSITIVE_CONTROL,
+            WellType.NEGATIVE_CONTROL,
+        ]
+
+    def test_plain_words_stay_literal_whatever_the_convention(self) -> None:
+        for full in (WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL):
+            out = self._normalize(["positive control", "negative control"], full_effect=full)
+            assert [r.well_role for r in out.rows] == [
+                WellType.POSITIVE_CONTROL,
+                WellType.NEGATIVE_CONTROL,
+            ]
+            assert out.roles_by_effect == ()
+
+    def test_unknown_values_are_listed_never_a_sample(self) -> None:
+        out = self._normalize(["negative control", "vehicle", "Vehicle ", "dmso"])
+        assert out.unknown_well_roles == ("vehicle", "dmso")  # first spelling, once each
+        assert out.rows[1].well_role is None
+
+    def test_unmapped_role_column_leaves_role_to_the_layout(self) -> None:
+        rd_id = uuid.uuid4()
+        table = _make_table(
+            ["Well", "Control State", "Raw"],
+            [{"Well": "A1", "Control State": "negative control", "Raw": "1.0"}],
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            readout_columns=(ReadoutColumn(header="Raw", readout_definition_id=rd_id),),
+        )
+        assert normalize(table, mapping).unwrap().rows[0].well_role is None
+
+    def test_missing_role_header_fails(self) -> None:
+        table = _make_table(["Well", "Raw"], [{"Well": "A1", "Raw": "1.0"}])
+        result = normalize(table, ColumnMapping(well="Well", well_role="Control State"))
+        assert isinstance(result, Failure)

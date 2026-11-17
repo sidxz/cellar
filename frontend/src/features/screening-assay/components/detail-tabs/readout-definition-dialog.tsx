@@ -266,8 +266,8 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Which layer of <span className="font-mono">{drYReadout}</span> the curve fits. Pick the
-            normalized layer (e.g. % Inhibition) when the raw column is the unprocessed signal —
+            Which layer of <span className="font-medium">{drYReadout}</span> the curve fits. Pick
+            the normalized layer (e.g. % Inhibition) when the raw column is the unprocessed signal —
             required for CDD-imported protocols where the % column is a derived layer of a raw
             measurement.
           </p>
@@ -281,7 +281,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
       <div className="grid gap-2 rounded-md border bg-background p-3">
         <div className="flex items-baseline justify-between">
           <Label className="text-xs font-medium">Intercepts</Label>
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             One row per intercept (EC50, EC90, IC10, …) — all derived from the same Hill fit
           </span>
         </div>
@@ -590,7 +590,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
               />
               <span className="text-xs text-muted-foreground whitespace-nowrap">max response</span>
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Compounds with max response below this are flagged INACTIVE without fitting.
             </p>
             {drInactiveThresholdError && (
@@ -611,9 +611,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
               onChange={(e) => setDrFullR2Min(e.target.value)}
               className="max-w-[8rem]"
             />
-            <p className="text-[11px] text-muted-foreground">
-              R² required to qualify as a FULL curve.
-            </p>
+            <p className="text-xs text-muted-foreground">R² required to qualify as a FULL curve.</p>
             {drFullR2MinError && (
               <p className="text-xs text-destructive">
                 Enter a value in (0, 1] or leave blank for default (0.8).
@@ -629,7 +627,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
               onChange={(e) => setDrFullTopMin(e.target.value)}
               className="max-w-[8rem]"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Fitted top plateau must reach this for FULL classification.
             </p>
             {drFullTopMinError && (
@@ -647,7 +645,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
               onChange={(e) => setDrFullBottomMax(e.target.value)}
               className="max-w-[8rem]"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               Fitted bottom plateau must be below this for FULL classification.
             </p>
             {drFullBottomMaxError && (
@@ -673,7 +671,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
               onChange={(e) => setDrPartialR2Min(e.target.value)}
               className="max-w-[8rem]"
             />
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-xs text-muted-foreground">
               R² required to qualify as a PARTIAL curve. Below this, classified INACTIVE.
             </p>
             {drPartialR2MinError && (
@@ -882,7 +880,7 @@ export function ReadoutDefinitionDialog({
                     protocols={protocols}
                     disabled={!isAdd && !isDraft}
                   />
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     Use other readout names as variables. Type <code>@</code> for cross-protocol.
                   </p>
                 </div>

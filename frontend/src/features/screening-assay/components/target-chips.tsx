@@ -32,7 +32,7 @@ export function TargetChips({ targets, max = 3, className, chipClassName }: Targ
         <Badge
           key={t.id}
           variant="secondary"
-          className={cn("font-normal text-[10px]", chipClassName)}
+          className={cn("font-normal text-xs", chipClassName)}
           title={t.name}
         >
           {t.name}
@@ -41,7 +41,7 @@ export function TargetChips({ targets, max = 3, className, chipClassName }: Targ
       {hidden.length > 0 && (
         <Badge
           variant="outline"
-          className={cn("font-normal text-[10px] text-muted-foreground", chipClassName)}
+          className={cn("font-normal text-xs text-muted-foreground", chipClassName)}
           title={hidden.map((t) => t.name).join(", ")}
         >
           +{hidden.length}

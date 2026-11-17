@@ -10,6 +10,7 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import type { ExternalToast } from "sonner";
 
 export interface CrudHooksConfig {
   entityName: string;
@@ -69,14 +70,15 @@ export function createCrudHooks<
     });
   }
 
-  function useCreate() {
+  /** `toastFor` adds options (description, an "Open" action…) to the success toast. */
+  function useCreate(toastFor?: (created: TEntity) => ExternalToast) {
     const qc = useQueryClient();
     return useMutation({
       mutationFn: (data: TCreateInput) =>
         customInstance<TEntity>({ url: baseUrl, method: "POST", data }),
-      onSuccess: () => {
+      onSuccess: (created) => {
         invalidateAll(qc);
-        showSuccess(createdMsg(entityName));
+        showSuccess(createdMsg(entityName), toastFor?.(created));
       },
       onError: (err: Error) => {
         showError(err.message || `Failed to create ${entityName}`);

@@ -6,7 +6,9 @@ import uuid
 
 import pytest
 
+from cellar.domain.shared.entity import AggregateRoot
 from cellar.domain.shared.errors import ConflictError
+from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests.integration.chemical_registration.test_molecule_repository import (
     _insert_molecule_raw,
@@ -29,3 +31,14 @@ async def test_constraint_violation_surfaces_as_conflict_error(session_factory) 
 
     assert "uq_mol_ws_regnum" in exc_info.value.message
     assert "CC-000001" in (exc_info.value.detail or "")
+
+
+@pytest.mark.integration
+async def test_an_aggregate_tracked_twice_gives_its_events_once(session_factory) -> None:
+    agg = AggregateRoot()
+    agg.register_event(DomainEvent(aggregate_id=agg.id, aggregate_type="T", workspace_id=agg.id))
+    async with AsyncUnitOfWork(session_factory) as uow:
+        uow.track(agg)
+        uow.track(agg)
+        events = await uow.commit()
+    assert len(events) == 1

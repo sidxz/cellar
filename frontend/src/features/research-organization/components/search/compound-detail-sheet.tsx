@@ -3,6 +3,7 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
+import { fitNoteLabel } from "@/features/screening-assay/lib/dose-response-display";
 import type {
   CurveClass,
   CurveType,
@@ -103,7 +104,7 @@ function adaptCurve(curve: CurveDetail, protocolId: string, molecule: Molecule):
     curve_class: (curve.curve_class as CurveClass | null) ?? null,
     raw_data: curve.raw_data ?? null,
     excluded_points: curve.excluded_points ?? null,
-    fit_quality_warnings: curve.fit_quality_warnings ?? [],
+    fit_quality_warnings: (curve.fit_quality_warnings ?? []).map(fitNoteLabel),
     intercept_values: curve.intercept_values ?? [],
     additional_curves: null,
     aggregate: null,
@@ -276,7 +277,9 @@ function SourceCurveCard({
       {curve.fit_quality_warnings && curve.fit_quality_warnings.length > 0 && (
         <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
           Fit quality:{" "}
-          {curve.fit_quality_warnings.map((warning) => warning.replaceAll("_", " ")).join(" · ")}
+          {curve.fit_quality_warnings
+            .map((warning) => fitNoteLabel(warning).replaceAll("_", " "))
+            .join(" · ")}
         </p>
       )}
       <div

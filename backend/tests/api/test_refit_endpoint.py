@@ -91,6 +91,53 @@ async def seeded_curve(
 
 
 @pytest.mark.asyncio
+async def test_an_edit_keeps_a_point_its_outlier_well_left_out(
+    client: AsyncClient, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+) -> None:
+    """A curve whose 1 µM point sat out of the auto-fit (its well flagged as an outlier) is
+    edited: the editor sends that entry back as it got it, and the save keeps it out."""
+    from datetime import UTC, datetime
+
+    from cellar.domain.screening_assay.excluded_point_detail import (
+        ExcludedPointDetail,
+        ExclusionReason,
+        ExclusionSource,
+    )
+
+    async with uow:
+        curve = await _seed_curve_with_points(uow, workspace_id=workspace_id)
+        curve.raw_data = [p for p in curve.raw_data if p["concentration"] != 1.0]
+        curve.excluded_points = [
+            ExcludedPointDetail(
+                idx=2, source=ExclusionSource.WELL_FLAG, excluded=True,
+                reason=ExclusionReason.OUTLIER_WELL, author_id=None, ts=datetime.now(UTC),
+                concentration=1.0, response=-40.0,
+            )
+        ]  # fmt: skip
+        await SQLAlchemyDoseResponseCurveRepository(uow).save(curve)
+        await uow.commit()
+
+    response = await client.post(
+        f"/api/v1/dose-response-curves/{curve.id}/refit",
+        json={
+            "exclusions": [
+                {"idx": 2, "source": "well_flag", "excluded": True, "reason": "outlier_well"},
+                {"idx": 4, "source": "manual", "excluded": True, "reason": "other"},
+            ],
+            "save_reason": "other",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["num_points"] == 4
+    assert -40.0 not in [p["response"] for p in body["raw_data"]]
+    kept = next(e for e in body["excluded_points"] if e["idx"] == 2)
+    assert (kept["source"], kept["reason"]) == ("well_flag", "outlier_well")
+    assert kept["excluded"] is True
+
+
+@pytest.mark.asyncio
 class TestRefitEndpoint:
     async def test_accepts_rich_exclusions_payload(
         self, client: AsyncClient, seeded_curve: DoseResponseCurve

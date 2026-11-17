@@ -1,0 +1,409 @@
+"""Plate QC per readout x layer, and control-compound potency per plate."""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+from returns.result import Success
+
+from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
+from cellar.domain.screening_assay.curve_fitting import FittedCurveResult
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.enums import (
+    CurveClass,
+    CurveType,
+    PlateFormat,
+    PosControlSignal,
+    ProtocolType,
+    ReadoutAggregation,
+    ReadoutDataType,
+    ReadoutNormalization,
+    WellType,
+)
+from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer
+from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
+from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+from cellar.domain.screening_assay.readout_data import ReadoutData
+from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
+from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.value_objects import QualifiedValue
+from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
+
+WS = uuid.uuid4()
+USER = uuid.uuid4()
+_PH = uuid.UUID(int=0)
+PI = ReadoutNormalization.PERCENT_INHIBITION
+
+
+def _uow():
+    uow = AsyncMock()
+    uow.is_active = True
+    return uow
+
+
+class _Plate:
+    """A run with one plate; ``add`` places a well and its raw value."""
+
+    def __init__(self, protocol: Protocol) -> None:
+        self.run = Run.create(
+            workspace_id=WS, protocol_id=protocol.id, run_date=date(2026, 11, 16), operator=USER
+        )
+        self.plate = Plate(run_id=self.run.id, plate_number=1, format=PlateFormat.F96)
+        self.run.plates.append(self.plate)
+        self.rows: list[ReadoutData] = []
+        self.computed: list[ReadoutData] = []
+        self._n = 0
+
+    def add(self, rd, well_type, value, *, dose=None, molecule=None, outlier=False) -> Well:
+        self._n += 1
+        well = Well(
+            plate_id=self.plate.id,
+            row="ABCDEFGH"[(self._n - 1) // 12],
+            column=(self._n - 1) % 12 + 1,
+            well_type=well_type,
+            dose=dose,
+        )
+        self.run.wells.append(well)
+        self.rows.append(
+            ReadoutData(
+                workspace_id=WS,
+                run_id=self.run.id,
+                well_id=well.id,
+                molecule_id=molecule,
+                readout_definition_id=rd.id,
+                value=QualifiedValue(value=value),
+                is_outlier=outlier,
+            )
+        )
+        return well
+
+
+async def _compute(protocol: Protocol, p: _Plate, curve_fitter=None) -> Run:
+    readout_repo, run_repo, protocol_repo = AsyncMock(), AsyncMock(), AsyncMock()
+    run_repo.find_by_id_in_workspace = AsyncMock(return_value=p.run)
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+    readout_repo.find_by_run.return_value = p.rows
+    engine = ReadoutCalculationEngine(
+        uow=_uow(),
+        formula_evaluator=AstevalFormulaEvaluator(),
+        plate_normalizer=PlateNormalizer(),
+        replicate_aggregator=ReplicateAggregator(),
+        readout_data_repo=readout_repo,
+        run_repo=run_repo,
+        protocol_repo=protocol_repo,
+        dispatcher=AsyncMock(),
+        plate_quality=PlateQualityCalculator(),
+        curve_fitter=curve_fitter,
+    )
+    assert isinstance(await engine.compute_for_run(p.run.id, workspace_id=WS), Success)
+    p.computed = (
+        readout_repo.save_bulk.await_args.args[0] if readout_repo.save_bulk.await_args else []
+    )
+    return p.run
+
+
+@pytest.mark.asyncio
+async def test_plate_qc_per_readout_and_layer_beside_the_legacy_z_prime() -> None:
+    signal = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Signal",
+        data_type=ReadoutDataType.NUMERIC,
+        normalizations=frozenset({PI}),
+    )
+    other = ReadoutDefinition(protocol_id=_PH, name="Other", data_type=ReadoutDataType.NUMERIC)
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="QC",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[signal, other],
+    )
+    p = _Plate(protocol)
+    for v in (100.0, 98.0, 102.0):  # HIGH convention: POS = uninhibited
+        p.add(signal, WellType.POSITIVE_CONTROL, v)
+    for v in (10.0, 12.0, 8.0):
+        p.add(signal, WellType.NEGATIVE_CONTROL, v)
+    p.add(signal, WellType.SAMPLE, 50.0, molecule=uuid.uuid4())
+    p.add(other, WellType.SAMPLE, 7.0, molecule=uuid.uuid4())  # no controls: no entry
+
+    run = await _compute(protocol, p)
+
+    plate_id = str(p.plate.id)
+    per_layer = run.qc_metrics["plates"][plate_id]
+    assert list(per_layer) == [str(signal.id)]
+    raw = per_layer[str(signal.id)]["raw"]
+    assert raw["z_prime"] == pytest.approx(1 - 12 / 90, abs=1e-3)
+    assert raw["classification"] == "excellent"
+    assert (raw["pos_mean"], raw["pos_sd"], raw["pos_n"]) == pytest.approx((100.0, 2.0, 3))
+    assert (raw["neg_mean"], raw["neg_sd"], raw["neg_n"]) == pytest.approx((10.0, 2.0, 3))
+    assert raw["s2b"] == pytest.approx(10.0)
+    inh = per_layer[str(signal.id)]["percent_inhibition"]
+    assert inh["z_prime"] == pytest.approx(raw["z_prime"], abs=1e-3)
+    assert (inh["pos_mean"], inh["neg_mean"]) == pytest.approx((0.0, 100.0))
+    assert inh["pos_sd"] == pytest.approx(200 / 90)
+    assert inh["s2b"] is None  # a ratio of % means says nothing
+    # The legacy per-plate entry stays, from the first readout's raw layer.
+    assert run.qc_metrics["z_prime"][plate_id] == {
+        "z_prime": 0.867,
+        "classification": "excellent",
+        "pos_mean": 100.0,
+        "pos_sd": 2.0,
+        "neg_mean": 10.0,
+        "neg_sd": 2.0,
+        "s2b": 10.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_one_well_per_control_stores_means_without_a_z_prime() -> None:
+    signal = ReadoutDefinition(protocol_id=_PH, name="Signal", data_type=ReadoutDataType.NUMERIC)
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="QC",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[signal],
+    )
+    p = _Plate(protocol)
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 10.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 12.0)
+
+    run = await _compute(protocol, p)
+
+    raw = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]
+    assert raw["z_prime"] is None
+    assert raw["classification"] == "insufficient_data"
+    assert (raw["pos_mean"], raw["pos_sd"], raw["pos_n"]) == (100.0, None, 1)
+    assert (raw["neg_mean"], raw["neg_n"]) == (11.0, 2)
+
+
+@pytest.mark.asyncio
+async def test_a_control_compound_dose_series_is_fitted_per_plate_as_qc() -> None:
+    signal = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Signal",
+        data_type=ReadoutDataType.NUMERIC,
+        normalizations=frozenset({PI}),
+    )
+    potency = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Potency",
+        data_type=ReadoutDataType.DOSE_RESPONSE,
+        dose_response_config=DoseResponseConfig(
+            curve_type=CurveType.IC50, y_readout_name="Signal", y_normalization=PI
+        ),
+    )
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="QC",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[signal, potency],
+        pos_control_signal=PosControlSignal.LOW,  # POS = the known inhibitor
+    )
+    p = _Plate(protocol)
+    rif, ref = uuid.uuid4(), uuid.uuid4()
+    doses = (0.01, 0.1, 1.0, 10.0, 100.0, 100.0)
+    for i, d in enumerate(doses):
+        p.add(signal, WellType.POSITIVE_CONTROL, 100.0 - 10 * i, dose=d, molecule=rif)
+    for v in (100.0, 102.0, 98.0):
+        p.add(signal, WellType.NEGATIVE_CONTROL, v)
+    for d in (1.0, 10.0, 100.0):  # three doses: too few for a curve
+        p.add(signal, WellType.REFERENCE, 50.0, dose=d, molecule=ref)
+    fitter = MagicMock()
+    fitter.fit.return_value = Success(
+        FittedCurveResult(
+            fitted_value=0.45,
+            hill_slope=1.0,
+            top=100.0,
+            bottom=0.0,
+            r_squared=0.98,
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            curve_class=CurveClass.FULL,
+            num_points=6,
+            raw_data=[],
+        )
+    )
+
+    run = await _compute(protocol, p, fitter)
+
+    fitter.fit.assert_called_once()
+    points, config = fitter.fit.call_args.args
+    assert config is potency.dose_response_config
+    assert sorted(pt.concentration for pt in points) == sorted(doses)
+    # The fit reads the % inhibition layer, as the samples' fits do.
+    neg_mean = 100.0
+    assert sorted(pt.response for pt in points) == pytest.approx(
+        sorted(100 * (neg_mean - w) / (neg_mean - 75.0) for w in (100, 90, 80, 70, 60, 50))
+    )
+    entry = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["percent_inhibition"]
+    assert entry["control_fits"] == [
+        {
+            "role": "positive_control",
+            "molecule_id": str(rif),
+            "label": "IC50",
+            "value": 0.45,
+            "curve_class": "full",
+        }
+    ]
+    assert "control_fits" not in run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]
+
+
+# NadD-Sumo dose response, 2026-10-08: the platform flags negative controls A01 and B01.
+_NEG = (0.40, 0.55, 0.65, 0.55, 0.61, 0.61, 0.54, 0.63, 0.63, 0.63, 0.60)
+_POS = (0.19, 0.19, 0.20, 0.19, 0.19, 0.19, 0.20, 0.20, 0.20, 0.20, 0.20)
+
+
+async def _nadd_run(flagged: int) -> tuple[_Plate, ReadoutDefinition, list[Well]]:
+    raw_au = ReadoutDefinition(
+        protocol_id=_PH,
+        name="raw AU",
+        data_type=ReadoutDataType.NUMERIC,
+        normalizations=frozenset({PI}),
+    )
+    protocol = Protocol.create(
+        workspace_id=WS,
+        name="NadD",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=[raw_au],
+        pos_control_signal=PosControlSignal.LOW,
+    )
+    p = _Plate(protocol)
+    neg = [
+        p.add(raw_au, WellType.NEGATIVE_CONTROL, v, outlier=i < flagged)
+        for i, v in enumerate(_NEG)
+    ]
+    for v in _POS:
+        p.add(raw_au, WellType.POSITIVE_CONTROL, v)
+    p.add(raw_au, WellType.SAMPLE, 0.3, molecule=uuid.uuid4())
+    await _compute(protocol, p)
+    return p, raw_au, neg
+
+
+@pytest.mark.asyncio
+async def test_every_negative_control_counts_without_outlier_flags() -> None:
+    p, raw_au, _ = await _nadd_run(flagged=0)
+    qc = p.run.qc_metrics["plates"][str(p.plate.id)][str(raw_au.id)]
+    assert qc["raw"]["z_prime"] == pytest.approx(0.408, abs=1e-3)
+    assert qc["raw"]["neg_n"] == 11
+    assert qc["percent_inhibition"]["neg_sd"] == pytest.approx(18.4, abs=0.1)
+
+
+@pytest.mark.asyncio
+async def test_outlier_wells_leave_plate_qc_and_the_anchors_but_keep_a_value() -> None:
+    p, raw_au, neg = await _nadd_run(flagged=2)  # A01 and B01
+
+    qc = p.run.qc_metrics["plates"][str(p.plate.id)][str(raw_au.id)]
+    assert qc["raw"]["z_prime"] == pytest.approx(0.688, abs=1e-3)
+    assert (qc["raw"]["neg_n"], qc["raw"]["pos_n"]) == (9, 11)
+    inh = qc["percent_inhibition"]
+    assert (inh["neg_mean"], inh["neg_n"]) == (pytest.approx(0.0, abs=1e-9), 9)
+    assert inh["neg_sd"] == pytest.approx(9.2, abs=0.1)
+    assert inh["z_prime"] == pytest.approx(0.688, abs=1e-3)
+    # The flagged wells still get a % inhibition, flagged too, on the 9-well anchor.
+    by_well = {r.well_id: r for r in p.computed if r.normalization_applied == PI}
+    neg9 = sum(_NEG[2:]) / 9
+    a01 = by_well[neg[0].id]
+    assert a01.is_outlier and not by_well[neg[2].id].is_outlier
+    assert a01.value.value == pytest.approx(100 * (neg9 - 0.40) / (neg9 - sum(_POS) / 11))
+    assert p.run.qc_metrics["z_prime"][str(p.plate.id)]["z_prime"] == 0.688
+
+
+def _raw_only(*readouts: ReadoutDefinition) -> Protocol:
+    return Protocol.create(
+        workspace_id=WS,
+        name="QC",
+        protocol_type=ProtocolType.BIOCHEMICAL,
+        created_by=USER,
+        readout_definitions=list(readouts),
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_recompute_with_no_qualifying_plate_replaces_the_stale_qc_blocks() -> None:
+    signal = ReadoutDefinition(protocol_id=_PH, name="Signal", data_type=ReadoutDataType.NUMERIC)
+    protocol = _raw_only(signal)
+    p = _Plate(protocol)
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 10.0, outlier=True)  # every negative flagged
+    p.add(signal, WellType.NEGATIVE_CONTROL, 12.0, outlier=True)
+    stale = {str(p.plate.id): {str(signal.id): {"raw": {"neg_n": 2}}}}
+    p.run.qc_metrics = {"plates": stale, "z_prime": {str(p.plate.id): {}}, "edited": 1}
+
+    run = await _compute(protocol, p)
+
+    assert run.qc_metrics == {"plates": {}, "z_prime": {}, "edited": 1}
+
+
+@pytest.mark.asyncio
+async def test_a_formula_reads_only_the_compounds_unflagged_sample_wells() -> None:
+    signal = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Signal",
+        data_type=ReadoutDataType.NUMERIC,
+        aggregation=ReadoutAggregation.MEAN,
+    )
+    doubled = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Doubled",
+        data_type=ReadoutDataType.NUMERIC,
+        is_calculated=True,
+        calculation_formula="Signal * 2",
+    )
+    protocol = _raw_only(signal, doubled)
+    p = _Plate(protocol)
+    mol = uuid.uuid4()
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0, molecule=mol)  # the compound as a control
+    p.add(signal, WellType.SAMPLE, 10.0, molecule=mol)
+    p.add(signal, WellType.SAMPLE, 1000.0, molecule=mol, outlier=True)
+
+    await _compute(protocol, p)
+
+    [row] = [r for r in p.computed if r.readout_definition_id == doubled.id]
+    assert (row.molecule_id, row.value.value) == (mol, 20.0)
+
+
+@pytest.mark.asyncio
+async def test_an_inactive_control_fit_stores_no_potency() -> None:
+    signal = ReadoutDefinition(protocol_id=_PH, name="Signal", data_type=ReadoutDataType.NUMERIC)
+    potency = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Potency",
+        data_type=ReadoutDataType.DOSE_RESPONSE,
+        dose_response_config=DoseResponseConfig(
+            curve_type=CurveType.IC50, y_readout_name="Signal"
+        ),
+    )
+    protocol = _raw_only(signal, potency)
+    p = _Plate(protocol)
+    ref = uuid.uuid4()
+    for d in (0.1, 1.0, 10.0, 100.0):
+        p.add(signal, WellType.REFERENCE, 5.0, dose=d, molecule=ref)
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 10.0)
+    fitter = MagicMock()
+    fitter.fit.return_value = Success(
+        FittedCurveResult(
+            fitted_value=0.0,  # what the fitter's inactive path reports
+            hill_slope=0.0,
+            top=5.0,
+            bottom=5.0,
+            r_squared=0.0,
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            curve_class=CurveClass.INACTIVE,
+            num_points=4,
+            raw_data=[],
+        )
+    )
+
+    run = await _compute(protocol, p, fitter)
+
+    [fit] = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]["control_fits"]
+    assert (fit["value"], fit["curve_class"]) == (None, "inactive")

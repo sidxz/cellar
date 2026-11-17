@@ -21,6 +21,7 @@ class CurveRow:
     batch_id: uuid.UUID
     protocol_id: uuid.UUID
     run_id: uuid.UUID
+    readout_definition_id: uuid.UUID
     curve_type: str | None
     fitted_value: float | None
     hill_slope: float | None
@@ -33,6 +34,14 @@ class CurveRow:
     curve_class: str | None
     raw_data: Any | None
     excluded_points: Any | None
+    intercept_values: Any | None = None  # [{spec, value, at_bound, …}]; the first is primary
+
+
+@dataclass(frozen=True)
+class CompoundCurveRow(CurveRow):
+    """A curve with its batch's number (``None`` when the batch is not the workspace's)."""
+
+    batch_number: str | None = None
 
 
 @runtime_checkable
@@ -44,4 +53,4 @@ class CompoundCurvesReader(Protocol):
         workspace_id: uuid.UUID,
         protocol_id: uuid.UUID,
         molecule_id: uuid.UUID,
-    ) -> list[CurveRow]: ...
+    ) -> list[CompoundCurveRow]: ...

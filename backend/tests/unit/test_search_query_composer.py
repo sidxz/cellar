@@ -867,7 +867,8 @@ class TestActivityInterceptKey:
         assert "intercept_values" in sql
 
     def test_intercept_key_null_uses_fitted_value(self) -> None:
-        """Primary intercept stays on the fast fitted_value path."""
+        """Primary intercept reads fitted_value, never the intercept_values array
+        (only the curve's doses, to censor it as the grid reports it)."""
         proto = str(uuid.uuid4())
         rd = str(uuid.uuid4())
         clause = _compose({
@@ -890,7 +891,7 @@ class TestActivityInterceptKey:
         })
         sql = str(clause.compile())
         assert "fitted_value" in sql
-        assert "jsonb_array_elements" not in sql.lower()
+        assert "jsonb_array_elements(dose_response_curves.intercept_values)" not in sql
 
     def test_intercept_key_invalid_kind_raises(self) -> None:
         proto = str(uuid.uuid4())

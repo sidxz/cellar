@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
+import { API_V1, ApiError, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   AmbiguousCompoundModel,
   BatchOptionModel,
@@ -21,7 +21,7 @@ import type {
   RunImportTemplateResponse,
   WellConflictModel,
 } from "@/shared/lib/api/model";
-import { showWarning } from "@/shared/lib/toast";
+import { showInfo, showWarning } from "@/shared/lib/toast";
 import {
   DOSE_RESPONSE_KEY,
   MEASURED_CURVES_KEY,
@@ -33,13 +33,18 @@ import {
   RUN_KEY,
 } from "./query-keys";
 
-/** Compose a non-blocking warning toast body from a fit_warnings array.
- *  Up to 3 lines are shown verbatim; anything beyond is collapsed into a
- *  "+N more" suffix so the toast doesn't grow unbounded on bad runs. */
-function buildFitWarningDescription(warnings: string[]): string {
+/** Warn of a refit's failed fits, each naming its compound: up to 3 lines verbatim,
+ *  anything beyond collapsed into a "+N more" suffix so the toast doesn't grow unbounded
+ *  on bad runs. Compounds tested at too few doses are not failures: they ride in the
+ *  refit's notes. */
+export function showFitFailures(warnings: string[] | undefined, prefix = ""): void {
+  if (!warnings?.length) return;
   const head = warnings.slice(0, 3);
   const rest = warnings.length - head.length;
-  return rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n");
+  const n = warnings.length;
+  showWarning(`${prefix}${n} curve fit${n === 1 ? "" : "s"} failed`, {
+    description: rest > 0 ? `${head.join("\n")}\n+${rest} more` : head.join("\n"),
+  });
 }
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
@@ -62,7 +67,8 @@ export type ImportRole =
   | "concentration"
   | "batch_ref"
   | "compound_ref"
-  | "readout";
+  | "readout"
+  | "well_role";
 
 export type ImportConfidence = "high" | "medium" | "low";
 
@@ -82,6 +88,7 @@ const IMPORT_ROLES: readonly ImportRole[] = [
   "batch_ref",
   "compound_ref",
   "readout",
+  "well_role",
 ];
 
 const IMPORT_CONFIDENCES: readonly ImportConfidence[] = ["high", "medium", "low"];
@@ -124,54 +131,94 @@ export type RunImportTemplate = RunImportTemplateResponse;
 
 // ─── Hooks ─────────────────────────────────────────────────────────────────────
 
-export function usePreviewRunFile(runId: string) {
-  return useMutation({
-    mutationFn: async ({ file }: { file: File }) => {
-      const formData = new FormData();
-      formData.append("file", file);
-      return customInstance<PreviewRunFileResponse>({
-        url: `${API_V1}/runs/${runId}/preview-file`,
-        method: "POST",
-        data: formData,
-      });
-    },
+function uploadPreview(runId: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  return customInstance<PreviewRunFileResponse>({
+    url: `${API_V1}/runs/${runId}/preview-file`,
+    method: "POST",
+    data: formData,
   });
 }
+
+export function usePreviewRunFile(runId: string) {
+  return useMutation({
+    mutationFn: async ({ file }: { file: File }) => uploadPreview(runId, file),
+  });
+}
+
+/** The server keeps a preview 30 minutes from its last use and loses it on a restart. */
+export class PreviewExpiredError extends Error {
+  constructor() {
+    super("The preview expired — upload the file again");
+    this.name = "PreviewExpiredError";
+  }
+}
+
+function isMissingPreview(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.status !== 404) return false;
+  const message = (error.body as { message?: unknown } | null)?.message;
+  return typeof message === "string" && message.startsWith("Preview ");
+}
+
+/** Run ``call`` against the preview; when the server no longer holds it, upload the
+ *  file again and retry with the fresh preview — the chemist's mapping and picks
+ *  survive. Only when that fails too is the preview reported expired. */
+async function withLivePreview<T>(
+  runId: string,
+  file: File | null,
+  previewId: string,
+  call: (previewId: string) => Promise<T>,
+): Promise<T> {
+  try {
+    return await call(previewId);
+  } catch (error) {
+    if (!isMissingPreview(error)) throw error;
+  }
+  const fresh = file ? await uploadPreview(runId, file).catch(() => null) : null;
+  if (!fresh) throw new PreviewExpiredError();
+  return call(fresh.preview_id).catch((error: unknown) => {
+    throw isMissingPreview(error) ? new PreviewExpiredError() : error;
+  });
+}
+
+/** The file the wizard still holds, for re-uploading an expired preview. */
+type WithFile<T> = T & { file: File | null };
 
 export type RepreviewRunFilePayload = RepreviewRunFileRequest;
 
 export function useRepreviewRunFile(runId: string) {
   return useMutation({
-    mutationFn: async (payload: RepreviewRunFilePayload) =>
-      customInstance<PreviewRunFileResponse>({
-        url: `${API_V1}/runs/${runId}/repreview-file`,
-        method: "POST",
-        data: payload,
-      }),
+    mutationFn: async ({ file, ...payload }: WithFile<RepreviewRunFilePayload>) =>
+      withLivePreview(runId, file, payload.preview_id, (preview_id) =>
+        customInstance<PreviewRunFileResponse>({
+          url: `${API_V1}/runs/${runId}/repreview-file`,
+          method: "POST",
+          data: { ...payload, preview_id },
+        }),
+      ),
   });
 }
 
 export function useImportRunFile(runId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: ImportRunFilePayload) =>
-      customInstance<ImportRunFileResponse>({
-        url: `${API_V1}/runs/${runId}/import-file`,
-        method: "POST",
-        data: payload,
-      }),
+    mutationFn: async ({ file, ...payload }: WithFile<ImportRunFilePayload>) =>
+      withLivePreview(runId, file, payload.preview_id, (preview_id) =>
+        customInstance<ImportRunFileResponse>({
+          url: `${API_V1}/runs/${runId}/import-file`,
+          method: "POST",
+          data: { ...payload, preview_id },
+        }),
+      ),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: [...PLATE_MAP_KEY, runId] });
       qc.invalidateQueries({ queryKey: READOUT_DATA_KEY });
       qc.invalidateQueries({ queryKey: DOSE_RESPONSE_KEY });
       qc.invalidateQueries({ queryKey: RUNS_KEY });
       qc.invalidateQueries({ queryKey: ["attachments", "run", runId] });
-      const warnings = data.fit_warnings ?? [];
-      if (warnings.length > 0) {
-        showWarning(`Run imported. ${warnings.length} curve(s) had fit issues.`, {
-          description: buildFitWarningDescription(warnings),
-        });
-      }
+      if (data.fit_notes?.length) showInfo(data.fit_notes.join("\n"));
+      showFitFailures(data.fit_warnings, "Run imported. ");
     },
   });
 }

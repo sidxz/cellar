@@ -10,13 +10,6 @@ import {
   CardTitle,
 } from "@/shared/components/ui/card";
 import { Label } from "@/shared/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/components/ui/select";
 import { useQueryClient } from "@tanstack/react-query";
 import { useProtocolFacetSlots } from "../../hooks/use-protocol-facet-slots";
 import {
@@ -25,35 +18,19 @@ import {
   useProtocolTargets,
   useRemoveProtocolTarget,
 } from "../../hooks/use-protocol-targets";
-import {
-  useRemoveOntologyAnnotation,
-  useSetOntologyAnnotation,
-  useUpdateProtocol,
-} from "../../hooks/use-protocols";
-import {
-  POS_CONTROL_SIGNAL_LABELS,
-  type PosControlSignal,
-  type Protocol,
-  type ProtocolStatus,
-} from "../../types";
+import { useRemoveOntologyAnnotation, useSetOntologyAnnotation } from "../../hooks/use-protocols";
+import type { Protocol, ProtocolStatus } from "../../types";
 import { hidesFacet, settledSlots } from "../create-protocol/required-facts";
 import { TargetMultiSelect } from "../target-multi-select";
 
-// ---------------------------------------------------------------------------
-// DesignTabProtocolCard
-// Renders the protocol-level metadata sections: Ontology Annotations and
-// Control Convention. Both are "protocol-level" fields that live above the
-// readout / condition / layout management sections.
-// ---------------------------------------------------------------------------
-
-interface DesignTabProtocolCardProps {
+/** Targets and controlled vocabulary describe the assay on Overview. */
+interface ProtocolIdentityCardsProps {
   protocol: Protocol;
   protocolId: string;
 }
 
-export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtocolCardProps) {
+export function ProtocolIdentityCards({ protocol, protocolId }: ProtocolIdentityCardsProps) {
   const status = protocol.status as ProtocolStatus;
-  const isRetired = status === "retired";
   const isDraft = status === "draft";
   const isLocked = protocol.is_locked;
   // Destructive / structural ops — strict DRAFT only. Lock blocks DRAFT too.
@@ -65,7 +42,6 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
   const correctable = status === "active" && !isLocked;
 
   const qc = useQueryClient();
-  const updateProtocol = useUpdateProtocol(protocolId);
   const setOntologyAnnotation = useSetOntologyAnnotation(protocolId);
   const removeOntologyAnnotation = useRemoveOntologyAnnotation(protocolId);
   const addProtocolTarget = useAddProtocolTarget(protocolId);
@@ -135,7 +111,7 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
                 {inheritedTargets.map((t) => (
                   <Badge key={t.id} variant="outline" className="font-normal text-muted-foreground">
                     {t.name}
-                    <span className="ml-1 text-[10px]">
+                    <span className="ml-1 text-xs">
                       · from {t.run_count} run{t.run_count === 1 ? "" : "s"}
                     </span>
                   </Badge>
@@ -234,49 +210,6 @@ export function DesignTabProtocolCard({ protocol, protocolId }: DesignTabProtoco
           </CardContent>
         </Card>
       )}
-
-      {/* ── Control Convention ──────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Control Convention</CardTitle>
-          <CardDescription>
-            Tells the calculation engine which control well produces high raw signal. Drives %
-            Inhibition / % Activation / % Control / Z-Score formula dispatch and the heatmap legend.
-            Editable after publish — re-run Recompute on each run after changing.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-end gap-3">
-            <div className="space-y-1">
-              <Label className="text-xs">POS control signal</Label>
-              <Select
-                value={protocol.pos_control_signal}
-                onValueChange={(v) => {
-                  if (v === protocol.pos_control_signal) return;
-                  updateProtocol.mutate({
-                    pos_control_signal: v as PosControlSignal,
-                  });
-                }}
-                disabled={isRetired || updateProtocol.isPending}
-              >
-                <SelectTrigger className="w-[420px]">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {(["high", "low"] as PosControlSignal[]).map((v) => (
-                    <SelectItem key={v} value={v}>
-                      {POS_CONTROL_SIGNAL_LABELS[v]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {updateProtocol.isPending && (
-              <span className="pb-2 text-xs text-muted-foreground">Saving…</span>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </>
   );
 }

@@ -13,6 +13,7 @@ from sqlalchemy.orm import aliased
 from cellar.domain.research_organization.collection import Collection, CollectionVisibility
 from cellar.domain.research_organization.enums import CollectionType
 from cellar.domain.shared.errors import CollectionFrozenError, NotFoundError
+from cellar.infrastructure.persistence.sqlalchemy._sql import uuid_array
 from cellar.infrastructure.persistence.sqlalchemy.base_repository import (
     SQLAlchemyRepository,
 )
@@ -207,8 +208,13 @@ class SQLAlchemyCollectionRepository(SQLAlchemyRepository[Collection, Collection
             raise CollectionFrozenError(
                 f"Collection {collection_id} is frozen and cannot be modified"
             )
-        values = [{"collection_id": collection_id, "molecule_id": mid} for mid in molecule_ids]
-        stmt = pg_insert(CollectionMoleculeModel).values(values).on_conflict_do_nothing()
+        # One uuid[] parameter, not two per row: asyncpg caps a statement at 32,767.
+        rows = select(sa.literal(collection_id, sa.Uuid()), func.unnest(uuid_array(molecule_ids)))
+        stmt = (
+            pg_insert(CollectionMoleculeModel)
+            .from_select(["collection_id", "molecule_id"], rows)
+            .on_conflict_do_nothing()
+        )
         result = await self._session.execute(stmt)
         if result.rowcount:
             await self._touch_updated_at(collection_id)

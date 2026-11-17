@@ -69,6 +69,7 @@ export function applyTemplateToDraft(
   setIfPresent(mapping.concentration, "concentration");
   setIfPresent(mapping.batch_ref, "batch_ref");
   setIfPresent(mapping.compound_ref, "compound_ref");
+  setIfPresent(mapping.well_role, "well_role");
   if (Array.isArray(mapping.readout_headers)) {
     for (const h of mapping.readout_headers) {
       if (typeof h === "string" && headers.includes(h)) {

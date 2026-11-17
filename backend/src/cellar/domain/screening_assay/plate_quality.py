@@ -23,6 +23,8 @@ class PlateQualityResult:
     negative_control_mean: float
     negative_control_sd: float
     signal_to_background: float
+    positive_control_n: int = 0
+    negative_control_n: int = 0
 
 
 class PlateQualityCalculator:
@@ -46,10 +48,12 @@ class PlateQualityCalculator:
                 z_prime=0.0,
                 classification="insufficient_data",
                 positive_control_mean=statistics.mean(positive_values) if positive_values else 0.0,
-                positive_control_sd=0.0,
+                positive_control_sd=_sd(positive_values),
                 negative_control_mean=statistics.mean(negative_values) if negative_values else 0.0,
-                negative_control_sd=0.0,
+                negative_control_sd=_sd(negative_values),
                 signal_to_background=0.0,
+                positive_control_n=len(positive_values),
+                negative_control_n=len(negative_values),
             )
 
         pos_mean = statistics.mean(positive_values)
@@ -82,4 +86,11 @@ class PlateQualityCalculator:
             negative_control_mean=neg_mean,
             negative_control_sd=neg_sd,
             signal_to_background=s2b,
+            positive_control_n=len(positive_values),
+            negative_control_n=len(negative_values),
         )
+
+
+def _sd(values: list[float]) -> float:
+    """Sample SD; 0.0 below two values (the count tells the two apart)."""
+    return statistics.stdev(values) if len(values) >= 2 else 0.0

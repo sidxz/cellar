@@ -4,8 +4,10 @@ from cellar.application.audit.audit_recording_service import AuditRecordingServi
 from cellar.domain.screening_assay.enums import HolderKind
 from cellar.domain.screening_assay.events import (
     FieldChange,
+    FlaggedPosition,
     PositionChange,
     RunInstrumentFileImported,
+    RunOutliersFlagged,
     RunPositionsRelabelled,
 )
 from cellar.domain.screening_assay.holder import position_label
@@ -72,4 +74,28 @@ async def test_relabelled_positions_are_audited_field_by_field_with_the_reason()
         ("event", None, "RunPositionsRelabelled"),
         (f"{label}: label", "x", "y"),
         (f"{label}: concentration", "10.0", "12.5"),
+    ]
+
+
+async def test_outlier_flags_are_audited_per_position_with_the_reason():
+    repo = _Repo()
+    await AuditRecordingService(repo).handle_event(
+        RunOutliersFlagged(
+            aggregate_id=uuid.uuid4(),
+            aggregate_type="Run",
+            workspace_id=uuid.uuid4(),
+            positions=(
+                FlaggedPosition(uuid.uuid4(), uuid.uuid4(), "Plate 1 · A1"),
+                FlaggedPosition(uuid.uuid4(), uuid.uuid4(), "Plate 2 · A1"),
+            ),
+            outlier=True,
+            reason="bubble",
+        )
+    )
+    (op,) = repo.saved
+    assert op.reason == "bubble" and str(op.operation_type) == "data_entry"
+    assert [(e.field_name, e.old_value, e.new_value) for e in op.entries] == [
+        ("event", None, "RunOutliersFlagged"),
+        ("Plate 1 · A1: outlier", "no", "yes"),
+        ("Plate 2 · A1: outlier", "no", "yes"),
     ]

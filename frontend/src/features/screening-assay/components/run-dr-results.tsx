@@ -7,6 +7,8 @@ import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import { Input } from "@/shared/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/components/ui/sheet";
 import { Skeleton } from "@/shared/components/ui/skeleton";
@@ -21,14 +23,15 @@ import {
   Filter,
   FlaskConical,
   FolderPlus,
+  Info,
   Pencil,
+  Search,
   Settings2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
 import { runRulesOf } from "../lib/melt-hits";
-import { worstZPrime } from "../lib/qc-metrics";
 import type { DoseResponseCurve, HitCriterion, Run } from "../types";
 import { ComparisonTable } from "./comparison-table";
 import { CurveNavigator } from "./curve-navigator";
@@ -75,6 +78,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   // Non-destructive, view-only bypass of the run's filter — lets a screener peek
   // at every compound without altering the recorded decision or its provenance.
   const [showAll, setShowAll] = useState(false);
+  const [quickFilter, setQuickFilter] = useState("");
 
   // Collection picker (bulk action on the checkbox selection)
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
@@ -182,173 +186,168 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   }
 
   return (
-    <div className="space-y-4">
-      {/* Summary bar */}
-      <div className="flex items-center gap-4 text-sm">
-        <Badge variant="secondary">
-          {allRows.length} compound{allRows.length !== 1 ? "s" : ""}
-        </Badge>
-        {hasThreshold && (
-          <Badge variant="outline" className="border-success/40 text-success">
-            {hitRows.length} hit{hitRows.length !== 1 ? "s" : ""}
-          </Badge>
-        )}
-        {(() => {
-          const zp = worstZPrime(run.qc_metrics);
-          if (zp === null) return null;
-          const label = zp >= 0.5 ? "Excellent" : zp >= 0 ? "Marginal" : "Poor";
-          const cls =
-            zp >= 0.5
-              ? "border-success/40 text-success"
-              : zp >= 0
-                ? "border-yellow-500/40 text-yellow-400"
-                : "border-destructive/40 text-destructive";
-          return (
-            <Badge variant="outline" className={cls}>
-              Worst Z&prime; = {zp.toFixed(2)} &mdash; {label}
+    <div className="space-y-2">
+      {/* Keep the screening outcome and tools together, directly above the data. */}
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-2"
+        aria-label="Compound results toolbar"
+      >
+        <div className="flex items-center gap-2 text-sm tabular-nums">
+          {hasThreshold && (
+            <Badge variant="outline" className="border-success/40 text-success">
+              {hitRows.length} hit{hitRows.length !== 1 ? "s" : ""}
             </Badge>
-          );
-        })()}
+          )}
+          <span className="text-muted-foreground">
+            {allRows.length} compound{allRows.length !== 1 ? "s" : ""}
+          </span>
+        </div>
         {selectedRows.length > 0 && (
-          <div className="ml-auto flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <span className="text-muted-foreground">{selectedRows.length} selected</span>
             <Button variant="outline" size="sm" onClick={() => setCollectionDialogOpen(true)}>
-              <FolderPlus className="mr-1.5 h-3.5 w-3.5" />
+              <FolderPlus className="size-4" />
               Add to Collection
             </Button>
-            <span className="text-muted-foreground">{selectedRows.length} selected</span>
           </div>
         )}
+        <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
+          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+            <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+            <Input
+              aria-label="Filter compounds"
+              placeholder="Find compound, alias or batch…"
+              value={quickFilter}
+              onChange={(event) => setQuickFilter(event.target.value)}
+              className="h-8 pl-8"
+            />
+          </div>
+          {hasThreshold && (
+            <Button
+              variant={showAll ? "outline" : "secondary"}
+              size="sm"
+              aria-pressed={!showAll}
+              onClick={() => setShowAll(!showAll)}
+            >
+              {showAll ? <Eye className="size-4" /> : <EyeOff className="size-4" />}
+              {showAll ? "All compounds" : "Hits only"}
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* Hit Criteria — a per-run decision. Unset → recommend (never auto-apply);
-          set → show the recorded decision + who/when. */}
+      {/* The scientific decision stays visible; its provenance is available on demand. */}
       {!isSet ? (
-        <Card className="border-2 border-dashed">
-          <CardContent className="flex flex-wrap items-center gap-3 p-4">
-            {recommendation.length > 0 ? (
-              <>
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-medium">Protocol recommends</span>
-                  <span className="text-muted-foreground">|</span>
-                  {recommendation.map((rule, i) => (
-                    // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                    <Badge key={i} variant="secondary">
-                      {criterionLabel(rule)}
-                    </Badge>
-                  ))}
-                </div>
-                <p className="w-full text-xs text-muted-foreground">Not yet applied</p>
-                <div className="ml-auto flex items-center gap-2">
-                  <Button
-                    size="sm"
-                    onClick={() =>
-                      setHitCriteria.mutate({
-                        runId: run.id,
-                        criteria: runRulesOf(recommendation, protocol?.readout_definitions ?? [])
-                          .kept,
-                      })
-                    }
-                    disabled={setHitCriteria.isPending || run.is_locked}
-                  >
-                    <Check className="mr-1 h-3.5 w-3.5" /> Apply to this run
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCriteriaDialogOpen(true)}
-                    disabled={run.is_locked}
-                  >
-                    <Settings2 className="mr-1 h-3.5 w-3.5" /> Customize…
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <p className="font-medium">No hit criteria set for this run</p>
-                  <p className="text-sm text-muted-foreground">
-                    Define criteria to identify hits in this run.
-                  </p>
-                </div>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-dashed px-4 py-3 text-sm">
+          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {recommendation.length > 0 ? (
+            <>
+              <span className="font-medium">Protocol recommends</span>
+              {recommendation.map((rule, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                <Badge key={i} variant="secondary" className="py-1 text-sm">
+                  {criterionLabel(rule)}
+                </Badge>
+              ))}
+              <span className="text-xs text-muted-foreground">Not yet applied</span>
+              <div className="ml-auto flex items-center gap-2">
                 <Button
-                  className="ml-auto"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    setHitCriteria.mutate({
+                      runId: run.id,
+                      criteria: runRulesOf(recommendation, protocol?.readout_definitions ?? [])
+                        .kept,
+                    })
+                  }
+                  disabled={setHitCriteria.isPending || run.is_locked}
+                >
+                  <Check className="size-4" /> Apply to this run
+                </Button>
+                <Button
+                  variant="ghost"
                   size="sm"
                   onClick={() => setCriteriaDialogOpen(true)}
                   disabled={run.is_locked}
                 >
-                  <Settings2 className="mr-1 h-3.5 w-3.5" /> Set hit criteria
+                  <Settings2 className="size-4" /> Customize…
                 </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
-      ) : (
-        <Card>
-          <CardContent className="flex flex-wrap items-center gap-2 p-3">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium">Hit Criteria</span>
-            <span className="text-muted-foreground">|</span>
-
-            {hasThreshold ? (
-              (runCriteria ?? []).map((rule, i) =>
-                isOtherTabRule(rule) ? (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                  <span key={i} className="text-xs text-muted-foreground">
-                    {criterionLabel(rule)} (evaluated on another tab)
-                  </span>
-                ) : (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                  <Badge key={i} variant="secondary">
-                    {criterionLabel(rule)}
-                  </Badge>
-                ),
-              )
-            ) : (
-              <span className="text-sm text-muted-foreground italic">
-                No threshold — showing all compounds (recorded)
-              </span>
-            )}
-
-            {run.hit_criteria_set_by && (
-              <span className="text-xs text-muted-foreground">
-                · Set by <MemberName id={run.hit_criteria_set_by} />
-                {run.hit_criteria_set_at ? ` on ${formatDate(run.hit_criteria_set_at)}` : ""}
-              </span>
-            )}
-
-            {hasThreshold && showAll && (
-              <span className="text-xs italic text-muted-foreground">
-                · showing all (filter bypassed)
-              </span>
-            )}
-
-            <div className="ml-auto flex items-center gap-2">
-              {/* View-only bypass — does not change the recorded decision. */}
-              {hasThreshold &&
-                (showAll ? (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAll(false)}>
-                    <EyeOff className="mr-1 h-3.5 w-3.5" /> Show hits only
-                  </Button>
-                ) : (
-                  <Button variant="ghost" size="sm" onClick={() => setShowAll(true)}>
-                    <Eye className="mr-1 h-3.5 w-3.5" /> Show all
-                  </Button>
-                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              <span className="text-muted-foreground">No hit criteria set for this run</span>
               <Button
-                variant="outline"
+                className="ml-auto"
+                variant="ghost"
                 size="sm"
                 onClick={() => setCriteriaDialogOpen(true)}
                 disabled={run.is_locked}
               >
-                <Pencil className="mr-1 h-3.5 w-3.5" /> Edit
+                <Settings2 className="size-4" /> Set hit criteria
               </Button>
-            </div>
-          </CardContent>
-        </Card>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm">
+          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <span className="font-medium">Hit criteria</span>
+          {hasThreshold ? (
+            (runCriteria ?? []).map((rule, i) =>
+              isOtherTabRule(rule) ? (
+                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                <span key={i} className="text-sm text-muted-foreground">
+                  {criterionLabel(rule)} (evaluated on another tab)
+                </span>
+              ) : (
+                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
+                <Badge key={i} variant="secondary" className="py-1 text-sm">
+                  {criterionLabel(rule)}
+                </Badge>
+              ),
+            )
+          ) : (
+            <span className="text-muted-foreground">No threshold · all compounds</span>
+          )}
+          {run.hit_criteria_set_by && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="size-8"
+                  aria-label="Hit criteria provenance"
+                >
+                  <Info className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-72 text-sm" align="start">
+                Set by <MemberName id={run.hit_criteria_set_by} />
+                {run.hit_criteria_set_at ? ` on ${formatDate(run.hit_criteria_set_at)}` : ""}
+              </PopoverContent>
+            </Popover>
+          )}
+          {hasThreshold && showAll && (
+            <span className="text-xs text-muted-foreground">Viewing all · criteria retained</span>
+          )}
+          <Button
+            className="ml-auto"
+            variant="outline"
+            size="sm"
+            onClick={() => setCriteriaDialogOpen(true)}
+            disabled={run.is_locked}
+          >
+            <Pencil className="size-4" /> Edit criteria
+          </Button>
+        </div>
       )}
 
       {/* AG Grid */}
       <DataGrid<CompoundCurveRow>
+        searchPlaceholder={false}
+        quickFilterText={quickFilter}
         rowData={displayedRows}
         columnDefs={columnDefs}
         height="auto"
@@ -446,6 +445,8 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                 curve_class: row.curve_class,
                 top: row.top,
                 bottom: row.bottom,
+                raw_data: row.data_points,
+                intercept_values: row.intercept_values,
               }))}
             />
           </CardContent>

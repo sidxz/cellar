@@ -31,6 +31,7 @@ from . import (
     _run_import,
     _sar_analysis,
     _screening,
+    _visualization,
     _workspace_config,
 )
 from ._admin import *  # noqa: F403
@@ -47,6 +48,7 @@ from ._research_organization import *  # noqa: F403
 from ._run_import import *  # noqa: F403
 from ._sar_analysis import *  # noqa: F403
 from ._screening import *  # noqa: F403
+from ._visualization import *  # noqa: F403
 from ._workspace_config import *  # noqa: F403
 
 __all__ = (
@@ -65,4 +67,5 @@ __all__ = (
     + _cdd_import.__all__
     + _dashboard.__all__
     + _run_import.__all__
+    + _visualization.__all__
 )

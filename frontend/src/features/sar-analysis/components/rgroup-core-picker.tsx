@@ -137,6 +137,8 @@ export function RGroupCorePicker({
             />
           )}
           {visible.map((c) => {
+            // A scaffold that is the shared substructure too shows once, as the shared chip.
+            if (c.scaffoldSmiles === sharedCore?.core_smiles) return null;
             const isSelected = coreSmiles === c.scaffoldSmiles;
             return (
               <button

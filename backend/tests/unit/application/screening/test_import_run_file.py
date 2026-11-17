@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
+from cellar.application.screening.compound_ref_resolver import LOTS_UNMATCHED_NOTE
 from cellar.application.screening.import_run_file import (
     ImportRunFile,
     ImportRunFileCommand,
@@ -22,13 +23,18 @@ from cellar.application.screening.import_run_file import (
     RepreviewRunFile,
     RepreviewRunFileQuery,
 )
+from cellar.application.screening.import_run_file_validator import _swapped_controls
 from cellar.application.screening.long_format_normalizer import (
+    CALCULATED_BY_SOURCE,
     ColumnMapping,
+    NormalizedTable,
     ReadoutColumn,
     infer_mapping,
+    normalize,
 )
 from cellar.domain.screening_assay.enums import (
     HolderKind,
+    PosControlSignal,
     ProtocolStatus,
     ProtocolType,
     ReadoutDataType,
@@ -42,7 +48,6 @@ from cellar.domain.shared.enums import PlateFormat
 from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.infrastructure.parsers.tabular_file import TabularFileParser, parse_tabular
-
 
 # Real lab export, not in the repo: set NADD_FIXTURE=/path/to/file.xlsx to run these tests.
 _NADD_FIXTURE = os.environ.get("NADD_FIXTURE", "")
@@ -202,7 +207,7 @@ def _build_preview_uc(
     *,
     run: Run | None,
     batches_by_ref: dict[str, FakeBatch] | None = None,
-    molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
+    molecules_by_synonym: dict[str, FakeMolecule] | None = None,
     store: InMemoryPreviewStore | None = None,
     protocol: Protocol | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
@@ -260,7 +265,7 @@ def _build_import_uc(
     batches_by_ref: dict[str, FakeBatch],
     store: InMemoryPreviewStore,
     save_bulk: list | None = None,
-    molecules_by_synonym: dict[str, "FakeMolecule"] | None = None,
+    molecules_by_synonym: dict[str, FakeMolecule] | None = None,
     plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
     existing_readouts: list | None = None,
     upload_attachment=None,
@@ -390,7 +395,34 @@ class TestPreviewRunFile:
         assert preview.matched_batch_count == 1
         assert preview.unmatched_batch_refs == ()
         # Cached for follow-up import
-        assert preview.preview_id in store._items  # noqa: SLF001
+        assert preview.preview_id in store._items
+
+    @pytest.mark.asyncio
+    async def test_columns_the_source_calculated_from_a_readout_default_to_ignore(
+        self,
+    ) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id, ["raw AU"], normalization=ReadoutNormalization.PERCENT_INHIBITION
+        )
+        uc, _ = _build_preview_uc(run=run, protocol=protocol)
+        csv = b"Plate,Well,raw AU (AU),% inhibition (%)\nP1,A1,0.42,45\n"
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        s = {x.header: x for x in result.unwrap().suggestions}
+        assert s["raw AU (AU)"].readout_definition_id == protocol.readout_definitions[0].id
+        assert (s["% inhibition (%)"].role, s["% inhibition (%)"].reason) == (
+            None,
+            CALCULATED_BY_SOURCE,
+        )
 
     @pytest.mark.asyncio
     async def test_unmatched_batches_listed(self) -> None:
@@ -468,25 +500,63 @@ def _seed_preview(
     filename: str,
 ) -> uuid.UUID:
     """Helper: parse a file directly and stash it under a fresh preview_id."""
-    import time
+    preview_id = uuid.uuid4()
+    store.save(preview_id, _stored(workspace_id, run_id, file_content, filename))
+    return preview_id
 
+
+def _stored(
+    workspace_id: uuid.UUID,
+    run_id: uuid.UUID,
+    file_content: bytes = b"Well,Raw\nA1,0.5\n",
+    filename: str = "x.csv",
+):
     from cellar.application.screening.import_run_file import _StoredPreview
 
-    table = parse_tabular(file_content, filename)
-    preview_id = uuid.uuid4()
-    store.save(
-        preview_id,
-        _StoredPreview(
-            workspace_id=workspace_id,
-            run_id=run_id,
-            table=table,
-            raw_bytes=file_content,
-            filename=filename,
-            content_type="text/csv",
-            expires_at=time.monotonic() + 60,
-        ),
+    return _StoredPreview(
+        workspace_id=workspace_id,
+        run_id=run_id,
+        table=parse_tabular(file_content, filename),
+        raw_bytes=file_content,
+        filename=filename,
+        content_type="text/csv",
     )
-    return preview_id
+
+
+class TestInMemoryPreviewStore:
+    """A chemist can spend half an hour on a 60-column mapping."""
+
+    def _store(self, **kw):
+        now = [0.0]
+        return InMemoryPreviewStore(clock=lambda: now[0], **kw), now
+
+    def test_a_preview_lives_thirty_minutes_by_default(self) -> None:
+        store, now = self._store()
+        store.save(key := uuid.uuid4(), _stored(uuid.uuid4(), uuid.uuid4()))
+        now[0] = 29 * 60
+        assert store.peek(key) is not None
+        assert store.ttl_seconds == 30 * 60
+
+    def test_every_use_restarts_the_clock(self) -> None:
+        store, now = self._store()
+        store.save(key := uuid.uuid4(), _stored(uuid.uuid4(), uuid.uuid4()))
+        for minute in (25, 50, 75):
+            now[0] = minute * 60
+            assert store.peek(key) is not None, minute
+        now[0] = 106 * 60
+        assert store.peek(key) is None
+
+    def test_the_least_recently_used_preview_goes_past_the_cap(self) -> None:
+        store, now = self._store(max_items=2)
+        a, b, c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        store.save(a, _stored(uuid.uuid4(), uuid.uuid4()))
+        now[0] = 1
+        store.save(b, _stored(uuid.uuid4(), uuid.uuid4()))
+        now[0] = 2
+        store.peek(a)
+        store.save(c, _stored(uuid.uuid4(), uuid.uuid4()))
+        assert store.peek(b) is None
+        assert store.peek(a) is not None and store.peek(c) is not None
 
 
 class TestImportRunFile:
@@ -1214,8 +1284,8 @@ class TestConflictAwareReimport:
         """A re-imported readout cell that already has a value is left alone."""
         from cellar.domain.screening_assay.readout_data import ReadoutData
         from cellar.domain.screening_assay.run import Plate, Well
-        from cellar.domain.shared.value_objects import QualifiedValue
         from cellar.domain.shared.enums import Qualifier
+        from cellar.domain.shared.value_objects import QualifiedValue
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1302,6 +1372,83 @@ class TestConflictAwareReimport:
         assert c.readout_definition_id == rd_id
         # Existing readout was NOT overwritten.
         assert existing_readout.value.value == 0.123
+
+    @pytest.mark.asyncio
+    async def test_a_new_readout_on_a_flagged_well_is_flagged_too(self) -> None:
+        from cellar.domain.screening_assay.readout_data import ReadoutData
+        from cellar.domain.screening_assay.run import Plate, Well
+        from cellar.domain.shared.value_objects import QualifiedValue
+
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data", "Second"])
+        raw_id, second_id = (rd.id for rd in protocol.readout_definitions)
+        batch = FakeBatch()
+        plate = Plate(run_id=run.id, plate_number=1, format=PlateFormat.F384)
+        plate.plate_map = {"name": "P1"}
+        flagged = Well(
+            plate_id=plate.id,
+            row="A",
+            column=1,
+            well_type=WellType.SAMPLE,
+            batch_id=batch.id,
+            dose=100.0,
+        )
+        run.plates.append(plate)
+        run.wells.append(flagged)
+        existing = ReadoutData(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            well_id=flagged.id,
+            molecule_id=batch.molecule_id,
+            batch_id=batch.id,
+            readout_definition_id=raw_id,
+            value=QualifiedValue(value=0.9),
+            is_outlier=True,
+        )
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        csv = (
+            b"Plate Name,Well,Concentration,Batch,Second\nP1,A1,100,LG-1,0.4\nP1,A2,100,LG-1,0.5\n"
+        )
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="b.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": batch},
+            store=store,
+            save_bulk=saved,
+            existing_readouts=[existing],
+        )
+
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    concentration="Concentration",
+                    batch_ref="Batch",
+                    readout_columns=(
+                        ReadoutColumn(header="Second", readout_definition_id=second_id),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Success), result
+        by_well = {r.well_id: r.is_outlier for r in saved}
+        assert by_well.pop(flagged.id) is True
+        assert list(by_well.values()) == [False]  # A2, a new well
 
     @pytest.mark.asyncio
     async def test_well_metadata_mismatch_skips_row(self) -> None:
@@ -1452,8 +1599,8 @@ class TestConflictAwareReimport:
         """Same well, same plate — different readout def. The new one writes."""
         from cellar.domain.screening_assay.readout_data import ReadoutData
         from cellar.domain.screening_assay.run import Plate, Well
-        from cellar.domain.shared.value_objects import QualifiedValue
         from cellar.domain.shared.enums import Qualifier
+        from cellar.domain.shared.value_objects import QualifiedValue
 
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
@@ -1601,6 +1748,123 @@ class TestConflictAwareReimport:
 
 
 # ---------------------------------------------------------------------------
+# Bare lot numbers in the batch column, next to a compound ref
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _FakeBatchNumber:
+    value: str
+
+
+@dataclass
+class _FakeInventoryBatch:
+    id: uuid.UUID
+    batch_number: _FakeBatchNumber
+    salt_name: str | None = None
+    purity: float | None = None
+    created_at: object = None
+
+
+class TestBareLotNumbers:
+    """CPD-1's lot "001" is registered as "CPD-1-001"; CPD-2's lot "002" is not."""
+
+    CSV = (
+        b"Molecule Name,Batch Name,Plate,Well,Raw Data\nCPD-1,001,P1,A1,0.5\nCPD-2,002,P1,A2,0.4\n"
+    )
+
+    def _world(self):
+        mol1, mol2 = FakeMolecule(name="CPD-1"), FakeMolecule(name="CPD-2")
+        b1, b2 = FakeBatch(molecule_id=mol1.id), FakeBatch(molecule_id=mol2.id)
+        inventory = {
+            mol1.id: [_FakeInventoryBatch(b1.id, _FakeBatchNumber("CC-1-001"))],
+            mol2.id: [_FakeInventoryBatch(b2.id, _FakeBatchNumber("CC-2-001"))],
+        }
+
+        async def _batches_of(_ws, molecule_id):
+            return inventory[molecule_id]
+
+        return {"CPD-1": mol1, "CPD-2": mol2}, {"CPD-1-001": b1}, _batches_of, (b1, b2)
+
+    @pytest.mark.asyncio
+    async def test_preview_resolves_lots_and_notes_the_fallback(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        molecules, batches, batches_of, _ = self._world()
+        uc, _ = _build_preview_uc(
+            run=run,
+            batches_by_ref=batches,
+            molecules_by_synonym=molecules,
+            protocol=_make_protocol(auth.workspace_id, ["Raw Data"]),
+        )
+        uc._batch_repo.find_by_molecule = batches_of
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=self.CSV,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        assert preview.unmatched_batch_refs == ()
+        assert preview.unmatched_compound_refs == ()
+        assert preview.errors == ()
+        assert LOTS_UNMATCHED_NOTE in preview.warnings
+
+    @pytest.mark.asyncio
+    async def test_import_writes_the_lots_batch_or_the_compounds_batch(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        molecules, batches, batches_of, (b1, b2) = self._world()
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=self.CSV,
+            filename="x.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref=batches,
+            store=store,
+            save_bulk=saved,
+            molecules_by_synonym=molecules,
+        )
+        uc._batch_repo.find_by_molecule = batches_of
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate",
+                    batch_ref="Batch Name",
+                    compound_ref="Molecule Name",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        assert sorted((r.value.value, r.batch_id) for r in saved) == [
+            (0.4, b2.id),
+            (0.5, b1.id),
+        ]
+
+
+# ---------------------------------------------------------------------------
 # RepreviewRunFile — re-resolve a cached preview with a refined mapping
 # ---------------------------------------------------------------------------
 
@@ -1611,6 +1875,7 @@ def _build_repreview_uc(
     store: InMemoryPreviewStore,
     batches_by_ref: dict[str, FakeBatch] | None = None,
     protocol: Protocol | None = None,
+    plate_templates: dict[uuid.UUID, PlateTemplate] | None = None,
 ) -> RepreviewRunFile:
     run_repo = AsyncMock()
     run_repo.find_by_id_in_workspace = AsyncMock(return_value=run)
@@ -1641,7 +1906,7 @@ def _build_repreview_uc(
         molecule_repo=molecule_repo,
         preview_store=store,
         protocol_repo=protocol_repo,
-        plate_template_repo=_make_plate_template_repo(None),
+        plate_template_repo=_make_plate_template_repo(plate_templates),
     )
 
 
@@ -1719,7 +1984,7 @@ class TestRepreviewRunFile:
             auth=auth,
         )
         # Still in the store — chemist can repreview again or import.
-        assert preview_id in store._items  # noqa: SLF001
+        assert preview_id in store._items
 
     @pytest.mark.asyncio
     async def test_repreview_unknown_preview_id_returns_not_found(self) -> None:
@@ -1781,8 +2046,9 @@ class TestAutoCreateMissingBatches:
         created: bool = True,
     ) -> AsyncMock:
         """Return an AsyncMock that simulates EnsureBatchExists returning Success."""
-        from cellar.application.inventory.ensure_batch_exists import EnsureBatchExistsOutcome
         from returns.result import Success as _Success
+
+        from cellar.application.inventory.ensure_batch_exists import EnsureBatchExistsOutcome
 
         mock_uc = AsyncMock()
 
@@ -2197,3 +2463,627 @@ class TestImportAutoLinksInventoryPlate:
         auth = FakeAuth()
         run = await self._import(auth, None, None)
         assert all(p.registered_plate_id is None for p in run.plates)
+
+
+# ---------------------------------------------------------------------------
+# The file's well-role column ("Control State") decides control roles
+# ---------------------------------------------------------------------------
+
+
+# The protocol layout says A1 = positive, A2 = negative; the file says the opposite.
+# A3 is a sample, A4 a blank the layout does not mention; H12 forces a 96-well plate.
+_ROLE_CSV = (
+    b"Plate Name,Well,Control State,Batch,Raw Data\n"
+    b"P1,A1,negative control,,0.95\n"
+    b"P1,A2,positive control,,0.07\n"
+    b"P1,A3,,LG-1,0.5\n"
+    b"P1,A4,blank,,0.01\n"
+    b"P1,H12,,LG-1,0.4\n"
+)
+
+
+def _layout_protocol(auth: FakeAuth) -> tuple[Protocol, PlateTemplate]:
+    tmpl = _make_plate_template(
+        auth.workspace_id,
+        fmt=PlateFormat.F96,
+        template_map={"A1": "positive_control", "A2": "negative_control"},
+    )
+    protocol = _make_protocol(
+        auth.workspace_id,
+        ["Raw Data"],
+        normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        control_layouts={PlateFormat.F96.value: tmpl.id},
+    )
+    return protocol, tmpl
+
+
+def _role_mapping(rd_id: uuid.UUID, *, well_role: str | None = "Control State") -> ColumnMapping:
+    return ColumnMapping(
+        well="Well",
+        plate_name="Plate Name",
+        batch_ref="Batch",
+        well_role=well_role,
+        readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+    )
+
+
+class TestWellRoleColumn:
+    @pytest.mark.asyncio
+    async def test_preview_counts_roles_from_the_file_and_says_where_it_differs(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        uc, _ = _build_preview_uc(
+            run=run,
+            batches_by_ref={"LG-1": FakeBatch()},
+            protocol=protocol,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=_ROLE_CSV,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        roles = {s.header: s.role for s in preview.suggestions}
+        assert roles["Control State"] == "well_role"
+        (plate,) = preview.plates
+        assert (
+            plate.sample_count,
+            plate.positive_count,
+            plate.negative_count,
+            plate.reference_count,
+            plate.blank_count,
+        ) == (2, 1, 1, 0, 1)
+        assert preview.validation_errors == ()
+        assert plate.roles_from == 'the file\'s "Control State" column'
+        assert preview.warnings == (
+            'Control roles from the file\'s "Control State" column differ from the '
+            'protocol default "Test Layout" on 3 wells.',
+        )
+
+    @pytest.mark.asyncio
+    async def test_repreview_without_the_role_column_counts_the_layout(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(
+            run=run,
+            protocol=protocol,
+            store=store,
+            batches_by_ref={"LG-1": FakeBatch()},
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id, well_role=None),
+            ),
+            auth=auth,
+        )
+        preview = result.unwrap()
+        (plate,) = preview.plates
+        # Layout: A1 positive, A2 negative; A4 (no compound, no layout entry) unclassified.
+        assert (
+            plate.sample_count,
+            plate.positive_count,
+            plate.negative_count,
+            plate.reference_count,
+            plate.blank_count,
+        ) == (2, 1, 1, 0, 1)
+        assert plate.roles_from == 'the protocol default "Test Layout"'
+        assert preview.warnings == ()
+
+    @pytest.mark.asyncio
+    async def test_unknown_role_values_block_the_preview(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        csv = _ROLE_CSV.replace(b"P1,A4,blank", b"P1,A4,vehicle")
+        uc, _ = _build_preview_uc(
+            run=run,
+            batches_by_ref={"LG-1": FakeBatch()},
+            protocol=protocol,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=csv,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        errors = result.unwrap().validation_errors
+        assert len(errors) == 1
+        assert '"Control State"' in errors[0] and '"vehicle"' in errors[0]
+
+    @pytest.mark.asyncio
+    async def test_import_writes_the_file_roles_and_keeps_controls_without_a_compound(
+        self,
+    ) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        rd_id = protocol.readout_definitions[0].id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            save_bulk=saved,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(rd_id),
+            ),
+            auth=auth,
+        )
+        out = result.unwrap()
+        types = {f"{w.row}{w.column}": w.well_type for w in run.wells}
+        assert types == {
+            "A1": WellType.NEGATIVE_CONTROL,
+            "A2": WellType.POSITIVE_CONTROL,
+            "A3": WellType.SAMPLE,
+            "A4": WellType.BLANK,
+            "H12": WellType.SAMPLE,
+        }
+        assert (out.controls_from_file, out.controls_from_template) == (3, 0)
+        assert out.controls_unclassified == 0
+        assert out.values_inserted == 5 and len(saved) == 5
+
+    @pytest.mark.asyncio
+    async def test_roles_from_the_file_need_no_protocol_layout(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        )
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run, protocol=protocol, batches_by_ref={"LG-1": FakeBatch()}, store=store
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        assert result.unwrap().controls_from_file == 3
+
+    @pytest.mark.asyncio
+    async def test_import_refuses_unknown_role_values(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV.replace(b"P1,A4,blank", b"P1,A4,vehicle"),
+            filename="x.csv",
+        )
+        uc, uow, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
+        assert '"vehicle"' in str(result.failure())
+        assert not uow.committed and run.wells == []
+
+
+# ---------------------------------------------------------------------------
+# The run's own layout (runs.plate_template_id) comes before the protocol default
+# ---------------------------------------------------------------------------
+
+
+def _run_layout(auth: FakeAuth, fmt: PlateFormat = PlateFormat.F96) -> PlateTemplate:
+    """The run's own layout: the protocol default turned around (A1 neg, A2 pos)."""
+    tmpl = _make_plate_template(
+        auth.workspace_id,
+        fmt=fmt,
+        template_map={"A1": "negative_control", "A2": "positive_control"},
+    )
+    tmpl.name = "Run Layout"
+    return tmpl
+
+
+class TestRunLayoutPrecedence:
+    async def _repreview(self, run: Run, protocol: Protocol, templates, *, well_role=None):
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=run.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(
+            run=run,
+            protocol=protocol,
+            store=store,
+            batches_by_ref={"LG-1": FakeBatch()},
+            plate_templates={t.id: t for t in templates},
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=run.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id, well_role=well_role),
+            ),
+            auth=FakeAuth(workspace_id=run.workspace_id),
+        )
+        return result.unwrap()
+
+    @pytest.mark.asyncio
+    async def test_the_runs_layout_beats_the_protocol_default(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)
+        own = _run_layout(auth)
+        run.plate_template_id = own.id
+        preview = await self._repreview(run, protocol, [default, own])
+        (plate,) = preview.plates
+        assert plate.roles_from == 'this run\'s layout "Run Layout"'
+        assert (plate.positive_count, plate.negative_count) == (1, 1)
+        assert preview.warnings == (
+            'Control roles from this run\'s layout "Run Layout" differ from the '
+            'protocol default "Test Layout" on 2 wells.',
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_run_layout_of_another_plate_format_is_passed_over(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)
+        own = _run_layout(auth, fmt=PlateFormat.F384)
+        run.plate_template_id = own.id
+        preview = await self._repreview(run, protocol, [default, own])
+        assert preview.plates[0].roles_from == 'the protocol default "Test Layout"'
+        assert preview.warnings == ()
+
+    @pytest.mark.asyncio
+    async def test_the_file_column_is_compared_with_every_layout(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)
+        own = _run_layout(auth)
+        run.plate_template_id = own.id
+        preview = await self._repreview(run, protocol, [default, own], well_role="Control State")
+        assert preview.plates[0].roles_from == 'the file\'s "Control State" column'
+        # The file agrees with the run's layout on A1/A2; only its blank (A4) differs there.
+        assert preview.warnings == (
+            'Control roles from the file\'s "Control State" column differ from '
+            'this run\'s layout "Run Layout" on 1 well.',
+            'Control roles from the file\'s "Control State" column differ from the '
+            'protocol default "Test Layout" on 3 wells.',
+        )
+
+    @pytest.mark.asyncio
+    async def test_import_writes_the_runs_layout_and_needs_no_protocol_default(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(
+            auth.workspace_id,
+            ["Raw Data"],
+            normalization=ReadoutNormalization.PERCENT_INHIBITION,
+        )
+        own = _run_layout(auth)
+        run.plate_template_id = own.id
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_ROLE_CSV,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"LG-1": FakeBatch()},
+            store=store,
+            plate_templates={own.id: own},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=_role_mapping(protocol.readout_definitions[0].id, well_role=None),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        types = {f"{w.row}{w.column}": w.well_type for w in run.wells}
+        assert (types["A1"], types["A2"]) == (
+            WellType.NEGATIVE_CONTROL,
+            WellType.POSITIVE_CONTROL,
+        )
+        assert result.unwrap().controls_from_template == 2
+
+
+# ---------------------------------------------------------------------------
+# Swap guard: controls whose raw signal reads the wrong way round
+# ---------------------------------------------------------------------------
+
+
+def _controls_table(
+    pos: list[float], neg: list[float], *, words: tuple[str, str] = ("positive", "negative")
+) -> tuple[NormalizedTable, uuid.UUID]:
+    rd_id = uuid.uuid4()
+    lines = ["Plate Name,Well,Control State,Raw Data"]
+    lines += [f"P1,A{i + 1},{words[0]} control,{v}" for i, v in enumerate(pos)]
+    lines += [f"P1,B{i + 1},{words[1]} control,{v}" for i, v in enumerate(neg)]
+    lines += ["P1,C1,,0.5"]
+    table = parse_tabular("\n".join(lines).encode(), "x.csv")
+    mapping = ColumnMapping(
+        well="Well",
+        plate_name="Plate Name",
+        well_role="Control State",
+        readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+    )
+    return normalize(table, mapping).unwrap(), rd_id
+
+
+INHIBITION, ACTIVATION = False, True
+
+
+class TestSwappedControls:
+    """The full-effect control against the no-effect one: under HIGH the negative control
+    is the full effect of an inhibition and the positive control that of an activation;
+    LOW mirrors both."""
+
+    def test_full_effect_reading_high_in_an_inhibition_is_flagged(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == (
+            "Plate P1: the full-effect controls (negative controls, mean 0.91) read higher "
+            "than the no-effect controls (positive controls, mean 0.11); this protocol "
+            "expects the full effect to lower the signal.",
+        )
+
+    def test_low_protocol_inhibition(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.LOW) == ()
+        norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
+        (note,) = _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.LOW)
+        assert note.startswith("Plate P1: the full-effect controls (positive controls, mean 0.91)")
+
+    def test_activation_expects_the_full_effect_to_raise_the_signal(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
+        assert _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.HIGH) == ()
+        assert _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.LOW) == (
+            "Plate P1: the full-effect controls (negative controls, mean 0.11) read lower "
+            "than the no-effect controls (positive controls, mean 0.91); this protocol "
+            "expects the full effect to raise the signal.",
+        )
+
+    def test_platform_words_read_by_effect_pass_under_a_high_protocol(self) -> None:
+        # The platform's hit control reads low, its negative control high: right for an
+        # inhibition, once the words are read by effect.
+        rd_id = uuid.uuid4()
+        table = parse_tabular(
+            b"Plate Name,Well,Control State,Raw Data\n"
+            b"P1,A1,positive control (hit),0.07\nP1,A2,positive control (hit),0.08\n"
+            b"P1,B1,negative control,0.95\nP1,B2,negative control,0.93\n",
+            "x.csv",
+        )
+        mapping = ColumnMapping(
+            well="Well",
+            plate_name="Plate Name",
+            well_role="Control State",
+            readout_columns=(ReadoutColumn(header="Raw Data", readout_definition_id=rd_id),),
+        )
+        norm = normalize(table, mapping, full_effect=WellType.NEGATIVE_CONTROL).unwrap()
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == ()
+
+    def test_no_clear_separation_says_nothing(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.2, 0.8], neg=[0.3, 0.9])
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == ()
+
+    def test_one_well_per_group_says_nothing(self) -> None:
+        norm, rd_id = _controls_table(pos=[0.1], neg=[0.9])
+        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == ()
+
+    def test_readouts_not_normalized_against_controls_are_not_checked(self) -> None:
+        norm, _ = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
+        assert _swapped_controls(norm, {}, {}, PosControlSignal.HIGH) == ()
+
+    @pytest.mark.asyncio
+    async def test_the_preview_flags_a_layout_that_swaps_the_controls(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, default = _layout_protocol(auth)  # A1 pos, A2 neg; signal HIGH
+        default.template_map = {
+            "A1": "positive_control",
+            "A2": "positive_control",
+            "B1": "negative_control",
+            "B2": "negative_control",
+        }
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=(
+                b"Plate Name,Well,Raw Data\n"
+                b"P1,A1,0.1\nP1,A2,0.12\nP1,B1,0.9\nP1,B2,0.92\nP1,H12,0.5\n"
+            ),
+            filename="x.csv",
+        )
+        uc = _build_repreview_uc(
+            run=run, protocol=protocol, store=store, plate_templates={default.id: default}
+        )
+        result = await uc(
+            RepreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        swapped = result.unwrap().swapped_controls
+        assert len(swapped) == 1 and swapped[0].startswith("Plate P1: the full-effect controls")
+
+
+# The external platform's export: its "positive control (hit)" is the full-effect control.
+_PLATFORM_CSV = (
+    b"Plate Name,Well,Control State,Raw Data\n"
+    b"P1,A1,negative control,0.95\n"
+    b"P1,A2,positive control (hit),0.07\n"
+    b"P1,H12,,0.5\n"
+)
+
+
+class TestPlatformRoleWords:
+    async def _preview(self, signal: PosControlSignal):
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)  # layout: A1 positive, A2 negative
+        protocol.pos_control_signal = signal
+        uc, _ = _build_preview_uc(run=run, protocol=protocol, plate_templates={tmpl.id: tmpl})
+        result = await uc(
+            PreviewRunFileQuery(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                file_content=_PLATFORM_CSV,
+                filename="x.csv",
+            ),
+            auth=auth,
+        )
+        return result.unwrap()
+
+    @pytest.mark.asyncio
+    async def test_a_high_protocol_reads_the_hit_control_as_its_negative_control(self) -> None:
+        preview = await self._preview(PosControlSignal.HIGH)
+        # Read by effect the file agrees with the layout: A1 positive, A2 negative.
+        assert preview.warnings == (
+            'Control roles read by effect: "negative control" as positive control, '
+            '"positive control (hit)" as negative control — under this protocol the '
+            "negative control is the full-effect (hit) end.",
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_high_protocol_imports_the_hit_control_as_its_negative_control(self) -> None:
+        # The import writes what the preview said: read by effect, not by the literal word.
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol, tmpl = _layout_protocol(auth)
+        protocol.pos_control_signal = PosControlSignal.HIGH
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=_PLATFORM_CSV,
+            filename="x.csv",
+        )
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            store=store,
+            batches_by_ref={},
+            plate_templates={tmpl.id: tmpl},
+        )
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate Name",
+                    well_role="Control State",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        types = {f"{w.row}{w.column}": w.well_type for w in run.wells}
+        assert (types["A1"], types["A2"]) == (
+            WellType.POSITIVE_CONTROL,
+            WellType.NEGATIVE_CONTROL,
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_low_protocol_reads_the_hit_control_as_its_positive_control(self) -> None:
+        preview = await self._preview(PosControlSignal.LOW)
+        assert preview.warnings == (
+            'Control roles from the file\'s "Control State" column differ from the '
+            'protocol default "Test Layout" on 2 wells.',
+            'Control roles read by effect: "negative control" as negative control, '
+            '"positive control (hit)" as positive control — under this protocol the '
+            "positive control is the full-effect (hit) end.",
+        )

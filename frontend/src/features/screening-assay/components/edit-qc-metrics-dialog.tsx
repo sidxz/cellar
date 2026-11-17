@@ -46,15 +46,25 @@ const QC_PRESETS = [
   { value: "z_factor", label: "Z Factor" },
 ] as const;
 
+/** The calc engine's per-plate blocks (``z_prime``, ``plates``) are objects, not
+ *  text: they are left out of the rows and saved back as they are. */
+const isComputed = (value: unknown) => value !== null && typeof value === "object";
+
+function computedMetrics(qcMetrics: Record<string, unknown> | null): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(qcMetrics ?? {}).filter(([, v]) => isComputed(v)));
+}
+
 function metricsToRows(qcMetrics: Record<string, unknown> | null): MetricRow[] {
   if (!qcMetrics || Object.keys(qcMetrics).length === 0) {
     return [];
   }
-  return Object.entries(qcMetrics).map(([key, value]) => ({
-    _id: crypto.randomUUID(),
-    key,
-    value: String(value ?? ""),
-  }));
+  return Object.entries(qcMetrics)
+    .filter(([, value]) => !isComputed(value))
+    .map(([key, value]) => ({
+      _id: crypto.randomUUID(),
+      key,
+      value: String(value ?? ""),
+    }));
 }
 
 function rowsToMetrics(rows: MetricRow[]): Record<string, unknown> {
@@ -101,7 +111,7 @@ export function EditQcMetricsDialog({ run, open, onOpenChange }: EditQcMetricsDi
   };
 
   const handleSubmit = () => {
-    const metrics = rowsToMetrics(rows);
+    const metrics = { ...computedMetrics(run.qc_metrics), ...rowsToMetrics(rows) };
     updateRun.mutate(
       {
         runId: run.id,

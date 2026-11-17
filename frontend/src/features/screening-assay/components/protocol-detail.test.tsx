@@ -34,8 +34,8 @@ vi.mock("../hooks/use-protocols", () => {
   };
 });
 vi.mock("./detail-tabs", () => ({
-  ActivityTab: () => null,
-  DesignTab: () => null,
+  ActivityTab: () => <input aria-label="Filter compound activity" />,
+  DesignTab: () => <div>Readout setup</div>,
   FilesTab: () => null,
   OverviewTab: () => <div>Overview content</div>,
   RunsTab: ({ onCompareCurves }: { onCompareCurves: (ids: string[]) => void }) => (
@@ -86,6 +86,7 @@ const openMore = () => {
 describe("ProtocolDetail actions", () => {
   beforeEach(() => {
     state.canCreate = true;
+    state.hash = "";
     state.protocol = protocol();
   });
 
@@ -128,50 +129,116 @@ describe("ProtocolDetail actions", () => {
       screen.queryByRole("menuitem", { name: "New protocol from this" }),
     ).not.toBeInTheDocument();
   });
+
+  it("keeps workflow actions in the header and Visualize in Results", () => {
+    state.protocol = protocol({ status: "active" } as Partial<Protocol>);
+    render();
+    expect(screen.getByRole("button", { name: "New Run" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Visualize" })).not.toBeInTheDocument();
+    selectTab("Results");
+    const visualize = screen.getByRole("button", { name: "Visualize" }).parentElement;
+    expect(visualize).toContainElement(screen.getByRole("button", { name: "Saved views" }));
+  });
 });
 
-describe("ProtocolDetail Curves tab", () => {
+function selectTab(name: string) {
+  fireEvent.mouseDown(screen.getByRole("tab", { name }), {
+    button: 0,
+    ctrlKey: false,
+  });
+}
+
+describe("ProtocolDetail navigation", () => {
   beforeEach(() => {
     state.canCreate = true;
     state.hash = "";
+    state.protocol = protocol();
   });
 
-  it("shows the Curves tab only when the protocol has measured curves", () => {
+  it("has five main sections with the setup workspace on Setup", () => {
+    render();
+    expect(screen.getByRole("tablist", { name: "Protocol sections" })).toHaveTextContent(
+      "OverviewRunsResultsSetupFiles",
+    );
+    expect(screen.queryByText("Readout setup")).not.toBeInTheDocument();
+    selectTab("Setup");
+    expect(screen.getByText("Readout setup")).toBeVisible();
+  });
+
+  it.each([
+    ["design", "Setup", "Readout setup"],
+    ["activity", "Results", null],
+  ])("keeps legacy #%s links working", (hash, section, content) => {
+    state.hash = hash;
+    render();
+    expect(screen.getByRole("tab", { name: section })).toHaveAttribute("aria-selected", "true");
+    if (content) expect(screen.getByText(content)).toBeVisible();
+    else expect(screen.getByRole("textbox", { name: "Filter compound activity" })).toBeVisible();
+  });
+
+  it("retains compound filters when navigating to Runs and back", () => {
+    render();
+    selectTab("Results");
+    fireEvent.change(screen.getByRole("textbox", { name: "Filter compound activity" }), {
+      target: { value: "CC-061341" },
+    });
+    selectTab("Runs");
+    selectTab("Results");
+    expect(screen.getByRole("textbox", { name: "Filter compound activity" })).toHaveValue(
+      "CC-061341",
+    );
+  });
+
+  it("offers trace comparison inside Results only when the protocol has measured curves", () => {
     for (const has_measured_curves of [false, null, undefined]) {
       state.protocol = protocol({ has_measured_curves } as Partial<Protocol>);
       const { unmount } = render();
+      selectTab("Results");
       expect(screen.queryByRole("tab", { name: "Compare traces" })).not.toBeInTheDocument();
       unmount();
     }
     state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
     render();
-    const names = screen.getAllByRole("tab").map((t) => t.textContent);
-    expect(names.indexOf("Compare traces")).toBe(names.indexOf("Runs") + 1);
+    selectTab("Results");
+    expect(screen.getByRole("tab", { name: "Compare traces" })).toBeInTheDocument();
   });
 
-  it("shows the overview when the hash names curves on a protocol without curves", () => {
+  it("shows the overview for a curves link on a protocol without measured curves", () => {
     state.hash = "curves";
     state.protocol = protocol({ has_measured_curves: false } as Partial<Protocol>);
     render();
-    expect(screen.getByText("Overview content")).toBeInTheDocument();
+    expect(screen.getByText("Overview content")).toBeVisible();
   });
 
-  it("opens the Curves tab with no run chosen", () => {
+  it("opens trace comparison from its existing link", () => {
     state.hash = "curves";
     state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
     render();
-    expect(screen.getByText("Curves for none")).toBeInTheDocument();
-  });
-
-  it("Compare curves opens the Curves tab with those runs chosen", () => {
-    state.hash = "runs";
-    state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
-    render();
-    fireEvent.click(screen.getByRole("button", { name: "Compare traces" }));
+    expect(screen.getByRole("tab", { name: "Results" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tab", { name: "Compare traces" })).toHaveAttribute(
       "aria-selected",
       "true",
     );
-    expect(screen.getByText("Curves for r1,r3")).toBeInTheDocument();
+    expect(screen.getByText("Curves for none")).toBeVisible();
+  });
+
+  it("compares runs selected in Runs and retains them after switching sections", () => {
+    state.hash = "runs";
+    state.protocol = protocol({ has_measured_curves: true } as Partial<Protocol>);
+    render();
+    fireEvent.click(screen.getByRole("button", { name: "Compare traces" }));
+    expect(screen.getByRole("tab", { name: "Results" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "Compare traces" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText("Curves for r1,r3")).toBeVisible();
+    selectTab("Files");
+    selectTab("Results");
+    expect(screen.getByRole("tab", { name: "Compare traces" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText("Curves for r1,r3")).toBeVisible();
   });
 });

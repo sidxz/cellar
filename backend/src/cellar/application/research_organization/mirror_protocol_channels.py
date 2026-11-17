@@ -56,7 +56,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.screening_assay.enums import ReadoutDataType
+from cellar.domain.screening_assay.enums import ReadoutDataType, primary_normalization
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
 from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import (
@@ -130,20 +130,6 @@ def _channel_label(
     if primary_label is not None and rd.name == primary_label:
         return intercept_label
     return f"{rd.name} {intercept_label}"
-
-
-def _primary_normalization(rd: ReadoutDefinition) -> str | None:
-    """Pick the readout's primary normalization layer (non-'none') if any.
-
-    Matches the channel-popover's create-mode auto-pick: chemists usually
-    want the computed (% inhibition / z-score / ...) layer rather than the
-    raw signal. Returns None when the readout declares no normalizations.
-    """
-    for norm in rd.normalizations or []:
-        v = norm.value if hasattr(norm, "value") else norm
-        if v != "none":
-            return v
-    return None
 
 
 # Stage criteria are numeric-only (StageCriterion forbids the string-based
@@ -249,7 +235,7 @@ class MirrorProtocolChannels:
                     if is_dr
                     else ChannelSourceKind.READOUT_DATA
                 )
-                normalization = None if is_dr else _primary_normalization(rd)
+                normalization = None if is_dr else primary_normalization(rd.normalizations)
 
                 # Build the list of (intercept_key, spec, is_multi) tuples to
                 # emit. Non-DR + single-intercept DR collapse to one tuple

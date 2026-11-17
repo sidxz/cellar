@@ -13,7 +13,7 @@ import {
 } from "@/shared/components/ui/dialog";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
-import { ApiError } from "@/shared/lib/api/custom-instance";
+import { isStaleEdit } from "@/shared/lib/api/custom-instance";
 import { showSuccess, showWarning } from "@/shared/lib/toast";
 import { apiReason } from "../hooks/use-instrument-import-wizard";
 import { useRelabelPositions } from "../hooks/use-relabel-positions";
@@ -35,10 +35,6 @@ import { LabellingTable, Notice } from "./labelling-table";
 
 type Position = RunCurves["positions"][number];
 
-/** The API names the refusal of an edit made from values someone else changed since. */
-function isStaleEdit(body: unknown): boolean {
-  return (body as { error?: unknown } | null)?.error === "StaleEditError";
-}
 type EditableRun = Pick<Run, "id" | "status" | "is_locked">;
 
 interface EditLabellingDialogProps {
@@ -123,7 +119,7 @@ function EditLabellingBody({
           setError({
             message: apiReason(e),
             // Only a stale edit is helped by reloading; other refusals keep the edits.
-            stale: e instanceof ApiError && isStaleEdit(e.body),
+            stale: isStaleEdit(e),
           }),
       },
     );

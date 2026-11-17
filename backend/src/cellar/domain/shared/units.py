@@ -7,6 +7,7 @@ and nothing ever converts between different units.
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -159,3 +160,12 @@ def comparable_magnitude(value: float, unit: str | None) -> tuple[str, float]:
     canonical = canonical_unit(unit) or ""
     family, factor = _FAMILY_FACTORS.get(canonical, (canonical, 1.0))
     return family, float(value) * factor
+
+
+def p_scale(value: float, unit: str | None) -> float | None:
+    """``-log10`` of the value in M (pIC50 from an IC50). ``None`` outside the molar
+    family (mass concentrations need a molecular weight) or for a value <= 0."""
+    family, molar = comparable_magnitude(value, unit)
+    if family != "molar" or not molar > 0:
+        return None
+    return -math.log10(molar)

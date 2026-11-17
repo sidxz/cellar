@@ -288,7 +288,7 @@ export function RunCurvesPanel({
                   />
                 )
               }
-              designHref={run && `/assays/protocols/${run.protocol_id}#design`}
+              designHref={run && `/assays/protocols/${run.protocol_id}#setup`}
             />
           ) : melting.isLoading ? (
             <Skeleton data-testid="results-loading" className={cn("w-full", PLOT_HEIGHT)} />

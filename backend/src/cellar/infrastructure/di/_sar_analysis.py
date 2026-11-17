@@ -40,6 +40,9 @@ from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaff
 from cellar.application.sar_analysis.cancel_umap_cluster_job import CancelUmapClusterJob
 from cellar.application.sar_analysis.compute_mcs import ComputeMcs
 from cellar.application.sar_analysis.compute_umap_cluster import ComputeUmapCluster
+from cellar.application.sar_analysis.decomposition_assignments import (
+    FetchDecompositionAssignments,
+)
 from cellar.application.sar_analysis.decomposition_members import DecompositionMemberStream
 from cellar.application.sar_analysis.decomposition_rows import FetchDecompositionRows
 from cellar.application.sar_analysis.get_activity_projection import GetActivityProjection
@@ -250,6 +253,14 @@ def register_sar_analysis(container: Container) -> None:
             uow=uow,
         )
 
+    def _fetch_decomposition_assignments(c: Container) -> FetchDecompositionAssignments:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return FetchDecompositionAssignments(
+            repository=SQLAlchemyRGroupDecompositionRunRepository(uow),
+            reader=SQLAlchemyDecompositionRowReader(uow),
+            uow=uow,
+        )
+
     def _save_decomposition_collection(c: Container) -> SaveDecompositionCollection:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
         return SaveDecompositionCollection(
@@ -265,6 +276,7 @@ def register_sar_analysis(container: Container) -> None:
     container.define(GetDecompositionRun, _get_decomposition)
     container.define(CancelDecompositionRun, _cancel_decomposition)
     container.define(FetchDecompositionRows, _fetch_decomposition_rows)
+    container.define(FetchDecompositionAssignments, _fetch_decomposition_assignments)
     container.define(SaveDecompositionCollection, _save_decomposition_collection)
 
     # =====================================================================

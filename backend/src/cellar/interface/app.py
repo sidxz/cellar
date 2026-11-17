@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.duar.auth import get_duar
@@ -15,6 +16,15 @@ from cellar.interface.error_handlers import register_error_handlers
 from cellar.interface.middleware.request_context import RequestContextMiddleware
 from cellar.interface.middleware.security_headers import SecurityHeadersMiddleware
 from cellar.version import build_info
+
+
+def add_compression(app: FastAPI) -> None:
+    """Gzip responses of 1 KiB or more (a workbench dataset runs to tens of MB).
+
+    Starlette skips event streams and already-compressed media, and compresses
+    large bodies in a worker thread.
+    """
+    app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 
 def create_app() -> FastAPI:
@@ -223,6 +233,8 @@ def create_app() -> FastAPI:
         exclude_paths=["/health", "/version", "/docs", "/openapi.json", "/api/v1/kiosk"],
     )
 
+    add_compression(app)
+
     # CORS — added last so it runs first (LIFO)
     import os
 
@@ -354,6 +366,9 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.projects import router as project_router
     from cellar.interface.routes.recent_searches import router as recent_searches_router
     from cellar.interface.routes.saved_searches import router as saved_search_router
+    from cellar.interface.routes.saved_visualizations import (
+        router as saved_visualization_router,
+    )
 
     app.include_router(project_router)
     app.include_router(favorites_router)
@@ -362,6 +377,7 @@ def create_app() -> FastAPI:
     app.include_router(collection_import_previews_router)
     app.include_router(collection_import_templates_router)
     app.include_router(saved_search_router)
+    app.include_router(saved_visualization_router)
     app.include_router(campaign_router)
     app.include_router(campaign_channels_router)
     app.include_router(campaign_collections_router)
@@ -478,6 +494,10 @@ def create_app() -> FastAPI:
     from cellar.interface.routes.protocol_hub import router as protocol_hub_router
 
     app.include_router(protocol_hub_router)
+
+    from cellar.interface.routes.visualization import router as visualization_router
+
+    app.include_router(visualization_router)
 
     from cellar.interface.routes.compound_flags import router as compound_flags_router
 

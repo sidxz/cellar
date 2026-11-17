@@ -55,7 +55,7 @@ export function ProtocolGrid({
                 {data.name}
               </Link>
               <span className="text-xs text-muted-foreground">
-                <span className="font-mono">{data.code ?? "No code"}</span>
+                <span className="tabular-nums">{data.code ?? "No code"}</span>
                 <span className="mx-2">·</span>v{data.protocol_version}
               </span>
             </div>

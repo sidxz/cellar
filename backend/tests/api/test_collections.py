@@ -3,16 +3,27 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from httpx import AsyncClient
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncEngine
+
+from cellar.domain.research_organization.events import (
+    CollectionCreated,
+    CollectionMembersChanged,
+)
+from cellar.domain.shared.events import DomainEvent
+from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
+from tests.api.conftest import _create_test_app
+from tests.fakes.fake_auth import FakeAuth
 
 
 class TestCreateCollection:
     async def test_create_success(self, client: AsyncClient) -> None:
         # Create a project to link
-        proj = await client.post(
-            "/api/v1/projects", json={"name": "Host Project"}
-        )
+        proj = await client.post("/api/v1/projects", json={"name": "Host Project"})
         project_id = proj.json()["id"]
 
         resp = await client.post(
@@ -46,18 +57,14 @@ class TestCreateCollection:
 
 class TestGetCollection:
     async def test_get_includes_molecule_count(self, client: AsyncClient) -> None:
-        create = await client.post(
-            "/api/v1/collections", json={"name": "CountTest"}
-        )
+        create = await client.post("/api/v1/collections", json={"name": "CountTest"})
         coll_id = create.json()["id"]
         resp = await client.get(f"/api/v1/collections/{coll_id}")
         assert resp.status_code == 200
         assert resp.json()["molecule_count"] == 0
 
     async def test_get_includes_frozen_fields(self, client: AsyncClient) -> None:
-        create = await client.post(
-            "/api/v1/collections", json={"name": "FrozenFieldsTest"}
-        )
+        create = await client.post("/api/v1/collections", json={"name": "FrozenFieldsTest"})
         coll_id = create.json()["id"]
         resp = await client.get(f"/api/v1/collections/{coll_id}")
         assert resp.status_code == 200
@@ -86,13 +93,9 @@ class TestListCollections:
             "/api/v1/collections",
             json={"name": "In Project", "project_id": project_id},
         )
-        await client.post(
-            "/api/v1/collections", json={"name": "No Project"}
-        )
+        await client.post("/api/v1/collections", json={"name": "No Project"})
 
-        resp = await client.get(
-            "/api/v1/collections", params={"project_ids": project_id}
-        )
+        resp = await client.get("/api/v1/collections", params={"project_ids": project_id})
         assert resp.status_code == 200
         data = resp.json()["items"]
         assert len(data) == 1
@@ -120,9 +123,7 @@ class TestListCollections:
             "/api/v1/collections",
             json={"name": "In C (excluded)", "project_id": c_id},
         )
-        await client.post(
-            "/api/v1/collections", json={"name": "Unscoped (excluded)"}
-        )
+        await client.post("/api/v1/collections", json={"name": "Unscoped (excluded)"})
 
         resp = await client.get(
             "/api/v1/collections",
@@ -135,9 +136,7 @@ class TestListCollections:
 
 class TestUpdateCollection:
     async def test_update_name(self, client: AsyncClient) -> None:
-        create = await client.post(
-            "/api/v1/collections", json={"name": "OldCol"}
-        )
+        create = await client.post("/api/v1/collections", json={"name": "OldCol"})
         coll_id = create.json()["id"]
         resp = await client.patch(
             f"/api/v1/collections/{coll_id}",
@@ -150,9 +149,7 @@ class TestUpdateCollection:
 
 class TestDeleteCollection:
     async def test_delete_success(self, client: AsyncClient) -> None:
-        create = await client.post(
-            "/api/v1/collections", json={"name": "Doomed"}
-        )
+        create = await client.post("/api/v1/collections", json={"name": "Doomed"})
         coll_id = create.json()["id"]
         resp = await client.delete(f"/api/v1/collections/{coll_id}")
         assert resp.status_code == 204
@@ -164,9 +161,7 @@ class TestDeleteCollection:
 
 class TestCollectionMolecules:
     async def test_list_molecules_empty(self, client: AsyncClient) -> None:
-        create = await client.post(
-            "/api/v1/collections", json={"name": "Empty Membership"}
-        )
+        create = await client.post("/api/v1/collections", json={"name": "Empty Membership"})
         coll_id = create.json()["id"]
         resp = await client.get(f"/api/v1/collections/{coll_id}/molecules")
         assert resp.status_code == 200
@@ -191,9 +186,7 @@ class TestCollectionTypeAttribute:
         assert created.status_code == 201
         coll_id = created.json()["id"]
 
-        resp = await client.patch(
-            f"/api/v1/collections/{coll_id}", json={"type": "hit_list"}
-        )
+        resp = await client.patch(f"/api/v1/collections/{coll_id}", json={"type": "hit_list"})
         assert resp.status_code == 200
         assert resp.json()["type"] == "hit_list"
 
@@ -207,9 +200,7 @@ class TestCollectionTypeAttribute:
         assert resp.json()["type"] == "series"
 
     async def test_list_includes_type(self, client: AsyncClient) -> None:
-        await client.post(
-            "/api/v1/collections", json={"name": "Ref Set", "type": "reference_set"}
-        )
+        await client.post("/api/v1/collections", json={"name": "Ref Set", "type": "reference_set"})
         resp = await client.get("/api/v1/collections")
         assert resp.status_code == 200
         items = resp.json()["items"]
@@ -227,9 +218,7 @@ class TestCollectionTypeAttribute:
         assert created.status_code == 201
         coll_id = created.json()["id"]
 
-        resp = await client.patch(
-            f"/api/v1/collections/{coll_id}", json={"type": "bogus"}
-        )
+        resp = await client.patch(f"/api/v1/collections/{coll_id}", json={"type": "bogus"})
         assert resp.status_code == 422
 
     async def test_patch_null_type_returns_422(self, client: AsyncClient) -> None:
@@ -237,7 +226,94 @@ class TestCollectionTypeAttribute:
         assert created.status_code == 201
         coll_id = created.json()["id"]
 
-        resp = await client.patch(
-            f"/api/v1/collections/{coll_id}", json={"type": None}
-        )
+        resp = await client.patch(f"/api/v1/collections/{coll_id}", json={"type": None})
         assert resp.status_code == 422
+
+
+async def _register_molecule(client: AsyncClient, smiles: str) -> str:
+    org = await client.post(
+        "/api/v1/organizations", json={"name": f"Org {smiles}", "org_type": "internal"}
+    )
+    assert org.status_code == 201, org.text
+    resp = await client.post(
+        "/api/v1/molecules",
+        json={"name": smiles, "smiles": smiles, "originating_org_id": org.json()["id"]},
+    )
+    assert resp.status_code == 201, resp.text
+    return resp.json()["molecule"]["id"]
+
+
+@asynccontextmanager
+async def _client_as(database_url: str, auth: FakeAuth) -> AsyncIterator[AsyncClient]:
+    app = _create_test_app(database_url, auth)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:  # type: ignore[arg-type]
+        yield ac
+    await app.state.container[AsyncEngine].dispose()
+
+
+SMILES = ("CCO", "CCN", "CCCl")
+
+
+class TestCreateCollectionWithMolecules:
+    async def test_create_with_molecules_adds_them(self, client: AsyncClient) -> None:
+        ids = [await _register_molecule(client, s) for s in SMILES]
+        resp = await client.post(
+            "/api/v1/collections", json={"name": "From workbench", "molecule_ids": ids}
+        )
+        assert resp.status_code == 201, resp.text
+        assert resp.json()["molecule_count"] == 3
+        members = await client.get(f"/api/v1/collections/{resp.json()['id']}/molecules")
+        assert sorted(members.json()) == sorted(ids)
+
+    async def test_create_emits_created_once_and_members_changed(
+        self, client: AsyncClient, api_app: FastAPI
+    ) -> None:
+        seen: list[DomainEvent] = []
+
+        async def _record(event: DomainEvent) -> None:
+            seen.append(event)
+
+        api_app.state.container[EventDispatcher].register(DomainEvent, _record)
+        ids = [await _register_molecule(client, s) for s in SMILES]
+        seen.clear()
+        resp = await client.post(
+            "/api/v1/collections", json={"name": "Audited", "molecule_ids": ids}
+        )
+        assert resp.status_code == 201, resp.text
+        assert [type(e) for e in seen] == [CollectionCreated, CollectionMembersChanged]
+        changed = seen[1]
+        assert isinstance(changed, CollectionMembersChanged)
+        assert sorted(map(str, changed.added_ids)) == sorted(ids)
+
+    async def test_foreign_molecule_fails_and_creates_nothing(
+        self, client: AsyncClient, database_url: str
+    ) -> None:
+        ids = [await _register_molecule(client, s) for s in SMILES[:2]]
+        stranger = FakeAuth(role="admin", workspace_id=uuid.uuid4(), user_id=uuid.uuid4())
+        async with _client_as(database_url, stranger) as other:
+            foreign = await _register_molecule(other, SMILES[2])
+
+        resp = await client.post(
+            "/api/v1/collections",
+            json={"name": "Leaky", "molecule_ids": [*ids, foreign]},
+        )
+        assert resp.status_code == 422, resp.text
+        listed = await client.get("/api/v1/collections")
+        assert listed.json()["items"] == []
+
+    async def test_unknown_molecule_fails_and_creates_nothing(self, client: AsyncClient) -> None:
+        resp = await client.post(
+            "/api/v1/collections",
+            json={"name": "Ghost", "molecule_ids": [str(uuid.uuid4())]},
+        )
+        assert resp.status_code == 422, resp.text
+        listed = await client.get("/api/v1/collections")
+        assert listed.json()["items"] == []
+
+    async def test_omitted_or_empty_molecule_ids_is_a_plain_create(
+        self, client: AsyncClient
+    ) -> None:
+        for body in ({"name": "Plain"}, {"name": "Empty", "molecule_ids": []}):
+            resp = await client.post("/api/v1/collections", json=body)
+            assert resp.status_code == 201, resp.text
+            assert resp.json()["molecule_count"] == 0

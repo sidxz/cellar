@@ -1,5 +1,6 @@
 "use client";
 
+import { WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { Fragment, useCallback, useRef, useState } from "react";
 import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
@@ -8,17 +9,19 @@ import { WELL_DESIGNATION_LABELS } from "../types";
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Controls are coloured by effect (WELL_TYPE_COLORS: a layout belongs to no protocol, so
+// the default convention); the rest by these classes.
 const WELL_COLORS: Record<WellDesignation, string> = {
   compound: "bg-primary",
-  positive_control: "bg-green-500",
-  negative_control: "bg-destructive",
+  positive_control: "",
+  negative_control: "",
   empty: "bg-gray-300 dark:bg-gray-700",
 };
 
 const WELL_DOT_COLORS: Record<WellDesignation, string> = {
   compound: "bg-primary",
-  positive_control: "bg-green-500",
-  negative_control: "bg-destructive",
+  positive_control: "",
+  negative_control: "",
   empty: "bg-gray-400",
 };
 
@@ -117,7 +120,10 @@ export function PlateMapEditor({ format, value, onChange }: PlateMapEditorProps)
                 : "border-border hover:bg-accent",
             )}
           >
-            <span className={cn("h-3 w-3 rounded-full", WELL_DOT_COLORS[d])} />
+            <span
+              className={cn("h-3 w-3 rounded-full", WELL_DOT_COLORS[d])}
+              style={{ background: WELL_TYPE_COLORS[d] }}
+            />
             {WELL_DESIGNATION_LABELS[d]}
           </button>
         ))}
@@ -193,7 +199,11 @@ export function PlateMapEditor({ format, value, onChange }: PlateMapEditorProps)
                         WELL_COLORS[designation],
                       )}
                       title={`${wellKey}: ${WELL_DESIGNATION_LABELS[designation]}`}
-                      style={{ width: size, height: size }}
+                      style={{
+                        width: size,
+                        height: size,
+                        background: WELL_TYPE_COLORS[designation],
+                      }}
                     >
                       {showText && (
                         <span className="flex h-full w-full items-center justify-center text-[8px] text-white/70 select-none">

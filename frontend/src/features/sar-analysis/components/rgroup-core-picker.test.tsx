@@ -245,6 +245,22 @@ describe("RGroupCorePicker", () => {
     expect(screen.getAllByText("3/4").length).toBeGreaterThan(0);
   });
 
+  it("lists a scaffold that is also the shared substructure once, so one card is selected", () => {
+    setMcs({ core_smiles: BENZENE, molecule_count: 4 });
+    render(
+      <RGroupCorePicker
+        moleculeIds={["a", "b", "c", "d"]}
+        coreSmiles={BENZENE}
+        onCoreChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getAllByTestId(`thumb-${BENZENE}`)).toHaveLength(1);
+    expect(screen.getAllByRole("button", { pressed: true })).toEqual([
+      screen.getByRole("button", { name: /shared substructure as the core/i }),
+    ]);
+  });
+
   it("emits the shared substructure when picked", () => {
     setMcs({ core_smiles: PYRIDINE, molecule_count: 4 });
     const onCoreChange = vi.fn();

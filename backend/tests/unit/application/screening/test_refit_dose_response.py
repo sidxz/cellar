@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid
 from types import TracebackType
 from typing import Self
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from returns.result import Failure, Success
@@ -18,6 +18,7 @@ from cellar.application.screening.refit_dose_response import (
 )
 from cellar.domain.audit_compliance.enums import OperationType
 from cellar.domain.screening_assay.curve_fitting import (
+    DOSE_ZERO_LEFT_OUT,
     ConcentrationResponsePoint,
     FittedCurveResult,
 )
@@ -34,7 +35,6 @@ from cellar.domain.screening_assay.excluded_point_detail import (
     ExclusionSource,
 )
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
-
 
 WS = uuid.uuid4()
 USER = uuid.uuid4()
@@ -90,8 +90,16 @@ class _RecordingFitter:
                 confidence_interval_high=2.0,
                 curve_class=CurveClass.FULL,
                 num_points=len(points),
-                raw_data=[],
-                excluded_points=[],
+                raw_data=[
+                    {"concentration": p.concentration, "response": p.response}
+                    for p in points
+                    if not p.is_excluded
+                ],
+                excluded_points=[
+                    {"concentration": p.concentration, "response": p.response}
+                    for p in points
+                    if p.is_excluded
+                ],
             )
         )
 
@@ -119,7 +127,7 @@ def _make_auth():
     auth.user_id = USER
     auth.workspace_id = WS
 
-    def has_role(role):  # noqa: ANN001
+    def has_role(role):
         return True
 
     auth.has_role = has_role
@@ -271,6 +279,23 @@ async def test_refit_without_disable_auto_outliers_preserves_protocol_sigma():
     # default (currently 3.0 via ``DEFAULT_OUTLIER_SIGMA``); the key assertion
     # is that the use case did not silently swap it to None.
     assert fitter.last_config.outlier_sigma is not None
+
+
+@pytest.mark.asyncio
+async def test_a_refit_keeps_the_note_of_points_left_out_at_dose_zero():
+    """The dose-0 points never reach the stored raw_data, so a refit cannot see them;
+    the curve keeps saying they were left out."""
+    curve = _make_curve_with_points([(1.0, 5.0), (10.0, 20.0), (100.0, 50.0), (1000.0, 80.0)])
+    curve.fit_quality_warnings = ["low_r_squared", f"{DOSE_ZERO_LEFT_OUT}:2"]
+    use_case, curve_repo = _make_use_case(curve)
+
+    cmd = RefitDoseResponseCurveCommand(
+        workspace_id=WS, curve_id=curve.id, excluded_point_indices=[]
+    )
+    assert isinstance(await use_case(cmd, auth=_make_auth()), Success)
+
+    [saved] = curve_repo.save.await_args.args
+    assert saved.fit_quality_warnings == [f"{DOSE_ZERO_LEFT_OUT}:2"]
 
 
 # ---------------------------------------------------------------------------
@@ -480,3 +505,190 @@ async def test_commit_refit_rich_payload_audit_failure_rolls_back():
     # ...but the UoW never committed: audit failure must abort the refit
     # atomically alongside the curve save.
     assert use_case._uow.commit_called is False
+
+
+# ---------------------------------------------------------------------------
+# One point order: suggestions, outlier-well entries and edits address the same set
+# ---------------------------------------------------------------------------
+
+
+def _left_out(points: list[ConcentrationResponsePoint]) -> list[tuple[float, float]]:
+    return sorted((p.concentration, p.response) for p in points if p.is_excluded)
+
+
+def _preview(curve, fitter):
+    from cellar.application.screening.refit_dose_response_preview import (
+        RefitDoseResponseCurvePreview,
+    )
+
+    curve_repo = AsyncMock()
+    curve_repo.find_by_id_in_workspace = AsyncMock(return_value=curve)
+    protocol_repo = AsyncMock()
+    protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=_make_protocol())
+    return RefitDoseResponseCurvePreview(
+        uow=_FakeUow(), curve_repo=curve_repo, protocol_repo=protocol_repo, curve_fitter=fitter
+    )
+
+
+def _auto_fitted_curve() -> DoseResponseCurve:
+    """The auto-fit's curve: the 0.1 µM well is flagged as an outlier (left out), and the
+    fitter suggests the 1 µM point — raw_data index 1, captured-set position 2."""
+    from cellar.application.screening.fit_dose_response import _build_excluded_from_fitter
+    from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
+
+    raw = [(0.01, 2.0), (1.0, 80.0), (10.0, 90.0), (100.0, 98.0), (1000.0, 99.0)]
+    fitted = FittedCurveResult(
+        fitted_value=1.0, hill_slope=1.0, top=100.0, bottom=0.0, r_squared=0.9,
+        confidence_interval_low=None, confidence_interval_high=None,
+        curve_class=CurveClass.FULL, num_points=len(raw),
+        raw_data=[{"concentration": c, "response": r} for c, r in raw],
+        excluded_points=[{"concentration": 0.1, "response": -40.0}],
+        outlier_suggestions=(
+            OutlierSuggestion(idx=1, concentration=1.0, response=80.0, residual_z_full_sd=4.0),
+        ),
+    )  # fmt: skip
+    curve = _make_curve_with_points(raw)
+    curve.excluded_points = _build_excluded_from_fitter(fitted)
+    return curve
+
+
+def _every_entry_addresses_its_point(curve: DoseResponseCurve) -> None:
+    from cellar.application.screening._dr_point_reconstruction import captured_set
+
+    captured = captured_set(curve.raw_data, curve.excluded_points)
+    for e in curve.excluded_points:
+        assert captured[e.idx][:2] == (e.concentration, e.response), e
+
+
+@pytest.mark.asyncio
+async def test_accepting_a_suggestion_above_an_outlier_well_leaves_out_that_point_only():
+    """The editor sends every entry back with its idx, the suggestion accepted: the preview
+    and the save both leave out the 1 µM point (and the flagged 0.1 µM one), nothing else."""
+    curve = _auto_fitted_curve()
+    _every_entry_addresses_its_point(curve)
+    accepted = [
+        ExclusionPayloadEntry(idx=e.idx, source=e.source, excluded=True, reason=e.reason)
+        for e in curve.excluded_points
+    ]
+    preview_fitter = _RecordingFitter()
+    preview = _preview(curve, preview_fitter)
+    from cellar.application.screening.refit_dose_response_preview import PreviewRefitCommand
+
+    previewed = await preview(
+        PreviewRefitCommand(
+            workspace_id=WS, curve_id=curve.id,
+            excluded_point_indices=[e.idx for e in accepted],
+        ),
+        auth=_make_auth(),
+    )  # fmt: skip
+    fitter = _RecordingFitter()
+    use_case, curve_repo = _make_use_case(curve, fitter=fitter)
+    saved = await use_case(
+        RefitDoseResponseCurveCommand(
+            workspace_id=WS, curve_id=curve.id, exclusions=accepted,
+            save_reason=ExclusionReason.OUTLIER,
+        ),
+        auth=_make_auth(),
+    )  # fmt: skip
+
+    assert isinstance(previewed, Success) and isinstance(saved, Success)
+    expected = [(0.1, -40.0), (1.0, 80.0)]
+    assert _left_out(preview_fitter.last_points) == expected
+    assert _left_out(fitter.last_points) == expected
+    [curve_saved] = curve_repo.save.await_args.args
+    _every_entry_addresses_its_point(curve_saved)
+
+
+@pytest.mark.asyncio
+async def test_a_save_keeps_every_entry_on_its_point_when_replicates_change_places():
+    """Two 1 µM replicates; excluding the first moves it behind the second in the stored
+    captured set (raw_data first). The saved entry follows its point."""
+    curve = _make_curve_with_points(
+        [(0.01, 2.0), (1.0, 30.0), (1.0, 70.0), (10.0, 90.0), (100.0, 98.0)]
+    )
+    use_case, curve_repo = _make_use_case(curve)
+
+    await use_case(
+        RefitDoseResponseCurveCommand(
+            workspace_id=WS, curve_id=curve.id, save_reason=ExclusionReason.OUTLIER,
+            exclusions=[ExclusionPayloadEntry(
+                idx=1, source=ExclusionSource.MANUAL, excluded=True,
+                reason=ExclusionReason.OUTLIER,
+            )],
+        ),
+        auth=_make_auth(),
+    )  # fmt: skip
+
+    [saved] = curve_repo.save.await_args.args
+    [entry] = saved.excluded_points
+    assert (entry.concentration, entry.response) == (1.0, 30.0)
+    _every_entry_addresses_its_point(saved)
+
+
+# ---------------------------------------------------------------------------
+# A point of an outlier well cannot be re-included from the curve editor
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_an_outlier_well_point_stays_out_when_the_editor_includes_it():
+    """The editor sends the flagged point's entry back as included (and the preview leaves
+    it out of its indices): preview and save still leave it out, and the curve keeps the
+    flag's entry."""
+    curve = _auto_fitted_curve()
+    flag = next(e for e in curve.excluded_points if e.source == ExclusionSource.WELL_FLAG)
+    preview_fitter = _RecordingFitter()
+    from cellar.application.screening.refit_dose_response_preview import PreviewRefitCommand
+
+    await _preview(curve, preview_fitter)(
+        PreviewRefitCommand(workspace_id=WS, curve_id=curve.id, excluded_point_indices=[]),
+        auth=_make_auth(),
+    )
+    fitter = _RecordingFitter()
+    use_case, curve_repo = _make_use_case(curve, fitter=fitter)
+    await use_case(
+        RefitDoseResponseCurveCommand(
+            workspace_id=WS, curve_id=curve.id, save_reason=ExclusionReason.OTHER,
+            exclusions=[
+                ExclusionPayloadEntry(
+                    idx=flag.idx, source=ExclusionSource.WELL_FLAG, excluded=False,
+                    reason=ExclusionReason.OUTLIER_WELL,
+                ),
+                ExclusionPayloadEntry(
+                    idx=flag.idx, source=ExclusionSource.MANUAL, excluded=False,
+                    reason=ExclusionReason.OTHER,
+                ),
+            ],
+        ),
+        auth=_make_auth(),
+    )  # fmt: skip
+
+    assert _left_out(preview_fitter.last_points) == [(0.1, -40.0)]
+    assert _left_out(fitter.last_points) == [(0.1, -40.0)]
+    [saved] = curve_repo.save.await_args.args
+    [kept] = [e for e in saved.excluded_points if e.excluded]
+    assert (kept.source, kept.concentration, kept.excluded) == (
+        ExclusionSource.WELL_FLAG, 0.1, True,
+    )  # fmt: skip
+    _every_entry_addresses_its_point(saved)
+
+
+@pytest.mark.asyncio
+async def test_a_constraint_refit_keeps_an_outlier_well_point_out_and_recorded():
+    """The constraint-edit (legacy) path sends no indices: the flagged point stays out of
+    the fit and its typed entry stays on the curve."""
+    curve = _auto_fitted_curve()
+    fitter = _RecordingFitter()
+    use_case, curve_repo = _make_use_case(curve, fitter=fitter)
+
+    await use_case(
+        RefitDoseResponseCurveCommand(
+            workspace_id=WS, curve_id=curve.id, excluded_point_indices=[]
+        ),
+        auth=_make_auth(),
+    )
+
+    assert _left_out(fitter.last_points) == [(0.1, -40.0)]
+    [saved] = curve_repo.save.await_args.args
+    [kept] = saved.excluded_points
+    assert (kept.source, kept.idx, kept.concentration) == (ExclusionSource.WELL_FLAG, 1, 0.1)

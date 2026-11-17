@@ -59,7 +59,7 @@ async def enrich_to_scalars(
         av = cols.get(channel.column)
         if av is None:
             continue
-        scalar = pick_scalar(av, channel.intercept_key)
+        scalar, qualifier = pick_scalar(av, channel.intercept_key)
         if scalar is None:
             continue  # sparse — no value for this molecule on this channel
         out.append(
@@ -67,7 +67,7 @@ async def enrich_to_scalars(
                 molecule_id=molecule_id,
                 scalar=scalar,
                 unit=av.unit,
-                qualifier=av.qualifier,
+                qualifier=qualifier,
                 source=av.source,
                 snapshot=activity_value_snapshot(av),
             )

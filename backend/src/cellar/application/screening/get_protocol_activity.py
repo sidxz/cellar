@@ -2,7 +2,9 @@
 
 Returns ALL aggregatable readouts per compound in a single response,
 with scientifically correct aggregation:
-  - Numeric readouts: arithmetic mean + max (higher-is-better)
+  - Numeric readouts: arithmetic mean + max (higher-is-better), over ONE
+    normalization layer — the readout's primary normalization when it has
+    data, else raw. Layers are never pooled.
   - Dose-response readouts: geometric mean + min fitted_value (lower-is-better),
     plus best curve params (hill_slope, top, bottom, r_squared)
 """
@@ -21,6 +23,7 @@ from cellar.application.screening.protocol_activity_reader import (
     ProtocolActivityReader,
 )
 from cellar.application.shared.query import Query
+from cellar.domain.screening_assay.enums import primary_normalization, unit_for_normalization
 from cellar.domain.screening_assay.readout_best import (
     BestDirection,
     best_direction,
@@ -192,6 +195,10 @@ class GetProtocolActivitySummary:
         # we key by the readout-def UUID — curve_type was ambiguous when
         # two DR readouts on one protocol shared it.
         readout_defs: list[ReadoutDefInfo] = []
+        # Numeric readouts show one layer: the primary normalization when any
+        # of its rows exist, else raw (None). Keyed by readout name, like the rows.
+        layers_with_data = {(r.readout_name, r.layer) for r in data.numeric_rows}
+        layer_of: dict[str, str | None] = {}
 
         for rd in data.protocol.readout_definitions:
             if rd.data_type not in _AGGREGATABLE_DATA_TYPES:
@@ -202,6 +209,13 @@ class GetProtocolActivitySummary:
                 rd.data_type, melt.get("measure") if isinstance(melt, dict) else None
             )
             intercept_specs: list[InterceptSpecPayload] = []
+            unit = rd.unit
+            if rd.data_type == "numeric":
+                # Unit-test fakes of the read model carry no ``normalizations``.
+                primary = primary_normalization(getattr(rd, "normalizations", None))
+                layer = primary if (rd.name, primary) in layers_with_data else None
+                layer_of[rd.name] = layer
+                unit = unit_for_normalization(layer, rd.unit)
             if rd.data_type == "dose_response":
                 cfg = rd.dose_response_config
                 # ``rd`` is a ``ProtocolRow.readout_definitions`` entry — the
@@ -229,7 +243,7 @@ class GetProtocolActivitySummary:
                     id=rd.id,
                     name=rd.name,
                     data_type=rd.data_type,
-                    unit=rd.unit,
+                    unit=unit,
                     best_direction=direction.value,
                     melt_config=melt if isinstance(melt, dict) else None,
                     intercepts=intercept_specs,
@@ -258,9 +272,12 @@ class GetProtocolActivitySummary:
         # Python merge
         # ----------------------------------------------------------
 
-        # Index numeric rows: (molecule_id, readout_name) -> row
+        # Index numeric rows of each readout's chosen layer:
+        # (molecule_id, readout_name) -> row
         numeric_map: dict[tuple[uuid.UUID, str], object] = {
-            (row.molecule_id, row.readout_name): row for row in data.numeric_rows
+            (row.molecule_id, row.readout_name): row
+            for row in data.numeric_rows
+            if row.layer == layer_of.get(row.readout_name)
         }
 
         # Index DR agg rows: (molecule_id, readout_definition_id) -> row
@@ -284,7 +301,8 @@ class GetProtocolActivitySummary:
                     dr_row = dr_agg_map.get(dr_key)
                     bp_row = best_params_map.get(dr_key)
 
-                    if dr_row is None:
+                    # No active curve (all inactive) → no value, as before.
+                    if dr_row is None or dr_row.geo_mean is None:
                         continue
 
                     curve_params: CurveParams | None = None

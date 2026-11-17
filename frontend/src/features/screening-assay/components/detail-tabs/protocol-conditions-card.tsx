@@ -8,27 +8,32 @@ import {
   CardHeader,
   CardTitle,
 } from "@/shared/components/ui/card";
-import { Settings2 } from "lucide-react";
-import { Fragment } from "react";
-import type { ConditionDefinition, Protocol } from "../../types";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/shared/components/ui/table";
+import { Pencil, Plus, Trash2 } from "lucide-react";
+import { type Protocol, READOUT_DATA_TYPE_LABELS, type ReadoutDataType } from "../../types";
 
-/** What a run enters for the condition (its unit, or the allowed values), or, the exception,
- *  the one value every run uses. */
-function conditionDetail(cd: ConditionDefinition): string {
-  const unit = cd.unit?.trim();
-  if (cd.fixed_value) return `Fixed: ${cd.fixed_value}${unit ? ` ${unit}` : ""}`;
-  if (cd.pick_list_values?.length) return cd.pick_list_values.join(", ");
-  return unit ?? "";
-}
-
-/** The conditions each run records, right under the method: they tell the protocol's runs apart
- *  and together define it. Edited on the Design tab. */
+/** Run conditions live alongside their definitions and control settings on Setup. */
 export function ProtocolConditionsCard({
   protocol,
-  onOpenDesign,
+  canAdd,
+  canEdit,
+  onAdd,
+  onEdit,
+  onRemove,
 }: {
   protocol: Protocol;
-  onOpenDesign: () => void;
+  canAdd: boolean;
+  canEdit: boolean;
+  onAdd: () => void;
+  onEdit: (id: string) => void;
+  onRemove: (id: string) => void;
 }) {
   const conditions = protocol.condition_definitions;
   return (
@@ -36,27 +41,87 @@ export function ProtocolConditionsCard({
       <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0">
         <div className="grid gap-1">
           <CardTitle>Assay conditions</CardTitle>
-          <CardDescription>Recorded with every run; they tell its runs apart.</CardDescription>
+          <CardDescription>
+            Recorded with every run; they tell its runs apart. Define each condition and its allowed
+            values here.
+          </CardDescription>
         </div>
-        <Button variant="ghost" size="sm" className="h-auto px-2 py-1" onClick={onOpenDesign}>
-          <Settings2 className="mr-1.5 h-3.5 w-3.5" />
-          Open in Design
-        </Button>
+        {canAdd && (
+          <Button variant="outline" size="sm" onClick={onAdd}>
+            <Plus className="size-4" /> Add condition
+          </Button>
+        )}
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-3">
         {conditions.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            None yet. Add what each run records (concentrations, times, temperatures) in Design.
+            None yet. Add what each run records, such as concentrations, times, or temperatures.
           </p>
         ) : (
-          <dl className="grid grid-cols-[minmax(0,max-content)_1fr] gap-x-6 gap-y-1.5 text-sm">
-            {conditions.map((cd) => (
-              <Fragment key={cd.id}>
-                <dt className="font-medium">{cd.name}</dt>
-                <dd className="text-muted-foreground">{conditionDetail(cd)}</dd>
-              </Fragment>
-            ))}
-          </dl>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Data Type</TableHead>
+                <TableHead>Unit</TableHead>
+                <TableHead>Allowed values</TableHead>
+                <TableHead>Fixed value</TableHead>
+                {canEdit && (
+                  <TableHead className="w-20">
+                    <span className="sr-only">Actions</span>
+                  </TableHead>
+                )}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {conditions.map((cd) => (
+                <TableRow key={cd.id}>
+                  <TableCell className="font-medium">{cd.name}</TableCell>
+                  <TableCell>
+                    {READOUT_DATA_TYPE_LABELS[cd.data_type as ReadoutDataType] ?? cd.data_type}
+                  </TableCell>
+                  <TableCell>{cd.unit || "—"}</TableCell>
+                  <TableCell className="whitespace-normal">
+                    {cd.pick_list_values?.join(", ") || "—"}
+                  </TableCell>
+                  <TableCell>
+                    {cd.fixed_value
+                      ? `${cd.fixed_value}${cd.unit ? ` ${cd.unit}` : ""}`
+                      : "Varies per run"}
+                  </TableCell>
+                  {canEdit && (
+                    <TableCell>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Edit ${cd.name}`}
+                          onClick={() => onEdit(cd.id)}
+                        >
+                          <Pencil className="size-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-destructive hover:text-destructive"
+                          aria-label={`Delete ${cd.name}`}
+                          onClick={() => onRemove(cd.id)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+        {protocol.status === "active" && (
+          <p className="text-xs text-muted-foreground">
+            Add new conditions here. Edit existing definitions and allowed values in a draft or new
+            version. Change a fixed value with Correct details.
+          </p>
         )}
       </CardContent>
     </Card>

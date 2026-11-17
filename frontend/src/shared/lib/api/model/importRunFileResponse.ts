@@ -27,10 +27,12 @@ export interface ImportRunFileResponse {
   plates_created: number;
   wells_created: number;
   controls_from_template: number;
+  controls_from_file: number;
   controls_unclassified: number;
   well_conflicts?: WellConflictModel[];
   readout_conflicts?: ReadoutConflictModel[];
   compute_warning?: string | null;
   fit_warnings?: string[];
+  fit_notes?: string[];
   auto_created_batches?: number;
 }

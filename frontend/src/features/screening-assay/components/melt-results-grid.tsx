@@ -78,9 +78,14 @@ function SampleCell({ row }: { row: ResultRow }) {
   const { registrationNumber, moleculeId, batchSuffix, smiles, label } = row.identity;
   if (registrationNumber) {
     const id = moleculeId ? (
-      <EntityLink type="compound" id={moleculeId} label={registrationNumber} />
+      <EntityLink
+        type="compound"
+        id={moleculeId}
+        label={registrationNumber}
+        className="font-sans"
+      />
     ) : (
-      <span className="font-mono text-sm">{registrationNumber}</span>
+      <span className="text-sm">{registrationNumber}</span>
     );
     return (
       <span
@@ -107,9 +112,7 @@ function SampleCell({ row }: { row: ResultRow }) {
         ) : (
           id
         )}
-        {batchSuffix && (
-          <span className="font-mono text-xs text-muted-foreground">{`·${batchSuffix}`}</span>
-        )}
+        {batchSuffix && <span className="text-xs text-muted-foreground">{`·${batchSuffix}`}</span>}
       </span>
     );
   }

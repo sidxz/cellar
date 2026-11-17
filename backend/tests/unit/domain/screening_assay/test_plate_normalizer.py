@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
+import statistics
 import uuid
 
 import pytest
 
-from cellar.domain.screening_assay.enums import ReadoutNormalization, WellType
-from cellar.domain.screening_assay.plate_normalizer import NormalizedValue, PlateNormalizer
+from cellar.domain.screening_assay.enums import PosControlSignal, ReadoutNormalization, WellType
+from cellar.domain.screening_assay.plate_normalizer import PlateNormalizer, effect_roles
 from cellar.domain.screening_assay.run import Well
 from cellar.domain.shared.errors import ValidationError
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -88,7 +88,7 @@ class TestPercentInhibition:
 
         values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
-        assert len(values) == 1
+        assert len(values) == 3
         # 100 * (100 - 50) / (100 - 0) = 50.0
         assert values[0].normalized_value == pytest.approx(50.0)
         assert values[0].original_value == 50.0
@@ -144,7 +144,7 @@ class TestPercentInhibition:
             [s, n1, n2, p1, p2], raw, ReadoutNormalization.PERCENT_INHIBITION
         )
 
-        assert len(values) == 1
+        assert len(values) == 5
         assert values[0].normalized_value == pytest.approx(60.0)
 
     def test_multiple_samples(self) -> None:
@@ -156,11 +156,9 @@ class TestPercentInhibition:
         # POS=100, NEG=0
         raw = {s1.id: 25.0, s2.id: 75.0, n.id: 0.0, p.id: 100.0}
 
-        values = normalizer.normalize(
-            [s1, s2, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION
-        )
+        values = normalizer.normalize([s1, s2, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
 
-        assert len(values) == 2
+        assert len(values) == 4
         normalized = {v.well_id: v.normalized_value for v in values}
         # 100 * (100-25)/100 = 75; 100 * (100-75)/100 = 25
         assert normalized[s1.id] == pytest.approx(75.0)
@@ -218,18 +216,27 @@ class TestPercentInhibition:
 
         assert values[0].batch_id == batch_id
 
-    def test_control_wells_excluded_from_output(self) -> None:
+    def test_controls_and_references_are_normalized_with_their_own_spread(self) -> None:
+        """Control wells land near 0 % (high anchor) and 100 % (low anchor), each at its own
+        reading; a reference well is normalized too; a blank is not."""
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
-        n = _neg_ctrl("B", 1)
-        p = _pos_ctrl("C", 1)
-        raw = {s.id: 50.0, n.id: 100.0, p.id: 0.0}
+        p1, p2 = _pos_ctrl("C", 1), _pos_ctrl("C", 2)
+        n1, n2 = _neg_ctrl("B", 1), _neg_ctrl("B", 2)
+        ref = _make_well(WellType.REFERENCE, "E", 1)
+        b = _blank("D", 1)
+        raw = {s.id: 50.0, p1.id: 98.0, p2.id: 102.0, n1.id: 1.0, n2.id: -1.0, ref.id: 25.0}
+        raw[b.id] = 0.0
 
-        values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_INHIBITION)
+        values = normalizer.normalize(
+            [s, p1, p2, n1, n2, ref, b], raw, ReadoutNormalization.PERCENT_INHIBITION
+        )
 
-        well_ids = {v.well_id for v in values}
-        assert n.id not in well_ids
-        assert p.id not in well_ids
+        by_well = {v.well_id: v.normalized_value for v in values}
+        assert by_well == pytest.approx(
+            {s.id: 50.0, p1.id: 2.0, p2.id: -2.0, n1.id: 99.0, n2.id: 101.0, ref.id: 75.0}
+        )
+        assert b.id not in by_well
 
     def test_pos_low_convention_swaps_anchors(self) -> None:
         """LOW convention: lab labels known-inhibitor wells as POS (low signal),
@@ -245,7 +252,9 @@ class TestPercentInhibition:
         raw = {s.id: 100.0, p.id: 0.0, n.id: 100.0}  # sample at DMSO level
 
         values = normalizer.normalize(
-            [s, p, n], raw, ReadoutNormalization.PERCENT_INHIBITION,
+            [s, p, n],
+            raw,
+            ReadoutNormalization.PERCENT_INHIBITION,
             PosControlSignal.LOW,
         )
         # Sample == high-anchor (NEG under LOW convention) → 0% inhibition
@@ -254,7 +263,9 @@ class TestPercentInhibition:
         # Sample at the inhibitor level → 100% inhibition
         raw2 = {s.id: 0.0, p.id: 0.0, n.id: 100.0}
         values2 = normalizer.normalize(
-            [s, p, n], raw2, ReadoutNormalization.PERCENT_INHIBITION,
+            [s, p, n],
+            raw2,
+            ReadoutNormalization.PERCENT_INHIBITION,
             PosControlSignal.LOW,
         )
         assert values2[0].normalized_value == pytest.approx(100.0)
@@ -278,7 +289,7 @@ class TestPercentActivation:
 
         values = normalizer.normalize([s, n, p], raw, ReadoutNormalization.PERCENT_ACTIVATION)
 
-        assert len(values) == 1
+        assert len(values) == 3
         assert values[0].normalized_value == pytest.approx(50.0)
 
     def test_fully_activated(self) -> None:
@@ -320,7 +331,7 @@ class TestPercentActivation:
             [s, n1, n2, p1, p2], raw, ReadoutNormalization.PERCENT_ACTIVATION
         )
 
-        assert len(values) == 1
+        assert len(values) == 5
         assert values[0].normalized_value == pytest.approx(100.0 * 40.0 / 90.0)
 
     def test_missing_neg_ctrl_raises(self) -> None:
@@ -364,7 +375,9 @@ class TestPercentActivation:
         raw = {s.id: 50.0, n.id: 100.0, p.id: 0.0}
 
         values = normalizer.normalize(
-            [s, n, p], raw, ReadoutNormalization.PERCENT_ACTIVATION,
+            [s, n, p],
+            raw,
+            ReadoutNormalization.PERCENT_ACTIVATION,
             PosControlSignal.LOW,
         )
         assert values[0].normalized_value == pytest.approx(50.0)
@@ -392,7 +405,7 @@ class TestPercentControl:
 
         values = normalizer.normalize([s, p], raw, ReadoutNormalization.PERCENT_CONTROL)
 
-        assert len(values) == 1
+        assert len(values) == 2
         assert values[0].normalized_value == pytest.approx(60.0)
 
     def test_equal_to_control(self) -> None:
@@ -445,7 +458,7 @@ class TestPercentControl:
 
         values = normalizer.normalize([s1, s2, p], raw, ReadoutNormalization.PERCENT_CONTROL)
 
-        assert len(values) == 2
+        assert len(values) == 3
         normalized = {v.well_id: v.normalized_value for v in values}
         assert normalized[s1.id] == pytest.approx(25.0)
         assert normalized[s2.id] == pytest.approx(75.0)
@@ -463,7 +476,9 @@ class TestPercentControl:
         raw = {s.id: 60.0, n.id: 100.0}
 
         values = normalizer.normalize(
-            [s, n], raw, ReadoutNormalization.PERCENT_CONTROL,
+            [s, n],
+            raw,
+            ReadoutNormalization.PERCENT_CONTROL,
             PosControlSignal.LOW,
         )
         assert values[0].normalized_value == pytest.approx(60.0)
@@ -496,7 +511,7 @@ class TestZScore:
 
         values = normalizer.normalize([s, p1, p2], raw, ReadoutNormalization.Z_SCORE)
 
-        assert len(values) == 1
+        assert len(values) == 3
         assert values[0].normalized_value == pytest.approx(expected_z)
 
     def test_at_mean_gives_zero_z(self) -> None:
@@ -574,8 +589,9 @@ class TestZScore:
     def test_pos_low_convention_uses_neg_anchor(self) -> None:
         """Under LOW convention NEG_CONTROL holds the high signal, so it
         becomes the baseline distribution."""
-        from cellar.domain.screening_assay.enums import PosControlSignal
         import statistics
+
+        from cellar.domain.screening_assay.enums import PosControlSignal
 
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
@@ -585,12 +601,14 @@ class TestZScore:
         expected = (150.0 - statistics.mean([90.0, 110.0])) / statistics.stdev([90.0, 110.0])
 
         values = normalizer.normalize(
-            [s, n1, n2], raw, ReadoutNormalization.Z_SCORE,
+            [s, n1, n2],
+            raw,
+            ReadoutNormalization.Z_SCORE,
             PosControlSignal.LOW,
         )
         assert values[0].normalized_value == pytest.approx(expected)
 
-    def test_control_wells_not_in_output(self) -> None:
+    def test_control_wells_are_scored_against_their_own_anchor(self) -> None:
         normalizer = PlateNormalizer()
         s = _sample("A", 1)
         p1 = _pos_ctrl("B", 1)
@@ -599,9 +617,9 @@ class TestZScore:
 
         values = normalizer.normalize([s, p1, p2], raw, ReadoutNormalization.Z_SCORE)
 
-        well_ids = {v.well_id for v in values}
-        assert p1.id not in well_ids
-        assert p2.id not in well_ids
+        sd = statistics.stdev([90.0, 110.0])
+        by_well = {v.well_id: v.normalized_value for v in values}
+        assert by_well == pytest.approx({s.id: -50.0 / sd, p1.id: -10.0 / sd, p2.id: 10.0 / sd})
 
 
 # ---------------------------------------------------------------------------
@@ -651,7 +669,7 @@ class TestNormalizedValueFields:
 
         values = normalizer.normalize([s1, s2, p], raw, ReadoutNormalization.PERCENT_CONTROL)
 
-        assert len(values) == 1
+        assert len(values) == 2
         assert values[0].well_id == s1.id
 
 
@@ -686,8 +704,8 @@ class TestNormalizeMany:
             ReadoutNormalization.PERCENT_INHIBITION,
             ReadoutNormalization.Z_SCORE,
         }
-        assert len(result[ReadoutNormalization.PERCENT_INHIBITION]) == 1
-        assert len(result[ReadoutNormalization.Z_SCORE]) == 1
+        assert len(result[ReadoutNormalization.PERCENT_INHIBITION]) == 4
+        assert len(result[ReadoutNormalization.Z_SCORE]) == 4
 
     def test_empty_set_returns_empty_dict(self) -> None:
         normalizer = PlateNormalizer()
@@ -703,11 +721,85 @@ class TestNormalizeMany:
         n = _neg_ctrl("C", 1)
         raw = {s.id: 50.0, p.id: 100.0, n.id: 0.0}
 
-        single = normalizer.normalize(
-            [s, p, n], raw, ReadoutNormalization.PERCENT_INHIBITION
-        )
+        single = normalizer.normalize([s, p, n], raw, ReadoutNormalization.PERCENT_INHIBITION)
         many = normalizer.normalize_many(
             [s, p, n], raw, frozenset({ReadoutNormalization.PERCENT_INHIBITION})
         )
 
         assert many[ReadoutNormalization.PERCENT_INHIBITION] == single
+
+
+# ---------------------------------------------------------------------------
+# Outlier wells
+# ---------------------------------------------------------------------------
+
+
+class TestOutlierWells:
+    """An outlier-flagged control leaves the anchors but still gets its own value."""
+
+    @pytest.mark.parametrize("formula", list(ReadoutNormalization)[1:])
+    def test_outliers_leave_the_anchors_and_are_still_normalized(self, formula) -> None:
+        normalizer = PlateNormalizer()
+        pos = [_pos_ctrl("C", c) for c in (1, 2, 3)]
+        neg = [_neg_ctrl("B", c) for c in (1, 2, 3)]
+        s = _sample()
+        raw = {pos[0].id: 100.0, pos[1].id: 102.0, pos[2].id: 98.0}
+        raw |= {neg[0].id: 10.0, neg[1].id: 12.0, neg[2].id: 8.0, s.id: 55.0}
+        flagged = {pos[2].id: 500.0, neg[2].id: -90.0}  # off the chart, flagged
+
+        clean = normalizer.normalize([*pos[:2], *neg[:2], s], raw, formula)
+        with_flags = normalizer.normalize(
+            [*pos, *neg, s],
+            raw | flagged,
+            formula,
+            outlier_well_ids=frozenset(flagged),
+        )
+
+        by_well = {nv.well_id: nv.normalized_value for nv in with_flags}
+        for nv in clean:
+            assert by_well[nv.well_id] == pytest.approx(nv.normalized_value)
+        assert set(by_well) == {*(w.id for w in pos), *(w.id for w in neg), s.id}
+
+    def test_normalize_many_passes_the_outliers_on(self) -> None:
+        pos, neg = _pos_ctrl(), _neg_ctrl()
+        bad = _neg_ctrl("B", 2)
+        raw = {pos.id: 100.0, neg.id: 0.0, bad.id: 50.0}
+        out = PlateNormalizer().normalize_many(
+            [pos, neg, bad],
+            raw,
+            frozenset({ReadoutNormalization.PERCENT_INHIBITION}),
+            outlier_well_ids=frozenset({bad.id}),
+        )
+        by_well = {
+            nv.well_id: nv.normalized_value for nv in out[ReadoutNormalization.PERCENT_INHIBITION]
+        }
+        assert by_well[bad.id] == pytest.approx(50.0)
+        assert by_well[neg.id] == pytest.approx(100.0)
+
+
+class TestEffectRoles:
+    """Which control is the full-effect (hit) end and which the no-effect end, as the
+    anchors put them: the high anchor is 0 % for inhibition and 100 % for activation."""
+
+    @pytest.mark.parametrize(
+        ("signal", "activation", "full", "none"),
+        [
+            (PosControlSignal.HIGH, False, WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL),
+            (PosControlSignal.LOW, False, WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL),
+            (PosControlSignal.HIGH, True, WellType.POSITIVE_CONTROL, WellType.NEGATIVE_CONTROL),
+            (PosControlSignal.LOW, True, WellType.NEGATIVE_CONTROL, WellType.POSITIVE_CONTROL),
+        ],
+    )
+    def test_roles_follow_the_anchors(self, signal, activation, full, none) -> None:
+        assert effect_roles(signal, activation=activation) == (full, none)
+        normalization = (
+            ReadoutNormalization.PERCENT_ACTIVATION
+            if activation
+            else ReadoutNormalization.PERCENT_INHIBITION
+        )
+        wells = [_make_well(full, "A", 1), _make_well(none, "B", 1)]
+        out = PlateNormalizer().normalize(
+            wells, {wells[0].id: 1.0, wells[1].id: 9.0}, normalization, signal
+        )
+        by_id = {v.well_id: v.normalized_value for v in out}
+        assert (by_id[wells[0].id], by_id[wells[1].id]) == (100.0, 0.0)

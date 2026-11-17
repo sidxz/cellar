@@ -17,6 +17,9 @@ from cellar.application.sar_analysis.cancel_activity_projection import (
 from cellar.application.sar_analysis.cancel_decomposition_run import (
     CancelDecompositionRunInput,
 )
+from cellar.application.sar_analysis.decomposition_assignments import (
+    FetchDecompositionAssignmentsInput,
+)
 from cellar.application.sar_analysis.decomposition_rows import (
     DecompositionRow,
     DecompositionRowSort,
@@ -45,6 +48,7 @@ from cellar.interface.dependencies._sar_analysis import (
     CancelActivityProjectionDep,
     CancelDecompositionRunDep,
     FetchActivityHeatmapDep,
+    FetchDecompositionAssignmentsDep,
     FetchDecompositionRowsDep,
     GetActivityProjectionDep,
     GetDecompositionRunDep,
@@ -218,6 +222,30 @@ async def decomposition_rows(
         rows=[_row_view(r) for r in out.rows],
         total=out.total,
         activity_reference=out.activity_reference,
+    )
+
+
+class DecompositionAssignmentsResponse(BaseModel):
+    core_smiles: str
+    labels: list[str]
+    assignments: dict[UUID, dict[str, str]]
+
+
+@router.get("/decomposition/{run_id}/assignments")
+async def decomposition_assignments(
+    run_id: UUID,
+    auth: AuthDep,
+    uc: FetchDecompositionAssignmentsDep,
+) -> DecompositionAssignmentsResponse:
+    """Every matched molecule's R-groups in one response (no page cap)."""
+    out = result_to_response(
+        await uc.execute(
+            FetchDecompositionAssignmentsInput(run_id=run_id, workspace_id=auth.workspace_id),
+            auth=auth,
+        )
+    )
+    return DecompositionAssignmentsResponse(
+        core_smiles=out.core_smiles, labels=out.labels, assignments=out.assignments
     )
 
 

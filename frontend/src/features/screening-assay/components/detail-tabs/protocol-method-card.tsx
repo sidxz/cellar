@@ -15,7 +15,7 @@ import type { Protocol } from "../../types";
 /** Past this many lines the method shows clamped, with "Show all". */
 const CLAMP_LINES = 12;
 
-/** The protocol's method, first on the Overview: how the assay is run, written by the scientist.
+/** The protocol's method, on Overview: how the assay is run, written by the scientist.
  *  A draft's method is edited freely; a published one is corrected with a reason (a changed
  *  procedure is a new version); locked and retired ones are read-only. */
 export function ProtocolMethodCard({

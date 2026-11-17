@@ -15,7 +15,7 @@ from sqlalchemy.sql import ColumnElement
 
 from cellar.infrastructure.persistence.sqlalchemy._sql import escape_like
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._activity_query import (
-    reportable_curve_value,
+    exact_curve_potency,
     to_micromolar,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._field_clauses import (
@@ -164,7 +164,7 @@ def _selectivity_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> C
 
     def potency_um(curve: Any, protocol: Any) -> ColumnElement:
         return to_micromolar(
-            reportable_curve_value(curve.fitted_value, curve.curve_class),
+            exact_curve_potency(curve),
             dose_unit=protocol.dose_unit,
             molecular_weight=mol.molecular_weight,
         )

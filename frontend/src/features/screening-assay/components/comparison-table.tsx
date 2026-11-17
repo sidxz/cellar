@@ -4,6 +4,7 @@ import { Badge } from "@/shared/components/ui/badge";
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { cn, shortId } from "@/shared/lib/utils";
 import { useMemo, useState } from "react";
+import { curvePotency } from "../lib/intercept-label";
 import {
   CURVE_CLASS_LABELS,
   CURVE_TYPE_LABELS,
@@ -26,6 +27,9 @@ interface ComparisonRow {
   curve_class: CurveClass | null;
   top: number;
   bottom: number;
+  /** The fit's points and intercepts: a value outside the tested doses reads as a bound. */
+  raw_data: readonly unknown[] | null;
+  intercept_values: readonly unknown[] | null;
 }
 
 interface ComparisonTableProps {
@@ -56,7 +60,10 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
     }
   };
 
-  const bestIC50 = Math.min(...rows.map((r) => r.fitted_value));
+  const potency = (r: ComparisonRow) => curvePotency(r);
+  const bestIC50 = Math.min(
+    ...rows.filter((r) => potency(r).kind === "scalar").map((r) => r.fitted_value),
+  );
   const bestR2 = Math.max(...rows.map((r) => r.r_squared));
 
   const hdr = (label: string, key: SortKey) => (
@@ -106,7 +113,7 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
                   row.fitted_value === bestIC50 && "text-success font-semibold",
                 )}
               >
-                {row.fitted_value.toPrecision(4)}
+                {potency(row).text}
               </td>
               <td className="px-3 py-2 font-mono">{row.hill_slope.toFixed(2)}</td>
               <td
@@ -165,6 +172,8 @@ export function buildComparisonRows(
       curve_class: (curve.curve_class as CurveClass | null) ?? null,
       top: curve.top,
       bottom: curve.bottom,
+      raw_data: curve.raw_data ?? null,
+      intercept_values: curve.intercept_values ?? null,
     });
     idx++;
   }

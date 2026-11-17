@@ -123,7 +123,7 @@ export function ProtocolLibraryView({
   };
 
   return (
-    <div className="flex flex-col gap-4 p-4 md:flex-row">
+    <div className="flex flex-col gap-3 p-3 md:flex-row">
       <FacetSidebar
         model={facetModel}
         selections={selections}

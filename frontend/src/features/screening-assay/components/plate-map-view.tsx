@@ -1,15 +1,17 @@
 "use client";
 
+import { WELL_TYPE_COLORS } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { Fragment } from "react";
 import { plateCellSizePx, plateDimensionsTuple, rowLabel } from "../lib/plate-dimensions";
 import type { PlateFormat, WellDesignation } from "../types";
 import { WELL_DESIGNATION_LABELS } from "../types";
 
+// Controls take their colour from `colors` (by effect); the rest from these classes.
 const WELL_COLORS: Record<WellDesignation, string> = {
   compound: "bg-primary",
-  positive_control: "bg-green-500",
-  negative_control: "bg-destructive",
+  positive_control: "",
+  negative_control: "",
   empty: "bg-gray-300 dark:bg-gray-700",
 };
 
@@ -21,11 +23,14 @@ interface PlateMapViewProps {
   cellSize?: number;
   /** Hide row/col labels for an even more compact thumbnail. */
   compact?: boolean;
+  /** Well-type colours, the controls by effect (`protocolWellTypeColors`); the default
+   *  convention outside a protocol. */
+  colors?: Record<string, string>;
   className?: string;
 }
 
 /** Read-only static plate grid renderer. Use for surfacing a configured
- *  control layout on the Design tab, in protocol viewers, and anywhere
+ *  control layout on the Setup tab, in protocol viewers, and anywhere
  *  else we need a non-interactive preview of a `template_map`. The
  *  editable counterpart is `PlateMapEditor`.
  */
@@ -34,6 +39,7 @@ export function PlateMapView({
   templateMap,
   cellSize,
   compact = false,
+  colors = WELL_TYPE_COLORS,
   className,
 }: PlateMapViewProps) {
   const [rows, cols] = plateDimensionsTuple(format);
@@ -112,7 +118,7 @@ export function PlateMapView({
                       key={wellKey}
                       className={cn("rounded-sm", WELL_COLORS[designation])}
                       title={`${wellKey}: ${WELL_DESIGNATION_LABELS[designation]}`}
-                      style={{ width: size, height: size }}
+                      style={{ width: size, height: size, background: colors[designation] }}
                     />
                   );
                 })}
@@ -127,7 +133,10 @@ export function PlateMapView({
           .filter((d) => counts[d] > 0 && d !== "empty")
           .map((d) => (
             <span key={d} className="flex items-center gap-1.5">
-              <span className={cn("h-2.5 w-2.5 rounded-full", WELL_COLORS[d])} />
+              <span
+                className={cn("h-2.5 w-2.5 rounded-full", WELL_COLORS[d])}
+                style={{ background: colors[d] }}
+              />
               {WELL_DESIGNATION_LABELS[d]}
               <span className="opacity-60">({counts[d]})</span>
             </span>

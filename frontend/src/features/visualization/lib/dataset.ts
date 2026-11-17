@@ -1,0 +1,108 @@
+import type { Dataset, DatasetColumn } from "../types";
+
+/** key → column per dataset, built on first lookup (cells look columns up per row). */
+const byKey = new WeakMap<DatasetColumn[], Map<string, DatasetColumn>>();
+
+export function column(ds: Dataset, key: string): DatasetColumn | undefined {
+  let map = byKey.get(ds.columns);
+  if (!map) {
+    map = new Map(ds.columns.map((c) => [c.key, c]));
+    byKey.set(ds.columns, map);
+  }
+  return map.get(key);
+}
+
+/** The value at row ``i`` as a finite number, else null (missing, NaN, text). */
+export function numberAt(ds: Dataset, key: string, i: number): number | null {
+  const v = ds.values[key]?.[i];
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+export function numericColumns(ds: Dataset): DatasetColumn[] {
+  return ds.columns.filter((c) => c.kind === "number" && !c.hidden);
+}
+
+/** Columns usable as categories (color, split, filters). User columns count once resolved. */
+export function categoryColumns(ds: Dataset): DatasetColumn[] {
+  return ds.columns.filter((c) => (c.kind === "category" || c.kind === "user") && !c.hidden);
+}
+
+/** Readout value columns (p-values included), without their siblings (qualifier, outlier,
+ * n, SD, …: the columns that carry a ``stat``) and without hidden ones. */
+export function valueColumns(ds: Dataset): DatasetColumn[] {
+  return ds.columns.filter(
+    (c) => c.provenance.readout_definition_id && !c.provenance.stat && !c.hidden,
+  );
+}
+
+/** Row ``i`` of the ``stat`` sibling of value column ``key`` (``<key>:<stat>``). */
+export function siblingAt(ds: Dataset, key: string, stat: string, i: number): unknown {
+  return ds.values[`${key}:${stat}`]?.[i];
+}
+
+/** A sample well, or a well-less summary row that names a compound. */
+export function isSampleRow(ds: Dataset, i: number): boolean {
+  const type = ds.values.well_type?.[i];
+  if (type === "sample") return true;
+  return (type === null || type === undefined) && ds.values.molecule_id?.[i] != null;
+}
+
+/** Molecule ids of the sample rows among ``rows``, deduped, in first-seen order. */
+export function uniqueCompounds(ds: Dataset, rows: Iterable<number>): string[] {
+  const seen = new Set<string>();
+  for (const i of rows) {
+    const id = ds.values.molecule_id?.[i];
+    if (typeof id === "string" && isSampleRow(ds, i)) seen.add(id);
+  }
+  return [...seen];
+}
+
+/** Each distinct molecule of the dataset → whether any of its rows carries a structure. */
+export function moleculeStructures(ds: Dataset): Map<string, boolean> {
+  const out = new Map<string, boolean>();
+  const smiles = ds.values.structure ?? [];
+  (ds.values.molecule_id ?? []).forEach((id, i) => {
+    if (typeof id !== "string") return;
+    const s = smiles[i];
+    out.set(id, out.get(id) || (typeof s === "string" && s !== ""));
+  });
+  return out;
+}
+
+/** The dataset's distinct molecule ids, sorted. */
+export const datasetMoleculeIds = (ds: Dataset): string[] =>
+  [...moleculeStructures(ds).keys()].sort();
+
+/** How many of the dataset's compounds have no structure on any of their rows. */
+export const noStructureCompounds = (ds: Dataset): number =>
+  [...moleculeStructures(ds).values()].filter((has) => !has).length;
+
+/** Replace user-id values with display names and retype those columns as categories,
+ * so no raw user id ever reaches a legend, filter or table cell. */
+export function resolveUserColumns(ds: Dataset, nameOf: (userId: string) => string): Dataset {
+  const userKeys = ds.columns.filter((c) => c.kind === "user").map((c) => c.key);
+  if (userKeys.length === 0) return ds;
+  const values = { ...ds.values };
+  for (const key of userKeys) {
+    values[key] = (ds.values[key] ?? []).map((v) => (typeof v === "string" ? nameOf(v) : v));
+  }
+  return {
+    ...ds,
+    columns: ds.columns.map((c) => (c.kind === "user" ? { ...c, kind: "category" } : c)),
+    values,
+  };
+}
+
+const WELL_TYPE_LABELS: Record<string, string> = {
+  sample: "Sample",
+  negative_control: "Negative control",
+  positive_control: "Positive control",
+  blank: "Blank",
+  reference: "Reference",
+};
+
+/** A category value as legends and cells show it: well types in words, missing as "(none)". */
+export function categoryLabel(key: string, v: unknown): string {
+  if (v === null || v === undefined || v === "") return "(none)";
+  return (key === "well_type" && WELL_TYPE_LABELS[String(v)]) || String(v);
+}

@@ -64,6 +64,12 @@ class DecompositionRowReader(Protocol):
         filter: dict[str, Any] | None = None,
     ) -> int: ...
 
+    async def fetch_assignments(
+        self, run_id: UUID, *, workspace_id: UUID
+    ) -> dict[UUID, dict[str, str]]:
+        """Every row's R-groups by molecule, unpaged (the rows' scope, nothing else read)."""
+        ...
+
     async def fetch_matched_ids(
         self,
         run_id: UUID,

@@ -11,4 +11,5 @@ export type ExclusionPayloadEntryBodySource = typeof ExclusionPayloadEntryBodySo
 export const ExclusionPayloadEntryBodySource = {
   manual: 'manual',
   auto_3sigma: 'auto_3sigma',
+  well_flag: 'well_flag',
 } as const;

@@ -27,7 +27,7 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.research_organization.stage_evaluation import _is_tested_nd
-from cellar.domain.shared.hit_criterion import InterceptKey
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 
 
 class _FakeQuery:
@@ -568,6 +568,70 @@ async def test_mean_across_runs_drops_inactive_from_aggregate():
         molecule_id=uuid.uuid4(),
     )
     assert m.value == 15.0  # mean of the healthy pair only
+
+
+_DOSES_TO_500 = [
+    {"concentration": 0.5, "response": 2},
+    {"concentration": 500.0, "response": 4},
+]
+
+
+@pytest.mark.asyncio
+async def test_latest_run_inactive_curve_reads_above_its_top_dose():
+    """Parity with the run tab: an inactive curve's potency is "> top dose" —
+    a value a hit criterion reads as censored ("IC50 < 50" is a miss)."""
+    ch = _channel(SelectionRule.LATEST_RUN)
+    candidates = [
+        _dr_candidate(
+            0.013,
+            run_date=date(2026, 5, 1),
+            curve_class="inactive",
+            intercept_values=[_iv("ec", 50, 0.013)],
+            raw_data=_DOSES_TO_500,
+        ),
+    ]
+    m = await ChannelResolver(_FakeQuery(candidates)).resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert (m.value, m.value_qualifier) == (500.0, ValueQualifier.GT)
+    assert m.source_curve_id == candidates[0].curve_id
+    ic50_below_50 = HitCriterion(readout_name="IC50", operator="lt", value=50.0)
+    assert ic50_below_50.is_met(m.value, m.value_qualifier) is False
+
+
+@pytest.mark.asyncio
+async def test_mean_across_runs_all_inactive_reads_the_bound_on_the_latest_snapshot():
+    ch = _channel(SelectionRule.MEAN_ACROSS_RUNS)
+    candidates = [
+        _dr_candidate(
+            10.0,
+            run_date=date(2026, 1, 1),
+            curve_class="inactive",
+            intercept_values=[_iv("ec", 50, 10.0)],
+            raw_data=_DOSES_TO_500,
+        ),
+        _dr_candidate(
+            20.0,
+            run_date=date(2026, 5, 1),
+            curve_class="inactive",
+            intercept_values=[_iv("ec", 50, 20.0)],
+            raw_data=_DOSES_TO_500,
+        ),
+    ]
+    m = await ChannelResolver(_FakeQuery(candidates)).resolve(
+        workspace_id=uuid.uuid4(),
+        channel=ch,
+        result_id=uuid.uuid4(),
+        molecule_id=uuid.uuid4(),
+    )
+    assert (m.value, m.value_qualifier) == (500.0, ValueQualifier.GT)
+    # No exact value was averaged, so no aggregate marker: the latest curve's own shape.
+    assert m.curve_snapshot is not None
+    assert "aggregate" not in m.curve_snapshot
+    assert m.curve_snapshot["fitted_value"] == 20.0
 
 
 @pytest.mark.asyncio

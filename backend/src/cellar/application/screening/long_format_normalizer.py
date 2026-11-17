@@ -12,9 +12,14 @@ This module contains no I/O. It does:
        - well-position canonicalization (``A01`` ↔ ``A1``)
        - per-plate format inference (96 / 384 / 1536)
 
-Well-type classification is NOT done here — the importer derives WellType
-from the protocol's configured ``control_layouts`` (PlateTemplate.template_map)
-since the file format itself can't distinguish positive from negative controls.
+Well roles: when the file carries a role column ("Control State", "Well
+Type", …) and it is mapped, each row's ``well_role`` is read from it and the
+importer writes that role. The external platform's words name the effect, not
+cellar's role: its "positive control (hit)" is the full-effect control, and in a
+file that uses it, "negative control" the no-effect one — each read as the role
+that anchors that end under the protocol's convention (``full_effect``).
+Without a mapped role column ``well_role`` stays ``None`` and the importer
+derives WellType from the protocol's ``control_layouts``.
 """
 
 from __future__ import annotations
@@ -30,7 +35,7 @@ from typing import Literal
 from returns.result import Failure, Result, Success
 
 from cellar.application.shared.parsers import ParsedTable
-from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.enums import PlateFormat, WellType
 from cellar.domain.shared.errors import DomainError, ValidationError
 
 # ---------------------------------------------------------------------------
@@ -44,11 +49,15 @@ Role = Literal[
     "batch_ref",
     "compound_ref",
     "readout",
+    "well_role",
 ]
 
 Confidence = Literal["high", "medium", "low"]
 
 ReadoutValueKind = Literal["numeric", "text"]
+
+# The note on a column the source platform calculated from the raw readout.
+CALCULATED_BY_SOURCE = "Calculated by the source — Cellar calculates its own"
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +93,8 @@ class ColumnMapping:
     batch_ref: str | None = None
     compound_ref: str | None = None
     readout_columns: tuple[ReadoutColumn, ...] = ()
+    # The file's per-well role column; when set it decides every well's role.
+    well_role: str | None = None
 
 
 @dataclass(frozen=True)
@@ -100,6 +111,10 @@ class ReadoutDefRef:
     id: uuid.UUID
     name: str
     data_type: str  # "numeric" | "text" | "dose_response" | "pick_list"
+    # The readout's normalization layers ("percent_inhibition", …).
+    normalizations: tuple[str, ...] = ()
+    # Computed by Cellar (formula / temperature window) — never imported.
+    derived: bool = False
 
 
 @dataclass(frozen=True)
@@ -160,6 +175,9 @@ class LongFormatRow:
     compound_ref: str | None
     concentration: float | None
     readouts: dict[uuid.UUID, float | str]
+    # From the mapped role column (empty cell = sample). None when no role
+    # column is mapped, or the cell holds a value we do not know.
+    well_role: WellType | None = None
 
 
 @dataclass(frozen=True)
@@ -169,6 +187,14 @@ class NormalizedTable:
     rows: tuple[LongFormatRow, ...]
     plate_formats: dict[str, PlateFormat]
     skipped_rows: int = 0
+    # Role-column values no WellType matches — the import refuses until they
+    # are fixed (never read as samples). First spelling of each, in file order.
+    unknown_well_roles: tuple[str, ...] = ()
+    # The mapped role column's header; None = roles come from the layouts.
+    well_role_column: str | None = None
+    # The platform's effect words found, with the role each was read as (first
+    # spelling of each, in file order).
+    roles_by_effect: tuple[tuple[str, WellType], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -262,10 +288,74 @@ _SYNONYMS: dict[Role, frozenset[str]] = {
             )
         ]
     ),
+    "well_role": frozenset(
+        [_norm(x) for x in ("control state", "well type", "well role", "control")]
+    ),
 }
+
+# Role-column values, compared after ``_norm``. Empty = a sample.
+_WELL_ROLE_VALUES: dict[str, WellType] = {
+    _norm(k): v
+    for k, v in (
+        ("", WellType.SAMPLE),
+        ("sample", WellType.SAMPLE),
+        ("compound", WellType.SAMPLE),
+        ("negative control", WellType.NEGATIVE_CONTROL),
+        ("positive control", WellType.POSITIVE_CONTROL),
+        ("reference", WellType.REFERENCE),
+        ("reference molecule", WellType.REFERENCE),
+        ("blank", WellType.BLANK),
+    )
+}
+# The platform's full-effect words; beside them its "negative control" is the no-effect one.
+_HIT_WORDS = frozenset(_norm(x) for x in ("positive control (hit)", "hit control"))
+_NO_EFFECT_WORD = _norm("negative control")
+
+
+def unknown_well_roles_message(header: str, values: Sequence[str]) -> str:
+    listed = ", ".join(f'"{v}"' for v in values)
+    return (
+        f'Unknown values in the "{header}" column: {listed}. Use negative control, '
+        "positive control, positive control (hit), reference or blank, or leave the cell "
+        "empty for a sample."
+    )
 
 
 _WELL_RE = re.compile(r"^[A-Z]{1,2}\d{1,2}$", re.IGNORECASE)
+_DATE_RE = re.compile(r"^\d{1,4}[-/.]\d{1,2}[-/.]\d{1,4}(?:[ T].*)?$")
+
+# Headers of a normalized-percent column, per normalization a readout applies.
+_NORMALIZED_HEADERS: dict[str, tuple[str, ...]] = {
+    n: tuple(_norm(h) for h in headers)
+    for n, headers in (
+        ("percent_inhibition", ("percent inhibition", "% inhibition")),
+        ("percent_activation", ("percent activation", "% activation")),
+        ("percent_control", ("percent control", "percent of control", "% of control")),
+        ("z_score", ("z score",)),
+    )
+}
+# Curve-fit statistics a source reports next to a dose-response readout.
+_CURVE_STATISTICS = frozenset(
+    _norm(x)
+    for x in (
+        "curve class",
+        "hill slope",
+        "r squared",
+        "r2",
+        "span",
+        "top",
+        "bottom",
+        "baseline response",
+        "maximum response",
+        "minimum response",
+        "area under the curve",
+        "auc",
+        "n",
+    )
+)
+_CURVE_STATISTIC_PREFIXES = (_norm("maximum measured"), _norm("minimum measured"))
+# Plate QC the source computed (Cellar computes its own plate QC).
+_PLATE_STATISTIC_SUFFIXES = (_norm("z'-factor"), _norm("z prime"))
 
 
 # ---------------------------------------------------------------------------
@@ -280,19 +370,26 @@ def infer_mapping(
 ) -> SuggestedMapping:
     """Suggest a role for each header, with confidence.
 
-    Inference stages (highest to lowest precedence):
+    Inference stages (highest to lowest precedence); a trailing unit in
+    parentheses is ignored when matching names ("raw AU (AU)" = "raw AU"):
       1. **Synonym dictionary** — header matches a built-in synonym for a
-         core role (well / plate_name / concentration / batch_ref).
-         Confidence: high.
+         core role (well / plate_name / concentration / batch_ref /
+         compound_ref / well_role), claimed across all headers before any
+         value guess. Confidence: high.
       2. **Readout-definition name match** — header (after normalization)
-         exactly equals the name of a protocol-defined readout def.
+         equals the name of a protocol-defined readout def.
          Confidence: high. The matching def's id is attached to the
          suggestion so the wizard can pre-bind the readout-def select.
          Only ``numeric`` and ``text`` readout defs are considered;
          ``dose_response`` and ``pick_list`` are computed/derived and
          shouldn't be column-mapped.
-      3. **Value-based fallback** — heuristics on cell values:
+      3. **Calculated by the source** — a column the source derived from a
+         raw readout Cellar normalizes or fits itself (% inhibition, IC50,
+         curve statistics, Z'-factor): no role, with ``CALCULATED_BY_SOURCE``.
+      4. **Readout synonym** ("signal", "% inhibition", …). Confidence: high.
+      5. **Value-based fallback** — heuristics on cell values:
          - >80% match ``[A-Z]{1,2}\\d{1,2}`` → ``well``.
+         - >80% dates → no role.
          - Numeric, high uniqueness, no nulls → ``readout`` (low/medium).
          - Numeric with many repeats and many nulls → ``concentration``.
          - Long string with shared prefix → ``plate_name``.
@@ -310,33 +407,39 @@ def infer_mapping(
     """
     sample_rows = list(table.rows[:sample_size])
     suggestions: list[HeaderSuggestion] = []
-    role_taken: dict[Role, bool] = {}
 
     # Build a normalized-name index for protocol-defined readouts.
     bindable_defs: dict[str, ReadoutDefRef] = {
-        _norm(d.name): d for d in readout_defs if d.data_type in ("numeric", "text")
+        _norm(d.name): d
+        for d in readout_defs
+        if d.data_type in ("numeric", "text") and not d.derived
     }
 
-    for header in table.headers:
-        norm = _norm(header)
-        # 1. Synonym match
-        role = _synonym_role(norm)
-        if role is not None:
-            allow_dup = role == "readout"
-            if allow_dup or not role_taken.get(role):
-                suggestions.append(
-                    HeaderSuggestion(
-                        header=header,
-                        role=role,
-                        confidence="high",
-                        reason="header matched synonym dictionary",
-                    )
-                )
-                role_taken[role] = True
-                continue
+    # Core-role synonyms claim their columns first, so a value guess on an
+    # earlier column ("Run Date") can never take a role a later column names
+    # outright ("Plate"). The first column per role wins.
+    core: dict[int, Role] = {}
+    for i, header in enumerate(table.headers):
+        role = _synonym_role(header)
+        if role is not None and role != "readout" and role not in core.values():
+            core[i] = role
+    role_taken: dict[Role, bool] = dict.fromkeys(core.values(), True)
 
-        # 2. Readout-definition name match
-        bound_def = bindable_defs.get(norm)
+    for i, header in enumerate(table.headers):
+        # 1. Core-role synonym match
+        if i in core:
+            suggestions.append(
+                HeaderSuggestion(
+                    header=header,
+                    role=core[i],
+                    confidence="high",
+                    reason="header matched synonym dictionary",
+                )
+            )
+            continue
+
+        # 2. Readout-definition name match, with or without a trailing unit
+        bound_def = bindable_defs.get(_norm(header)) or bindable_defs.get(_norm(_stem(header)))
         if bound_def is not None:
             suggestions.append(
                 HeaderSuggestion(
@@ -349,7 +452,29 @@ def infer_mapping(
             )
             continue
 
-        # 3. Value-based fallback
+        # 3. Calculated by the source from the raw readout — Cellar calculates its own
+        if _calculated_by_source(header, readout_defs):
+            suggestions.append(
+                HeaderSuggestion(
+                    header=header, role=None, confidence="high", reason=CALCULATED_BY_SOURCE
+                )
+            )
+            continue
+
+        # 4. Readout synonym
+        if _synonym_role(header) == "readout":
+            suggestions.append(
+                HeaderSuggestion(
+                    header=header,
+                    role="readout",
+                    confidence="high",
+                    reason="header matched synonym dictionary",
+                )
+            )
+            role_taken["readout"] = True
+            continue
+
+        # 5. Value-based fallback
         values = [(r.get(header) or "").strip() for r in sample_rows]
         guess, conf, reason = _guess_role_from_values(values, role_taken)
         suggestions.append(
@@ -361,11 +486,42 @@ def infer_mapping(
     return SuggestedMapping(suggestions=tuple(suggestions))
 
 
-def _synonym_role(norm_header: str) -> Role | None:
-    for role, syns in _SYNONYMS.items():
-        if norm_header in syns:
-            return role
+def _stem(header: str) -> str:
+    """The header without a trailing unit in parentheses: "raw AU (AU)" → "raw AU"."""
+    return re.sub(r"\s*\([^()]*\)\s*$", "", header)
+
+
+def _synonym_role(header: str) -> Role | None:
+    for key in (_norm(header), _norm(_stem(header))):
+        for role, syns in _SYNONYMS.items():
+            if key in syns:
+                return role
     return None
+
+
+def _calculated_by_source(header: str, readout_defs: Sequence[ReadoutDefRef]) -> bool:
+    """True when the column is one the source calculated from a raw readout
+    the protocol imports — Cellar calculates its own, so it defaults to Ignore."""
+    full, stem = _norm(header), _norm(_stem(header))
+    if full.endswith(_PLATE_STATISTIC_SUFFIXES):
+        return True
+    fits_curves = False
+    for d in readout_defs:
+        name = _norm(d.name)
+        if d.data_type == "dose_response":
+            fits_curves = True
+            # "IC50 (uM)", "IC50 CI (Lower) (uM)", "IC50 Fold Change"
+            if name and stem.startswith(name):
+                return True
+        elif d.derived and name and stem == name:
+            return True
+        for n in d.normalizations:
+            # "% inhibition (%)", "inhibition-50uM (%)"
+            if any(stem.startswith(h) for h in _NORMALIZED_HEADERS.get(n, ())):
+                return True
+    return fits_curves and (
+        stem in _CURVE_STATISTICS or stem.startswith(_CURVE_STATISTIC_PREFIXES)
+    )
 
 
 def _guess_role_from_values(
@@ -380,6 +536,10 @@ def _guess_role_from_values(
     well_hits = sum(1 for v in non_empty if _WELL_RE.match(v))
     if well_hits / len(non_empty) > 0.8 and not role_taken.get("well"):
         return "well", "medium", "values look like well coordinates"
+
+    # A date is never a plate name or a batch, however much it shares a prefix.
+    if sum(1 for v in non_empty if _DATE_RE.match(v)) / len(non_empty) > 0.8:
+        return None, "low", "values look like dates"
 
     numeric_hits = 0
     for v in non_empty:
@@ -431,8 +591,15 @@ def _has_shared_prefix(values: list[str], min_len: int) -> bool:
 def normalize(
     table: ParsedTable,
     mapping: ColumnMapping,
+    *,
+    full_effect: WellType = WellType.POSITIVE_CONTROL,
 ) -> Result[NormalizedTable, DomainError]:
     """Convert parsed rows + mapping to typed long-format rows.
+
+    ``full_effect`` is the control role that anchors the full-effect end under the
+    protocol's convention (``protocol_effect_roles``); the platform's effect words in
+    the role column are read as it and the other control role. The default reads them
+    literally ("positive control (hit)" as a positive control).
 
     - Well positions are canonicalized to ``WellPosition(row, column)``.
     - Plate name comes from ``mapping.plate_name`` if set; otherwise all
@@ -451,6 +618,7 @@ def normalize(
         mapping.concentration,
         mapping.batch_ref,
         mapping.compound_ref,
+        mapping.well_role,
     ):
         if col is not None and col not in table.headers:
             return Failure(ValidationError(f"Column '{col}' not found in file headers"))
@@ -462,6 +630,19 @@ def normalize(
 
     rows: list[LongFormatRow] = []
     skipped = 0
+    unknown_roles: dict[str, str] = {}  # _norm(value) -> first spelling
+    # The platform's effect words, when the role column uses them: value -> role.
+    effect_words: dict[str, WellType] = {}
+    if mapping.well_role and any(
+        _norm(raw.get(mapping.well_role) or "") in _HIT_WORDS for raw in table.iter_rows()
+    ):
+        effect_words = dict.fromkeys(_HIT_WORDS, full_effect)
+        effect_words[_NO_EFFECT_WORD] = (
+            WellType.POSITIVE_CONTROL
+            if full_effect == WellType.NEGATIVE_CONTROL
+            else WellType.NEGATIVE_CONTROL
+        )
+    by_effect: dict[str, tuple[str, WellType]] = {}  # _norm(value) -> (first spelling, role)
     for raw in table.iter_rows():
         well_str = (raw.get(mapping.well) or "").strip()
         if not well_str:
@@ -488,6 +669,16 @@ def normalize(
 
         conc = _parse_float(raw.get(mapping.concentration)) if mapping.concentration else None
 
+        well_role: WellType | None = None
+        if mapping.well_role:
+            role_cell = (raw.get(mapping.well_role) or "").strip()
+            key = _norm(role_cell)
+            well_role = effect_words.get(key) or _WELL_ROLE_VALUES.get(key)
+            if well_role is None:
+                unknown_roles.setdefault(key, role_cell)
+            elif key in effect_words:
+                by_effect.setdefault(key, (role_cell, well_role))
+
         readouts: dict[uuid.UUID, float | str] = {}
         for rc in mapping.readout_columns:
             cell = raw.get(rc.header)
@@ -511,6 +702,7 @@ def normalize(
                 compound_ref=compound_ref,
                 concentration=conc,
                 readouts=readouts,
+                well_role=well_role,
             )
         )
 
@@ -523,6 +715,9 @@ def normalize(
             rows=tuple(rows),
             plate_formats=plate_formats,
             skipped_rows=skipped,
+            unknown_well_roles=tuple(unknown_roles.values()),
+            well_role_column=mapping.well_role,
+            roles_by_effect=tuple(by_effect.values()),
         )
     )
 

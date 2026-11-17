@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 import uuid
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from typing import Any
@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.events import (
     FieldChange,
+    FlaggedPosition,
     PositionChange,
     RunApproved,
     RunCompleted,
@@ -26,11 +27,12 @@ from cellar.domain.screening_assay.events import (
     RunHitCriteriaSet,
     RunInstrumentFileImported,
     RunLocked,
+    RunOutliersFlagged,
     RunPositionsRelabelled,
     RunRejected,
     RunUnlocked,
 )
-from cellar.domain.screening_assay.holder import position_label
+from cellar.domain.screening_assay.holder import holder_position_label, position_label
 from cellar.domain.shared.entity import AggregateRoot, Entity
 from cellar.domain.shared.errors import (
     ConflictError,
@@ -62,6 +64,9 @@ _WELL_NOTE_MAX = 1000
 _CALCULATION_EDIT_STATES = {RunStatus.DRAFT, RunStatus.IN_PROGRESS}
 # Label/note edits on these statuses need a reason.
 _REASON_REQUIRED_STATES = {RunStatus.COMPLETED, RunStatus.APPROVED}
+# Outlier flags move the normalization anchors, so every % value on the plate: they
+# change while the run is worked on, and on a completed run with a reason.
+_OUTLIER_FLAG_STATES = {RunStatus.DRAFT, RunStatus.IN_PROGRESS, RunStatus.COMPLETED}
 
 
 def _clean_label(label: str | None) -> str | None:
@@ -595,10 +600,11 @@ class Run(AggregateRoot):
 
         names = batch_names or {}
         changed: list[tuple[Well, PositionValues, PositionChange]] = []
-        for well, label, _, new in checked:
+        for well, _, _, new in checked:
             fields = _field_changes(well.values, new, names)
             if fields:
-                changed.append((well, new, PositionChange(well.id, label, fields)))
+                change = PositionChange(well.id, self._audit_label(well), fields, well.plate_id)
+                changed.append((well, new, change))
         if not changed:
             return ()
 
@@ -664,6 +670,68 @@ class Run(AggregateRoot):
                 "Reloading shows their current values and discards your unsaved edits."
             )
         return checked
+
+    def check_recalculation(self) -> None:
+        """A recalculation rewrites the run's computed values, plate QC and curves: refused
+        on a locked or approved run. Changes nothing."""
+        self._guard_not_locked()
+        if self.status == RunStatus.APPROVED:
+            raise ConflictError("An approved run cannot be recalculated")
+
+    def _audit_label(self, well: Well) -> str:
+        plate = next(p for p in self.plates if p.id == well.plate_id)
+        return holder_position_label(plate.holder_kind, plate.plate_number, well.row, well.column)
+
+    def check_outlier_flags(
+        self, well_ids: Collection[uuid.UUID], *, reason: str | None = None
+    ) -> None:
+        """The checks ``flag_outliers`` makes: the run is not locked and is draft, in
+        progress or (with a reason) completed — as role edits, a flag changes every %
+        value on its plate — and names at least one of its wells. Changes nothing."""
+        self._guard_not_locked()
+        if self.status not in _OUTLIER_FLAG_STATES:
+            hint = "; send it back to draft first" if self.status == RunStatus.REJECTED else ""
+            raise ConflictError(
+                f"Outlier flags cannot change on a run that is {self.status.value}{hint}"
+            )
+        if self.status in _REASON_REQUIRED_STATES and not (reason or "").strip():
+            raise ValidationError(
+                "A reason is required to change outlier flags on a completed run"
+            )
+        if not well_ids:
+            raise ValidationError("Name at least one well")
+        on_run = {w.id for w in self.wells}
+        for well_id in well_ids:
+            if well_id not in on_run:
+                raise ValidationError(f"Position '{well_id}' is not on this run")
+
+    def flag_outliers(
+        self, well_ids: Collection[uuid.UUID], *, outlier: bool, reason: str | None = None
+    ) -> None:
+        """Record that these wells' readouts are outliers (or no longer are): an outlier
+        leaves plate QC and the normalization anchors, and keeps its own value. The flags
+        live on the readout rows; this checks the change and registers its audit event,
+        naming the positions in plate order."""
+        self.check_outlier_flags(well_ids, reason=reason)
+        named = set(well_ids)
+        order = {p.id: p.plate_number for p in self.plates}
+        wells = sorted(
+            (w for w in self.wells if w.id in named),
+            key=lambda w: (order[w.plate_id], len(w.row), w.row, w.column),
+        )
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            RunOutliersFlagged(
+                workspace_id=self.workspace_id,
+                aggregate_id=self.id,
+                aggregate_type="Run",
+                positions=tuple(
+                    FlaggedPosition(w.plate_id, w.id, self._audit_label(w)) for w in wells
+                ),
+                outlier=outlier,
+                reason=(reason or "").strip() or None,
+            )
+        )
 
     def reset_data(
         self,

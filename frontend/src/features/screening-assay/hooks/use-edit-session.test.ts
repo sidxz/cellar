@@ -61,6 +61,28 @@ describe("useEditSession", () => {
     expect(result.current.dirtyCount).toBe(1);
   });
 
+  it("toggleExclusion leaves a point of a flagged outlier well excluded", () => {
+    const curve = {
+      excluded_points: [
+        makeEntry({
+          idx: 4,
+          source: "well_flag",
+          reason: "outlier_well",
+          author_id: null,
+          concentration: 0.1,
+          response: -40,
+        }),
+      ],
+    };
+    const { result } = renderHook(() =>
+      useEditSession(curve, { authorId: AUTHOR, curveId: "curve-1" }),
+    );
+    act(() => result.current.toggleExclusion(4));
+    expect(result.current.draft.exclusions).toEqual(curve.excluded_points);
+    expect(result.current.dirtyCount).toBe(0);
+    expect(result.current.canUndo).toBe(false);
+  });
+
   it("toggleExclusion on a suggestion flips it to excluded (accept)", () => {
     const { result } = renderHook(() =>
       useEditSession(persistedCurve, { authorId: AUTHOR, curveId: "curve-1" }),

@@ -1,0 +1,197 @@
+import {
+  CHART_AXIS,
+  CHART_COLORS,
+  GROUP_PALETTE,
+  isActivation,
+  wellTypeColors,
+} from "@/shared/lib/chart-colors";
+import type { Dataset } from "../../types";
+import { categoryLabel, column } from "../dataset";
+
+export const MAX_FACETS = 6;
+export const OTHER = "Other";
+export const NONE = categoryLabel("", null);
+export const GRID = "rgba(113,113,122,0.2)";
+
+/** What every built panel returns: the figure plus the rows it could not plot. */
+export interface Figure {
+  data: Record<string, unknown>[];
+  layout: Record<string, unknown>;
+  /** Passing rows that cannot be plotted (missing value, or ≤ 0 on a log axis). */
+  skipped: number;
+  /** "38 rows lack Signal (AU)", or null when every passing row is plotted. */
+  note: string | null;
+  /** The subplots overlays draw into (scatter and box only). */
+  facets?: Facet[];
+}
+
+/** One subplot: its title, every row it holds whatever the filters, and its axis ids. */
+export interface Facet {
+  label: string;
+  rows: number[];
+  xaxis: string;
+  yaxis: string;
+}
+
+/** Most groups a bar or box panel draws (one bar or box each); the rest pool as "Other". */
+export const MAX_CATEGORIES = 500;
+const OTHER_COLOR = "#a1a1aa";
+
+const collator = new Intl.Collator(undefined, { numeric: true });
+
+/** Groups of a category column: ``labels`` in display order, ``of(i)`` the index of row
+ * ``i``'s group in them. */
+export interface Groups {
+  labels: string[];
+  of: (i: number) => number;
+}
+
+interface Tally {
+  labels: string[];
+  counts: Map<string, number>;
+  capped: Map<number, Groups>;
+}
+
+// A loaded dataset never changes, so each column is tallied (and sorted) once.
+const tallies = new WeakMap<Dataset, Map<string, Tally>>();
+
+function tally(ds: Dataset, key: string): Tally {
+  let byKey = tallies.get(ds);
+  if (!byKey) {
+    byKey = new Map();
+    tallies.set(ds, byKey);
+  }
+  let t = byKey.get(key);
+  if (!t) {
+    const counts = new Map<string, number>();
+    for (const v of ds.values[key] ?? []) {
+      const label = categoryLabel(key, v);
+      counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    const labels = [...counts.keys()].sort(
+      (a, b) => Number(a === NONE) - Number(b === NONE) || collator.compare(a, b),
+    );
+    t = { labels, counts, capped: new Map() };
+    byKey.set(key, t);
+  }
+  return t;
+}
+
+/** A category column's distinct display labels, natural order, "(none)" last. */
+export function levels(ds: Dataset, key: string): string[] {
+  return tally(ds, key).labels;
+}
+
+/** Groups of a category column: every label when there are at most ``max``, else the
+ * ``max`` most frequent (in natural order; ties go to the earlier label) and "Other"
+ * pooling the rest. Built from every row, so groups never move as filters change. */
+export function groupsOf(ds: Dataset, key: string | undefined, max: number): Groups {
+  const t = key ? tally(ds, key) : undefined;
+  if (!key || !t || t.labels.length === 0) return { labels: [""], of: () => 0 };
+  const cached = t.capped.get(max);
+  if (cached) return cached;
+  let named = t.labels;
+  if (named.length > max) {
+    // A stable sort by count keeps natural order among equal counts.
+    const count = (label: string) => t.counts.get(label) ?? 0;
+    const top = new Set([...named].sort((a, b) => count(b) - count(a)).slice(0, max));
+    named = named.filter((label) => top.has(label));
+  }
+  const index = new Map(named.map((label, k) => [label, k]));
+  const values = ds.values[key] ?? [];
+  const groups: Groups = {
+    labels: named.length < t.labels.length ? [...named, OTHER] : named,
+    of: (i) => index.get(categoryLabel(key, values[i])) ?? named.length,
+  };
+  t.capped.set(max, groups);
+  return groups;
+}
+
+/** Facets of a split: up to MAX_FACETS named, the rest pooled as "Other". */
+export const facetsOf = (ds: Dataset, key: string | undefined) => groupsOf(ds, key, MAX_FACETS);
+
+// Labels a workbench has shown, by the dataset it draws: undo can bring back a plot on
+// chemistry columns removed since, and it still reads by name.
+const seenLabels = new WeakMap<Dataset, ReadonlyMap<string, string>>();
+
+/** ``ds``, whose fields without a column take the label ``labels`` last saw for them. */
+export function withSeenLabels(ds: Dataset, labels: ReadonlyMap<string, string>): Dataset {
+  seenLabels.set(ds, labels);
+  return ds;
+}
+
+/** A field's name: its column's label, else the one it last had, else its key. */
+export const fieldLabel = (ds: Dataset, key: string): string =>
+  column(ds, key)?.label ?? seenLabels.get(ds)?.get(key) ?? key;
+
+export function axisTitle(ds: Dataset, key: string | undefined, log?: boolean): string {
+  const label = key ? fieldLabel(ds, key) : "—";
+  return log ? `${label} (log)` : label;
+}
+
+/** Well-type colours of ``ds``'s protocol, the controls by effect: its control signal, and
+ * % activation when its value columns hold % activation and no % inhibition. */
+export function wellColorsOf(ds: Dataset): Record<string, string> {
+  const layers = ds.columns.map((c) => c.provenance?.layer);
+  return wellTypeColors(ds.protocols?.[0]?.pos_control_signal, isActivation(layers));
+}
+
+/** The color of label ``k`` of a group list: well types their well-type colour (controls by
+ * effect), "(none)" neutral, "Other" a light grey, anything else its place around
+ * GROUP_PALETTE. */
+export function categoryColor(ds: Dataset, key: string, label: string, k: number): string {
+  if (label === NONE) return CHART_COLORS.neutral;
+  if (label === OTHER) return OTHER_COLOR;
+  if (key === "well_type") {
+    const type = Object.entries(wellColorsOf(ds)).find(
+      ([t]) => categoryLabel("well_type", t) === label,
+    );
+    return type?.[1] ?? CHART_COLORS.neutral;
+  }
+  return GROUP_PALETTE[k % GROUP_PALETTE.length];
+}
+
+/** Whether row ``i``'s ``key`` value is censored: its qualifier is a bound (`>`, `<`), so
+ * the true value is unknown and means, medians and boxes leave it out. */
+export function isCensored(ds: Dataset, key: string, i: number): boolean {
+  const q = ds.values[`${key}:q`]?.[i];
+  return typeof q === "string" && (q.startsWith(">") || q.startsWith("<"));
+}
+
+/** The panel note: rows lacking a value, then censored values left out. */
+export function panelNote(lack: string | null, censored: number): string | null {
+  const left = censored
+    ? `${censored.toLocaleString()} censored ${censored === 1 ? "value" : "values"} not included`
+    : null;
+  return [lack, left].filter(Boolean).join(" · ") || null;
+}
+
+/** Hairline between bars and around box points: the card surface of the theme. */
+export const edgeColor = (dark: boolean) => (dark ? "#1e293b" : "#ffffff");
+
+/** Layout keys every panel shares; ``uirevision`` per panel keeps zoom across redraws.
+ * The legend sits under the plot: the modebar takes the top-right corner on hover. */
+export function baseLayout(panelId: string): Record<string, unknown> {
+  return {
+    autosize: true,
+    uirevision: panelId,
+    paper_bgcolor: "transparent",
+    plot_bgcolor: "transparent",
+    font: { color: CHART_AXIS.tick, size: 11 },
+    margin: { l: 56, r: 12, t: 32, b: 44 },
+    legend: { orientation: "h", x: 0, xanchor: "left", y: 0, yanchor: "bottom", yref: "container" },
+  };
+}
+
+export const axis = (title: string, extra: Record<string, unknown> = {}) => ({
+  title: { text: title },
+  gridcolor: GRID,
+  zeroline: false,
+  automargin: true,
+  ...extra,
+});
+
+export function lackNote(skipped: number, what: string): string | null {
+  if (!skipped) return null;
+  return `${skipped.toLocaleString()} ${skipped === 1 ? "row lacks" : "rows lack"} ${what}`;
+}

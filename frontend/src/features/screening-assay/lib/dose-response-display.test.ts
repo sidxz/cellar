@@ -1,5 +1,6 @@
+import { buildDoseResponsePlot } from "@structflo/components/dose-response";
 import { describe, expect, it } from "vitest";
-import { generate4PLFromData } from "./dose-response-display";
+import { editablePoints, generate4PLFromData, placeExclusions } from "./dose-response-display";
 
 describe("generate4PLFromData — compact-renderer wrapper", () => {
   const PARAMS = { top: 100, bottom: 0, fitted_value: 1, hill_slope: 1 };
@@ -33,5 +34,64 @@ describe("generate4PLFromData — compact-renderer wrapper", () => {
         { x: 0, y: 5 },
       ]).x,
     ).toEqual([]);
+  });
+});
+
+describe("one point order for a curve's entries", () => {
+  // The auto-fit left the 0.1 µM point out (its well is flagged) and suggests the 1 µM point:
+  // captured set 0.01, 0.1 (flag), 1 (suggestion), 10, 100, 1000.
+  const raw = [0.01, 1, 10, 100, 1000].map((c, i) => ({ concentration: c, response: i * 20 }));
+  const flag = {
+    idx: 1,
+    source: "well_flag",
+    excluded: true,
+    reason: "outlier_well",
+    concentration: 0.1,
+    response: -40,
+  };
+  const suggestion = (idx: number) => ({
+    idx,
+    source: "auto_3sigma",
+    excluded: false,
+    reason: "auto_3sigma",
+    concentration: 1,
+    response: 20,
+  });
+  const curve = (idx: number) => ({
+    id: "c1",
+    fitted_value: 1,
+    top: 100,
+    bottom: 0,
+    hill_slope: 1,
+    raw_data: raw,
+    excluded_points: [flag, suggestion(idx)],
+  });
+
+  it.each([
+    ["its captured position", 2],
+    ["the raw_data index an earlier fit stored", 1],
+  ])("puts a suggestion stored at %s on its own point, once", (_, idx) => {
+    const { captured, exclusions } = editablePoints(curve(idx));
+
+    expect(captured.map((p) => p.concentration)).toEqual([0.01, 0.1, 1, 10, 100, 1000]);
+    expect(exclusions.map((e) => [e.source, e.idx])).toEqual([
+      ["well_flag", 1],
+      ["auto_3sigma", 2],
+    ]);
+  });
+
+  it("gives the chart's suggestion halo the index the edit session and the backend use", () => {
+    const { traces, traceIndexToCurve } = buildDoseResponsePlot([placeExclusions(curve(2))], {
+      showCI: false,
+      showMarker: false,
+      showPlateaus: false,
+      interactive: true,
+      editMode: true,
+      editCurveId: "c1",
+    });
+    const halo = traceIndexToCurve.findIndex((t) => t?.type === "suggestion");
+
+    expect(traces[halo].x).toEqual([1]);
+    expect(traceIndexToCurve[halo].capturedIdxOrder).toEqual([2]);
   });
 });

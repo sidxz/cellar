@@ -51,6 +51,7 @@ TABLE_LABELS: dict[str, tuple[str, str | None]] = {
     "collections": ("collection", "name"),
     "collection_molecules": ("collection_molecule", None),
     "saved_searches": ("saved_search", "name"),
+    "saved_visualizations": ("saved_visualization", "name"),
     "project_members": ("project_member", None),
     # --- Workspace Config ---
     "organizations": ("organization", "name"),

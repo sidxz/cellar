@@ -14,15 +14,16 @@ import { CHART_AXIS, CHART_COLORS, GROUP_PALETTE } from "@/shared/lib/chart-colo
 import { groupBy } from "@/shared/lib/group-by";
 import { Plot } from "@/shared/lib/plotly";
 import { shortId } from "@/shared/lib/utils";
-import { DoseResponseChartView } from "@structflo/components/dose-response";
 import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
+import { curvePotencyText } from "../../lib/intercept-label";
 import type { CompoundActivity, CurveClass, Protocol } from "../../types";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
 import { CurveClassBadge } from "../curve-class-badge";
 import { CurveNavigator } from "../curve-navigator";
+import { DoseResponseChartView } from "../dose-response-figure";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import { Segmented } from "../segmented";
 import { ActivityColumnsMenu, useColumnChoices } from "./activity-columns-menu";
@@ -465,7 +466,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                     <Skeleton className="h-[300px] w-full" />
                   ) : compoundCurves && compoundCurves.length > 0 ? (
                     <>
-                      <DoseResponseChartView curves={compoundCurves} plot={Plot} />
+                      <DoseResponseChartView curves={compoundCurves} />
                       <div className="rounded-lg border">
                         <table className="w-full text-sm">
                           <thead>
@@ -493,16 +494,14 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                           <tbody>
                             {compoundCurves.map((curve) => (
                               <tr key={curve.id} className="border-b last:border-0">
-                                <td className="px-3 py-2 font-mono text-xs">
-                                  {shortId(curve.run_id)}
-                                </td>
-                                <td className="px-3 py-2 text-xs text-muted-foreground">
+                                <td className="px-3 py-2 tabular-nums">{shortId(curve.run_id)}</td>
+                                <td className="px-3 py-2 text-muted-foreground">
                                   {curve.batch_number ?? shortId(curve.batch_id)}
                                 </td>
-                                <td className="px-3 py-2 font-mono">
-                                  {curve.fitted_value.toPrecision(4)} {curve.fitted_unit}
+                                <td className="px-3 py-2 tabular-nums">
+                                  {curvePotencyText(curve)}
                                 </td>
-                                <td className="px-3 py-2 font-mono">
+                                <td className="px-3 py-2 tabular-nums">
                                   {curve.r_squared.toFixed(3)}
                                 </td>
                                 <td className="px-3 py-2">
@@ -510,7 +509,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
                                     ? curveClassBadge(curve.curve_class as CurveClass)
                                     : "--"}
                                 </td>
-                                <td className="px-3 py-2 font-mono">
+                                <td className="px-3 py-2 tabular-nums">
                                   {curve.hill_slope.toFixed(2)}
                                 </td>
                               </tr>

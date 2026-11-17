@@ -12,6 +12,11 @@ from returns.result import Failure, Result, Success
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
+from cellar.application.screening._dr_point_reconstruction import with_captured_positions
+from cellar.application.screening.dose_response_enriched_reader import (
+    DoseResponseEnrichedReader,
+    MoleculeDisplayInfo,
+)
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
@@ -24,6 +29,7 @@ from cellar.domain.screening_assay.enums import (
     HillSlopeConstraint,
     ReadoutDataType,
     ReadoutNormalization,
+    WellType,
 )
 from cellar.domain.screening_assay.excluded_point_detail import (
     ExcludedPointDetail,
@@ -36,59 +42,61 @@ from cellar.domain.screening_assay.repository import DoseResponseCurveRepository
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import AuthorizationError, DomainError
 
-_MIN_POINTS = 4
+_MIN_DOSES = 4
 
 
-def _build_excluded_from_fitter(
-    fitted: FittedCurveResult,
-) -> list[ExcludedPointDetail] | list[dict]:
+def _build_excluded_from_fitter(fitted: FittedCurveResult) -> list[ExcludedPointDetail]:
     """Translate a ``FittedCurveResult`` into the curve's ``excluded_points``.
 
-    For the initial-fit path (auto-fit on run import) the fitter's input list
-    has no pre-excluded points, so ``fitted.excluded_points`` is always empty.
-    Any ``fitted.outlier_suggestions`` become ``ExcludedPointDetail`` entries
-    with ``source=AUTO_3SIGMA`` and ``excluded=False`` — the FE renders them
-    as yellow-halo "suggested for exclusion" markers; chemists accept or
-    reject in edit mode.
-
-    Returns ``[]`` when neither pre-excluded points nor suggestions exist.
+    The points the fitter was told to leave out — points of wells flagged as outliers
+    on the run — become excluded entries (``source=WELL_FLAG``). ``outlier_suggestions``
+    become ``AUTO_3SIGMA`` entries with ``excluded=False`` — the FE renders them as
+    yellow-halo "suggested for exclusion" markers; chemists accept or reject in edit mode.
+    Every entry's idx is its point's position in the captured set (``captured_set``), the
+    order the editor and a refit read indices in.
     """
-    if not fitted.outlier_suggestions:
-        # Preserve the legacy dict-shape path for the (currently impossible)
-        # case where the fitter wrote any pre-excluded entries — the repo
-        # tolerates either shape.
-        return list(fitted.excluded_points or [])
-
     now = datetime.now(UTC)
-    out: list[ExcludedPointDetail] = []
-    for s in fitted.outlier_suggestions:
-        out.append(
-            ExcludedPointDetail(
-                idx=s.idx,
-                source=ExclusionSource.AUTO_3SIGMA,
-                excluded=False,  # SUGGESTION, not an exclusion
-                reason=ExclusionReason.AUTO_3SIGMA,
-                author_id=None,  # the fitter wrote this, no human author
-                ts=now,
-                concentration=s.concentration,
-                response=s.response,
-            )
+    entries = [
+        ExcludedPointDetail(
+            idx=None,
+            source=ExclusionSource.WELL_FLAG,
+            excluded=True,
+            reason=ExclusionReason.OUTLIER_WELL,
+            author_id=None,  # the run's well flag excluded it, not an edit of the curve
+            ts=now,
+            concentration=p["concentration"],
+            response=p["response"],
         )
-    return out
+        for p in fitted.excluded_points
+    ] + [
+        ExcludedPointDetail(
+            idx=None,
+            source=ExclusionSource.AUTO_3SIGMA,
+            excluded=False,  # SUGGESTION, not an exclusion
+            reason=ExclusionReason.AUTO_3SIGMA,
+            author_id=None,  # the fitter wrote this, no human author
+            ts=now,
+            concentration=s.concentration,
+            response=s.response,
+        )
+        for s in fitted.outlier_suggestions
+    ]
+    return with_captured_positions(fitted.raw_data, entries)
 
 
 @dataclass(frozen=True)
 class FitRunResult:
     """Outcome of fitting all dose-response curves for one run.
 
-    ``warnings`` carries one entry per skipped fit — typically a fitter
-    Failure that would otherwise have been silently swallowed. Each entry
-    names the molecule/batch and the underlying error so the user can see
-    which compounds didn't get curves.
+    ``warnings`` carries one entry per failed fit — a fitter Failure that would
+    otherwise have been silently swallowed — naming the compound by registration
+    number (and synonym) and the underlying error. ``notes`` are neutral facts: how
+    many compounds were tested at too few doses for a curve.
     """
 
     curves: list[DoseResponseCurve]
     warnings: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -199,10 +207,12 @@ class FitDoseResponseCurves:
         uow: UnitOfWork,
         curve_repo: DoseResponseCurveRepository,
         curve_fitter: CurveFittingService,
+        molecules: DoseResponseEnrichedReader,
     ) -> None:
         self._uow = uow
         self._curve_repo = curve_repo
         self._curve_fitter = curve_fitter
+        self._molecules = molecules
 
     async def fit_for_run(
         self,
@@ -270,11 +280,10 @@ class FitDoseResponseCurves:
         well_map = {w.id: w for w in run.wells}
         rd_by_name = {rd.name: rd for rd in protocol.readout_definitions}
 
-        # Idempotent: remove previous auto-fitted curves
-        await self._curve_repo.delete_by_run(run.workspace_id, run.id)
-
         all_curves: list[DoseResponseCurve] = []
         warnings: list[str] = []
+        failed: list[tuple[uuid.UUID, str, DomainError]] = []  # (molecule, readout, error)
+        too_few_doses: set[uuid.UUID] = set()
 
         for dr_def in dr_defs:
             base_config = dr_def.dose_response_config
@@ -318,6 +327,7 @@ class FitDoseResponseCurves:
                 defaultdict(list)
             )
 
+            on_wells = False  # whether any of the layer's rows sits on a well of this run
             for rd in readout_data:
                 if rd.readout_definition_id != y_rd.id:
                     continue
@@ -327,34 +337,48 @@ class FitDoseResponseCurves:
                 # Calculated readouts are filtered by is_computed alone (no formula).
                 if target_formula is not None and rd.normalization_applied != target_formula:
                     continue
-                if rd.value is None or rd.well_id is None:
+                well = well_map.get(rd.well_id) if rd.well_id is not None else None
+                if well is None:
                     continue
-                well = well_map.get(rd.well_id)
-                if well is None or well.dose is None:
+                on_wells = True
+                # A curve belongs to a compound and reads its sample wells: control,
+                # reference and blank wells carry normalized values (even when they
+                # name a compound) but are plate QC, never fitted.
+                if rd.value is None or rd.molecule_id is None:
+                    continue
+                if well.dose is None or well.well_type != WellType.SAMPLE:
                     continue
                 key = (rd.molecule_id, rd.batch_id)
                 groups[key].append(
                     ConcentrationResponsePoint(
                         concentration=well.dose,
                         response=rd.value.value,
+                        # A well flagged as an outlier sits out of the fit, recorded.
+                        is_excluded=rd.is_outlier,
                     )
                 )
 
+            # Without a row on this run's wells (a summary import, rows of wells the run
+            # no longer has) a refit cannot rebuild the readout's curves: they stay.
+            if not on_wells:
+                continue
+            await self._curve_repo.delete_by_run(
+                run.workspace_id, run.id, readout_definition_id=dr_def.id
+            )
+
             for (molecule_id, batch_id), points in groups.items():
-                if len(points) < _MIN_POINTS:
-                    warnings.append(
-                        f"Molecule {molecule_id} batch {batch_id} on '{dr_def.name}': "
-                        f"only {len(points)} dose point(s) — need at least {_MIN_POINTS}."
-                    )
+                doses = {
+                    p.concentration for p in points if p.concentration > 0 and not p.is_excluded
+                }
+                if len(doses) < _MIN_DOSES:
+                    too_few_doses.add(molecule_id)  # a single-dose screen: no curve, no failure
                     continue
 
+                # Dose order: the captured set's order, so raw_data positions match it.
+                points.sort(key=lambda p: p.concentration)
                 fit_result = self._curve_fitter.fit(points, config)
                 if isinstance(fit_result, Failure):
-                    err = fit_result.failure()
-                    warnings.append(
-                        f"Molecule {molecule_id} batch {batch_id} on "
-                        f"'{dr_def.name}': fit failed — {err}"
-                    )
+                    failed.append((molecule_id, dr_def.name, fit_result.failure()))
                     continue
 
                 fitted = fit_result.unwrap()
@@ -395,4 +419,29 @@ class FitDoseResponseCurves:
                 await self._curve_repo.save(curve)
                 all_curves.append(curve)
 
-        return Success(FitRunResult(curves=all_curves, warnings=warnings))
+        if failed:
+            info = await self._molecules.resolve_molecules(
+                run.workspace_id, list({m for m, _, _ in failed})
+            )
+            for molecule_id, readout, err in failed:
+                warnings.append(
+                    f"{_compound(info.get(molecule_id))} on '{readout}': fit failed — {err}"
+                )
+        notes: list[str] = []
+        if n := len(too_few_doses):
+            notes.append(
+                f"{n} compound{'' if n == 1 else 's'} tested at fewer than {_MIN_DOSES} doses"
+                " — no curve"
+            )
+        return Success(FitRunResult(curves=all_curves, warnings=warnings, notes=notes))
+
+
+def _compound(info: MoleculeDisplayInfo | None) -> str:
+    """A compound as a chemist names it: registration number, then its first synonym."""
+    if info is None:
+        return "An unknown compound"
+    return (
+        f"{info.registration_number} ({info.synonyms[0]})"
+        if info.synonyms
+        else info.registration_number
+    )

@@ -57,7 +57,6 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration._structu
     _scaffold_clause,
     _similarity_clause,
     _structure_clause,
-    _substructure_clause,
 )
 
 __all__ = [
@@ -89,7 +88,6 @@ __all__ = [
     "_selectivity_clause",
     "_similarity_clause",
     "_structure_clause",
-    "_substructure_clause",
     "_tag_clause",
     "_text_clause",
     # Public API

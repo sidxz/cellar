@@ -16,8 +16,8 @@ Specifically:
 - ``_auto_create_missing_batches`` — opt-in auto-create placeholder
   batches for unmatched batch_refs whose compound is known. Mutates
   ``batch_index`` in place and returns the creation count.
-- ``_summarize_plates`` — per-plate well/sample/blank counts for the
-  preview panel.
+- ``_summarize_plates`` — per-plate well counts by role for the preview
+  panel.
 - ``_to_ambiguous_dto`` — resolver internal → wire DTO shape.
 """
 
@@ -25,22 +25,29 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from typing import TYPE_CHECKING
 
 from cellar.application.auth import AuthContext
 from cellar.application.screening.compound_ref_resolver import (
     AmbiguousCompound,
     BatchSummary,
     CompoundCandidate,
+    qualified_lot_ref,
 )
+from cellar.application.screening.import_plan import _row_role, file_roles_phrase
 from cellar.application.screening.long_format_normalizer import (
     ColumnMapping,
     LongFormatRow,
+    NormalizedTable,
     ReadoutColumn,
     SuggestedMapping,
 )
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.repository import BatchRepository
-from cellar.domain.shared.enums import PlateFormat
+from cellar.domain.shared.enums import PlateFormat, WellType
+
+if TYPE_CHECKING:
+    from cellar.application.screening.import_run_file_validator import LayoutsByFormat
 
 
 def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
@@ -60,6 +67,7 @@ def _build_guess_mapping(suggested: SuggestedMapping) -> ColumnMapping | None:
         concentration=suggested.first("concentration"),
         batch_ref=suggested.first("batch_ref"),
         compound_ref=suggested.first("compound_ref"),
+        well_role=suggested.first("well_role"),
         readout_columns=tuple(
             ReadoutColumn(header=s.header, readout_definition_id=uuid.uuid4()) for s in readouts
         ),
@@ -73,6 +81,9 @@ async def _build_batch_lookup(
 ) -> dict[str, tuple[uuid.UUID, uuid.UUID]]:
     """Resolve every distinct ``batch_ref`` to ``(batch_id, molecule_id)``.
 
+    A bare lot number next to a compound ref is looked up both as itself and
+    as ``"<compound ref>-<lot>"`` (``qualified_lot_ref``), keyed each way.
+
     Lookup order per ref:
       1. canonical batch_number (find_by_batch_number)
       2. external alias (find_by_external_identifier)
@@ -83,12 +94,13 @@ async def _build_batch_lookup(
     out: dict[str, tuple[uuid.UUID, uuid.UUID]] = {}
     seen: set[str] = set()
     for r in rows:
-        if not r.batch_ref or r.batch_ref in seen:
-            continue
-        seen.add(r.batch_ref)
-        batch = await resolve_batch_ref(batch_repo, workspace_id, r.batch_ref)
-        if batch is not None:
-            out[r.batch_ref] = (batch.id, batch.molecule_id)
+        for ref in (r.batch_ref, qualified_lot_ref(r.batch_ref, r.compound_ref)):
+            if not ref or ref in seen:
+                continue
+            seen.add(ref)
+            batch = await resolve_batch_ref(batch_repo, workspace_id, ref)
+            if batch is not None:
+                out[ref] = (batch.id, batch.molecule_id)
     return out
 
 
@@ -233,29 +245,47 @@ def _to_ambiguous_dto(amb: AmbiguousCompound):
 
 
 def _summarize_plates(
-    rows: Iterable[LongFormatRow],
-    plate_formats: dict[str, PlateFormat],
+    normalized: NormalizedTable,
+    layouts: LayoutsByFormat,
 ):
-    """Per-plate well/sample/blank counts for the preview panel.
+    """Per-plate well counts by role, and where the roles come from.
 
-    Returns a tuple of ``PlatePreview`` — imported lazily to keep DTO
+    Roles as the import writes them (file role column, else the run's own
+    layout, else the protocol default); a well nothing classifies counts as a
+    blank. Returns a tuple of ``PlatePreview`` — imported lazily to keep DTO
     definitions in one place.
     """
     from cellar.application.screening.import_run_file_dtos import PlatePreview
 
-    by_plate: dict[str, list[LongFormatRow]] = {}
-    for r in rows:
-        by_plate.setdefault(r.plate_name, []).append(r)
+    by_plate: dict[str, list[WellType]] = {}
+    for r in normalized.rows:
+        plate_layouts = _plate_layouts(normalized, layouts, r.plate_name)
+        role = _row_role(r, plate_layouts[0].roles if plate_layouts else None)
+        by_plate.setdefault(r.plate_name, []).append(role or WellType.BLANK)
 
     out: list[PlatePreview] = []
-    for plate, plate_rows in sorted(by_plate.items()):
+    for plate, roles in sorted(by_plate.items()):
+        plate_layouts = _plate_layouts(normalized, layouts, plate)
+        if normalized.well_role_column is not None:
+            roles_from: str | None = file_roles_phrase(normalized.well_role_column)
+        else:
+            roles_from = plate_layouts[0].phrase if plate_layouts else None
         out.append(
             PlatePreview(
                 plate_name=plate,
-                plate_format=plate_formats.get(plate, PlateFormat.F96).value,
-                well_count=len(plate_rows),
-                sample_count=sum(1 for r in plate_rows if r.batch_ref),
-                blank_count=sum(1 for r in plate_rows if not r.batch_ref),
+                plate_format=normalized.plate_formats.get(plate, PlateFormat.F96).value,
+                well_count=len(roles),
+                sample_count=roles.count(WellType.SAMPLE),
+                blank_count=roles.count(WellType.BLANK),
+                positive_count=roles.count(WellType.POSITIVE_CONTROL),
+                negative_count=roles.count(WellType.NEGATIVE_CONTROL),
+                reference_count=roles.count(WellType.REFERENCE),
+                roles_from=roles_from,
             )
         )
     return tuple(out)
+
+
+def _plate_layouts(normalized: NormalizedTable, layouts: LayoutsByFormat, plate: str):
+    fmt = normalized.plate_formats.get(plate)
+    return layouts.get(fmt, ()) if fmt is not None else ()

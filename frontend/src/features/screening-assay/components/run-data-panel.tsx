@@ -1,6 +1,7 @@
 "use client";
 
 import { AttachmentList, FileUploadZone } from "@/features/attachment";
+import { DetailTabsContent, DetailTabsList } from "@/shared/components/detail-tabs";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import {
@@ -9,28 +10,38 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { useHashTab } from "@/shared/hooks/use-hash-tab";
 import { shortId } from "@/shared/lib/utils";
-import { Grid3x3, Paperclip, Pencil, Upload } from "lucide-react";
-import { useState } from "react";
+import {
+  AlertTriangle,
+  ChevronDown,
+  FileSpreadsheet,
+  Grid3x3,
+  ListChecks,
+  Microscope,
+  Pencil,
+  Upload,
+} from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { usePlateMap } from "../hooks/use-plate-setup";
+import { useProtocol } from "../hooks/use-protocols";
 import { instrumentFileRefusal } from "../lib/instrument-labelling";
-import { readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
-import type { PlateData, PlateFormat, Run } from "../types";
+import type { PlateColorBy } from "../lib/plate-map-values";
+import { classifyZPrime, readPerPlateQc, worstZPrime } from "../lib/qc-metrics";
+import type { Run } from "../types";
 import { EditQcMetricsDialog } from "./edit-qc-metrics-dialog";
 import { GridImportDialog } from "./grid-import-dialog";
 import { InstrumentImportWizard } from "./instrument-import-wizard";
-import { PlateHeatmap } from "./plate-heatmap";
-import { PlateMapViewer } from "./plate-map-viewer";
 import { ReadoutDataTable } from "./readout-data-table";
 import { RunCurvesPanel } from "./run-curves-panel";
+import { RunDataSummary } from "./run-data-summary";
+import { RunDetailsPanel } from "./run-details-panel";
 import { RunDoseResponseResults } from "./run-dr-results";
-import { RunHeatmapPanel } from "./run-heatmap-panel";
 import { RunImportWizard } from "./run-import-wizard";
-import { RunPlateLink } from "./run-plate-link";
+import { RunPlatesPanel } from "./run-plates-panel";
 import { SummaryImportWizard } from "./summary-import-wizard";
 import { ZPrimeBadge } from "./z-prime-badge";
 
@@ -51,8 +62,11 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
   const plateIds = Object.keys(perPlate);
   const worstZp = worstZPrime(qcMetrics);
 
-  // Anything else on qc_metrics that isn't the per-plate z_prime block.
-  const genericEntries = Object.entries(qcMetrics).filter(([k]) => k !== "z_prime");
+  // Anything else on qc_metrics that isn't a per-plate block (z_prime here; plates in
+  // the Data summary).
+  const genericEntries = Object.entries(qcMetrics).filter(
+    ([k]) => k !== "z_prime" && k !== "plates",
+  );
 
   return (
     <div className="space-y-4">
@@ -93,7 +107,7 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
                   <tr key={pid} className="border-b last:border-b-0">
                     <td className="px-3 py-2 text-xs text-muted-foreground">
                       {i + 1}
-                      <span className="ml-2 font-mono text-[10px]">{shortId(pid)}…</span>
+                      <span className="ml-2 tabular-nums text-xs">{shortId(pid)}…</span>
                     </td>
                     <td className="px-3 py-2 text-right tabular-nums">
                       {typeof q.z_prime === "number" ? q.z_prime.toFixed(3) : "—"}
@@ -157,221 +171,262 @@ const HOVERABLE_WHEN_DISABLED = "data-[disabled]:pointer-events-auto";
 
 interface RunDataPanelProps {
   run: Run;
+  resultActions?: ReactNode;
 }
 
-export function RunDataPanel({ run }: RunDataPanelProps) {
-  const { data: curves } = useDoseResponseByRun(run.id);
-  const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
+function resultViewFromHash(hash: string): string | undefined {
+  if (hash === "readout") return "readout";
+  if (hash === "dose-response" || hash === "curves") return hash;
+}
 
+function plateViewFromHash(hash: string): PlateColorBy | undefined {
+  if (hash === "plates" || hash === "heat-map") return "response";
+  if (hash === "plate-map") return "compound";
+  if (hash === "plate-concentration") return "concentration";
+  if (hash === "plate-well-type") return "well-type";
+}
+
+function sectionFromHash(hash: string): string {
+  if (plateViewFromHash(hash)) return "plates";
+  if (hash === "quality" || hash === "qc") return "quality";
+  if (hash === "details" || hash === "files") return hash;
+  return "results";
+}
+
+export function RunDataPanel({ run, resultActions }: RunDataPanelProps) {
+  const { data: curves, isLoading: curvesLoading } = useDoseResponseByRun(run.id);
+  const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
+  const { data: protocol, isLoading: protocolLoading } = useProtocol(run.protocol_id);
+  const canEdit = useCanEdit();
   const [editQcOpen, setEditQcOpen] = useState(false);
   const [runImportWizardOpen, setRunImportWizardOpen] = useState(false);
   const [summaryWizardOpen, setSummaryWizardOpen] = useState(false);
   const [gridImportOpen, setGridImportOpen] = useState(false);
   const [instrumentWizardOpen, setInstrumentWizardOpen] = useState(false);
 
-  const plates = plateMap?.plates ?? [];
-  const doseUnit = plateMap?.dose_unit ?? "uM";
-  const hasPlateMap = plates.length > 0 && plates.some((p) => p.wells.length > 0);
-  const canEdit = useCanEdit();
-
-  // A holder that is not a plate has no plate geometry: the plate-shaped tabs are
-  // hidden and the plate-shaped imports refused.
-  const notPlate = plates.some((p) => p.holder_kind !== "plate");
+  const notPlate = plateMap?.plates.some((p) => p.holder_kind !== "plate") ?? false;
   const instrumentRefusal = instrumentFileRefusal(run);
   const hasCurves = !!plateMap?.has_measured_curves;
+  const hasDoseResponse =
+    !!curves?.length ||
+    !!protocol?.readout_definitions.some(
+      (d) => d.data_type === "dose_response" || d.dose_response_config,
+    );
+  const defaultResult = hasDoseResponse ? "dose-response" : hasCurves ? "curves" : "readout";
 
-  const [hashTab, setActiveTab] = useHashTab("readout");
-  const hiddenTabs = new Set<string>(notPlate ? ["plate-map", "heat-map"] : []);
-  if (!hasCurves) hiddenTabs.add("curves");
-  // Which tabs exist is known only once the plate map has loaded; until then keep the
-  // hash's tab rather than falling back, so a link to #curves still opens Curves.
-  const activeTab = !plateMapLoading && hiddenTabs.has(hashTab) ? "readout" : hashTab;
+  // Keep existing readout/plate-map/heat-map/curves/qc links working.
+  const [hashTab, setHashTab] = useHashTab("results");
+  const [resultView, setResultView] = useState<string | null>(
+    () => resultViewFromHash(hashTab) ?? null,
+  );
+  const [plateView, setPlateView] = useState<PlateColorBy>(
+    () => plateViewFromHash(hashTab) ?? "response",
+  );
 
-  // Plate header (number + physical-plate link) above each plate map.
-  const renderPlate = (p: PlateData) => (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className="font-medium">Plate {p.plate_number}</span>
-        <RunPlateLink runId={run.id} plate={p} readOnly={run.is_locked || !canEdit} />
-      </div>
-      <PlateMapViewer plate={p} doseUnit={doseUnit} />
-    </div>
+  useEffect(() => {
+    const result = resultViewFromHash(hashTab);
+    const plate = plateViewFromHash(hashTab);
+    if (result) setResultView(result);
+    if (plate) setPlateView(plate);
+  }, [hashTab]);
+
+  const requestedSection = sectionFromHash(hashTab);
+  const activeSection = notPlate && requestedSection === "plates" ? "results" : requestedSection;
+  const requestedResult = resultViewFromHash(hashTab) ?? resultView ?? defaultResult;
+  const resultsLoading =
+    !resultViewFromHash(hashTab) &&
+    resultView === null &&
+    (curvesLoading || protocolLoading || plateMapLoading);
+  const showTraces = hasCurves || (plateMapLoading && requestedResult === "curves");
+  const activeResult =
+    (requestedResult === "curves" && !showTraces) ||
+    (requestedResult === "dose-response" && !hasDoseResponse)
+      ? defaultResult
+      : requestedResult;
+  const activePlateView = plateViewFromHash(hashTab) ?? plateView;
+  const zPrime = worstZPrime(run.qc_metrics);
+
+  const openResultView = (view: string) => {
+    setResultView(view);
+    setHashTab(view === defaultResult ? "results" : view);
+  };
+  const openPlateView = (view: PlateColorBy) => {
+    setPlateView(view);
+    setHashTab(
+      view === "compound"
+        ? "plate-map"
+        : view === "concentration"
+          ? "plate-concentration"
+          : view === "well-type"
+            ? "plate-well-type"
+            : "plates",
+    );
+  };
+  const openSection = (section: string) => {
+    if (section === "results" && resultsLoading) setHashTab("results");
+    else if (section === "results") openResultView(activeResult);
+    else if (section === "plates") openPlateView(activePlateView);
+    else setHashTab(section);
+  };
+
+  const importMenu = canEdit && (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="outline" disabled={run.is_locked}>
+          <Upload className="size-4" />
+          Import
+          <ChevronDown className="size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem
+          disabled={notPlate}
+          title={notPlate ? NOT_A_PLATE : undefined}
+          className={HOVERABLE_WHEN_DISABLED}
+          onClick={() => setRunImportWizardOpen(true)}
+        >
+          <FileSpreadsheet className="size-4" />
+          Import Run File (plate/well)
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setSummaryWizardOpen(true)}>
+          <ListChecks className="size-4" />
+          Import Summary Results (compound + endpoints)
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={instrumentRefusal !== null}
+          title={instrumentRefusal ?? undefined}
+          className={HOVERABLE_WHEN_DISABLED}
+          onClick={() => setInstrumentWizardOpen(true)}
+        >
+          <Microscope className="size-4" />
+          Import Instrument File
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          disabled={notPlate}
+          title={notPlate ? NOT_A_PLATE : undefined}
+          className={HOVERABLE_WHEN_DISABLED}
+          onClick={() => setGridImportOpen(true)}
+        >
+          <Grid3x3 className="size-4" />
+          Import Grid
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 
   return (
     <>
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="readout">Readout Data</TabsTrigger>
-          {!notPlate && <TabsTrigger value="plate-map">Plate Map</TabsTrigger>}
-          {!notPlate && <TabsTrigger value="heat-map">Heat Map</TabsTrigger>}
-          {hasCurves && <TabsTrigger value="curves">Traces</TabsTrigger>}
-          <TabsTrigger value="dose-response">Dose-Response</TabsTrigger>
-          <TabsTrigger value="qc">QC Metrics</TabsTrigger>
-          <TabsTrigger value="files">
-            <Paperclip className="mr-1.5 size-4" />
-            Files
-          </TabsTrigger>
-        </TabsList>
+      {zPrime !== null && classifyZPrime(zPrime) !== "excellent" && (
+        <output className="flex flex-wrap items-center gap-2 rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span>QC needs review. Worst plate Z′ is {zPrime.toFixed(2)}.</span>
+          <button
+            type="button"
+            className="font-medium underline underline-offset-4"
+            onClick={() => openSection("quality")}
+          >
+            Review quality
+          </button>
+        </output>
+      )}
+      <Tabs value={activeSection} onValueChange={openSection} className="gap-3">
+        <DetailTabsList aria-label="Run sections">
+          <TabsTrigger value="results">Results</TabsTrigger>
+          {!notPlate && <TabsTrigger value="plates">Plates</TabsTrigger>}
+          <TabsTrigger value="quality">Quality</TabsTrigger>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="files">Files</TabsTrigger>
+        </DetailTabsList>
 
-        {/* Readout Data */}
-        <TabsContent value="readout">
-          <div className="mt-3 space-y-3">
-            <ReadoutDataTable
-              runId={run.id}
-              protocolId={run.protocol_id}
-              toolbarActions={
-                <>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button size="sm" disabled={run.is_locked}>
-                        <Upload className="mr-2 h-4 w-4" /> Import
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        disabled={notPlate}
-                        title={notPlate ? NOT_A_PLATE : undefined}
-                        className={HOVERABLE_WHEN_DISABLED}
-                        onClick={() => setRunImportWizardOpen(true)}
-                      >
-                        Import Run File (plate/well)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setSummaryWizardOpen(true)}>
-                        Import Summary Results (compound + endpoints)
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        disabled={instrumentRefusal !== null}
-                        title={instrumentRefusal ?? undefined}
-                        className={HOVERABLE_WHEN_DISABLED}
-                        onClick={() => setInstrumentWizardOpen(true)}
-                      >
-                        Import Instrument File
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  {/* A disabled button ignores the pointer; the wrapper carries the title. */}
-                  <span title={notPlate ? NOT_A_PLATE : undefined}>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setGridImportOpen(true)}
-                      disabled={run.is_locked || notPlate}
-                    >
-                      <Grid3x3 className="mr-2 h-4 w-4" /> Import Grid
-                    </Button>
-                  </span>
-                </>
-              }
-            />
-          </div>
-        </TabsContent>
+        <DetailTabsContent value="results" activeValue={activeSection}>
+          {resultsLoading ? (
+            <p className="py-12 text-center text-sm text-muted-foreground">Loading results…</p>
+          ) : (
+            <Tabs value={activeResult} onValueChange={openResultView} className="gap-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <TabsList aria-label="Result view">
+                  {hasDoseResponse && (
+                    <TabsTrigger value="dose-response">Dose-response</TabsTrigger>
+                  )}
+                  {showTraces && <TabsTrigger value="curves">Traces</TabsTrigger>}
+                  <TabsTrigger value="readout">Readouts</TabsTrigger>
+                </TabsList>
+                <div className="flex flex-wrap items-center gap-2">
+                  {resultActions}
+                  {importMenu}
+                </div>
+              </div>
+              <DetailTabsContent value="readout" activeValue={activeResult}>
+                <ReadoutDataTable runId={run.id} protocolId={run.protocol_id} />
+              </DetailTabsContent>
+              {hasDoseResponse && (
+                <DetailTabsContent value="dose-response" activeValue={activeResult}>
+                  <RunDoseResponseResults run={run} curves={curves ?? []} isLoading={!curves} />
+                </DetailTabsContent>
+              )}
+              {showTraces && (
+                <DetailTabsContent value="curves" activeValue={activeResult}>
+                  {hasCurves ? (
+                    <RunCurvesPanel runId={run.id} run={run} />
+                  ) : (
+                    <p className="py-12 text-center text-sm text-muted-foreground">
+                      Loading traces…
+                    </p>
+                  )}
+                </DetailTabsContent>
+              )}
+            </Tabs>
+          )}
+        </DetailTabsContent>
 
-        {/* Plate Map — pure viewer. Ingest lives on the Readout Data tab. */}
         {!notPlate && (
-          <TabsContent value="plate-map">
-            <div className="mt-3 space-y-3">
-              {hasPlateMap ? (
-                plates.length > 1 ? (
-                  <Tabs defaultValue={plates[0].plate_id}>
-                    <TabsList>
-                      {plates.map((p) => (
-                        <TabsTrigger key={p.plate_id} value={p.plate_id}>
-                          Plate {p.plate_number}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                    {plates.map((p) => (
-                      <TabsContent key={p.plate_id} value={p.plate_id}>
-                        <div className="mt-3">{renderPlate(p)}</div>
-                      </TabsContent>
-                    ))}
-                  </Tabs>
-                ) : (
-                  renderPlate(plates[0])
-                )
-              ) : run.plate_format ? (
-                <div className="space-y-3">
-                  <PlateHeatmap format={run.plate_format as PlateFormat} />
-                  {!run.is_locked && (
-                    <p className="text-center text-sm text-muted-foreground">
-                      No data imported yet.{" "}
-                      <button
-                        type="button"
-                        className="text-primary underline-offset-4 hover:underline"
-                        onClick={() => setActiveTab("readout")}
-                      >
-                        Import on the Readout Data tab
-                      </button>
-                      .
-                    </p>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2 py-8">
-                  <p className="text-sm text-muted-foreground">
-                    No plate map has been configured for this run.
-                  </p>
-                  {!run.is_locked && (
-                    <p className="text-sm text-muted-foreground">
-                      <button
-                        type="button"
-                        className="text-primary underline-offset-4 hover:underline"
-                        onClick={() => setActiveTab("readout")}
-                      >
-                        Import on the Readout Data tab
-                      </button>{" "}
-                      to populate it.
-                    </p>
-                  )}
-                </div>
+          <DetailTabsContent value="plates" activeValue={activeSection}>
+            <RunPlatesPanel
+              run={run}
+              view={activePlateView}
+              onViewChange={openPlateView}
+              onOpenResults={() => openResultView("readout")}
+            />
+          </DetailTabsContent>
+        )}
+
+        <DetailTabsContent value="quality" activeValue={activeSection}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-base font-semibold">Run quality</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Plate controls and assay quality compared with this protocol’s runs.
+                </p>
+              </div>
+              {canEdit && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setEditQcOpen(true)}
+                  disabled={run.is_locked}
+                >
+                  <Pencil className="size-4" /> Edit Metrics
+                </Button>
               )}
             </div>
-          </TabsContent>
-        )}
-
-        {/* Heat Map */}
-        {!notPlate && (
-          <TabsContent value="heat-map">
-            <RunHeatmapPanel run={run} />
-          </TabsContent>
-        )}
-
-        {/* Curves */}
-        {hasCurves && (
-          <TabsContent value="curves">
-            <RunCurvesPanel runId={run.id} run={run} />
-          </TabsContent>
-        )}
-
-        {/* Dose-Response */}
-        <TabsContent value="dose-response">
-          <div className="mt-3 space-y-3">
-            <RunDoseResponseResults run={run} curves={curves ?? []} isLoading={!curves} />
+            <RunDataSummary run={run} protocol={protocol} />
+            <QcMetricsPanel qcMetrics={run.qc_metrics ?? null} />
           </div>
-        </TabsContent>
+        </DetailTabsContent>
 
-        {/* QC Metrics */}
-        <TabsContent value="qc">
-          <div className="mt-3 space-y-3">
-            <div className="flex justify-end">
-              <Button size="sm" onClick={() => setEditQcOpen(true)} disabled={run.is_locked}>
-                <Pencil className="mr-2 h-4 w-4" /> Edit Metrics
-              </Button>
-            </div>
-            <QcMetricsPanel qcMetrics={run.qc_metrics} />
-          </div>
-        </TabsContent>
-        {/* Files */}
-        <TabsContent value="files">
-          <div className="mt-3 space-y-4">
-            <FileUploadZone entityType="run" entityId={run.id} />
+        <DetailTabsContent value="details" activeValue={activeSection}>
+          <RunDetailsPanel run={run} protocol={protocol} canEdit={canEdit} />
+        </DetailTabsContent>
+
+        <DetailTabsContent value="files" activeValue={activeSection}>
+          <div className="space-y-4">
+            {canEdit && <FileUploadZone entityType="run" entityId={run.id} />}
             <AttachmentList entityType="run" entityId={run.id} />
           </div>
-        </TabsContent>
+        </DetailTabsContent>
       </Tabs>
 
-      {/* Dialogs */}
       <EditQcMetricsDialog run={run} open={editQcOpen} onOpenChange={setEditQcOpen} />
       <RunImportWizard
         runId={run.id}

@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/shared/components/ui/table";
 import { resolveCategoryColor } from "@/shared/lib/category-colors";
+import { protocolWellTypeColors } from "@/shared/lib/chart-colors";
 import { cn } from "@/shared/lib/utils";
 import { ExternalLink, Eye, Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
@@ -64,7 +65,8 @@ import { PlateMapView } from "../plate-map-view";
 import { ReadoutDefinitionViewerDialog } from "../readout-definition-viewer-dialog";
 import { TemperatureWindowDialog } from "../temperature-window-dialog";
 import { ConditionDefinitionDialog } from "./condition-definition-dialog";
-import { DesignTabProtocolCard } from "./design-tab-protocol-card";
+import { ProtocolConditionsCard } from "./protocol-conditions-card";
+import { ProtocolControlConventionCard } from "./protocol-control-convention-card";
 import { ReadoutDefinitionDialog } from "./readout-definition-dialog";
 import { useReadoutDefinitionForm } from "./use-readout-definition-form";
 
@@ -179,8 +181,16 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
 
   return (
     <div className="space-y-6">
-      {/* ── Protocol-level metadata: Ontology + Control Convention ──────── */}
-      <DesignTabProtocolCard protocol={protocol} protocolId={protocolId} />
+      <ProtocolConditionsCard
+        protocol={protocol}
+        canAdd={canAddMetadata}
+        canEdit={canStructurallyEdit}
+        onAdd={() => setAddConditionOpen(true)}
+        onEdit={openEditCondition}
+        onRemove={(id) => removeConditionDef.mutate(id)}
+      />
+      {/* ── Control convention ────────────────────────────────────────── */}
+      <ProtocolControlConventionCard protocol={protocol} protocolId={protocolId} />
 
       {/* ── 2. Readout Definitions ──────────────────────────────────────── */}
       <Card>
@@ -267,7 +277,7 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                               <Badge
                                 key={v.label}
                                 variant="outline"
-                                className={cn("text-[10px]", c.bg, c.text)}
+                                className={cn("text-xs", c.bg, c.text)}
                               >
                                 {v.label}
                               </Badge>
@@ -346,81 +356,6 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
         </CardContent>
       </Card>
 
-      {/* ── 3. Condition Definitions ────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Condition Definitions</CardTitle>
-            <CardDescription>
-              What each run records, so its runs can be told apart; together they define the
-              protocol. Fix a value only when every run uses the same one.
-              {status === "active" && " Change a fixed value with Correct details."}
-            </CardDescription>
-          </div>
-          {canAddMetadata && (
-            <Button size="sm" variant="outline" onClick={() => setAddConditionOpen(true)}>
-              <Plus className="mr-1 h-4 w-4" />
-              Add
-            </Button>
-          )}
-        </CardHeader>
-        <CardContent>
-          {protocol.condition_definitions.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No condition definitions yet.</p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Data Type</TableHead>
-                  <TableHead>Unit</TableHead>
-                  <TableHead>Fixed value</TableHead>
-                  {canStructurallyEdit && <TableHead className="w-10" />}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {protocol.condition_definitions.map((cd) => (
-                  <TableRow key={cd.id}>
-                    <TableCell className="font-medium">{cd.name}</TableCell>
-                    <TableCell>
-                      {READOUT_DATA_TYPE_LABELS[cd.data_type as ReadoutDataType] ?? cd.data_type}
-                    </TableCell>
-                    <TableCell>{cd.unit ?? "—"}</TableCell>
-                    <TableCell>
-                      {cd.fixed_value
-                        ? `${cd.fixed_value}${cd.unit ? ` ${cd.unit}` : ""}`
-                        : "Varies per run"}
-                    </TableCell>
-                    {canStructurallyEdit && (
-                      <TableCell>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => openEditCondition(cd.id)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:text-destructive"
-                            onClick={() => removeConditionDef.mutate(cd.id)}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
-
       {/* ── 4. Control Layouts ──────────────────────────────────────────── */}
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-2">
@@ -462,10 +397,15 @@ export function DesignTab({ protocol, protocolId }: DesignTabProps) {
                         </Button>
                       )}
                     </div>
-                    {/* Read-only preview of the template — same color
-                          vocabulary as the editor + Plate Templates page,
-                          so chemists recognize the layout instantly. */}
-                    {tmpl && <PlateMapView format={tmpl.format} templateMap={tmpl.template_map} />}
+                    {/* Read-only preview of the template, its controls coloured
+                          by effect under this protocol's convention, as on its runs. */}
+                    {tmpl && (
+                      <PlateMapView
+                        format={tmpl.format}
+                        templateMap={tmpl.template_map}
+                        colors={protocolWellTypeColors(protocol)}
+                      />
+                    )}
                   </div>
                 );
               })}

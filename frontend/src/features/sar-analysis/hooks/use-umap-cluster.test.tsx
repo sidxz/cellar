@@ -243,4 +243,59 @@ describe("useUmapCluster", () => {
 
     await waitFor(() => expect(cancelFn).toHaveBeenCalled(), { timeout: 1000 });
   });
+  it("cancels a job whose start had not answered yet, once its id arrives", async () => {
+    let answer: (r: { result: null; job: ReturnType<typeof makeJobDto> }) => void = () => {};
+    const startFn = vi.fn(
+      () =>
+        new Promise<{ result: null; job: ReturnType<typeof makeJobDto> }>((r) => {
+          answer = r;
+        }),
+    );
+    const cancelFn = vi.fn(async () => {});
+    const { result, unmount } = renderHook(
+      () =>
+        useUmapCluster({
+          moleculeIds: ["a"],
+          picker: "butina",
+          threshold: 0.4,
+          enabled: true,
+          startFn,
+          pollFn: vi.fn(async () => ({ result: null, job: makeJobDto("pending") })),
+          cancelFn,
+        }),
+      { wrapper },
+    );
+    await waitFor(() => expect(startFn).toHaveBeenCalled());
+    result.current.cancel();
+    unmount();
+    answer({ result: null, job: makeJobDto("pending") });
+    await waitFor(() => expect(cancelFn).toHaveBeenCalledWith("job-1"));
+  });
+
+  it("starts again for a new nonce, never reusing the cached start", async () => {
+    const startFn = vi.fn(async () => ({ result: makeResultDto(), job: null }));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, rerender } = renderHook(
+      ({ nonce }) =>
+        useUmapCluster({
+          moleculeIds: ["a"],
+          picker: "butina",
+          threshold: 0.4,
+          enabled: true,
+          startFn,
+          nonce,
+        }),
+      {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={qc}>{children}</QueryClientProvider>
+        ),
+        initialProps: { nonce: "clusters:1" },
+      },
+    );
+    await waitFor(() => expect(result.current.result).not.toBeNull());
+    rerender({ nonce: "clusters:1" });
+    expect(startFn).toHaveBeenCalledTimes(1);
+    rerender({ nonce: "clusters:2" });
+    await waitFor(() => expect(startFn).toHaveBeenCalledTimes(2));
+  });
 });

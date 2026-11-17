@@ -28,7 +28,12 @@ interface DoseResponsePointInventoryProps {
   onToggle: (idx: number) => void;
 }
 
-type RowStatus = "included" | "excluded_manual" | "suggested_3sigma" | "excluded_3sigma";
+type RowStatus =
+  | "included"
+  | "excluded_manual"
+  | "suggested_3sigma"
+  | "excluded_3sigma"
+  | "excluded_well";
 
 interface ResolvedRow {
   idx: number;
@@ -50,6 +55,7 @@ function classifyRow(entry: DraftExclusion | undefined): RowStatus {
   if (entry.source === "manual" && entry.excluded) return "excluded_manual";
   if (entry.source === "auto_3sigma" && entry.excluded) return "excluded_3sigma";
   if (entry.source === "auto_3sigma" && !entry.excluded) return "suggested_3sigma";
+  if (entry.source === "well_flag" && entry.excluded) return "excluded_well";
   // Defensive fallback — a manual entry with excluded=false shouldn't exist
   // but treat as included so we don't gaslight the chemist.
   return "included";
@@ -101,6 +107,12 @@ function StatusPill({ status }: { status: RowStatus }) {
           Excluded (accepted 3σ)
         </Badge>
       );
+    case "excluded_well":
+      return (
+        <Badge variant="destructive" className="text-xs">
+          Excluded (outlier well)
+        </Badge>
+      );
   }
 }
 
@@ -149,11 +161,21 @@ export function DoseResponsePointInventory({
           <TableBody>
             {resolvedRows.map((row) => {
               const isSuggestion = row.status === "suggested_3sigma";
+              // Only removing the well's outlier flag on the plate brings its point back.
+              const isWellFlag = row.status === "excluded_well";
               return (
                 <TableRow
                   key={row.idx}
-                  onClick={() => onToggle(row.idx)}
-                  className={cn("cursor-pointer", isSuggestion && "bg-amber-50 hover:bg-amber-100")}
+                  onClick={isWellFlag ? undefined : () => onToggle(row.idx)}
+                  title={
+                    isWellFlag
+                      ? "Its well is flagged as an outlier. Remove the flag on the plate to include it."
+                      : undefined
+                  }
+                  className={cn(
+                    isWellFlag ? "cursor-default" : "cursor-pointer",
+                    isSuggestion && "bg-amber-50 hover:bg-amber-100",
+                  )}
                 >
                   <TableCell className="text-xs font-mono text-muted-foreground">
                     {row.idx + 1}
@@ -175,6 +197,11 @@ export function DoseResponsePointInventory({
             })}
           </TableBody>
         </Table>
+      )}
+      {resolvedRows.some((row) => row.status === "excluded_well") && (
+        <p className="text-xs text-muted-foreground">
+          Points of outlier wells stay out of the fit. Remove the flag on the plate to include one.
+        </p>
       )}
       {legacyEntries.length > 0 && (
         <div>

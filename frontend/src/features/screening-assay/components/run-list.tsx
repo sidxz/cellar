@@ -32,7 +32,7 @@ export function RunList({ protocolId, onSelect }: RunListProps) {
         field: "run_date",
         flex: 1,
         minWidth: 110,
-        cellClass: "font-mono text-sm",
+        cellClass: "tabular-nums",
       },
       { headerName: "Plates", field: "plate_count", width: 80 },
       {

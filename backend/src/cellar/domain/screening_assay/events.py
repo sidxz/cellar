@@ -278,11 +278,12 @@ class FieldChange:
 @dataclass(frozen=True)
 class PositionChange:
     """The fields that changed on one position, in the order label, note, role, batch,
-    concentration."""
+    concentration. ``position_label`` names it with its holder ("Plate 2 · A1")."""
 
     well_id: uuid.UUID
     position_label: str
     fields: tuple[FieldChange, ...]
+    plate_id: uuid.UUID | None = None
 
     @property
     def batch_changed(self) -> bool:
@@ -312,3 +313,30 @@ class RunPositionsRelabelled(DomainEvent):
             for p in self.positions
             for f in p.fields
         ]
+
+
+@dataclass(frozen=True)
+class FlaggedPosition:
+    """A well whose outlier flag changed, named with its holder ("Plate 2 · A1")."""
+
+    plate_id: uuid.UUID
+    well_id: uuid.UUID
+    label: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class RunOutliersFlagged(DomainEvent):
+    """Wells of a run were flagged as outliers (``outlier``), or their flag was removed.
+    Audited per position, with the reason when one was given."""
+
+    positions: tuple[FlaggedPosition, ...]
+    outlier: bool
+    reason: str | None = None
+
+    @property
+    def audit_reason(self) -> str | None:
+        return self.reason
+
+    def audit_changes(self) -> list[tuple[str, str | None, str | None]]:
+        old, new = ("no", "yes") if self.outlier else ("yes", "no")
+        return [(f"{p.label}: outlier", old, new) for p in self.positions]

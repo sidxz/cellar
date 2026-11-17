@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
 import {
+  doseRange,
   findInterceptValue,
   formatInterceptDisplay,
   interceptKeyId,
   interceptKeyLabel,
   interceptLabel,
-  maxDoseFromRawData,
   parseInterceptKeyId,
 } from "./intercept-label";
 
@@ -123,57 +123,113 @@ describe("interceptKeyId / parseInterceptKeyId", () => {
   });
 });
 
-describe("maxDoseFromRawData", () => {
-  it("returns the largest positive x from {x,y} points", () => {
+describe("doseRange", () => {
+  it("reads the lowest and highest positive dose from {x,y} points", () => {
     expect(
-      maxDoseFromRawData([
+      doseRange([
         { x: 0.1, y: 5 },
         { x: 10, y: 80 },
         { x: 1, y: 40 },
-      ] as unknown as Array<{ x?: number; concentration?: number }>),
-    ).toBe(10);
+      ]),
+    ).toEqual({ min_dose: 0.1, max_dose: 10 });
   });
 
   it("accepts {concentration, response} shape too", () => {
     expect(
-      maxDoseFromRawData([
+      doseRange([
         { concentration: 0.5, response: 10 },
         { concentration: 50, response: 90 },
-      ] as unknown as Array<{ x?: number; concentration?: number }>),
-    ).toBe(50);
+      ]),
+    ).toEqual({ min_dose: 0.5, max_dose: 50 });
   });
 
   it("ignores non-positive and non-finite x", () => {
     expect(
-      maxDoseFromRawData([
+      doseRange([
         { x: -1, y: 5 },
         { x: 0, y: 5 },
         { x: Number.NaN, y: 5 },
         { x: 7, y: 5 },
-      ] as unknown as Array<{ x?: number; concentration?: number }>),
-    ).toBe(7);
+      ]),
+    ).toEqual({ min_dose: 7, max_dose: 7 });
   });
 
-  it("returns null on empty / nullish input", () => {
-    expect(maxDoseFromRawData(null)).toBeNull();
-    expect(maxDoseFromRawData(undefined)).toBeNull();
-    expect(maxDoseFromRawData([])).toBeNull();
+  it("returns nulls on empty / nullish input", () => {
+    const none = { min_dose: null, max_dose: null };
+    expect(doseRange(null)).toEqual(none);
+    expect(doseRange(undefined)).toEqual(none);
+    expect(doseRange([])).toEqual(none);
   });
 });
 
 describe("formatInterceptDisplay", () => {
-  it("returns ND for inactive class regardless of value/at_bound", () => {
+  it("reads an inactive curve as above its top dose, whatever the fit's value", () => {
+    // Run 394e4741's SACC-0108241: inactive over 0.5–500 µM, fit parked at 1172.
+    const out = formatInterceptDisplay({
+      value: 1172.1,
+      at_bound: false,
+      curve_class: "inactive",
+      min_dose: 0.5,
+      max_dose: 500,
+    });
+    expect(out.kind).toBe("qualifier");
+    expect(out.text).toBe("> 500");
+    expect(out.warning).toBe(false);
+    expect(out.tooltip).toMatch(/inactive/i);
+    expect(out.sortValue).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("returns ND for an inactive curve with no tested dose to report", () => {
     const out = formatInterceptDisplay({
       value: 0.013,
       at_bound: false,
       curve_class: "inactive",
-      max_dose: 50,
+      max_dose: null,
     });
     expect(out.kind).toBe("nd");
     expect(out.text).toBe("ND");
-    expect(out.warning).toBe(false);
     expect(out.tooltip).toMatch(/not determined/i);
     expect(out.sortValue).toBeNull();
+  });
+
+  it("reads a value fitted above the top dose as above it, not the extrapolated number", () => {
+    const out = formatInterceptDisplay({
+      value: 1172.1,
+      at_bound: false,
+      curve_class: "partial",
+      min_dose: 0.5,
+      max_dose: 500,
+    });
+    expect(out.kind).toBe("qualifier");
+    expect(out.text).toBe("> 500");
+    expect(out.warning).toBe(true);
+    expect(out.sortValue).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("reads a value fitted below the lowest dose as below it", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0002,
+      at_bound: false,
+      curve_class: "full",
+      min_dose: 0.0006,
+      max_dose: 2,
+    });
+    expect(out.kind).toBe("qualifier");
+    expect(out.text).toBe("< 0.0006");
+    expect(out.warning).toBe(true);
+    expect(out.sortValue).toBe(Number.NEGATIVE_INFINITY);
+  });
+
+  it("keeps a value inside the tested doses as the number (rifampicin, EC50 0.00122 µM)", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0012230246,
+      at_bound: false,
+      curve_class: "full",
+      min_dose: 0.0006,
+      max_dose: 2,
+    });
+    expect(out.kind).toBe("scalar");
+    expect(out.text).toBe("0.001223");
   });
 
   it("returns '—' for missing value when class is not inactive", () => {
@@ -197,7 +253,7 @@ describe("formatInterceptDisplay", () => {
       max_dose: 50,
     });
     expect(out.kind).toBe("qualifier");
-    expect(out.text).toBe("> 50.00");
+    expect(out.text).toBe("> 50");
     expect(out.warning).toBe(true);
     expect(out.tooltip).toMatch(/upper-bound|tested concentration|did not reach/i);
     expect(out.sortValue).toBe(Number.POSITIVE_INFINITY);
@@ -235,8 +291,8 @@ describe("formatInterceptDisplay", () => {
       curve_class: "inactive",
       max_dose: 50,
     });
-    expect(out.kind).toBe("nd");
-    expect(out.sortValue).toBeNull();
+    expect(out.tooltip).toMatch(/inactive/i);
+    expect(out.warning).toBe(false);
   });
 
   // Chemist's sort expectation: scalars in ascending potency, then
@@ -258,9 +314,9 @@ describe("formatInterceptDisplay", () => {
     }).sortValue;
     const nd = formatInterceptDisplay({
       value: 0.013,
-      at_bound: false,
-      curve_class: "inactive",
-      max_dose: 50,
+      at_bound: true,
+      curve_class: "full",
+      max_dose: null,
     }).sortValue;
     const missing = formatInterceptDisplay({
       value: null,

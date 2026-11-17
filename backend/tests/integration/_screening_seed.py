@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from collections.abc import Sequence
 from datetime import date, datetime
 from typing import Any
 
@@ -35,6 +36,7 @@ async def protocol(
     *,
     dose_unit: str = "uM",
     conditions: list[tuple[str, str, str | None]] = (),  # type: ignore[assignment]
+    name: str | None = None,
 ) -> uuid.UUID:
     """``conditions``: (name, data_type, unit) condition definitions."""
     pid = uuid.uuid4()
@@ -45,7 +47,13 @@ async def protocol(
             "VALUES (:id, :ws, :name, :name, 'biochemical', 'active', false, :du, 'high', 1, 1, "
             ":user)"
         ),
-        {"id": pid, "ws": ws, "name": f"Protocol-{pid.hex[:8]}", "du": dose_unit, "user": USER},
+        {
+            "id": pid,
+            "ws": ws,
+            "name": name or f"Protocol-{pid.hex[:8]}",
+            "du": dose_unit,
+            "user": USER,
+        },
     )
     for name, data_type, unit in conditions:
         await s.execute(
@@ -75,13 +83,15 @@ async def readout_def(
     data_type: str = "numeric",
     unit: str | None = None,
     aggregation: str = "mean",
+    normalizations: Sequence[str] = (),
 ) -> uuid.UUID:
     rid = uuid.uuid4()
     await s.execute(
         sa.text(
             "INSERT INTO readout_definitions (id, protocol_id, name, data_type, unit, "
-            "aggregation, display_order, is_calculated, dose_response_config) "
-            "VALUES (:id, :p, :name, :dt, :unit, :agg, 0, false, cast(:cfg as jsonb))"
+            "aggregation, display_order, is_calculated, dose_response_config, normalizations) "
+            "VALUES (:id, :p, :name, :dt, :unit, :agg, 0, false, cast(:cfg as jsonb), "
+            "cast(:norms as jsonb))"
         ),
         {
             "id": rid,
@@ -91,6 +101,7 @@ async def readout_def(
             "unit": unit,
             "agg": aggregation,
             "cfg": json.dumps(DR_CONFIG) if data_type == "dose_response" else None,
+            "norms": json.dumps(list(normalizations)),
         },
     )
     return rid
@@ -105,14 +116,15 @@ async def run(
     status: str = "draft",
     conditions: dict[str, Any] | None = None,
     created_at: datetime | None = None,
+    qc_metrics: dict[str, Any] | None = None,
 ) -> uuid.UUID:
     rid = uuid.uuid4()
     await s.execute(
         sa.text(
             "INSERT INTO runs (id, workspace_id, protocol_id, run_date, operator, status, "
-            "is_locked, version, conditions, created_at) "
+            "is_locked, version, conditions, created_at, qc_metrics) "
             "VALUES (:id, :ws, :p, :d, :user, :status, false, 1, cast(:c as jsonb), "
-            "coalesce(:created, now()))"
+            "coalesce(:created, now()), cast(:qc as jsonb))"
         ),
         {
             "id": rid,
@@ -123,6 +135,7 @@ async def run(
             "status": status,
             "c": json.dumps(conditions) if conditions is not None else None,
             "created": created_at,
+            "qc": json.dumps(qc_metrics) if qc_metrics is not None else None,
         },
     )
     return rid
@@ -140,19 +153,25 @@ async def readout(
     wellless: bool = False,
     outlier: bool = False,
     normalization: str | None = None,
+    well_id: uuid.UUID | None = None,
+    batch_id: uuid.UUID | None = None,
+    text: str | None = None,
 ) -> None:
     await s.execute(
         sa.text(
-            "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, "
-            "readout_definition_id, value_numeric, value_qualifier, is_outlier, "
-            "normalization_applied) VALUES (:id, :ws, :run, :well, :m, :rd, :v, :q, :o, :n)"
+            "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, batch_id, "
+            "readout_definition_id, value_numeric, value_qualifier, value_text, is_outlier, "
+            "normalization_applied) "
+            "VALUES (:id, :ws, :run, :well, :m, :b, :rd, :v, :q, :t, :o, :n)"
         ),
         {
             "id": uuid.uuid4(),
             "ws": ws,
             "run": run_id,
-            "well": None if wellless else uuid.uuid4(),
+            "well": None if wellless else (well_id or uuid.uuid4()),
             "m": molecule_id,
+            "b": batch_id,
+            "t": text,
             "rd": rd_id,
             "v": value,
             "q": qualifier,
@@ -160,6 +179,54 @@ async def readout(
             "n": normalization,
         },
     )
+
+
+async def plate(
+    s: AsyncSession,
+    run_id: uuid.UUID,
+    number: int,
+    *,
+    format: str | None = "384",
+    barcode: str | None = None,
+) -> uuid.UUID:
+    pid = uuid.uuid4()
+    await s.execute(
+        sa.text(
+            "INSERT INTO plates (id, run_id, plate_number, barcode, format) "
+            "VALUES (:id, :run, :n, :bc, :f)"
+        ),
+        {"id": pid, "run": run_id, "n": number, "bc": barcode, "f": format},
+    )
+    return pid
+
+
+async def well(
+    s: AsyncSession,
+    plate_id: uuid.UUID,
+    row: str,
+    column: int,
+    *,
+    well_type: str = "sample",
+    dose: float | None = None,
+    batch_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    wid = uuid.uuid4()
+    await s.execute(
+        sa.text(
+            'INSERT INTO wells (id, plate_id, "row", "column", well_type, dose, batch_id) '
+            "VALUES (:id, :p, :r, :c, :t, :d, :b)"
+        ),
+        {
+            "id": wid,
+            "p": plate_id,
+            "r": row,
+            "c": column,
+            "t": well_type,
+            "d": dose,
+            "b": batch_id,
+        },
+    )
+    return wid
 
 
 async def curve(
@@ -175,38 +242,65 @@ async def curve(
     curve_class: str | None = "full",
     with_well: bool = True,
     intercept_values: list[dict[str, Any]] | None = None,
-    max_dose: float = 1.0,
+    max_dose: float | None = None,
+    batch_id: uuid.UUID | None = None,
+    top: float = 100.0,
+    min_dose: float | None = None,
 ) -> uuid.UUID:
     """A fitted curve, plus (``with_well``) one per-well response reading on the
     same readout — real dose-response runs always carry their well data, and
-    search matching finds tested compounds through it."""
+    search matching finds tested compounds through it.
+
+    Its points sit at ``min_dose`` and ``max_dose``: 0.001 and 1000 by default, so a
+    fitted value is reported as is; a lone ``max_dose`` keeps one point."""
+    if max_dose is None:
+        min_dose, max_dose = min_dose or 0.001, 1000.0
     cid = uuid.uuid4()
     if with_well:
-        await readout(s, ws, run_id, rd_id, molecule_id, 50.0)
+        await readout(s, ws, run_id, rd_id, molecule_id, 50.0, batch_id=batch_id)
     await s.execute(
         sa.text(
             "INSERT INTO dose_response_curves (id, workspace_id, molecule_id, batch_id, "
             "protocol_id, run_id, readout_definition_id, curve_type, fitted_value, hill_slope, "
             "top, bottom, r_squared, num_points, curve_class, raw_data, intercept_values) "
-            "VALUES (:id, :ws, :m, :b, :p, :run, :rd, 'ic50', :fv, 1.0, 100, 0, :r2, 3, :cc, "
+            "VALUES (:id, :ws, :m, :b, :p, :run, :rd, 'ic50', :fv, 1.0, :top, 0, :r2, 3, :cc, "
             "cast(:raw as jsonb), cast(:ivs as jsonb))"
         ),
         {
             "id": cid,
             "ws": ws,
             "m": molecule_id,
-            "b": uuid.uuid4(),
+            "b": batch_id or uuid.uuid4(),
             "p": protocol_id,
             "run": run_id,
             "rd": rd_id,
             "fv": fitted_value,
+            "top": top,
             "r2": r_squared,
             "cc": curve_class,
-            "raw": json.dumps([{"concentration": max_dose, "response": 50.0}]),
+            "raw": json.dumps(
+                [
+                    {"concentration": d, "response": 50.0}
+                    for d in ([min_dose] if min_dose is not None else []) + [max_dose]
+                ]
+            ),
             "ivs": json.dumps(intercept_values) if intercept_values is not None else None,
         },
     )
     return cid
+
+
+async def batch(s: AsyncSession, ws: uuid.UUID, molecule_id: uuid.UUID, number: str) -> uuid.UUID:
+    bid = uuid.uuid4()
+    await s.execute(
+        sa.text(
+            "INSERT INTO batches (id, workspace_id, molecule_id, batch_number, amount_value, "
+            "amount_unit, source, chemist, version) "
+            "VALUES (:id, :ws, :m, :n, 1, 'mg', 'synthesized', :chemist, 1)"
+        ),
+        {"id": bid, "ws": ws, "m": molecule_id, "n": number, "chemist": USER},
+    )
+    return bid
 
 
 def descriptors(molecular_weight: float) -> dict[str, Any]:

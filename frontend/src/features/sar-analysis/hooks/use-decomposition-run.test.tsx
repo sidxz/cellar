@@ -115,6 +115,45 @@ describe("useDecompositionRun", () => {
     await waitFor(() => expect(result.current.isCancelled).toBe(true));
   });
 
+  it("cancels a job whose start had not answered yet, once its id arrives", async () => {
+    let answer: (r: typeof READY) => void = () => {};
+    const startFn = vi.fn(
+      () =>
+        new Promise<typeof READY>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const cancelFn = vi.fn().mockResolvedValue({ ...READY, status: "cancelled" });
+    const { result, unmount } = renderHook(
+      () =>
+        useDecompositionRun({
+          moleculeIds: ["m1"],
+          coreSmiles: "c1ccccc1",
+          startFn,
+          pollFn: vi.fn().mockResolvedValue({ ...READY, status: "running" }),
+          cancelFn,
+        }),
+      { wrapper: wrap() },
+    );
+    await waitFor(() => expect(startFn).toHaveBeenCalled());
+    act(() => result.current.cancel());
+    unmount();
+    answer({ ...READY, status: "running" });
+    await waitFor(() => expect(cancelFn).toHaveBeenCalledWith("run-1"));
+  });
+
+  it("starts again for a new nonce, never reusing the cached start", async () => {
+    const startFn = vi.fn().mockResolvedValue(READY);
+    const { result, rerender } = renderHook(
+      ({ nonce }) =>
+        useDecompositionRun({ moleculeIds: ["m1"], coreSmiles: "c1ccccc1", startFn, nonce }),
+      { wrapper: wrap(), initialProps: { nonce: "rg1:1" } },
+    );
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    rerender({ nonce: "rg1:2" });
+    await waitFor(() => expect(startFn).toHaveBeenCalledTimes(2));
+  });
+
   it("runAgain() re-starts (a fresh POST) and clears the cancelled flag", async () => {
     const startFn = vi.fn().mockResolvedValue({ ...READY, status: "running" });
     const pollFn = vi.fn().mockResolvedValue({ ...READY, status: "cancelled" });

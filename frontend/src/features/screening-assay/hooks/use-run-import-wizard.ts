@@ -13,6 +13,7 @@ import { useProtocol } from "./use-protocols";
 import {
   type ColumnMappingPayload,
   type ImportRole,
+  PreviewExpiredError,
   type PreviewRunFileResponse,
   type ReadoutColumnPayload,
   type RunImportTemplate,
@@ -44,6 +45,8 @@ export interface UseRunImportWizardResult {
   templateName: string;
   autoCreateUnmatchedBatches: boolean;
   compoundPicks: Record<string, string>;
+  // The chemist confirmed the preview's swapped-looking controls are right.
+  acknowledgedSwappedControls: boolean;
 
   // Mutations (expose for pending/data inspection in the component)
   previewMutation: ReturnType<typeof usePreviewRunFile>;
@@ -68,6 +71,7 @@ export interface UseRunImportWizardResult {
   setTemplateName: (v: string) => void;
   setAutoCreateUnmatchedBatches: (v: boolean) => void;
   setCompoundPicks: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setAcknowledgedSwappedControls: (v: boolean) => void;
   reset: () => void;
   handleOpenChange: (next: boolean) => void;
   handleFile: (f: File) => void;
@@ -95,6 +99,7 @@ export function useRunImportWizard({
   // Per-molecule batch picks from the disambiguation panel. Cleared when
   // the wizard resets. ``molecule_id -> batch_id``.
   const [compoundPicks, setCompoundPicks] = useState<Record<string, string>>({});
+  const [acknowledgedSwappedControls, setAcknowledgedSwappedControls] = useState(false);
 
   // ─── Mutations / queries ─────────────────────────────────────────────────────
   const previewMutation = usePreviewRunFile(runId);
@@ -127,6 +132,7 @@ export function useRunImportWizard({
     setTemplateName("");
     setAutoCreateUnmatchedBatches(false);
     setCompoundPicks({});
+    setAcknowledgedSwappedControls(false);
     previewMutationRef.current.reset();
     importMutationRef.current.reset();
   }, []);
@@ -197,15 +203,15 @@ export function useRunImportWizard({
   const handleSetRole = useCallback((header: string, role: ImportRole | "ignore") => {
     setDraft((d) => {
       const nextRoles = { ...d.roles };
-      // well / plate_name / concentration / batch_ref / compound_ref are
-      // unique — only one column can carry each. Reassigning the same role to
-      // a new header clears the prior holder.
+      // Every role but readout is unique — only one column can carry each.
+      // Reassigning the same role to a new header clears the prior holder.
       const unique: ImportRole[] = [
         "well",
         "plate_name",
         "concentration",
         "batch_ref",
         "compound_ref",
+        "well_role",
       ];
       const r: ImportRole | null = role === "ignore" ? null : role;
       if (r && unique.includes(r)) {
@@ -249,6 +255,7 @@ export function useRunImportWizard({
       concentration: find("concentration"),
       batch_ref: find("batch_ref"),
       compound_ref: find("compound_ref"),
+      well_role: find("well_role"),
       readout_columns,
     };
   }, [wellHeader, draft.roles, draft.readoutDefByHeader, readoutHeaders]);
@@ -264,6 +271,7 @@ export function useRunImportWizard({
       {
         preview_id: preview.preview_id,
         mapping,
+        file,
       },
       {
         onSuccess: (data) => {
@@ -272,12 +280,19 @@ export function useRunImportWizard({
           // (different column → different compound refs). Drop stale picks so
           // the panel forces a fresh decision.
           setCompoundPicks({});
+          // A new preview needs its own look at the controls.
+          setAcknowledgedSwappedControls(false);
           setStep(3);
         },
-        onError: () => showError("Could not re-resolve with the new mapping"),
+        onError: (e) =>
+          showError(
+            e instanceof PreviewExpiredError
+              ? e.message
+              : "Could not re-resolve with the new mapping",
+          ),
       },
     );
-  }, [preview, buildMapping, repreviewMutation]);
+  }, [preview, file, buildMapping, repreviewMutation]);
 
   // ─── Step 4 — submit ─────────────────────────────────────────────────────────
   const handleSubmit = useCallback(() => {
@@ -296,6 +311,7 @@ export function useRunImportWizard({
           batch_id,
         })),
         auto_create_unmatched_batches: autoCreateUnmatchedBatches,
+        file,
       },
       {
         onSuccess: (data) => {
@@ -307,6 +323,7 @@ export function useRunImportWizard({
               concentration: mapping.concentration,
               batch_ref: mapping.batch_ref,
               compound_ref: mapping.compound_ref,
+              well_role: mapping.well_role,
               readout_headers: (mapping.readout_columns ?? []).map((rc) => rc.header),
             };
             createTemplate.mutate({
@@ -316,11 +333,12 @@ export function useRunImportWizard({
           }
           setStep(4);
         },
-        onError: () => showError("Import failed"),
+        onError: (e) => showError(e instanceof PreviewExpiredError ? e.message : "Import failed"),
       },
     );
   }, [
     preview,
+    file,
     buildMapping,
     compoundPicks,
     autoCreateUnmatchedBatches,
@@ -342,6 +360,7 @@ export function useRunImportWizard({
     templateName,
     autoCreateUnmatchedBatches,
     compoundPicks,
+    acknowledgedSwappedControls,
     previewMutation,
     repreviewMutation,
     importMutation,
@@ -358,6 +377,7 @@ export function useRunImportWizard({
     setTemplateName,
     setAutoCreateUnmatchedBatches,
     setCompoundPicks,
+    setAcknowledgedSwappedControls,
     reset,
     handleOpenChange,
     handleFile,

@@ -13,8 +13,10 @@ vi.mock("@duar-auth/nextjs", () => ({ useAuthzHasRole: () => false }));
 vi.mock("@/features/tagging/components/tag-table", () => ({ TagTable: () => null }));
 vi.mock("../protocol-aliases-card", () => ({ ProtocolAliasesCard: () => null }));
 vi.mock("../protocol-references", () => ({ ProtocolReferencesCard: () => null }));
-vi.mock("./protocol-method-card", () => ({ ProtocolMethodCard: () => null }));
-vi.mock("./protocol-conditions-card", () => ({ ProtocolConditionsCard: () => null }));
+vi.mock("./protocol-method-card", () => ({ ProtocolMethodCard: () => <div>Protocol method</div> }));
+vi.mock("./protocol-identity-cards", () => ({
+  ProtocolIdentityCards: () => <div>Targets and ontology</div>,
+}));
 
 function protocol(over: Partial<Protocol> = {}): Protocol {
   return {
@@ -37,7 +39,7 @@ function protocol(over: Partial<Protocol> = {}): Protocol {
 }
 
 describe("NameFlagNotice", () => {
-  it("needs_facts points to the Design tab", () => {
+  it("needs_facts points to targets and ontology on Overview", () => {
     const onTabChange = vi.fn();
     render(
       <OverviewTab
@@ -47,8 +49,10 @@ describe("NameFlagNotice", () => {
       />,
     );
     expect(screen.getByText(/name is missing a field/i)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /open the design tab/i }));
-    expect(onTabChange).toHaveBeenCalledWith("design");
+    expect(screen.getByText(/Complete Targets and Ontology Annotations below/)).toBeVisible();
+    expect(screen.getByText("Protocol method")).toBeVisible();
+    expect(screen.getByText("Targets and ontology")).toBeVisible();
+    expect(screen.queryByText("Assay conditions")).not.toBeInTheDocument();
   });
 
   it.each([

@@ -1,7 +1,15 @@
 "use client";
 
-import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -9,277 +17,380 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/components/ui/select";
+import { useCanEdit } from "@/shared/hooks/use-current-user";
+import {
+  CHART_COLORS,
+  fullEffectControl,
+  isActivation,
+  wellTypeColors,
+} from "@/shared/lib/chart-colors";
+import { showError, showSuccess, showWarning } from "@/shared/lib/toast";
 import { cn } from "@/shared/lib/utils";
+import { Maximize2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
+import { useFlagOutliers } from "../hooks/use-flag-outliers";
+import { apiReason } from "../hooks/use-instrument-import-wizard";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { useProtocol } from "../hooks/use-protocols";
 import { useReadoutDataByRun } from "../hooks/use-readout-data";
-import { classifyZPrime, readPerPlateQc } from "../lib/qc-metrics";
+import {
+  type Palette,
+  type PlateColorBy,
+  type ScaleKind,
+  buildPlateScale,
+  compoundColorsForPlates,
+  formatPlateValue,
+} from "../lib/plate-map-values";
 import { hasComputedLayer } from "../lib/readout-data-pivot";
+import { replicateWells } from "../lib/replicate-wells";
 import {
   type PlateData,
+  type PlateMapWell,
   READOUT_NORMALIZATION_LABELS,
-  type ReadoutDefinition,
   type ReadoutNormalization,
   type Run,
 } from "../types";
-import {
-  ColorScaleLegend,
-  type Palette,
-  PlateValueHeatmap,
-  type ScaleKind,
-  type ValueScale,
-} from "./plate-value-heatmap";
+import { PlateCompoundsList } from "./plate-compounds-list";
+import { PlateQualitySummary } from "./plate-quality-summary";
+import { ColorScaleLegend, PlateValueHeatmap } from "./plate-value-heatmap";
+import { PlateWellDetails } from "./plate-well-details";
+import { PlateWellMenu } from "./plate-well-menu";
 import { RunPlateLink } from "./run-plate-link";
-import { Z_PRIME_BADGE } from "./z-prime-badge";
 
-type ValueLayer = "raw" | "normalized";
-
-/** Sentinel id for the synthetic "well concentration" option. Lives on
- *  `well.dose`, not in `readout_data` — branched everywhere the panel
- *  reads a value. */
-const DOSE_OPTION_ID = "__well_dose__";
-
-function computedUnitLabel(normalization: ReadoutNormalization): string {
-  if (normalization === "none") return "Computed";
-  return READOUT_NORMALIZATION_LABELS[normalization];
-}
+const EMPTY_VALUES = new Map<string, number>();
+const COLOR_BY_OPTIONS: { value: PlateColorBy; label: string }[] = [
+  { value: "response", label: "Response" },
+  { value: "compound", label: "Compound" },
+  { value: "concentration", label: "Concentration" },
+  { value: "well-type", label: "Well type" },
+];
+const CONTROL_TYPES = ["negative_control", "positive_control", "blank", "reference"] as const;
 
 interface RunHeatmapPanelProps {
   run: Run;
+  colorBy?: PlateColorBy;
+  onColorByChange?: (colorBy: PlateColorBy) => void;
+  onOpenResults?: () => void;
 }
 
-export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
+/** All plates share a readout, colour encoding, and (by default) numeric scale. */
+export function RunHeatmapPanel({
+  run,
+  colorBy,
+  onColorByChange,
+  onOpenResults,
+}: RunHeatmapPanelProps) {
   const { data: plateMap, isLoading: plateMapLoading } = usePlateMap(run.id);
-  const { data: readoutData, isLoading: readoutLoading } = useReadoutDataByRun(run.id);
-  const { data: protocol } = useProtocol(run.protocol_id);
+  const {
+    data: readoutData,
+    isLoading: readoutLoading,
+    error: readoutError,
+  } = useReadoutDataByRun(run.id);
+  const { data: protocol, isLoading: protocolLoading } = useProtocol(run.protocol_id);
   const { data: curves } = useDoseResponseByRun(run.id);
+  const canEdit = useCanEdit();
+  const flag = useFlagOutliers();
+  const canFlag =
+    canEdit && !run.is_locked && ["draft", "in_progress", "completed"].includes(run.status);
 
-  const numericReadouts = useMemo<ReadoutDefinition[]>(() => {
-    if (!protocol) return [];
-    return [...protocol.readout_definitions]
-      .filter((d) => d.data_type === "numeric")
-      .sort((a, b) => a.display_order - b.display_order);
-  }, [protocol]);
-
+  const [localColorBy, setLocalColorBy] = useState<PlateColorBy>("response");
   const [readoutId, setReadoutId] = useState<string | null>(null);
-  const [layer, setLayer] = useState<ValueLayer>("normalized");
+  const [layer, setLayer] = useState<"raw" | "normalized">("normalized");
   const [scaleKind, setScaleKind] = useState<ScaleKind>("linear");
+  const [scaleScope, setScaleScope] = useState<"run" | "plate">("run");
+  const [compactChoice, setCompactChoice] = useState<boolean | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<{ plateId: string; wellId: string } | null>(null);
+  const [highlight, setHighlight] = useState<{
+    wellId: string;
+    kind: "compound" | "replicates";
+  } | null>(null);
+  const [customFlag, setCustomFlag] = useState<{
+    plate: PlateData;
+    well: PlateMapWell;
+    outlier: boolean;
+  } | null>(null);
+  const [customReason, setCustomReason] = useState("");
 
   const plates = plateMap?.plates ?? [];
+  const compact = compactChoice ?? plates.length > 6;
   const doseUnit = plateMap?.dose_unit ?? "uM";
-  const perPlateQc = readPerPlateQc(run.qc_metrics);
+  const highlightSource = plates
+    .flatMap((plate) => plate.wells)
+    .find((well) => well.well_id === highlight?.wellId);
+  const highlightedWells = highlightSource
+    ? highlight?.kind === "replicates"
+      ? replicateWells(plates, highlightSource).map((item) => item.well)
+      : plates
+          .flatMap((plate) => plate.wells)
+          .filter(
+            (well) =>
+              !!highlightSource.molecule_id && well.molecule_id === highlightSource.molecule_id,
+          )
+    : [];
+  const highlightedIds = new Set(highlightedWells.map((well) => well.well_id));
+  const flagUnavailableReason = canFlag
+    ? null
+    : !canEdit
+      ? "Read-only access — outlier flags cannot be changed."
+      : run.is_locked
+        ? "This run is locked — outlier flags cannot be changed."
+        : `Outlier changes are unavailable for ${run.status.replace(/_/g, " ")} runs.`;
+  const numericReadouts = useMemo(
+    () =>
+      [...(protocol?.readout_definitions ?? [])]
+        .filter((definition) => definition.data_type === "numeric")
+        .sort((a, b) => a.display_order - b.display_order),
+    [protocol],
+  );
+  const selectedDef =
+    numericReadouts.find((definition) => definition.id === readoutId) ?? numericReadouts[0];
+  const requestedColorBy = colorBy ?? localColorBy;
+  const activeColorBy =
+    requestedColorBy === "response" && !selectedDef ? "well-type" : requestedColorBy;
+  const isDose = activeColorBy === "concentration";
+  const isNumeric = activeColorBy === "response" || isDose;
+  const layerAvailable = !!selectedDef && hasComputedLayer(selectedDef);
+  const wantsComputed = layerAvailable && layer === "normalized";
+  const normalization = selectedDef?.normalizations?.find((value) => value !== "none");
+  const computedUnit = normalization
+    ? (READOUT_NORMALIZATION_LABELS[normalization as ReadoutNormalization] ?? normalization)
+    : "Computed response";
+  const rawUnit = selectedDef?.unit ?? null;
+  const responseLabel = wantsComputed ? computedUnit : `Raw${rawUnit ? ` (${rawUnit})` : ""}`;
+  const valueUnit = isDose
+    ? doseUnit
+    : wantsComputed && normalization?.startsWith("percent_")
+      ? "%"
+      : rawUnit;
+  const activation = isActivation(selectedDef?.normalizations ?? []);
+  const fullIsPositive =
+    fullEffectControl(protocol?.pos_control_signal, activation) === "positive_control";
+  const colors = wellTypeColors(protocol?.pos_control_signal, activation);
 
-  // Pick a sane default once readouts load. Falls back to the dose option
-  // when the protocol declares no numeric readouts so the dropdown is
-  // never empty for a freshly-imported run.
-  const effectiveReadoutId = readoutId ?? numericReadouts[0]?.id ?? DOSE_OPTION_ID;
-  const isDose = effectiveReadoutId === DOSE_OPTION_ID;
-  const selectedDef = isDose ? undefined : numericReadouts.find((d) => d.id === effectiveReadoutId);
-  const layerAvailable = !isDose && selectedDef ? hasComputedLayer(selectedDef) : false;
-  const effectiveLayer: ValueLayer = layerAvailable ? layer : "raw";
-
-  const wantsComputed = effectiveLayer === "normalized" && layerAvailable;
-
-  // Per-well value lookups. For the readout case we split by is_computed so
-  // the tooltip can show both layers. For the dose case the dose value
-  // already shows in the tooltip's existing "Dose" line, so the secondary
-  // raw/computed lines stay empty.
-  const { activeByWellId, rawByWellId, computedByWellId } = useMemo(() => {
-    const active = new Map<string, number>();
-    const raw = new Map<string, number>();
-    const computed = new Map<string, number>();
-
-    if (isDose) {
-      for (const plate of plates) {
-        for (const w of plate.wells) {
-          if (w.dose != null) active.set(w.well_id, w.dose);
-        }
+  const { rawValues, computedValues, outliers } = useMemo(() => {
+    const rawValues = new Map<string, number>();
+    const computedValues = new Map<string, number>();
+    const outliers = new Set<string>();
+    for (const row of readoutData ?? []) {
+      if (!row.well_id) continue;
+      if (row.is_outlier && !row.is_computed) outliers.add(row.well_id);
+      if (
+        row.readout_definition_id !== selectedDef?.id ||
+        row.value_numeric == null ||
+        !Number.isFinite(row.value_numeric)
+      )
+        continue;
+      (row.is_computed ? computedValues : rawValues).set(row.well_id, row.value_numeric);
+    }
+    return { rawValues, computedValues, outliers };
+  }, [readoutData, selectedDef?.id]);
+  const responseValues = wantsComputed ? computedValues : rawValues;
+  const concentrations = useMemo(
+    () =>
+      new Map(
+        plates.flatMap((plate) =>
+          plate.wells
+            .filter((well) => well.dose != null && Number.isFinite(well.dose))
+            .map((well) => [well.well_id, well.dose as number] as const),
+        ),
+      ),
+    [plates],
+  );
+  const numericValues = isDose ? concentrations : responseValues;
+  const compoundColors = useMemo(() => compoundColorsForPlates(plates), [plates]);
+  const categoricalColors = useMemo(() => {
+    const result = new Map<string, string>();
+    if (activeColorBy !== "compound" && activeColorBy !== "well-type") return result;
+    for (const plate of plates) {
+      for (const well of plate.wells) {
+        if (activeColorBy === "well-type")
+          result.set(well.well_id, colors[well.well_type] ?? CHART_COLORS.neutral);
+        else if (well.well_type === "sample")
+          result.set(
+            well.well_id,
+            (well.molecule_id && compoundColors.get(well.molecule_id)) || CHART_COLORS.primary,
+          );
       }
-      return { activeByWellId: active, rawByWellId: raw, computedByWellId: computed };
     }
-
-    if (!readoutData || !effectiveReadoutId) {
-      return { activeByWellId: active, rawByWellId: raw, computedByWellId: computed };
-    }
-    for (const r of readoutData) {
-      if (r.readout_definition_id !== effectiveReadoutId) continue;
-      if (r.well_id == null || r.value_numeric == null) continue;
-      if (r.is_computed) computed.set(r.well_id, r.value_numeric);
-      else raw.set(r.well_id, r.value_numeric);
-    }
-    const source = wantsComputed ? computed : raw;
-    for (const [wellId, v] of source) active.set(wellId, v);
-    return { activeByWellId: active, rawByWellId: raw, computedByWellId: computed };
-  }, [readoutData, effectiveReadoutId, wantsComputed, isDose, plates]);
-
-  /** Per-plate scale.
-   *
-   *  Z-score: μ ± 2σ across every well with a value on this plate. σ
-   *  computed from samples *and* controls combined; otherwise the
-   *  high-leverage control wells dominate the gradient and crush the
-   *  sample variance.
-   *
-   *  Linear (readouts): anchored on NEG/POS means when both controls
-   *  have values for the active layer; otherwise min/max of samples.
-   *
-   *  Linear (dose): no control anchoring (NEG/POS doses aren't meaningful
-   *  reference points). min/max across every well with a dose. */
-  function buildScale(plate: PlateData): ValueScale {
-    const allValues: number[] = [];
-    for (const w of plate.wells) {
-      const v = activeByWellId.get(w.well_id);
-      if (v != null) allValues.push(v);
-    }
-
-    if (scaleKind === "zscore") {
-      if (allValues.length < 2) {
-        return {
-          low: 0,
-          high: 1,
-          kind: "zscore",
-          controlAnchored: false,
-          zMean: 0,
-          zStd: 0,
-        };
-      }
-      const mean = allValues.reduce((a, b) => a + b, 0) / allValues.length;
-      const variance = allValues.reduce((a, b) => a + (b - mean) ** 2, 0) / (allValues.length - 1);
-      const std = Math.sqrt(variance);
-      // Symmetric ±2σ window. Outliers fall into the dark tails.
-      // If σ collapses to 0 (all values identical) widen to ±1 so the
-      // legend still renders without divide-by-zero downstream.
-      const halfSpan = std > 0 ? 2 * std : 1;
-      return {
-        low: mean - halfSpan,
-        high: mean + halfSpan,
-        kind: "zscore",
-        controlAnchored: false,
-        zMean: mean,
-        zStd: std,
-      };
-    }
-
-    if (isDose) {
-      if (allValues.length === 0) {
-        return { low: 0, high: 1, kind: "linear", controlAnchored: false };
-      }
-      const lo = Math.min(...allValues);
-      const hi = Math.max(...allValues);
-      return {
-        low: lo,
-        high: hi === lo ? lo + 1 : hi,
-        kind: "linear",
-        controlAnchored: false,
-      };
-    }
-
-    const negValues: number[] = [];
-    const posValues: number[] = [];
-    const sampleValues: number[] = [];
-    for (const w of plate.wells) {
-      const v = activeByWellId.get(w.well_id);
-      if (v == null) continue;
-      if (w.well_type === "negative_control") negValues.push(v);
-      else if (w.well_type === "positive_control") posValues.push(v);
-      else if (w.well_type === "sample") sampleValues.push(v);
-    }
-    const negMean =
-      negValues.length > 0 ? negValues.reduce((a, b) => a + b, 0) / negValues.length : undefined;
-    const posMean =
-      posValues.length > 0 ? posValues.reduce((a, b) => a + b, 0) / posValues.length : undefined;
-
-    if (negMean != null && posMean != null) {
-      return {
-        low: negMean,
-        high: posMean,
-        kind: "linear",
-        controlAnchored: true,
-        negMean,
-        posMean,
-      };
-    }
-    if (sampleValues.length === 0) {
-      return {
-        low: 0,
-        high: 1,
-        kind: "linear",
-        controlAnchored: false,
-        negMean,
-        posMean,
-      };
-    }
-    const lo = Math.min(...sampleValues);
-    const hi = Math.max(...sampleValues);
-    return {
-      low: lo,
-      high: hi === lo ? lo + 1 : hi,
-      kind: "linear",
-      controlAnchored: false,
-      negMean,
-      posMean,
-    };
-  }
-
-  /** Sequential palette only when the metric is unsigned magnitude AND we
-   *  aren't z-scoring it — otherwise the diverging palette carries the
-   *  signed semantics correctly. */
+    return result;
+  }, [plates, activeColorBy, compoundColors, colors]);
   const palette: Palette = isDose && scaleKind === "linear" ? "sequential" : "diverging";
+  const scaleOptions = {
+    values: numericValues,
+    outliers,
+    kind: scaleKind,
+    concentration: isDose,
+    normalization:
+      wantsComputed && !isDose ? (normalization as ReadoutNormalization | undefined) : undefined,
+    fullIsPositive,
+    unit: valueUnit,
+  };
+  const sharedScale = buildPlateScale({ ...scaleOptions, plates });
+  const scaleFor = (plate: PlateData) =>
+    scaleScope === "run" ? sharedScale : buildPlateScale({ ...scaleOptions, plates: [plate] });
+  const controlTypes = CONTROL_TYPES.filter((type) =>
+    plates.some((plate) => plate.wells.some((well) => well.well_type === type)),
+  );
 
-  if (!protocol || plateMapLoading || readoutLoading) {
-    return <p className="py-12 text-center text-sm text-muted-foreground">Loading…</p>;
+  function changeColorBy(value: string) {
+    const next = value as PlateColorBy;
+    setLocalColorBy(next);
+    onColorByChange?.(next);
   }
-
-  if (plates.length === 0) {
-    return (
-      <p className="py-12 text-center text-sm text-muted-foreground">
-        No plate map. Import a run file or set up a plate.
-      </p>
+  function onFlag(well: PlateMapWell, outlier: boolean, reason: string | null) {
+    if (!canFlag || flag.isPending || (run.status === "completed" && !reason?.trim())) return;
+    flag.mutate(
+      { runId: run.id, well_ids: [well.well_id], outlier, reason },
+      {
+        onSuccess: (result) => {
+          setCustomFlag(null);
+          setCustomReason("");
+          showSuccess(
+            outlier
+              ? `${well.position_label} flagged as an outlier`
+              : `${well.position_label} is no longer an outlier`,
+          );
+          if (result.compute_warning) showWarning(result.compute_warning);
+        },
+        onError: (error) => showError(apiReason(error)),
+      },
     );
   }
+  const renderMap = (plate: PlateData, preview = false) => (
+    <PlateValueHeatmap
+      plate={plate}
+      valueByWellId={isNumeric ? numericValues : EMPTY_VALUES}
+      colorByWellId={isNumeric ? undefined : categoricalColors}
+      rawByWellId={rawValues}
+      computedByWellId={computedValues}
+      scale={scaleFor(plate)}
+      palette={palette}
+      rawUnit={rawUnit}
+      computedUnit={computedUnit}
+      doseUnit={doseUnit}
+      outlierWellIds={outliers}
+      colors={colors}
+      preview={preview}
+      onSelectWell={(well) => setSelection({ plateId: plate.plate_id, wellId: well.well_id })}
+      selectedWellId={selection?.plateId === plate.plate_id ? selection.wellId : undefined}
+      highlightedWellIds={highlightedIds}
+      renderWellMenu={(well) => (
+        <PlateWellMenu
+          plate={plate}
+          well={well}
+          plates={plates}
+          excluded={outliers.has(well.well_id)}
+          rawValue={rawValues.get(well.well_id)}
+          computedValue={computedValues.get(well.well_id)}
+          rawLabel={`${selectedDef?.name ?? "Response"} · Raw${rawUnit ? ` (${rawUnit})` : ""}`}
+          computedLabel={computedUnit}
+          doseUnit={doseUnit}
+          canFlag={canFlag}
+          flagPending={flag.isPending}
+          flagUnavailableReason={flagUnavailableReason}
+          onInspect={() => setSelection({ plateId: plate.plate_id, wellId: well.well_id })}
+          onFlag={(outlier, reason) => onFlag(well, outlier, reason)}
+          onCustomReason={(outlier) => {
+            setCustomReason("");
+            setCustomFlag({ plate, well, outlier });
+          }}
+          onHighlight={(kind) => setHighlight({ wellId: well.well_id, kind })}
+        />
+      )}
+    />
+  );
+  const legend = (plate?: PlateData) => (
+    <ColorScaleLegend
+      scale={plate ? scaleFor(plate) : sharedScale}
+      palette={palette}
+      unit={valueUnit}
+      controlTypesPresent={controlTypes}
+      colors={colors}
+      hasOutliers={outliers.size > 0}
+    />
+  );
+  const quality = (plate: PlateData) => (
+    <PlateQualitySummary
+      run={run}
+      plate={plate}
+      readoutId={selectedDef?.id}
+      layer={wantsComputed && normalization ? normalization : "raw"}
+      values={responseValues}
+      outliers={outliers}
+      showCoverage={activeColorBy === "response"}
+      valueLabel={responseLabel}
+    />
+  );
+  const expanded = plates.find((plate) => plate.plate_id === expandedId);
+  const selectedPlate = plates.find((plate) => plate.plate_id === selection?.plateId);
+  const selectedWell = selectedPlate?.wells.find((well) => well.well_id === selection?.wellId);
 
-  // For the dose option there's no readout def — synthesize labels from
-  // the protocol's canonical dose unit.
-  const rawUnit = isDose ? doseUnit : (selectedDef?.unit ?? null);
-  const computedUnit = isDose
-    ? "Concentration"
-    : selectedDef
-      ? computedUnitLabel(selectedDef.normalizations?.find((n) => n !== "none") ?? "none")
-      : "Computed";
+  if (plateMapLoading || readoutLoading || protocolLoading)
+    return <p className="py-12 text-center text-sm text-muted-foreground">Loading plates…</p>;
+  if (!plates.length)
+    return (
+      <div className="space-y-3 rounded-lg border border-dashed py-12 text-center text-sm text-muted-foreground">
+        <p>No plates have been populated for this run.</p>
+        {canEdit && !run.is_locked && onOpenResults && (
+          <Button size="sm" variant="outline" onClick={onOpenResults}>
+            Import data in Results
+          </Button>
+        )}
+      </div>
+    );
 
   return (
-    <div className="mt-4 space-y-6">
-      <div className="flex flex-wrap items-end gap-4">
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end gap-x-4 gap-y-3 rounded-lg border bg-muted/15 p-3">
         <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Readout</label>
-          <Select value={effectiveReadoutId ?? undefined} onValueChange={(v) => setReadoutId(v)}>
-            <SelectTrigger className="h-9 w-[260px] text-sm">
+          <span className="text-xs font-medium text-muted-foreground">Colour by</span>
+          <Select value={activeColorBy} onValueChange={changeColorBy}>
+            <SelectTrigger aria-label="Colour by" className="h-9 w-40">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {numericReadouts.map((d) => (
-                <SelectItem key={d.id} value={d.id} className="text-sm">
-                  {d.name}
-                  {d.unit ? ` (${d.unit})` : ""}
+              {COLOR_BY_OPTIONS.map((option) => (
+                <SelectItem
+                  key={option.value}
+                  value={option.value}
+                  disabled={option.value === "response" && !selectedDef}
+                >
+                  {option.label}
                 </SelectItem>
               ))}
-              <SelectItem value={DOSE_OPTION_ID} className="text-sm">
-                Concentration ({doseUnit})
-              </SelectItem>
             </SelectContent>
           </Select>
         </div>
-
-        {layerAvailable && (
+        {numericReadouts.length > 0 && (
           <div className="flex flex-col gap-1">
-            <label className="text-xs font-medium text-muted-foreground">Value</label>
-            <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
+            <span className="text-xs font-medium text-muted-foreground">Readout</span>
+            <Select value={selectedDef?.id} onValueChange={setReadoutId}>
+              <SelectTrigger aria-label="Readout" className="h-9 w-56 max-w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {numericReadouts.map((definition) => (
+                  <SelectItem key={definition.id} value={definition.id}>
+                    {definition.name}
+                    {definition.unit ? ` (${definition.unit})` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
+        {activeColorBy === "response" && layerAvailable && (
+          <div className="flex flex-col gap-1">
+            <span className="text-xs font-medium text-muted-foreground">Value</span>
+            <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-background p-1">
               <Button
                 type="button"
                 size="sm"
-                variant={effectiveLayer === "raw" ? "secondary" : "ghost"}
-                className="h-7 rounded-sm px-2.5 text-xs"
+                variant={!wantsComputed ? "secondary" : "ghost"}
+                aria-pressed={!wantsComputed}
+                className="h-7 px-2.5"
                 onClick={() => setLayer("raw")}
               >
                 Raw
@@ -287,8 +398,9 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
               <Button
                 type="button"
                 size="sm"
-                variant={effectiveLayer === "normalized" ? "secondary" : "ghost"}
-                className="h-7 rounded-sm px-2.5 text-xs"
+                variant={wantsComputed ? "secondary" : "ghost"}
+                aria-pressed={wantsComputed}
+                className="h-7 px-2.5"
                 onClick={() => setLayer("normalized")}
               >
                 {computedUnit}
@@ -296,126 +408,315 @@ export function RunHeatmapPanel({ run }: RunHeatmapPanelProps) {
             </div>
           </div>
         )}
-
-        <div className="flex flex-col gap-1">
-          <label className="text-xs font-medium text-muted-foreground">Scale</label>
-          <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-muted/40 p-1">
+        {isNumeric && (
+          <>
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-medium text-muted-foreground">Scale</span>
+              <div className="inline-flex h-9 items-center gap-0.5 rounded-md border bg-background p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={scaleKind === "linear" ? "secondary" : "ghost"}
+                  aria-pressed={scaleKind === "linear"}
+                  className="h-7 px-2.5"
+                  onClick={() => setScaleKind("linear")}
+                >
+                  Linear
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={scaleKind === "zscore" ? "secondary" : "ghost"}
+                  aria-pressed={scaleKind === "zscore"}
+                  className="h-7 px-2.5"
+                  onClick={() => setScaleKind("zscore")}
+                >
+                  Z-Score
+                </Button>
+              </div>
+            </div>
+            {plates.length > 1 && (
+              <div className="flex flex-col gap-1">
+                <span className="text-xs font-medium text-muted-foreground">Range</span>
+                <Select
+                  value={scaleScope}
+                  onValueChange={(value) => setScaleScope(value as "run" | "plate")}
+                >
+                  <SelectTrigger aria-label="Scale range" className="h-9 w-48">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="run">Shared across plates</SelectItem>
+                    <SelectItem value="plate">Per plate</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </>
+        )}
+        <div className="ml-auto flex h-9 items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {plates.length} {plates.length === 1 ? "plate" : "plates"}
+          </span>
+          {plates.length > 1 && (
             <Button
-              type="button"
               size="sm"
-              variant={scaleKind === "linear" ? "secondary" : "ghost"}
-              className="h-7 rounded-sm px-2.5 text-xs"
-              onClick={() => setScaleKind("linear")}
+              variant="outline"
+              aria-pressed={compact}
+              onClick={() => setCompactChoice(!compact)}
             >
-              Linear
+              {compact ? "Detailed maps" : "Compact maps"}
             </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={scaleKind === "zscore" ? "secondary" : "ghost"}
-              className="h-7 rounded-sm px-2.5 text-xs"
-              onClick={() => setScaleKind("zscore")}
-            >
-              Z-Score
-            </Button>
-          </div>
+          )}
         </div>
       </div>
 
-      {/* Per-plate heatmaps */}
-      <div className="space-y-8">
-        {plates.map((plate) => {
-          const scale = buildScale(plate);
-          const qc = perPlateQc[plate.plate_id];
-          const zp = typeof qc?.z_prime === "number" ? qc.z_prime : null;
-          const zpQuality = zp != null ? classifyZPrime(zp) : null;
-
-          // For readouts: skip controls so they always render as type-color
-          // outlines regardless of their raw value.
-          // For the dose view: include every well — POS wells at a fixed
-          // inhibitor dose are part of the dose distribution and the user
-          // is here specifically to see where doses landed across the plate.
-          const valuesForGradient = new Map<string, number>();
-          const controlTypesSeen = new Set<string>();
-          for (const w of plate.wells) {
-            const includeControls = isDose;
-            if (w.well_type === "sample" || includeControls) {
-              const v = activeByWellId.get(w.well_id);
-              if (v != null) valuesForGradient.set(w.well_id, v);
-            }
-            if (
-              w.well_type === "negative_control" ||
-              w.well_type === "positive_control" ||
-              w.well_type === "blank" ||
-              w.well_type === "reference"
-            ) {
-              controlTypesSeen.add(w.well_type);
-            }
-          }
-          const controlTypesPresent = (
-            ["negative_control", "positive_control", "blank", "reference"] as const
-          ).filter((t) => controlTypesSeen.has(t));
-
-          return (
-            <div key={plate.plate_id} className="space-y-3">
-              <div className="flex flex-wrap items-baseline justify-between gap-3">
-                <div className="flex items-baseline gap-3">
-                  <h3 className="text-sm font-medium">Plate {plate.plate_number}</h3>
-                  <span className="text-xs text-muted-foreground">
-                    {plate.summary.total_wells} wells · {plate.summary.sample_wells} samples ·{" "}
-                    {plate.summary.control_wells} controls
-                  </span>
-                  <RunPlateLink runId={run.id} plate={plate} readOnly />
-                </div>
-                {zp != null && zpQuality && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Z&apos;
-                    </span>
-                    <span className="font-mono text-sm tabular-nums">{zp.toFixed(3)}</span>
-                    <Badge
-                      variant="outline"
-                      className={cn("text-[10px] font-medium", Z_PRIME_BADGE[zpQuality].className)}
-                    >
-                      {Z_PRIME_BADGE[zpQuality].label}
-                    </Badge>
-                    {typeof qc?.s2b === "number" && (
-                      <span className="ml-2 text-[11px] text-muted-foreground">
-                        S/B <span className="font-mono tabular-nums">{qc.s2b.toFixed(2)}</span>
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <ColorScaleLegend
-                scale={scale}
-                palette={palette}
-                unit={wantsComputed ? null : rawUnit}
-                controlTypesPresent={controlTypesPresent}
-              />
-
-              <PlateValueHeatmap
-                plate={plate}
-                valueByWellId={valuesForGradient}
-                rawByWellId={rawByWellId}
-                computedByWellId={computedByWellId}
-                scale={scale}
-                palette={palette}
-                rawUnit={rawUnit}
-                computedUnit={computedUnit}
-                doseUnit={doseUnit}
-              />
-            </div>
-          );
-        })}
-      </div>
-
-      {curves && curves.length > 0 && (
-        <p className="pt-2 text-[11px] text-muted-foreground">
-          {curves.length} fitted curve{curves.length === 1 ? "" : "s"} · see Dose-Response tab.
+      {readoutError && (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/30 p-3 text-sm text-destructive"
+        >
+          Response values could not be loaded. Reload to try again; compound and well-type views
+          remain available.
         </p>
       )}
+      {isNumeric ? (
+        scaleScope === "run" ? (
+          <section aria-label="Shared colour scale" className="space-y-2 rounded-lg border p-3">
+            <p className="text-xs font-medium">
+              {isDose
+                ? `Concentration (${doseUnit})`
+                : `${selectedDef?.name ?? "Response"} · ${responseLabel}`}
+              <span className="ml-2 font-normal text-muted-foreground">
+                {plates.length > 1
+                  ? "Same colours mean the same values across plates"
+                  : "Click a well to inspect; right-click for actions"}
+              </span>
+            </p>
+            {legend()}
+          </section>
+        ) : (
+          <p className="rounded-md border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+            Per-plate scaling is on. Each map has its own scale; colours are not directly comparable
+            between plates.
+          </p>
+        )
+      ) : (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
+          <span>
+            {activeColorBy === "compound"
+              ? "The same compound has the same colour across every plate"
+              : "Wells are coloured by their role"}
+          </span>
+          {activeColorBy === "well-type" && (
+            <span className="flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-sm"
+                style={{ background: colors.sample ?? CHART_COLORS.primary }}
+              />
+              Sample
+            </span>
+          )}
+          {controlTypes.map((type) => (
+            <span key={type} className="flex items-center gap-1.5">
+              <span
+                className="h-2.5 w-2.5 rounded-sm border-2"
+                style={{
+                  borderColor: colors[type],
+                  background: activeColorBy === "well-type" ? colors[type] : "transparent",
+                }}
+              />
+              {type.replace(/_/g, " ")}
+            </span>
+          ))}
+          {outliers.size > 0 && <span>✕ Excluded from QC</span>}
+        </div>
+      )}
+
+      {highlightSource && (
+        <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
+          <span>
+            {highlight?.kind === "replicates" ? "Replicates" : "Same compound"} ·{" "}
+            {highlightSource.registration_number ??
+              highlightSource.batch_number ??
+              highlightSource.position_label}
+            {highlight?.kind === "replicates" && highlightSource.dose != null
+              ? ` · ${formatPlateValue(highlightSource.dose)} ${doseUnit}`
+              : ""}{" "}
+            · {highlightedIds.size} wells
+          </span>
+          <Button className="ml-auto" variant="ghost" size="sm" onClick={() => setHighlight(null)}>
+            Clear highlights
+          </Button>
+        </div>
+      )}
+      <div
+        className={cn(
+          "grid items-start gap-4",
+          compact
+            ? "[grid-template-columns:repeat(auto-fit,minmax(min(100%,20rem),1fr))]"
+            : "[grid-template-columns:repeat(auto-fit,minmax(min(100%,32rem),1fr))]",
+        )}
+      >
+        {plates.map((plate) => (
+          <article
+            key={plate.plate_id}
+            aria-label={`Plate ${plate.plate_number}`}
+            className="min-w-0 space-y-3 rounded-lg border bg-card p-4"
+          >
+            <header className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="text-base font-semibold">Plate {plate.plate_number}</h3>
+                <RunPlateLink runId={run.id} plate={plate} readOnly={run.is_locked || !canEdit} />
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 gap-1.5 px-2"
+                aria-label={`Expand Plate ${plate.plate_number}`}
+                onClick={() => setExpandedId(plate.plate_id)}
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+                Expand
+              </Button>
+            </header>
+            {quality(plate)}
+            {isNumeric && scaleScope === "plate" && legend(plate)}
+            {compact ? (
+              <button
+                type="button"
+                className="block w-full rounded-md text-left focus-visible:outline-2 focus-visible:outline-primary"
+                aria-label={`Inspect Plate ${plate.plate_number}`}
+                onClick={() => setExpandedId(plate.plate_id)}
+              >
+                {renderMap(plate, true)}
+              </button>
+            ) : (
+              <div className="flex justify-center [&>div]:min-w-0">{renderMap(plate)}</div>
+            )}
+            {!plate.wells.length && canEdit && !run.is_locked && onOpenResults && (
+              <Button size="sm" variant="outline" onClick={onOpenResults}>
+                Import data in Results
+              </Button>
+            )}
+            <PlateCompoundsList plate={plate} colors={compoundColors} doseUnit={doseUnit} />
+          </article>
+        ))}
+      </div>
+      {curves && curves.length > 0 && (
+        <p className="text-xs text-muted-foreground">
+          {curves.length} fitted {curves.length === 1 ? "curve" : "curves"} · available in Results →
+          Dose-response and when selecting a sample well.
+        </p>
+      )}
+
+      <Dialog
+        open={!!expanded}
+        onOpenChange={(open) => {
+          if (!open) setExpandedId(null);
+        }}
+      >
+        {expanded && (
+          <DialogContent className="max-h-[90dvh] w-[calc(100vw-2rem)] overflow-y-auto sm:max-w-4xl">
+            <DialogHeader>
+              <DialogTitle>Plate {expanded.plate_number}</DialogTitle>
+              <DialogDescription>
+                {COLOR_BY_OPTIONS.find((option) => option.value === activeColorBy)?.label} view ·
+                using the overview’s readout and scale
+              </DialogDescription>
+            </DialogHeader>
+            {quality(expanded)}
+            {isNumeric && legend(expanded)}
+            <div className="flex justify-center [&>div]:min-w-0">{renderMap(expanded)}</div>
+            <PlateCompoundsList plate={expanded} colors={compoundColors} doseUnit={doseUnit} />
+          </DialogContent>
+        )}
+      </Dialog>
+      {selectedPlate && selectedWell && (
+        <PlateWellDetails
+          key={selectedWell.well_id}
+          plate={selectedPlate}
+          well={selectedWell}
+          plates={plates}
+          rawValues={rawValues}
+          computedValues={computedValues}
+          responseValues={responseValues}
+          responseLabel={responseLabel}
+          rawUnit={rawUnit}
+          computedUnit={computedUnit}
+          doseUnit={doseUnit}
+          outliers={outliers}
+          curves={curves ?? []}
+          canFlag={canFlag}
+          flagPending={flag.isPending}
+          reasonRequired={run.status === "completed"}
+          onFlag={onFlag}
+          onClose={() => setSelection(null)}
+        />
+      )}
+      <Dialog
+        open={!!customFlag}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCustomFlag(null);
+            setCustomReason("");
+          }
+        }}
+      >
+        {customFlag && (
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>
+                {customFlag.outlier ? "Exclude from QC" : "Restore to QC"} · Plate{" "}
+                {customFlag.plate.plate_number} · {customFlag.well.position_label}
+              </DialogTitle>
+              <DialogDescription>
+                {customFlag.outlier
+                  ? "Leaves plate QC and normalization anchors; the measurement is retained. The run is recalculated."
+                  : "Returns the well to plate QC and normalization anchors. The run is recalculated."}
+              </DialogDescription>
+            </DialogHeader>
+            <form
+              className="space-y-4"
+              onSubmit={(event) => {
+                event.preventDefault();
+                if (customReason.trim())
+                  onFlag(customFlag.well, customFlag.outlier, customReason.trim());
+              }}
+            >
+              <Input
+                aria-label="Reason"
+                placeholder="Reason for this QC decision"
+                required
+                maxLength={500}
+                value={customReason}
+                onChange={(event) => setCustomReason(event.target.value)}
+              />
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => setCustomFlag(null)}
+                  disabled={flag.isPending}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={!canFlag || flag.isPending || !customReason.trim()}
+                >
+                  {flag.isPending
+                    ? "Updating…"
+                    : customFlag.outlier
+                      ? "Exclude well"
+                      : "Restore well"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }

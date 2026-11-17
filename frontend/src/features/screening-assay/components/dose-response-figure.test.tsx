@@ -20,8 +20,8 @@ vi.mock("@/shared/lib/chart-colors", () => ({
   CURVE_QUALITY_COLORS: { inactive: "#999", full: "#000" } as Record<string, string>,
 }));
 
-import { render } from "@testing-library/react";
-import { DoseResponseFigure } from "./dose-response-figure";
+import { render, screen } from "@testing-library/react";
+import { DoseResponseChartView, DoseResponseFigure } from "./dose-response-figure";
 
 function reset() {
   plotCalls.length = 0;
@@ -299,5 +299,72 @@ describe("<DoseResponseFigure /> — aggregate-mode overlay", () => {
     expect(layout.xaxis?.range).toBeDefined();
     const [, hi] = layout.xaxis!.range!;
     expect(hi).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("<DoseResponseChartView /> — cellar's fit notes", () => {
+  it("says on each curve's card how many points at dose 0 sat out of the fit", () => {
+    const curve = { fitted_value: 0.0013, top: 100, bottom: 0, hill_slope: 1, r_squared: 0.99 };
+    render(
+      <DoseResponseChartView
+        curves={[
+          { ...curve, id: "a", label: "A", fit_quality_warnings: ["dose_zero_left_out:1"] },
+          { ...curve, id: "b", label: "B", fit_quality_warnings: ["dose_zero_left_out:2"] },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/1 point at dose 0 left out of the fit/)).toBeInTheDocument();
+    expect(screen.getByText(/2 points at dose 0 left out of the fit/)).toBeInTheDocument();
+  });
+});
+
+describe("<DoseResponseChartView /> — a value censored at the dose range", () => {
+  it("says on an inactive curve's card that it reads above the top dose", () => {
+    // Run 394e4741's SACC-0108241: inactive over 0.5–500 µM, the fit parked at 1172.
+    render(
+      <DoseResponseChartView
+        curves={[
+          {
+            id: "a",
+            label: "SACC-0108241",
+            fitted_value: 1172.1,
+            fitted_unit: "uM",
+            top: 12,
+            bottom: 3,
+            hill_slope: 1,
+            r_squared: 0,
+            curve_class: "inactive",
+            raw_data: [
+              { concentration: 0.5, response: 4 },
+              { concentration: 50, response: 8 },
+              { concentration: 500, response: 11 },
+            ],
+          },
+        ]}
+      />,
+    );
+    expect(screen.getByText(/Reported as > 500 uM/)).toBeInTheDocument();
+  });
+
+  it("adds nothing to a curve whose value lies inside the tested doses", () => {
+    render(
+      <DoseResponseChartView
+        curves={[
+          {
+            id: "a",
+            label: "A",
+            fitted_value: 10,
+            fitted_unit: "uM",
+            top: 100,
+            bottom: 0,
+            hill_slope: 1,
+            r_squared: 0.99,
+            curve_class: "full",
+            raw_data: RAW_POINTS,
+          },
+        ]}
+      />,
+    );
+    expect(screen.queryByText(/Reported as/)).not.toBeInTheDocument();
   });
 });

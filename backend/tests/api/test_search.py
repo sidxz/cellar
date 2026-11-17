@@ -381,6 +381,7 @@ async def _seed_multi_run_dr(
     fitted_value: float = 5.0,
     intercepts: list[tuple[str, float, float]] | None = None,
     curve_class: CurveClass = CurveClass.FULL,
+    raw_data: list[dict] | None = None,
 ) -> tuple[uuid.UUID, uuid.UUID, list[uuid.UUID]]:
     """Seed a protocol + DR readout-def + N runs + N curves for one molecule.
 
@@ -486,7 +487,7 @@ async def _seed_multi_run_dr(
                 r_squared=0.97,
                 num_points=8,
                 curve_class=curve_class,
-                raw_data=[],
+                raw_data=raw_data or [],
                 intercept_values=intercept_values,
             )
             repo = SQLAlchemyDoseResponseCurveRepository(uow)
@@ -1257,6 +1258,75 @@ class TestChemistSearchCorrectness:
         )
         assert active in any_protocol
         assert inactive not in any_protocol
+
+    async def test_potency_cutoff_reads_the_reported_value_censored_at_the_doses(
+        self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
+    ) -> None:
+        """The grid reports an inactive curve and a fit above its doses as "> 500"
+        (the top dose), a fit below them as "< 0.5". A cutoff matches a bound only
+        when certain: "> 500" is in "IC50 > 100", never in "IC50 < 1000"."""
+        doses = [
+            {"concentration": 0.5, "response": 2.0},
+            {"concentration": 500.0, "response": 9.0},
+        ]
+        inactive = await _register(client, org_id, "InactiveBound", "CCCCCCCCCCN")
+        above = await _register(client, org_id, "AboveBound", "CCCCCCCCCCCN")
+        below = await _register(client, org_id, "BelowBound", "CCCCCCCCCCCCN")
+        inside = await _register(client, org_id, "InsideDoses", "CCCCCCCCCCCCCN")
+        seeded = {
+            m: await _seed_multi_run_dr(
+                uow,
+                workspace_id=workspace_id,
+                molecule_id=uuid.UUID(m),
+                run_count=1,
+                fitted_value=v,
+                curve_class=cc,
+                raw_data=doses,
+                intercepts=[("ic", 50, v)],
+            )
+            for m, v, cc in (
+                (inactive, 3.0, CurveClass.INACTIVE),
+                (above, 823.4, CurveClass.PARTIAL),
+                (below, 0.01, CurveClass.FULL),
+                (inside, 3.0, CurveClass.FULL),
+            )
+        }
+
+        async def hits(operator: str, value: float, *, keyed: bool = False) -> set[str]:
+            found: set[str] = set()
+            for m, (proto, rd, _) in seeded.items():
+                cond = {
+                    "source": "dr_curve",
+                    "readout_definition_id": str(rd),
+                    "operator": operator,
+                    "value": value,
+                }
+                if keyed:
+                    cond["intercept_key"] = {"kind": "ic", "level": 50}
+                ids = await _ids(
+                    client, [{"type": "activity", "protocol_id": str(proto), "where": [cond]}]
+                )
+                found |= {m} & set(ids)
+            return found
+
+        for keyed in (False, True):
+            assert await hits("gt", 100, keyed=keyed) == {inactive, above}
+            assert await hits("lt", 1000, keyed=keyed) == {below, inside}
+            assert await hits("lt", 0.1, keyed=keyed) == set()
+            assert await hits("lt", 1, keyed=keyed) == {below}
+
+        any_protocol = await _ids(
+            client,
+            [
+                {
+                    "type": "activity",
+                    "protocol_id": None,
+                    "where": [{"source": "dr_curve", "operator": "gt", "value": 100}],
+                }
+            ],
+        )
+        assert {inactive, above} <= set(any_protocol)
+        assert not {below, inside} & set(any_protocol)
 
     async def test_readout_filter_targets_one_layer(
         self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID

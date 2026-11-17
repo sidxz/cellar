@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from cellar.application.screening.compound_curves_reader import CurveRow
+from cellar.application.screening.compound_curves_reader import CompoundCurveRow
+from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     RunModel,
@@ -25,11 +26,18 @@ class SQLAlchemyCompoundCurvesReader:
         workspace_id: uuid.UUID,
         protocol_id: uuid.UUID,
         molecule_id: uuid.UUID,
-    ) -> list[CurveRow]:
+    ) -> list[CompoundCurveRow]:
         async with self._session_factory() as session:
             stmt = (
-                select(DoseResponseCurveModel)
+                select(DoseResponseCurveModel, BatchModel.batch_number)
                 .join(RunModel, DoseResponseCurveModel.run_id == RunModel.id)
+                .outerjoin(
+                    BatchModel,
+                    and_(
+                        BatchModel.id == DoseResponseCurveModel.batch_id,
+                        BatchModel.workspace_id == workspace_id,
+                    ),
+                )
                 .where(
                     DoseResponseCurveModel.protocol_id == protocol_id,
                     DoseResponseCurveModel.molecule_id == molecule_id,
@@ -37,16 +45,17 @@ class SQLAlchemyCompoundCurvesReader:
                 )
                 .order_by(RunModel.run_date.desc())
             )
-            rows = (await session.execute(stmt)).scalars().all()
+            rows = (await session.execute(stmt)).all()
 
             return [
-                CurveRow(
+                CompoundCurveRow(
                     id=r.id,
                     workspace_id=r.workspace_id,
                     molecule_id=r.molecule_id,
                     batch_id=r.batch_id,
                     protocol_id=r.protocol_id,
                     run_id=r.run_id,
+                    readout_definition_id=r.readout_definition_id,
                     curve_type=r.curve_type,
                     fitted_value=r.fitted_value,
                     hill_slope=r.hill_slope,
@@ -59,6 +68,8 @@ class SQLAlchemyCompoundCurvesReader:
                     curve_class=r.curve_class,
                     raw_data=r.raw_data,
                     excluded_points=r.excluded_points,
+                    intercept_values=r.intercept_values,
+                    batch_number=batch_number,
                 )
-                for r in rows
+                for r, batch_number in rows
             ]

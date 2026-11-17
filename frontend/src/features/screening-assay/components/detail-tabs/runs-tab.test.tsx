@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ColDef, ColGroupDef } from "ag-grid-community";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,7 +15,13 @@ vi.mock("@/features/workspace-config/hooks/use-organizations", () => ({
 }));
 
 const runs = [
-  { id: "r1", run_date: "2026-11-05", operator: "u1", status: "completed" },
+  {
+    id: "r1",
+    run_date: "2026-11-05",
+    operator: "u1",
+    status: "completed",
+    conditions: { Strain: "H37Rv" },
+  },
   { id: "r2", run_date: "2026-11-04", operator: "u1", status: "draft" },
   { id: "r3", run_date: "2026-11-03", operator: "u1", status: "approved" },
 ] as unknown as Run[];
@@ -69,6 +76,7 @@ const protocol = (has_measured_curves: boolean | null) =>
 
 describe("RunsTab Compare curves", () => {
   beforeEach(() => {
+    localStorage.clear();
     push.mockClear();
     positionCalls.length = 0;
     gridProps.length = 0;
@@ -101,6 +109,48 @@ describe("RunsTab Compare curves", () => {
     render(<RunsTab protocol={protocol(true)} protocolId="p1" onCompareCurves={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "open first row" }));
     expect(push).toHaveBeenCalledWith("/assays/runs/r1");
+  });
+
+  const columns = (): ColDef<Run>[] =>
+    (gridProps.at(-1)?.columnDefs as (ColDef<Run> | ColGroupDef<Run>)[]).flatMap((column) =>
+      "children" in column ? (column.children as ColDef<Run>[]) : [column],
+    );
+
+  it("defaults to core run facts and full notes, with no Lab column", () => {
+    render(<RunsTab protocol={protocol(false)} protocolId="p1" onCompareCurves={vi.fn()} />);
+    expect(columns().some((column) => column.field === "performed_at_org_id")).toBe(false);
+    expect(columns().find((column) => column.field === "notes")?.hide).toBe(false);
+    expect(columns().find((column) => column.colId === "cond:Strain")?.hide).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    expect(screen.getByRole("checkbox", { name: "Run Date" })).toBeDisabled();
+  });
+
+  it("remembers optional condition columns and resets to defaults", () => {
+    const first = render(
+      <RunsTab protocol={protocol(false)} protocolId="p1" onCompareCurves={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Conditions · Strain" }));
+    expect(columns().find((column) => column.colId === "cond:Strain")?.hide).toBe(false);
+    first.unmount();
+    render(<RunsTab protocol={protocol(false)} protocolId="p1" onCompareCurves={vi.fn()} />);
+    expect(columns().find((column) => column.colId === "cond:Strain")?.hide).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    expect(columns().find((column) => column.colId === "cond:Strain")?.hide).toBe(true);
+  });
+
+  it("keeps visibility choices separate when switching protocols", () => {
+    const view = render(
+      <RunsTab protocol={protocol(false)} protocolId="p1" onCompareCurves={vi.fn()} />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Notes" }));
+    expect(columns().find((column) => column.field === "notes")?.hide).toBe(true);
+    view.rerender(<RunsTab protocol={protocol(false)} protocolId="p2" onCompareCurves={vi.fn()} />);
+    expect(columns().find((column) => column.field === "notes")?.hide).toBe(false);
+    view.rerender(<RunsTab protocol={protocol(false)} protocolId="p1" onCompareCurves={vi.fn()} />);
+    expect(columns().find((column) => column.field === "notes")?.hide).toBe(true);
   });
 
   it.each([false, null])(

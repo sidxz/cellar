@@ -9,10 +9,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/shared/components/ui/dropdown-menu";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
-import { ChevronDown, Crosshair, Download, Plus, Settings2, TestTubes, Upload } from "lucide-react";
-import Link from "next/link";
+import { ChevronDown, Download, FileSpreadsheet, Plus, Upload } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useCddEnabled } from "../hooks/use-cdd-enabled";
@@ -22,11 +20,9 @@ import { CreateProtocolDialog } from "./create-protocol-dialog";
 import { CreateRunDialog } from "./create-run-dialog";
 import { ProtocolBrowser } from "./protocol-browser";
 import { ProtocolCsvImportDialog } from "./protocol-csv-import/protocol-csv-import-dialog";
-import { TargetList } from "./target-list";
 
 export function ScreeningDashboard() {
   const router = useRouter();
-  const [tab, setTab] = useState("protocols");
   const [createProtocolOpen, setCreateProtocolOpen] = useState(false);
   const [cddImportOpen, setCddImportOpen] = useState(false);
   const [csvImportOpen, setCsvImportOpen] = useState(false);
@@ -36,82 +32,38 @@ export function ScreeningDashboard() {
   const { enabled: cddEnabled } = useCddEnabled();
 
   return (
-    <div>
-      <PageHeader
-        title="Protocols"
-        subtitle="Find an assay, explore its readouts, and review screening runs."
-      />
-
-      <Tabs value={tab} onValueChange={setTab} className="mt-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <TabsList>
-            <TabsTrigger value="protocols">
-              <TestTubes className="mr-2 h-4 w-4" />
-              Protocols
-            </TabsTrigger>
-            <TabsTrigger value="targets">
-              <Crosshair className="mr-2 h-4 w-4" />
-              Targets
-            </TabsTrigger>
-          </TabsList>
-
-          {tab === "protocols" && (
-            <div className="flex items-center gap-2">
-              {(cddEnabled || canCreate) && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline">
-                      <Upload className="mr-2 h-4 w-4" />
-                      Import
-                      <ChevronDown className="ml-2 h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {canCreate && (
-                      <DropdownMenuItem onSelect={() => setCsvImportOpen(true)}>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Import protocols (CSV)
-                      </DropdownMenuItem>
-                    )}
-                    {cddEnabled && (
-                      <DropdownMenuItem onSelect={() => setCddImportOpen(true)}>
-                        <Download className="mr-2 h-4 w-4" />
-                        Import from CDD
-                      </DropdownMenuItem>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-              <Button onClick={() => setCreateProtocolOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                New protocol
+    <div className="space-y-3">
+      <PageHeader title="Protocols" className="mb-3 flex-wrap gap-3">
+        {(cddEnabled || canCreate) && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Upload className="size-4" /> Import <ChevronDown className="size-4" />
               </Button>
-            </div>
-          )}
-          {tab === "targets" && (
-            <Button asChild variant="outline">
-              <Link href="/admin/targets">
-                <Settings2 className="mr-2 h-4 w-4" />
-                Manage targets
-              </Link>
-            </Button>
-          )}
-        </div>
-
-        <TabsContent value="protocols" className="mt-4">
-          <SetupChecklist compact />
-          <ProtocolBrowser
-            onNewFrom={canCreate ? setNewFrom : undefined}
-            onSelect={(protocolId) => {
-              router.push(`/assays/protocols/${protocolId}`);
-            }}
-          />
-        </TabsContent>
-
-        <TabsContent value="targets" className="mt-4">
-          <TargetList />
-        </TabsContent>
-      </Tabs>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {canCreate && (
+                <DropdownMenuItem onSelect={() => setCsvImportOpen(true)}>
+                  <FileSpreadsheet className="size-4" /> Import protocols (CSV)
+                </DropdownMenuItem>
+              )}
+              {cddEnabled && (
+                <DropdownMenuItem onSelect={() => setCddImportOpen(true)}>
+                  <Download className="size-4" /> Import from CDD
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <Button variant="outline" size="sm" onClick={() => setCreateProtocolOpen(true)}>
+          <Plus className="size-4" /> New protocol
+        </Button>
+      </PageHeader>
+      <SetupChecklist compact />
+      <ProtocolBrowser
+        onNewFrom={canCreate ? setNewFrom : undefined}
+        onSelect={(protocolId) => router.push(`/assays/protocols/${protocolId}`)}
+      />
 
       <CreateProtocolDialog
         open={createProtocolOpen}

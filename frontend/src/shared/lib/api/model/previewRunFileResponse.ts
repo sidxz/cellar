@@ -40,4 +40,6 @@ export interface PreviewRunFileResponse {
   readout_conflicts?: ReadoutConflictModel[];
   ambiguous_compounds?: AmbiguousCompoundModel[];
   auto_created_batches?: number;
+  warnings?: string[];
+  swapped_controls?: string[];
 }

@@ -15,10 +15,12 @@
  * the chart degrades to the legacy label.
  */
 
-import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
+import {
+  type CurveSnapshot,
+  DoseResponseChartView,
+} from "@/features/screening-assay/components/dose-response-figure";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/shared/components/ui/dialog";
-import { Plot } from "@/shared/lib/plotly";
-import { type CurveLike, DoseResponseChartView } from "@structflo/components/dose-response";
+import type { CurveLike } from "@structflo/components/dose-response";
 import { useMemo } from "react";
 
 export interface ExpandedCurve extends CurveSnapshot {
@@ -55,7 +57,7 @@ export function CurveExpandDialog({ data, onOpenChange }: Props) {
             <span className="text-muted-foreground font-normal">{data.channelLabel}</span>
           </DialogTitle>
         </DialogHeader>
-        <DoseResponseChartView curves={curves} plot={Plot} />
+        <DoseResponseChartView curves={curves} />
       </DialogContent>
     </Dialog>
   );

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { RunImportTemplate } from "../hooks/use-run-import";
+import { type RunImportTemplate, narrowHeaderSuggestions } from "../hooks/use-run-import";
 import {
   applyTemplateToDraft,
   emptyDraft,
@@ -47,6 +47,12 @@ describe("applyTemplateToDraft", () => {
     expect(result.roles.EXTRA).toBeUndefined();
   });
 
+  it("restores the well-role column", () => {
+    const template = makeTemplate("roles", { well: "WELL", well_role: "Control State" });
+    const result = applyTemplateToDraft(emptyDraft(), template, ["WELL", "Control State"]);
+    expect(result.roles["Control State"]).toBe("well_role");
+  });
+
   it("skips headers from the template that are absent in the file", () => {
     const draft = emptyDraft();
     const template = makeTemplate("t2", {
@@ -91,6 +97,15 @@ describe("suggestionToInitialDraft", () => {
     expect(draft.roles.WELL).toBe("well");
     expect(draft.roles.INHIB).toBe("readout");
     expect(draft.readoutDefByHeader.INHIB).toBe("rd-1");
+  });
+
+  it("keeps a suggested well-role column", () => {
+    const draft = suggestionToInitialDraft(
+      narrowHeaderSuggestions([
+        { header: "Control State", role: "well_role", confidence: "high", reason: "synonym" },
+      ]),
+    );
+    expect(draft.roles["Control State"]).toBe("well_role");
   });
 
   it("does not set readoutDefByHeader when readout_definition_id is null", () => {

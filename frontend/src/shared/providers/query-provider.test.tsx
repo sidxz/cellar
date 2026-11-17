@@ -25,6 +25,19 @@ describe("onMutationError", () => {
     expect(mockShowError).not.toHaveBeenCalled();
   });
 
+  it("stays silent on a stale edit — the caller explains it and offers a reload", () => {
+    onMutationError(new ApiError("API error: 409", 409, { error: "StaleEditError" }));
+    expect(mockShowError).not.toHaveBeenCalled();
+  });
+
+  it("stays silent on a race 409 only for a mutation that explains it as a stale edit", () => {
+    const race = new ApiError("API error: 409", 409, { error: "ConcurrencyConflictError" });
+    onMutationError(race, undefined, undefined, { meta: { raceIsStale: true } });
+    expect(mockShowError).not.toHaveBeenCalled();
+    onMutationError(race);
+    expect(mockShowError).toHaveBeenCalledWith("API error: 409");
+  });
+
   it("toasts a plain mutation error as before", () => {
     onMutationError(new Error("boom"));
     expect(mockShowError).toHaveBeenCalledWith("boom");

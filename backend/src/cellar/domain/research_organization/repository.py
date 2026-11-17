@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Protocol, runtime_checkable
@@ -20,6 +21,7 @@ from cellar.domain.research_organization.project_membership import (
 )
 from cellar.domain.research_organization.project_scope_stats import ProjectScopeStats
 from cellar.domain.research_organization.saved_search import SavedSearch
+from cellar.domain.research_organization.saved_visualization import SavedVisualization
 from cellar.domain.shared.target_ref import TargetRef
 
 
@@ -157,6 +159,31 @@ class SavedSearchRepository(Protocol):
     async def find_by_creator(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> list[SavedSearch]: ...
+
+
+@runtime_checkable
+class SavedVisualizationRepository(Protocol):
+    """Repository for SavedVisualization aggregates."""
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> SavedVisualization | None: ...
+
+    async def save(self, aggregate: SavedVisualization) -> None: ...
+
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+    async def find_visible(
+        self,
+        workspace_id: uuid.UUID,
+        user_id: uuid.UUID,
+        *,
+        project_ids: Sequence[uuid.UUID] | None,
+        protocol_id: uuid.UUID | None = None,
+    ) -> list[SavedVisualization]:
+        """The user's own views plus project views of ``project_ids`` (``None`` = every
+        project, for admins), by name; only those naming ``protocol_id`` when given."""
+        ...
 
 
 @runtime_checkable

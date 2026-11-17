@@ -186,7 +186,7 @@ describe("MeltResultsPanel", () => {
     render(<Harness channel="c" onLead={onLead} />);
     expect(
       screen.getByText(
-        "No temperature window on this signal — add one on the protocol's Design tab",
+        "No temperature window on this signal — add one on the protocol's Setup tab",
       ),
     ).toBeInTheDocument();
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);

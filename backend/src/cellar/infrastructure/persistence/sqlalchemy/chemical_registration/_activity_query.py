@@ -22,6 +22,10 @@ from cellar.domain.shared.units import canonical_unit
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeModel,
 )
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
+    curve_doses,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
     not_in_rejected_run,
@@ -182,25 +186,15 @@ def _activity_where_clause(
         msg = "where condition with readout_definition_id needs protocol_id"
         raise ValueError(msg)
 
-    qualifier_col: Any = None  # readout rows only — curves carry no qualifier
     if source == "dr_curve":
         # Pick the column to filter on. The primary intercept is the headline
         # `fitted_value` (indexed, fast). Secondary intercepts (EC90 on an EC50-
         # primary fit, etc.) live in the `intercept_values` JSONB array — keyed
         # by (kind, level) per the spec at
         # docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md.
-        ik = cond.get("intercept_key")
-        data_col: Any
-        if ik is None:
-            data_col = DoseResponseCurveModel.fitted_value
-        else:
-            kind = ik.get("kind") if isinstance(ik, dict) else None
-            level = ik.get("level") if isinstance(ik, dict) else None
-            if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
-                msg = f"Invalid intercept_key on activity where: {ik!r}"
-                raise ValueError(msg)
-            data_col = _jsonb_intercept_value(kind, float(level))
-        data_col = reportable_curve_value(data_col, DoseResponseCurveModel.curve_class)
+        data_col, qualifier_col = reported_curve_value(
+            DoseResponseCurveModel, *_curve_intercept(cond.get("intercept_key"))
+        )
         molecule_col = DoseResponseCurveModel.molecule_id
         run_id_col = DoseResponseCurveModel.run_id
         base_filters = [
@@ -220,10 +214,11 @@ def _activity_where_clause(
         base_filters = [
             ReadoutDataModel.workspace_id == workspace_id,
             ReadoutDataModel.readout_definition_id == rd_id,
-            # Control / blank wells carry molecule_id NULL; one NULL in a
-            # NOT IN subquery ("every run" counterexamples, negated filters)
-            # makes it match nothing.
+            # One NULL in a NOT IN subquery ("every run" counterexamples,
+            # negated filters) makes it match nothing.
             ReadoutDataModel.molecule_id.is_not(None),
+            # A compound's results only: its control/reference wells are plate QC.
+            COMPOUND_RESULT,
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied == normalization
             if normalization
@@ -238,14 +233,11 @@ def _activity_where_clause(
     if scope_filter is not None:
         base_filters.append(scope_filter)
 
-    # coalesce: an ND value (inactive curve, missing intercept) satisfies no
+    # coalesce: an ND value (missing intercept, no dose to quote) satisfies no
     # cutoff — and in "all" mode it is a counterexample, not a skipped row.
-    raw_filter = (
-        _qualified_value_filter(data_col, qualifier_col, cond)
-        if source == "readout_data"
-        else _value_filter(data_col, cond)
+    value_filter = sa.func.coalesce(
+        _qualified_value_filter(data_col, qualifier_col, cond), sa.false()
     )
-    value_filter = sa.func.coalesce(raw_filter, sa.false())
 
     # "all" semantics: molecule has at least one satisfying row AND no
     # non-satisfying row in scope. Implemented as IN(positive) AND NOT IN(negative).
@@ -259,15 +251,36 @@ def _activity_where_clause(
     return MoleculeModel.id.in_(sa.select(molecule_col).where(*base_filters, value_filter))
 
 
-def _jsonb_intercept_value(kind: str, level: float) -> ColumnElement:
-    """Build a SQL expression that pulls the numeric value of a specific
-    intercept (identified by (kind, level)) out of the curve's
-    ``intercept_values`` JSONB array.
+def _curve_intercept(ik: Any) -> tuple[ColumnElement, ColumnElement]:
+    """(value, at_bound) of the intercept a condition names: the primary
+    ``fitted_value`` (indexed, fast) with intercept_values[0]'s flag, or the
+    (kind, level) entry of the ``intercept_values`` JSONB — secondary intercepts
+    (EC90 on an EC50-primary fit, etc.) live only there."""
+    c = DoseResponseCurveModel
+    if ik is None:
+        flag = c.intercept_values[0]["at_bound"]
+        return c.fitted_value, sa.func.coalesce(flag == _JSON_TRUE, sa.false())
+    kind = ik.get("kind") if isinstance(ik, dict) else None
+    level = ik.get("level") if isinstance(ik, dict) else None
+    if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
+        msg = f"Invalid intercept_key on activity where: {ik!r}"
+        raise ValueError(msg)
+    return (
+        _jsonb_intercept(kind, float(level), lambda v: sa.cast(v["value"].astext, sa.Float)),
+        sa.func.coalesce(
+            _jsonb_intercept(kind, float(level), lambda v: v["at_bound"] == _JSON_TRUE),
+            sa.false(),
+        ),
+    )
 
-    Used for filtering on a secondary intercept (e.g. EC90 on an EC50-primary
-    fit). Returns NULL when the curve has no matching intercept, which makes
-    the comparison evaluate to NULL — those rows naturally drop out of the
-    IN-subquery without needing an explicit IS NOT NULL guard.
+
+_JSON_TRUE = sa.literal_column("'true'::jsonb")
+
+
+def _jsonb_intercept(kind: str, level: float, field: Any) -> ColumnElement:
+    """``field(element)`` of the curve's ``intercept_values`` JSONB entry identified by
+    (kind, level); NULL when the curve has no such intercept, which drops the row
+    from an IN-subquery without an explicit IS NOT NULL guard.
 
     The expression is parameter-safe (kind/level are bind-params, not literals
     spliced into the path) so PostgreSQL plans the array scan against the
@@ -279,7 +292,7 @@ def _jsonb_intercept_value(kind: str, level: float) -> ColumnElement:
     iv_col = column("value", JSONB())
     iv = sa.func.jsonb_array_elements(DoseResponseCurveModel.intercept_values).table_valued(iv_col)
     return (
-        sa.select(sa.cast(iv.c.value["value"].astext, sa.Float))
+        sa.select(field(iv.c.value))
         .where(
             iv.c.value["spec"]["kind"].astext == kind,
             sa.cast(iv.c.value["spec"]["level"].astext, sa.Float) == level,
@@ -344,12 +357,36 @@ def _qualified_value_filter(value_col: Any, qualifier_col: Any, cond: dict[str, 
     return sa.or_(sa.and_(exact, plain), censored)
 
 
-def reportable_curve_value(value: Any, curve_class: Any) -> ColumnElement:
-    """A curve's value as the grid reports it: NULL (ND) when the curve is
-    inactive. An inactive fit's scalar is an arbitrary asymptote parameter
-    (see ``run_aggregation.resolve_intercept``), so a potency cutoff must not
-    match it — "IC50 < 10 µM" returning inactive compounds is a false hit."""
-    return sa.case((curve_class == CurveClass.INACTIVE.value, sa.null()), else_=value)
+def _dose_bound(curve: Any, agg: Any) -> ColumnElement:
+    pt, dose = curve_doses(curve)
+    return sa.select(agg(dose)).select_from(pt).where(dose > 0).scalar_subquery()
+
+
+def reported_curve_value(
+    curve: Any, value: Any, at_bound: Any
+) -> tuple[ColumnElement, ColumnElement]:
+    """(value, qualifier) of one curve intercept as the grid reports it
+    (``run_aggregation.resolve_intercept``): an inactive curve, an at-bound intercept
+    or a value above the tested doses is ``>`` the top dose (an inactive fit's scalar
+    is an arbitrary asymptote parameter); a value below them ``<`` the lowest dose;
+    else the value, qualifier NULL. NULL value (ND) without a dose to quote."""
+    lo, hi = _dose_bound(curve, sa.func.min), _dose_bound(curve, sa.func.max)
+    above = sa.or_(curve.curve_class == CurveClass.INACTIVE.value, at_bound, value > hi)
+    below = value < lo
+    return (
+        sa.case((above, hi), (below, lo), else_=value),
+        sa.case((above, sa.literal(">")), (below, sa.literal("<"))),
+    )
+
+
+def exact_curve_potency(curve: Any) -> ColumnElement:
+    """The curve's primary potency when the grid reports it exactly (inside the
+    tested doses), else NULL: a ratio of bounds is no ratio."""
+    flag = curve.intercept_values[0]["at_bound"]
+    value, qualifier = reported_curve_value(
+        curve, curve.fitted_value, sa.func.coalesce(flag == _JSON_TRUE, sa.false())
+    )
+    return sa.case((qualifier.is_(None), value))
 
 
 def to_micromolar(
@@ -388,16 +425,9 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
     path serves IC50 and EC90). Without it the primary ``fitted_value`` is
     used — the legacy shape from the first any-protocol release.
     """
-    ik = cond.get("intercept_key")
-    if ik is None:
-        expr: Any = DoseResponseCurveModel.fitted_value
-    else:
-        kind = ik.get("kind") if isinstance(ik, dict) else None
-        level = ik.get("level") if isinstance(ik, dict) else None
-        if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
-            msg = f"Invalid intercept_key on any-protocol activity where: {ik!r}"
-            raise ValueError(msg)
-        expr = _jsonb_intercept_value(kind, float(level))
+    value, qualifier = reported_curve_value(
+        DoseResponseCurveModel, *_curve_intercept(cond.get("intercept_key"))
+    )
     sub = (
         sa.select(DoseResponseCurveModel.molecule_id)
         .join(ProtocolModel, DoseResponseCurveModel.protocol_id == ProtocolModel.id)
@@ -406,10 +436,7 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
             DoseResponseCurveModel.workspace_id == workspace_id,
             ProtocolModel.workspace_id == workspace_id,
             not_in_rejected_run(DoseResponseCurveModel.run_id, workspace_id),
-            _value_filter(
-                to_micromolar(reportable_curve_value(expr, DoseResponseCurveModel.curve_class)),
-                cond,
-            ),
+            _qualified_value_filter(to_micromolar(value), qualifier, cond),
         )
     )
     return MoleculeModel.id.in_(sub)
@@ -435,7 +462,8 @@ def _readout_name_any_protocol_clause(
         )
         .where(
             ReadoutDataModel.workspace_id == workspace_id,
-            ReadoutDataModel.molecule_id.is_not(None),  # control wells; see per-protocol path
+            ReadoutDataModel.molecule_id.is_not(None),  # see the per-protocol path
+            COMPOUND_RESULT,
             not_in_rejected_run(ReadoutDataModel.run_id, workspace_id),
             ReadoutDataModel.is_outlier == False,  # noqa: E712
             ReadoutDataModel.normalization_applied.is_(None),
@@ -459,8 +487,9 @@ def _activity_presence_clause(
     # data point ultimately attaches to a run, and run carries protocol.
     conds: list[ColumnElement] = [
         ReadoutDataModel.workspace_id == workspace_id,
-        # Control wells (molecule_id NULL) would poison a negated NOT IN.
+        # A NULL molecule would poison a negated NOT IN.
         ReadoutDataModel.molecule_id.is_not(None),
+        COMPOUND_RESULT,  # a compound used only as a control has no results here
         RunModel.workspace_id == workspace_id,
         NOT_REJECTED,
     ]

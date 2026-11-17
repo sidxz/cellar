@@ -26,6 +26,7 @@ from cellar.application.screening.plate_setup import (
     ParsedPlateMap,
     SetUpRunPlateCommand,
 )
+from cellar.application.screening.recompute_run import RecomputeRunCommand
 from cellar.application.shared.grid_plate_reshaper import reshape_grid_to_well_value_csv
 from cellar.domain.screening_assay.enums import HillSlopeConstraint
 from cellar.domain.shared.errors import ValidationError
@@ -36,6 +37,7 @@ from cellar.interface.dependencies import (
     LinkRunPlateDep,
     ParsePlateMapFileDep,
     ReadoutCalculationEngineDep,
+    RecomputeRunDep,
     SetUpRunPlateDep,
     UnlinkRunPlateDep,
 )
@@ -433,6 +435,8 @@ async def import_run_readouts(
 class RecomputeRunResponse(BaseModel):
     computed_readouts: int
     fit_warnings: list[str] = []
+    # Neutral facts from the refit ("3 compounds tested at fewer than 4 doses — no curve").
+    fit_notes: list[str] = []
 
 
 class RecomputeRunRequest(BaseModel):
@@ -466,7 +470,7 @@ class RecomputeRunRequest(BaseModel):
 async def recompute_run(
     run_id: uuid.UUID,
     auth: AuthDep,
-    engine: ReadoutCalculationEngineDep,
+    uc: RecomputeRunDep,
     body: RecomputeRunRequest | None = None,
 ) -> RecomputeRunResponse:
     """Re-run the readout calculation pipeline on a run's existing raw data.
@@ -475,6 +479,8 @@ async def recompute_run(
     dose-response curves before recomputing. Useful when a normalization
     formula or computed readout definition has changed and the persisted
     computed values need to be regenerated without re-importing the file.
+    Editors only; refused on a locked or approved run. Curves a chemist edited
+    are refitted from scratch, and ``fit_notes`` says how many.
 
     The optional body allows transient per-run constraint overrides on the
     dose-response fits (top/bottom plateau bounds, hill slope). Overrides
@@ -498,13 +504,17 @@ async def recompute_run(
         if body is not None and not _all_none(body)
         else None
     )
-    result = await engine.compute_for_run(
-        run_id, workspace_id=auth.workspace_id, fit_overrides=overrides
+    result = await uc(
+        RecomputeRunCommand(
+            workspace_id=auth.workspace_id, run_id=run_id, fit_overrides=overrides
+        ),
+        auth=auth,
     )
     outcome = result_to_response(result)
     return RecomputeRunResponse(
         computed_readouts=len(outcome.computed_readouts),
         fit_warnings=outcome.fit_warnings,
+        fit_notes=outcome.fit_notes,
     )
 
 

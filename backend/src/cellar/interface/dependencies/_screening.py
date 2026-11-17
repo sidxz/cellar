@@ -33,6 +33,9 @@ from cellar.application.screening.get_molecule_test_counts import GetMoleculeTes
 from cellar.application.screening.get_plate_map import GetPlateMap
 from cellar.application.screening.get_protocol import GetProtocol, ListProtocols
 from cellar.application.screening.get_protocol_activity import GetProtocolActivitySummary
+from cellar.application.screening.get_protocol_plate_qc_averages import (
+    GetProtocolPlateQcAverages,
+)
 from cellar.application.screening.get_protocol_stats import GetProtocolStats
 from cellar.application.screening.get_readout_data import ListReadoutDataByRun
 from cellar.application.screening.get_run import GetRun, ListRunsByProtocol
@@ -189,6 +192,7 @@ __all__ = [
     "GetProtocolCollectionCoverageDep",
     "GetProtocolCollectionGapDep",
     "GetProtocolDep",
+    "GetProtocolPlateQcAveragesDep",
     "GetProtocolStatsDep",
     "GetProtocolTargetsDep",
     "GetRunCollectionGapDep",
@@ -430,6 +434,9 @@ FitDoseResponseCurvesDep = Annotated[
     FitDoseResponseCurves, Depends(_get_use_case(FitDoseResponseCurves))
 ]
 GetProtocolStatsDep = Annotated[GetProtocolStats, Depends(_get_use_case(GetProtocolStats))]
+GetProtocolPlateQcAveragesDep = Annotated[
+    GetProtocolPlateQcAverages, Depends(_get_use_case(GetProtocolPlateQcAverages))
+]
 GetProtocolActivitySummaryDep = Annotated[
     GetProtocolActivitySummary, Depends(_get_use_case(GetProtocolActivitySummary))
 ]
