@@ -184,16 +184,25 @@ async def test_a_value_written_after_the_check_ends_as_a_conflict(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The race: the usage check saw nothing, then a value landed before the delete.
-    The foreign key refuses and the answer is a 409, not a server error."""
+    The foreign key refuses, and the answer says the readout is now in use."""
     p = await _published(session_factory, fake_auth.workspace_id)
+    real = SQLAlchemyReadoutUsageReader.for_readout
+    asked = 0
 
-    async def saw_nothing(self: object, *args: object) -> ReadoutUsage:
-        return ReadoutUsage()
+    async def blind_the_first_time(self: SQLAlchemyReadoutUsageReader, *args: uuid.UUID):
+        nonlocal asked
+        asked += 1
+        return ReadoutUsage() if asked == 1 else await real(self, *args)
 
-    monkeypatch.setattr(SQLAlchemyReadoutUsageReader, "for_readout", saw_nothing)
+    monkeypatch.setattr(SQLAlchemyReadoutUsageReader, "for_readout", blind_the_first_time)
     resp = await client.delete(p.readout_url(p.used))
     assert resp.status_code == 409, resp.text
-    assert resp.json()["error"] == "ConflictError"
-    assert "readout_data_readout_definition_id_fkey" in resp.json()["message"]
+    assert resp.json() == {
+        "error": "ConflictError",
+        "message": (
+            "This readout is now in use (has values in 1 run), so it can no longer be "
+            "removed. Create a new version to change it."
+        ),
+    }
     monkeypatch.undo()
     assert await _names(client, p) == ["Sginal", "Signal"]

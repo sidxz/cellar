@@ -109,6 +109,47 @@ async def test_remove_used_readout_is_a_conflict_with_the_reasons():
     repo.save.assert_not_awaited()
 
 
+async def _remove_refused_by_the_database(protocol: Protocol, reader: AsyncMock | None):
+    """The delete passes the usage check, then the database refuses it."""
+    repo = _repo(protocol)
+    repo.save.side_effect = ConflictError("Database constraint violated: some_fkey")
+    uc = RemoveReadoutDefinition(FakeUnitOfWork(), repo, AsyncMock(), usage_reader=reader)
+    return await uc(
+        RemoveReadoutDefinitionCommand(
+            workspace_id=WS,
+            protocol_id=protocol.id,
+            definition_id=protocol.readout_definitions[1].id,
+        ),
+        auth=FakeAuth(workspace_id=WS),
+    )
+
+
+async def test_remove_refused_because_the_readout_came_into_use_says_so():
+    reader = AsyncMock()
+    reader.for_readout = AsyncMock(side_effect=[UNUSED, USED])  # the check, then the look back
+    result = await _remove_refused_by_the_database(_protocol(), reader)
+    assert isinstance(result, Failure)
+    assert isinstance(result.failure(), ConflictError)
+    assert str(result.failure()) == (
+        "This readout is now in use (has values in 3 runs), so it can no longer be "
+        "removed. Create a new version to change it."
+    )
+
+
+async def test_remove_refused_for_another_reason_keeps_the_databases_answer():
+    reader = _reader(UNUSED)  # still unused when looked at again
+    with pytest.raises(ConflictError, match="Database constraint violated: some_fkey"):
+        await _remove_refused_by_the_database(_protocol(), reader)
+    assert reader.for_readout.await_count == 2
+
+
+async def test_remove_refused_on_a_draft_keeps_the_databases_answer():
+    reader = _reader(USED)
+    with pytest.raises(ConflictError, match="Database constraint violated: some_fkey"):
+        await _remove_refused_by_the_database(_protocol(published=False), reader)
+    reader.for_readout.assert_not_awaited()
+
+
 async def test_remove_on_a_draft_does_not_look_usage_up():
     p = _protocol(published=False)
     reader = _reader(USED)

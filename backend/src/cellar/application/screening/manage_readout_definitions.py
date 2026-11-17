@@ -35,7 +35,12 @@ from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
 from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition, ReadoutUsage
 from cellar.domain.screening_assay.repository import ProtocolRepository
-from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import (
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    ValidationError,
+)
 from cellar.domain.shared.units import canonical_unit
 
 # ---------------------------------------------------------------------------
@@ -224,24 +229,44 @@ class RemoveReadoutDefinition:
     ) -> Result[Protocol, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
-        async with self._uow:
-            protocol = await self._repo.find_by_id_in_workspace(
-                input.workspace_id, input.protocol_id
-            )
-            if protocol is None:
-                return Failure(NotFoundError("Protocol", str(input.protocol_id)))
+        usage: ReadoutUsage | None = None
+        try:
+            async with self._uow:
+                protocol = await self._repo.find_by_id_in_workspace(
+                    input.workspace_id, input.protocol_id
+                )
+                if protocol is None:
+                    return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
-            # ponytail: check-then-delete in one transaction, no row lock. A value
-            # written in the same instant makes the database refuse the delete (the
-            # unit of work answers 409); a curve fitted in that instant goes with the
-            # readout. Lock the readout row if that ever shows up.
-            usage = await _stored_usage(self._usage_reader, protocol, input.definition_id)
-            try:
-                protocol.remove_readout_definition(input.definition_id, usage)
-            except DomainError as exc:
-                return Failure(exc)
-            await self._repo.save(protocol)
-            events = await self._uow.commit()
+                # ponytail: check-then-delete in one transaction, no row lock. A value
+                # written in the same instant makes the database refuse the delete
+                # (answered below); a curve fitted in that instant goes with the
+                # readout. Lock the readout row if that ever shows up.
+                usage = await _stored_usage(self._usage_reader, protocol, input.definition_id)
+                try:
+                    protocol.remove_readout_definition(input.definition_id, usage)
+                except DomainError as exc:
+                    return Failure(exc)
+                await self._repo.save(protocol)
+                events = await self._uow.commit()
+        except ConflictError:
+            # The database refused the write (the unit of work reports that as a
+            # conflict). If the readout was unused at the check and is in use now,
+            # say that; any other refusal keeps the database's own answer.
+            if usage is None or self._usage_reader is None:
+                raise
+            async with self._uow:
+                now = await self._usage_reader.for_readout(
+                    input.workspace_id, input.protocol_id, input.definition_id
+                )
+            if not now.in_use:
+                raise
+            return Failure(
+                ConflictError(
+                    f"This readout is now in use ({'; '.join(now.reasons)}), so it can no "
+                    "longer be removed. Create a new version to change it."
+                )
+            )
 
         await self._dispatcher.dispatch_all(events)
         return Success(protocol)
