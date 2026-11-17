@@ -1,7 +1,7 @@
 """Edit a run's positions after an instrument import: label, note, role, batch, concentration.
 
-Also reads a labelling layout file for the labelling table to fill itself from, and flags
-wells as outliers.
+Also reads a labelling layout file, or the positions' labels as compound identifiers, for
+the labelling table to fill itself from, and flags wells as outliers.
 """
 
 from __future__ import annotations
@@ -17,16 +17,21 @@ from cellar.application.screening.flag_run_outliers import (
     OutlierFlagResult,
 )
 from cellar.application.screening.instrument_export import MAX_INSTRUMENT_FILE_BYTES
+from cellar.application.screening.layout_compound_resolver import LayoutCompound
 from cellar.application.screening.relabel_run_positions import (
     RelabelResult,
     RelabelRunPositionsCommand,
 )
 from cellar.application.screening.resolve_layout_file import (
     MAX_LAYOUT_ROWS,
-    LayoutCompound,
     LayoutFile,
     LayoutRow,
     ResolveLayoutFileQuery,
+)
+from cellar.application.screening.resolve_position_labels import (
+    MAX_POSITION_LABELS,
+    LabelMatch,
+    ResolvePositionLabelsQuery,
 )
 from cellar.domain.screening_assay.run import PositionEdit, PositionValues
 from cellar.domain.shared.enums import WellType
@@ -35,6 +40,7 @@ from cellar.interface.dependencies import (
     FlagRunOutliersDep,
     RelabelRunPositionsDep,
     ResolveLayoutFileDep,
+    ResolvePositionLabelsDep,
 )
 from cellar.interface.error_handlers import result_to_response
 
@@ -116,7 +122,7 @@ class LayoutCompoundModel(BaseModel):
     registration_number: str
     batch_id: uuid.UUID | None
     batch_number: str | None
-    # The compound has several batches and the file named none.
+    # The compound has several batches and none was named.
     needs_batch_choice: bool
 
     @classmethod
@@ -190,6 +196,52 @@ async def resolve_layout_file(
     )
     result = await uc(query, auth=auth)
     return LayoutFileResponse.from_domain(result_to_response(result))
+
+
+class ResolvePositionLabelsRequest(BaseModel):
+    # Position labels as the table shows them; a repeated label is answered once.
+    labels: list[Annotated[str, Field(max_length=200)]] = Field(
+        min_length=1, max_length=MAX_POSITION_LABELS
+    )
+
+
+class PositionLabelMatchModel(BaseModel):
+    # The label, trimmed.
+    label: str
+    # Null when the label is not the identifier of a registered compound.
+    compound: LayoutCompoundModel | None
+
+    @classmethod
+    def from_domain(cls, m: LabelMatch) -> PositionLabelMatchModel:
+        return cls(
+            label=m.label,
+            compound=LayoutCompoundModel.from_domain(m.compound) if m.compound else None,
+        )
+
+
+class PositionLabelMatchesResponse(BaseModel):
+    # One per distinct non-blank label, in the order first given.
+    matches: list[PositionLabelMatchModel]
+
+    @classmethod
+    def from_domain(cls, matches: tuple[LabelMatch, ...]) -> PositionLabelMatchesResponse:
+        return cls(matches=[PositionLabelMatchModel.from_domain(m) for m in matches])
+
+
+@router.post("/runs/{run_id}/resolve-position-labels", response_model=PositionLabelMatchesResponse)
+async def resolve_position_labels(
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    body: ResolvePositionLabelsRequest,
+    uc: ResolvePositionLabelsDep,
+) -> PositionLabelMatchesResponse:
+    """Read position labels as compound identifiers, as a layout file's Compound column is
+    read: by registration number or any registered identifier. Writes nothing."""
+    query = ResolvePositionLabelsQuery(
+        workspace_id=auth.workspace_id, run_id=run_id, labels=tuple(body.labels)
+    )
+    result = await uc(query, auth=auth)
+    return PositionLabelMatchesResponse.from_domain(result_to_response(result))
 
 
 class FlagOutliersRequest(BaseModel):
