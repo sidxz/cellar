@@ -12,6 +12,7 @@ vi.mock("../../hooks/use-protocols", () => {
     useAddReadoutDefinition: idle,
     useRemoveReadoutDefinition: idle,
     useUpdateReadoutDefinition: idle,
+    useReadoutUsage: () => ({ data: undefined }),
     useProtocols: () => ({ data: [] }),
     useAddConditionDefinition: () => ({ mutate: add.mutate, isPending: false }),
     useRemoveConditionDefinition: idle,

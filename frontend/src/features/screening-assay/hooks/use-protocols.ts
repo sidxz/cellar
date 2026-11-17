@@ -7,6 +7,7 @@ import type {
   AddTemperatureWindowRequest,
   CorrectProtocolRequest,
   ProtocolSummaryResponse,
+  ReadoutUsageResponse,
   SetDiscriminatorRequest,
   UpdateConditionDefinitionRequest,
 } from "@/shared/lib/api/model";
@@ -135,6 +136,20 @@ export const useUnlockProtocol = () => protocolHooks.useAction("unlock", "Protoc
 export const useVersionProtocol = () => protocolHooks.useAction("version", "New version created");
 
 // --- Readout definitions (nested under protocol) ---
+
+/** What uses each readout of a protocol. Keyed under PROTOCOLS_KEY, so every readout
+ *  mutation refetches it. The server decides again on save; this only shapes controls. */
+export function useReadoutUsage(protocolId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: [...PROTOCOLS_KEY, protocolId, "readout-usage"],
+    queryFn: () =>
+      customInstance<ReadoutUsageResponse[]>({
+        url: `${API_V1}/protocols/${protocolId}/readout-usage`,
+        method: "GET",
+      }),
+    enabled,
+  });
+}
 
 export function useAddReadoutDefinition(protocolId: string) {
   const qc = useQueryClient();

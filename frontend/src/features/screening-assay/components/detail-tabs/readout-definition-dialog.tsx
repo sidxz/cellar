@@ -697,7 +697,11 @@ export interface ReadoutDefinitionDialogProps {
   protocol: Protocol;
   protocolId: string;
   editingReadoutId: string | null;
-  isDraft: boolean;
+  /** Every field is editable: a draft, or a published protocol's readout nothing uses.
+   *  Otherwise only the cosmetic ones are. Ignored when adding. */
+  canRestructure: boolean;
+  /** What uses the readout being edited, when something does. */
+  inUseReasons?: string[];
   protocols: readonly ProtocolRef[];
   form: ReturnType<typeof useReadoutDefinitionForm>;
   isSaving: boolean;
@@ -711,7 +715,8 @@ export function ReadoutDefinitionDialog({
   onOpenChange,
   protocol,
   editingReadoutId,
-  isDraft,
+  canRestructure,
+  inUseReasons,
   protocols,
   form,
   isSaving,
@@ -770,9 +775,13 @@ export function ReadoutDefinitionDialog({
           <DialogDescription>
             {isAdd
               ? "Define a new measured value for this protocol."
-              : isDraft
-                ? "Update fields on this readout."
-                : "Cosmetic fields (unit) can be edited on a published protocol. Renaming, data-type changes, and other structural edits require a new version — they would invalidate prior runs."}
+              : canRestructure
+                ? protocol.status === "draft"
+                  ? "Update fields on this readout."
+                  : "Nothing uses this readout yet, so every field can still be changed."
+                : `Cosmetic fields (unit) can be edited on a published protocol. Renaming, data-type changes, and other structural edits require a new version — they would invalidate prior runs.${
+                    inUseReasons?.length ? ` In use: ${inUseReasons.join("; ")}.` : ""
+                  }`}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -782,7 +791,7 @@ export function ReadoutDefinitionDialog({
               value={rdName}
               onChange={(e) => setRdName(e.target.value)}
               placeholder={isAdd ? "e.g. % Inhibition" : undefined}
-              disabled={!isAdd && !isDraft}
+              disabled={!isAdd && !canRestructure}
             />
             {isReservedReadoutName(rdName) && (
               <p className="text-xs text-destructive">
@@ -809,7 +818,11 @@ export function ReadoutDefinitionDialog({
           </div>
           <div className="space-y-1">
             <Label>Data Type</Label>
-            <Select value={rdDataType} onValueChange={setRdDataType} disabled={!isAdd && !isDraft}>
+            <Select
+              value={rdDataType}
+              onValueChange={setRdDataType}
+              disabled={!isAdd && !canRestructure}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -832,7 +845,7 @@ export function ReadoutDefinitionDialog({
               <PickListEditor
                 value={rdPickListValues}
                 onChange={setRdPickListValues}
-                disabled={!isAdd && !isDraft}
+                disabled={!isAdd && !canRestructure}
               />
             </div>
           ) : (
@@ -854,7 +867,7 @@ export function ReadoutDefinitionDialog({
                   <Switch
                     checked={rdIsCalculated}
                     onCheckedChange={(v) => setRdIsCalculated(v === true)}
-                    disabled={!isAdd && !isDraft}
+                    disabled={!isAdd && !canRestructure}
                   />
                   <Label className="text-sm font-normal">
                     Calculated{" "}
@@ -878,7 +891,7 @@ export function ReadoutDefinitionDialog({
                             .map((rd) => rd.name)
                     }
                     protocols={protocols}
-                    disabled={!isAdd && !isDraft}
+                    disabled={!isAdd && !canRestructure}
                   />
                   <p className="text-xs text-muted-foreground">
                     Use other readout names as variables. Type <code>@</code> for cross-protocol.
@@ -892,7 +905,7 @@ export function ReadoutDefinitionDialog({
                     <Select
                       value={rdAggregation}
                       onValueChange={setRdAggregation}
-                      disabled={!isAdd && !isDraft}
+                      disabled={!isAdd && !canRestructure}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -911,7 +924,7 @@ export function ReadoutDefinitionDialog({
                     <NormalizationCheckboxGroup
                       value={rdNormalizations}
                       onChange={setRdNormalizations}
-                      disabled={!isAdd && !isDraft}
+                      disabled={!isAdd && !canRestructure}
                     />
                   </div>
                 </>
@@ -919,10 +932,10 @@ export function ReadoutDefinitionDialog({
             </>
           )}
           {/* Dose-response fields are structural (curve type, axes,
-              intercepts, ranges) — disabled on non-DRAFT. The fields
+              intercepts, ranges) — disabled unless canRestructure. The fields
               inside DoseResponseFields don't currently take a disabled prop,
               so we wrap in a disabled-pointer-events shim instead. */}
-          {!isAdd && !isDraft ? (
+          {!isAdd && !canRestructure ? (
             <div className="pointer-events-none opacity-60">{doseResponseBlock}</div>
           ) : (
             doseResponseBlock

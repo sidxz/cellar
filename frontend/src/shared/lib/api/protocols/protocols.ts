@@ -49,6 +49,7 @@ import type {
   ProtocolResponse,
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
+  ReadoutUsageResponse,
   RemoveOntologyAnnotationApiV1ProtocolsProtocolIdOntologyAnnotationsSlotDeleteParams,
   RemoveProtocolNicknameApiV1ProtocolsProtocolIdNicknamesDeleteParams,
   RemoveProtocolTargetApiV1ProtocolsProtocolIdTargetsTargetIdDeleteParams,
@@ -1764,7 +1765,9 @@ export const useAddReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsPo
       return useMutation(getAddReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsPostMutationOptions(options), queryClient);
     }
     /**
- * Edit a readout definition on a DRAFT protocol. Partial-update semantics.
+ * Edit a readout definition. Partial-update semantics. Once published, cosmetic
+ * fields always; structural ones only while nothing uses the readout (409 names
+ * what does).
  * @summary Update Readout Definition
  */
 export const updateReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdPut = (
@@ -1821,7 +1824,9 @@ const {mutation: mutationOptions} = options ?
     export type UpdateReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdPutMutationVariables = {protocolId: string;definitionId: string;data: UpdateReadoutDefinitionRequest}
 
     /**
- * Edit a readout definition on a DRAFT protocol. Partial-update semantics.
+ * Edit a readout definition. Partial-update semantics. Once published, cosmetic
+ * fields always; structural ones only while nothing uses the readout (409 names
+ * what does).
  * @summary Update Readout Definition
  */
 export const useUpdateReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdPut = <TError = HTTPValidationError,
@@ -1835,7 +1840,8 @@ export const useUpdateReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinition
       return useMutation(getUpdateReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdPutMutationOptions(options), queryClient);
     }
     /**
- * Remove a readout definition from a DRAFT protocol.
+ * Remove a readout definition: any on a DRAFT, an unused one once published
+ * (409 names what uses it).
  * @summary Remove Readout Definition
  */
 export const removeReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdDelete = (
@@ -1889,7 +1895,8 @@ const {mutation: mutationOptions} = options ?
     export type RemoveReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdDeleteMutationVariables = {protocolId: string;definitionId: string}
 
     /**
- * Remove a readout definition from a DRAFT protocol.
+ * Remove a readout definition: any on a DRAFT, an unused one once published
+ * (409 names what uses it).
  * @summary Remove Readout Definition
  */
 export const useRemoveReadoutDefinitionApiV1ProtocolsProtocolIdReadoutDefinitionsDefinitionIdDelete = <TError = HTTPValidationError,
@@ -1973,6 +1980,116 @@ export const useAddTemperatureWindowApiV1ProtocolsProtocolIdTemperatureWindowsPo
       return useMutation(getAddTemperatureWindowApiV1ProtocolsProtocolIdTemperatureWindowsPostMutationOptions(options), queryClient);
     }
     /**
+ * What uses each readout of a protocol. On a published, unlocked protocol a
+ * readout nothing uses can still be renamed, restructured or removed.
+ * @summary Get Readout Usage
+ */
+export const getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet = (
+    protocolId: string,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<ReadoutUsageResponse[]>(
+      {url: `/api/v1/protocols/${protocolId}/readout-usage`, method: 'GET', signal
+    },
+      );
+    }
+
+
+
+
+export const getGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGetQueryKey = (protocolId: string,) => {
+    return [
+    `/api/v1/protocols/${protocolId}/readout-usage`
+    ] as const;
+    }
+
+
+export const getGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGetQueryOptions = <TData = Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError = HTTPValidationError>(protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGetQueryKey(protocolId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>> = ({ signal }) => getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet(protocolId, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: protocolId !== null && protocolId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGetQueryResult = NonNullable<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>>
+export type GetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGetQueryError = HTTPValidationError
+
+
+/**
+ * What uses each readout of a protocol. On a published, unlocked protocol a
+ * readout nothing uses can still be renamed, restructured or removed.
+ * @summary Get Readout Usage
+ */
+export function useGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet<TData = Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>,
+          TError,
+          Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * What uses each readout of a protocol. On a published, unlocked protocol a
+ * readout nothing uses can still be renamed, restructured or removed.
+ * @summary Get Readout Usage
+ */
+export function useGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet<TData = Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>,
+          TError,
+          Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * What uses each readout of a protocol. On a published, unlocked protocol a
+ * readout nothing uses can still be renamed, restructured or removed.
+ * @summary Get Readout Usage
+ */
+export function useGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet<TData = Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * What uses each readout of a protocol. On a published, unlocked protocol a
+ * readout nothing uses can still be renamed, restructured or removed.
+ * @summary Get Readout Usage
+ */
+export function useGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet<TData = Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError = HTTPValidationError>(
+ protocolId: string, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetReadoutUsageApiV1ProtocolsProtocolIdReadoutUsageGetQueryOptions(protocolId,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
  * Add a condition definition to a DRAFT protocol.
  * @summary Add Condition Definition
  */

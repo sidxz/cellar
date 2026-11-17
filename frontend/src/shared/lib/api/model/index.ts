@@ -612,6 +612,7 @@ export * from './readoutDefinitionResponseDoseResponseConfig';
 export * from './readoutDefinitionResponsePickListValues';
 export * from './readoutOptionModel';
 export * from './readoutSummaryResponse';
+export * from './readoutUsageResponse';
 export * from './readoutValueResponse';
 export * from './readoutValueResponseDataPoints';
 export * from './reagentResponse';
