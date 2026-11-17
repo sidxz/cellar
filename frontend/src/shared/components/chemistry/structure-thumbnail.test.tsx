@@ -41,6 +41,18 @@ describe("StructureThumbnail draws on a transparent background", () => {
     await waitFor(() => expect(screen.getByRole("img")).toBeInTheDocument());
     const opts = JSON.parse(svgSpy.mock.calls.at(-1)?.[0] ?? "{}");
     expect(opts).toMatchObject({ width: 80, height: 80, clearBackground: false });
+    expect(screen.getByRole("img")).toHaveAttribute("height", "40");
+  });
+
+  it("draws into a box wider than tall when given a height", async () => {
+    const { container } = render(<StructureThumbnail smiles="CCO" size={144} height={72} />);
+    // The placeholder holds the same room while the drawing loads.
+    expect(container.firstElementChild).toHaveStyle({ width: "144px", height: "72px" });
+    const img = await screen.findByRole("img");
+    const opts = JSON.parse(svgSpy.mock.calls.at(-1)?.[0] ?? "{}");
+    expect(opts).toMatchObject({ width: 288, height: 144 });
+    expect(img).toHaveAttribute("width", "144");
+    expect(img).toHaveAttribute("height", "72");
   });
 });
 

@@ -642,6 +642,43 @@ describe("MeltResultsPanel", () => {
   });
 });
 
+describe("the Concentration column", () => {
+  const headers = () =>
+    within(table())
+      .getAllByRole("columnheader")
+      .flatMap((h) => h.textContent || []);
+  const withDoses = (doses: Record<string, number>) =>
+    positions.map((p) => ({ ...p, dose: doses[p.well_id] ?? null }));
+
+  it("is not shown when no position of the run has a concentration", () => {
+    render(<Harness at={withDoses({})} />);
+    expect(headers()).toEqual(["Sample", "Position", "Tm (°C)", "ΔTm (°C)", "Hit", "Status"]);
+  });
+
+  it("is shown when one position has a concentration", () => {
+    render(<Harness at={withDoses({ s2: 10 })} />);
+    expect(headers()).toEqual([
+      "Sample",
+      "Position",
+      "Conc. (µM)",
+      "Tm (°C)",
+      "ΔTm (°C)",
+      "Hit",
+      "Status",
+    ]);
+    expect((row("s2") as HTMLTableRowElement).cells[2]).toHaveTextContent(/^10$/);
+    expect((row("s1") as HTMLTableRowElement).cells[2]).toHaveTextContent(/^$/);
+  });
+
+  it("stays while a filter hides the only positions that have one", () => {
+    // s2 (+3.0, a hit up) has the run's only concentration; "1 down" leaves s1.
+    render(<Harness at={withDoses({ s2: 10 })} />);
+    fireEvent.click(screen.getByRole("button", { name: "1 down" }));
+    expect(bodyIds()).toEqual(["r1", "s1"]);
+    expect(headers()).toContain("Conc. (µM)");
+  });
+});
+
 describe("the Structures switch", () => {
   beforeEach(() => localStorage.clear());
   const toggle = () => screen.getByRole("button", { name: "Structures" });

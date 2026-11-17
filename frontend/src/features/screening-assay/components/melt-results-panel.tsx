@@ -118,6 +118,8 @@ export function MeltResultsPanel({
       ),
     [windows, positions, analysis.steps, analysis.step_checks, analysis.outside_every_window],
   );
+  // Of the run, not of the rows a filter leaves: the column does not come and go.
+  const hasConcentration = useMemo(() => positions.some((p) => p.dose != null), [positions]);
   const activeFilter = windowNames.length ? knownFilter(filter) : null;
   // The samples missing a value the run's hit rule needs; empty without a rule.
   const unevaluated = useMemo(
@@ -278,6 +280,7 @@ export function MeltResultsPanel({
           hits={hits}
           applicable={applicable}
           doseUnit={doseUnit}
+          showConcentration={hasConcentration}
           showStructures={showStructures}
           selection={selection}
           onRowClick={(id, mods, order) =>
