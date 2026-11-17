@@ -179,7 +179,7 @@ register_rules(
         parent_table="runs",
         action=A.CASCADE,
         label_field=None,
-        display_label="Melting steps",
+        display_label="Melting peaks",
     ),
     # -------------------------------------------------------------------------
     # Plate children
