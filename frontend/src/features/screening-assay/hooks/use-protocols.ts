@@ -16,7 +16,7 @@ import { unwrapList } from "@/shared/types/pagination";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { referenceKey } from "../lib/protocol-references";
 import type { CreateProtocolInput, Protocol, ProtocolReference } from "../types";
-import { PROTOCOLS_KEY } from "./query-keys";
+import { MELTING_ANALYSIS_KEY, PROTOCOLS_KEY } from "./query-keys";
 
 const protocolHooks = createCrudHooks<
   Protocol,
@@ -177,6 +177,8 @@ export function useAddTemperatureWindow(protocolId: string) {
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: PROTOCOLS_KEY });
+      // Every run of the protocol reads its windows' results from the protocol's windows.
+      qc.invalidateQueries({ queryKey: MELTING_ANALYSIS_KEY });
       showSuccess("Temperature window readouts added");
     },
   });

@@ -71,6 +71,16 @@ vi.mock("./edit-labelling-dialog", () => ({
     open ? <div data-testid="edit-labelling">edit labelling dialog</div> : null,
 }));
 
+// The naming dialog is covered in name-peaks-dialog.test.tsx; here, what it is given.
+const naming: { open: boolean; canRecalculate: boolean; set: { curves: Map<string, unknown> } }[] =
+  [];
+vi.mock("./name-peaks-dialog", () => ({
+  NamePeaksDialog: (props: (typeof naming)[number]) => {
+    naming.push(props);
+    return props.open ? <div data-testid="name-peaks" /> : null;
+  },
+}));
+
 const protocolData: { value: unknown } = { value: undefined };
 vi.mock("../hooks/use-protocols", () => ({
   useProtocol: () => ({ data: protocolData.value }),
@@ -221,6 +231,7 @@ beforeEach(() => {
   saveStep.mockReset();
   melting.data = undefined;
   melting.isLoading = false;
+  naming.length = 0;
   plotCalls.length = 0;
   downloadImage.mockReset();
   useRunCurves.mockReset();
@@ -608,14 +619,47 @@ describe("RunCurvesPanel", () => {
       expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
     });
 
-    it("links the no-window note to the protocol's Setup tab", () => {
+    it("the no-window note opens the naming of the reference's peaks", () => {
       withAnalysis({}, 0);
       render(<RunCurvesPanel runId="r1" run={RUN} />);
-      expect(
-        screen.getByRole("link", {
-          name: "No temperature window on this signal — add one on the protocol's Setup tab",
-        }),
-      ).toHaveAttribute("href", "/assays/protocols/p1#setup");
+      expect(screen.queryByTestId("name-peaks")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
+      expect(screen.getByTestId("name-peaks")).toBeInTheDocument();
+    });
+
+    it("an editor names peaks on any run status, with every trace of the signal", () => {
+      withAnalysis({});
+      const draft = render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+      expect(naming.at(-1)).toMatchObject({
+        open: true,
+        runId: "r1",
+        protocolId: "p1",
+        analysis: melting.data,
+        canRecalculate: true,
+      });
+      // Nothing is selected or drawn, yet the reference's trace is there to propose from.
+      expect(naming.at(-1)?.set.curves.has("w1")).toBe(true);
+      draft.unmount();
+      // Naming changes the protocol, not the run: offered, but the run is not recalculated.
+      for (const run of [
+        { ...RUN, status: "approved" as const },
+        { ...RUN, is_locked: true },
+      ]) {
+        const view = render(<RunCurvesPanel runId="r1" run={run} />);
+        fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+        expect(naming.at(-1)).toMatchObject({ open: true, canRecalculate: false });
+        view.unmount();
+      }
+    });
+
+    it("a viewer is not offered the naming", () => {
+      canEdit.value = false;
+      withAnalysis({}, 0);
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
+      expect(naming).toHaveLength(0);
     });
 
     it("shows a placeholder while the results load", () => {

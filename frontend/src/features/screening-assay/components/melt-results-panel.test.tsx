@@ -136,9 +136,11 @@ function Harness({
   hits = HITS,
   applicable = OUTSIDE_MAIN,
   at = positions,
+  onNamePeaks,
 }: {
   /** The run's positions. */
   at?: CurvePosition[];
+  onNamePeaks?: () => void;
   channel?: string;
   onChange?: (s: SelectionState) => void;
   onLead?: (w: string | null) => void;
@@ -161,6 +163,7 @@ function Harness({
       onLeadWindowChange={onLead}
       hits={hits}
       applicable={applicable}
+      onNamePeaks={onNamePeaks}
     />
   );
 }
@@ -206,15 +209,35 @@ describe("MeltResultsPanel", () => {
   it("lists positions and the no-window sentence when the signal has no window", () => {
     const onLead = vi.fn();
     render(<Harness channel="c" onLead={onLead} />);
-    expect(
-      screen.getByText(
-        "No temperature window on this signal — add one on the protocol's Setup tab",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
+    // A viewer is offered nothing to do about it.
+    expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);
     expect(within(table()).queryByText("Tm (°C)")).not.toBeInTheDocument();
     expect(screen.queryByRole("tablist", { name: "Window" })).not.toBeInTheDocument();
     expect(onLead).toHaveBeenLastCalledWith(null);
+  });
+
+  it("offers naming the reference's peaks in the header and where the signal has no window", () => {
+    const onNamePeaks = vi.fn();
+    const { rerender } = render(<Harness onNamePeaks={onNamePeaks} />);
+    const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
+    fireEvent.click(within(header).getByRole("button", { name: "Name peaks" }));
+    expect(onNamePeaks).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/No temperature window/)).not.toBeInTheDocument();
+
+    rerender(<Harness channel="c" onNamePeaks={onNamePeaks} />);
+    expect(screen.getByText("No temperature window on this signal.")).toHaveTextContent(
+      "No temperature window on this signal. Name the reference's peaks.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
+    expect(onNamePeaks).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
+  });
+
+  it("offers no naming without the handler", () => {
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: "Name peaks" })).not.toBeInTheDocument();
   });
 
   it("shows signed ΔTm in direction colour without a tint, and the status chip", () => {

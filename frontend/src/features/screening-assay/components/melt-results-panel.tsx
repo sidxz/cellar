@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Button } from "@/shared/components/ui/button";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
@@ -22,7 +22,6 @@ import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
 
 const COMPARE = "__compare__";
-const NO_WINDOW = "No temperature window on this signal — add one on the protocol's Setup tab";
 
 export interface MeltResultsPanelProps {
   analysis: MeltingAnalysis;
@@ -44,8 +43,8 @@ export interface MeltResultsPanelProps {
   applicable: readonly ApplicableRule[];
   /** The run's hit rule line, shown above the counts. */
   hitRule?: ReactNode;
-  /** The protocol's Setup tab, where windows are added; links the no-window note. */
-  designHref?: string;
+  /** Opens the naming of the reference's peaks, which adds windows; given to editors. */
+  onNamePeaks?: () => void;
 }
 
 /** The run's results for the signal on screen: a window picker, the counts
@@ -63,7 +62,7 @@ export function MeltResultsPanel({
   hits,
   applicable,
   hitRule,
-  designHref,
+  onNamePeaks,
 }: MeltResultsPanelProps) {
   // The window last chosen by name; kept across signals and used where it exists.
   const [chosen, setChosen] = useState<string | null>(null);
@@ -179,7 +178,16 @@ export function MeltResultsPanel({
             onChange={setView}
           />
         </div>
-        {headerAction && <div className="ml-auto flex items-center gap-2">{headerAction}</div>}
+        {(onNamePeaks || headerAction) && (
+          <div className="ml-auto flex items-center gap-2">
+            {onNamePeaks && (
+              <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
+                Name peaks
+              </Button>
+            )}
+            {headerAction}
+          </div>
+        )}
       </div>
       {hitRule}
       {summary ? (
@@ -200,12 +208,19 @@ export function MeltResultsPanel({
         />
       ) : (
         <p className="text-sm text-muted-foreground">
-          {designHref ? (
-            <Link href={designHref} className="underline-offset-4 hover:underline">
-              {NO_WINDOW}
-            </Link>
-          ) : (
-            NO_WINDOW
+          No temperature window on this signal.
+          {onNamePeaks && (
+            <>
+              {" "}
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 font-normal"
+                onClick={onNamePeaks}
+              >
+                Name the reference's peaks.
+              </Button>
+            </>
           )}
         </p>
       )}

@@ -38,6 +38,7 @@ import { EditLabellingDialog } from "./edit-labelling-dialog";
 import { MeltHitRule } from "./melt-hit-rule";
 import { MeltResultsPanel } from "./melt-results-panel";
 import { MeltingStepsPanel, type StepRequest, stepInput } from "./melting-steps-panel";
+import { NamePeaksDialog } from "./name-peaks-dialog";
 import { type PeakPick, PeakPickBar } from "./peak-pick-bar";
 
 const PLOT_HEIGHT = "h-[400px]";
@@ -47,8 +48,10 @@ const PLOT_HEIGHT = "h-[400px]";
  *  for one signal with their melting steps as lines and the temperature
  *  windows as bands; a click on a trace picks a peak or a spot, which a line
  *  under the plot acts on through the step list's forms; under the plot, the
- *  steps are reviewed and the batch's ΔTm is charted by concentration. Without
- *  an analysis (it failed to load) the viewer keeps its own position selector. */
+ *  steps are reviewed and the batch's ΔTm is charted by concentration. An
+ *  editor names the reference's peaks from the results header, which adds the
+ *  protocol's windows. Without an analysis (it failed to load) the viewer
+ *  keeps its own position selector. */
 const RUN_FORMATS: readonly ExportFormat[] = ["xlsx", "csv", "pdf"];
 
 export function RunCurvesPanel({
@@ -72,6 +75,7 @@ export function RunCurvesPanel({
 }) {
   const canEdit = useCanEdit();
   const [editOpen, setEditOpen] = useState(false);
+  const [namingOpen, setNamingOpen] = useState(false);
   const [channel, setChannel] = useState<string | undefined>();
   const [view, setView] = useState<CurveView>("measured");
   // The committed window; undefined lets the API choose.
@@ -367,6 +371,18 @@ export function RunCurvesPanel({
     <div className="@container">
       <div className="grid gap-6 @[1100px]:grid-cols-12">
         <div className="order-2 min-w-0 @[1100px]:order-1 @[1100px]:col-span-7">
+          {analysis && run && canEdit && (
+            <NamePeaksDialog
+              open={namingOpen}
+              onOpenChange={setNamingOpen}
+              runId={runId}
+              protocolId={run.protocol_id}
+              // Every position's trace on the shown signal, so also a reference that is not drawn.
+              set={set}
+              analysis={analysis}
+              canRecalculate={run.status !== "approved" && !run.is_locked}
+            />
+          )}
           {analysis ? (
             <MeltResultsPanel
               analysis={analysis}
@@ -397,7 +413,8 @@ export function RunCurvesPanel({
                   />
                 )
               }
-              designHref={run && `/assays/protocols/${run.protocol_id}#setup`}
+              // Naming changes the protocol, not the run: offered on any run status.
+              onNamePeaks={run && canEdit ? () => setNamingOpen(true) : undefined}
             />
           ) : melting.isLoading ? (
             <Skeleton data-testid="results-loading" className={cn("w-full", PLOT_HEIGHT)} />
