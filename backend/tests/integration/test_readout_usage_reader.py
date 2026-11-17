@@ -140,6 +140,8 @@ async def test_a_peak_assigned_to_the_readouts_window_counts(uow: AsyncUnitOfWor
         run = await seed.run(s, p.ws, p.id, DAY)
         # Another protocol of the workspace with a window of the same name.
         other_run = await seed.run(s, p.ws, await seed.protocol(s, p.ws), DAY)
+        # A run of this protocol that belongs to another workspace.
+        foreign_run = await seed.run(s, p.elsewhere, p.id, DAY)
         s.add_all(
             [
                 step(p.ws, run, "Main"),
@@ -147,6 +149,7 @@ async def test_a_peak_assigned_to_the_readouts_window_counts(uow: AsyncUnitOfWor
                 step(p.ws, run, "Shoulder"),
                 step(p.ws, run, None),
                 step(p.ws, other_run, "Main"),
+                step(p.elsewhere, foreign_run, "Main"),
             ]
         )
 
