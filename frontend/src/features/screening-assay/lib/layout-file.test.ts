@@ -429,6 +429,16 @@ describe("match from labels", () => {
     expect(out.rows).toEqual(table);
   });
 
+  it("counts the used positions that had a compound before the answer was applied", () => {
+    // Position 5 had one; the three the answer fills are not counted.
+    expect(applyLabelMatches(table, answer)).toMatchObject({ matched: 3, alreadyMatched: 1 });
+    expect(applyLabelMatches([table[0], table[2]], answer).alreadyMatched).toBe(0);
+    // Of the two positions with a compound, one is unused.
+    expect(applyLabelMatches(rows, { matches: [] }).alreadyMatched).toBe(1);
+    const two = [table[4], labelled("9", "", { moleculeId: "m3" }), table[2]];
+    expect(applyLabelMatches(two, answer)).toMatchObject({ matched: 0, alreadyMatched: 2 });
+  });
+
   it("applies the answer to the table as it is now: a compound chosen or a label edited meanwhile stays", () => {
     const now = [
       { ...table[0], moleculeId: "m2", moleculeName: "Chosen by hand" },
@@ -437,6 +447,8 @@ describe("match from labels", () => {
     ];
     const out = applyLabelMatches(now, answer);
     expect(out.matched).toBe(1);
+    // The compound chosen meanwhile is in the table, so it is counted.
+    expect(out.alreadyMatched).toBe(1);
     expect(out.rows[0]).toBe(now[0]);
     expect(out.rows[1]).toBe(now[1]);
     expect(out.rows[2].moleculeId).toBe("m9");

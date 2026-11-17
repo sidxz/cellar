@@ -374,13 +374,17 @@ describe("EditLabellingDialog", () => {
       expect(screen.getByText("Compound seven")).toBeInTheDocument();
       expect(
         screen.getByText(
-          "Matched 1 position from its label. Nothing is saved until you press Save.",
+          "Matched 1 position from its label. 1 was already matched. Nothing is saved until you press Save.",
         ),
       ).toBeInTheDocument();
       expect(screen.getByText("1 position changed")).toBeInTheDocument();
       expect(mutate).not.toHaveBeenCalled();
       // Every position with a label now has a compound: nothing is left to match.
       expect(matchButton()).toBeDisabled();
+      expect(matchButton()).toHaveAttribute(
+        "title",
+        "Every labeled position already has a compound.",
+      );
 
       fireEvent.click(save());
       expect(mutate.mock.calls[0][0]).toEqual({

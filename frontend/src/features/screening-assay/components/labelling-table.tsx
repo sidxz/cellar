@@ -41,7 +41,14 @@ const SELECTED_OPAQUE = "bg-[color-mix(in_oklab,var(--muted)_40%,var(--backgroun
 
 const isBadDose = (dose: string) => parseDose(dose) === undefined;
 
-export function Notice({ tone, children }: { tone: "ok" | "warn" | "bad"; children: ReactNode }) {
+export function Notice({
+  tone,
+  children,
+}: {
+  /** "neutral" has the border alone: neither success nor a warning. */
+  tone: "ok" | "neutral" | "warn" | "bad";
+  children: ReactNode;
+}) {
   return (
     <div
       role={tone === "bad" ? "alert" : undefined}
@@ -109,6 +116,10 @@ export function LabellingTable<T extends LabellingRow>({
     // Only the wizard can add or remove positions; it stores on Import, Edit labelling on Save.
     saveButton: showUse ? "Import" : "Save",
   });
+  /** Why Match from labels cannot be pressed, or null. */
+  const matchBlocked =
+    calculatedLocked ||
+    (labelsToMatch(rows).length === 0 ? "Every labeled position already has a compound." : null);
 
   const toggle = (key: string, on: boolean) =>
     setSelected((s) => {
@@ -200,9 +211,9 @@ export function LabellingTable<T extends LabellingRow>({
           size="sm"
           variant="outline"
           // A disabled button ignores the pointer, which would hide its title; keep hover on.
-          className={cn(locked && "disabled:pointer-events-auto")}
-          disabled={locked || layout.matching || labelsToMatch(rows).length === 0}
-          title={calculatedLocked ?? undefined}
+          className={cn(matchBlocked && "disabled:pointer-events-auto")}
+          disabled={!!matchBlocked || layout.matching}
+          title={matchBlocked ?? undefined}
           onClick={layout.matchLabels}
         >
           <Tags className="h-4 w-4" /> {layout.matching ? "Matching…" : "Match from labels"}
@@ -285,7 +296,13 @@ type LayoutOutcome =
       notices: string[];
       saveButton: string;
     }
-  | { kind: "matched"; matched: number; unmatched: string[]; saveButton: string };
+  | {
+      kind: "matched";
+      matched: number;
+      alreadyMatched: number;
+      unmatched: string[];
+      saveButton: string;
+    };
 
 /** Labels that found no compound are listed up to this many; the rest are counted. */
 const MAX_UNMATCHED_LISTED = 20;
@@ -339,6 +356,7 @@ function useLayoutFile<T extends LabellingRow>(
           setOutcome({
             kind: "matched",
             matched: applied.matched,
+            alreadyMatched: applied.alreadyMatched,
             unmatched: applied.unmatched,
             saveButton: o.saveButton,
           });
@@ -361,23 +379,37 @@ function LayoutMessages({ outcome }: { outcome: LayoutOutcome | null }) {
   if (!outcome) return null;
   if (outcome.kind === "refused") return <Notice tone="bad">{outcome.message}</Notice>;
   if (outcome.kind === "matched") {
-    const { matched, unmatched, saveButton } = outcome;
-    if (matched === 0) {
-      return <Notice tone="warn">No label matched a registered compound.</Notice>;
-    }
+    const { matched, alreadyMatched, unmatched, saveButton } = outcome;
     const more = unmatched.length - MAX_UNMATCHED_LISTED;
+    const notFound =
+      unmatched.length > 0 &&
+      `No compound found for: ${unmatched.slice(0, MAX_UNMATCHED_LISTED).join(", ")}${
+        more > 0 ? ` and ${more} more` : ""
+      }`;
+    if (matched === 0) {
+      // Nothing new is a warning only when no position has a compound at all: the wizard
+      // matches on its own when the file is read, and what is left may be controls.
+      const already =
+        alreadyMatched === 1
+          ? "1 position is already matched."
+          : `${alreadyMatched} positions are already matched.`;
+      return (
+        <Notice tone={alreadyMatched > 0 ? "neutral" : "warn"}>
+          {alreadyMatched > 0 ? already : "No label matched a registered compound."}
+          {notFound && ` ${notFound}.`}
+        </Notice>
+      );
+    }
+    const also =
+      alreadyMatched > 0
+        ? ` ${alreadyMatched} ${alreadyMatched === 1 ? "was" : "were"} already matched.`
+        : "";
     // The unmatched labels are muted, not a warning: many, such as a control's, name no compound.
     return (
       <Notice tone="ok">
         Matched {matched} position{matched === 1 ? "" : "s"} from{" "}
-        {matched === 1 ? "its label" : "their labels"}. Nothing is saved until you press{" "}
-        {saveButton}.
-        {unmatched.length > 0 && (
-          <p className="mt-1 text-muted-foreground">
-            No compound found for: {unmatched.slice(0, MAX_UNMATCHED_LISTED).join(", ")}
-            {more > 0 && ` and ${more} more`}
-          </p>
-        )}
+        {matched === 1 ? "its label" : "their labels"}.{also} Nothing is saved until you press{" "}
+        {saveButton}.{notFound && <p className="mt-1 text-muted-foreground">{notFound}</p>}
       </Notice>
     );
   }
