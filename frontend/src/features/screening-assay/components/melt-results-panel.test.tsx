@@ -35,6 +35,8 @@ function pos(id: string, over: Record<string, unknown> = {}) {
   return {
     well_id: id,
     position_label: `Capillary ${id}`,
+    row: "A",
+    column: 1,
     label: null,
     well_type: "sample",
     registration_number: "",

@@ -367,6 +367,8 @@ export function MeltResultsGrid({
         headerName: "Position",
         width: 110,
         valueGetter: (p) => p.data?.position,
+        // As the holder is laid out (Capillary 2 before 11, A2 before A10), not as text.
+        comparator: (_a, _b, a, b) => (a.data?.holderRank ?? 0) - (b.data?.holderRank ?? 0),
       },
       {
         colId: "conc",

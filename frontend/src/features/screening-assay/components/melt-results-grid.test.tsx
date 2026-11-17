@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ApplicableRule } from "../lib/melt-hits";
@@ -13,7 +13,8 @@ vi.mock("@/shared/components/data-grid/data-grid", async (importOriginal) => {
   return {
     DataGrid: (p: { columnDefs: any[]; rowData: unknown[] }) => {
       defs = p.columnDefs;
-      return drawGrid ? <DataGrid {...p} /> : null;
+      // jsdom has no layout, so the real grid draws every row instead of a screenful.
+      return drawGrid ? <DataGrid {...p} suppressRowVirtualisation /> : null;
     },
   };
 });
@@ -116,6 +117,39 @@ describe("MeltResultsGrid values beside a limit of the hit rule", () => {
     show(["Main"], { applicable: [{ ...applicable[0], window: "Low" }] });
     expect(column("Main:delta").valueFormatter({ data: near, value: -2.02 })).toBe("−2.0");
     expect(column("Main:tm").cellRenderer({ data: near })).toBe("60.0");
+  });
+});
+
+describe("MeltResultsGrid sorted by Position", () => {
+  const numbers = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+  const at = (position: string, holderRank: number, over: Partial<ResultRow> = {}) =>
+    ({ ...row, wellId: position, position, holderRank, ...over }) as ResultRow;
+  const asText = (a: ResultRow, b: ResultRow) => a.position.localeCompare(b.position);
+  const shown = (container: string) =>
+    [...document.querySelectorAll<HTMLElement>(`${container} [role="row"]`)]
+      .sort((a, b) => Number(a.getAttribute("row-index")) - Number(b.getAttribute("row-index")))
+      .map((r) => r.querySelector('[col-id="position"]')?.textContent);
+  const body = () => shown(".ag-center-cols-container");
+  const sortByPosition = () => fireEvent.click(screen.getByText("Position"));
+
+  // The holder's order, both ways, with the rows given as text sorts them.
+  it.each([
+    ["a cassette of 24", numbers(24).map((n) => `Capillary ${n}`)],
+    ["a plate", ["A", "B"].flatMap((r) => numbers(12).map((n) => `${r}${n}`))],
+  ])("orders %s as the holder is laid out, in both directions", async (_, labels) => {
+    drawGrid = true;
+    const [first, ...rest] = labels.map((label, i) => at(label, i));
+    // The first position is the reference: pinned, so never sorted.
+    const pinned = [{ ...first, wellType: "reference", isSample: false } as ResultRow];
+    show(["Main"], { rows: { pinned, body: rest.sort(asText) } });
+    await screen.findByText(labels[1]);
+
+    sortByPosition();
+    await waitFor(() => expect(body()).toEqual(labels.slice(1)));
+    expect(shown(".ag-floating-top")).toEqual([labels[0]]);
+    sortByPosition();
+    await waitFor(() => expect(body()).toEqual(labels.slice(1).reverse()));
+    expect(shown(".ag-floating-top")).toEqual([labels[0]]);
   });
 });
 
