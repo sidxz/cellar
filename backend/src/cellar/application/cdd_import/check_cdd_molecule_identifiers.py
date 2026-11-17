@@ -14,8 +14,8 @@ from cellar.application.cdd_import.gateway import CddMoleculeLookupGateway
 from cellar.application.cdd_import.molecule_identifiers import (
     MAX_IDENTIFIERS,
     IdentifierMatch,
-    clean_identifiers,
     match_identifiers,
+    parse_identifiers,
 )
 from cellar.application.shared.query import Query
 from cellar.application.workspace_config.get_data_source_for_import import (
@@ -27,7 +27,7 @@ from cellar.domain.shared.errors import DomainError, ValidationError
 @dataclass(frozen=True, kw_only=True)
 class CheckCddMoleculeIdentifiersQuery(Query):
     workspace_id: uuid.UUID
-    identifiers: list[str]
+    text: str  # as pasted: one identifier per line, or separated by commas, semicolons or tabs
 
 
 class CheckCddMoleculeIdentifiers:
@@ -47,7 +47,7 @@ class CheckCddMoleculeIdentifiers:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
 
-        identifiers = clean_identifiers(input.identifiers)
+        identifiers = parse_identifiers(input.text)
         if not identifiers:
             return Failure(ValidationError("Enter at least one identifier"))
         if len(identifiers) > MAX_IDENTIFIERS:

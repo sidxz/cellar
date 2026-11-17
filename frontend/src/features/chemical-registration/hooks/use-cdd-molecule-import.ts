@@ -50,14 +50,17 @@ export function useStartCddMoleculeImport() {
   });
 }
 
-/** Which identifiers name a molecule in the vault. Imports nothing. */
+/**
+ * Which identifiers in the pasted `text` name a molecule in the vault. Imports nothing.
+ * The server splits the text into identifiers.
+ */
 export function useCheckCddMoleculeIdentifiers() {
   return useMutation({
-    mutationFn: (identifiers: string[]) =>
+    mutationFn: (text: string) =>
       customInstance<CddMoleculeIdentifierCheck>({
         url: `${API_V1}/cdd-import/molecules/check`,
         method: "POST",
-        data: { identifiers } satisfies CheckCddMoleculeIdentifiersBody,
+        data: { text } satisfies CheckCddMoleculeIdentifiersBody,
       }),
   });
 }

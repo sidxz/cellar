@@ -141,6 +141,8 @@ describe("DataImportPage: import specific molecules", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Check identifiers" }));
     await screen.findByText("2 of 3 identifiers found in CDD Vault.");
+    // The server parses the list: it gets the text exactly as pasted.
+    expect(h.check.mutateAsync).toHaveBeenCalledExactlyOnceWith("SACC-0001, SACC-0002\nSACC-0099");
     expect(h.start.mutateAsync).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Import" }));

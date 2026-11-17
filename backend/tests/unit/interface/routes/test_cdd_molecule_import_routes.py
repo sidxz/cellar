@@ -44,8 +44,17 @@ class _GetDataSource:
 
 
 class _Vault:
+    """Knows two molecules; records the names it was asked about."""
+
+    def __init__(self) -> None:
+        self.asked: list[list[str]] = []
+
     async def find_molecules_by_names(self, vault_id: str, api_key: str, names: list[str]):
-        return [{"id": 11, "name": "SACC-0001", "synonyms": []}]
+        self.asked.append(names)
+        return [
+            {"id": 11, "name": "SACC-0001", "synonyms": []},
+            {"id": 14, "name": "16:0 CoA", "synonyms": ["Palmitoyl CoA"]},
+        ]
 
 
 class _App:
@@ -54,13 +63,14 @@ class _App:
         self.get_data_source = _GetDataSource()
         self.orchestrator = AsyncMock()
         self.orchestrator.start = AsyncMock(return_value="wf-1")
+        self.vault = _Vault()
         app = FastAPI()
         register_error_handlers(app)
         app.include_router(router)
         app.dependency_overrides[get_auth] = lambda: self.auth
         app.state.container = {
             CheckCddMoleculeIdentifiers: CheckCddMoleculeIdentifiers(
-                gateway=_Vault(), get_data_source=self.get_data_source
+                gateway=self.vault, get_data_source=self.get_data_source
             ),
             StartCddMoleculeImport: StartCddMoleculeImport(
                 get_data_source=self.get_data_source, orchestrator=self.orchestrator
@@ -81,7 +91,7 @@ async def test_check_reports_found_and_not_found_in_the_callers_workspace():
     app = _App("editor")
     response = await app.client.post(
         CHECK,
-        json={"identifiers": ["SACC-0001", "SACC-0099"], "workspace_id": str(uuid.uuid4())},
+        json={"text": "SACC-0001\nSACC-0099", "workspace_id": str(uuid.uuid4())},
     )
 
     assert response.status_code == 200
@@ -89,19 +99,35 @@ async def test_check_reports_found_and_not_found_in_the_callers_workspace():
     assert app.get_data_source.workspaces == [app.auth.workspace_id]
 
 
+async def test_check_parses_the_pasted_text_and_keeps_names_with_spaces_whole():
+    app = _App("editor")
+    pasted = "SACC-0001\r\n16:0 CoA\r\nPalmitoyl  CoA, sacc-0001;\tAcetyl CoA\r\n"
+    response = await app.client.post(CHECK, json={"text": pasted})
+
+    assert response.status_code == 200
+    assert app.vault.asked == [["SACC-0001", "16:0 CoA", "Palmitoyl CoA", "Acetyl CoA"]]
+    assert response.json() == {
+        "found": ["SACC-0001", "16:0 CoA", "Palmitoyl CoA"],
+        "not_found": ["Acetyl CoA"],
+    }
+
+
 async def test_viewer_may_not_check():
     app = _App("viewer")
-    response = await app.client.post(CHECK, json={"identifiers": ["SACC-0001"]})
+    response = await app.client.post(CHECK, json={"text": "SACC-0001"})
 
     assert response.status_code == 403
     assert app.get_data_source.workspaces == []
 
 
-async def test_check_takes_a_list_of_identifiers():
+async def test_check_takes_the_pasted_text():
     app = _App("editor")
-    response = await app.client.post(CHECK, json={"identifiers": "SACC-0001"})
-
-    assert response.status_code == 422
+    for body in ({"identifiers": ["SACC-0001"]}, {"text": ["SACC-0001"]}):
+        response = await app.client.post(CHECK, json=body)
+        assert response.status_code == 422
+    blank = await app.client.post(CHECK, json={"text": " \n ,"})
+    assert blank.status_code == 422
+    assert app.vault.asked == []
 
 
 async def test_filtered_import_starts_with_the_names_in_the_callers_workspace():

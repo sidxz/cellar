@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { SelectedMoleculesImport, parseIdentifiers } from "./selected-molecules-import";
+import { SelectedMoleculesImport } from "./selected-molecules-import";
 
 const h = vi.hoisted(() => ({
   check: { mutateAsync: vi.fn(), isPending: false },
@@ -10,28 +10,7 @@ vi.mock("../hooks/use-cdd-molecule-import", () => ({
   useCheckCddMoleculeIdentifiers: () => h.check,
 }));
 
-describe("parseIdentifiers", () => {
-  it("splits on new lines, commas, spaces and tabs", () => {
-    expect(parseIdentifiers("SACC-1\nSACC-2, SACC-3 SACC-4\tSACC-5\r\nSACC-6")).toEqual([
-      "SACC-1",
-      "SACC-2",
-      "SACC-3",
-      "SACC-4",
-      "SACC-5",
-      "SACC-6",
-    ]);
-  });
-
-  it("ignores blank entries", () => {
-    expect(parseIdentifiers("\n\n SACC-1 ,, ,\n\t\nSACC-2\n")).toEqual(["SACC-1", "SACC-2"]);
-    expect(parseIdentifiers("  \n ,")).toEqual([]);
-  });
-
-  it("ignores repeats, whatever their case, and keeps the first spelling", () => {
-    expect(parseIdentifiers("SACC-1\nsacc-1\nSACC-2\nSACC-1")).toEqual(["SACC-1", "SACC-2"]);
-  });
-});
-
+// The pasted text is parsed by the server's check; the page only shows what the check returns.
 describe("SelectedMoleculesImport: check, then import", () => {
   const onImport = vi.fn();
 
@@ -59,18 +38,38 @@ describe("SelectedMoleculesImport: check, then import", () => {
     });
   });
 
-  it("offers nothing to check or import until identifiers are pasted", () => {
+  it("offers nothing to check or import until something is pasted", () => {
     renderIt();
+    expect(button("Check identifiers")).toBeDisabled();
+    paste("  \n ");
     expect(button("Check identifiers")).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
   });
 
-  it("counts the pasted identifiers beside the Check button, and asks nothing yet", () => {
+  it("says how to separate identifiers", () => {
     renderIt();
-    paste("SACC-0001, SACC-0002\nSACC-0099\nsacc-0001");
-    expect(screen.getByText("3 identifiers")).toBeInTheDocument();
-    expect(button("Check identifiers")).not.toHaveTextContent("3");
+    expect(
+      screen.getByText("One per line, or separated by commas. Repeats are ignored."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/spaces/)).toBeNull();
+  });
+
+  it("asks nothing until Check is pressed", () => {
+    renderIt();
+    paste("SACC-0001, SACC-0002\nSACC-0099");
+    expect(button("Check identifiers")).toBeEnabled();
     expect(h.check.mutateAsync).not.toHaveBeenCalled();
+  });
+
+  it("sends the text as pasted, so a name with spaces reaches the check whole", async () => {
+    h.check.mutateAsync.mockResolvedValue({ found: ["16:0 CoA"], not_found: ["Palmitoyl CoA"] });
+    renderIt();
+    paste("16:0 CoA\nPalmitoyl CoA");
+    check();
+
+    expect(await screen.findByText("1 of 2 identifiers found in CDD Vault.")).toBeInTheDocument();
+    expect(h.check.mutateAsync).toHaveBeenCalledExactlyOnceWith("16:0 CoA\nPalmitoyl CoA");
+    expect(screen.getByText("Palmitoyl CoA")).toBeInTheDocument();
   });
 
   it("reports what was found and lists what was not, without importing", async () => {
@@ -79,7 +78,7 @@ describe("SelectedMoleculesImport: check, then import", () => {
     check();
 
     expect(await screen.findByText("2 of 3 identifiers found in CDD Vault.")).toBeInTheDocument();
-    expect(h.check.mutateAsync).toHaveBeenCalledWith(["SACC-0001", "SACC-0002", "SACC-0099"]);
+    expect(h.check.mutateAsync).toHaveBeenCalledWith("SACC-0001, SACC-0002\nSACC-0099");
     expect(screen.getByText("Not found (1)")).toBeInTheDocument();
     expect(screen.getByText("SACC-0099")).toBeInTheDocument();
     expect(onImport).not.toHaveBeenCalled();

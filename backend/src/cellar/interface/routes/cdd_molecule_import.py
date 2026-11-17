@@ -50,7 +50,8 @@ class StartCddMoleculeImportBody(BaseModel):
 
 
 class CheckCddMoleculeIdentifiersBody(BaseModel):
-    identifiers: list[str]
+    # As pasted: one identifier per line, or separated by commas, semicolons or tabs.
+    text: str
 
 
 class CddMoleculeIdentifierCheckResponse(BaseModel):
@@ -163,7 +164,7 @@ async def check_cdd_molecule_identifiers(
     result = await use_case(
         CheckCddMoleculeIdentifiersQuery(
             workspace_id=auth.workspace_id,
-            identifiers=body.identifiers,
+            text=body.text,
         ),
         auth=auth,
     )

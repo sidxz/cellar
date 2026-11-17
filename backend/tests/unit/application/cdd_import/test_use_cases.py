@@ -446,6 +446,15 @@ class TestStartCddMoleculeImport:
         assert request.import_mode == "filtered"
         assert request.filter_criteria == {"names": ["SACC-0001", "SACC-0002"]}
 
+    @pytest.mark.asyncio
+    async def test_filtered_import_keeps_a_name_with_spaces_whole(self):
+        uc, orchestrator = self._make_uc()
+        result = await uc(self._filtered({"names": ["16:0  CoA", "Palmitoyl CoA"]}), auth=_make_auth())
+
+        assert isinstance(result, Success)
+        request = orchestrator.start.call_args[0][0]
+        assert request.filter_criteria == {"names": ["16:0 CoA", "Palmitoyl CoA"]}
+
     @pytest.mark.parametrize("filter_criteria", [None, {}, {"names": []}, {"names": ["  "]}])
     @pytest.mark.asyncio
     async def test_filtered_import_without_names_never_starts(self, filter_criteria):
@@ -507,12 +516,13 @@ class FakeMoleculeGateway:
 VAULT_MOLECULES = [
     {"id": 11, "name": "SACC-0001", "synonyms": ["ASA"]},
     {"id": 12, "name": "SACC-0002", "synonyms": []},
+    {"id": 14, "name": "16:0 CoA", "synonyms": ["Palmitoyl CoA"]},
 ]
 
 
 class TestCheckCddMoleculeIdentifiers:
-    def _query(self, identifiers, workspace_id=WORKSPACE_ID):
-        return CheckCddMoleculeIdentifiersQuery(workspace_id=workspace_id, identifiers=identifiers)
+    def _query(self, text, workspace_id=WORKSPACE_ID):
+        return CheckCddMoleculeIdentifiersQuery(workspace_id=workspace_id, text=text)
 
     def _make_uc(self, gateway=None, get_data_source=None):
         gateway = gateway or FakeMoleculeGateway(VAULT_MOLECULES)
@@ -524,7 +534,7 @@ class TestCheckCddMoleculeIdentifiers:
     @pytest.mark.asyncio
     async def test_reports_found_and_not_found(self):
         uc, gateway = self._make_uc()
-        result = await uc(self._query(["SACC-0001", "ASA", "SACC-0099"]), auth=_make_auth())
+        result = await uc(self._query("SACC-0001\nASA\nSACC-0099"), auth=_make_auth())
 
         match = result.unwrap()
         assert match.found == ["SACC-0001", "ASA"]
@@ -532,10 +542,20 @@ class TestCheckCddMoleculeIdentifiers:
         assert gateway.calls == [("12345", "key123", ["SACC-0001", "ASA", "SACC-0099"])]
 
     @pytest.mark.asyncio
+    async def test_a_name_with_spaces_is_asked_about_whole(self):
+        uc, gateway = self._make_uc()
+        result = await uc(self._query("16:0 CoA\nPalmitoyl  CoA, Acetyl CoA"), auth=_make_auth())
+
+        match = result.unwrap()
+        assert match.found == ["16:0 CoA", "Palmitoyl CoA"]
+        assert match.not_found == ["Acetyl CoA"]
+        assert gateway.calls[0][2] == ["16:0 CoA", "Palmitoyl CoA", "Acetyl CoA"]
+
+    @pytest.mark.asyncio
     async def test_duplicates_and_blanks_are_asked_about_once(self):
         uc, gateway = self._make_uc()
         result = await uc(
-            self._query(["SACC-0002", " sacc-0002", "", "SACC-0099", "SACC-0099"]),
+            self._query("SACC-0002\n sacc-0002\n\nSACC-0099, SACC-0099"),
             auth=_make_auth(),
         )
 
@@ -544,19 +564,19 @@ class TestCheckCddMoleculeIdentifiers:
         assert match.not_found == ["SACC-0099"]
         assert gateway.calls[0][2] == ["SACC-0002", "SACC-0099"]
 
-    @pytest.mark.parametrize("identifiers", [[], ["", "  "]])
+    @pytest.mark.parametrize("text", ["", " \n , ;\t"])
     @pytest.mark.asyncio
-    async def test_an_empty_list_is_refused_without_asking_the_vault(self, identifiers):
+    async def test_an_empty_list_is_refused_without_asking_the_vault(self, text):
         uc, gateway = self._make_uc()
-        result = await uc(self._query(identifiers), auth=_make_auth())
+        result = await uc(self._query(text), auth=_make_auth())
         assert isinstance(result.failure(), ValidationError)
         assert gateway.calls == []
 
     @pytest.mark.asyncio
     async def test_more_identifiers_than_the_limit_are_refused(self):
         uc, gateway = self._make_uc()
-        identifiers = [f"SACC-{i}" for i in range(MAX_IDENTIFIERS + 1)]
-        result = await uc(self._query(identifiers), auth=_make_auth())
+        text = "\n".join(f"SACC-{i}" for i in range(MAX_IDENTIFIERS + 1))
+        result = await uc(self._query(text), auth=_make_auth())
         assert isinstance(result.failure(), ValidationError)
         assert gateway.calls == []
 
@@ -564,14 +584,14 @@ class TestCheckCddMoleculeIdentifiers:
     async def test_viewer_rejected(self):
         uc, gateway = self._make_uc()
         with pytest.raises(AuthorizationError):
-            await uc(self._query(["SACC-0001"]), auth=_make_auth(role="viewer"))
+            await uc(self._query("SACC-0001"), auth=_make_auth(role="viewer"))
         assert gateway.calls == []
 
     @pytest.mark.asyncio
     async def test_another_workspace_is_refused(self):
         uc, gateway = self._make_uc()
         with pytest.raises(NotFoundError):
-            await uc(self._query(["SACC-0001"], workspace_id=uuid.uuid4()), auth=_make_auth())
+            await uc(self._query("SACC-0001", workspace_id=uuid.uuid4()), auth=_make_auth())
         assert gateway.calls == []
 
     @pytest.mark.asyncio
@@ -581,14 +601,14 @@ class TestCheckCddMoleculeIdentifiers:
                 result=Failure(NotFoundError("DataSource", "no active CDD source"))
             )
         )
-        result = await uc(self._query(["SACC-0001"]), auth=_make_auth())
+        result = await uc(self._query("SACC-0001"), auth=_make_auth())
         assert isinstance(result, Failure)
         assert gateway.calls == []
 
     @pytest.mark.asyncio
     async def test_vault_refusing_the_key_is_a_failure_not_a_crash(self):
         uc, _ = self._make_uc(gateway=FakeMoleculeGateway(error=CddAuthError("Invalid key")))
-        result = await uc(self._query(["SACC-0001"]), auth=_make_auth())
+        result = await uc(self._query("SACC-0001"), auth=_make_auth())
         assert isinstance(result.failure(), ValidationError)
 
 

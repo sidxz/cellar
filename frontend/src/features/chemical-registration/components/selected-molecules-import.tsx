@@ -4,22 +4,11 @@ import { Button } from "@/shared/components/ui/button";
 import { Label } from "@/shared/components/ui/label";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { Loader2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   type CddMoleculeIdentifierCheck,
   useCheckCddMoleculeIdentifiers,
 } from "../hooks/use-cdd-molecule-import";
-
-/** Identifiers in pasted text: split on commas and any white space; blanks and repeats dropped. */
-export function parseIdentifiers(text: string): string[] {
-  const seen = new Set<string>();
-  return text.split(/[\s,]+/).filter((identifier) => {
-    const key = identifier.toLowerCase();
-    if (!identifier || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
 
 const plural = (count: number, noun: string) =>
   `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
@@ -27,6 +16,9 @@ const plural = (count: number, noun: string) =>
 /**
  * Import a pasted list of vault molecules: check which identifiers the vault
  * knows, then import the found ones. Nothing is imported until Import is pressed.
+ *
+ * The pasted text goes to the check as it is. The server alone splits it into
+ * identifiers, so this component shows only what the check returns.
  */
 export function SelectedMoleculesImport({
   organizationSelected,
@@ -42,12 +34,11 @@ export function SelectedMoleculesImport({
   const [checked, setChecked] = useState<CddMoleculeIdentifierCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const check = useCheckCddMoleculeIdentifiers();
-  const identifiers = useMemo(() => parseIdentifiers(text), [text]);
 
   const handleCheck = async () => {
     setError(null);
     try {
-      setChecked(await check.mutateAsync(identifiers));
+      setChecked(await check.mutateAsync(text));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not check the identifiers");
     }
@@ -82,23 +73,18 @@ export function SelectedMoleculesImport({
           }}
         />
         <p className="text-xs text-muted-foreground">
-          One per line, or separated by commas, spaces or tabs. Repeats are ignored.
+          One per line, or separated by commas. Repeats are ignored.
         </p>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button
-          variant="outline"
-          onClick={handleCheck}
-          disabled={identifiers.length === 0 || check.isPending}
-        >
-          {check.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Check identifiers
-        </Button>
-        <span className="text-sm tabular-nums text-muted-foreground">
-          {plural(identifiers.length, "identifier")}
-        </span>
-      </div>
+      <Button
+        variant="outline"
+        onClick={handleCheck}
+        disabled={text.trim() === "" || check.isPending}
+      >
+        {check.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Check identifiers
+      </Button>
 
       {error && (
         <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
