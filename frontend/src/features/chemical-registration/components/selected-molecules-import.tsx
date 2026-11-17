@@ -14,49 +14,41 @@ const plural = (count: number, noun: string) =>
   `${count.toLocaleString()} ${noun}${count === 1 ? "" : "s"}`;
 
 /**
- * Import a pasted list of vault molecules: check which identifiers the vault
- * knows, then import the found ones. Nothing is imported until Import is pressed.
+ * The list for the "Specific molecules" import mode: the pasted identifiers and
+ * the check that says which of them the vault knows. It imports nothing; the
+ * page's Start Import button does, from the answer handed over by `onChecked`.
  *
  * The pasted text goes to the check as it is. The server alone splits it into
  * identifiers, so this component shows only what the check returns.
  */
 export function SelectedMoleculesImport({
-  organizationSelected,
-  isImporting,
-  onImport,
+  text,
+  onTextChange,
+  checked,
+  onChecked,
 }: {
-  organizationSelected: boolean;
-  isImporting: boolean;
-  onImport: (found: string[], notFound: string[]) => void;
+  /** The pasted list. The page holds it, so it outlives a switch of import mode. */
+  text: string;
+  onTextChange: (text: string) => void;
+  /** The check's answer for the list as it stands, or null when it has none. */
+  checked: CddMoleculeIdentifierCheck | null;
+  /** A check came back: the text it was asked about, and its answer. */
+  onChecked: (text: string, result: CddMoleculeIdentifierCheck) => void;
 }) {
-  const [text, setText] = useState("");
-  // The answer for the list as it stands; cleared whenever the list is edited.
-  const [checked, setChecked] = useState<CddMoleculeIdentifierCheck | null>(null);
   const [error, setError] = useState<string | null>(null);
   const check = useCheckCddMoleculeIdentifiers();
 
   const handleCheck = async () => {
     setError(null);
     try {
-      setChecked(await check.mutateAsync(text));
+      onChecked(text, await check.mutateAsync(text));
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Could not check the identifiers");
     }
   };
 
   return (
-    <section aria-labelledby="selected-molecules-heading" className="max-w-lg space-y-4">
-      <div className="space-y-1">
-        <h3 id="selected-molecules-heading" className="text-sm font-semibold">
-          Import specific molecules
-        </h3>
-        <p className="text-sm text-muted-foreground">
-          Paste the identifiers of the molecules you need: the name or a synonym each one has in CDD
-          Vault. Only those molecules and their batches are imported, for the organization selected
-          above.
-        </p>
-      </div>
-
+    <div className="space-y-4">
       <div className="grid gap-2">
         <Label htmlFor="molecule-identifiers">Identifiers</Label>
         <Textarea
@@ -67,10 +59,7 @@ export function SelectedMoleculesImport({
           value={text}
           // Locked while a check is out, so its answer is always for the list shown.
           disabled={check.isPending}
-          onChange={(e) => {
-            setText(e.target.value);
-            setChecked(null);
-          }}
+          onChange={(e) => onTextChange(e.target.value)}
         />
         <p className="text-xs text-muted-foreground">
           One per line, or separated by commas. Repeats are ignored.
@@ -102,27 +91,9 @@ export function SelectedMoleculesImport({
             title={`Not found (${checked.not_found.length.toLocaleString()})`}
             identifiers={checked.not_found}
           />
-
-          <div className="flex items-center gap-3">
-            <Button
-              onClick={() => onImport(checked.found, checked.not_found)}
-              disabled={checked.found.length === 0 || !organizationSelected || isImporting}
-            >
-              {isImporting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Import
-            </Button>
-            <span className="tabular-nums text-muted-foreground">
-              {checked.found.length.toLocaleString()} found
-            </span>
-          </div>
-          {!organizationSelected && checked.found.length > 0 && (
-            <p className="text-xs text-muted-foreground">
-              Select the originating organization above to import.
-            </p>
-          )}
         </div>
       )}
-    </section>
+    </div>
   );
 }
 

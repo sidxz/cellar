@@ -1,5 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { CddMoleculeIdentifierCheck } from "../hooks/use-cdd-molecule-import";
 import { SelectedMoleculesImport } from "./selected-molecules-import";
 
 const h = vi.hoisted(() => ({
@@ -10,17 +12,25 @@ vi.mock("../hooks/use-cdd-molecule-import", () => ({
   useCheckCddMoleculeIdentifiers: () => h.check,
 }));
 
-// The pasted text is parsed by the server's check; the page only shows what the check returns.
-describe("SelectedMoleculesImport: check, then import", () => {
-  const onImport = vi.fn();
+// The pasted text is parsed by the server's check; the component only shows what the check
+// returns. The page holds the list and the answer, and its own button does the importing.
+describe("SelectedMoleculesImport: the list and its check", () => {
+  const onChecked = vi.fn();
 
-  function renderIt(organizationSelected = true) {
-    render(
+  /** Holds the list and the answer the way the page does. */
+  function Harness({ initialText = "" }: { initialText?: string }) {
+    const [text, setText] = useState(initialText);
+    const [checked, setChecked] = useState<CddMoleculeIdentifierCheck | null>(null);
+    return (
       <SelectedMoleculesImport
-        organizationSelected={organizationSelected}
-        isImporting={false}
-        onImport={onImport}
-      />,
+        text={text}
+        onTextChange={setText}
+        checked={checked}
+        onChecked={(checkedText, result) => {
+          onChecked(checkedText, result);
+          setChecked(result);
+        }}
+      />
     );
   }
 
@@ -30,7 +40,7 @@ describe("SelectedMoleculesImport: check, then import", () => {
   const check = () => fireEvent.click(button("Check identifiers"));
 
   beforeEach(() => {
-    onImport.mockReset();
+    onChecked.mockReset();
     h.check.mutateAsync.mockReset();
     h.check.mutateAsync.mockResolvedValue({
       found: ["SACC-0001", "SACC-0002"],
@@ -38,16 +48,21 @@ describe("SelectedMoleculesImport: check, then import", () => {
     });
   });
 
-  it("offers nothing to check or import until something is pasted", () => {
-    renderIt();
+  it("offers nothing to check until something is pasted", () => {
+    render(<Harness />);
     expect(button("Check identifiers")).toBeDisabled();
     paste("  \n ");
     expect(button("Check identifiers")).toBeDisabled();
-    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
+  });
+
+  it("shows the list the page already holds", () => {
+    render(<Harness initialText="SACC-0001" />);
+    expect(screen.getByLabelText("Identifiers")).toHaveValue("SACC-0001");
+    expect(button("Check identifiers")).toBeEnabled();
   });
 
   it("says how to separate identifiers", () => {
-    renderIt();
+    render(<Harness />);
     expect(
       screen.getByText("One per line, or separated by commas. Repeats are ignored."),
     ).toBeInTheDocument();
@@ -55,15 +70,16 @@ describe("SelectedMoleculesImport: check, then import", () => {
   });
 
   it("asks nothing until Check is pressed", () => {
-    renderIt();
+    render(<Harness />);
     paste("SACC-0001, SACC-0002\nSACC-0099");
     expect(button("Check identifiers")).toBeEnabled();
     expect(h.check.mutateAsync).not.toHaveBeenCalled();
+    expect(onChecked).not.toHaveBeenCalled();
   });
 
   it("sends the text as pasted, so a name with spaces reaches the check whole", async () => {
     h.check.mutateAsync.mockResolvedValue({ found: ["16:0 CoA"], not_found: ["Palmitoyl CoA"] });
-    renderIt();
+    render(<Harness />);
     paste("16:0 CoA\nPalmitoyl CoA");
     check();
 
@@ -72,8 +88,8 @@ describe("SelectedMoleculesImport: check, then import", () => {
     expect(screen.getByText("Palmitoyl CoA")).toBeInTheDocument();
   });
 
-  it("reports what was found and lists what was not, without importing", async () => {
-    renderIt();
+  it("reports what was found and lists what was not", async () => {
+    render(<Harness />);
     paste("SACC-0001, SACC-0002\nSACC-0099");
     check();
 
@@ -81,56 +97,31 @@ describe("SelectedMoleculesImport: check, then import", () => {
     expect(h.check.mutateAsync).toHaveBeenCalledWith("SACC-0001, SACC-0002\nSACC-0099");
     expect(screen.getByText("Not found (1)")).toBeInTheDocument();
     expect(screen.getByText("SACC-0099")).toBeInTheDocument();
-    expect(onImport).not.toHaveBeenCalled();
   });
 
-  it("imports the found ones on the Import press, with the count beside the button", async () => {
-    renderIt();
+  it("hands the page the answer with the text it was asked about, and imports nothing itself", async () => {
+    render(<Harness />);
     paste("SACC-0001, SACC-0002\nSACC-0099");
     check();
 
-    const importButton = await screen.findByRole("button", { name: "Import" });
-    expect(importButton).toHaveTextContent(/^Import$/);
-    expect(screen.getByText("2 found")).toBeInTheDocument();
-    fireEvent.click(importButton);
-
-    expect(onImport).toHaveBeenCalledExactlyOnceWith(["SACC-0001", "SACC-0002"], ["SACC-0099"]);
-  });
-
-  it("asks for a new check once the list is edited", async () => {
-    renderIt();
-    paste("SACC-0001");
-    check();
-    await screen.findByRole("button", { name: "Import" });
-
-    paste("SACC-0001\nSACC-0003");
-    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
-  });
-
-  it("will not import before an organization is chosen", async () => {
-    renderIt(false);
-    paste("SACC-0001");
-    check();
-    expect(await screen.findByRole("button", { name: "Import" })).toBeDisabled();
-    expect(screen.getByText(/Select the originating organization/)).toBeInTheDocument();
-  });
-
-  it("will not import when nothing was found", async () => {
-    h.check.mutateAsync.mockResolvedValue({ found: [], not_found: ["SACC-0099"] });
-    renderIt();
-    paste("SACC-0099");
-    check();
-    expect(await screen.findByRole("button", { name: "Import" })).toBeDisabled();
+    await waitFor(() =>
+      expect(onChecked).toHaveBeenCalledExactlyOnceWith("SACC-0001, SACC-0002\nSACC-0099", {
+        found: ["SACC-0001", "SACC-0002"],
+        not_found: ["SACC-0099"],
+      }),
+    );
+    // Check identifiers is its only button: the import is the page's.
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("shows why a check failed", async () => {
     h.check.mutateAsync.mockRejectedValue(new Error("Could not connect to CDD Vault"));
-    renderIt();
+    render(<Harness />);
     paste("SACC-0001");
     check();
     await waitFor(() =>
       expect(screen.getByText("Could not connect to CDD Vault")).toBeInTheDocument(),
     );
-    expect(screen.queryByRole("button", { name: "Import" })).toBeNull();
+    expect(onChecked).not.toHaveBeenCalled();
   });
 });
