@@ -46,7 +46,8 @@ export interface MeltResultsPanelProps {
   applicable: readonly ApplicableRule[];
   /** The run's hit rule line, shown above the counts. */
   hitRule?: ReactNode;
-  /** Opens the naming of the reference's peaks, which adds windows; given to editors. */
+  /** Opens the setting up of windows (naming the reference's peaks); given to
+   *  editors. A button while there is something to set up, else a quiet Edit. */
   onNamePeaks?: () => void;
 }
 
@@ -86,6 +87,18 @@ export function MeltResultsPanel({
   );
   const leadName = lead?.window ?? null;
   const plotShown = view === "plot" && !comparing && !!lead;
+  // Something to set up: the signal has no window, or a reference has a
+  // counted peak on it that no window holds.
+  const needsSetup = useMemo(() => {
+    if (windows.length === 0) return true;
+    const outside = new Set(analysis.outside_every_window);
+    const references = new Set(
+      positions.filter((p) => p.well_type === "reference").map((p) => p.well_id),
+    );
+    return analysis.steps.some(
+      (s) => s.channel_key === channel && outside.has(s.id) && references.has(s.well_id),
+    );
+  }, [windows, analysis.outside_every_window, analysis.steps, positions, channel]);
   useEffect(() => {
     onLeadWindowChange?.(leadName);
   }, [leadName, onLeadWindowChange]);
@@ -170,6 +183,17 @@ export function MeltResultsPanel({
                 if (v !== COMPARE) setChosen(v);
               }}
             />
+            {onNamePeaks && !needsSetup && (
+              <Button
+                type="button"
+                variant="link"
+                aria-label="Set up windows"
+                className="h-auto p-0 text-xs font-normal text-muted-foreground"
+                onClick={onNamePeaks}
+              >
+                Edit
+              </Button>
+            )}
           </div>
         )}
         <div title={comparing ? "Shift plot shows one window" : undefined}>
@@ -190,9 +214,9 @@ export function MeltResultsPanel({
             // The shift plot draws no structures.
             disabled={plotShown}
           />
-          {onNamePeaks && (
+          {onNamePeaks && needsSetup && (
             <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
-              Name peaks
+              Set up windows
             </Button>
           )}
           {headerAction}
@@ -227,8 +251,9 @@ export function MeltResultsPanel({
                 className="h-auto p-0 font-normal"
                 onClick={onNamePeaks}
               >
-                Name the reference's peaks.
+                Set up windows
               </Button>
+              .
             </>
           )}
         </p>

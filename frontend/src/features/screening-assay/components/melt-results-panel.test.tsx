@@ -213,33 +213,84 @@ describe("MeltResultsPanel", () => {
     render(<Harness channel="c" onLead={onLead} />);
     expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
     // A viewer is offered nothing to do about it.
-    expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);
     expect(within(table()).queryByText("Tm (°C)")).not.toBeInTheDocument();
     expect(screen.queryByRole("tablist", { name: "Window" })).not.toBeInTheDocument();
     expect(onLead).toHaveBeenLastCalledWith(null);
   });
 
-  it("offers naming the reference's peaks in the header and where the signal has no window", () => {
-    const onNamePeaks = vi.fn();
-    const { rerender } = render(<Harness onNamePeaks={onNamePeaks} />);
-    const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
-    fireEvent.click(within(header).getByRole("button", { name: "Name peaks" }));
-    expect(onNamePeaks).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/No temperature window/)).not.toBeInTheDocument();
+  describe("setting up windows", () => {
+    const setUp = () => screen.queryAllByRole("button", { name: "Set up windows" });
+    /** The analysis with one more counted peak, outside every window of signal a. */
+    const outside = (well: string, channel = "a") =>
+      ({
+        ...analysis,
+        steps: [...analysis.steps, { ...step(well, 95, "unreviewed", channel), id: "o1" }],
+        outside_every_window: ["o1"],
+      }) as MeltingAnalysis;
 
-    rerender(<Harness channel="c" onNamePeaks={onNamePeaks} />);
-    expect(screen.getByText("No temperature window on this signal.")).toHaveTextContent(
-      "No temperature window on this signal. Name the reference's peaks.",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
-    expect(onNamePeaks).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
-  });
+    it("is a button in the header, and a link in the note, when the signal has no window", () => {
+      const onNamePeaks = vi.fn();
+      render(<Harness channel="c" onNamePeaks={onNamePeaks} />);
+      const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
+      const button = within(header).getByRole("button", { name: "Set up windows" });
+      expect(button).toHaveTextContent(/^Set up windows$/);
+      expect(button).toHaveAttribute("data-variant", "outline");
+      fireEvent.click(button);
+      expect(onNamePeaks).toHaveBeenCalledTimes(1);
 
-  it("offers no naming without the handler", () => {
-    render(<Harness />);
-    expect(screen.queryByRole("button", { name: "Name peaks" })).not.toBeInTheDocument();
+      const note = screen.getByText(/^No temperature window on this signal\./);
+      expect(note).toHaveTextContent(/^No temperature window on this signal\. Set up windows\.$/);
+      const link = within(note).getByRole("button", { name: "Set up windows" });
+      expect(link).toHaveTextContent(/^Set up windows$/);
+      fireEvent.click(link);
+      expect(onNamePeaks).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
+    });
+
+    it("is a quiet Edit after the Window switch when the windows hold the reference's peaks", () => {
+      const onNamePeaks = vi.fn();
+      render(<Harness onNamePeaks={onNamePeaks} />);
+      // One control, and it is not the outlined button.
+      expect(setUp()).toHaveLength(1);
+      const edit = setUp()[0];
+      expect(edit).toHaveTextContent(/^Edit$/);
+      expect(edit).toHaveAttribute("data-variant", "link");
+      const precedes = (a: Element, b: Element) =>
+        !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(precedes(screen.getByRole("tablist", { name: "Window" }), edit)).toBe(true);
+      expect(precedes(edit, screen.getByRole("tablist", { name: "View" }))).toBe(true);
+      fireEvent.click(edit);
+      expect(onNamePeaks).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(/No temperature window/)).not.toBeInTheDocument();
+    });
+
+    it("is the button again when a reference has a peak outside every window", () => {
+      render(<Harness data={outside("r1")} onNamePeaks={() => {}} />);
+      expect(setUp()).toHaveLength(1);
+      expect(setUp()[0]).toHaveTextContent(/^Set up windows$/);
+      expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    });
+
+    it("stays the Edit for a sample's stray peak, or a reference's on another signal", () => {
+      const sample = render(<Harness data={outside("s1")} onNamePeaks={() => {}} />);
+      expect(setUp().map((b) => b.textContent)).toEqual(["Edit"]);
+      sample.unmount();
+      render(<Harness data={outside("r1", "b")} onNamePeaks={() => {}} />);
+      expect(setUp().map((b) => b.textContent)).toEqual(["Edit"]);
+    });
+
+    it("is not offered to a viewer, with or without a window", () => {
+      const { rerender } = render(<Harness />);
+      expect(setUp()).toHaveLength(0);
+      expect(screen.queryByText("Edit")).not.toBeInTheDocument();
+      rerender(<Harness channel="c" />);
+      expect(setUp()).toHaveLength(0);
+      expect(screen.getByText("No temperature window on this signal.")).toHaveTextContent(
+        /^No temperature window on this signal\.$/,
+      );
+    });
   });
 
   it("shows signed ΔTm in direction colour without a tint, and the status chip", () => {

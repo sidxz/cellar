@@ -619,18 +619,19 @@ describe("RunCurvesPanel", () => {
       expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
     });
 
-    it("the no-window note opens the naming of the reference's peaks", () => {
+    it("the no-window note opens the setting up of windows", () => {
       withAnalysis({}, 0);
       render(<RunCurvesPanel runId="r1" run={RUN} />);
       expect(screen.queryByTestId("name-peaks")).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
+      const note = screen.getByText(/^No temperature window on this signal\./);
+      fireEvent.click(within(note).getByRole("button", { name: "Set up windows" }));
       expect(screen.getByTestId("name-peaks")).toBeInTheDocument();
     });
 
-    it("an editor names peaks on any run status, with every trace of the signal", () => {
+    it("an editor sets up windows on any run status, with every trace of the signal", () => {
       withAnalysis({});
       const draft = render(<RunCurvesPanel runId="r1" run={RUN} />);
-      fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Set up windows" }));
       expect(naming.at(-1)).toMatchObject({
         open: true,
         runId: "r1",
@@ -647,19 +648,25 @@ describe("RunCurvesPanel", () => {
         { ...RUN, is_locked: true },
       ]) {
         const view = render(<RunCurvesPanel runId="r1" run={run} />);
-        fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+        fireEvent.click(screen.getByRole("button", { name: "Set up windows" }));
         expect(naming.at(-1)).toMatchObject({ open: true, canRecalculate: false });
         view.unmount();
       }
     });
 
-    it("a viewer is not offered the naming", () => {
+    it("a viewer is not offered the setting up of windows", () => {
       canEdit.value = false;
       withAnalysis({}, 0);
-      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      const none = render(<RunCurvesPanel runId="r1" run={RUN} />);
       expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
       expect(naming).toHaveLength(0);
+      none.unmount();
+      // Nor the quiet Edit beside a window that is already there.
+      withAnalysis({});
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
+      expect(screen.queryByText("Edit")).not.toBeInTheDocument();
     });
 
     it("shows a placeholder while the results load", () => {
