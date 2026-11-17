@@ -78,7 +78,12 @@ def results_table(report: RunReport) -> tuple[list[str], list[list]]:
         ]
         for w in report.windows:
             cell = r.cells.get(w.name)
-            row += [cell.tm, cell.delta_tm, cell.status, cell.named_by] if cell else [None] * 4
+            # An empty status is an empty cell, not a cell holding empty text.
+            row += (
+                [cell.tm, cell.delta_tm, cell.status or None, cell.named_by]
+                if cell
+                else [None] * 4
+            )
         row += [HIT_TEXT[r.hit], r.note]
         rows.append(row)
     return headers, rows

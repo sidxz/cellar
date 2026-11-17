@@ -234,6 +234,24 @@ class MeltingStep(Entity):
         self.version += 1
         return changes
 
+    def accept(self, *, by: uuid.UUID) -> list[tuple[str, str | None, str | None]]:
+        """Mark an unreviewed step accepted, its value and reason untouched; returns
+        (field, old, new).
+
+        A step already accepted, or rejected, is left exactly as it is: restoring a
+        rejected step is a review of that step.
+        """
+        if self.status is not MeltingStepStatus.UNREVIEWED:
+            return []
+        # The value does not change, so there is no trace to check it against.
+        return self.review(
+            status=MeltingStepStatus.ACCEPTED,
+            value=self.value,
+            reason=self.reason,
+            x_range=(self.value, self.value),
+            by=by,
+        )
+
     def assign(
         self, *, window: str | None, reason: str | None, by: uuid.UUID
     ) -> list[tuple[str, str | None, str | None]]:

@@ -1,5 +1,5 @@
-"""API tests: a run's melting analysis, adding and reviewing melting steps, and reading the
-candidate peaks of a position.
+"""API tests: a run's melting analysis, adding, reviewing and accepting melting steps, and
+reading the candidate peaks of a position.
 
 The synthetic run has a reference position whose steps sit at 36.6 and 71.3 °C and a
 sample whose ligand merged them into one at 64.0 °C, read in two temperature windows,
@@ -800,3 +800,118 @@ async def test_peak_candidates_of_an_unknown_run_or_position_return_404(
         other_workspace.status_code,
     ) == (404, 404, 404)
     assert (await client.get(f"/api/v1/runs/{s.run_id}/wells/{sample}/peak-candidates")).is_success
+
+
+def _accept_url(run_id: Any) -> str:
+    return f"/api/v1/runs/{run_id}/melting-steps/accept"
+
+
+def _items(analysis: dict[str, Any], **versions: int) -> dict[str, Any]:
+    """Every peak of the run at the version read; ``versions`` overrides one by its id."""
+    return {
+        "steps": [
+            {"id": st["id"], "expected_version": versions.get(st["id"], st["version"])}
+            for st in analysis["steps"]
+        ]
+    }
+
+
+def _states(analysis: dict[str, Any]) -> dict[float, tuple[str, int]]:
+    return {st["value"]: (st["status"], st["version"]) for st in analysis["steps"]}
+
+
+async def test_editor_accepts_the_unreviewed_peaks_of_a_run_in_one_request(
+    client: AsyncClient,
+    database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    rejected = await client.patch(
+        f"/api/v1/melting-steps/{_step(analysis, 71.3)['id']}",
+        json={"expected_version": 1, "status": "rejected", "value": 71.3, "reason": "bubble"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    analysis = await _analysis(client, s.run_id)
+    sample = _step(analysis, 64.0)
+
+    editor = FakeAuth(role="editor", workspace_id=fake_auth.workspace_id, user_id=uuid.uuid4())
+    async with _client_as(database_url, editor) as as_editor:
+        resp = await as_editor.post(_accept_url(s.run_id), json=_items(analysis))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert set(body) == {"steps", "skipped", "recalculated", "compute_warning"}
+    assert (body["skipped"], body["recalculated"], body["compute_warning"]) == (1, True, None)
+    assert sorted(st["value"] for st in body["steps"]) == [36.6, 64.0]
+    for st in body["steps"]:
+        assert (st["status"], st["version"], st["reason"]) == ("accepted", 2, None)
+        assert st["changed_by"] == str(editor.user_id)
+        assert set(st) == set(sample)  # the same model as the single review returns
+
+    after = await _analysis(client, s.run_id)
+    assert _states(after) == {36.6: ("accepted", 2), 64.0: ("accepted", 2), 71.3: ("rejected", 2)}
+    # Asking again changes nothing and recalculates nothing.
+    again = await client.post(_accept_url(s.run_id), json=_items(after))
+    assert again.status_code == 200, again.text
+    assert again.json() == {
+        "steps": [],
+        "skipped": 3,
+        "recalculated": False,
+        "compute_warning": None,
+    }
+
+
+async def test_accept_many_as_viewer_returns_403(
+    client: AsyncClient,
+    viewer_client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    resp = await viewer_client.post(_accept_url(s.run_id), json=_items(analysis))
+    assert resp.status_code == 403, resp.text
+    assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
+
+
+async def test_accept_many_is_all_or_nothing(
+    client: AsyncClient,
+    database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    url, items = _accept_url(s.run_id), _items(analysis)
+
+    # A peak that is not the run's: the usual not-found.
+    foreign = {"steps": [*items["steps"], {"id": str(uuid.uuid4()), "expected_version": 1}]}
+    not_found = await client.post(url, json=foreign)
+    assert not_found.status_code == 404, not_found.text
+    # A stale version on the last peak, after the others were written in the same save.
+    stale = _items(analysis, **{analysis["steps"][-1]["id"]: 5})
+    conflict = await client.post(url, json=stale)
+    assert conflict.status_code == 409, conflict.text
+    assert "changed by someone else" in conflict.text
+    # Another workspace's run.
+    stranger = FakeAuth(role="admin", workspace_id=uuid.uuid4(), user_id=uuid.uuid4())
+    async with _client_as(database_url, stranger) as other:
+        elsewhere = await other.post(url, json=items)
+    assert elsewhere.status_code == 404, elsewhere.text
+    assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
+
+    # An approved run refuses as the single review does.
+    await _sql(session_factory, "UPDATE runs SET status = 'approved' WHERE id = :id", id=s.run_id)
+    approved = await client.post(url, json=items)
+    assert approved.status_code == 409, approved.text
+    assert NOT_EDITABLE in approved.text
+    assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
+
+
+async def test_accept_many_refuses_a_malformed_list(client: AsyncClient) -> None:
+    url = _accept_url(uuid.uuid4())
+    one = {"id": str(uuid.uuid4()), "expected_version": 1}
+    too_many = [{"id": str(uuid.uuid4()), "expected_version": 1} for _ in range(2001)]
+    for steps in (too_many, [one, one], [], [{"id": one["id"], "expected_version": 0}]):
+        resp = await client.post(url, json={"steps": steps})
+        assert resp.status_code == 422, resp.text
+    # 2,000 is allowed: it gets as far as looking for the run.
+    assert (await client.post(url, json={"steps": too_many[:2000]})).status_code == 404

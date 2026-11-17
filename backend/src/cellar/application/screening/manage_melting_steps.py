@@ -1,5 +1,5 @@
-"""AddMeltingStep, ReviewMeltingStep and AssignMeltingStep: melting steps placed by hand,
-reviewed, and assigned to a temperature window.
+"""AddMeltingStep, ReviewMeltingStep, AssignMeltingStep and AcceptMeltingSteps: melting
+steps placed by hand, reviewed, assigned to a temperature window, and accepted many at once.
 
 Each change is audited in the same unit of work, then the run is recalculated so the
 Tm and ΔTm rows follow. A failed recalculation does not undo the saved change; it comes
@@ -36,6 +36,10 @@ LOCKED = "This run is locked"
 NO_TRACE = "This position has no trace for that signal"
 COMPUTE_FAILED = (
     "The peak was saved, but the calculations could not be updated. "
+    "Select Recompute on the run to update them."
+)
+PEAKS_COMPUTE_FAILED = (
+    "The peaks were saved, but the calculations could not be updated. "
     "Select Recompute on the run to update them."
 )
 
@@ -101,9 +105,24 @@ class AssignMeltingStepCommand(Command):
     reason: str | None = None
 
 
+@dataclass(frozen=True, kw_only=True)
+class AcceptMeltingStepsCommand(Command):
+    workspace_id: uuid.UUID
+    run_id: uuid.UUID
+    steps: tuple[tuple[uuid.UUID, int], ...]  # (step id, the version the user read)
+
+
 @dataclass(frozen=True)
 class MeltingStepChange:
     step: MeltingStep
+    recalculated: bool
+    compute_warning: str | None = None
+
+
+@dataclass(frozen=True)
+class MeltingStepsAccepted:
+    steps: tuple[MeltingStep, ...]  # the ones that changed, in the order asked
+    skipped: int  # already accepted, or rejected: left as they were
     recalculated: bool
     compute_warning: str | None = None
 
@@ -208,19 +227,41 @@ class _StepUseCase:
                 user_id=user_id,
             )
 
-    async def _recalculate(self, step: MeltingStep, run: Run) -> MeltingStepChange:
+    async def _save_reviewed(
+        self, step: MeltingStep, changes: _Changes, *, expected_version: int, user_id: uuid.UUID
+    ) -> None:
+        """Write a reviewed step and its audit record.
+
+        Raises ConflictError when the step changed since ``expected_version`` was read.
+        """
+        await self._step_repo.update(step, expected_version=expected_version)
+        await self._record(
+            step=step,
+            operation_type=OperationType.PROPERTY_EDIT,
+            entries=_update_entries(step, changes),
+            reason=step.reason,
+            user_id=user_id,
+        )
+
+    async def _compute(self, run: Run) -> bool:
+        """Recalculate the run after a committed change; False when that failed."""
         computed = await self._calculation_engine.compute_for_run(
-            run.id, workspace_id=step.workspace_id
+            run.id, workspace_id=run.workspace_id
         )
         if isinstance(computed, Failure):
             _log.warning(
                 "melting_step.compute_failed",
                 run_id=str(run.id),
-                workspace_id=str(step.workspace_id),
+                workspace_id=str(run.workspace_id),
                 reason=str(computed.failure()),
             )
-            return MeltingStepChange(step, False, COMPUTE_FAILED)
-        return MeltingStepChange(step, True)
+            return False
+        return True
+
+    async def _recalculate(self, step: MeltingStep, run: Run) -> MeltingStepChange:
+        if await self._compute(run):
+            return MeltingStepChange(step, True)
+        return MeltingStepChange(step, False, COMPUTE_FAILED)
 
 
 class AddMeltingStep(_StepUseCase):
@@ -330,18 +371,62 @@ class ReviewMeltingStep(_StepUseCase):
             if not changes:
                 return Success(MeltingStepChange(step, False))
             try:
-                await self._step_repo.update(step, expected_version=input.expected_version)
+                await self._save_reviewed(
+                    step, changes, expected_version=input.expected_version, user_id=user_id
+                )
             except ConflictError as exc:
                 return Failure(exc)
-            await self._record(
-                step=step,
-                operation_type=OperationType.PROPERTY_EDIT,
-                entries=_update_entries(step, changes),
-                reason=step.reason,
-                user_id=user_id,
-            )
             await self._uow.commit()
         return Success(await self._recalculate(step, run))
+
+
+class AcceptMeltingSteps(_StepUseCase):
+    """Accept many unreviewed steps of one run in one save, then recalculate once.
+
+    All or nothing: a step that is not the run's, or one that changed since it was read,
+    fails the whole request. Steps already accepted, or rejected, are skipped.
+    """
+
+    async def __call__(
+        self, input: AcceptMeltingStepsCommand, auth: AuthContext | None = None
+    ) -> Result[MeltingStepsAccepted, DomainError]:
+        require_editor(auth)
+        require_same_workspace(auth, input.workspace_id)
+        ws = input.workspace_id
+        user_id = auth.user_id if auth else None
+        if user_id is None:
+            return Failure(ValidationError("A user is required to accept peaks"))
+
+        async with self._uow:
+            run = await self._run_repo.find_by_id_in_workspace(ws, input.run_id)
+            if run is None:
+                return Failure(NotFoundError("Run", str(input.run_id)))
+            if (refused := self._check_run(run)) is not None:
+                return Failure(refused)
+            of_run = {s.id: s for s in await self._step_repo.find_by_run(ws, run.id)}
+            for step_id, _ in input.steps:
+                if step_id not in of_run:
+                    return Failure(NotFoundError("MeltingStep", str(step_id)))
+            accepted: list[MeltingStep] = []
+            try:
+                # ponytail: one UPDATE and one audit record per step. A bulk write if a
+                # request of the largest size allowed is too slow.
+                for step_id, expected_version in input.steps:
+                    step = of_run[step_id]
+                    if changes := step.accept(by=user_id):
+                        await self._save_reviewed(
+                            step, changes, expected_version=expected_version, user_id=user_id
+                        )
+                        accepted.append(step)
+            except ConflictError as exc:
+                return Failure(exc)  # leaves without a commit: nothing is saved
+            skipped = len(input.steps) - len(accepted)
+            if not accepted:
+                return Success(MeltingStepsAccepted((), skipped, False))
+            await self._uow.commit()
+        if await self._compute(run):
+            return Success(MeltingStepsAccepted(tuple(accepted), skipped, True))
+        return Success(MeltingStepsAccepted(tuple(accepted), skipped, False, PEAKS_COMPUTE_FAILED))
 
 
 class AssignMeltingStep(_StepUseCase):

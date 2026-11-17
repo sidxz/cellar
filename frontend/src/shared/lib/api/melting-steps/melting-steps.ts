@@ -24,6 +24,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcceptMeltingStepsRequest,
+  AcceptMeltingStepsResponse,
   AddMeltingStepRequest,
   AssignMeltingStepRequest,
   GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,
@@ -363,6 +365,84 @@ export const useAddMeltingStepApiV1RunsRunIdMeltingStepsPost = <TError = HTTPVal
         TContext
       > => {
       return useMutation(getAddMeltingStepApiV1RunsRunIdMeltingStepsPostMutationOptions(options), queryClient);
+    }
+    /**
+ * Accept many unreviewed melting steps of the run in one save, then recalculate it once.
+ *
+ * All or nothing: a step that is not the run's (404) or that changed since it was read
+ * (409) fails the whole request. Steps already accepted, or rejected, are left as they are
+ * and counted in ``skipped``.
+ * @summary Accept Melting Steps
+ */
+export const acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost = (
+    runId: string,
+    acceptMeltingStepsRequest: AcceptMeltingStepsRequest,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<AcceptMeltingStepsResponse>(
+      {url: `/api/v1/runs/${runId}/melting-steps/accept`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: acceptMeltingStepsRequest, signal
+    },
+      );
+    }
+
+
+
+
+export const getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationKey = () => ['acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost'] as const;
+
+export const getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, TError,AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, TError,AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables, TContext> => {
+
+const mutationKey = getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost(runId,data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationResult = NonNullable<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>>
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationBody = AcceptMeltingStepsRequest
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationError = HTTPValidationError
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables = {runId: string;data: AcceptMeltingStepsRequest}
+
+    /**
+ * Accept many unreviewed melting steps of the run in one save, then recalculate it once.
+ *
+ * All or nothing: a step that is not the run's (404) or that changed since it was read
+ * (409) fails the whole request. Steps already accepted, or rejected, are left as they are
+ * and counted in ``skipped``.
+ * @summary Accept Melting Steps
+ */
+export const useAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, TError,AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>,
+        TError,
+        AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationOptions(options), queryClient);
     }
     /**
  * Accept, reject or correct a melting step, then recalculate the run.

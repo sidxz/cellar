@@ -17,6 +17,7 @@ from cellar.application.screening.import_run_file import (
 )
 from cellar.application.screening.list_instrument_file_formats import ListInstrumentFileFormats
 from cellar.application.screening.manage_melting_steps import (
+    AcceptMeltingSteps,
     AddMeltingStep,
     AssignMeltingStep,
     ReviewMeltingStep,
@@ -36,6 +37,7 @@ from cellar.application.screening.run_import_templates import (
 from ._core import _get_use_case
 
 __all__ = [
+    "AcceptMeltingStepsDep",
     "AddMeltingStepDep",
     "AssignMeltingStepDep",
     "CreateRunImportTemplateDep",
@@ -96,3 +98,4 @@ GetPeakCandidatesDep = Annotated[GetPeakCandidates, Depends(_get_use_case(GetPea
 AddMeltingStepDep = Annotated[AddMeltingStep, Depends(_get_use_case(AddMeltingStep))]
 ReviewMeltingStepDep = Annotated[ReviewMeltingStep, Depends(_get_use_case(ReviewMeltingStep))]
 AssignMeltingStepDep = Annotated[AssignMeltingStep, Depends(_get_use_case(AssignMeltingStep))]
+AcceptMeltingStepsDep = Annotated[AcceptMeltingSteps, Depends(_get_use_case(AcceptMeltingSteps))]

@@ -112,6 +112,7 @@ from cellar.application.screening.manage_control_layouts import (
     SetControlLayout,
 )
 from cellar.application.screening.manage_melting_steps import (
+    AcceptMeltingSteps,
     AddMeltingStep,
     AssignMeltingStep,
     ReviewMeltingStep,
@@ -1194,6 +1195,7 @@ def register_screening(container: Container) -> None:
     container.define(AddMeltingStep, _melting_step_uc(AddMeltingStep))
     container.define(ReviewMeltingStep, _melting_step_uc(ReviewMeltingStep))
     container.define(AssignMeltingStep, _melting_step_uc(AssignMeltingStep))
+    container.define(AcceptMeltingSteps, _melting_step_uc(AcceptMeltingSteps))
 
     def _get_melting_analysis(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
