@@ -249,6 +249,33 @@ def _normalize_pick_list_values(
 # ---------------------------------------------------------------------------
 
 
+@dataclass(frozen=True)
+class ReadoutUsage:
+    """What still uses a readout, as short reasons ("has values in 3 runs"); none = unused."""
+
+    reasons: tuple[str, ...] = ()
+
+    @property
+    def in_use(self) -> bool:
+        return bool(self.reasons)
+
+
+# A quoted name in a formula: ``[Raw AU]`` (this protocol's readout) or the braces
+# of ``@{PRT-00142}.{IC50 nM}`` (another protocol's).
+_FORMULA_QUOTED_RE = re.compile(r"\[([^\[\]]*)\]|\{[^{}]*\}")
+
+
+def _formula_names(formula: str | None, name: str) -> bool:
+    """True when a formula refers to this protocol's readout ``name``: in brackets
+    or, for an identifier, bare. ``@CODE.Name`` is another protocol's readout."""
+    if not formula:
+        return False
+    if any((m.group(1) or "").strip() == name for m in _FORMULA_QUOTED_RE.finditer(formula)):
+        return True
+    bare = _FORMULA_QUOTED_RE.sub(" ", formula)
+    return name.isidentifier() and bool(re.search(rf"(?<![\w.]){re.escape(name)}(?!\w)", bare))
+
+
 class ReadoutDefinition(Entity):
     """Defines a measurement column for a protocol.
 
@@ -460,7 +487,8 @@ class Protocol(AggregateRoot):
 
     Invariants:
         - At least one ReadoutDefinition required on create
-        - Only DRAFT protocols can have definitions modified
+        - Definitions change freely on a DRAFT; a published protocol can grow, and
+          a readout nothing uses can still be renamed, restructured or removed
         - Name cannot be empty
         - Status transitions follow the state machine
 
@@ -568,10 +596,10 @@ class Protocol(AggregateRoot):
             raise ConflictError(f"Cannot transition protocol from '{self.status}' to '{target}'")
 
     def _guard_draft(self) -> None:
-        """Strict guard for STRUCTURAL changes (rename, remove, change
-        data_type / formula / DR config) — DRAFT only. The lock check is
-        included because DRAFT-locked is also a thing (e.g. reviewing a
-        draft before publish).
+        """Strict guard for changes only a DRAFT may make: conditions, control
+        layouts, and removing a readout whose usage is in doubt (see
+        ``readout_usage``). The lock check is included because DRAFT-locked
+        is also a thing (e.g. reviewing a draft before publish).
         """
         if self.is_locked:
             raise ConflictError(
@@ -592,8 +620,9 @@ class Protocol(AggregateRoot):
 
         Why ACTIVE qualifies: a published protocol can grow (new readouts,
         new conditions, new plate format) without invalidating prior runs
-        — they simply don't have data for the new field. Renames and
-        removals still require versioning (those break references).
+        — they simply don't have data for the new field. Renaming or
+        removing what is in use still requires versioning (it breaks
+        references).
         """
         if self.is_locked:
             raise ConflictError(
@@ -959,7 +988,7 @@ class Protocol(AggregateRoot):
 
         Allowed on DRAFT or unlocked ACTIVE — adding a new readout never
         invalidates existing runs (they simply lack data for it). Removing
-        or renaming, by contrast, requires versioning (see
+        or renaming a readout in use, by contrast, requires versioning (see
         ``remove_readout_definition``, ``update_readout_definition``).
         """
         self._guard_metadata_mutable()
@@ -1047,13 +1076,49 @@ class Protocol(AggregateRoot):
             if rd.melt_config is not None and rd.melt_config.measure.is_series
         )
 
-    def remove_readout_definition(self, definition_id: uuid.UUID) -> None:
+    def readout_usage(
+        self, definition_id: uuid.UUID, stored: ReadoutUsage | None = None
+    ) -> ReadoutUsage:
+        """Everything that uses a readout: what the protocol sees in itself (another
+        readout's formula or dose-response axis, its recommended hit rule), then
+        ``stored`` — what the caller found outside it (values, curves, campaigns, ...).
+        """
+        rd = next((d for d in self.readout_definitions if d.id == definition_id), None)
+        if rd is None:
+            raise NotFoundError("ReadoutDefinition", str(definition_id))
+        reasons: list[str] = []
+        for other in self.readout_definitions:
+            if other.id == rd.id:
+                continue
+            if _formula_names(other.calculation_formula, rd.name):
+                reasons.append(f"named by the formula of '{other.name}'")
+            cfg = other.dose_response_config
+            if cfg is not None and rd.name in (cfg.x_readout_name, cfg.y_readout_name):
+                reasons.append(f"an axis of the dose-response readout '{other.name}'")
+        if any(c.readout_name == rd.name for c in self.recommended_hit_criteria or []):
+            reasons.append("named by the protocol's recommended hit rule")
+        return ReadoutUsage(reasons=(*reasons, *(stored.reasons if stored else ())))
+
+    def _may_restructure(self, usage: ReadoutUsage | None) -> bool:
+        """Published, unlocked, and the caller looked the readout's usage up.
+        Without that answer the readout counts as in use."""
+        return self.status == ProtocolStatus.ACTIVE and not self.is_locked and usage is not None
+
+    def remove_readout_definition(
+        self, definition_id: uuid.UUID, usage: ReadoutUsage | None = None
+    ) -> None:
         """Remove a readout definition by ID.
 
+        A DRAFT removes freely. An unlocked ACTIVE protocol removes a readout
+        nothing uses; ``usage`` is what the caller found outside the protocol
+        (see ``readout_usage``). Locked and RETIRED protocols remove nothing.
+
         Raises NotFoundError if the definition does not exist.
+        Raises ConflictError if the readout is in use on a published protocol.
         Raises ValidationError if removal would leave zero readout definitions.
         """
-        self._guard_draft()
+        if not self._may_restructure(usage):
+            self._guard_draft()
 
         idx = next(
             (i for i, d in enumerate(self.readout_definitions) if d.id == definition_id),
@@ -1061,6 +1126,15 @@ class Protocol(AggregateRoot):
         )
         if idx is None:
             raise NotFoundError("ReadoutDefinition", str(definition_id))
+
+        if self.status != ProtocolStatus.DRAFT:
+            reasons = self.readout_usage(definition_id, usage).reasons
+            if reasons:
+                raise ConflictError(
+                    f"Cannot remove readout '{self.readout_definitions[idx].name}' from a "
+                    "published protocol while it is in use — create a new version. "
+                    f"In use: {'; '.join(reasons)}."
+                )
 
         if len(self.readout_definitions) <= 1:
             raise ValidationError(
@@ -1089,14 +1163,18 @@ class Protocol(AggregateRoot):
         ) = _UNSET,
         dose_response_config: DoseResponseConfig | _UnsetT | None = _UNSET,
         melt_config: MeltReadoutConfig | _UnsetT | None = _UNSET,
+        usage: ReadoutUsage | None = None,
     ) -> None:
         """Update fields on an existing readout definition.
 
         On DRAFT protocols: any field is editable.
-        On unlocked ACTIVE protocols: only cosmetic fields (display_order,
-        precision, unit) are editable. Structural changes (rename,
+        On unlocked ACTIVE protocols: cosmetic fields (display_order,
+        precision, unit) are always editable. Structural changes (rename,
         data_type, aggregation, normalizations, is_calculated/formula,
-        dose_response_config, pick_list_values) require versioning — see
+        dose_response_config, pick_list_values, melt_config) are allowed
+        while nothing uses the readout — ``usage`` is what the caller found
+        outside the protocol (see ``readout_usage``). Once it is in use they
+        require versioning — see
         ``ProtocolVersioningService.create_new_version``.
 
         On locked or RETIRED protocols: nothing is editable.
@@ -1211,8 +1289,8 @@ class Protocol(AggregateRoot):
         # Structural-diff guard for non-DRAFT protocols. Cosmetic fields
         # (display_order, precision, unit text) can be edited on unlocked
         # ACTIVE — they only affect display, not the run-data contract.
-        # Structural changes break references on existing runs, so the
-        # only safe path is versioning.
+        # Structural changes break whatever refers to the readout, so once
+        # it is in use the only safe path is versioning.
         if self.status != ProtocolStatus.DRAFT:
             structural: list[str] = []
             if replacement.name != existing.name:
@@ -1233,12 +1311,14 @@ class Protocol(AggregateRoot):
                 structural.append("dose_response_config")
             if replacement.melt_config != existing.melt_config:
                 structural.append("melt_config")
-            if structural:
+            reasons = self.readout_usage(definition_id, usage).reasons
+            if structural and (reasons or not self._may_restructure(usage)):
+                in_use = f" In use: {'; '.join(reasons)}." if reasons else ""
                 raise ConflictError(
                     f"Cannot change {', '.join(structural)} on a non-draft "
                     f"protocol — create a new version. Cosmetic fields "
                     f"(display_order, precision, unit) are allowed on "
-                    f"unlocked ACTIVE."
+                    f"unlocked ACTIVE.{in_use}"
                 )
 
         self.readout_definitions[idx] = replacement
