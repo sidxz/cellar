@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, Upload, X } from "lucide-react";
+import { Download, Tags, Upload, X } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 
 import { BatchSelector } from "@/features/inventory/components/batch-selector";
@@ -19,9 +19,14 @@ import {
 import { saveText } from "@/shared/lib/api/download";
 import { cn } from "@/shared/lib/utils";
 import { apiReason } from "../hooks/use-instrument-import-wizard";
-import { useResolveLayoutFile } from "../hooks/use-layout-file";
+import { useResolveLayoutFile, useResolvePositionLabels } from "../hooks/use-layout-file";
 import { type LabellingRow, parseDose } from "../lib/labelling-rows";
-import { applyLayout, layoutTemplateCsv } from "../lib/layout-file";
+import {
+  applyLabelMatches,
+  applyLayout,
+  labelsToMatch,
+  layoutTemplateCsv,
+} from "../lib/layout-file";
 import { WELL_TYPE_LABELS, type WellType } from "../types";
 
 const WELL_TYPES = Object.keys(WELL_TYPE_LABELS) as WellType[];
@@ -191,6 +196,17 @@ export function LabellingTable<T extends LabellingRow>({
             if (file) layout.read(file);
           }}
         />
+        <Button
+          size="sm"
+          variant="outline"
+          // A disabled button ignores the pointer, which would hide its title; keep hover on.
+          className={cn(locked && "disabled:pointer-events-auto")}
+          disabled={locked || layout.matching || labelsToMatch(rows).length === 0}
+          title={calculatedLocked ?? undefined}
+          onClick={layout.matchLabels}
+        >
+          <Tags className="h-4 w-4" /> {layout.matching ? "Matching…" : "Match from labels"}
+        </Button>
       </div>
 
       <LayoutMessages outcome={layout.outcome} />
@@ -268,10 +284,15 @@ type LayoutOutcome =
       problems: string[];
       notices: string[];
       saveButton: string;
-    };
+    }
+  | { kind: "matched"; matched: number; unmatched: string[]; saveButton: string };
 
-/** Fill from file: send the file (reading changes nothing stored), apply the answer to the
- *  rows as they are when it arrives, and keep what to tell the user about it. */
+/** Labels that found no compound are listed up to this many; the rest are counted. */
+const MAX_UNMATCHED_LISTED = 20;
+
+/** Fill from file and Match from labels: send the file or the labels (reading changes
+ *  nothing stored), apply the answer to the rows as they are when it arrives, and keep
+ *  what to tell the user about it. */
 function useLayoutFile<T extends LabellingRow>(
   runId: string,
   rows: readonly T[],
@@ -279,6 +300,7 @@ function useLayoutFile<T extends LabellingRow>(
   opts: { allowUse: boolean; calculatedLocked: boolean; saveButton: string },
 ) {
   const resolve = useResolveLayoutFile(runId);
+  const match = useResolvePositionLabels(runId);
   const inputRef = useRef<HTMLInputElement>(null);
   const [outcome, setOutcome] = useState<LayoutOutcome | null>(null);
   const latest = useRef({ rows, onReplaceRows, opts });
@@ -304,12 +326,61 @@ function useLayoutFile<T extends LabellingRow>(
       },
     );
   };
-  return { inputRef, read, reading: resolve.isPending, outcome };
+
+  const matchLabels = () => {
+    setOutcome(null);
+    match.mutate(
+      { labels: labelsToMatch(latest.current.rows) },
+      {
+        onSuccess: (answer) => {
+          const { rows: now, onReplaceRows: replace, opts: o } = latest.current;
+          const applied = applyLabelMatches(now, answer);
+          if (applied.matched > 0) replace(applied.rows);
+          setOutcome({
+            kind: "matched",
+            matched: applied.matched,
+            unmatched: applied.unmatched,
+            saveButton: o.saveButton,
+          });
+        },
+        onError: (e) => setOutcome({ kind: "refused", message: apiReason(e) }),
+      },
+    );
+  };
+  return {
+    inputRef,
+    read,
+    reading: resolve.isPending,
+    matchLabels,
+    matching: match.isPending,
+    outcome,
+  };
 }
 
 function LayoutMessages({ outcome }: { outcome: LayoutOutcome | null }) {
   if (!outcome) return null;
   if (outcome.kind === "refused") return <Notice tone="bad">{outcome.message}</Notice>;
+  if (outcome.kind === "matched") {
+    const { matched, unmatched, saveButton } = outcome;
+    if (matched === 0) {
+      return <Notice tone="warn">No label matched a registered compound.</Notice>;
+    }
+    const more = unmatched.length - MAX_UNMATCHED_LISTED;
+    // The unmatched labels are muted, not a warning: many, such as a control's, name no compound.
+    return (
+      <Notice tone="ok">
+        Matched {matched} position{matched === 1 ? "" : "s"} from{" "}
+        {matched === 1 ? "its label" : "their labels"}. Nothing is saved until you press{" "}
+        {saveButton}.
+        {unmatched.length > 0 && (
+          <p className="mt-1 text-muted-foreground">
+            No compound found for: {unmatched.slice(0, MAX_UNMATCHED_LISTED).join(", ")}
+            {more > 0 && ` and ${more} more`}
+          </p>
+        )}
+      </Notice>
+    );
+  }
   const { fileName, filled, problems, notices, saveButton } = outcome;
   return (
     <div className="flex flex-col gap-2">

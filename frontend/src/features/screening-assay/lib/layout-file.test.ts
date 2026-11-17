@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LayoutFile, LayoutFileRow } from "../types";
 import type { LabellingRow } from "./labelling-rows";
-import { applyLayout, layoutTemplateCsv } from "./layout-file";
+import { applyLabelMatches, applyLayout, labelsToMatch, layoutTemplateCsv } from "./layout-file";
 
 const rows: LabellingRow[] = [
   {
@@ -353,5 +353,93 @@ describe("cells a spreadsheet would read as formulas", () => {
     // A value the server left an apostrophe on is the user's own; it stays.
     const out = applyLayout(rows, file(fileRow("Position 1", { label: "'=x" })), OPEN);
     expect(out.rows[0].label).toBe("'=x");
+  });
+});
+
+describe("match from labels", () => {
+  const empty = rows[0];
+  const labelled = (key: string, label: string, values: Partial<LabellingRow> = {}) => ({
+    ...empty,
+    key,
+    positionLabel: `Position ${key}`,
+    label,
+    ...values,
+  });
+  const table: LabellingRow[] = [
+    labelled("1", "SACC-0000001"),
+    labelled("2", " SACC-0000002 "),
+    labelled("3", "DMSO"),
+    labelled("4", "SACC-0000001"),
+    labelled("5", "SACC-0000001", { moleculeId: "m1", moleculeName: "Kept", batchId: "b1" }),
+    labelled("6", "   "),
+    labelled("7", "SACC-0000007", { used: false }),
+    labelled("8", "x".repeat(201)),
+  ];
+  const needsChoice = { ...compound, batch_id: null, batch_number: null, needs_batch_choice: true };
+  const answer = {
+    matches: [
+      { label: "SACC-0000001", compound },
+      { label: "SACC-0000002", compound: needsChoice },
+      { label: "DMSO", compound: null },
+    ],
+  };
+
+  it("asks once about each label of a used position that has a label and no compound", () => {
+    expect(labelsToMatch(table)).toEqual(["SACC-0000001", "SACC-0000002", "DMSO"]);
+    expect(labelsToMatch(rows)).toEqual(["Protein alone, buffer"]);
+    expect(labelsToMatch([table[4], table[5], table[6], table[7]])).toEqual([]);
+  });
+
+  it("fills the positions whose label matched, as a layout file naming the compound would", () => {
+    const out = applyLabelMatches(table, answer);
+    expect(out.matched).toBe(3);
+    for (const i of [0, 3]) {
+      expect(out.rows[i]).toEqual({
+        ...table[i],
+        moleculeId: "m9",
+        moleculeName: "Compound nine",
+        moleculeRef: "REG-0009",
+        batchId: "b9",
+        batchNumber: "B-9",
+      });
+    }
+    // Several batches: the compound is filled and the batch is left to choose.
+    expect(out.rows[1]).toMatchObject({ moleculeId: "m9", batchId: null, batchNumber: null });
+    expect(out.rows[1].label).toBe(" SACC-0000002 ");
+  });
+
+  it("leaves a position that has a compound, no label or is unused exactly as it is", () => {
+    const out = applyLabelMatches(table, {
+      matches: [...answer.matches, { label: "SACC-0000007", compound }],
+    });
+    for (const i of [2, 4, 5, 6, 7]) expect(out.rows[i]).toBe(table[i]);
+  });
+
+  it("lists each label that named no compound once, in table order", () => {
+    const twice = [...table, labelled("9", "160 CoA"), labelled("10", "DMSO")];
+    const out = applyLabelMatches(twice, {
+      matches: [...answer.matches, { label: "160 CoA", compound: null }],
+    });
+    expect(out.unmatched).toEqual(["DMSO", "160 CoA"]);
+  });
+
+  it("changes nothing when no label matched", () => {
+    const out = applyLabelMatches(table, { matches: [{ label: "DMSO", compound: null }] });
+    expect(out).toMatchObject({ matched: 0, unmatched: ["DMSO"] });
+    expect(out.rows).toEqual(table);
+  });
+
+  it("applies the answer to the table as it is now: a compound chosen or a label edited meanwhile stays", () => {
+    const now = [
+      { ...table[0], moleculeId: "m2", moleculeName: "Chosen by hand" },
+      { ...table[1], label: "edited" },
+      table[3],
+    ];
+    const out = applyLabelMatches(now, answer);
+    expect(out.matched).toBe(1);
+    expect(out.rows[0]).toBe(now[0]);
+    expect(out.rows[1]).toBe(now[1]);
+    expect(out.rows[2].moleculeId).toBe("m9");
+    expect(out.unmatched).toEqual([]);
   });
 });

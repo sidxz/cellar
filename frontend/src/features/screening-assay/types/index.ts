@@ -31,6 +31,7 @@ import type {
   PlateMapSummaryModel,
   PlateMapWellModel,
   PositionEditRequest,
+  PositionLabelMatchesResponse,
   PositionValuesModel,
   ProtocolReferenceResponse,
   ProtocolResponse,
@@ -821,6 +822,7 @@ export type CurvePositions = CurvePositionsResponse;
 export type MeasuredCurvesBatch = MeasuredCurvesBatchResponse;
 export type LayoutFile = LayoutFileResponse;
 export type LayoutFileRow = LayoutRowModel;
+export type PositionLabelMatches = PositionLabelMatchesResponse;
 export type MeltingAnalysis = MeltingAnalysisResponse;
 export type MeltingStep = MeltingStepModel;
 export type MeltWindow = MeltWindowModel;

@@ -5,7 +5,7 @@
 
 import type { WellType } from "../types";
 
-const MAX_LABEL = 200;
+export const MAX_LABEL = 200;
 const MAX_NOTE = 1000;
 
 export interface LabellingRow {

@@ -1,8 +1,8 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { LabellingRow } from "../lib/labelling-rows";
-import type { LayoutFile } from "../types";
+import type { LayoutFile, PositionLabelMatches } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
 // hasPointerCapture on its items — jsdom ships neither.
@@ -29,7 +29,18 @@ const resolve = vi.hoisted(() => ({
   mutate: vi.fn<(vars: { file: File }, opts?: ResolveOptions) => void>(),
   isPending: false,
 }));
-vi.mock("../hooks/use-layout-file", () => ({ useResolveLayoutFile: () => resolve }));
+type MatchOptions = {
+  onSuccess?: (m: PositionLabelMatches) => void;
+  onError?: (e: unknown) => void;
+};
+const match = vi.hoisted(() => ({
+  mutate: vi.fn<(vars: { labels: string[] }, opts?: MatchOptions) => void>(),
+  isPending: false,
+}));
+vi.mock("../hooks/use-layout-file", () => ({
+  useResolveLayoutFile: () => resolve,
+  useResolvePositionLabels: () => match,
+}));
 const download = vi.hoisted(() => ({ saveText: vi.fn() }));
 vi.mock("@/shared/lib/api/download", () => download);
 
@@ -335,5 +346,178 @@ describe("LabellingTable label and batch wording", () => {
     });
     expect(screen.getByText("Batch unavailable")).toBeInTheDocument();
     expect(screen.queryByText("b1")).not.toBeInTheDocument();
+  });
+});
+
+describe("LabellingTable Match from labels", () => {
+  const blank = rows[2];
+  /** Position 1 keeps its compound; 2 to 5 have a label and none; 6 has neither. */
+  const labelled: LabellingRow[] = [
+    rows[0],
+    { ...blank, key: "p2", positionLabel: "Position 2", label: "SACC-0000002" },
+    { ...blank, key: "p3", positionLabel: "Position 3", label: "DMSO" },
+    { ...blank, key: "p4", positionLabel: "Position 4", label: "SACC-0000004" },
+    { ...blank, key: "p5", positionLabel: "Position 5", label: "160 CoA" },
+    { ...blank, key: "p6", positionLabel: "Position 6" },
+  ];
+  const oneBatch = {
+    molecule_id: "m2",
+    molecule_name: "Compound two",
+    registration_number: "REG-0002",
+    batch_id: "b2",
+    batch_number: "B-2",
+    needs_batch_choice: false,
+  };
+  const severalBatches = {
+    molecule_id: "m4",
+    molecule_name: "Compound four",
+    registration_number: "REG-0004",
+    batch_id: null,
+    batch_number: null,
+    needs_batch_choice: true,
+  };
+  const answer: PositionLabelMatches = {
+    matches: [
+      { label: "SACC-0000002", compound: oneBatch },
+      { label: "DMSO", compound: null },
+      { label: "SACC-0000004", compound: severalBatches },
+      { label: "160 CoA", compound: null },
+    ],
+  };
+  const button = () => screen.getByRole("button", { name: "Match from labels" });
+
+  /** Press Match from labels and answer with the given outcome. */
+  function matchFromLabels(respond: (opts: MatchOptions) => void) {
+    match.mutate.mockReset();
+    match.mutate.mockImplementation((_vars, opts) => respond(opts ?? {}));
+    fireEvent.click(button());
+  }
+
+  it("is enabled only when a position has a label and no compound", () => {
+    // Position 1 has a label and a compound; 2 and 3 have no label.
+    renderTable();
+    expect(button()).toBeDisabled();
+    cleanup();
+    renderTable({ rows: labelled });
+    expect(button()).toBeEnabled();
+    expect(button()).not.toHaveAttribute("title");
+  });
+
+  it("asks about the labels of the positions without a compound, each once", () => {
+    renderTable({
+      rows: [...labelled, { ...labelled[2], key: "p7", positionLabel: "Position 7" }],
+    });
+    matchFromLabels(() => undefined);
+    expect(match.mutate).toHaveBeenCalledWith(
+      { labels: ["SACC-0000002", "DMSO", "SACC-0000004", "160 CoA"] },
+      expect.anything(),
+    );
+  });
+
+  it("fills the matched positions only and leaves a chosen compound as it is", () => {
+    const { onReplaceRows, onUpdate } = renderTable({ rows: labelled });
+    matchFromLabels((o) => o.onSuccess?.(answer));
+    expect(onReplaceRows).toHaveBeenCalledTimes(1);
+    expect(onUpdate).not.toHaveBeenCalled();
+    const filled = onReplaceRows.mock.calls[0][0] as LabellingRow[];
+    expect(filled[1]).toEqual({
+      ...labelled[1],
+      moleculeId: "m2",
+      moleculeName: "Compound two",
+      moleculeRef: "REG-0002",
+      batchId: "b2",
+      batchNumber: "B-2",
+    });
+    // Several batches: the compound is filled, the batch is left to choose.
+    expect(filled[3]).toEqual({
+      ...labelled[3],
+      moleculeId: "m4",
+      moleculeName: "Compound four",
+      moleculeRef: "REG-0004",
+    });
+    for (const i of [0, 2, 4, 5]) expect(filled[i]).toBe(labelled[i]);
+  });
+
+  it("says how many positions matched, that nothing is saved yet, and which labels found no compound", () => {
+    renderTable({ rows: labelled });
+    matchFromLabels((o) => o.onSuccess?.(answer));
+    const notice = screen.getByText(
+      "Matched 2 positions from their labels. Nothing is saved until you press Import.",
+    );
+    const unmatched = within(notice).getByText("No compound found for: DMSO, 160 CoA");
+    expect(unmatched).toHaveClass("text-muted-foreground");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    // Above the table.
+    const table = screen.getByRole("table");
+    expect(notice.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says Save where the table is saved, and counts one position in the singular", () => {
+    renderTable({ rows: labelled.slice(0, 2), showUse: false });
+    matchFromLabels((o) => o.onSuccess?.(answer));
+    expect(
+      screen.getByText("Matched 1 position from its label. Nothing is saved until you press Save."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/No compound found for/)).not.toBeInTheDocument();
+  });
+
+  it("says no label matched, and leaves the table alone, when none did", () => {
+    const { onReplaceRows } = renderTable({ rows: labelled });
+    matchFromLabels((o) =>
+      o.onSuccess?.({ matches: answer.matches.map((m) => ({ ...m, compound: null })) }),
+    );
+    expect(screen.getByText("No label matched a registered compound.")).toBeInTheDocument();
+    expect(screen.queryByText(/No compound found for/)).not.toBeInTheDocument();
+    expect(onReplaceRows).not.toHaveBeenCalled();
+  });
+
+  it("lists the first 20 labels that found no compound and counts the rest", () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      ...blank,
+      key: `u${i}`,
+      positionLabel: `Position ${i + 10}`,
+      label: `U${i + 1}`,
+    }));
+    renderTable({ rows: [...labelled, ...many] });
+    matchFromLabels((o) =>
+      o.onSuccess?.({
+        matches: [answer.matches[0], ...many.map((r) => ({ label: r.label, compound: null }))],
+      }),
+    );
+    const listed = Array.from({ length: 20 }, (_, i) => `U${i + 1}`).join(", ");
+    expect(screen.getByText(`No compound found for: ${listed} and 5 more`)).toBeInTheDocument();
+  });
+
+  it("is disabled, with the reason as its title, where the compound cannot change", () => {
+    renderTable({ rows: labelled, showUse: false, calculatedLocked: "These cannot change now." });
+    expect(button()).toBeDisabled();
+    expect(button()).toHaveAttribute("title", "These cannot change now.");
+  });
+
+  it("reads Matching… and is disabled while the labels are looked up", () => {
+    match.isPending = true;
+    try {
+      renderTable({ rows: labelled });
+      expect(screen.getByRole("button", { name: "Matching…" })).toBeDisabled();
+    } finally {
+      match.isPending = false;
+    }
+  });
+
+  it("shows the API's reason when the labels cannot be looked up and leaves the table alone", () => {
+    const { onReplaceRows } = renderTable({ rows: labelled });
+    matchFromLabels((o) => o.onError?.(new Error("API error: 404 — Run not found")));
+    expect(screen.getByRole("alert")).toHaveTextContent("Run not found");
+    expect(onReplaceRows).not.toHaveBeenCalled();
+  });
+
+  it("replaces a file's messages, and a file read afterwards replaces its own", () => {
+    const { container } = renderTable({ rows: labelled });
+    fillFromFile(container, (o) => o.onError?.(new Error("API error: 422 — File is empty")));
+    matchFromLabels((o) => o.onSuccess?.(answer));
+    expect(screen.queryByText("File is empty")).not.toBeInTheDocument();
+    expect(screen.getByText(/Matched 2 positions from their labels/)).toBeInTheDocument();
+    fillFromFile(container, (o) => o.onError?.(new Error("API error: 422 — File is empty")));
+    expect(screen.queryByText(/Matched 2 positions/)).not.toBeInTheDocument();
   });
 });

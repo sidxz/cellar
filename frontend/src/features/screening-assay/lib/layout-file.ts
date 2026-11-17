@@ -5,8 +5,14 @@
 
 import Papa from "papaparse";
 
-import { type LayoutFile, type LayoutFileRow, WELL_TYPE_LABELS, type WellType } from "../types";
-import { type LabellingRow, parseDose } from "./labelling-rows";
+import {
+  type LayoutFile,
+  type LayoutFileRow,
+  type PositionLabelMatches,
+  WELL_TYPE_LABELS,
+  type WellType,
+} from "../types";
+import { type LabellingRow, MAX_LABEL, parseDose } from "./labelling-rows";
 
 /** Lets a spreadsheet program read the file as UTF-8. */
 const BOM = "﻿";
@@ -136,4 +142,61 @@ export function applyLayout<T extends LabellingRow>(
     return { ...r, ...patch };
   });
   return { rows: out, filled, problems, notices };
+}
+
+/** The label Match from labels asks about for a row, or null: an unused row, one with a
+ *  compound, and one whose label is blank or too long to be stored are left alone. */
+function labelToMatch(r: LabellingRow): string | null {
+  const label = r.label.trim();
+  return r.used && !r.moleculeId && label !== "" && label.length <= MAX_LABEL ? label : null;
+}
+
+/** The distinct labels of the positions that have a label and no compound, in table order. */
+export function labelsToMatch(rows: readonly LabellingRow[]): string[] {
+  return [...new Set(rows.map(labelToMatch).filter((label) => label !== null))];
+}
+
+export interface LabelMatchApplication<T extends LabellingRow> {
+  rows: T[];
+  /** Table rows that took a compound. */
+  matched: number;
+  /** Labels that named no registered compound, each once, in table order. */
+  unmatched: string[];
+}
+
+/** Fill the compound of each position whose label the answer resolved. A row is filled
+ *  through {@link applyLayout}, as by a layout file naming that compound and no batch. */
+export function applyLabelMatches<T extends LabellingRow>(
+  rows: readonly T[],
+  answer: PositionLabelMatches,
+): LabelMatchApplication<T> {
+  const compounds = new Map(answer.matches.map((m) => [m.label, m.compound]));
+  const found: LayoutFileRow[] = [];
+  const unmatched = new Set<string>();
+  for (const r of rows) {
+    const label = labelToMatch(r);
+    // A label edited while the answer was on its way was not asked about.
+    if (label === null || !compounds.has(label)) continue;
+    const compound = compounds.get(label);
+    if (!compound) {
+      unmatched.add(label);
+      continue;
+    }
+    found.push({
+      position: r.positionLabel,
+      label: null,
+      note: null,
+      well_type: null,
+      dose: null,
+      use: null,
+      compound,
+      problems: [],
+    });
+  }
+  const applied = applyLayout(
+    rows,
+    { rows: found, unrecognised_columns: [], calculated_columns_ignored: false },
+    { allowUse: false, calculatedLocked: false },
+  );
+  return { rows: applied.rows, matched: applied.filled, unmatched: [...unmatched] };
 }

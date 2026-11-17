@@ -3,7 +3,7 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import { valuesOf } from "../lib/position-edits";
-import type { LayoutFile, RelabelResult, Run, RunCurves } from "../types";
+import type { LayoutFile, PositionLabelMatches, RelabelResult, Run, RunCurves } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
 // hasPointerCapture on its items — jsdom ships neither.
@@ -48,7 +48,15 @@ const resolve = vi.hoisted(() => ({
   mutate: vi.fn<(vars: { file: File }, opts?: ResolveOptions) => void>(),
   isPending: false,
 }));
-vi.mock("../hooks/use-layout-file", () => ({ useResolveLayoutFile: () => resolve }));
+type MatchOptions = { onSuccess?: (m: PositionLabelMatches) => void };
+const match = vi.hoisted(() => ({
+  mutate: vi.fn<(vars: { labels: string[] }, opts?: MatchOptions) => void>(),
+  isPending: false,
+}));
+vi.mock("../hooks/use-layout-file", () => ({
+  useResolveLayoutFile: () => resolve,
+  useResolvePositionLabels: () => match,
+}));
 const download = vi.hoisted(() => ({ saveText: vi.fn() }));
 vi.mock("@/shared/lib/api/download", () => download);
 
@@ -321,5 +329,77 @@ describe("EditLabellingDialog", () => {
     ).toBeInTheDocument();
     expect(save()).toBeEnabled();
     expect(mutate).not.toHaveBeenCalled();
+  });
+
+  describe("Match from labels", () => {
+    // Imported before its compounds were registered: labels, and no compound or batch.
+    const unlinked: Position[] = [
+      positions[0],
+      {
+        ...positions[1],
+        batch_id: null,
+        batch_number: null,
+        molecule_id: null,
+        molecule_name: null,
+        registration_number: null,
+        label: "SACC-0457698",
+      },
+    ];
+    const matchButton = () => screen.getByRole("button", { name: "Match from labels" });
+
+    it("fills the table from the labels and sends nothing until Save", () => {
+      match.mutate.mockReset();
+      match.mutate.mockImplementation((_vars, opts) =>
+        opts?.onSuccess?.({
+          matches: [
+            {
+              label: "SACC-0457698",
+              compound: {
+                molecule_id: "m7",
+                molecule_name: "Compound seven",
+                registration_number: "REG-0007",
+                batch_id: "b7",
+                batch_number: "B-7",
+                needs_batch_choice: false,
+              },
+            },
+          ],
+        }),
+      );
+      renderDialog({ positions: unlinked });
+      expect(save()).toBeDisabled();
+      fireEvent.click(matchButton());
+      expect(match.mutate).toHaveBeenCalledWith({ labels: ["SACC-0457698"] }, expect.anything());
+      expect(screen.getByText("Compound seven")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "Matched 1 position from its label. Nothing is saved until you press Save.",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText("1 position changed")).toBeInTheDocument();
+      expect(mutate).not.toHaveBeenCalled();
+      // Every position with a label now has a compound: nothing is left to match.
+      expect(matchButton()).toBeDisabled();
+
+      fireEvent.click(save());
+      expect(mutate.mock.calls[0][0]).toEqual({
+        positions: [
+          {
+            well_id: "w2",
+            expected: valuesOf(unlinked[1]),
+            new: { ...valuesOf(unlinked[1]), batch_id: "b7" },
+          },
+        ],
+      });
+    });
+
+    it("is disabled on a completed run, whose compounds cannot change, and says why", () => {
+      renderDialog({ run: completedRun, positions: unlinked });
+      expect(matchButton()).toBeDisabled();
+      expect(matchButton()).toHaveAttribute(
+        "title",
+        "Role, compound, batch and concentration can be changed only while the run is draft or in progress.",
+      );
+    });
   });
 });

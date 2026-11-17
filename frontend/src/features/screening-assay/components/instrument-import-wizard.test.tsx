@@ -36,7 +36,10 @@ const resolve = vi.hoisted(() => ({
   mutate: vi.fn<(vars: { file: File }, opts?: ResolveOptions) => void>(),
   isPending: false,
 }));
-vi.mock("../hooks/use-layout-file", () => ({ useResolveLayoutFile: () => resolve }));
+vi.mock("../hooks/use-layout-file", () => ({
+  useResolveLayoutFile: () => resolve,
+  useResolvePositionLabels: () => ({ mutate: vi.fn(), isPending: false }),
+}));
 const download = vi.hoisted(() => ({ saveText: vi.fn() }));
 vi.mock("@/shared/lib/api/download", () => download);
 const formats = vi.hoisted(() => ({
