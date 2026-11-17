@@ -54,7 +54,7 @@
         <tr class="group-row">
           <th colspan="4" class="group-spacer"></th>
           {%- for w in report.windows %}
-          <th colspan="3" class="group-header">{{ w.name }} · {{ w.low | num }}–{{ w.high | num }} °C</th>
+          <th colspan="4" class="group-header">{{ w.name }} · {{ w.low | num }}–{{ w.high | num }} °C</th>
           {%- endfor %}
           <th class="group-spacer"></th>
         </tr>
@@ -62,7 +62,7 @@
         <tr>
           <th>Position</th><th>Sample</th><th>Batch</th><th>Conc. <span class="unit">({{ report.dose_unit }})</span></th>
           {%- for w in report.windows %}
-          <th>Tm <span class="unit">(°C)</span></th><th>ΔTm <span class="unit">(°C)</span></th><th>Status</th>
+          <th>Tm <span class="unit">(°C)</span></th><th>ΔTm <span class="unit">(°C)</span></th><th>Status</th><th>Named</th>
           {%- endfor %}
           <th>Hit</th>
         </tr>
@@ -79,6 +79,7 @@
             <td class="cell-number">{{ c.tm | tm if c else "—" }}</td>
             <td class="cell-number">{{ c.delta_tm | delta if c else "—" }}</td>
             <td class="status">{{ c.status if c else "" }}</td>
+            <td class="status">{{ c.named_by if c else "" }}</td>
           {%- endfor %}
           <td>{{ hit_text[r.hit] }}</td>
         </tr>
@@ -97,10 +98,10 @@
 
   {%- if steps %}
   <section>
-    <h2>Melting steps</h2>
+    <h2>Peaks</h2>
     <table class="steps">
       <thead>
-        <tr><th>Position</th><th>Sample</th><th>Signal</th><th>Step <span class="unit">(°C)</span></th><th>Source</th><th>Status</th><th>Instrument <span class="unit">(°C)</span></th><th>Reason</th><th>Changed by</th><th>Changed <span class="unit">(UTC)</span></th></tr>
+        <tr><th>Position</th><th>Sample</th><th>Signal</th><th>Peak <span class="unit">(°C)</span></th><th>Source</th><th>Status</th><th>Instrument <span class="unit">(°C)</span></th><th>Reason</th><th>Changed by</th><th>Changed <span class="unit">(UTC)</span></th><th>Assigned to</th><th>Assignment reason</th><th>Assigned by</th><th>Assigned <span class="unit">(UTC)</span></th></tr>
       </thead>
       <tbody>
         {%- for s in steps %}
@@ -108,6 +109,7 @@
           <td class="cell-id">{{ s[0] }}</td><td class="cell-id">{{ s[1] }}</td><td>{{ s[2] }}</td>
           <td class="cell-number">{{ s[3] | tm }}</td><td>{{ s[4] }}</td><td>{{ s[5] }}</td>
           <td class="cell-number">{{ s[6] | tm }}</td><td>{{ s[7] or "" }}</td><td>{{ s[8] or "" }}</td><td>{{ s[9] or "" }}</td>
+          <td>{{ s[10] or "" }}</td><td>{{ s[11] or "" }}</td><td>{{ s[12] or "" }}</td><td>{{ s[13] or "" }}</td>
         </tr>
         {%- endfor %}
       </tbody>

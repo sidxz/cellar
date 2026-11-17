@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import csv
+import re
 import uuid
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -13,14 +15,18 @@ from openpyxl import load_workbook
 from cellar.application.export.renderers.base import RenderOptions
 from cellar.application.export.renderers.run_figures import shift_svg, traces_svg
 from cellar.application.export.renderers.run_report_renderer import (
+    _pdf_html,
     render_run_report,
     results_table,
+    steps_table,
 )
 from cellar.application.export.run_report import (
+    DIFFERS,
     NO_STEP,
     PROVISIONAL,
     REFERENCE,
     REVIEWED,
+    SEVERAL_STEPS,
     RunCell,
     RunReport,
     RunRow,
@@ -30,6 +36,7 @@ from cellar.application.export.run_report import (
     RunWindow,
     _band,
     _rows,
+    _steps,
     rule_text,
 )
 from cellar.application.screening.get_melting_analysis import (
@@ -41,6 +48,7 @@ from cellar.application.screening.plate_map_reader import WellMapEntry
 from cellar.domain.export.enums import ExportFormat
 from cellar.domain.screening_assay.melt_window import (
     MeltMeasure,
+    NamedBy,
     PositionWindowResult,
     StepCountCheck,
     WindowFlag,
@@ -70,7 +78,7 @@ def _pos(well_id, kind, label, reg=None, batch=None):
     )
 
 
-def _step(well_id, value, status=MeltingStepStatus.UNREVIEWED):
+def _step(well_id, value, status=MeltingStepStatus.UNREVIEWED, **assignment):
     return MeltingStep(
         workspace_id=uuid.uuid4(),
         run_id=uuid.uuid4(),
@@ -81,10 +89,16 @@ def _step(well_id, value, status=MeltingStepStatus.UNREVIEWED):
         instrument_value=value,
         instrument_label="Tm #1",
         status=status,
+        **assignment,
     )
 
 
-def _analysis():
+def _analysis(a_peaks=None, a_result=None):
+    """Position A's peaks and its result in Main can be replaced."""
+    ref = _step(REF, 71.3, MeltingStepStatus.ACCEPTED)
+    b = _step(B, 70.4, MeltingStepStatus.ACCEPTED)
+    a_peaks = a_peaks or (_step(A, 62.8),)
+    a_result = a_result or PositionWindowResult(A, 62.8, -8.5, (), NamedBy.RANGE, a_peaks[0].id)
     main = WindowAnalysis(
         window="Main",
         channel_key="ratio",
@@ -98,9 +112,9 @@ def _analysis():
             reference_tm=71.3,
             reference_count=1,
             positions=(
-                PositionWindowResult(REF, 71.3, None, ()),
-                PositionWindowResult(A, 62.8, -8.5, ()),
-                PositionWindowResult(B, 70.4, -0.9, ()),
+                PositionWindowResult(REF, 71.3, None, (), NamedBy.RANGE, ref.id),
+                a_result,
+                PositionWindowResult(B, 70.4, -0.9, (), NamedBy.RANGE, b.id),
                 PositionWindowResult(C, None, None, (WindowFlag.NO_STEP,)),
             ),
             flags=(),
@@ -109,11 +123,7 @@ def _analysis():
     return MeltingAnalysis(
         run_id=uuid.uuid4(),
         edit_refusal=None,
-        steps=(
-            _step(REF, 71.3, MeltingStepStatus.ACCEPTED),
-            _step(A, 62.8),
-            _step(B, 70.4, MeltingStepStatus.ACCEPTED),
-        ),
+        steps=(ref, *a_peaks, b),
         windows=(main,),
         step_checks=(
             ChannelStepCheck("ratio", StepCountCheck(frozenset({C}), references_differ=False)),
@@ -138,9 +148,80 @@ def test_rows_carry_the_pages_status_and_hit_call():
     assert (by[B].cells["Main"].status, by[B].hit) == (REVIEWED, False)
     # Registration number names the sample; its batch loses the prefix.
     assert (by[B].sample, by[B].batch) == ("CC-014538", "001")
-    # No step: no value fails the rule; the step-count check is noted.
+    # No peak: no value fails the rule; the count check is noted.
     assert by[C].hit is False
-    assert by[C].cells["Main"].status == f"{NO_STEP} · step count differs from the reference"
+    assert by[C].cells["Main"].status == f"{NO_STEP} · {DIFFERS}"
+
+
+def test_report_uses_the_assigned_peak_for_status():
+    # A's Tm is the unreviewed peak assigned to Main from below its range; the
+    # accepted peak inside the range no longer counts.
+    in_range = _step(A, 62.8, MeltingStepStatus.ACCEPTED)
+    assigned = _step(A, 45.0, assigned_window="Main")
+    result = PositionWindowResult(A, 45.0, -26.3, (), NamedBy.ASSIGNMENT, assigned.id)
+    cell = _rows(POSITIONS, _analysis((in_range, assigned), result), [])[1].cells["Main"]
+    assert (cell.tm, cell.status) == (45.0, PROVISIONAL)
+    # The other way round: the assigned peak is accepted, the one in range is not.
+    in_range = _step(A, 62.8)
+    assigned = _step(A, 45.0, MeltingStepStatus.ACCEPTED, assigned_window="Main")
+    result = PositionWindowResult(A, 45.0, -26.3, (), NamedBy.ASSIGNMENT, assigned.id)
+    cell = _rows(POSITIONS, _analysis((in_range, assigned), result), [])[1].cells["Main"]
+    assert cell.status == REVIEWED
+
+
+def test_report_lists_assignment_on_peaks():
+    ada, grace = uuid.uuid4(), uuid.uuid4()
+    when = datetime(2026, 11, 17, 9, 5, tzinfo=UTC)
+    stamp = {"assigned_by": ada, "assigned_at": when}
+    assigned = _step(A, 45.0, assigned_window="Main", assignment_reason="split peak", **stamp)
+    by_stranger = _step(A, 48.0, assigned_window="Main", assigned_by=grace, assigned_at=when)
+    # "Gone" is not a window on this signal: the peak counts as unassigned.
+    stale = _step(A, 62.8, assigned_window="Gone", assignment_reason="old", **stamp)
+    analysis = _analysis((assigned, by_stranger, stale))
+    _, first, second, third, _ = _steps(analysis, {}, {}, {str(ada): "Ada"})
+    assert (
+        first.assigned_window,
+        first.assignment_reason,
+        first.assigned_by,
+        first.assigned_at,
+    ) == ("Main", "split peak", "Ada", when)
+    assert second.assigned_by == str(grace)  # as an unknown "changed by" is shown
+    assert (
+        third.assigned_window,
+        third.assignment_reason,
+        third.assigned_by,
+        third.assigned_at,
+    ) == (None, None, None, None)
+
+    headers, rows = steps_table(replace(_report(), steps=(first,)))
+    assert headers[-4:] == ["Assigned to", "Assignment reason", "Assigned by", "Assigned at (UTC)"]
+    assert rows[0][-4:] == ["Main", "split peak", "Ada", "2026-11-17 09:05"]
+
+
+def test_report_says_how_each_tm_was_named():
+    assigned = _step(A, 45.0, MeltingStepStatus.ACCEPTED, assigned_window="Main")
+    result = PositionWindowResult(A, 45.0, -26.3, (), NamedBy.ASSIGNMENT, assigned.id)
+    rows = _rows(POSITIONS, _analysis((assigned,), result), [])
+    assert {r.well_id: r.cells["Main"].named_by for r in rows} == {
+        REF: "By range",
+        A: "Assigned",
+        B: "By range",
+        C: "",  # no Tm, so nothing named it
+    }
+    headers, table = results_table(_report())
+    assert headers[7:11] == ["Main Tm (°C)", "Main ΔTm (°C)", "Main status", "Main Tm named"]
+    assert [row[10] for row in table] == ["By range", "Assigned"]
+
+
+def test_report_wording_says_peak():
+    assert (NO_STEP, SEVERAL_STEPS) == ("No peak", "Several peaks")
+    assert DIFFERS == "different number of peaks than the reference"
+    report = _report()
+    assert "Peak (°C)" in steps_table(report)[0]
+    page = re.sub(r"<[^>]+>", " ", _pdf_html(report, OPTIONS))  # the PDF's text, tags dropped
+    assert "Peaks" in page and "Named" in page
+    said = [*results_table(report)[0], *steps_table(report)[0], page]
+    assert not any("step" in text.lower() for text in said)
 
 
 def test_without_a_rule_nobody_is_called():
@@ -169,7 +250,7 @@ def _report() -> RunReport:
             None,
             "reference",
             None,
-            {"Main": RunCell(71.3, None, REFERENCE)},
+            {"Main": RunCell(71.3, None, REFERENCE, "By range")},
             None,
         ),
         RunRow(
@@ -182,7 +263,7 @@ def _report() -> RunReport:
             50.0,
             "sample",
             "cloudy",
-            {"Main": RunCell(62.8, -8.5, PROVISIONAL)},
+            {"Main": RunCell(62.8, -8.5, PROVISIONAL, "Assigned")},
             True,
         ),
     )
@@ -252,19 +333,19 @@ async def test_csv_is_the_results_table_alone(tmp_path: Path):
     assert "ChemCellar" not in out.read_text(encoding="utf-8")  # no branding in the records
 
 
-async def test_excel_holds_results_steps_and_each_positions_own_temperatures(tmp_path: Path):
+async def test_excel_holds_results_peaks_and_each_positions_own_temperatures(tmp_path: Path):
     out = tmp_path / "run.xlsx"
     await render_run_report(_report(), ExportFormat.XLSX, out, OPTIONS)
     wb = load_workbook(out)
     assert wb.sheetnames == [
         "Results",
-        "Steps",
+        "Peaks",
         "Ratio 350-330 measured",
         "Ratio 350-330 derivative",
         "Notes",
     ]
     assert wb["Results"]["A1"].value == "Position"
-    assert wb["Steps"]["I2"].value == "Ada"
+    assert wb["Peaks"]["I2"].value == "Ada"
     traces = [[c.value for c in row] for row in wb["Ratio 350-330 measured"].iter_rows()]
     assert traces[0] == ["Position 1 · MadR", None, "Position 2 · 16:0-CoA", None]
     assert traces[2] == [50.5, 0.3, 50.0, 0.1]
