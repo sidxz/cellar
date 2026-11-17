@@ -18,6 +18,7 @@ from cellar.domain.screening_assay.melt_window import (
     WindowResult,
     check_step_counts,
     evaluate_window,
+    outside_every_window,
     window_positions,
 )
 from cellar.domain.screening_assay.melting_step import MeltingStep
@@ -74,6 +75,8 @@ class MeltingAnalysis:
     steps: tuple[MeltingStep, ...]  # ordered by well, channel, value
     windows: tuple[WindowAnalysis, ...]  # ordered by low
     step_checks: tuple[ChannelStepCheck, ...]  # one per channel that has steps
+    # Counted steps no window of their channel takes (not assigned, inside none).
+    outside_every_window: tuple[uuid.UUID, ...] = ()
 
 
 class GetMeltingAnalysis:
@@ -166,11 +169,21 @@ class GetMeltingAnalysis:
             analyse(name, channel, low, high)
             for name, (channel, low, high) in sorted(shape.items(), key=lambda kv: kv[1][1])
         )
-        step_checks = tuple(
-            ChannelStepCheck(ch, check_step_counts(window_positions(wells, facts, ch, traced)))
+        positions = {
+            ch: window_positions(wells, facts, ch, traced)
             for ch in sorted({s.channel_key for s in steps})
+        }
+        step_checks = tuple(
+            ChannelStepCheck(ch, check_step_counts(ps)) for ch, ps in positions.items()
+        )
+        outside = tuple(
+            step_id
+            for ch, ps in positions.items()
+            for step_id in outside_every_window(
+                ps, [(name, low, high) for name, (c, low, high) in shape.items() if c == ch]
+            )
         )
 
         return Success(
-            MeltingAnalysis(run.id, peak_edit_refusal(run), steps, windows, step_checks)
+            MeltingAnalysis(run.id, peak_edit_refusal(run), steps, windows, step_checks, outside)
         )

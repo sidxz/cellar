@@ -173,6 +173,8 @@ function withAnalysis(cells: Record<string, Cell>, windows = 1) {
       tm: null,
       delta_tm: null,
       flags: [],
+      named_by: null,
+      step_id: null,
       ...cells[p.well_id],
     })),
   });
@@ -182,6 +184,7 @@ function withAnalysis(cells: Record<string, Cell>, windows = 1) {
     steps: [],
     windows: windows ? [win("Main")] : [],
     step_checks: [],
+    outside_every_window: [],
   };
 }
 

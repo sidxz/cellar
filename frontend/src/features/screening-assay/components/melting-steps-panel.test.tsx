@@ -87,6 +87,10 @@ function step(over: Partial<MeltingStep> & Pick<MeltingStep, "id" | "well_id">):
     reason: null,
     changed_by: null,
     changed_at: null,
+    assigned_window: null,
+    assignment_reason: null,
+    assigned_by: null,
+    assigned_at: null,
     version: 1,
     ...over,
   };
@@ -134,6 +138,7 @@ beforeEach(() => {
     steps,
     windows: [],
     step_checks: [],
+    outside_every_window: [],
   };
   useRunCurves.mockReset();
   useRunCurves.mockReturnValue({ data: curves, isLoading: false, isPlaceholderData: false });

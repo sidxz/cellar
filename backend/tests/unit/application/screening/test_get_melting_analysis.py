@@ -21,7 +21,12 @@ from cellar.domain.screening_assay.enums import (
     RunStatus,
     WellType,
 )
-from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig, WindowFlag
+from cellar.domain.screening_assay.melt_window import (
+    MeltMeasure,
+    MeltReadoutConfig,
+    NamedBy,
+    WindowFlag,
+)
 from cellar.domain.screening_assay.melting_step import (
     MeltingStep,
     MeltingStepSource,
@@ -99,15 +104,24 @@ class Harness:
             curve_repo=self.curve_repo,
         )
 
-    def step(self, well: Well, value: float, status=MeltingStepStatus.UNREVIEWED) -> MeltingStep:
+    def step(
+        self,
+        well: Well,
+        value: float,
+        status=MeltingStepStatus.UNREVIEWED,
+        *,
+        channel: str = CH,
+        assigned_window: str | None = None,
+    ) -> MeltingStep:
         s = MeltingStep(
             workspace_id=WS,
             run_id=self.run.id,
             well_id=well.id,
-            channel_key=CH,
+            channel_key=channel,
             source=MeltingStepSource.MANUAL,
             value=value,
             status=status,
+            assigned_window=assigned_window,
         )
         self.steps.append(s)
         return s
@@ -159,6 +173,45 @@ async def test_rejected_steps_are_listed_but_do_not_count():
     sample = next(p for p in main.result.positions if p.well_id == h.sample.id)
     assert sample.tm is None
     assert sample.flags == (WindowFlag.NO_STEP,)
+
+
+async def test_analysis_reports_how_each_tm_was_named():
+    h = Harness()
+    reference = h.step(h.ref, 71.0)
+    assigned = h.step(h.sample, 40.0, assigned_window="Main")  # by temperature: in Low
+    h.step(h.sample, 70.0)  # inside Main, but the assigned peak wins
+    low, main = (await h.read()).unwrap().windows
+
+    def named(window, well):  # type: ignore[no-untyped-def]
+        p = next(p for p in window.result.positions if p.well_id == well.id)
+        return (p.tm, p.named_by, p.step_id)
+
+    assert named(main, h.sample) == (40.0, NamedBy.ASSIGNMENT, assigned.id)
+    assert named(main, h.ref) == (71.0, NamedBy.RANGE, reference.id)
+    assert named(low, h.sample) == (None, None, None)
+
+
+async def test_analysis_lists_peaks_outside_every_window():
+    h = Harness()
+    h.step(h.ref, 71.0)
+    h.step(h.sample, 70.0)
+    unplaced = h.step(h.sample, 90.0)
+    stale = h.step(h.sample, 92.0, assigned_window="Gone")
+    h.step(h.sample, 94.0, assigned_window="Main")
+    h.step(h.sample, 20.0, MeltingStepStatus.REJECTED)
+    # A signal is judged against its own windows: this one has none.
+    h.traced.add((h.sample.id, "330nm"))
+    other_signal = h.step(h.sample, 70.0, channel="330nm")
+
+    out = (await h.read()).unwrap()
+    assert out.outside_every_window == (other_signal.id, unplaced.id, stale.id)
+
+
+async def test_no_peak_is_outside_when_every_peak_is_in_a_window():
+    h = Harness()
+    h.step(h.ref, 71.0)
+    h.step(h.sample, 36.0)
+    assert (await h.read()).unwrap().outside_every_window == ()
 
 
 @pytest.mark.parametrize(

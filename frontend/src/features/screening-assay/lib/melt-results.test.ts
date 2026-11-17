@@ -36,6 +36,8 @@ const wp = (id: string, tm: number | null, d: number | null, flags: string[] = [
   tm,
   delta_tm: d,
   flags,
+  named_by: null,
+  step_id: null,
 });
 function win(positions: MeltWindow["positions"], over: Partial<MeltWindow> = {}): MeltWindow {
   return {

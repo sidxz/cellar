@@ -50,6 +50,8 @@ const cell = (well_id: string, tm: number | null, delta_tm: number | null) => ({
   tm,
   delta_tm,
   flags: [],
+  named_by: null,
+  step_id: null,
 });
 function analysis(windows: Record<string, ReturnType<typeof cell>[]>): MeltingAnalysis {
   return {
@@ -57,6 +59,7 @@ function analysis(windows: Record<string, ReturnType<typeof cell>[]>): MeltingAn
     edit_refusal: null,
     steps: [],
     step_checks: [],
+    outside_every_window: [],
     windows: Object.entries(windows).map(([window, positions]) => ({
       window,
       channel_key: window === "Other signal" ? "350nm" : "ratio",
