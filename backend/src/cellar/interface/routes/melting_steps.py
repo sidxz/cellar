@@ -1,12 +1,13 @@
-"""A run's melting analysis, and adding, reviewing and assigning its melting steps."""
+"""A run's melting analysis, adding, reviewing, assigning and accepting its melting steps,
+and the candidate peaks of a position."""
 
 from __future__ import annotations
 
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Query
+from pydantic import BaseModel, Field, field_validator
 
 from cellar.application.screening.get_melting_analysis import (
     ChannelStepCheck,
@@ -15,10 +16,16 @@ from cellar.application.screening.get_melting_analysis import (
     WindowAnalysis,
     WindowSeries,
 )
+from cellar.application.screening.get_peak_candidates import (
+    GetPeakCandidatesQuery,
+    SignalPeakCandidates,
+)
 from cellar.application.screening.manage_melting_steps import (
+    AcceptMeltingStepsCommand,
     AddMeltingStepCommand,
     AssignMeltingStepCommand,
     MeltingStepChange,
+    MeltingStepsAccepted,
     ReviewMeltingStepCommand,
 )
 from cellar.domain.screening_assay.melt_window import (
@@ -31,11 +38,14 @@ from cellar.domain.screening_assay.melting_step import (
     MeltingStepSource,
     MeltingStepStatus,
 )
+from cellar.domain.screening_assay.peak_detection import PeakCandidate, PeakDirection
 from cellar.interface.dependencies import (
+    AcceptMeltingStepsDep,
     AddMeltingStepDep,
     AssignMeltingStepDep,
     AuthDep,
     GetMeltingAnalysisDep,
+    GetPeakCandidatesDep,
     ReviewMeltingStepDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -252,6 +262,73 @@ class MeltingStepChangeResponse(BaseModel):
         )
 
 
+class AcceptMeltingStepItem(BaseModel):
+    id: uuid.UUID
+    # The version the user read; a save over someone else's change is refused.
+    expected_version: int = Field(ge=1)
+
+
+class AcceptMeltingStepsRequest(BaseModel):
+    steps: list[AcceptMeltingStepItem] = Field(min_length=1, max_length=2000)
+
+    @field_validator("steps")
+    @classmethod
+    def _each_once(cls, steps: list[AcceptMeltingStepItem]) -> list[AcceptMeltingStepItem]:
+        if len({s.id for s in steps}) != len(steps):
+            raise ValueError("A peak is listed more than once")
+        return steps
+
+
+class AcceptMeltingStepsResponse(BaseModel):
+    # The steps that changed from unreviewed to accepted.
+    steps: list[MeltingStepModel]
+    # Steps already accepted, or rejected: left as they were.
+    skipped: int
+    recalculated: bool
+    compute_warning: str | None
+
+    @classmethod
+    def from_domain(cls, a: MeltingStepsAccepted) -> AcceptMeltingStepsResponse:
+        return cls(
+            steps=[MeltingStepModel.from_domain(s) for s in a.steps],
+            skipped=a.skipped,
+            recalculated=a.recalculated,
+            compute_warning=a.compute_warning,
+        )
+
+
+class PeakCandidateModel(BaseModel):
+    value: float
+    direction: PeakDirection
+    # How far it stands out, in units of the trace's own noise.
+    strength: float
+
+    @classmethod
+    def from_domain(cls, c: PeakCandidate) -> PeakCandidateModel:
+        return cls(value=c.value, direction=c.direction, strength=c.strength)
+
+
+class SignalPeakCandidatesModel(BaseModel):
+    channel_key: str
+    # The smoothing the candidates were found with, in x units.
+    smoothing_window: float
+    # Strongest first.
+    candidates: list[PeakCandidateModel]
+
+    @classmethod
+    def from_domain(cls, s: SignalPeakCandidates) -> SignalPeakCandidatesModel:
+        return cls(
+            channel_key=s.channel_key,
+            smoothing_window=s.smoothing_window,
+            candidates=[PeakCandidateModel.from_domain(c) for c in s.candidates],
+        )
+
+
+class PeakCandidatesResponse(BaseModel):
+    # One entry per signal the position has a trace on, in the run's signal order.
+    signals: list[SignalPeakCandidatesModel]
+
+
 @router.get("/runs/{run_id}/melting-analysis", response_model=MeltingAnalysisResponse)
 async def get_melting_analysis(
     run_id: uuid.UUID, auth: AuthDep, uc: GetMeltingAnalysisDep
@@ -261,6 +338,35 @@ async def get_melting_analysis(
         GetMeltingAnalysisQuery(workspace_id=auth.workspace_id, run_id=run_id), auth=auth
     )
     return MeltingAnalysisResponse.from_domain(result_to_response(result))
+
+
+@router.get(
+    "/runs/{run_id}/wells/{well_id}/peak-candidates", response_model=PeakCandidatesResponse
+)
+async def get_peak_candidates(
+    run_id: uuid.UUID,
+    well_id: uuid.UUID,
+    auth: AuthDep,
+    uc: GetPeakCandidatesDep,
+    smoothing_window: float | None = Query(None, gt=0, allow_inf_nan=False),
+) -> PeakCandidatesResponse:
+    """The candidate peaks of one position on each signal it has a trace on: the extrema of
+    the smoothed first derivative that stand out from its noise, calculated on request and
+    never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+    those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal."""
+    result = await uc(
+        GetPeakCandidatesQuery(
+            workspace_id=auth.workspace_id,
+            run_id=run_id,
+            well_id=well_id,
+            smoothing_window=smoothing_window,
+        ),
+        auth=auth,
+    )
+    signals = result_to_response(result)
+    return PeakCandidatesResponse(
+        signals=[SignalPeakCandidatesModel.from_domain(s) for s in signals]
+    )
 
 
 @router.post(
@@ -280,6 +386,23 @@ async def add_melting_step(
         assigned_window=body.assigned_window,
     )
     return MeltingStepChangeResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
+
+
+@router.post("/runs/{run_id}/melting-steps/accept", response_model=AcceptMeltingStepsResponse)
+async def accept_melting_steps(
+    run_id: uuid.UUID, body: AcceptMeltingStepsRequest, auth: AuthDep, uc: AcceptMeltingStepsDep
+) -> AcceptMeltingStepsResponse:
+    """Accept many unreviewed melting steps of the run in one save, then recalculate it once.
+
+    All or nothing: a step that is not the run's (404) or that changed since it was read
+    (409) fails the whole request. Steps already accepted, or rejected, are left as they are
+    and counted in ``skipped``."""
+    cmd = AcceptMeltingStepsCommand(
+        workspace_id=auth.workspace_id,
+        run_id=run_id,
+        steps=tuple((s.id, s.expected_version) for s in body.steps),
+    )
+    return AcceptMeltingStepsResponse.from_domain(result_to_response(await uc(cmd, auth=auth)))
 
 
 @router.patch("/melting-steps/{step_id}", response_model=MeltingStepChangeResponse)

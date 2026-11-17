@@ -38,16 +38,36 @@ import {
   worstStatus,
 } from "../lib/melt-results";
 import { type MeltingStep, WELL_TYPE_LABELS, type WellType } from "../types";
-import { STRUCTURE_THUMBNAIL_SIZE } from "./grid-columns";
 
 type Range = { window: string; low: number; high: number };
 type Col = ColDef<ResultRow> | ColGroupDef<ResultRow>;
 type Params = ICellRendererParams<ResultRow>;
 
 const ROW_HEIGHT = 36;
-/** What a structure adds to its row: the drawing and the gap under it. */
-const STRUCTURE_HEIGHT = STRUCTURE_THUMBNAIL_SIZE + 8;
+/** The box a structure is drawn in, directly under the Sample text: wider than
+ *  tall, as most structures are drawn, so the drawing fills it. */
+const STRUCTURE = { width: 144, height: 72 };
+/** A row with a structure: one line of text (26 px in the grid's theme), the
+ *  drawing and the cell's two borders. */
+const STRUCTURE_ROW_HEIGHT = 26 + STRUCTURE.height + 2;
+/** One line of a cell, at its top: where AG Grid puts a plain value in a row
+ *  taller than a line. What a renderer draws on it lines up with those. */
+const TOP_LINE = "h-[1lh]";
 const GROUP_HEADER_HEIGHT = 32;
+/** The grid shares its width among the columns in proportion to these, so
+ *  they are the layout at about 830 px, the panel's usual width (Hit is held
+ *  to the grid's 80 px minimum). Status fits its widest text ("Reference ·
+ *  Reviewed"). Sample has what the others leave, and the Concentration
+ *  column's width too when that column is not shown. */
+const WIDTH = {
+  sample: 212,
+  position: 110,
+  concentration: 90,
+  tm: 92,
+  delta: 90,
+  hit: 64,
+  status: 158,
+};
 const DIFFERS_TEXT = "Different number of peaks than the reference";
 const LIST = new Intl.ListFormat("en-US", { type: "conjunction" });
 // AG Grid's row colours are unlayered CSS, so row-level utilities need `!`.
@@ -58,19 +78,17 @@ const SEARCH = "Find sample, position or batch";
 // Only the identity columns feed the search box; numbers and status do not.
 const NOT_SEARCHED = () => "";
 
+/** A value whose peak nobody has reviewed counts as any other and is not
+ *  flagged, so "provisional" has no chip: the column speaks of peak problems
+ *  and of the reviews that were made. */
 const STATUS: Record<
-  CellStatus,
-  { label: string; variant: "secondary" | "warning" | "outline" | "ghost"; className?: string }
+  Exclude<CellStatus, "provisional">,
+  { label: string; variant: "secondary" | "warning" | "ghost"; className?: string }
 > = {
   reference: { label: "Reference", variant: "secondary" },
   several_steps: { label: "Several peaks", variant: "warning" },
   no_step: { label: "No peak", variant: "warning" },
   no_reference: { label: "No reference", variant: "warning" },
-  provisional: {
-    label: "Provisional",
-    variant: "outline",
-    className: "border-dashed text-muted-foreground",
-  },
   reviewed: { label: "Reviewed", variant: "ghost", className: "px-0 text-muted-foreground" },
 };
 
@@ -219,48 +237,59 @@ function SampleCell({ row }: { row: ResultRow }) {
 const structureOf = (row: ResultRow) =>
   row.identity.registrationNumber ? row.identity.smiles : null;
 
-/** The Sample cell while structures are shown: the text on a line as tall as
- *  the row was (36 px less the cell's borders), and the structure under it.
- *  The column is `autoHeight`, so only a row with a structure grows. */
+/** The Sample cell while structures are shown. The column is `autoHeight`, so
+ *  only a row with a structure grows: it reads from the top, the text on the
+ *  cell's top line and the structure directly under it. A row without one
+ *  keeps its text on a line as tall as the row (36 px less the cell's borders). */
 function SampleWithStructure({ row }: { row: ResultRow }) {
   const smiles = structureOf(row);
   return (
     <div>
-      <div className="h-[34px] truncate leading-[34px]">
+      <div className={cn("truncate", smiles ? TOP_LINE : "h-[34px] leading-[34px]")}>
         <SampleCell row={row} />
       </div>
       {smiles && (
-        <div className="pb-2">
-          <StructureThumbnail smiles={smiles} size={STRUCTURE_THUMBNAIL_SIZE} />
-        </div>
+        <StructureThumbnail smiles={smiles} size={STRUCTURE.width} height={STRUCTURE.height} />
       )}
     </div>
   );
 }
 
-/** A reference's own step review in the shown windows: provisional if any is. */
-function referenceReview(row: ResultRow, windowNames: readonly string[]): string | null {
+/** Whether a reference's own peaks in the shown windows were reviewed: all of
+ *  those that gave a Tm, and at least one. */
+function referenceReviewed(row: ResultRow, windowNames: readonly string[]): boolean {
   const reviews = windowNames.map((n) => row.cells[n]?.review);
-  if (reviews.includes("provisional")) return "Provisional";
-  return reviews.includes("reviewed") ? "Reviewed" : null;
+  return reviews.includes("reviewed") && !reviews.includes("provisional");
 }
 
-function StatusCell({ row, windowNames }: { row: ResultRow; windowNames: readonly string[] }) {
+function StatusCell({
+  row,
+  windowNames,
+  top,
+}: {
+  row: ResultRow;
+  windowNames: readonly string[];
+  /** The row is taller than a line (it draws a structure): the chip goes on
+   *  the top line with the row's other values, not at the row's middle. */
+  top: boolean;
+}) {
   const status = worstStatus(row, windowNames);
   const differs = windowNames.some((n) => row.cells[n]?.differs);
-  const review = status === "reference" ? referenceReview(row, windowNames) : null;
+  const chip = status && status !== "provisional" ? STATUS[status] : null;
   // The same for every window of the signal, so the first shown one speaks.
   const outside =
     status === "no_step"
       ? (windowNames.map((n) => row.cells[n]?.outsidePeaks).find((peaks) => peaks?.length) ?? [])
       : [];
-  const badge = status && (
-    <Badge variant={STATUS[status].variant} className={STATUS[status].className}>
-      {review ? `${STATUS[status].label} · ${review}` : STATUS[status].label}
+  const badge = chip && (
+    <Badge variant={chip.variant} className={chip.className}>
+      {status === "reference" && referenceReviewed(row, windowNames)
+        ? `${chip.label} · Reviewed`
+        : chip.label}
     </Badge>
   );
   return (
-    <span className="flex h-full items-center gap-1.5">
+    <span className={cn("flex items-center gap-1.5", top ? TOP_LINE : "h-full")}>
       {outside.length > 0 ? (
         <Tooltip>
           <TooltipTrigger asChild>{badge}</TooltipTrigger>
@@ -299,7 +328,7 @@ function windowColumns(
     {
       colId: `${name}:tm`,
       headerName: "Tm (°C)",
-      width: 92,
+      width: WIDTH.tm,
       headerClass: "ag-right-aligned-header",
       cellClass: NUMERIC,
       getQuickFilterText: NOT_SEARCHED,
@@ -320,7 +349,7 @@ function windowColumns(
     {
       colId: `${name}:delta`,
       headerName: "ΔTm (°C)",
-      width: 90,
+      width: WIDTH.delta,
       headerClass: "ag-right-aligned-header",
       getQuickFilterText: NOT_SEARCHED,
       valueGetter: (p) =>
@@ -350,7 +379,10 @@ const statusRank = (s: CellStatus | null) =>
 const gridHeight = (rows: number, structures: number, grouped: boolean) =>
   Math.min(
     560,
-    48 + ROW_HEIGHT * rows + STRUCTURE_HEIGHT * structures + (grouped ? GROUP_HEADER_HEIGHT : 0),
+    48 +
+      ROW_HEIGHT * (rows - structures) +
+      STRUCTURE_ROW_HEIGHT * structures +
+      (grouped ? GROUP_HEADER_HEIGHT : 0),
   );
 
 /** The results of a run's temperature windows, one row per position: the
@@ -364,6 +396,7 @@ export function MeltResultsGrid({
   hits,
   applicable = NO_RULES,
   doseUnit,
+  showConcentration,
   showStructures = false,
   selection,
   onRowClick,
@@ -379,6 +412,8 @@ export function MeltResultsGrid({
   /** The run's rules on Tm/ΔTm: a value beside one of their limits is shown to two decimals. */
   applicable?: readonly ApplicableRule[];
   doseUnit: string;
+  /** A position of the run has a concentration; without one the column is not shown. */
+  showConcentration: boolean;
   /** Draw each registered compound's structure in its Sample cell; off, it shows on hover. */
   showStructures?: boolean;
   selection: SelectionState;
@@ -396,6 +431,7 @@ export function MeltResultsGrid({
         headerName: "Sample",
         flex: 1,
         minWidth: 180,
+        width: WIDTH.sample + (showConcentration ? 0 : WIDTH.concentration),
         valueGetter: (p) => p.data?.sampleText ?? "",
         getQuickFilterText: (p) =>
           p.data
@@ -419,22 +455,23 @@ export function MeltResultsGrid({
       {
         colId: "position",
         headerName: "Position",
-        width: 110,
+        width: WIDTH.position,
         valueGetter: (p) => p.data?.position,
         // As the holder is laid out (Capillary 2 before 11, A2 before A10), not as text.
         comparator: (_a, _b, a, b) => (a.data?.holderRank ?? 0) - (b.data?.holderRank ?? 0),
       },
-      {
+    ];
+    if (showConcentration)
+      identity.push({
         colId: "conc",
         headerName: `Conc. (${doseUnit})`,
-        width: 90,
+        width: WIDTH.concentration,
         headerClass: "ag-right-aligned-header",
         cellClass: NUMERIC,
         getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => p.data?.concentration ?? null,
         valueFormatter: (p) => (p.value == null ? "" : String(p.value)),
-      },
-    ];
+      });
     if (windowNames.length === 0) return identity;
     const values: Col[] = compare
       ? windowNames.map((n) => ({
@@ -448,7 +485,7 @@ export function MeltResultsGrid({
       {
         colId: "hit",
         headerName: "Hit",
-        width: 64,
+        width: WIDTH.hit,
         getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => (p.data && hits.has(p.data.wellId) ? 1 : 0),
         cellRenderer: (p: Params) =>
@@ -461,14 +498,30 @@ export function MeltResultsGrid({
       {
         colId: "status",
         headerName: "Status",
-        width: 170,
+        width: WIDTH.status,
         getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => (p.data ? statusRank(worstStatus(p.data, windowNames)) : null),
         cellRenderer: (p: Params) =>
-          p.data ? <StatusCell row={p.data} windowNames={windowNames} /> : null,
+          p.data ? (
+            <StatusCell
+              row={p.data}
+              windowNames={windowNames}
+              top={showStructures && !!structureOf(p.data)}
+            />
+          ) : null,
       },
     ];
-  }, [windowNames, compare, hits, doseUnit, steps, windows, applicable, showStructures]);
+  }, [
+    windowNames,
+    compare,
+    hits,
+    doseUnit,
+    steps,
+    windows,
+    applicable,
+    showConcentration,
+    showStructures,
+  ]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
   // classes) when they change, so the highlight follows the selection.

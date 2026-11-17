@@ -23,7 +23,6 @@ from cellar.application.export.renderers.run_report_renderer import (
 from cellar.application.export.run_report import (
     DIFFERS,
     NO_STEP,
-    PROVISIONAL,
     REFERENCE,
     REVIEWED,
     SEVERAL_STEPS,
@@ -144,7 +143,8 @@ def test_rows_carry_the_pages_status_and_hit_call():
     rows = _rows(POSITIONS, _analysis(), [(OUTSIDE, "Main", MeltMeasure.DELTA_TM)])
     by = {r.well_id: r for r in rows}
     assert by[REF].cells["Main"].status == REFERENCE and by[REF].hit is None
-    assert (by[A].cells["Main"].status, by[A].hit) == (PROVISIONAL, True)  # -8.5 is outside ±2
+    # An unreviewed peak leaves the review cell empty. -8.5 is outside ±2.
+    assert (by[A].cells["Main"].status, by[A].hit) == ("", True)
     assert (by[B].cells["Main"].status, by[B].hit) == (REVIEWED, False)
     # Registration number names the sample; its batch loses the prefix.
     assert (by[B].sample, by[B].batch) == ("CC-014538", "001")
@@ -160,7 +160,7 @@ def test_report_uses_the_assigned_peak_for_status():
     assigned = _step(A, 45.0, assigned_window="Main")
     result = PositionWindowResult(A, 45.0, -26.3, (), NamedBy.ASSIGNMENT, assigned.id)
     cell = _rows(POSITIONS, _analysis((in_range, assigned), result), [])[1].cells["Main"]
-    assert (cell.tm, cell.status) == (45.0, PROVISIONAL)
+    assert (cell.tm, cell.status) == (45.0, "")
     # The other way round: the assigned peak is accepted, the one in range is not.
     in_range = _step(A, 62.8)
     assigned = _step(A, 45.0, MeltingStepStatus.ACCEPTED, assigned_window="Main")
@@ -213,6 +213,21 @@ def test_report_says_how_each_tm_was_named():
     assert [row[10] for row in table] == ["By range", "Assigned"]
 
 
+def test_an_unreviewed_peak_leaves_the_review_cell_empty():
+    headers, table = results_table(_report())
+    assert [row[headers.index("Main status")] for row in table] == [REFERENCE, None]
+    assert "Provisional" not in _pdf_html(_report(), OPTIONS)
+
+
+def test_a_differing_peak_count_is_said_whether_or_not_the_peak_was_reviewed():
+    # A's peak is unreviewed, B's accepted; both have another number of peaks than the reference.
+    check = ChannelStepCheck("ratio", StepCountCheck(frozenset({A, B}), references_differ=False))
+    rows = _rows(POSITIONS, replace(_analysis(), step_checks=(check,)), [])
+    by = {r.well_id: r.cells["Main"].status for r in rows}
+    assert by[A] == "Different number of peaks than the reference"
+    assert by[B] == f"{REVIEWED} · {DIFFERS}"
+
+
 def test_report_wording_says_peak():
     assert (NO_STEP, SEVERAL_STEPS) == ("No peak", "Several peaks")
     assert DIFFERS == "different number of peaks than the reference"
@@ -263,7 +278,7 @@ def _report() -> RunReport:
             50.0,
             "sample",
             "cloudy",
-            {"Main": RunCell(62.8, -8.5, PROVISIONAL, "Assigned")},
+            {"Main": RunCell(62.8, -8.5, "", "Assigned")},
             True,
         ),
     )

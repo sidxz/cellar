@@ -1,4 +1,5 @@
-"""API tests: a run's melting analysis, and adding and reviewing melting steps.
+"""API tests: a run's melting analysis, adding, reviewing and accepting melting steps, and
+reading the candidate peaks of a position.
 
 The synthetic run has a reference position whose steps sit at 36.6 and 71.3 °C and a
 sample whose ligand merged them into one at 64.0 °C, read in two temperature windows,
@@ -8,6 +9,8 @@ Lower (25 to 50) and Main (50 to 85).
 from __future__ import annotations
 
 import json
+import math
+import random
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -21,25 +24,32 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from tests.api.conftest import _create_test_app
 from tests.api.test_instrument_import_routes import Seeded, _seed, labelling_from
 from tests.fakes.fake_auth import FakeAuth
-from tests.helpers.instrument_workbook import build_raw_workbook
+from tests.helpers.instrument_workbook import build_raw_workbook, temperature
 
 XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-# 1060 points reach 85.4 °C, so both windows lie inside every trace.
-MELT_FILE = {
-    "file": (
-        "melt.xlsx",
-        build_raw_workbook(
-            positions={1: "protein alone", 2: "ABC-0000001 (Old)"},
-            points=1060,
-            reported={
-                "Onset #1 for Ratio ": {1: 33.0, 2: 60.0},
-                "Inflection Point #1 for Ratio ": {1: 36.6, 2: 64.0},
-                "Inflection Point #2 for Ratio ": {1: 71.3},
-            },
-        ),
-        XLSX,
-    )
-}
+POINTS = 1060  # they reach 85.4 °C, so both windows lie inside every trace
+
+
+def _melt_file(cells: dict[tuple[str, int, int, str], object] | None = None) -> dict[str, Any]:
+    return {
+        "file": (
+            "melt.xlsx",
+            build_raw_workbook(
+                positions={1: "protein alone", 2: "ABC-0000001 (Old)"},
+                points=POINTS,
+                reported={
+                    "Onset #1 for Ratio ": {1: 33.0, 2: 60.0},
+                    "Inflection Point #1 for Ratio ": {1: 36.6, 2: 64.0},
+                    "Inflection Point #2 for Ratio ": {1: 71.3},
+                },
+                cells=cells,
+            ),
+            XLSX,
+        )
+    }
+
+
+MELT_FILE = _melt_file()
 NOT_EDITABLE = "Peaks cannot be changed on an approved run"
 
 
@@ -61,6 +71,7 @@ async def _setup(
     session_factory: async_sessionmaker[AsyncSession],
     ws: uuid.UUID,
     main_extra: dict[str, Any] | None = None,
+    files: dict[str, Any] = MELT_FILE,
 ) -> tuple[Seeded, dict[str, Any]]:
     """Seed, add the two windows through the protocol route, import the melt file."""
     s = await _seed(session_factory, ws)
@@ -81,9 +92,9 @@ async def _setup(
         )
         assert resp.status_code == 201, resp.text
 
-    preview = (await client.post(s.preview_url, files=MELT_FILE)).json()
+    preview = (await client.post(s.preview_url, files=files)).json()
     resp = await client.post(
-        s.import_url, files=MELT_FILE, data={"labelling": json.dumps(labelling_from(preview))}
+        s.import_url, files=files, data={"labelling": json.dumps(labelling_from(preview))}
     )
     assert resp.status_code == 201, resp.text
     return s, await _analysis(client, s.run_id)
@@ -688,3 +699,219 @@ async def test_analysis_carries_assignment_fields(
     assert (read["assigned_window"], read["assignment_reason"]) == ("Lower", "late melt")
     assert read["assigned_by"] == str(fake_auth.user_id) and read["assigned_at"]
     assert _named(after, "Lower", sample["well_id"]) == (85.2, "assignment", unplaced["id"])
+
+
+def _step_file() -> dict[str, Any]:
+    """The melt file, with a step at 60 °C in the sample's 350 nm trace (synthetic: a sigmoid
+    on the file's straight line plus seeded noise). Every other trace stays a straight line."""
+    rng = random.Random(7)
+    return _melt_file(
+        {
+            ("350nm", 2, i, "value"): round(
+                0.8
+                + i * 0.001
+                + 1 / (1 + math.exp(-(temperature(i) - 60.0) / 1.2))
+                + rng.gauss(0, 0.01),
+                6,
+            )
+            for i in range(POINTS)
+        }
+    )
+
+
+WIDEST = temperature(POINTS - 1) - temperature(0)  # every trace of the run: 60.363 °C
+
+
+async def test_viewer_reads_the_candidate_peaks_of_a_position(
+    client: AsyncClient,
+    viewer_client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id, files=_step_file())
+    sample = _step(analysis, 64.0)["well_id"]
+
+    resp = await viewer_client.get(f"/api/v1/runs/{s.run_id}/wells/{sample}/peak-candidates")
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert list(body) == ["signals"]
+    # One entry per signal of the position, in the run's signal order.
+    assert [sg["channel_key"] for sg in body["signals"]] == ["ratio", "f330", "f350", "scattering"]
+    for signal in body["signals"]:
+        assert set(signal) == {"channel_key", "smoothing_window", "candidates"}
+        # By default what the Traces view uses for the derivative: 5% of the widest trace.
+        assert signal["smoothing_window"] == pytest.approx(0.05 * WIDEST)
+    found = {sg["channel_key"]: sg["candidates"] for sg in body["signals"]}
+    assert found["ratio"] == found["f330"] == found["scattering"] == []  # straight lines
+    (peak,) = found["f350"]
+    assert set(peak) == {"value", "direction", "strength"}
+    assert peak["value"] == pytest.approx(60.0, abs=0.3) and peak["direction"] == "rising"
+    assert peak["strength"] >= 10
+    # Reading stores nothing: the run's peaks are the instrument's three, as before.
+    assert len((await _analysis(client, s.run_id))["steps"]) == 3
+
+
+async def test_peak_candidates_smoothing_is_used_capped_or_refused(
+    client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    url = f"/api/v1/runs/{s.run_id}/wells/{_step(analysis, 64.0)['well_id']}/peak-candidates"
+
+    given = await client.get(url, params={"smoothing_window": 2})
+    assert given.status_code == 200, given.text
+    assert {sg["smoothing_window"] for sg in given.json()["signals"]} == {2.0}
+
+    wide = await client.get(url, params={"smoothing_window": 1e6})
+    assert wide.status_code == 200, wide.text
+    assert [sg["smoothing_window"] for sg in wide.json()["signals"]] == [pytest.approx(WIDEST)] * 4
+
+    # Refused as the derivative view of GET /runs/{run_id}/curves refuses it.
+    curves = await client.get(
+        f"/api/v1/runs/{s.run_id}/curves", params={"view": "derivative", "window": 0}
+    )
+    for refused in (0, -1, "nan"):
+        resp = await client.get(url, params={"smoothing_window": refused})
+        assert resp.status_code == curves.status_code == 422, resp.text
+
+
+async def test_peak_candidates_of_an_unknown_run_or_position_return_404(
+    client: AsyncClient,
+    database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    sample = _step(analysis, 64.0)["well_id"]
+
+    unknown_well = await client.get(
+        f"/api/v1/runs/{s.run_id}/wells/{uuid.uuid4()}/peak-candidates"
+    )
+    unknown_run = await client.get(f"/api/v1/runs/{uuid.uuid4()}/wells/{sample}/peak-candidates")
+    stranger = FakeAuth(role="admin", workspace_id=uuid.uuid4(), user_id=uuid.uuid4())
+    async with _client_as(database_url, stranger) as other:
+        other_workspace = await other.get(
+            f"/api/v1/runs/{s.run_id}/wells/{sample}/peak-candidates"
+        )
+    assert (
+        unknown_well.status_code,
+        unknown_run.status_code,
+        other_workspace.status_code,
+    ) == (404, 404, 404)
+    assert (await client.get(f"/api/v1/runs/{s.run_id}/wells/{sample}/peak-candidates")).is_success
+
+
+def _accept_url(run_id: Any) -> str:
+    return f"/api/v1/runs/{run_id}/melting-steps/accept"
+
+
+def _items(analysis: dict[str, Any], **versions: int) -> dict[str, Any]:
+    """Every peak of the run at the version read; ``versions`` overrides one by its id."""
+    return {
+        "steps": [
+            {"id": st["id"], "expected_version": versions.get(st["id"], st["version"])}
+            for st in analysis["steps"]
+        ]
+    }
+
+
+def _states(analysis: dict[str, Any]) -> dict[float, tuple[str, int]]:
+    return {st["value"]: (st["status"], st["version"]) for st in analysis["steps"]}
+
+
+async def test_editor_accepts_the_unreviewed_peaks_of_a_run_in_one_request(
+    client: AsyncClient,
+    database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    rejected = await client.patch(
+        f"/api/v1/melting-steps/{_step(analysis, 71.3)['id']}",
+        json={"expected_version": 1, "status": "rejected", "value": 71.3, "reason": "bubble"},
+    )
+    assert rejected.status_code == 200, rejected.text
+    analysis = await _analysis(client, s.run_id)
+    sample = _step(analysis, 64.0)
+
+    editor = FakeAuth(role="editor", workspace_id=fake_auth.workspace_id, user_id=uuid.uuid4())
+    async with _client_as(database_url, editor) as as_editor:
+        resp = await as_editor.post(_accept_url(s.run_id), json=_items(analysis))
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert set(body) == {"steps", "skipped", "recalculated", "compute_warning"}
+    assert (body["skipped"], body["recalculated"], body["compute_warning"]) == (1, True, None)
+    assert sorted(st["value"] for st in body["steps"]) == [36.6, 64.0]
+    for st in body["steps"]:
+        assert (st["status"], st["version"], st["reason"]) == ("accepted", 2, None)
+        assert st["changed_by"] == str(editor.user_id)
+        assert set(st) == set(sample)  # the same model as the single review returns
+
+    after = await _analysis(client, s.run_id)
+    assert _states(after) == {36.6: ("accepted", 2), 64.0: ("accepted", 2), 71.3: ("rejected", 2)}
+    # Asking again changes nothing and recalculates nothing.
+    again = await client.post(_accept_url(s.run_id), json=_items(after))
+    assert again.status_code == 200, again.text
+    assert again.json() == {
+        "steps": [],
+        "skipped": 3,
+        "recalculated": False,
+        "compute_warning": None,
+    }
+
+
+async def test_accept_many_as_viewer_returns_403(
+    client: AsyncClient,
+    viewer_client: AsyncClient,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    resp = await viewer_client.post(_accept_url(s.run_id), json=_items(analysis))
+    assert resp.status_code == 403, resp.text
+    assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
+
+
+async def test_accept_many_is_all_or_nothing(
+    client: AsyncClient,
+    database_url: str,
+    session_factory: async_sessionmaker[AsyncSession],
+    fake_auth: FakeAuth,
+) -> None:
+    s, analysis = await _setup(client, session_factory, fake_auth.workspace_id)
+    url, items = _accept_url(s.run_id), _items(analysis)
+
+    # A peak that is not the run's: the usual not-found.
+    foreign = {"steps": [*items["steps"], {"id": str(uuid.uuid4()), "expected_version": 1}]}
+    not_found = await client.post(url, json=foreign)
+    assert not_found.status_code == 404, not_found.text
+    # A stale version on the last peak, after the others were written in the same save.
+    stale = _items(analysis, **{analysis["steps"][-1]["id"]: 5})
+    conflict = await client.post(url, json=stale)
+    assert conflict.status_code == 409, conflict.text
+    assert "changed by someone else" in conflict.text
+    # Another workspace's run.
+    stranger = FakeAuth(role="admin", workspace_id=uuid.uuid4(), user_id=uuid.uuid4())
+    async with _client_as(database_url, stranger) as other:
+        elsewhere = await other.post(url, json=items)
+    assert elsewhere.status_code == 404, elsewhere.text
+    assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
+
+    # An approved run refuses as the single review does.
+    await _sql(session_factory, "UPDATE runs SET status = 'approved' WHERE id = :id", id=s.run_id)
+    approved = await client.post(url, json=items)
+    assert approved.status_code == 409, approved.text
+    assert NOT_EDITABLE in approved.text
+    assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
+
+
+async def test_accept_many_refuses_a_malformed_list(client: AsyncClient) -> None:
+    url = _accept_url(uuid.uuid4())
+    one = {"id": str(uuid.uuid4()), "expected_version": 1}
+    too_many = [{"id": str(uuid.uuid4()), "expected_version": 1} for _ in range(2001)]
+    for steps in (too_many, [one, one], [], [{"id": one["id"], "expected_version": 0}]):
+        resp = await client.post(url, json={"steps": steps})
+        assert resp.status_code == 422, resp.text
+    # 2,000 is allowed: it gets as far as looking for the run.
+    assert (await client.post(url, json={"steps": too_many[:2000]})).status_code == 404

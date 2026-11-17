@@ -237,3 +237,31 @@ def test_constructor_enforces_source_shape():
         )
     with pytest.raises(ValidationError):
         MeltingStep(**base, channel_key="r", source=MeltingStepSource.MANUAL, value=math.nan)
+
+
+def test_accept_marks_an_unreviewed_step_accepted_and_changes_nothing_else():
+    step, u = _step(), uuid.uuid4()
+    assert step.accept(by=u) == [("status", "unreviewed", "accepted")]
+    assert step.status is ACCEPTED and (step.value, step.reason) == (64.0, None)
+    assert step.changed_by == u and step.changed_at is not None and step.version == 2
+    # Already accepted: left exactly as it is.
+    assert step.accept(by=uuid.uuid4()) == []
+    assert (step.changed_by, step.version) == (u, 2)
+
+
+def test_accept_keeps_a_corrected_value_and_its_reason():
+    step, u = _step(), uuid.uuid4()
+    step.review(status=UNREVIEWED, value=63.2, reason="hand pick", x_range=RANGE, by=u)
+    assert step.accept(by=u) == [("status", "unreviewed", "accepted")]
+    assert (step.value, step.reason, step.version) == (63.2, "hand pick", 3)
+
+
+def test_accept_leaves_a_rejected_step_rejected():
+    step, u = _step(), uuid.uuid4()
+    step.review(status=REJECTED, value=64.0, reason="bubble", x_range=RANGE, by=u)
+    assert step.accept(by=uuid.uuid4()) == []
+    assert step.status is REJECTED and (step.reason, step.changed_by, step.version) == (
+        "bubble",
+        u,
+        2,
+    )

@@ -18,7 +18,7 @@ import type { ReviewMeltingStepRequest } from "@/shared/lib/api/model";
 import { formatDateTime } from "@/shared/lib/format-date";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
 import { cn } from "@/shared/lib/utils";
-import { useEffect, useId, useState } from "react";
+import { type ReactNode, useEffect, useId, useState } from "react";
 import { apiReason } from "../hooks/use-instrument-import-wizard";
 import {
   useAddMeltingStep,
@@ -63,6 +63,9 @@ export type StepRequest = {
   stepId?: string;
   wellId?: string;
   value?: string;
+  /** Given when `value` is a found peak the click snapped to: the temperature
+   *  clicked, which the form offers to put back. */
+  clicked?: string;
   window?: string | null;
 };
 
@@ -89,6 +92,9 @@ const FORM_TITLES = {
 function fmt(v: number): string {
   return formatMeasurementValue(v, 4);
 }
+
+/** A value field's text to two decimals, as the snap line says temperatures. */
+const twoDecimals = (input: string) => Number(input).toFixed(2);
 
 /** The PATCH body; a blank reason is left out. */
 function review(
@@ -123,6 +129,8 @@ export interface MeltingStepsPanelProps {
   pickedId: string | null;
   /** A peak added by hand was saved. */
   onAdded?: (step: MeltingStep) => void;
+  /** Directly under the list of peaks. */
+  underList?: ReactNode;
   onReload: () => Promise<unknown>;
 }
 
@@ -142,6 +150,7 @@ export function MeltingStepsPanel({
   onRequestHandled,
   pickedId,
   onAdded,
+  underList,
   onReload,
 }: MeltingStepsPanelProps) {
   const canEdit = useCanEdit();
@@ -150,6 +159,9 @@ export function MeltingStepsPanel({
   const reviewStep = useReviewMeltingStep(runId);
   const assign = useAssignMeltingStep(runId);
   const [form, setForm] = useState<Form | null>(null);
+  // The form opened on a found peak in place of the temperature clicked. Said
+  // while that peak is still the field's value; typing ends it.
+  const [snap, setSnap] = useState<{ to: string; clicked: string } | null>(null);
   const [error, setError] = useState<{ message: string; conflict: boolean } | null>(null);
   const [warning, setWarning] = useState<string | null>(null);
   const [reloading, setReloading] = useState(false);
@@ -194,10 +206,12 @@ export function MeltingStepsPanel({
     );
   };
 
-  const open = (next: Form, initialValue: string) => {
+  /** `clicked`: the temperature clicked, when `initialValue` is the found peak it snapped to. */
+  const open = (next: Form, initialValue: string, clicked?: string) => {
     start();
     setForm(next);
     onValueChange(initialValue);
+    setSnap(clicked === undefined ? null : { to: initialValue, clicked });
   };
 
   const reload = async () => {
@@ -288,7 +302,7 @@ export function MeltingStepsPanel({
     if (!editable || busy) return;
     if (request.kind === "add") {
       const { wellId, window = null, value: at = "" } = request;
-      if (wellId) open({ kind: "add", wellId, window, reason: "" }, at);
+      if (wellId) open({ kind: "add", wellId, window, reason: "" }, at, request.clicked);
       return;
     }
     const s = analysis.steps.find((o) => o.id === request.stepId);
@@ -297,11 +311,14 @@ export function MeltingStepsPanel({
     else if (request.kind === "assign") openAssign(s, request.window);
     else {
       const initial = request.kind === "correct" ? (request.value ?? stepInput(s.value)) : "";
-      open({ kind: request.kind, step: s, reason: s.reason ?? "" }, initial);
+      open({ kind: request.kind, step: s, reason: s.reason ?? "" }, initial, request.clicked);
     }
   }, [request]);
 
   const formPosition = form && byWell.get(form.kind === "add" ? form.wellId : form.step.well_id);
+  // A click that fills the field, or Use instrument value, replaces the peak snapped to.
+  const snapped =
+    snap && (form?.kind === "add" || form?.kind === "correct") && value === snap.to ? snap : null;
   // One peak per position and window: saving takes the window from the peak that has it.
   const naming =
     form?.kind === "assign"
@@ -495,6 +512,7 @@ export function MeltingStepsPanel({
           })
         )}
       </ul>
+      {underList}
 
       {form && editable && (
         <div className="space-y-3 rounded-md border p-3">
@@ -545,7 +563,10 @@ export function MeltingStepsPanel({
                     step="any"
                     className="h-8 w-28"
                     value={value}
-                    onChange={(e) => onValueChange(e.target.value)}
+                    onChange={(e) => {
+                      setSnap(null);
+                      onValueChange(e.target.value);
+                    }}
                   />
                   <span className="text-sm text-muted-foreground">{unit}</span>
                   {form.kind === "correct" && form.step.instrument_value !== null && (
@@ -612,6 +633,23 @@ export function MeltingStepsPanel({
               />
             </div>
           </div>
+          {snapped && (
+            <p className="text-xs text-muted-foreground">
+              {`Snapped to the peak of the derivative at ${twoDecimals(snapped.to)} ${unit}. You clicked ${twoDecimals(snapped.clicked)} ${unit}: `}
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 text-xs font-normal"
+                onClick={() => {
+                  onValueChange(snapped.clicked);
+                  setSnap(null);
+                }}
+              >
+                use that
+              </Button>
+              .
+            </p>
+          )}
           {replaced && (
             <p className="text-xs text-muted-foreground">
               {`${replaced.assigned_window} is currently the peak at ${fmt(replaced.value)} ${unit} on this position; saving replaces it.`}

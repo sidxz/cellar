@@ -9,6 +9,7 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.orm.util import identity_key
 
 from cellar.domain.screening_assay.melting_step import (
     MeltingStep,
@@ -55,10 +56,17 @@ class SQLAlchemyMeltingStepRepository:
                 version=step.version,
                 updated_at=step.updated_at,
             )
-        )  # default session sync keeps an already-loaded row current for later reads
-        result = await self._uow.session.execute(stmt)
+        )
+        session = self._uow.session
+        # Without the session-wide synchronization: it compares the statement with every
+        # loaded step, which is quadratic when many steps of a run change in one request.
+        result = await session.execute(stmt, execution_options={"synchronize_session": False})
         if not result.rowcount:
             raise ConflictError("This peak was changed by someone else. Reload and try again.")
+        # The one row this changed, if it is loaded, is marked stale so a later read reloads it.
+        loaded = session.identity_map.get(identity_key(MeltingStepModel, step.id))
+        if loaded is not None:
+            session.expire(loaded)
 
     async def find_by_id(self, workspace_id: uuid.UUID, step_id: uuid.UUID) -> MeltingStep | None:
         stmt = select(MeltingStepModel).where(

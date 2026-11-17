@@ -15,6 +15,7 @@ import {
   nearestPeak,
   orderedPositions,
   pickFromClick,
+  pickReach,
   positionsNotShown,
   preferSelectedTrace,
   reportedColumns,
@@ -634,6 +635,11 @@ describe("picking on the plot", () => {
     expect(nearestPeak(peaks, 48.9, 70)).toBe(peaks[0]);
     expect(nearestPeak(peaks, 48.9, 5)).toBeNull();
     expect(nearestPeak(peaks, 48.3, 5)).toBe(peaks[0]);
+  });
+
+  it("pickReach is 2% of the x range in view, and never under 0.3", () => {
+    expect(pickReach(70)).toBeCloseTo(1.4);
+    expect(pickReach(5)).toBe(0.3);
   });
 
   it("xSpan and ySpan are the ranges the figure's traces cover", () => {

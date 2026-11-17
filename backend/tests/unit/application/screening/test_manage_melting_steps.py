@@ -1,7 +1,9 @@
-"""Unit tests for AddMeltingStep, ReviewMeltingStep and AssignMeltingStep."""
+"""Unit tests for AddMeltingStep, ReviewMeltingStep, AssignMeltingStep and
+AcceptMeltingSteps."""
 
 from __future__ import annotations
 
+import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -9,11 +11,15 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.screening.manage_melting_steps import (
+    PEAKS_COMPUTE_FAILED,
+    AcceptMeltingSteps,
+    AcceptMeltingStepsCommand,
     AddMeltingStep,
     AddMeltingStepCommand,
     AssignMeltingStep,
     AssignMeltingStepCommand,
     MeltingStepChange,
+    MeltingStepsAccepted,
     ReviewMeltingStep,
     ReviewMeltingStepCommand,
 )
@@ -100,6 +106,7 @@ class Harness:
         self.add = AddMeltingStep(**deps)
         self.review = ReviewMeltingStep(**deps)
         self.assign = AssignMeltingStep(**deps)
+        self.accept = AcceptMeltingSteps(**deps)
 
     def peak(self, well=None, *, window=None, version=1):  # type: ignore[no-untyped-def]
         """Another peak of the run on the same signal, on the step's position by default."""
@@ -134,6 +141,15 @@ class Harness:
     def assign_cmd(self, **kw):  # type: ignore[no-untyped-def]
         base = dict(workspace_id=self.ws, step_id=self.step.id, expected_version=1, window="Main")
         return AssignMeltingStepCommand(**{**base, **kw})
+
+    async def do_accept(self, *steps, auth=None):  # type: ignore[no-untyped-def]
+        """Accept the peaks given, each as the peak (read at its version) or (id, version)."""
+        cmd = AcceptMeltingStepsCommand(
+            workspace_id=self.ws,
+            run_id=self.run.id,
+            steps=tuple(s if isinstance(s, tuple) else (s.id, s.version) for s in steps),
+        )
+        return await self.accept(cmd, auth=auth or self.auth)
 
     async def do_add(self, auth=None, **kw):  # type: ignore[no-untyped-def]
         return await self.add(self.add_cmd(**kw), auth=auth or self.auth)
@@ -533,3 +549,155 @@ async def test_add_without_window_does_not_read_the_protocol():
     assert out.step.assigned_window is None
     h.protocol_repo.find_by_id_in_workspace.assert_not_awaited()
     h.step_repo.find_by_run.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Accepting many peaks of a run in one request
+# ---------------------------------------------------------------------------
+
+
+def _unreviewed(h: Harness) -> MeltingStep:
+    """A second unreviewed instrument peak of the run, on the other position."""
+    peak = MeltingStep(
+        workspace_id=h.ws,
+        run_id=h.run.id,
+        well_id=h.w1.id,
+        channel_key="ratio",
+        source=MeltingStepSource.INSTRUMENT,
+        value=61.0,
+        instrument_value=61.0,
+        instrument_label="T1",
+    )
+    h.steps.append(peak)
+    return peak
+
+
+def _rejected(h: Harness) -> MeltingStep:
+    peak = h.peak()
+    peak.status, peak.reason = MeltingStepStatus.REJECTED, "bubble"
+    return peak
+
+
+async def test_accept_many_changes_the_unreviewed_and_skips_the_rest():
+    h = Harness()
+    other, accepted, rejected = _unreviewed(h), h.peak(version=4), _rejected(h)
+    # A stale version on a peak that does not change is not looked at.
+    out = (await h.do_accept(h.step, (accepted.id, 1), other, (rejected.id, 9))).unwrap()
+
+    assert out == MeltingStepsAccepted((h.step, other), 2, True)
+    assert out.compute_warning is None
+    for peak in (h.step, other):
+        assert (peak.status, peak.version) == (MeltingStepStatus.ACCEPTED, 2)
+        assert peak.changed_by == h.auth.user_id and peak.reason is None
+    assert (accepted.status, accepted.version) == (MeltingStepStatus.ACCEPTED, 4)
+    assert (rejected.status, rejected.reason) == (MeltingStepStatus.REJECTED, "bubble")
+    assert [c.args[0] for c in h.step_repo.update.await_args_list] == [h.step, other]
+    assert {c.kwargs["expected_version"] for c in h.step_repo.update.await_args_list} == {1}
+    # One audit record per changed peak, as the single accept writes it.
+    records = [c.kwargs for c in h.audit.record.await_args_list]
+    assert [kw["entity_id"] for kw in records] == [h.step.id, other.id]
+    for kw in records:
+        assert kw["operation_type"] is OperationType.PROPERTY_EDIT
+        assert (kw["entity_type"], kw["reason"]) == ("MeltingStep", None)
+        assert kw["user_id"] == h.auth.user_id and kw["session"] is h.uow.session
+        assert [(e.field_name, e.action, e.old_value, e.new_value) for e in kw["entries"]] == [
+            ("status", AuditAction.UPDATE, "unreviewed", "accepted")
+        ]
+    assert h.uow.committed
+    # One recalculation for the whole request.
+    h.engine.compute_for_run.assert_awaited_once_with(h.run.id, workspace_id=h.ws)
+    h.step_repo.find_by_run.assert_awaited_once_with(h.ws, h.run.id)
+    h.curve_repo.find_by_wells.assert_not_awaited()
+
+
+async def test_accept_many_writes_the_same_audit_record_as_the_single_accept():
+    one, many = Harness(), Harness()
+    (await one.do_review()).unwrap()
+    (await many.do_accept(many.step)).unwrap()
+    single, bulk = one.audit.record.await_args.kwargs, many.audit.record.await_args.kwargs
+    assert single.keys() == bulk.keys()
+    for kw in (single, bulk):
+        assert (kw["operation_type"], kw["entity_type"]) == (
+            OperationType.PROPERTY_EDIT,
+            "MeltingStep",
+        )
+        assert kw["reason"] is None
+        assert [
+            (e.entity_type, e.field_name, e.action, e.old_value, e.new_value)
+            for e in kw["entries"]
+        ] == [("MeltingStep", "status", AuditAction.UPDATE, "unreviewed", "accepted")]
+
+
+async def test_accept_many_with_a_peak_that_is_not_the_runs_is_not_found():
+    h = Harness()
+    stranger = uuid.uuid4()
+    failure = (await h.do_accept(h.step, (stranger, 1))).failure()
+    assert isinstance(failure, NotFoundError) and str(stranger) in str(failure)
+    assert (h.step.status, h.step.version) == (MeltingStepStatus.UNREVIEWED, 1)
+    h.assert_nothing_written()
+
+
+async def test_accept_many_with_a_stale_version_fails_the_whole_request():
+    h = Harness()
+    other = _unreviewed(h)
+    h.step_repo.update.side_effect = [None, ConflictError("changed by someone else")]
+    result = await h.do_accept(h.step, (other.id, 7))
+    assert isinstance(result, Failure) and isinstance(result.failure(), ConflictError)
+    assert h.step_repo.update.await_args_list[1].kwargs == {"expected_version": 7}
+    # The first peak's write is never committed, and nothing is recalculated.
+    assert h.uow.committed is False
+    h.engine.compute_for_run.assert_not_awaited()
+
+
+@pytest.mark.parametrize(
+    ("status", "locked", "message"),
+    [
+        (RunStatus.APPROVED, False, NOT_EDITABLE),
+        (RunStatus.DRAFT, True, "This run is locked"),
+    ],
+)
+async def test_accept_many_refused_on_an_approved_or_locked_run(status, locked, message):
+    h = Harness(status=status, locked=locked)
+    failure = (await h.do_accept(h.step)).failure()
+    assert isinstance(failure, ConflictError) and failure.message == message
+    h.step_repo.find_by_run.assert_not_awaited()
+    h.assert_nothing_written()
+
+
+async def test_accept_many_allowed_on_a_completed_run():
+    h = Harness(status=RunStatus.COMPLETED)
+    assert (await h.do_accept(h.step)).unwrap().recalculated
+
+
+async def test_accept_many_with_nothing_to_change_writes_nothing():
+    h = Harness()
+    accepted, rejected = h.peak(), _rejected(h)
+    out = (await h.do_accept(accepted, rejected)).unwrap()
+    assert out == MeltingStepsAccepted((), 2, False)
+    h.assert_nothing_written()
+
+
+async def test_accept_many_engine_failure_becomes_compute_warning():
+    h = Harness()
+    h.engine.compute_for_run.return_value = Failure(ValidationError("bad formula"))
+    out = (await h.do_accept(h.step, _unreviewed(h))).unwrap()
+    assert (out.recalculated, out.compute_warning) == (False, PEAKS_COMPUTE_FAILED)
+    assert PEAKS_COMPUTE_FAILED.startswith("The peaks were saved, but")
+    assert len(out.steps) == 2 and h.uow.committed
+
+
+async def test_accept_many_run_not_found():
+    h = Harness()
+    h.run_repo.find_by_id_in_workspace.return_value = None
+    assert isinstance((await h.do_accept(h.step)).failure(), NotFoundError)
+    h.assert_nothing_written()
+
+
+async def test_accept_many_needs_an_editor_of_the_workspace():
+    h = Harness()
+    with pytest.raises(AuthorizationError):
+        await h.do_accept(h.step, auth=FakeAuth(role="viewer", workspace_id=h.ws))
+    with pytest.raises(NotFoundError):
+        await h.do_accept(h.step, auth=FakeAuth())
+    h.run_repo.find_by_id_in_workspace.assert_not_awaited()
+    h.assert_nothing_written()

@@ -24,11 +24,15 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AcceptMeltingStepsRequest,
+  AcceptMeltingStepsResponse,
   AddMeltingStepRequest,
   AssignMeltingStepRequest,
+  GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,
   HTTPValidationError,
   MeltingAnalysisResponse,
   MeltingStepChangeResponse,
+  PeakCandidatesResponse,
   ReviewMeltingStepRequest
 } from '../model';
 
@@ -158,6 +162,141 @@ export function useGetMeltingAnalysisApiV1RunsRunIdMeltingAnalysisGet<TData = Aw
 
 
 /**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export const getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet = (
+    runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<PeakCandidatesResponse>(
+      {url: `/api/v1/runs/${runId}/wells/${wellId}/peak-candidates`, method: 'GET',
+        params, signal
+    },
+      );
+    }
+
+
+
+
+export const getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryKey = (runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams,) => {
+    return [
+    `/api/v1/runs/${runId}/wells/${wellId}/peak-candidates`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryOptions = <TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryKey(runId,wellId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>> = ({ signal }) => getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet(runId,wellId,params, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: runId !== null && runId !== undefined && wellId !== null && wellId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryResult = NonNullable<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>>
+export type GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryError = HTTPValidationError
+
+
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params: undefined |  GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>,
+          TError,
+          Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * The candidate peaks of one position on each signal it has a trace on: the extrema of
+ * the smoothed first derivative that stand out from its noise, calculated on request and
+ * never stored. ``smoothing_window`` is in x units; its default and its upper bound are
+ * those of the derivative view of ``GET /runs/{run_id}/curves`` on the same signal.
+ * @summary Get Peak Candidates
+ */
+export function useGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet<TData = Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError = HTTPValidationError>(
+ runId: string,
+    wellId: string,
+    params?: GetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams, options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getGetPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetQueryOptions(runId,wellId,params,options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
  * Add a hand-made melting step to a position, then recalculate the run.
  * @summary Add Melting Step
  */
@@ -226,6 +365,84 @@ export const useAddMeltingStepApiV1RunsRunIdMeltingStepsPost = <TError = HTTPVal
         TContext
       > => {
       return useMutation(getAddMeltingStepApiV1RunsRunIdMeltingStepsPostMutationOptions(options), queryClient);
+    }
+    /**
+ * Accept many unreviewed melting steps of the run in one save, then recalculate it once.
+ *
+ * All or nothing: a step that is not the run's (404) or that changed since it was read
+ * (409) fails the whole request. Steps already accepted, or rejected, are left as they are
+ * and counted in ``skipped``.
+ * @summary Accept Melting Steps
+ */
+export const acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost = (
+    runId: string,
+    acceptMeltingStepsRequest: AcceptMeltingStepsRequest,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<AcceptMeltingStepsResponse>(
+      {url: `/api/v1/runs/${runId}/melting-steps/accept`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: acceptMeltingStepsRequest, signal
+    },
+      );
+    }
+
+
+
+
+export const getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationKey = () => ['acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost'] as const;
+
+export const getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, TError,AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, TError,AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables, TContext> => {
+
+const mutationKey = getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables> = (props) => {
+          const {runId,data} = props ?? {};
+
+          return  acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost(runId,data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationResult = NonNullable<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>>
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationBody = AcceptMeltingStepsRequest
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationError = HTTPValidationError
+    export type AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables = {runId: string;data: AcceptMeltingStepsRequest}
+
+    /**
+ * Accept many unreviewed melting steps of the run in one save, then recalculate it once.
+ *
+ * All or nothing: a step that is not the run's (404) or that changed since it was read
+ * (409) fails the whole request. Steps already accepted, or rejected, are left as they are
+ * and counted in ``skipped``.
+ * @summary Accept Melting Steps
+ */
+export const useAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>, TError,AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof acceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPost>>,
+        TError,
+        AcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationVariables,
+        TContext
+      > => {
+      return useMutation(getAcceptMeltingStepsApiV1RunsRunIdMeltingStepsAcceptPostMutationOptions(options), queryClient);
     }
     /**
  * Accept, reject or correct a melting step, then recalculate the run.

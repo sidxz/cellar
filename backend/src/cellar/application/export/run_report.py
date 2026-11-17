@@ -39,7 +39,6 @@ REFERENCE = "Reference"
 SEVERAL_STEPS = "Several peaks"
 NO_STEP = "No peak"
 NO_REFERENCE = "No reference"
-PROVISIONAL = "Provisional"
 REVIEWED = "Reviewed"
 DIFFERS = "different number of peaks than the reference"
 
@@ -331,7 +330,7 @@ def _rows(
             # The peak behind the Tm is the one the rule names (r.step_id).
             status = _status(p.well_type, r.flags, peaks.get(r.step_id))
             if p.well_id in differs.get(w.channel_key, ()):
-                status = f"{status} · {DIFFERS}"
+                status = f"{status} · {DIFFERS}" if status else DIFFERS[0].upper() + DIFFERS[1:]
             cells[w.window] = RunCell(
                 tm=r.tm, delta_tm=r.delta_tm, status=status, named_by=_NAMED[r.named_by]
             )
@@ -378,9 +377,8 @@ def _status(well_type: str, flags, counting: MeltingStep | None) -> str:
         return NO_STEP
     if WindowFlag.NO_REFERENCE in flags:
         return NO_REFERENCE
-    return (
-        PROVISIONAL if counting and counting.status == MeltingStepStatus.UNREVIEWED else REVIEWED
-    )
+    # Only a peak a person accepted reads as reviewed; an unreviewed one says nothing.
+    return "" if counting and counting.status == MeltingStepStatus.UNREVIEWED else REVIEWED
 
 
 def _batch_suffix(p: WellMapEntry) -> str | None:

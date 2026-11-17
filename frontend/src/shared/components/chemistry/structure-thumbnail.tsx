@@ -9,6 +9,8 @@ interface StructureThumbnailProps {
   smiles: string;
   /** Size in pixels (square) */
   size?: number;
+  /** Height in pixels of a box that is not square; `size` is then its width. */
+  height?: number;
   /** Additional CSS class */
   className?: string;
   /** Query to highlight; SMILES queries must be parsed as molecules to perceive aromaticity. */
@@ -25,6 +27,7 @@ interface StructureThumbnailProps {
 function StructureThumbnailInner({
   smiles,
   size = 48,
+  height = size,
   className,
   highlightQuery,
   queryKind = "smarts",
@@ -48,10 +51,9 @@ function StructureThumbnailInner({
         }
 
         // Render at 2x for HiDPI crispness, display at CSS size
-        const renderSize = size * 2;
         const drawOpts: Record<string, unknown> = {
-          width: renderSize,
-          height: renderSize,
+          width: size * 2,
+          height: height * 2,
           bondLineWidth: 2.0,
           minFontSize: 14,
           addAtomIndices: false,
@@ -96,12 +98,10 @@ function StructureThumbnailInner({
       cancelled = true;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [smiles, size, highlightQuery, queryKind]);
+  }, [smiles, size, height, highlightQuery, queryKind]);
 
   if (!blobUrl) {
-    return (
-      <div className={cn("rounded bg-muted", className)} style={{ width: size, height: size }} />
-    );
+    return <div className={cn("rounded bg-muted", className)} style={{ width: size, height }} />;
   }
 
   return (
@@ -109,7 +109,7 @@ function StructureThumbnailInner({
       src={blobUrl}
       alt="Structure"
       width={size}
-      height={size}
+      height={height}
       className={cn("dark:invert", className)}
     />
   );

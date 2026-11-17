@@ -164,6 +164,9 @@ export interface CurveViewerProps {
   onShowReferencesChange: (on: boolean) => void;
   selection: SelectionState;
   onSelectionChange: (next: SelectionState) => void;
+  /** The signal asked for, from a parent that can also switch it itself; it
+   *  shows as chosen at once. Without it the viewer shows the one it last asked for. */
+  channel?: string;
   onChannelChange: (key: string) => void;
   onViewChange: (view: CurveView) => void;
   /** On blur or Enter, never per keystroke; undefined lets the API choose. */
@@ -227,6 +230,7 @@ function CurveViewerBody({
   onShowReferencesChange,
   selection,
   onSelectionChange,
+  channel: askedChannel,
   onChannelChange,
   onViewChange,
   onWindowChange,
@@ -472,7 +476,7 @@ function CurveViewerBody({
         <Field label="Signal" bare={compactControls}>
           <Segmented
             label="Signal"
-            value={channel ?? set.channel ?? ""}
+            value={askedChannel ?? channel ?? set.channel ?? ""}
             options={set.channels.map((c) => ({ value: c.key, label: c.label }))}
             onChange={(key) => {
               setChannel(key);
