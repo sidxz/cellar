@@ -32,6 +32,8 @@ const melting: { data?: MeltingAnalysis; isLoading?: boolean } = {};
 const saveStep = vi.fn();
 vi.mock("../hooks/use-melting-analysis", () => ({
   useMeltingAnalysis: () => ({ ...melting, refetch: vi.fn() }),
+  // The peaks found in a position's traces are covered in melting-steps-panel.test.tsx.
+  usePeakCandidates: () => ({ data: undefined }),
   useAddMeltingStep: () => ({ mutate: saveStep, isPending: false }),
   useReviewMeltingStep: () => ({ mutate: saveStep, isPending: false }),
   useAssignMeltingStep: () => ({ mutate: saveStep, isPending: false }),

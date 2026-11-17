@@ -8,10 +8,11 @@ import type {
   AcceptMeltingStepsResponse,
   AddMeltingStepRequest,
   AssignMeltingStepRequest,
+  PeakCandidatesResponse,
   ReviewMeltingStepRequest,
 } from "@/shared/lib/api/model";
 import type { MeltingAnalysis, MeltingStepChange } from "../types";
-import { MELTING_ANALYSIS_KEY, READOUT_DATA_KEY } from "./query-keys";
+import { MEASURED_CURVES_KEY, MELTING_ANALYSIS_KEY, READOUT_DATA_KEY } from "./query-keys";
 
 /** A run's melting steps and its temperature windows' results. */
 export function useMeltingAnalysis(runId: string) {
@@ -22,6 +23,28 @@ export function useMeltingAnalysis(runId: string) {
         url: `${API_V1}/runs/${runId}/melting-analysis`,
         method: "GET",
       }),
+  });
+}
+
+/** The clear peaks found in one position's traces, per signal, strongest first.
+ *  GET /api/v1/runs/{runId}/wells/{wellId}/peak-candidates?smoothing_window=
+ *  (without a smoothing the API uses the Derivative view's default). Nothing is
+ *  asked without a position. They are worked out from the traces, so the key
+ *  sits under the curves': what reloads those reloads these. */
+export function usePeakCandidates(
+  runId: string,
+  wellId: string | undefined,
+  smoothingWindow: number | undefined,
+) {
+  return useQuery({
+    queryKey: [...MEASURED_CURVES_KEY, runId, "peak-candidates", wellId, smoothingWindow ?? null],
+    queryFn: () =>
+      customInstance<PeakCandidatesResponse>({
+        url: `${API_V1}/runs/${runId}/wells/${wellId}/peak-candidates`,
+        method: "GET",
+        params: { smoothing_window: smoothingWindow },
+      }),
+    enabled: !!wellId,
   });
 }
 

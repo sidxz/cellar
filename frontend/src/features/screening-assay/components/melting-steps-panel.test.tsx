@@ -17,16 +17,20 @@ const useRunCurves = vi.fn();
 vi.mock("../hooks/use-run-curves", () => ({
   useRunCurves: (...args: unknown[]) => useRunCurves(...args),
 }));
-vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => true }));
+const canEdit = { value: true };
+vi.mock("@/shared/hooks/use-current-user", () => ({ useCanEdit: () => canEdit.value }));
 vi.mock("./edit-labelling-dialog", () => ({ EditLabellingDialog: () => null }));
 vi.mock("@/shared/components/data-grid/data-grid", async () => ({
   DataGrid: (await import("../test/test-data-grid")).TableGrid,
 }));
 
 const api = vi.fn();
+/** The reads of a position's found peaks, apart from `api`, which tests replace whole. */
+const found = vi.fn();
 vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/shared/lib/api/custom-instance")>()),
-  customInstance: (req: unknown) => api(req),
+  customInstance: (req: { url: string }) =>
+    req.url.endsWith("/peak-candidates") ? found(req) : api(req),
 }));
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
@@ -182,8 +186,11 @@ beforeEach(() => {
     step_checks: [],
     outside_every_window: [],
   };
+  canEdit.value = true;
   useRunCurves.mockReset();
   useRunCurves.mockReturnValue({ data: curves, isLoading: false, isPlaceholderData: false });
+  found.mockReset();
+  found.mockResolvedValue({ signals: [] });
   api.mockReset();
   api.mockImplementation((req: { url: string; method: string }) => {
     if (req.url.endsWith("/melting-analysis")) return Promise.resolve(analysis);
@@ -193,8 +200,9 @@ beforeEach(() => {
   });
 });
 
+let qc: QueryClient;
 function renderPanel() {
-  const qc = new QueryClient({
+  qc = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
   render(
@@ -702,6 +710,291 @@ describe("MeltingStepsPanel", () => {
       const table = await select("Position 2");
       fireEvent.click(within(row(table, "41.2")).getByRole("button", { name: "Correct" }));
       expect(screen.queryByText(HINT)).not.toBeInTheDocument();
+    });
+  });
+});
+
+describe("the peaks found in a position's traces", () => {
+  /** What the read answers: per signal, [temperature, strength] pairs. */
+  const peaksOn = (bySignal: Record<string, [number, number][]>) => ({
+    signals: Object.entries(bySignal).map(([channel_key, peaks]) => ({
+      channel_key,
+      smoothing_window: 3.5,
+      candidates: peaks.map(([value, strength]) => ({ value, direction: "rising", strength })),
+    })),
+  });
+  const read = (wellId: string) => `/api/v1/runs/r1/wells/${wellId}/peak-candidates`;
+  /** The reads asked for: the position's and the smoothing sent. */
+  const reads = () => found.mock.calls.map(([req]) => [req.url, req.params.smoothing_window]);
+  /** Every read asked for has come back, or failed. */
+  const settled = () =>
+    waitFor(() => {
+      expect(found).toHaveBeenCalled();
+      expect(qc.isFetching()).toBe(0);
+    });
+  // The traces run from 20 to 90 °C, so a click reaches 1.4 °C.
+  const clickTrace = (wellId: string, x: number) =>
+    act(() => plotProps.at(-1)?.onClick?.({ points: [{ x, y: 2, data: { meta: wellId } }] }));
+  const inBar = (kind: "Peak" | "Spot", name: string) =>
+    fireEvent.click(
+      within(screen.getByRole("region", { name: `${kind} picked` })).getByRole("button", { name }),
+    );
+  const value = () => screen.getByLabelText("Value");
+  const SNAPPED =
+    "Snapped to the peak of the derivative at 72.71 °C. You clicked 72.53 °C: use that.";
+  const snapLine = () => screen.queryByText(/^Snapped to/);
+
+  describe("a click on the plot", () => {
+    /** Position 3 with its found peaks read, and a spot picked on its trace at 72.53 °C. */
+    const spotNear = async (answer: unknown) => {
+      found.mockResolvedValue(answer);
+      renderPanel();
+      await select("Position 3");
+      await settled();
+      clickTrace("w3", 72.53);
+    };
+
+    it("Add a peak here offers the found peak within reach and says so; use that puts the clicked temperature back", async () => {
+      await spotNear(
+        peaksOn({
+          a: [
+            [48.1, 40],
+            [72.71, 30],
+          ],
+        }),
+      );
+      // The spot is where the click landed; the found peak is offered in the form.
+      expect(screen.getByRole("region", { name: "Spot picked" })).toHaveTextContent(
+        "Position 3 · 72.53 °C",
+      );
+      inBar("Spot", "Add a peak here");
+      expect(value()).toHaveValue(72.71);
+      expect(snapLine()?.textContent).toBe(SNAPPED);
+      expect(writes()).toHaveLength(0);
+      fireEvent.click(screen.getByRole("button", { name: "use that" }));
+      expect(value()).toHaveValue(72.53);
+      expect(snapLine()).toBeNull();
+    });
+
+    it("saves the offered peak as any peak placed by hand, on the form's Save", async () => {
+      await spotNear(peaksOn({ a: [[72.71, 30]] }));
+      inBar("Spot", "Add a peak here");
+      fireEvent.click(screen.getByRole("button", { name: "Save" }));
+      await waitFor(() => expect(writes()).toHaveLength(1));
+      expect(writes()[0]).toEqual({
+        url: "/api/v1/runs/r1/melting-steps",
+        method: "POST",
+        data: { well_id: "w3", channel_key: "a", value: 72.71 },
+      });
+    });
+
+    it("Move, then a click, offers the found peak within reach in Correct", async () => {
+      found.mockResolvedValue(peaksOn({ a: [[72.71, 30]] }));
+      renderPanel();
+      await select("Position 2");
+      await settled();
+      clickTrace("w2", 64.2);
+      inBar("Peak", "Move");
+      clickTrace("w2", 72.53);
+      expect(screen.getByText("Correct the peak at 64 °C on Position 2")).toBeInTheDocument();
+      expect(value()).toHaveValue(72.71);
+      expect(snapLine()?.textContent).toBe(SNAPPED);
+      // A later click fills the open form with the temperature clicked, as before.
+      clickTrace("w2", 72.4);
+      expect(value()).toHaveValue(72.4);
+      expect(snapLine()).toBeNull();
+      expect(writes()).toHaveLength(0);
+    });
+
+    it("uses the clicked temperature when no found peak of the shown signal is within reach", async () => {
+      // Signal B has one right there: a click means the peaks of the signal shown.
+      await spotNear(peaksOn({ a: [[60, 30]], b: [[72.6, 30]] }));
+      inBar("Spot", "Add a peak here");
+      expect(value()).toHaveValue(72.53);
+      expect(snapLine()).toBeNull();
+    });
+
+    it("uses the clicked temperature while the found peaks are loading", async () => {
+      found.mockReturnValue(new Promise(() => {}));
+      renderPanel();
+      await select("Position 3");
+      await waitFor(() => expect(found).toHaveBeenCalled());
+      clickTrace("w3", 72.53);
+      inBar("Spot", "Add a peak here");
+      expect(value()).toHaveValue(72.53);
+      expect(snapLine()).toBeNull();
+    });
+
+    it("uses the clicked temperature when the found peaks could not be loaded", async () => {
+      found.mockRejectedValue(new Error("API error: 500"));
+      renderPanel();
+      await select("Position 3");
+      await settled();
+      clickTrace("w3", 72.53);
+      inBar("Spot", "Add a peak here");
+      expect(value()).toHaveValue(72.53);
+      expect(snapLine()).toBeNull();
+    });
+
+    it("leaves a typed value as typed", async () => {
+      found.mockResolvedValue(peaksOn({ a: [[72.71, 30]] }));
+      renderPanel();
+      await select("Position 3");
+      await settled();
+      fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
+      fireEvent.change(value(), { target: { value: "72.53" } });
+      expect(value()).toHaveValue(72.53);
+      expect(snapLine()).toBeNull();
+      // Typing over an offered peak takes over, and the line does not come back.
+      clickTrace("w3", 72.53);
+      inBar("Spot", "Add a peak here");
+      expect(snapLine()).not.toBeNull();
+      fireEvent.change(value(), { target: { value: "72.6" } });
+      expect(value()).toHaveValue(72.6);
+      expect(snapLine()).toBeNull();
+      fireEvent.change(value(), { target: { value: "72.71" } });
+      expect(snapLine()).toBeNull();
+    });
+
+    it("a spot on another drawn position's trace is offered that position's found peak", async () => {
+      found.mockImplementation((req: { url: string }) =>
+        Promise.resolve(peaksOn({ a: [[req.url === read("w1") ? 40.2 : 72.71, 30]] })),
+      );
+      renderPanel();
+      await select("Position 3");
+      await settled();
+      // The reference, drawn beside the selected position.
+      clickTrace("w1", 40);
+      await waitFor(() => expect(reads()).toContainEqual([read("w1"), undefined]));
+      await settled();
+      inBar("Spot", "Add a peak here");
+      expect(value()).toHaveValue(40.2);
+      // The position the results open on, the one then selected, the one picked on: no others.
+      expect(reads()).toEqual([
+        [read("w2"), undefined],
+        [read("w3"), undefined],
+        [read("w1"), undefined],
+      ]);
+    });
+  });
+
+  describe("a step on another signal", () => {
+    const hint = () => screen.queryByText(/shows a step near/);
+    /** Position 3's value in Main (50–85 °C), a window of Signal A unless said, with the flags given. */
+    const position3InMain = (flags: string[], channel = "a") => {
+      analysis = {
+        ...analysis,
+        steps: steps.filter((s) => s.well_id !== "w3"),
+        windows: [
+          {
+            ...win("Main", 50, 85, channel),
+            positions: [
+              { well_id: "w3", tm: null, delta_tm: null, flags, named_by: null, step_id: null },
+            ],
+          },
+        ],
+      };
+    };
+
+    it("says which signal shows one where the lead window reads No peak, and Show switches to it", async () => {
+      position3InMain(["no_step_in_window"]);
+      found.mockResolvedValue(peaksOn({ a: [], b: [[72.71, 30]] }));
+      renderPanel();
+      const list = await select("Position 3");
+      expect(within(gridRow("Position 3")).getByText("No peak")).toBeInTheDocument();
+      const line = await screen.findByText("Signal B shows a step near 72.7 °C.");
+      // Directly under the peaks list, and not naming the only position listed.
+      expect(list.nextElementSibling).toContainElement(line);
+      expect(list.nextElementSibling).not.toHaveTextContent("Position 3");
+      fireEvent.click(screen.getByRole("button", { name: "Show Signal B" }));
+      expect(useRunCurves.mock.calls.at(-1)?.[1]).toMatchObject({ channel: "b" });
+      expect(screen.getByRole("tab", { name: "Signal B" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(writes()).toHaveLength(0);
+    });
+
+    it("Show moves the signal switch too, after the switch itself was used", async () => {
+      // The curves follow the signal asked for; Position 3 reads No peak in Main on Signal B.
+      useRunCurves.mockImplementation((_runId: string, params: { channel?: string }) => ({
+        data: { ...curves, channel: params.channel ?? "a" },
+        isLoading: false,
+        isPlaceholderData: false,
+      }));
+      position3InMain(["no_step_in_window"], "b");
+      found.mockResolvedValue(peaksOn({ a: [[72.71, 30]], b: [] }));
+      renderPanel();
+      await select("Position 3");
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "Signal B" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Show Signal A" }));
+      expect(screen.getByRole("tab", { name: "Signal A" })).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      expect(useRunCurves.mock.calls.at(-1)?.[1]).toMatchObject({ channel: "a" });
+    });
+
+    it("gives no hint when the window has a peak", async () => {
+      position3InMain([]);
+      found.mockResolvedValue(peaksOn({ a: [], b: [[72.71, 30]] }));
+      renderPanel();
+      await select("Position 3");
+      await settled();
+      expect(hint()).toBeNull();
+    });
+
+    it("gives no hint when no other signal has a clear peak inside the window's range", async () => {
+      position3InMain(["no_step_in_window"]);
+      // One above the window; and the shown signal's own do not count.
+      found.mockResolvedValue(peaksOn({ a: [[72.71, 30]], b: [[90, 30]] }));
+      renderPanel();
+      await select("Position 3");
+      await settled();
+      expect(hint()).toBeNull();
+    });
+
+    it("shows a viewer the hint too", async () => {
+      canEdit.value = false;
+      position3InMain(["no_step_in_window"]);
+      found.mockResolvedValue(peaksOn({ a: [], b: [[72.71, 30]] }));
+      renderPanel();
+      await select("Position 3");
+      expect(await screen.findByText("Signal B shows a step near 72.7 °C.")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Show Signal B" })).toBeInTheDocument();
+    });
+
+    it("names the position when several are listed: the one selected last", async () => {
+      position3InMain(["no_step_in_window"]);
+      found.mockResolvedValue(peaksOn({ a: [], b: [[72.71, 30]] }));
+      renderPanel();
+      await select("Position 2", "Position 3");
+      const line = await screen.findByText("Signal B shows a step near 72.7 °C.");
+      expect(line.closest("li")).toHaveTextContent(/^Position 3/);
+    });
+
+    it("reads a position's found peaks once per smoothing, for the hint and the snap alike", async () => {
+      position3InMain(["no_step_in_window"]);
+      found.mockResolvedValue(peaksOn({ a: [[72.71, 30]], b: [[72.6, 30]] }));
+      renderPanel();
+      await select("Position 3");
+      expect(await screen.findByText("Signal B shows a step near 72.6 °C.")).toBeInTheDocument();
+      clickTrace("w3", 72.53);
+      inBar("Spot", "Add a peak here");
+      expect(snapLine()?.textContent).toBe(SNAPPED);
+      expect(reads()).toEqual([[read("w3"), undefined]]);
+      // The Derivative view by itself uses the default smoothing, as the read without one does.
+      fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
+      const field = screen.getByLabelText("Smoothing window");
+      expect(reads()).toHaveLength(1);
+      fireEvent.change(field, { target: { value: "2" } });
+      fireEvent.blur(field);
+      await waitFor(() =>
+        expect(reads()).toEqual([
+          [read("w3"), undefined],
+          [read("w3"), 2],
+        ]),
+      );
     });
   });
 });

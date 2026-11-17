@@ -476,15 +476,21 @@ export function preferSelectedTrace(
   return nearest;
 }
 
-/** The peak nearest to a clicked x, if the click is near enough to mean it: within
- *  2% of the x range in view, so zooming in picks finer, and never under 0.3. */
+/** How far a click on the plot reaches: 2% of the x range in view, so zooming
+ *  in picks finer, and never under 0.3. */
+export function pickReach(visibleSpan: number): number {
+  return Math.max(0.3, 0.02 * visibleSpan);
+}
+
+/** The peak nearest to a clicked x, if the click is near enough to mean it:
+ *  within its reach. */
 export function nearestPeak<T extends { value: number }>(
   peaks: readonly T[],
   x: number,
   visibleSpan: number,
 ): T | null {
   let nearest: T | null = null;
-  let distance = Math.max(0.3, 0.02 * visibleSpan);
+  let distance = pickReach(visibleSpan);
   for (const peak of peaks) {
     const d = Math.abs(peak.value - x);
     if (d <= distance) {
