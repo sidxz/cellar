@@ -145,6 +145,83 @@ def test_manual_step_has_no_instrument_value_and_checks_range():
         step.review(status=UNREVIEWED, value=59.0, reason=None, x_range=RANGE, by=u)
 
 
+def test_assign_marks_accepted_and_records_who_when_why():
+    step, u = _step(48.1), uuid.uuid4()
+    changes = step.assign(window=" Main ", reason=" shoulder ", by=u)
+    assert changes == [
+        ("assigned_window", None, "Main"),
+        ("assignment_reason", None, "shoulder"),
+        ("status", "unreviewed", "accepted"),
+    ]
+    assert step.assigned_window == "Main" and step.assignment_reason == "shoulder"
+    assert step.assigned_by == u and step.assigned_at is not None
+    assert step.status is ACCEPTED and step.version == 2
+    # the assignment is recorded apart from the review
+    assert step.reason is None and step.changed_by is None and step.changed_at is None
+    assert step.fact.assigned_window == "Main" and step.fact.id == step.id
+    assert step.fact.value == 48.1 and step.fact.counts
+
+    for bad in ("x" * 61, "   "):
+        with pytest.raises(ValidationError, match="window"):
+            step.assign(window=bad, reason=None, by=u)
+    with pytest.raises(ValidationError, match="reason"):
+        step.assign(window="Low", reason="x" * (REASON_MAX + 1), by=u)
+    assert step.assigned_window == "Main" and step.version == 2
+
+
+def test_assign_restores_a_rejected_peak():
+    step, u = _step(), uuid.uuid4()
+    step.review(status=REJECTED, value=64.0, reason="noisy", x_range=RANGE, by=u)
+    changes = step.assign(window="Main", reason=None, by=u)
+    assert changes == [("assigned_window", None, "Main"), ("status", "rejected", "accepted")]
+    assert step.counts and step.reason == "noisy" and step.version == 3
+
+
+def test_clear_leaves_status():
+    step, u = _step(), uuid.uuid4()
+    assert step.assign(window=None, reason="nothing to clear", by=u) == []
+    assert step.version == 1
+
+    step.assign(window="Main", reason="shoulder", by=u)
+    step.review(status=REJECTED, value=64.0, reason="noisy", x_range=RANGE, by=u)
+    changes = step.assign(window=None, reason="not needed", by=u)
+    assert changes == [("assigned_window", "Main", None), ("assignment_reason", "shoulder", None)]
+    assert step.assigned_window is None and step.assignment_reason is None
+    assert step.assigned_by is None and step.assigned_at is None
+    assert step.status is REJECTED and step.version == 4
+
+
+def test_assign_same_window_again_changes_nothing():
+    step, u = _step(), uuid.uuid4()
+    step.assign(window="Main", reason="shoulder", by=u)
+    when = step.assigned_at
+    assert step.assign(window="Main", reason="shoulder", by=uuid.uuid4()) == []
+    assert step.version == 2 and step.assigned_by == u and step.assigned_at == when
+
+
+def test_manual_peak_can_be_assigned_at_creation():
+    u = uuid.uuid4()
+    kwargs = dict(workspace_id=uuid.uuid4(), run_id=uuid.uuid4(), well_id=uuid.uuid4())
+    step = MeltingStep.manual(
+        **kwargs,
+        channel_key="ratio",
+        value=58.5,
+        x_range=RANGE,
+        reason=" missed ",
+        by=u,
+        assigned_window="Main",
+    )
+    assert step.assigned_window == "Main" and step.assignment_reason == "missed"
+    assert step.reason == "missed" and step.assigned_by == u
+    assert step.assigned_at == step.changed_at and step.status is ACCEPTED
+
+    plain = MeltingStep.manual(
+        **kwargs, channel_key="ratio", value=58.5, x_range=RANGE, reason="missed", by=u
+    )
+    assert plain.assigned_window is None and plain.assignment_reason is None
+    assert plain.assigned_by is None and plain.assigned_at is None
+
+
 def test_constructor_enforces_source_shape():
     base = dict(workspace_id=uuid.uuid4(), run_id=uuid.uuid4(), well_id=uuid.uuid4())
     with pytest.raises(ValidationError):

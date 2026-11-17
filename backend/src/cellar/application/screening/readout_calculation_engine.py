@@ -642,13 +642,14 @@ class ReadoutCalculationEngine:
         ]
         if not melt_defs or self._melting_step_repo is None or self._measured_curve_repo is None:
             return [], []
-        steps = [
-            (s.well_id, s.channel_key, s.value, s.counts)
-            for s in await self._melting_step_repo.find_by_run(workspace_id, run.id)
-        ]
+        steps = [s.fact for s in await self._melting_step_repo.find_by_run(workspace_id, run.id)]
         traced = await self._measured_curve_repo.list_traced(workspace_id, run.id)
         wells = [(w.id, w.well_type) for w in run.wells]
         batch_and_dose = {w.id: (w.batch_id, w.dose) for w in run.wells}
+        # Window names per channel: an assignment to any other name is stale.
+        on_signal: dict[str, set[str]] = {}
+        for _, mc in melt_defs:
+            on_signal.setdefault(mc.channel_key, set()).add(mc.window)
 
         # Readouts of one window share its channel and limits (Protocol enforces it).
         by_window: dict[str, WindowResult] = {}
@@ -659,7 +660,11 @@ class ReadoutCalculationEngine:
             result = by_window.get(mc.window)
             if result is None:
                 result = by_window[mc.window] = evaluate_window(
-                    mc.low, mc.high, window_positions(wells, steps, mc.channel_key, traced)
+                    mc.window,
+                    mc.low,
+                    mc.high,
+                    window_positions(wells, steps, mc.channel_key, traced),
+                    on_signal[mc.channel_key],
                 )
             if mc.measure.is_series:
                 for sv in series_values(mc, series_points(result, batch_and_dose)):

@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from enum import StrEnum
 
 from cellar.domain.screening_assay.measured_curve import ReportedPoint
-from cellar.domain.screening_assay.melt_window import STEP_KIND
+from cellar.domain.screening_assay.melt_window import STEP_KIND, WINDOW_NAME_MAX, StepFact
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
 
@@ -37,6 +37,15 @@ def _clean_reason(reason: str | None) -> str | None:
     return reason
 
 
+def _clean_window(window: str | None) -> str | None:
+    if window is None:
+        return None
+    window = window.strip()
+    if not 1 <= len(window) <= WINDOW_NAME_MAX:
+        raise ValidationError(f"Temperature window name must be 1 to {WINDOW_NAME_MAX} characters")
+    return window
+
+
 def _check_value(value: float, x_range: tuple[float, float]) -> None:
     lo, hi = x_range
     if not (math.isfinite(value) and lo <= value <= hi):
@@ -49,6 +58,10 @@ class MeltingStep(Entity):
     Instrument steps keep the value the instrument reported; a correction changes
     ``value`` only. Not an AggregateRoot (no events), but versioned so two people
     editing the same step cannot overwrite each other.
+
+    A step can be assigned to a temperature window: it then gives the position's
+    Tm in that window whatever its value. The assignment has its own reason,
+    person and time, apart from the review's.
 
     Invariants:
         - value is finite
@@ -71,6 +84,10 @@ class MeltingStep(Entity):
         reason: str | None = None,
         changed_by: uuid.UUID | None = None,
         changed_at: datetime | None = None,
+        assigned_window: str | None = None,
+        assignment_reason: str | None = None,
+        assigned_by: uuid.UUID | None = None,
+        assigned_at: datetime | None = None,
         version: int = 1,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -99,6 +116,10 @@ class MeltingStep(Entity):
         self.reason = reason
         self.changed_by = changed_by
         self.changed_at = changed_at
+        self.assigned_window = assigned_window
+        self.assignment_reason = assignment_reason
+        self.assigned_by = assigned_by
+        self.assigned_at = assigned_at
         self.version = version
 
     @classmethod
@@ -136,8 +157,13 @@ class MeltingStep(Entity):
         x_range: tuple[float, float],
         reason: str | None,
         by: uuid.UUID,
+        assigned_window: str | None = None,
     ) -> MeltingStep:
+        """A step placed by hand; when assigned in the same save, the one reason serves both."""
         _check_value(value, x_range)
+        reason = _clean_reason(reason)
+        assigned_window = _clean_window(assigned_window)
+        now = datetime.now(UTC)
         return cls(
             workspace_id=workspace_id,
             run_id=run_id,
@@ -147,15 +173,31 @@ class MeltingStep(Entity):
             value=value,
             # Placed by the scientist, so already reviewed, like a corrected step.
             status=MeltingStepStatus.ACCEPTED,
-            reason=_clean_reason(reason),
+            reason=reason,
             changed_by=by,
-            changed_at=datetime.now(UTC),
+            changed_at=now,
+            assigned_window=assigned_window,
+            assignment_reason=reason if assigned_window else None,
+            assigned_by=by if assigned_window else None,
+            assigned_at=now if assigned_window else None,
         )
 
     @property
     def counts(self) -> bool:
         """Unreviewed and accepted steps feed calculations; rejected ones do not."""
         return self.status is not MeltingStepStatus.REJECTED
+
+    @property
+    def fact(self) -> StepFact:
+        """This step as the window naming rule sees it."""
+        return StepFact(
+            id=self.id,
+            well_id=self.well_id,
+            channel_key=self.channel_key,
+            value=self.value,
+            counts=self.counts,
+            assigned_window=self.assigned_window,
+        )
 
     def review(
         self,
@@ -189,5 +231,35 @@ class MeltingStep(Entity):
         now = datetime.now(UTC)
         self.status, self.value, self.reason = status, value, reason
         self.changed_by, self.changed_at, self.updated_at = by, now, now
+        self.version += 1
+        return changes
+
+    def assign(
+        self, *, window: str | None, reason: str | None, by: uuid.UUID
+    ) -> list[tuple[str, str | None, str | None]]:
+        """Assign to a window, or clear with ``window=None``; returns (field, old, new).
+
+        Assigning marks the step accepted (the scientist judged it), which restores
+        a rejected one. Clearing leaves the status alone.
+        """
+        window = _clean_window(window)
+        # A cleared assignment keeps nothing; the reason for clearing goes to the audit trail.
+        reason = _clean_reason(reason) if window else None
+        status = MeltingStepStatus.ACCEPTED if window else self.status
+
+        changes: list[tuple[str, str | None, str | None]] = []
+        if window != self.assigned_window:
+            changes.append(("assigned_window", self.assigned_window, window))
+        if reason != self.assignment_reason:
+            changes.append(("assignment_reason", self.assignment_reason, reason))
+        if status is not self.status:
+            changes.append(("status", self.status.value, status.value))
+        if not changes:
+            return []
+
+        now = datetime.now(UTC)
+        self.assigned_window, self.assignment_reason, self.status = window, reason, status
+        self.assigned_by, self.assigned_at = (by, now) if window else (None, None)
+        self.updated_at = now
         self.version += 1
         return changes

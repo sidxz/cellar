@@ -520,6 +520,7 @@ LEFT_ALONE: dict[str, str] = {
     "rgroup_decomposition_runs.requested_by": _USER,
     "run_tags.assigned_by": _USER,
     "melting_steps.changed_by": _USER,
+    "melting_steps.assigned_by": _USER,
     "runs.hit_criteria_set_by": _USER,
     "runs.locked_by": _USER,
     "runs.operator": _USER,

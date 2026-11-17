@@ -125,11 +125,30 @@ class WindowFlag(StrEnum):
     NO_REFERENCE = "no_reference_value"
 
 
+class NamedBy(StrEnum):
+    """How a position's Tm in a window was chosen."""
+
+    RANGE = "range"
+    ASSIGNMENT = "assignment"
+
+
+@dataclass(frozen=True)
+class StepFact:
+    """One melting step, as the naming rule sees it."""
+
+    id: uuid.UUID
+    well_id: uuid.UUID
+    channel_key: str
+    value: float
+    counts: bool
+    assigned_window: str | None
+
+
 @dataclass(frozen=True)
 class WindowPosition:
     well_id: uuid.UUID
     well_type: WellType
-    steps: tuple[float, ...]  # counted step values on the window's channel
+    steps: tuple[StepFact, ...]  # counted steps on the window's channel, sorted by value
 
 
 @dataclass(frozen=True)
@@ -138,6 +157,9 @@ class PositionWindowResult:
     tm: float | None
     delta_tm: float | None
     flags: tuple[WindowFlag, ...]
+    # Set together with ``tm``: how the Tm was named, and the step that supplied it.
+    named_by: NamedBy | None = None
+    step_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True)
@@ -150,35 +172,57 @@ class WindowResult:
     flags: tuple[WindowFlag, ...]
 
 
-def evaluate_window(low: float, high: float, positions: Sequence[WindowPosition]) -> WindowResult:
-    """Tm per position (one step inside [low, high]) and its shift from the reference mean."""
-    tms: list[tuple[WindowPosition, float | None, tuple[WindowFlag, ...]]] = []
+def evaluate_window(
+    window: str,
+    low: float,
+    high: float,
+    positions: Sequence[WindowPosition],
+    windows_on_signal: Collection[str],
+) -> WindowResult:
+    """Tm per position and its shift from the reference mean.
+
+    A step assigned to ``window`` names the Tm whatever its value. Otherwise the
+    Tm is the step inside [low, high] that is not assigned to another current
+    window of the signal (``windows_on_signal``; any other name is stale and
+    counts as no assignment). One candidate gives the Tm; none or several give a flag.
+    """
+    tms: list[tuple[WindowPosition, StepFact | None, NamedBy, tuple[WindowFlag, ...]]] = []
     for p in positions:
         if p.well_type == WellType.BLANK:
             continue
-        inside = [s for s in p.steps if low <= s <= high]
-        if not inside:
-            tms.append((p, None, (WindowFlag.NO_STEP,)))
-        elif len(inside) == 1:
-            tms.append((p, inside[0], ()))
+        named_by = NamedBy.ASSIGNMENT
+        candidates = [s for s in p.steps if s.assigned_window == window]
+        if not candidates:
+            named_by = NamedBy.RANGE
+            candidates = [
+                s
+                for s in p.steps
+                if s.assigned_window not in windows_on_signal and low <= s.value <= high
+            ]
+        if not candidates:
+            tms.append((p, None, named_by, (WindowFlag.NO_STEP,)))
+        elif len(candidates) == 1:
+            tms.append((p, candidates[0], named_by, ()))
         else:
-            tms.append((p, None, (WindowFlag.SEVERAL_STEPS,)))
-    ref_values = [tm for p, tm, _ in tms if p.well_type == WellType.REFERENCE and tm is not None]
+            tms.append((p, None, named_by, (WindowFlag.SEVERAL_STEPS,)))
+    ref_values = [
+        s.value for p, s, _, _ in tms if p.well_type == WellType.REFERENCE and s is not None
+    ]
     reference_tm = sum(ref_values) / len(ref_values) if ref_values else None
     results = tuple(
         PositionWindowResult(
             well_id=p.well_id,
-            tm=tm,
+            tm=s.value if s else None,
             delta_tm=(
-                tm - reference_tm
-                if tm is not None
-                and reference_tm is not None
-                and p.well_type != WellType.REFERENCE
+                s.value - reference_tm
+                if s is not None and reference_tm is not None and p.well_type != WellType.REFERENCE
                 else None
             ),
             flags=flags,
+            named_by=named_by if s else None,
+            step_id=s.id if s else None,
         )
-        for p, tm, flags in tms
+        for p, s, named_by, flags in tms
     )
     return WindowResult(
         low=low,
@@ -216,7 +260,7 @@ def check_step_counts(positions: Sequence[WindowPosition]) -> StepCountCheck:
 
 def window_positions(
     wells: Sequence[tuple[uuid.UUID, WellType]],
-    steps: Sequence[tuple[uuid.UUID, str, float, bool]],
+    steps: Sequence[StepFact],
     channel_key: str,
     traced: Collection[tuple[uuid.UUID, str]],
 ) -> list[WindowPosition]:
@@ -224,12 +268,29 @@ def window_positions(
 
     ``traced`` holds the (well id, channel key) pairs that have a trace.
     """
-    by_well: dict[uuid.UUID, list[float]] = {}
-    for well_id, key, value, counts in steps:
-        if counts and key == channel_key:
-            by_well.setdefault(well_id, []).append(value)
+    by_well: dict[uuid.UUID, list[StepFact]] = {}
+    for s in steps:
+        if s.counts and s.channel_key == channel_key:
+            by_well.setdefault(s.well_id, []).append(s)
     return [
-        WindowPosition(well_id, well_type, tuple(sorted(by_well.get(well_id, ()))))
+        WindowPosition(
+            well_id, well_type, tuple(sorted(by_well.get(well_id, ()), key=lambda s: s.value))
+        )
         for well_id, well_type in wells
         if well_type != WellType.BLANK and (well_id, channel_key) in traced
     ]
+
+
+def outside_every_window(
+    positions: Sequence[WindowPosition], windows: Sequence[tuple[str, float, float]]
+) -> tuple[uuid.UUID, ...]:
+    """Ids of the counted steps no window takes: not assigned to one of ``windows``
+    (name, low, high: the windows of the positions' channel) and inside none of them."""
+    names = {name for name, _, _ in windows}
+    return tuple(
+        s.id
+        for p in positions
+        for s in p.steps
+        if s.assigned_window not in names
+        and not any(low <= s.value <= high for _, low, high in windows)
+    )

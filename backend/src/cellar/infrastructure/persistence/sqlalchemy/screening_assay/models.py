@@ -607,6 +607,11 @@ class MeltingStepModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     reason: Mapped[str | None] = mapped_column(String(500))
     changed_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
     changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # The temperature window this step is assigned to, by name (a readout's melt_config).
+    assigned_window: Mapped[str | None] = mapped_column(String(60))
+    assignment_reason: Mapped[str | None] = mapped_column(String(500))
+    assigned_by: Mapped[uuid.UUID | None] = mapped_column(Uuid)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     __table_args__ = (
         Index("ix_melting_step_run", "run_id"),

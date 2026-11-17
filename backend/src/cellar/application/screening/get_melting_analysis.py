@@ -115,7 +115,7 @@ class GetMeltingAnalysis:
             sorted(found, key=lambda s: (order.get(s.well_id, len(order)), s.channel_key, s.value))
         )
         wells = [(w.id, w.well_type) for w in run.wells]
-        counted = [(s.well_id, s.channel_key, s.value, s.counts) for s in steps]
+        facts = [s.fact for s in steps]
 
         batch_and_dose = {w.id: (w.batch_id, w.dose) for w in run.wells}
 
@@ -133,7 +133,14 @@ class GetMeltingAnalysis:
                 per_position.setdefault(mc.window, {})[mc.measure] = rd.id
 
         def analyse(name: str, channel: str, low: float, high: float) -> WindowAnalysis:
-            result = evaluate_window(low, high, window_positions(wells, counted, channel, traced))
+            result = evaluate_window(
+                name,
+                low,
+                high,
+                window_positions(wells, facts, channel, traced),
+                # Window names on this channel: an assignment to any other name is stale.
+                {n for n, (ch, _, _) in shape.items() if ch == channel},
+            )
             points = series_points(result, batch_and_dose)
             ids = per_position.get(name, {})
             return WindowAnalysis(
@@ -162,7 +169,7 @@ class GetMeltingAnalysis:
             for name, (channel, low, high) in sorted(shape.items(), key=lambda kv: kv[1][1])
         )
         step_checks = tuple(
-            ChannelStepCheck(ch, check_step_counts(window_positions(wells, counted, ch, traced)))
+            ChannelStepCheck(ch, check_step_counts(window_positions(wells, facts, ch, traced)))
             for ch in sorted({s.channel_key for s in steps})
         )
 
