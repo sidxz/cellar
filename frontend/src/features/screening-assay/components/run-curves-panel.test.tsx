@@ -316,8 +316,12 @@ describe("RunCurvesPanel", () => {
     const row = within(screen.getByRole("table")).getByText("ABC-0000002").closest("tr");
     if (!row) throw new Error("row not found");
     fireEvent.mouseEnter(row);
-    const traces = lastPlot().data as Array<{ line: { color: string }; opacity: number }>;
-    expect(traces[1].line.color).toBe(MEASURED_CURVE_COLORS.dark.focus);
+    const traces = lastPlot().data as Array<{
+      line: { color: string; width: number };
+      opacity: number;
+    }>;
+    // The hovered sample keeps its colour and is drawn thicker; the reference dims.
+    expect(traces[1].line).toEqual({ color: MEASURED_CURVE_COLORS.dark.selected, width: 3 });
     expect(traces[0].opacity).toBe(0.35);
     expect(screen.getByRole("button", { name: "Position 2" })).toHaveAttribute(
       "data-focused",
@@ -580,9 +584,19 @@ describe("RunCurvesPanel", () => {
       const key = screen.getByTestId("curve-key");
       for (const t of ["Reference", "Reviewed peak", "Unreviewed peak", "Onset"])
         expect(within(key).getByText(t)).toBeInTheDocument();
+      // The key's swatches are the traces' colours: violet reference, orange selection.
+      const swatch = (text: string) => within(key).getByText(text).querySelector("i");
+      const { reference, selected } = MEASURED_CURVE_COLORS.dark;
+      expect(swatch("Reference")).toHaveStyle({ borderTopColor: reference });
+      expect(swatch("Selected sample")).toHaveStyle({ borderTopColor: selected });
       expect(screen.queryByText("Other positions")).toBeNull();
+      expect(screen.queryByText(/The trace under the pointer/)).toBeNull();
       fireEvent.click(gridRow("Position 3"), { metaKey: true });
       expect(screen.getByText("2 samples selected")).toBeInTheDocument();
+      expect(swatch("Selected samples")).toHaveStyle({ borderTopColor: selected });
+      // A selected reference stays violet, so alone it has no orange swatch to explain.
+      fireEvent.click(gridRow("Position 1"));
+      expect(within(screen.getByTestId("curve-key")).queryByText(/^Selected sample/)).toBeNull();
     });
 
     it("filtering keeps the selection", () => {

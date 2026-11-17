@@ -338,8 +338,8 @@ function CurveViewerBody({
     () =>
       effectiveMode === "group"
         ? { colourMode: effectiveMode, slots: groupSlots, groups: groupOf, focusedId, palette }
-        : { colourMode: effectiveMode, slots, focusedId, palette },
-    [effectiveMode, slots, groupSlots, groupOf, focusedId, palette],
+        : { colourMode: effectiveMode, slots, selected: selection.selected, focusedId, palette },
+    [effectiveMode, slots, groupSlots, groupOf, selection.selected, focusedId, palette],
   );
 
   // Memoised on its real inputs: a re-render for anything else hands Plotly
@@ -461,6 +461,7 @@ function CurveViewerBody({
   const hasTraces = !failed && !!figure && figure.data.length > 0;
   const colours = MEASURED_CURVE_COLORS[palette];
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
+  const selectedSamples = selectedPositions.filter((p) => p.well_type !== "reference").length;
   const doseUnit = DOSE_UNIT_LABELS[set.doseUnit as DoseUnit] ?? set.doseUnit;
   const notShown = pending || tooMany || failed ? [] : positionsNotShown(set, drawnIds);
   const addedReferences = drawnIds.length > selectedIds.length;
@@ -842,6 +843,14 @@ function CurveViewerBody({
                 <Swatch line colour={colours.reference} />
                 Reference
               </span>
+              {/* A selected reference stays violet; Distinct and By group name
+                  their own colours in the legend below. */}
+              {effectiveMode === "highlight" && selectedSamples > 0 && (
+                <span>
+                  <Swatch line colour={colours.selected} />
+                  {selectedSamples === 1 ? "Selected sample" : "Selected samples"}
+                </span>
+              )}
               {steps && showReported && (
                 <>
                   <span>
@@ -912,13 +921,10 @@ function CurveViewerBody({
                 Reference positions
               </span>
               <span>
-                <Swatch line colour={colours.neutral} />
-                Other positions
+                <Swatch line colour={colours.selected} />
+                Selected positions
               </span>
-              <span>
-                <Swatch line colour={colours.focus} />
-                The trace under the pointer
-              </span>
+              <span>The trace under the pointer is drawn thicker</span>
               {colourMode === "distinct" && (
                 <span>More than {COLOUR_SLOT_COUNT} selected: distinct colors are off</span>
               )}

@@ -204,6 +204,35 @@ function colourOfTrace(id: string) {
 
 const series = MEASURED_CURVE_COLORS.dark.series;
 
+describe("CurveViewer in Highlight mode", () => {
+  const { reference, selected } = MEASURED_CURVE_COLORS.dark;
+  const swatch = (text: string) =>
+    within(screen.getByTestId("curve-legend")).getByText(text).querySelector("i");
+
+  it("draws the selected sample in orange beside the violet reference, and says so", () => {
+    render(<Harness callbacks={callbacks()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Position 2" }), { metaKey: true });
+    expect(["w1", "w2"].map(colourOfTrace)).toEqual([reference, selected]);
+
+    expect(swatch("Reference positions")).toHaveStyle({ borderTopColor: reference });
+    expect(swatch("Selected positions")).toHaveStyle({ borderTopColor: selected });
+    // Hovering changes a trace's width, not its colour: no swatch to show.
+    expect(swatch("The trace under the pointer is drawn thicker")).toBeNull();
+    const legend = screen.getByTestId("curve-legend");
+    expect(within(legend).queryByText("Other positions")).not.toBeInTheDocument();
+    expect(within(legend).queryByText("The trace under the pointer")).not.toBeInTheDocument();
+  });
+
+  it("keeps a hovered trace's colour and draws it thicker", () => {
+    render(<Harness callbacks={callbacks()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Position 2" }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "Position 2" }));
+    const hovered = plotCalls.at(-1)?.data.find((t) => t.meta === "w2");
+    expect(hovered?.line).toEqual({ color: selected, width: 3 });
+  });
+});
+
 describe("CurveViewer colour by group", () => {
   const twoCompounds = compoundSet(3, (i) => (i <= 2 ? 1 : 2));
 
@@ -248,7 +277,7 @@ describe("CurveViewer colour by group", () => {
     expect(screen.getByRole("tab", { name: "By group" })).toBeDisabled();
     expect(screen.getByText("More than 8 groups")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Highlight" })).toHaveAttribute("aria-selected", "true");
-    expect(colourOfTrace("c1")).toBe(MEASURED_CURVE_COLORS.dark.neutral);
+    expect(colourOfTrace("c1")).toBe(MEASURED_CURVE_COLORS.dark.selected);
   });
 
   it("groups by run, compound, batch or role as chosen", async () => {
