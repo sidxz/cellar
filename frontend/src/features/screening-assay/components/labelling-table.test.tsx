@@ -1,8 +1,9 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import type { PositionLabelMatchesResponse } from "@/shared/lib/api/model";
 import type { LabellingRow } from "../lib/labelling-rows";
-import type { LayoutFile, PositionLabelMatches } from "../types";
+import type { LayoutFile } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
 // hasPointerCapture on its items — jsdom ships neither.
@@ -30,7 +31,7 @@ const resolve = vi.hoisted(() => ({
   isPending: false,
 }));
 type MatchOptions = {
-  onSuccess?: (m: PositionLabelMatches) => void;
+  onSuccess?: (m: PositionLabelMatchesResponse) => void;
   onError?: (e: unknown) => void;
 };
 const match = vi.hoisted(() => ({
@@ -376,7 +377,7 @@ describe("LabellingTable Match from labels", () => {
     batch_number: null,
     needs_batch_choice: true,
   };
-  const answer: PositionLabelMatches = {
+  const answer: PositionLabelMatchesResponse = {
     matches: [
       { label: "SACC-0000002", compound: oneBatch },
       { label: "DMSO", compound: null },
@@ -519,5 +520,34 @@ describe("LabellingTable Match from labels", () => {
     expect(screen.getByText(/Matched 2 positions from their labels/)).toBeInTheDocument();
     fillFromFile(container, (o) => o.onError?.(new Error("API error: 422 — File is empty")));
     expect(screen.queryByText(/Matched 2 positions/)).not.toBeInTheDocument();
+  });
+
+  // The server reads a label as the import does, also by the part before a "(...)";
+  // the table sends, finds and lists each label as it is written.
+  it("asks about a label with a bracketed suffix as written, fills it, and lists an unmatched one as written", () => {
+    const suffixed: LabellingRow[] = [
+      { ...blank, key: "s1", positionLabel: "Position 1", label: "SACC-0000002 (50 µM)" },
+      { ...blank, key: "s2", positionLabel: "Position 2", label: "SACC-0000002" },
+      { ...blank, key: "s3", positionLabel: "Position 3", label: " DMSO (5%) " },
+    ];
+    const { onReplaceRows } = renderTable({ rows: suffixed });
+    matchFromLabels((o) =>
+      o.onSuccess?.({
+        matches: [
+          { label: "SACC-0000002 (50 µM)", compound: oneBatch },
+          { label: "SACC-0000002", compound: oneBatch },
+          { label: "DMSO (5%)", compound: null },
+        ],
+      }),
+    );
+    expect(match.mutate).toHaveBeenCalledWith(
+      { labels: ["SACC-0000002 (50 µM)", "SACC-0000002", "DMSO (5%)"] },
+      expect.anything(),
+    );
+    const filled = onReplaceRows.mock.calls[0][0] as LabellingRow[];
+    expect(filled.map((r) => r.moleculeId)).toEqual(["m2", "m2", null]);
+    expect(filled.map((r) => r.label)).toEqual(suffixed.map((r) => r.label));
+    expect(screen.getByText(/Matched 2 positions from their labels/)).toBeInTheDocument();
+    expect(screen.getByText("No compound found for: DMSO (5%)")).toBeInTheDocument();
   });
 });

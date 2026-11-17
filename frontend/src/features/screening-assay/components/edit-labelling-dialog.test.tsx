@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
+import type { PositionLabelMatchesResponse } from "@/shared/lib/api/model";
 import { valuesOf } from "../lib/position-edits";
-import type { LayoutFile, PositionLabelMatches, RelabelResult, Run, RunCurves } from "../types";
+import type { LayoutFile, RelabelResult, Run, RunCurves } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
 // hasPointerCapture on its items — jsdom ships neither.
@@ -48,7 +49,7 @@ const resolve = vi.hoisted(() => ({
   mutate: vi.fn<(vars: { file: File }, opts?: ResolveOptions) => void>(),
   isPending: false,
 }));
-type MatchOptions = { onSuccess?: (m: PositionLabelMatches) => void };
+type MatchOptions = { onSuccess?: (m: PositionLabelMatchesResponse) => void };
 const match = vi.hoisted(() => ({
   mutate: vi.fn<(vars: { labels: string[] }, opts?: MatchOptions) => void>(),
   isPending: false,

@@ -5,13 +5,8 @@
 
 import Papa from "papaparse";
 
-import {
-  type LayoutFile,
-  type LayoutFileRow,
-  type PositionLabelMatches,
-  WELL_TYPE_LABELS,
-  type WellType,
-} from "../types";
+import type { PositionLabelMatchesResponse } from "@/shared/lib/api/model";
+import { type LayoutFile, type LayoutFileRow, WELL_TYPE_LABELS, type WellType } from "../types";
 import { type LabellingRow, MAX_LABEL, parseDose } from "./labelling-rows";
 
 /** Lets a spreadsheet program read the file as UTF-8. */
@@ -168,7 +163,7 @@ export interface LabelMatchApplication<T extends LabellingRow> {
  *  through {@link applyLayout}, as by a layout file naming that compound and no batch. */
 export function applyLabelMatches<T extends LabellingRow>(
   rows: readonly T[],
-  answer: PositionLabelMatches,
+  answer: PositionLabelMatchesResponse,
 ): LabelMatchApplication<T> {
   const compounds = new Map(answer.matches.map((m) => [m.label, m.compound]));
   const found: LayoutFileRow[] = [];
