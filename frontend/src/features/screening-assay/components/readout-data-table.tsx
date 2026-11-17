@@ -4,11 +4,9 @@ import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
-import { Button } from "@/shared/components/ui/button";
 import { resolveCategoryColor } from "@/shared/lib/category-colors";
 import { cn } from "@/shared/lib/utils";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
-import { Hexagon } from "lucide-react";
 import { type ReactNode, useMemo, useState } from "react";
 import { useDoseResponseByRun } from "../hooks/use-dose-response";
 import { useProtocol } from "../hooks/use-protocols";
@@ -35,6 +33,7 @@ import {
   type ReadoutNormalization,
   narrowInterceptValues,
 } from "../types";
+import { StructuresToggle } from "./structures-toggle";
 
 interface ReadoutDataTableProps {
   runId: string;
@@ -411,21 +410,6 @@ export function ReadoutDataTable({
     return cols;
   }, [readoutDefs, showStructures]);
 
-  const structuresToggle = (
-    <Button
-      type="button"
-      variant={showStructures ? "secondary" : "outline"}
-      size="sm"
-      aria-pressed={showStructures}
-      onClick={() => setShowStructures((v) => !v)}
-      className="h-9"
-      title={showStructures ? "Hide compound structures" : "Show compound structures"}
-    >
-      <Hexagon className="mr-1.5 h-4 w-4" />
-      Structures
-    </Button>
-  );
-
   return (
     <div className={className}>
       <DataGrid<PivotRow>
@@ -436,7 +420,11 @@ export function ReadoutDataTable({
         suppressFilters
         toolbarActions={
           <>
-            {structuresToggle}
+            <StructuresToggle
+              pressed={showStructures}
+              onPressedChange={setShowStructures}
+              className="h-9"
+            />
             {toolbarActions}
           </>
         }

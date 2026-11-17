@@ -38,12 +38,15 @@ import {
   worstStatus,
 } from "../lib/melt-results";
 import { type MeltingStep, WELL_TYPE_LABELS, type WellType } from "../types";
+import { STRUCTURE_THUMBNAIL_SIZE } from "./grid-columns";
 
 type Range = { window: string; low: number; high: number };
 type Col = ColDef<ResultRow> | ColGroupDef<ResultRow>;
 type Params = ICellRendererParams<ResultRow>;
 
 const ROW_HEIGHT = 36;
+/** What a structure adds to its row: the drawing and the gap under it. */
+const STRUCTURE_HEIGHT = STRUCTURE_THUMBNAIL_SIZE + 8;
 const GROUP_HEADER_HEIGHT = 32;
 const DIFFERS_TEXT = "Different number of peaks than the reference";
 const LIST = new Intl.ListFormat("en-US", { type: "conjunction" });
@@ -137,7 +140,7 @@ function deltaTint(d: number, isHit: boolean): string {
 }
 
 function SampleCell({ row }: { row: ResultRow }) {
-  const { registrationNumber, moleculeId, batchSuffix, smiles, label } = row.identity;
+  const { registrationNumber, moleculeId, batchSuffix, smiles, label, aliases } = row.identity;
   if (registrationNumber) {
     const id = moleculeId ? (
       <EntityLink
@@ -175,6 +178,16 @@ function SampleCell({ row }: { row: ResultRow }) {
           id
         )}
         {batchSuffix && <span className="text-xs text-muted-foreground">{`·${batchSuffix}`}</span>}
+        {aliases.length > 0 && (
+          // The first alias gives way to the rest of the cell; "+N" never does.
+          <span
+            className="flex min-w-0 gap-1 text-xs text-muted-foreground"
+            title={aliases.join(", ")}
+          >
+            <span className="truncate">{aliases[0]}</span>
+            {aliases.length > 1 && <span>{`+${aliases.length - 1}`}</span>}
+          </span>
+        )}
       </span>
     );
   }
@@ -199,6 +212,29 @@ function SampleCell({ row }: { row: ResultRow }) {
         {(WELL_TYPE_LABELS[row.wellType as WellType] ?? row.wellType).toLowerCase()}
       </span>
     </span>
+  );
+}
+
+/** The structure a row draws: its registered compound's, when it has one. */
+const structureOf = (row: ResultRow) =>
+  row.identity.registrationNumber ? row.identity.smiles : null;
+
+/** The Sample cell while structures are shown: the text on a line as tall as
+ *  the row was (36 px less the cell's borders), and the structure under it.
+ *  The column is `autoHeight`, so only a row with a structure grows. */
+function SampleWithStructure({ row }: { row: ResultRow }) {
+  const smiles = structureOf(row);
+  return (
+    <div>
+      <div className="h-[34px] truncate leading-[34px]">
+        <SampleCell row={row} />
+      </div>
+      {smiles && (
+        <div className="pb-2">
+          <StructureThumbnail smiles={smiles} size={STRUCTURE_THUMBNAIL_SIZE} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -309,9 +345,13 @@ function windowColumns(
 const statusRank = (s: CellStatus | null) =>
   s === "reference" ? -1 : s === null ? STATUS_ORDER.length : STATUS_ORDER.indexOf(s);
 
-/** Grid height that fits the rows up to 560 px, then scrolls. */
-const gridHeight = (rows: number, grouped: boolean) =>
-  Math.min(560, 48 + ROW_HEIGHT * rows + (grouped ? GROUP_HEADER_HEIGHT : 0));
+/** Grid height that fits the rows (`structures` of them with a drawing) up to
+ *  560 px, then scrolls. */
+const gridHeight = (rows: number, structures: number, grouped: boolean) =>
+  Math.min(
+    560,
+    48 + ROW_HEIGHT * rows + STRUCTURE_HEIGHT * structures + (grouped ? GROUP_HEADER_HEIGHT : 0),
+  );
 
 /** The results of a run's temperature windows, one row per position: the
  *  references pinned, then samples by largest |ΔTm|, then the rest. Doubles as
@@ -324,6 +364,7 @@ export function MeltResultsGrid({
   hits,
   applicable = NO_RULES,
   doseUnit,
+  showStructures = false,
   selection,
   onRowClick,
 }: {
@@ -338,6 +379,8 @@ export function MeltResultsGrid({
   /** The run's rules on Tm/ΔTm: a value beside one of their limits is shown to two decimals. */
   applicable?: readonly ApplicableRule[];
   doseUnit: string;
+  /** Draw each registered compound's structure in its Sample cell; off, it shows on hover. */
+  showStructures?: boolean;
   selection: SelectionState;
   onRowClick: (
     wellId: string,
@@ -356,17 +399,30 @@ export function MeltResultsGrid({
         valueGetter: (p) => p.data?.sampleText ?? "",
         getQuickFilterText: (p) =>
           p.data
-            ? [p.data.sampleText, p.data.identity.label, p.data.identity.batchSuffix]
+            ? [
+                p.data.sampleText,
+                p.data.identity.label,
+                p.data.identity.batchSuffix,
+                ...p.data.identity.aliases,
+              ]
                 .filter(Boolean)
                 .join(" ")
             : "",
-        cellRenderer: (p: Params) => (p.data ? <SampleCell row={p.data} /> : null),
+        autoHeight: showStructures,
+        cellRenderer: (p: Params) =>
+          !p.data ? null : showStructures ? (
+            <SampleWithStructure row={p.data} />
+          ) : (
+            <SampleCell row={p.data} />
+          ),
       },
       {
         colId: "position",
         headerName: "Position",
         width: 110,
         valueGetter: (p) => p.data?.position,
+        // As the holder is laid out (Capillary 2 before 11, A2 before A10), not as text.
+        comparator: (_a, _b, a, b) => (a.data?.holderRank ?? 0) - (b.data?.holderRank ?? 0),
       },
       {
         colId: "conc",
@@ -412,7 +468,7 @@ export function MeltResultsGrid({
           p.data ? <StatusCell row={p.data} windowNames={windowNames} /> : null,
       },
     ];
-  }, [windowNames, compare, hits, doseUnit, steps, windows, applicable]);
+  }, [windowNames, compare, hits, doseUnit, steps, windows, applicable, showStructures]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
   // classes) when they change, so the highlight follows the selection.
@@ -457,6 +513,7 @@ export function MeltResultsGrid({
     select(e.api, e.data, ev);
   };
 
+  const shown = [...rows.pinned, ...rows.body];
   return (
     <TooltipProvider delayDuration={200}>
       <DataGrid<ResultRow>
@@ -471,7 +528,11 @@ export function MeltResultsGrid({
         suppressCellFocus={false}
         rowHeight={ROW_HEIGHT}
         groupHeaderHeight={GROUP_HEADER_HEIGHT}
-        height={gridHeight(rows.pinned.length + rows.body.length, compare)}
+        height={gridHeight(
+          shown.length,
+          showStructures ? shown.filter(structureOf).length : 0,
+          compare,
+        )}
         suppressFilters
         suppressOverlays={NO_EMPTY_NOTICE}
         searchPlaceholder={SEARCH}

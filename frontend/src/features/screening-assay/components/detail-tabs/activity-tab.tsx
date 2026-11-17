@@ -15,7 +15,7 @@ import { groupBy } from "@/shared/lib/group-by";
 import { Plot } from "@/shared/lib/plotly";
 import { shortId } from "@/shared/lib/utils";
 import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
 import { curvePotencyText } from "../../lib/intercept-label";
@@ -26,31 +26,12 @@ import { CurveNavigator } from "../curve-navigator";
 import { DoseResponseChartView } from "../dose-response-figure";
 import { HitCriteriaDialog } from "../hit-criteria-dialog";
 import { Segmented } from "../segmented";
+import { useStructuresChoice } from "../structures-toggle";
 import { ActivityColumnsMenu, useColumnChoices } from "./activity-columns-menu";
 import { type Statistic, buildColumnDefs } from "./activity-tab-columns";
 import { type StatusFilter, criterionLabel, useActivityTab } from "./use-activity-tab";
 
 const STRUCTURES_KEY = "cellar.activity.structures";
-
-/** Whether the grid draws structures (taller rows), kept per browser. */
-function useStructuresChoice(): [boolean, (show: boolean) => void] {
-  const [show, setShow] = useState(() => {
-    try {
-      return localStorage.getItem(STRUCTURES_KEY) === "1";
-    } catch {
-      return false;
-    }
-  });
-  const save = useCallback((next: boolean) => {
-    setShow(next);
-    try {
-      localStorage.setItem(STRUCTURES_KEY, next ? "1" : "0");
-    } catch {
-      // Storage unavailable: the choice holds for this visit only.
-    }
-  }, []);
-  return [show, save];
-}
 
 // ---------------------------------------------------------------------------
 // Curve class badge
@@ -109,7 +90,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
   // One column per result, grouped; what shows comes from the catalog's
   // defaults and the user's Columns-menu choices.
   const [statistic, setStatistic] = useState<Statistic>("best");
-  const [showStructures, setShowStructures] = useStructuresChoice();
+  const [showStructures, setShowStructures] = useStructuresChoice(STRUCTURES_KEY);
   const { choices, toggle: toggleColumn, reset: resetColumns } = useColumnChoices(protocolId);
   const items = activity?.items;
   const catalog = useMemo(

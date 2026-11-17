@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { formatDateTime } from "@/shared/lib/format-date";
 import type { CurvePosition } from "../lib/curve-plot";
@@ -35,6 +35,8 @@ function pos(id: string, over: Record<string, unknown> = {}) {
   return {
     well_id: id,
     position_label: `Capillary ${id}`,
+    row: "A",
+    column: 1,
     label: null,
     well_type: "sample",
     registration_number: "",
@@ -211,33 +213,84 @@ describe("MeltResultsPanel", () => {
     render(<Harness channel="c" onLead={onLead} />);
     expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
     // A viewer is offered nothing to do about it.
-    expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
     expect(bodyIds()).toEqual(["r1", "s1", "s2", "s3", "s4"]);
     expect(within(table()).queryByText("Tm (°C)")).not.toBeInTheDocument();
     expect(screen.queryByRole("tablist", { name: "Window" })).not.toBeInTheDocument();
     expect(onLead).toHaveBeenLastCalledWith(null);
   });
 
-  it("offers naming the reference's peaks in the header and where the signal has no window", () => {
-    const onNamePeaks = vi.fn();
-    const { rerender } = render(<Harness onNamePeaks={onNamePeaks} />);
-    const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
-    fireEvent.click(within(header).getByRole("button", { name: "Name peaks" }));
-    expect(onNamePeaks).toHaveBeenCalledTimes(1);
-    expect(screen.queryByText(/No temperature window/)).not.toBeInTheDocument();
+  describe("setting up windows", () => {
+    const setUp = () => screen.queryAllByRole("button", { name: "Set up windows" });
+    /** The analysis with one more counted peak, outside every window of signal a. */
+    const outside = (well: string, channel = "a") =>
+      ({
+        ...analysis,
+        steps: [...analysis.steps, { ...step(well, 95, "unreviewed", channel), id: "o1" }],
+        outside_every_window: ["o1"],
+      }) as MeltingAnalysis;
 
-    rerender(<Harness channel="c" onNamePeaks={onNamePeaks} />);
-    expect(screen.getByText("No temperature window on this signal.")).toHaveTextContent(
-      "No temperature window on this signal. Name the reference's peaks.",
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
-    expect(onNamePeaks).toHaveBeenCalledTimes(2);
-    expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
-  });
+    it("is a button in the header, and a link in the note, when the signal has no window", () => {
+      const onNamePeaks = vi.fn();
+      render(<Harness channel="c" onNamePeaks={onNamePeaks} />);
+      const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
+      const button = within(header).getByRole("button", { name: "Set up windows" });
+      expect(button).toHaveTextContent(/^Set up windows$/);
+      expect(button).toHaveAttribute("data-variant", "outline");
+      fireEvent.click(button);
+      expect(onNamePeaks).toHaveBeenCalledTimes(1);
 
-  it("offers no naming without the handler", () => {
-    render(<Harness />);
-    expect(screen.queryByRole("button", { name: "Name peaks" })).not.toBeInTheDocument();
+      const note = screen.getByText(/^No temperature window on this signal\./);
+      expect(note).toHaveTextContent(/^No temperature window on this signal\. Set up windows\.$/);
+      const link = within(note).getByRole("button", { name: "Set up windows" });
+      expect(link).toHaveTextContent(/^Set up windows$/);
+      fireEvent.click(link);
+      expect(onNamePeaks).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
+    });
+
+    it("is a quiet Edit after the Window switch when the windows hold the reference's peaks", () => {
+      const onNamePeaks = vi.fn();
+      render(<Harness onNamePeaks={onNamePeaks} />);
+      // One control, and it is not the outlined button.
+      expect(setUp()).toHaveLength(1);
+      const edit = setUp()[0];
+      expect(edit).toHaveTextContent(/^Edit$/);
+      expect(edit).toHaveAttribute("data-variant", "link");
+      const precedes = (a: Element, b: Element) =>
+        !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+      expect(precedes(screen.getByRole("tablist", { name: "Window" }), edit)).toBe(true);
+      expect(precedes(edit, screen.getByRole("tablist", { name: "View" }))).toBe(true);
+      fireEvent.click(edit);
+      expect(onNamePeaks).toHaveBeenCalledTimes(1);
+      expect(screen.queryByText(/No temperature window/)).not.toBeInTheDocument();
+    });
+
+    it("is the button again when a reference has a peak outside every window", () => {
+      render(<Harness data={outside("r1")} onNamePeaks={() => {}} />);
+      expect(setUp()).toHaveLength(1);
+      expect(setUp()[0]).toHaveTextContent(/^Set up windows$/);
+      expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    });
+
+    it("stays the Edit for a sample's stray peak, or a reference's on another signal", () => {
+      const sample = render(<Harness data={outside("s1")} onNamePeaks={() => {}} />);
+      expect(setUp().map((b) => b.textContent)).toEqual(["Edit"]);
+      sample.unmount();
+      render(<Harness data={outside("r1", "b")} onNamePeaks={() => {}} />);
+      expect(setUp().map((b) => b.textContent)).toEqual(["Edit"]);
+    });
+
+    it("is not offered to a viewer, with or without a window", () => {
+      const { rerender } = render(<Harness />);
+      expect(setUp()).toHaveLength(0);
+      expect(screen.queryByText("Edit")).not.toBeInTheDocument();
+      rerender(<Harness channel="c" />);
+      expect(setUp()).toHaveLength(0);
+      expect(screen.getByText("No temperature window on this signal.")).toHaveTextContent(
+        /^No temperature window on this signal\.$/,
+      );
+    });
   });
 
   it("shows signed ΔTm in direction colour without a tint, and the status chip", () => {
@@ -553,6 +606,120 @@ describe("MeltResultsPanel", () => {
     expect(screen.queryByTestId("structure")).toBeNull();
     act(() => within(row("s1")).getByRole("link", { name: "CC-014538" }).focus());
     expect(screen.getAllByTestId("structure").length).toBeGreaterThan(0);
+  });
+});
+
+describe("the Structures switch", () => {
+  beforeEach(() => localStorage.clear());
+  const toggle = () => screen.getByRole("button", { name: "Structures" });
+  const drawn = (id: string) => within(row(id)).queryAllByTestId("structure").length;
+
+  it("draws the structure in the Sample cell of each registered compound that has one", () => {
+    render(<Harness />);
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("structure")).toBeNull();
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(drawn("s1")).toBe(1);
+    // Registered without a structure, unregistered, and a reference without a compound.
+    expect([drawn("s3"), drawn("s2"), drawn("r1")]).toEqual([0, 0, 0]);
+    expect(within(row("s3")).getByRole("link", { name: "CC-000002" })).toBeInTheDocument();
+    expect(within(row("s2")).getByTitle("16:0-CoA (unregistered)")).toHaveTextContent(/^16:0-CoA$/);
+    expect(within(row("r1")).getByText("MadR")).toBeInTheDocument();
+
+    fireEvent.click(toggle());
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByTestId("structure")).toBeNull();
+  });
+
+  it("draws a pinned reference's structure when the reference is a registered compound", () => {
+    const registered = positions.map((p) =>
+      p.well_id === "r1" ? { ...p, registration_number: "CC-000009", smiles: "c1ccccc1" } : p,
+    );
+    render(<Harness at={registered} />);
+    fireEvent.click(toggle());
+    expect(drawn("r1")).toBe(1);
+  });
+
+  it("remembers the choice in this browser", () => {
+    const first = render(<Harness />);
+    fireEvent.click(toggle());
+    expect(localStorage.getItem("cellar.traces.structures")).toBe("1");
+    first.unmount();
+
+    const second = render(<Harness />);
+    expect(toggle()).toHaveAttribute("aria-pressed", "true");
+    expect(drawn("s1")).toBe(1);
+    fireEvent.click(toggle());
+    expect(localStorage.getItem("cellar.traces.structures")).toBe("0");
+    second.unmount();
+
+    render(<Harness />);
+    expect(toggle()).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("works for this visit when the browser refuses storage", () => {
+    const refuse = () => {
+      throw new Error("denied");
+    };
+    const get = vi.spyOn(localStorage, "getItem").mockImplementation(refuse);
+    const set = vi.spyOn(localStorage, "setItem").mockImplementation(refuse);
+    render(<Harness />);
+    fireEvent.click(toggle());
+    expect(drawn("s1")).toBe(1);
+    get.mockRestore();
+    set.mockRestore();
+  });
+
+  it("is off for the shift plot, which draws no structures", () => {
+    render(<Harness />);
+    fireEvent.mouseDown(screen.getByRole("tab", { name: "Shift plot" }));
+    expect(toggle()).toBeDisabled();
+  });
+});
+
+describe("aliases in the Sample cell", () => {
+  /** s1 has one alias; s3 has its compound's name and two synonyms. */
+  const withAliases = positions.map((p) =>
+    p.well_id === "s1"
+      ? { ...p, synonyms: ["SACC-0455096"] }
+      : p.well_id === "s3"
+        ? { ...p, molecule_name: "Isoniazid", synonyms: ["SACC-0000002", "INH"] }
+        : p,
+  );
+  const sample = (id: string) => (row(id) as HTMLTableRowElement).cells[0];
+
+  it("shows one alias in full, and of several the first with how many more", () => {
+    render(<Harness at={withAliases} />);
+    const one = within(row("s1")).getByTitle("SACC-0455096");
+    expect(one).toHaveTextContent(/^SACC-0455096$/);
+    expect(one).toHaveClass("text-muted-foreground");
+    // The registration number still links, with its batch suffix.
+    expect(sample("s1")).toHaveTextContent(/^CC-014538·001SACC-0455096$/);
+    expect(within(row("s1")).getByRole("link", { name: "CC-014538" })).toBeInTheDocument();
+    // The tooltip lists every alias.
+    const several = within(row("s3")).getByTitle("Isoniazid, SACC-0000002, INH");
+    expect(within(several).getByText("Isoniazid")).toBeInTheDocument();
+    expect(within(several).getByText("+2")).toBeInTheDocument();
+    expect(several).not.toHaveTextContent("INH");
+  });
+
+  it("leaves a sample without aliases and an unregistered one as they were", () => {
+    render(<Harness at={withAliases.map((p) => (p.well_id === "s1" ? positions[1] : p))} />);
+    expect(sample("s1")).toHaveTextContent(/^CC-014538·001$/);
+    expect(within(row("s2")).getByTitle("16:0-CoA (unregistered)")).toHaveTextContent(/^16:0-CoA$/);
+    expect(sample("s2")).toHaveTextContent(/^16:0-CoA$/);
+  });
+
+  it("the search box finds a sample by any of its aliases", () => {
+    render(<Harness at={withAliases} />);
+    const search = screen.getByPlaceholderText("Find sample, position or batch");
+    fireEvent.change(search, { target: { value: "sacc-0455" } });
+    expect(bodyIds()).toEqual(["r1", "s1"]);
+    // An alias behind "+2" is found too.
+    fireEvent.change(search, { target: { value: "INH" } });
+    expect(bodyIds()).toEqual(["r1", "s3"]);
   });
 });
 

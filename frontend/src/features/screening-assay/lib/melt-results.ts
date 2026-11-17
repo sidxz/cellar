@@ -3,6 +3,8 @@
 
 import type { MeltWindow, MeltWindowPosition, MeltingStep, StepCheck } from "../types";
 import type { CurvePosition } from "./curve-plot";
+import { holderOrder } from "./curve-selection";
+import { buildAliases } from "./readout-data-pivot";
 
 // ---- Results table derivations (Traces tab) ----
 
@@ -55,11 +57,15 @@ export interface SampleIdentity {
   batchSuffix: string | null;
   label: string | null;
   smiles: string | null;
+  /** A registered compound's name and synonyms, as the Readouts view lists them. */
+  aliases: string[];
 }
 
 export interface ResultRow {
   wellId: string;
   position: string;
+  /** The position's place in its holder (row, then column); Position sorts by it. */
+  holderRank: number;
   wellType: string;
   isSample: boolean;
   batchId: string | null;
@@ -153,6 +159,7 @@ export function resultRows(
   outside: readonly string[],
 ): ResultRow[] {
   const outsideIds = new Set(outside);
+  const rank = new Map(holderOrder(positions).map((p, i) => [p.well_id, i]));
   return positions.flatMap((p) => {
     const cells: Record<string, WindowCell> = {};
     for (const w of windows) {
@@ -182,6 +189,7 @@ export function resultRows(
     return {
       wellId: p.well_id,
       position: p.position_label,
+      holderRank: rank.get(p.well_id) ?? 0,
       wellType: p.well_type,
       isSample: p.well_type === "sample",
       batchId: p.batch_id ?? null,
@@ -191,6 +199,7 @@ export function resultRows(
         batchSuffix: batchSuffix(p),
         label: p.label ?? null,
         smiles: p.smiles ?? null,
+        aliases: p.registration_number ? buildAliases(p) : [],
       },
       sampleText: sampleTextOf(p),
       concentration: p.dose ?? null,

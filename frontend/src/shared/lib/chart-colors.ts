@@ -40,36 +40,42 @@ export const CURVE_DEFAULT_COLOR = "#707372";
 
 /* ── Measured curves (run Curves tab) ──────────────────────── */
 /* Validated for colour-blind separation. `dark` is for the dark surface,
- * `light` for the light surface and for every exported (white) figure. */
+ * `light` for the light surface and for every exported (white) figure.
+ * `selected` (the selected trace in Highlight mode) is the second series
+ * step: orange separates from the violet reference where blue does not. */
+const DARK_SERIES = [
+  "#3987e5",
+  "#d95926",
+  "#199e70",
+  "#c98500",
+  "#d55181",
+  "#008300",
+  "#9085e9",
+  "#e66767",
+] as const;
+const LIGHT_SERIES = [
+  "#2a78d6",
+  "#eb6834",
+  "#1baf7a",
+  "#eda100",
+  "#e87ba4",
+  "#008300",
+  "#6250d6",
+  "#e34948",
+] as const;
 export const MEASURED_CURVE_COLORS = {
   dark: {
-    series: [
-      "#3987e5",
-      "#d95926",
-      "#199e70",
-      "#c98500",
-      "#d55181",
-      "#008300",
-      "#9085e9",
-      "#e66767",
-    ],
+    series: DARK_SERIES,
     neutral: "#8494ab",
     reference: "#9085e9",
+    selected: DARK_SERIES[1],
     focus: "#3987e5",
   },
   light: {
-    series: [
-      "#2a78d6",
-      "#eb6834",
-      "#1baf7a",
-      "#eda100",
-      "#e87ba4",
-      "#008300",
-      "#6250d6",
-      "#e34948",
-    ],
+    series: LIGHT_SERIES,
     neutral: "#7c8a9c",
     reference: "#6250d6",
+    selected: LIGHT_SERIES[1],
     focus: "#2a78d6",
   },
 } as const;

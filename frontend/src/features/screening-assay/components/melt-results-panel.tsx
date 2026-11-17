@@ -20,8 +20,10 @@ import { MeltResultsGrid } from "./melt-results-grid";
 import { MeltSummaryStrip } from "./melt-summary-strip";
 import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
+import { StructuresToggle, useStructuresChoice } from "./structures-toggle";
 
 const COMPARE = "__compare__";
+const STRUCTURES_KEY = "cellar.traces.structures";
 
 export interface MeltResultsPanelProps {
   analysis: MeltingAnalysis;
@@ -44,7 +46,8 @@ export interface MeltResultsPanelProps {
   applicable: readonly ApplicableRule[];
   /** The run's hit rule line, shown above the counts. */
   hitRule?: ReactNode;
-  /** Opens the naming of the reference's peaks, which adds windows; given to editors. */
+  /** Opens the setting up of windows (naming the reference's peaks); given to
+   *  editors. A button while there is something to set up, else a quiet Edit. */
   onNamePeaks?: () => void;
 }
 
@@ -70,6 +73,7 @@ export function MeltResultsPanel({
   const [compare, setCompare] = useState(false);
   const [filter, setFilter] = useState<ResultFilter>(null);
   const [view, setView] = useState<"table" | "plot">("table");
+  const [showStructures, setShowStructures] = useStructuresChoice(STRUCTURES_KEY);
 
   const windows = useMemo(
     () => analysis.windows.filter((w) => w.channel_key === channel),
@@ -82,6 +86,19 @@ export function MeltResultsPanel({
     [comparing, windows, lead],
   );
   const leadName = lead?.window ?? null;
+  const plotShown = view === "plot" && !comparing && !!lead;
+  // Something to set up: the signal has no window, or a reference has a
+  // counted peak on it that no window holds.
+  const needsSetup = useMemo(() => {
+    if (windows.length === 0) return true;
+    const outside = new Set(analysis.outside_every_window);
+    const references = new Set(
+      positions.filter((p) => p.well_type === "reference").map((p) => p.well_id),
+    );
+    return analysis.steps.some(
+      (s) => s.channel_key === channel && outside.has(s.id) && references.has(s.well_id),
+    );
+  }, [windows, analysis.outside_every_window, analysis.steps, positions, channel]);
   useEffect(() => {
     onLeadWindowChange?.(leadName);
   }, [leadName, onLeadWindowChange]);
@@ -166,6 +183,17 @@ export function MeltResultsPanel({
                 if (v !== COMPARE) setChosen(v);
               }}
             />
+            {onNamePeaks && !needsSetup && (
+              <Button
+                type="button"
+                variant="link"
+                aria-label="Set up windows"
+                className="h-auto p-0 text-xs font-normal text-muted-foreground"
+                onClick={onNamePeaks}
+              >
+                Edit
+              </Button>
+            )}
           </div>
         )}
         <div title={comparing ? "Shift plot shows one window" : undefined}>
@@ -179,16 +207,20 @@ export function MeltResultsPanel({
             onChange={setView}
           />
         </div>
-        {(onNamePeaks || headerAction) && (
-          <div className="ml-auto flex items-center gap-2">
-            {onNamePeaks && (
-              <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
-                Name peaks
-              </Button>
-            )}
-            {headerAction}
-          </div>
-        )}
+        <div className="ml-auto flex items-center gap-2">
+          <StructuresToggle
+            pressed={showStructures}
+            onPressedChange={setShowStructures}
+            // The shift plot draws no structures.
+            disabled={plotShown}
+          />
+          {onNamePeaks && needsSetup && (
+            <Button type="button" variant="outline" size="sm" onClick={onNamePeaks}>
+              Set up windows
+            </Button>
+          )}
+          {headerAction}
+        </div>
       </div>
       {hitRule}
       {summary ? (
@@ -219,13 +251,14 @@ export function MeltResultsPanel({
                 className="h-auto p-0 font-normal"
                 onClick={onNamePeaks}
               >
-                Name the reference's peaks.
+                Set up windows
               </Button>
+              .
             </>
           )}
         </p>
       )}
-      {view === "plot" && !comparing && lead ? (
+      {plotShown ? (
         <ShiftPlot
           rows={shiftRows(
             rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
@@ -248,6 +281,7 @@ export function MeltResultsPanel({
           hits={hits}
           applicable={applicable}
           doseUnit={doseUnit}
+          showStructures={showStructures}
           selection={selection}
           onRowClick={(id, mods, order) =>
             onSelectionChange(applyClick(selection, order, id, mods))

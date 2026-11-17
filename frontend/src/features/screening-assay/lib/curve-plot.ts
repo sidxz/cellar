@@ -172,6 +172,9 @@ export interface CurveColouring {
   slots: ReadonlyMap<string, number>;
   /** Group mode: the colour group of each selected position, by well id. */
   groups?: ReadonlyMap<string, { key: string; label: string }>;
+  /** Highlight mode: the selected positions, drawn in the selected colour
+   *  unless they are references. */
+  selected?: ReadonlySet<string>;
   focusedId: string | null;
   palette: CurvePalette;
 }
@@ -203,10 +206,22 @@ export function curveStyle(
     return { color: colours.series[slot], width: focused ? 3 : 1.6, opacity: 1 };
   }
   const reference = position.well_type === "reference";
+  const opacity = c.focusedId !== null && !focused ? DIMMED : 1;
+  if (c.colourMode === "highlight") {
+    // The selected sample outweighs the reference; under the pointer a trace
+    // keeps its own colour and is only drawn thicker.
+    const selected = !reference && !!c.selected?.has(position.well_id);
+    return {
+      color: reference ? colours.reference : selected ? colours.selected : colours.neutral,
+      width: focused ? 3 : selected ? 2 : 1.6,
+      opacity,
+    };
+  }
+  // Distinct and By group: a position without a slot, a reference the switch added.
   return {
     color: focused ? colours.focus : reference ? colours.reference : colours.neutral,
     width: focused ? 3 : reference ? 2.2 : 1.6,
-    opacity: c.focusedId !== null && !focused ? DIMMED : 1,
+    opacity,
   };
 }
 

@@ -328,10 +328,10 @@ function NamePeaks({
     >
       <DialogContent className="flex max-h-[90vh] w-[min(95vw,1000px)] max-w-[1000px] flex-col overflow-y-auto sm:max-w-[1000px]">
         <DialogHeader>
-          <DialogTitle>{`Name the reference's peaks · ${currentChannel(set)?.label ?? ""}`}</DialogTitle>
+          <DialogTitle>{`Set up windows · ${currentChannel(set)?.label ?? ""}`}</DialogTitle>
           <DialogDescription>
-            Each named row becomes a temperature window on the protocol. A row without a name
-            creates nothing.
+            Name the reference's peaks. Each named row becomes a temperature window on the protocol.
+            A row without a name creates nothing.
           </DialogDescription>
         </DialogHeader>
 

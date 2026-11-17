@@ -23,6 +23,8 @@ function pos(id: string, over: Record<string, unknown> = {}) {
   return {
     well_id: id,
     position_label: id,
+    row: "A",
+    column: 1,
     label: null,
     well_type: "sample",
     registration_number: "",
@@ -380,6 +382,44 @@ describe("melt-results", () => {
     expect(matchesFilter(rows[0], ["Main"], "up", new Set(["a"]))).toBe(false);
     const { body } = orderRows(rows, ["Main"]);
     expect(body.map((r) => r.wellId)).toEqual(["a", "c", "b"]);
+  });
+
+  it("a row carries its place in the holder, whatever order the positions come in", () => {
+    const at = (row: string, column: number, label: string) =>
+      pos(label, { row, column, position_label: label });
+    const inHolderOrder = (positions: CurvePosition[]) =>
+      resultRows([], positions, [], noChecks, [])
+        .sort((a, b) => a.holderRank - b.holderRank)
+        .map((r) => r.position);
+    const asText = (a: CurvePosition, b: CurvePosition) =>
+      a.position_label.localeCompare(b.position_label);
+    const numbers = (n: number) => Array.from({ length: n }, (_, i) => i + 1);
+
+    // A cassette of 24, given as text sorts it: Capillary 1, 10, 11, …, 2.
+    const cassette = numbers(24).map((n) => at("A", n, `Capillary ${n}`));
+    expect(inHolderOrder([...cassette].sort(asText))).toEqual(
+      numbers(24).map((n) => `Capillary ${n}`),
+    );
+    // A plate: A1 … A12, B1 … B12, and row AA after row B.
+    const plate = ["A", "B", "AA"].flatMap((row) =>
+      numbers(12).map((n) => at(row, n, `${row}${n}`)),
+    );
+    expect(inHolderOrder([...plate].sort(asText))).toEqual(plate.map((p) => p.position_label));
+  });
+
+  it("a registered sample lists its compound's name and synonyms as aliases, once each", () => {
+    const positions = [
+      pos("a", {
+        registration_number: "CC-1",
+        molecule_name: "Aspirin",
+        synonyms: ["SACC-0455096", "CC-1", "Aspirin"],
+      }),
+      // A name that only repeats the registration number is no alias.
+      pos("b", { registration_number: "CC-2", molecule_name: "CC-2" }),
+      pos("c", { label: "Lipid X" }),
+    ];
+    const rows = resultRows([], positions, [], noChecks, []);
+    expect(rows.map((r) => r.identity.aliases)).toEqual([["Aspirin", "SACC-0455096"], [], []]);
   });
 
   it("shiftRows excludes references, non-samples and missing values, ascending", () => {

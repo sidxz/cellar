@@ -10,6 +10,7 @@ import {
   colourGroupLabel,
   curveSetFromPositions,
   curveSetFromRun,
+  curveStyle,
   focusIdFromHover,
   nearestPeak,
   orderedPositions,
@@ -95,6 +96,65 @@ const base = {
 
 type Trace = { x: number[]; line: { color: string; width: number }; opacity: number; name: string };
 
+describe("curveStyle in Highlight mode", () => {
+  const reference = { well_id: "w1", well_type: "reference" };
+  const sample = { well_id: "w3", well_type: "sample" };
+  const highlight = (over: Partial<Parameters<typeof curveStyle>[1]> = {}) => ({
+    colourMode: "highlight" as const,
+    slots: new Map<string, number>(),
+    selected: new Set(["w3"]),
+    focusedId: null,
+    palette: "dark" as const,
+    ...over,
+  });
+
+  it("the selected colour is the palette's second step: orange, validated against the violet reference", () => {
+    expect(dark.selected).toBe("#d95926");
+    expect(light.selected).toBe("#eb6834");
+    expect([dark.selected, light.selected]).toEqual([dark.series[1], light.series[1]]);
+    expect([dark.reference, light.reference]).toEqual(["#9085e9", "#6250d6"]);
+  });
+
+  it("a selected sample is orange at width 2", () => {
+    expect(curveStyle(sample, highlight())).toEqual({ color: "#d95926", width: 2, opacity: 1 });
+    expect(curveStyle(sample, highlight({ palette: "light" })).color).toBe("#eb6834");
+  });
+
+  it("a reference is violet at width 1.6, selected or not", () => {
+    const violet = { color: "#9085e9", width: 1.6, opacity: 1 };
+    expect(curveStyle(reference, highlight())).toEqual(violet);
+    expect(curveStyle(reference, highlight({ selected: new Set(["w1"]) }))).toEqual(violet);
+    expect(curveStyle(reference, highlight({ palette: "light" })).color).toBe("#6250d6");
+  });
+
+  it("a focused sample stays orange at width 3 and the others dim", () => {
+    const c = highlight({ focusedId: "w3" });
+    expect(curveStyle(sample, c)).toEqual({ color: "#d95926", width: 3, opacity: 1 });
+    expect(curveStyle(reference, c)).toEqual({ color: "#9085e9", width: 1.6, opacity: 0.35 });
+  });
+
+  it("a focused reference stays violet at width 3 and the others dim", () => {
+    const c = highlight({ focusedId: "w1" });
+    expect(curveStyle(reference, c)).toEqual({ color: "#9085e9", width: 3, opacity: 1 });
+    expect(curveStyle(sample, c)).toEqual({ color: "#d95926", width: 2, opacity: 0.35 });
+  });
+
+  it("Distinct and By group are as they were: a reference without a slot, and its hover", () => {
+    for (const colourMode of ["distinct", "group"] as const) {
+      expect(curveStyle(reference, highlight({ colourMode }))).toEqual({
+        color: dark.reference,
+        width: 2.2,
+        opacity: 1,
+      });
+      expect(curveStyle(reference, highlight({ colourMode, focusedId: "w1" }))).toEqual({
+        color: dark.focus,
+        width: 3,
+        opacity: 1,
+      });
+    }
+  });
+});
+
 describe("buildCurveFigure", () => {
   it("draws one unchanged trace per selected position with a curve", () => {
     const { data } = buildCurveFigure(base) as unknown as { data: Trace[] };
@@ -104,20 +164,45 @@ describe("buildCurveFigure", () => {
     expect(data[1].name).toBe("Position 3");
   });
 
-  it("draws reference positions in the reference colour and the rest in neutral", () => {
-    const { data } = buildCurveFigure(base) as unknown as { data: Trace[] };
-    expect(data[0].line.color).toBe(dark.reference);
-    expect(data[0].line.width).toBeGreaterThan(data[1].line.width);
-    expect(data[1].line.color).toBe(dark.neutral);
-  });
-
-  it("draws the focused curve in the focus colour and dims the others", () => {
-    const { data } = buildCurveFigure({ ...base, focusedId: "w3" }) as unknown as {
+  it("draws the reference in violet and the selected sample in orange, the sample the heavier", () => {
+    const { data } = buildCurveFigure({ ...base, selected: new Set(["w3"]) }) as unknown as {
       data: Trace[];
     };
-    expect(data[1].line.color).toBe(dark.focus);
+    expect(data[0].line).toEqual({ color: dark.reference, width: 1.6 });
+    expect(data[1].line).toEqual({ color: dark.selected, width: 2 });
+  });
+
+  it("draws a position that is neither selected nor a reference in neutral", () => {
+    const { data } = buildCurveFigure(base) as unknown as { data: Trace[] };
+    expect(data[1].line).toEqual({ color: dark.neutral, width: 1.6 });
+  });
+
+  it("draws the focused curve thicker in its own colour and dims the others", () => {
+    const { data } = buildCurveFigure({
+      ...base,
+      selected: new Set(["w3"]),
+      focusedId: "w3",
+    }) as unknown as { data: Trace[] };
+    expect(data[1].line).toEqual({ color: dark.selected, width: 3 });
     expect(data[1].opacity).toBe(1);
     expect(data[0].opacity).toBe(0.35);
+  });
+
+  it("draws a selected sample's peak lines in orange and the reference's in violet", () => {
+    const steps = new Map([
+      ["w1", [{ value: 36.6, reviewed: true }]],
+      ["w3", [{ value: 41.2, reviewed: true }]],
+    ]);
+    const { layout } = buildCurveFigure({
+      ...base,
+      selected: new Set(["w3"]),
+      showReported: true,
+      steps,
+    });
+    const lines = (layout.shapes as { x0: number; line: { color: string } }[]).filter(
+      (s) => s.x0 === 36.6 || s.x0 === 41.2,
+    );
+    expect(lines.map((s) => s.line.color)).toEqual([dark.reference, dark.selected]);
   });
 
   it("uses each position's slot colour in distinct mode", () => {
@@ -378,12 +463,17 @@ describe("buildCurveFigure", () => {
   });
 
   it("uses the white canvas and the light colours for export", () => {
-    const { data, layout } = buildCurveFigure({ ...base, canvas: "export" }) as unknown as {
+    const { data, layout } = buildCurveFigure({
+      ...base,
+      selected: new Set(["w3"]),
+      canvas: "export",
+    }) as unknown as {
       data: Trace[];
       layout: Record<string, unknown>;
     };
     expect(layout.paper_bgcolor).toBe(CHART_CANVAS.background);
     expect(data[0].line.color).toBe(light.reference);
+    expect(data[1].line.color).toBe(light.selected);
   });
 
   it("puts a legend on the exported figure in Distinct mode only", () => {

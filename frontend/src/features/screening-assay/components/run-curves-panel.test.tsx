@@ -316,8 +316,12 @@ describe("RunCurvesPanel", () => {
     const row = within(screen.getByRole("table")).getByText("ABC-0000002").closest("tr");
     if (!row) throw new Error("row not found");
     fireEvent.mouseEnter(row);
-    const traces = lastPlot().data as Array<{ line: { color: string }; opacity: number }>;
-    expect(traces[1].line.color).toBe(MEASURED_CURVE_COLORS.dark.focus);
+    const traces = lastPlot().data as Array<{
+      line: { color: string; width: number };
+      opacity: number;
+    }>;
+    // The hovered sample keeps its colour and is drawn thicker; the reference dims.
+    expect(traces[1].line).toEqual({ color: MEASURED_CURVE_COLORS.dark.selected, width: 3 });
     expect(traces[0].opacity).toBe(0.35);
     expect(screen.getByRole("button", { name: "Position 2" })).toHaveAttribute(
       "data-focused",
@@ -580,9 +584,19 @@ describe("RunCurvesPanel", () => {
       const key = screen.getByTestId("curve-key");
       for (const t of ["Reference", "Reviewed peak", "Unreviewed peak", "Onset"])
         expect(within(key).getByText(t)).toBeInTheDocument();
+      // The key's swatches are the traces' colours: violet reference, orange selection.
+      const swatch = (text: string) => within(key).getByText(text).querySelector("i");
+      const { reference, selected } = MEASURED_CURVE_COLORS.dark;
+      expect(swatch("Reference")).toHaveStyle({ borderTopColor: reference });
+      expect(swatch("Selected sample")).toHaveStyle({ borderTopColor: selected });
       expect(screen.queryByText("Other positions")).toBeNull();
+      expect(screen.queryByText(/The trace under the pointer/)).toBeNull();
       fireEvent.click(gridRow("Position 3"), { metaKey: true });
       expect(screen.getByText("2 samples selected")).toBeInTheDocument();
+      expect(swatch("Selected samples")).toHaveStyle({ borderTopColor: selected });
+      // A selected reference stays violet, so alone it has no orange swatch to explain.
+      fireEvent.click(gridRow("Position 1"));
+      expect(within(screen.getByTestId("curve-key")).queryByText(/^Selected sample/)).toBeNull();
     });
 
     it("filtering keeps the selection", () => {
@@ -619,18 +633,19 @@ describe("RunCurvesPanel", () => {
       expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
     });
 
-    it("the no-window note opens the naming of the reference's peaks", () => {
+    it("the no-window note opens the setting up of windows", () => {
       withAnalysis({}, 0);
       render(<RunCurvesPanel runId="r1" run={RUN} />);
       expect(screen.queryByTestId("name-peaks")).not.toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Name the reference's peaks." }));
+      const note = screen.getByText(/^No temperature window on this signal\./);
+      fireEvent.click(within(note).getByRole("button", { name: "Set up windows" }));
       expect(screen.getByTestId("name-peaks")).toBeInTheDocument();
     });
 
-    it("an editor names peaks on any run status, with every trace of the signal", () => {
+    it("an editor sets up windows on any run status, with every trace of the signal", () => {
       withAnalysis({});
       const draft = render(<RunCurvesPanel runId="r1" run={RUN} />);
-      fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+      fireEvent.click(screen.getByRole("button", { name: "Set up windows" }));
       expect(naming.at(-1)).toMatchObject({
         open: true,
         runId: "r1",
@@ -647,19 +662,25 @@ describe("RunCurvesPanel", () => {
         { ...RUN, is_locked: true },
       ]) {
         const view = render(<RunCurvesPanel runId="r1" run={run} />);
-        fireEvent.click(screen.getByRole("button", { name: "Name peaks" }));
+        fireEvent.click(screen.getByRole("button", { name: "Set up windows" }));
         expect(naming.at(-1)).toMatchObject({ open: true, canRecalculate: false });
         view.unmount();
       }
     });
 
-    it("a viewer is not offered the naming", () => {
+    it("a viewer is not offered the setting up of windows", () => {
       canEdit.value = false;
       withAnalysis({}, 0);
-      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      const none = render(<RunCurvesPanel runId="r1" run={RUN} />);
       expect(screen.getByText("No temperature window on this signal.")).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /name/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
       expect(naming).toHaveLength(0);
+      none.unmount();
+      // Nor the quiet Edit beside a window that is already there.
+      withAnalysis({});
+      render(<RunCurvesPanel runId="r1" run={RUN} />);
+      expect(screen.queryByRole("button", { name: /set up windows/i })).not.toBeInTheDocument();
+      expect(screen.queryByText("Edit")).not.toBeInTheDocument();
     });
 
     it("shows a placeholder while the results load", () => {

@@ -186,9 +186,10 @@ beforeEach(() => {
 describe("NamePeaksDialog", () => {
   it("names the signal and starts on the first reference in holder order", () => {
     renderDialog();
-    expect(
-      screen.getByRole("heading", { name: "Name the reference's peaks · Ratio" }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Set up windows · Ratio" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+      "Name the reference's peaks. Each named row becomes a temperature window on the protocol. A row without a name creates nothing.",
+    );
     const chooser = screen.getByLabelText("Reference");
     expect(chooser).toHaveValue("r1");
     expect(within(chooser).getAllByRole("option")).toHaveLength(2);
