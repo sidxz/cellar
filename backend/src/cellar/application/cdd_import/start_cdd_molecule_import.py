@@ -12,6 +12,7 @@ from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     CddMoleculeImportOrchestrator,
     StartCddMoleculeImportRequest,
 )
+from cellar.application.cdd_import.molecule_identifiers import MAX_IDENTIFIERS, clean_identifiers
 from cellar.application.shared.command import Command
 from cellar.application.workspace_config.get_data_source_for_import import (
     GetDataSourceForImport,
@@ -27,6 +28,7 @@ class StartCddMoleculeImportCommand(Command):
     submitted_by: uuid.UUID
     originating_org_id: uuid.UUID
     import_mode: str = "full_vault"
+    # With import_mode "filtered": {"names": [...]}, molecule names or synonyms in the vault.
     filter_criteria: dict | None = None
     max_molecules: int | None = None  # limit for testing; None = import all
 
@@ -65,6 +67,19 @@ class StartCddMoleculeImport:
         if input.import_mode not in ("full_vault", "filtered", "sync"):
             return Failure(ValidationError(f"Invalid import_mode: {input.import_mode}"))
 
+        # A filter that is not applied would import the whole vault, so the two go together.
+        names: list[str] | None = None
+        if input.import_mode == "filtered":
+            names = clean_identifiers((input.filter_criteria or {}).get("names") or [])
+            if not names:
+                return Failure(ValidationError("A filtered import needs at least one molecule"))
+            if len(names) > MAX_IDENTIFIERS:
+                return Failure(
+                    ValidationError(f"At most {MAX_IDENTIFIERS} molecules can be imported at once")
+                )
+        elif input.filter_criteria:
+            return Failure(ValidationError("filter_criteria needs import_mode 'filtered'"))
+
         ds_result = await self._get_data_source(
             GetDataSourceForImportQuery(
                 workspace_id=input.workspace_id,
@@ -89,7 +104,7 @@ class StartCddMoleculeImport:
             originating_org_id=input.originating_org_id,
             secret_ref=secret_ref,
             entity_mappings=[em.to_dict() for em in config.data_source.entity_mappings],
-            filter_criteria=input.filter_criteria,
+            filter_criteria={"names": names} if names else None,
             max_molecules=input.max_molecules,
             create_batch_on_duplicate=config.data_source.create_batch_on_duplicate,
         )

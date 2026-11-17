@@ -2,9 +2,12 @@
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
+  CddMoleculeIdentifierCheckResponse,
   CddMoleculeImportAcceptedResponse,
+  CddMoleculeImportFilter,
   CddMoleculeImportStatusResponse,
   CddMoleculeImportSummary as CddMoleculeImportSummaryResponse,
+  CheckCddMoleculeIdentifiersBody,
 } from "@/shared/lib/api/model";
 import { isTerminalImportStatus } from "@/shared/lib/job-status";
 import { STALE_TIME } from "@/shared/lib/query-defaults";
@@ -18,6 +21,7 @@ import { MOLECULES_KEY } from "./query-keys";
 export type CddMoleculeImportAccepted = CddMoleculeImportAcceptedResponse;
 export type CddMoleculeImportStatus = CddMoleculeImportStatusResponse;
 export type CddMoleculeImportSummary = CddMoleculeImportSummaryResponse;
+export type CddMoleculeIdentifierCheck = CddMoleculeIdentifierCheckResponse;
 
 export function useStartCddMoleculeImport() {
   return useMutation({
@@ -28,8 +32,9 @@ export function useStartCddMoleculeImport() {
       maxMolecules,
     }: {
       originatingOrgId: string;
-      importMode?: "full_vault" | "sync";
-      filterCriteria?: Record<string, unknown>;
+      /** "filtered" imports only the molecules `filterCriteria` names. */
+      importMode?: "full_vault" | "sync" | "filtered";
+      filterCriteria?: CddMoleculeImportFilter;
       maxMolecules?: number;
     }) =>
       customInstance<CddMoleculeImportAccepted>({
@@ -41,6 +46,21 @@ export function useStartCddMoleculeImport() {
           filter_criteria: filterCriteria ?? null,
           max_molecules: maxMolecules ?? null,
         },
+      }),
+  });
+}
+
+/**
+ * Which identifiers in the pasted `text` name a molecule in the vault. Imports nothing.
+ * The server splits the text into identifiers.
+ */
+export function useCheckCddMoleculeIdentifiers() {
+  return useMutation({
+    mutationFn: (text: string) =>
+      customInstance<CddMoleculeIdentifierCheck>({
+        url: `${API_V1}/cdd-import/molecules/check`,
+        method: "POST",
+        data: { text } satisfies CheckCddMoleculeIdentifiersBody,
       }),
   });
 }

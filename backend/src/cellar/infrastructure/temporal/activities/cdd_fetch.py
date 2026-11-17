@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
+from cellar.application.cdd_import.molecule_identifiers import match_identifiers
 from cellar.application.cdd_import.molecule_mapper import map_cdd_molecules
 from cellar.application.cdd_import.plate_mapper import map_cdd_plate
 from cellar.domain.shared.secret_provider import SecretProvider
@@ -120,10 +121,22 @@ class CddFetchActivities:
 
         total_count = await client.get_molecule_count(input.vault_id, api_key)
 
+        # Filtered import: look the names up, then export those molecules by vault id.
+        molecule_ids = input.molecule_ids
+        if input.names is not None:
+            molecules = await client.find_molecules_by_names(input.vault_id, api_key, input.names)
+            molecule_ids = match_identifiers(input.names, molecules).molecule_ids
+            if not molecule_ids:
+                # An export with no ids would not be narrowed to anything.
+                raise ApplicationError(
+                    "None of the requested molecules were found in the vault",
+                    non_retryable=True,
+                )
+
         export_id = await client.start_molecule_export(
             input.vault_id,
             api_key,
-            molecule_ids=input.molecule_ids,
+            molecule_ids=molecule_ids,
             modified_after=input.modified_after,
             max_molecules=input.max_molecules,
         )
@@ -131,8 +144,8 @@ class CddFetchActivities:
         # For modified_after/full exports, we don't know the exact count
         # until the export finishes. Use vault total as estimate.
         effective_count = total_count
-        if input.molecule_ids is not None:
-            effective_count = len(input.molecule_ids)
+        if molecule_ids is not None:
+            effective_count = len(molecule_ids)
         elif input.max_molecules is not None:
             effective_count = min(input.max_molecules, total_count)
 
@@ -142,7 +155,11 @@ class CddFetchActivities:
             export_id=export_id,
             total_count=total_count,
             effective_count=effective_count,
-            mode="modified_after" if input.modified_after else "full",
+            mode="filtered"
+            if input.names is not None
+            else "modified_after"
+            if input.modified_after
+            else "full",
         )
         return CddStartExportOutput(export_id=export_id, total_count=effective_count)
 

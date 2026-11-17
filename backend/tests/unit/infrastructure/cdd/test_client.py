@@ -146,6 +146,70 @@ async def test_list_molecule_ids_posts_only_ids_query(client: CddVaultClient):
     assert json.loads(route.calls[0].request.content) == {"only_ids": True}
 
 
+MOLECULE_QUERY_URL = f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/molecules/query"
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_find_molecules_by_names_posts_the_names_as_a_list_without_structures(
+    client: CddVaultClient,
+):
+    molecule = {"id": 11, "class": "molecule", "name": "SACC-0001", "synonyms": ["ASA"]}
+    route = respx.post(MOLECULE_QUERY_URL).mock(
+        return_value=httpx.Response(
+            200, json={"count": 1, "offset": 0, "page_size": 1000, "objects": [molecule]}
+        )
+    )
+    found = await client.find_molecules_by_names(VAULT_ID, API_KEY, ["SACC-0001", "SACC-0099"])
+    assert found == [molecule]
+    assert json.loads(route.calls[0].request.content) == {
+        "names": ["SACC-0001", "SACC-0099"],
+        "no_structures": True,
+        "only_batch_ids": True,
+        "page_size": 1000,
+        "offset": 0,
+    }
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_find_molecules_by_names_splits_a_long_list_into_several_queries(
+    client: CddVaultClient,
+):
+    names = [f"SACC-{i:04d}" for i in range(1201)]
+
+    def answer(request: httpx.Request) -> httpx.Response:
+        asked = json.loads(request.content)["names"]
+        objects = [{"id": int(n[5:]), "name": n, "synonyms": []} for n in asked]
+        return httpx.Response(200, json={"count": len(objects), "objects": objects})
+
+    route = respx.post(MOLECULE_QUERY_URL).mock(side_effect=answer)
+    found = await client.find_molecules_by_names(VAULT_ID, API_KEY, names)
+
+    sent = [json.loads(call.request.content)["names"] for call in route.calls]
+    assert [len(group) for group in sent] == [500, 500, 201]
+    assert [name for group in sent for name in group] == names
+    assert [m["name"] for m in found] == names
+
+
+@respx.mock
+@pytest.mark.asyncio
+async def test_find_molecules_by_names_pages_until_the_vault_count_is_reached(
+    client: CddVaultClient,
+):
+    first = [{"id": i, "name": f"M{i}", "synonyms": []} for i in range(1000)]
+    second = [{"id": 1000, "name": "M1000", "synonyms": []}]
+    route = respx.post(MOLECULE_QUERY_URL).mock(
+        side_effect=[
+            httpx.Response(200, json={"count": 1001, "objects": first}),
+            httpx.Response(200, json={"count": 1001, "objects": second}),
+        ]
+    )
+    found = await client.find_molecules_by_names(VAULT_ID, API_KEY, ["M"])
+    assert len(found) == 1001
+    assert [json.loads(call.request.content)["offset"] for call in route.calls] == [0, 1000]
+
+
 EXPORT_URL = f"https://app.collaborativedrug.com/api/v1/vaults/{VAULT_ID}/exports/77"
 EXPORT_BODY = b'{"count": 1, "objects": [{"id": 5, "class": "plate"}]}'
 
