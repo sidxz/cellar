@@ -39,7 +39,7 @@ type Params = ICellRendererParams<ResultRow>;
 
 const ROW_HEIGHT = 36;
 const GROUP_HEADER_HEIGHT = 32;
-const DIFFERS_TEXT = "Step count differs from the reference";
+const DIFFERS_TEXT = "Different number of peaks than the reference";
 // AG Grid's row colours are unlayered CSS, so row-level utilities need `!`.
 const SELECTED_ROW = "bg-primary/10! shadow-[inset_3px_0_0_var(--primary)]";
 const MUTED_ROW = "text-muted-foreground!";
@@ -53,8 +53,8 @@ const STATUS: Record<
   { label: string; variant: "secondary" | "warning" | "outline" | "ghost"; className?: string }
 > = {
   reference: { label: "Reference", variant: "secondary" },
-  several_steps: { label: "Several steps", variant: "warning" },
-  no_step: { label: "No step", variant: "warning" },
+  several_steps: { label: "Several peaks", variant: "warning" },
+  no_step: { label: "No peak", variant: "warning" },
   no_reference: { label: "No reference", variant: "warning" },
   provisional: {
     label: "Provisional",

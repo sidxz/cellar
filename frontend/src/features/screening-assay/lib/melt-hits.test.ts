@@ -7,6 +7,7 @@ import {
   hitWells,
   isSeriesReadout,
   meetsRule,
+  notEvaluated,
   runRulesOf,
   splitRunRules,
 } from "./melt-hits";
@@ -50,8 +51,9 @@ const cell = (well_id: string, tm: number | null, delta_tm: number | null) => ({
   tm,
   delta_tm,
   flags: [],
-  named_by: null,
-  step_id: null,
+  // With a Tm the server names the peak that gave it.
+  named_by: tm == null ? null : ("range" as const),
+  step_id: tm == null ? null : `${well_id}-peak`,
 });
 function analysis(windows: Record<string, ReturnType<typeof cell>[]>): MeltingAnalysis {
   return {
@@ -148,6 +150,35 @@ describe("hitWells", () => {
   it("evaluates a window on another signal than the one on screen", () => {
     const { applicable } = splitRunRules([rule("ΔTm (350)", "gt", 5)], READOUTS);
     expect([...hitWells(data, POSITIONS, applicable)]).toEqual(["s2"]);
+  });
+});
+
+describe("notEvaluated", () => {
+  it("lists the samples missing a value an applicable rule needs", () => {
+    const data = analysis({
+      Main: [
+        cell("ref", 71.3, null),
+        cell("s1", 62.7, -8.6),
+        cell("s2", 70.5, -0.8),
+        cell("s3", null, null),
+        cell("c1", null, null),
+      ],
+    });
+    const { applicable } = splitRunRules([outside("ΔTm (Main)")], READOUTS);
+    // s3 has no ΔTm; the reference and the control are never listed.
+    expect([...notEvaluated(data, POSITIONS, applicable)]).toEqual(["s3"]);
+    expect(notEvaluated(data, POSITIONS, []).size).toBe(0);
+  });
+
+  it("with no reference lists every sample once, but not under a rule on Tm alone", () => {
+    const data = analysis({
+      Main: [cell("s1", 62.7, null), cell("s2", 70.5, null), cell("s3", 61, null)],
+      Low: [cell("s1", 30, null), cell("s2", 30, null)],
+    });
+    const rules = (...r: HitCriterion[]) => splitRunRules(r, READOUTS).applicable;
+    const both = rules(outside("ΔTm (Main)"), outside("ΔTm (Low)"));
+    expect([...notEvaluated(data, POSITIONS, both)]).toEqual(["s1", "s2", "s3"]);
+    expect(notEvaluated(data, POSITIONS, rules(rule("Tm (Main)", "gt", 65))).size).toBe(0);
   });
 });
 

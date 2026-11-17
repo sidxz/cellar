@@ -3,7 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { AddMeltingStepRequest, ReviewMeltingStepRequest } from "@/shared/lib/api/model";
+import type {
+  AddMeltingStepRequest,
+  AssignMeltingStepRequest,
+  ReviewMeltingStepRequest,
+} from "@/shared/lib/api/model";
 import type { MeltingAnalysis, MeltingStepChange } from "../types";
 import { MELTING_ANALYSIS_KEY, READOUT_DATA_KEY } from "./query-keys";
 
@@ -51,6 +55,22 @@ export function useReviewMeltingStep(runId: string) {
       customInstance<MeltingStepChange>({
         url: `${API_V1}/melting-steps/${stepId}`,
         method: "PATCH",
+        data: body,
+      }),
+    onSuccess,
+  });
+}
+
+/** PUT /api/v1/melting-steps/{stepId}/assignment: the window the step is
+ *  assigned to for its position; a null window clears the assignment. A 409
+ *  means the step changed since it was loaded, or the run no longer allows edits. */
+export function useAssignMeltingStep(runId: string) {
+  const onSuccess = useInvalidateAfterStepChange(runId);
+  return useMutation({
+    mutationFn: ({ stepId, body }: { stepId: string; body: AssignMeltingStepRequest }) =>
+      customInstance<MeltingStepChange>({
+        url: `${API_V1}/melting-steps/${stepId}/assignment`,
+        method: "PUT",
         data: body,
       }),
     onSuccess,

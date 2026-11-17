@@ -520,7 +520,7 @@ describe("RunCurvesPanel", () => {
       render(<RunCurvesPanel runId="r1" />);
       expect(lastPlot().style?.height).toBe(340);
       const line = screen.getByText("ABC-0000002 · Position 2 · 50 µM");
-      const steps = screen.getByRole("heading", { name: "Melting steps" });
+      const steps = screen.getByRole("heading", { name: "Peaks" });
       const values = screen.getByRole("button", { name: "Instrument values" });
       const follows = (a: Node, b: Node) =>
         !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -529,7 +529,7 @@ describe("RunCurvesPanel", () => {
       expect(follows(steps, values)).toBe(true);
       // A compact key stands in for the generic legend.
       const key = screen.getByTestId("curve-key");
-      for (const t of ["Reference", "Reviewed step", "Unreviewed step", "Onset"])
+      for (const t of ["Reference", "Reviewed peak", "Unreviewed peak", "Onset"])
         expect(within(key).getByText(t)).toBeInTheDocument();
       expect(screen.queryByText("Other positions")).toBeNull();
       fireEvent.click(gridRow("Position 3"), { metaKey: true });
@@ -549,15 +549,15 @@ describe("RunCurvesPanel", () => {
       withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
       render(<RunCurvesPanel runId="r1" />);
       expect(
-        screen.queryByText("Select a sample in the results to see its trace and steps."),
+        screen.queryByText("Select a sample in the results to see its trace and peaks."),
       ).not.toBeInTheDocument();
       fireEvent.click(gridRow("Position 2"), { metaKey: true });
       expect(selectedRows()).toEqual([]);
       // One message; no steps panel and no chart.
       expect(
-        screen.getAllByText("Select a sample in the results to see its trace and steps."),
+        screen.getAllByText("Select a sample in the results to see its trace and peaks."),
       ).toHaveLength(1);
-      expect(screen.queryByRole("heading", { name: "Melting steps" })).toBeNull();
+      expect(screen.queryByRole("heading", { name: "Peaks" })).toBeNull();
       expect(screen.queryByText(/positions above/)).toBeNull();
     });
 

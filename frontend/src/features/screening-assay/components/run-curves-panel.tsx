@@ -154,7 +154,13 @@ export function RunCurvesPanel({
     if (selection.selected.size > 0) return;
     const onSignal = analysis.windows.filter((w) => w.channel_key === data.channel);
     const lead = onSignal.find((w) => w.window === leadWindow) ?? onSignal[0];
-    const rows = resultRows(onSignal, data.positions, analysis.steps, analysis.step_checks);
+    const rows = resultRows(
+      onSignal,
+      data.positions,
+      analysis.steps,
+      analysis.step_checks,
+      analysis.outside_every_window,
+    );
     const id = firstToSelect(rows, lead ? [lead.window] : []);
     if (id) setSelection(applyClick(EMPTY_SELECTION, [id], id, { shift: false, toggle: false }));
   }, [analysis, data, runId, selection, leadWindow]);

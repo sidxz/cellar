@@ -205,7 +205,7 @@ export function MeltingStepsPanel({
   return (
     <section className="space-y-3">
       <div className="flex items-center gap-3">
-        <h3 className="text-sm font-medium">Melting steps</h3>
+        <h3 className="text-sm font-medium">Peaks</h3>
         {editable && positions.length > 0 && (
           <Button
             type="button"
@@ -215,7 +215,7 @@ export function MeltingStepsPanel({
             disabled={busy}
             onClick={() => open({ kind: "add", wellId: positions[0].well_id, reason: "" }, "")}
           >
-            Add step
+            Add peak
           </Button>
         )}
       </div>
@@ -224,12 +224,12 @@ export function MeltingStepsPanel({
         <p className="text-sm text-muted-foreground">{analysis.edit_refusal}</p>
       )}
 
-      <ul aria-label="Melting steps" className="divide-y rounded-md border text-sm">
+      <ul aria-label="Peaks" className="divide-y rounded-md border text-sm">
         {rows.length === 0 ? (
           <li className="p-2 text-muted-foreground">
             {positions.length === 0
-              ? "Select a position to review its melting steps."
-              : "The selected positions have no melting steps on this signal."}
+              ? "Select a position to review its peaks."
+              : "The selected positions have no peaks on this signal."}
           </li>
         ) : (
           rows.map((s) => {
@@ -336,12 +336,12 @@ export function MeltingStepsPanel({
         <div className="space-y-3 rounded-md border p-3">
           <p className="text-sm font-medium">
             {form.kind === "add"
-              ? "Add a melting step"
-              : `${FORM_TITLES[form.kind === "restore" ? form.status : form.kind]} the step at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
+              ? "Add a peak"
+              : `${FORM_TITLES[form.kind === "restore" ? form.status : form.kind]} the peak at ${fmt(form.step.value)} ${unit} on ${formPosition?.position_label ?? "this position"}`}
           </p>
           {form.kind === "restore" && (
             <p className="text-xs text-muted-foreground">
-              The reason below was given when the step was rejected. Clear it or change it if it no
+              The reason below was given when the peak was rejected. Clear it or change it if it no
               longer applies.
             </p>
           )}

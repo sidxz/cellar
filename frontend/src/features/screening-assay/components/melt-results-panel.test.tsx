@@ -53,11 +53,20 @@ const positions = [
   pos("s3", { registration_number: "CC-000002", molecule_id: "m2" }),
   pos("s4", { label: "Lipid X" }),
 ];
-const wp = (id: string, tm: number | null, d: number | null, flags: string[] = []) => ({
+/** `stepId`: the peak the server says gave the Tm (a peak's id is its position's). */
+const wp = (
+  id: string,
+  tm: number | null,
+  d: number | null,
+  flags: string[] = [],
+  stepId: string | null = null,
+) => ({
   well_id: id,
   tm,
   delta_tm: d,
   flags,
+  named_by: stepId ? "range" : null,
+  step_id: stepId,
 });
 const win = (window: string, channel: string, low: number, high: number, ps: unknown[]) =>
   ({
@@ -71,17 +80,17 @@ const win = (window: string, channel: string, low: number, high: number, ps: unk
     positions: ps,
   }) as unknown as MeltWindow;
 const step = (well: string, value: number, status: string, channel = "a") =>
-  ({ well_id: well, channel_key: channel, value, status }) as unknown as MeltingStep;
+  ({ id: well, well_id: well, channel_key: channel, value, status }) as unknown as MeltingStep;
 
 const analysis = {
   run_id: "run",
   edit_refusal: null,
   windows: [
     win("Main", "a", 50, 85, [
-      wp("r1", 71.3, 0),
-      wp("s1", 62.8, -8.5),
-      wp("s2", 74.3, 3.0),
-      wp("s3", 70.3, -1.0),
+      wp("r1", 71.3, 0, [], "r1"),
+      wp("s1", 62.8, -8.5, [], "s1"),
+      wp("s2", 74.3, 3.0, [], "s2"),
+      wp("s3", 70.3, -1.0, [], "s3"),
       wp("s4", null, null, ["no_step_in_window"]),
     ]),
     win("Low", "a", 30, 50, [
@@ -100,6 +109,7 @@ const analysis = {
     step("s3", 70.3, "unreviewed"),
   ],
   step_checks: [],
+  outside_every_window: [],
 } as unknown as MeltingAnalysis;
 
 /** The run's rule "ΔTm (Main) outside −2 to 2": s1 (−8.5) and s2 (+3.0) are hits. */
@@ -204,8 +214,8 @@ describe("MeltResultsPanel", () => {
     expect(delta("s3", "−1.0")).toHaveClass("text-muted-foreground");
     expect(within(row("s3")).getByText("Provisional")).toBeInTheDocument();
     expect(within(row("s1")).getByText("Reviewed")).toBeInTheDocument();
-    expect(within(row("s4")).getByText("No step")).toBeInTheDocument();
-    // The reference's own counting step in the shown window is accepted.
+    expect(within(row("s4")).getByText("No peak")).toBeInTheDocument();
+    // The peak that gave the reference its Tm in the shown window is accepted.
     expect(within(row("r1")).getByText("Reference · Reviewed")).toBeInTheDocument();
     expect(within(row("r1")).getByText("—")).toBeInTheDocument();
     // Identity: registered links to the compound with the batch suffix; unregistered
@@ -231,7 +241,7 @@ describe("MeltResultsPanel", () => {
     expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
     expect(screen.queryByLabelText("Shift threshold (°C)")).toBeNull();
-    const needs = screen.getByRole("button", { name: "Step issues 1" });
+    const needs = screen.getByRole("button", { name: "Peak issues 1" });
     fireEvent.click(needs);
     expect(needs).toHaveAttribute("aria-pressed", "true");
     expect(bodyIds()).toEqual(["r1", "s4"]);

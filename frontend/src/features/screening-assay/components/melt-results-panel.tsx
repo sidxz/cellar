@@ -89,8 +89,15 @@ export function MeltResultsPanel({
   }, [windowNames, onShownWindowsChange]);
 
   const rows = useMemo(
-    () => resultRows(windows, positions, analysis.steps, analysis.step_checks),
-    [windows, positions, analysis.steps, analysis.step_checks],
+    () =>
+      resultRows(
+        windows,
+        positions,
+        analysis.steps,
+        analysis.step_checks,
+        analysis.outside_every_window,
+      ),
+    [windows, positions, analysis.steps, analysis.step_checks, analysis.outside_every_window],
   );
   const activeFilter = windowNames.length ? filter : null;
   const ordered = useMemo(() => {
@@ -105,9 +112,9 @@ export function MeltResultsPanel({
   const each = useMemo<WindowSummary[]>(
     () =>
       (comparing ? windows : lead ? [lead] : []).map((w) =>
-        windowSummary(w, rows, positions, analysis.steps, analysis.step_checks, hits),
+        windowSummary(w, rows, positions, analysis.step_checks, hits),
       ),
-    [comparing, windows, lead, rows, positions, analysis, hits],
+    [comparing, windows, lead, rows, positions, analysis.step_checks, hits],
   );
   const summary = useMemo<WindowSummary | null>(() => {
     if (each.length === 0) return null;

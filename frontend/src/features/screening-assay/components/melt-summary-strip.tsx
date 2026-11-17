@@ -7,7 +7,7 @@ import type { ResultFilter, WindowSummary } from "../lib/melt-results";
 
 const NOTE = "font-medium text-amber-700 dark:text-amber-400";
 const Note = ({ children }: { children: ReactNode }) => <span className={NOTE}>{children}</span>;
-const STEP_ISSUES = "Step issues";
+const STEP_ISSUES = "Peak issues";
 
 const Dot = () => (
   <span aria-hidden className="text-muted-foreground">
@@ -107,13 +107,13 @@ export function MeltSummaryStrip({
           {`${reference} ${summary.referenceTm.toFixed(1)} °C (n=${summary.referenceCount})`}
         </span>
       )}
-      {summary.referencesDiffer && <Note>References disagree in step count</Note>}
+      {summary.referencesDiffer && <Note>References have different numbers of peaks</Note>}
       {summary.referenceUnreviewed &&
         (onSelectReferences ? (
           <button
             type="button"
             className={cn(NOTE, "underline-offset-4 hover:underline")}
-            title="Select the reference to review its steps"
+            title="Select the reference to review its peaks"
             onClick={onSelectReferences}
           >
             Reference not reviewed

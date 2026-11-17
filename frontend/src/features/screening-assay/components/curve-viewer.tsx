@@ -79,7 +79,7 @@ const PLOT_HEIGHT = "h-[400px]";
 // The run tab's narrow column: shorter, so the steps under it are on the first screen.
 const COMPACT_PLOT_STYLE = { width: "100%", height: 340 };
 const COMPACT_PLOT_HEIGHT = "h-[340px]";
-const NOTHING_SELECTED = "Select a sample in the results to see its trace and steps.";
+const NOTHING_SELECTED = "Select a sample in the results to see its trace and peaks.";
 
 function Field({
   label,
@@ -795,11 +795,11 @@ function CurveViewerBody({
                 <>
                   <span>
                     <Swatch line colour={colours.neutral} />
-                    Reviewed step
+                    Reviewed peak
                   </span>
                   <span>
                     <Swatch line dash="dashed" colour={colours.neutral} />
-                    Unreviewed step
+                    Unreviewed peak
                   </span>
                   <span>
                     <Swatch line dash="dotted" colour={colours.neutral} />

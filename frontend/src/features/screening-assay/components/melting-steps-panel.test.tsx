@@ -168,7 +168,7 @@ async function select(...names: string[]) {
   for (const [i, name] of names.entries()) {
     fireEvent.click(gridRow(name), { metaKey: i > 0 });
   }
-  return screen.findByRole("list", { name: "Melting steps" });
+  return screen.findByRole("list", { name: "Peaks" });
 }
 
 function row(table: HTMLElement, text: string) {
@@ -277,7 +277,7 @@ describe("MeltingStepsPanel", () => {
   it("a plot click fills two decimals", async () => {
     renderPanel();
     await select("Position 3");
-    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
     plotProps.at(-1)?.onClick?.({ points: [{ x: 32.646001, y: 2 }] });
     await waitFor(() => expect(screen.getByLabelText("Value")).toHaveValue(32.65));
   });
@@ -353,7 +353,7 @@ describe("MeltingStepsPanel", () => {
   it("a plot click fills the open form's value without saving", async () => {
     renderPanel();
     await select("Position 3");
-    fireEvent.click(screen.getByRole("button", { name: "Add step" }));
+    fireEvent.click(screen.getByRole("button", { name: "Add peak" }));
     const onClick = plotProps.at(-1)?.onClick;
     expect(onClick).toBeDefined();
     onClick?.({ points: [{ x: 52.3, y: 2 }] });
@@ -369,7 +369,7 @@ describe("MeltingStepsPanel", () => {
   });
 
   it("shows the conflict message and Reload", async () => {
-    const message = "The melting step was changed by someone else. Reload and try again.";
+    const message = "This peak was changed by someone else. Reload and try again.";
     api.mockImplementation((req: { url: string; method: string }) => {
       if (req.url.endsWith("/melting-analysis")) return Promise.resolve(analysis);
       return Promise.reject(new ApiError(`API error: 409 — ${message}`, 409, { detail: message }));
@@ -385,13 +385,13 @@ describe("MeltingStepsPanel", () => {
     await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument());
   });
 
-  it("hides actions and shows the refusal on a completed run", async () => {
-    const refusal = "Melting steps can be changed only while the run is draft or in progress";
+  it("hides actions and shows the refusal on an approved run", async () => {
+    const refusal = "Peaks cannot be changed on an approved run";
     analysis = { ...analysis, edit_refusal: refusal };
     renderPanel();
     const table = await select("Position 1");
     expect(screen.getByText(refusal)).toBeInTheDocument();
-    for (const name of ["Accept", "Reject", "Correct", "Mark unreviewed", "Add step"]) {
+    for (const name of ["Accept", "Reject", "Correct", "Mark unreviewed", "Add peak"]) {
       expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
     }
     expect(within(table).getByText("36.6")).toBeInTheDocument();

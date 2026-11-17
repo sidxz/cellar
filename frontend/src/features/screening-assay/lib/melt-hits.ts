@@ -82,6 +82,20 @@ export function splitRunRules(
   return { applicable, other };
 }
 
+/** A position's value for a rule's readout; null when it has none. */
+function valuesOf(analysis: MeltingAnalysis) {
+  const cells = new Map(
+    analysis.windows.map((w) => [w.window, new Map(w.positions.map((p) => [p.well_id, p]))]),
+  );
+  return ({ window, measure }: ApplicableRule, wellId: string): number | null =>
+    cells.get(window)?.get(wellId)?.[measure] ?? null;
+}
+
+const sampleIds = (positions: readonly CurvePosition[], keep: (wellId: string) => boolean) =>
+  new Set(
+    positions.flatMap((p) => (p.well_type === "sample" && keep(p.well_id) ? [p.well_id] : [])),
+  );
+
 /** Sample positions meeting every applicable rule; a missing value fails its rule. */
 export function hitWells(
   analysis: MeltingAnalysis,
@@ -89,19 +103,24 @@ export function hitWells(
   applicable: readonly ApplicableRule[],
 ): ReadonlySet<string> {
   if (applicable.length === 0) return new Set();
-  const cells = new Map(
-    analysis.windows.map((w) => [w.window, new Map(w.positions.map((p) => [p.well_id, p]))]),
+  const value = valuesOf(analysis);
+  return sampleIds(positions, (id) =>
+    applicable.every((a) => {
+      const v = value(a, id);
+      return v != null && meetsRule(v, a.rule);
+    }),
   );
-  const hits = new Set<string>();
-  for (const p of positions) {
-    if (p.well_type !== "sample") continue;
-    const met = applicable.every(({ rule, window, measure }) => {
-      const v = cells.get(window)?.get(p.well_id)?.[measure];
-      return typeof v === "number" && meetsRule(v, rule);
-    });
-    if (met) hits.add(p.well_id);
-  }
-  return hits;
+}
+
+/** Sample positions missing a value an applicable rule needs: they fail the
+ *  rule for want of a number, not because of one. */
+export function notEvaluated(
+  analysis: MeltingAnalysis,
+  positions: readonly CurvePosition[],
+  applicable: readonly ApplicableRule[],
+): ReadonlySet<string> {
+  const value = valuesOf(analysis);
+  return sampleIds(positions, (id) => applicable.some((a) => value(a, id) == null));
 }
 
 /** The band to draw on a window's ΔTm figures, from the first rule on its ΔTm. */
