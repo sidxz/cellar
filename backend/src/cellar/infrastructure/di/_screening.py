@@ -201,6 +201,7 @@ from cellar.application.screening.resolve_collection_coverage import (
     ResolveRunCollections,
 )
 from cellar.application.screening.resolve_layout_file import ResolveLayoutFile
+from cellar.application.screening.resolve_position_labels import ResolvePositionLabels
 from cellar.application.screening.resolve_target_links import (
     GetProtocolTargets,
     ResolveProtocolTargets,
@@ -1191,6 +1192,17 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ResolveLayoutFile, _resolve_layout_file)
+
+    def _resolve_position_labels(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResolvePositionLabels(
+            uow=uow,
+            run_repo=SQLAlchemyRunRepository(uow),
+            molecule_repo=SQLAlchemyMoleculeRepository(uow),
+            batch_repo=SQLAlchemyBatchRepository(uow),
+        )
+
+    container.define(ResolvePositionLabels, _resolve_position_labels)
 
     def _get_run_curves(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
