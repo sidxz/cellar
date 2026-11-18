@@ -137,8 +137,9 @@ def compute_names(
     objects: list[dict[str, Any]], mapping: ColumnMapping, id_mapping: EntityMapping
 ) -> dict[str, int]:
     """Each molecule's deciding values — its name and vault id, lower-cased — → its vault
-    id. Stored on another compound, such a value would make that molecule's own row
-    find (or conflict with) the wrong compound, whichever is read first.
+    id, kept only where some molecule also lists the value as a compound ID (so the file
+    stays small on a Full run). Stored on another compound, such a value would make that
+    molecule's own row find (or conflict with) the wrong compound, whichever is read first.
 
     ponytail: only the run's own molecules are known; a value equal to the name of a
     molecule outside the run (an earlier Sync / Specific run, or one not read yet) is
@@ -147,13 +148,15 @@ def compute_names(
     """
     molecule_cols, _, _ = _split(mapping)
     names: dict[str, int] = {}
+    listed: set[str] = set()
     for obj in objects:
         entity_id: int = _resolve_field(obj, id_mapping.id_field) or 0
         row = _row(_getter(obj, entity_id), molecule_cols)
+        listed.update(e["identifier"].lower() for e in _compound_ids(row))
         for value in (row.name, str(entity_id) if entity_id else None):
             if value:
                 names.setdefault(value.lower(), entity_id)
-    return names
+    return {v: owner for v, owner in names.items() if v in listed}
 
 
 # ---------------------------------------------------------------------------

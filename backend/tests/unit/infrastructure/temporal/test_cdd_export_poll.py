@@ -102,7 +102,8 @@ class _MoleculeVault(_Vault):
         self, vault_id: str, api_key: str, export_id: int, dest_path: str
     ) -> None:
         objects = [
-            {"id": i, "name": n, "synonyms": [n, "Series 1"]} for i, n in [(1, "A"), (2, "B")]
+            {"id": 1, "name": "A", "synonyms": ["A", "Series 1"]},
+            {"id": 2, "name": "B", "synonyms": ["B", "Series 1", "A"]},  # A's name
         ]
         Path(dest_path).write_text(json.dumps({"count": 2, "objects": objects}))
 
@@ -117,7 +118,7 @@ async def test_a_molecule_export_with_a_mapping_gets_its_labels_and_names(monkey
     )
     assert json.loads((Path(out.storage_path) / "labels.json").read_text()) == {"series 1": 2}
     names = json.loads((Path(out.storage_path) / "names.json").read_text())
-    assert names == {"a": 1, "1": 1, "b": 2, "2": 2}
+    assert names == {"a": 1}  # only names some molecule also lists as an ID
 
 
 @pytest.mark.parametrize("status", ["failed", "canceled"])
