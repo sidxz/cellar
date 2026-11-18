@@ -7,6 +7,7 @@ import type {
   DataSourceResponse,
   EntityMappingResponse,
   UpdateDataSourceBody,
+  VaultFieldsResponse,
 } from "@/shared/lib/api/model";
 import { useQuery } from "@tanstack/react-query";
 
@@ -74,5 +75,17 @@ export function useDataSourceTemplate(sourceType: string | null) {
         method: "GET",
       }),
     enabled: !!sourceType,
+  });
+}
+
+/** The vault's own fields, for the Match fields editor (admin only). */
+export function useVaultFields(dataSourceId: string) {
+  return useQuery({
+    queryKey: ["data-sources", dataSourceId, "vault-fields"],
+    queryFn: () =>
+      customInstance<VaultFieldsResponse>({
+        url: `${API_V1}/data-sources/${dataSourceId}/vault-fields`,
+        method: "GET",
+      }),
   });
 }

@@ -29,6 +29,7 @@ import { isTerminalImportStatus } from "@/shared/lib/job-status";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MOLECULES_KEY } from "../hooks/query-keys";
 import { useCddImportPreview } from "../hooks/use-cdd-import-preview";
@@ -326,7 +327,17 @@ export function DataImportPage() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label>Import Mode</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>Import Mode</Label>
+                      {isAdmin && (
+                        <Link
+                          href="/admin/data-sources"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Field mapping
+                        </Link>
+                      )}
+                    </div>
                     <RadioGroup
                       value={importMode}
                       onValueChange={(v) => setImportMode(v as ImportMode)}
