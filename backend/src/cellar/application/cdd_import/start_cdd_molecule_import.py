@@ -93,6 +93,13 @@ class StartCddMoleculeImport:
         vault_id = str(config.data_source.config.get("vault_id", ""))
         if not vault_id:
             return Failure(ValidationError("CDD Vault data source has no vault_id configured"))
+        if not config.data_source.registration_mapping:
+            return Failure(
+                ValidationError(
+                    "The CDD Vault data source has no field mapping yet. "
+                    "An admin sets it on the data source page."
+                )
+            )
 
         secret_ref = f"{input.workspace_id}:{config.data_source.api_key_name}"
 
@@ -104,6 +111,7 @@ class StartCddMoleculeImport:
             originating_org_id=input.originating_org_id,
             secret_ref=secret_ref,
             entity_mappings=[em.to_dict() for em in config.data_source.entity_mappings],
+            registration_mapping=config.data_source.registration_mapping,
             filter_criteria={"names": names} if names else None,
             max_molecules=input.max_molecules,
             create_batch_on_duplicate=config.data_source.create_batch_on_duplicate,

@@ -22,6 +22,7 @@ class StartCddMoleculeImportRequest:
     originating_org_id: uuid.UUID
     secret_ref: str
     entity_mappings: list[dict]
+    registration_mapping: list[dict] | None = None  # vault field → target, see data source
     filter_criteria: dict | None = None
     max_molecules: int | None = None
     create_batch_on_duplicate: bool | None = None

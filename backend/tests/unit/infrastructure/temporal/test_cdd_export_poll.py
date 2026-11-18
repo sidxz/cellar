@@ -9,6 +9,7 @@ import pytest
 from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
+from cellar.application.cdd_import.registration_mapping import default_cdd_registration_mapping
 from cellar.infrastructure.temporal.activities import cdd_fetch
 from cellar.infrastructure.temporal.activities.cdd_fetch import CddFetchActivities
 from cellar.infrastructure.temporal.activities.dtos import CddPollExportInput
@@ -53,12 +54,21 @@ class _SlowVault(_Vault):
         await super().stream_export_to_file(vault_id, api_key, export_id, dest_path)
 
 
-def _poll(status: str, vault: _Vault | None = None, beats: list | None = None):
+def _poll(
+    status: str,
+    vault: _Vault | None = None,
+    beats: list | None = None,
+    registration_mapping: list[dict] | None = None,
+):
     activities = CddFetchActivities(
         session_factory=None, secret_provider=_Secrets(), cdd_client=vault or _Vault(status)
     )
     poll_input = CddPollExportInput(
-        workspace_id="ws", secret_ref="ws:cdd_vault", vault_id="4443", export_id=77
+        workspace_id="ws",
+        secret_ref="ws:cdd_vault",
+        vault_id="4443",
+        export_id=77,
+        registration_mapping=registration_mapping,
     )
     env = ActivityEnvironment()
     if beats is not None:
@@ -81,6 +91,27 @@ async def test_ready_export_is_saved_as_chunks(status, monkeypatch, tmp_path):
     export_dir = tmp_path / "cdd-exports" / "77"
     assert Path(out.storage_path) == export_dir
     assert json.loads((export_dir / "chunk_000000.json").read_text()) == EXPORT["objects"]
+    assert not (export_dir / "labels.json").exists()  # a plate export has none
+
+
+class _MoleculeVault(_Vault):
+    async def stream_export_to_file(
+        self, vault_id: str, api_key: str, export_id: int, dest_path: str
+    ) -> None:
+        objects = [
+            {"id": i, "name": n, "synonyms": [n, "Series 1"]} for i, n in [(1, "A"), (2, "B")]
+        ]
+        Path(dest_path).write_text(json.dumps({"count": 2, "objects": objects}))
+
+
+async def test_a_molecule_export_with_a_mapping_gets_its_labels(monkeypatch, tmp_path):
+    monkeypatch.setenv("STORAGE_ROOT", str(tmp_path))
+    out = await _poll(
+        "finished",
+        vault=_MoleculeVault("finished"),
+        registration_mapping=default_cdd_registration_mapping(),
+    )
+    assert json.loads((Path(out.storage_path) / "labels.json").read_text()) == {"series 1": 2}
 
 
 @pytest.mark.parametrize("status", ["failed", "canceled"])
@@ -109,7 +140,7 @@ async def test_parse_keeps_heartbeating_off_the_event_loop(monkeypatch, tmp_path
     beats: list = []
     beats_during_parse = 0
 
-    def slow_split(raw_path: Path, export_dir: Path) -> tuple[int, int]:
+    def slow_split(raw_path: Path, export_dir: Path, mapping=None) -> tuple[int, int]:
         nonlocal beats_during_parse
         before = len(beats)
         time.sleep(0.05)  # blocks its thread, the way parsing a huge export does

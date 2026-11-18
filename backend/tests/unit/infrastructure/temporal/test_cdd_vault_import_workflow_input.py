@@ -24,6 +24,7 @@ def _input(**overrides) -> CddVaultImportWorkflowInput:
         "secret_ref": "ws:cdd_vault",
         "filter_criteria": {"names": NAMES},
         "entity_mappings": [{"entity_type": "molecule"}],
+        "registration_mapping": [{"header": "name", "target": "name"}],
         "create_batch_on_duplicate": True,
     }
     return CddVaultImportWorkflowInput(**{**values, **overrides})
@@ -70,6 +71,7 @@ def test_continue_input_keeps_the_filter_and_options_and_takes_progress() -> Non
     assert nxt.import_mode == "filtered"
     assert nxt.max_molecules == 900
     assert nxt.entity_mappings == [{"entity_type": "molecule"}]
+    assert nxt.registration_mapping == [{"header": "name", "target": "name"}]
     assert nxt.create_batch_on_duplicate is True
     assert nxt.import_id == "imp"
     assert nxt.storage_path == "/data/cdd-exports/77"

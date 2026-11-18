@@ -1,7 +1,9 @@
 """Plate registration activities — process a chunk of CDD plates.
 
 Registers plates via existing RegisterPlate + MapWells use cases.
-Resolves CDD batch IDs to internal batch IDs via custom_fields query.
+Resolves CDD batch IDs to internal batch IDs via custom_fields, else the batch's
+``cdd_batch_id`` identifier (a file-created batch later matched by a CDD run has
+only the identifier).
 """
 
 from __future__ import annotations
@@ -26,7 +28,10 @@ from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.inventory.batch_repository import (
     SQLAlchemyBatchRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
+    BatchIdentifierModel,
+    BatchModel,
+)
 from cellar.infrastructure.persistence.sqlalchemy.inventory.registered_plate_repository import (
     SQLAlchemyRegisteredPlateRepository,
 )
@@ -208,6 +213,18 @@ class PlateRegistrationActivities:
                     internal_id = result.scalar_one_or_none()
                     if internal_id:
                         batch_id_map[cdd_bid] = internal_id
+                missing = [str(b) for b in cdd_batch_ids - batch_id_map.keys()]
+                if missing:
+                    rows = await uow.session.execute(
+                        select(
+                            BatchIdentifierModel.identifier, BatchIdentifierModel.batch_id
+                        ).where(
+                            BatchIdentifierModel.workspace_id == workspace_id,
+                            BatchIdentifierModel.identifier_type == "cdd_batch_id",
+                            BatchIdentifierModel.identifier.in_(missing),
+                        )
+                    )
+                    batch_id_map.update({int(text): bid for text, bid in rows.all()})
 
         # Build well_map
         well_map: dict[str, dict] = {}

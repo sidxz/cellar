@@ -31,16 +31,8 @@ from cellar.application.chemical_registration.row_batch import (
     ApplyRowBatchCommand,
     row_batch_ids,
 )
-from cellar.application.inventory.batch_identifiers import (
-    AddBatchIdentifier,
-    AddBatchIdentifierCommand,
-)
 from cellar.application.inventory.batch_policy import should_create_batch
-from cellar.application.inventory.create_batch import (
-    CreateBatch,
-    CreateBatchCommand,
-    NewBatchIdentifier,
-)
+from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.shared.actor_context import set_current_actor
@@ -280,7 +272,7 @@ class RegistrationActivities:
                     else None,
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
-                    warnings=[*outcome.skipped_ids, *batch_warnings],
+                    warnings=[*item.warnings, *outcome.skipped_ids, *batch_warnings],
                 )
             )
 
@@ -322,8 +314,9 @@ async def _create_batch(
     session_factory: async_sessionmaker,
     dispatcher,
 ) -> tuple[uuid.UUID | None, str | None, bool]:
-    """Resolve salt and create a batch. Uses a fresh UoW for each call."""
-    batch_cmd, salt_matched, create_batch, add_batch_alias = await _batch_command(
+    """A row without batch IDs: resolve salt and create a batch (the duplicate policy
+    already said yes). Uses a fresh UoW for each call."""
+    batch_cmd, salt_matched, create_batch = await _batch_command(
         item=item,
         reg_outcome=reg_outcome,
         workspace_id=workspace_id,
@@ -331,17 +324,17 @@ async def _create_batch(
         session_factory=session_factory,
         dispatcher=dispatcher,
     )
-    molecule = reg_outcome.molecule
-    return await _run_create_batch(
-        item=item,
-        molecule_id=molecule.id,
-        workspace_id=workspace_id,
-        submitted_by=submitted_by,
-        batch_cmd=batch_cmd,
-        salt_matched=salt_matched,
-        create_batch=create_batch,
-        add_batch_alias=add_batch_alias,
-    )
+    batch_result = await create_batch(batch_cmd)
+    if isinstance(batch_result, Failure):
+        logger.warning(
+            "registration.batch_create_failed",
+            molecule_id=str(reg_outcome.molecule.id),
+            row_index=item.row_index,
+            error=str(batch_result.failure()),
+        )
+        return None, None, False
+    batch = batch_result.unwrap().batch
+    return batch.id, batch.batch_number.value, salt_matched
 
 
 async def _apply_row_batch(
@@ -357,7 +350,7 @@ async def _apply_row_batch(
     batch (``row_batch.ApplyRowBatch``). Returns ``(batch_id, batch_number,
     salt_matched, problem, skipped-ID warnings)``; on a problem the compound stays
     registered."""
-    batch_cmd, salt_matched, create_batch, _ = await _batch_command(
+    batch_cmd, salt_matched, create_batch = await _batch_command(
         item=item,
         reg_outcome=reg_outcome,
         workspace_id=workspace_id,
@@ -404,8 +397,8 @@ async def _batch_command(
     submitted_by: uuid.UUID,
     session_factory: async_sessionmaker,
     dispatcher,
-) -> tuple[CreateBatchCommand, bool, CreateBatch, AddBatchIdentifier]:
-    """Resolve salt; build the batch command and the use cases that run it."""
+) -> tuple[CreateBatchCommand, bool, CreateBatch]:
+    """Resolve salt; build the batch command and the use case that runs it."""
     molecule = reg_outcome.molecule
     detected_salt = reg_outcome.detected_salt
 
@@ -472,30 +465,11 @@ async def _batch_command(
         sync=SyncBatchIdentifierMirrors(batch_repo),
     )
 
-    # Separate UoW for the alias-capture step; AddBatchIdentifier manages its own txn.
-    alias_uow = AsyncUnitOfWork(session_factory)
-    add_batch_alias = AddBatchIdentifier(
-        uow=alias_uow,
-        repo=SQLAlchemyBatchRepository(alias_uow),
-        dispatcher=dispatcher,
-    )
-
-    # Merge CDD batch ID into custom_fields for plate well resolution
+    # The CDD vault batch id also goes into custom_fields: plate wells resolve by it.
+    # (It is a batch ID too — ``item.batch_ids`` — which ApplyRowBatch stores.)
     custom_fields = None
     if item.cdd_batch_id is not None:
         custom_fields = {"cdd_batch_id": item.cdd_batch_id}
-
-    # The CDD batch name becomes a real batch ID (as migration 105 did for earlier
-    # imports), so a later file export of the same batch matches it instead of
-    # creating a second one. Skipped when another batch already holds the text.
-    # ponytail: stopgap until the CDD importer maps batch IDs itself (phase 2 spec).
-    born_with: tuple[NewBatchIdentifier, ...] = ()
-    vcn = (item.vendor_catalog_number or "").strip()
-    if item.cdd_batch_id is not None and vcn and len(vcn) <= 255:
-        async with batch_uow:
-            holder = await batch_repo.find_by_external_identifier(workspace_id, vcn)
-        if holder is None:
-            born_with = (NewBatchIdentifier(vcn, "custom", "CDD batch ID"),)
 
     batch_cmd = CreateBatchCommand(
         workspace_id=workspace_id,
@@ -511,62 +485,7 @@ async def _batch_command(
         formula_weight=formula_weight,
         purity=item.purity,
         appearance=item.appearance,
-        vendor_catalog_number=item.vendor_catalog_number,
         custom_fields=custom_fields,
-        identifiers=born_with,
     )
 
-    return batch_cmd, salt_matched, create_batch, add_batch_alias
-
-
-async def _run_create_batch(
-    *,
-    item: ChunkItem,
-    molecule_id: uuid.UUID,
-    workspace_id: uuid.UUID,
-    submitted_by: uuid.UUID,
-    batch_cmd: CreateBatchCommand,
-    salt_matched: bool,
-    create_batch: CreateBatch,
-    add_batch_alias: AddBatchIdentifier,
-) -> tuple[uuid.UUID | None, str | None, bool]:
-    batch_result = await create_batch(batch_cmd)
-
-    if isinstance(batch_result, Failure):
-        logger.warning(
-            "registration.batch_create_failed",
-            molecule_id=str(molecule_id),
-            row_index=item.row_index,
-            error=str(batch_result.failure()),
-        )
-        return None, None, False
-
-    batch = batch_result.unwrap().batch
-
-    # Capture the CDD batch id as a BatchIdentifier so future imports + plate
-    # lookups can resolve via find_by_external_identifier (mirror of how
-    # MoleculeIdentifier captures CDD molecule id). The custom_fields write
-    # above stays as the existing plate-well-resolution mechanism for now.
-    if item.cdd_batch_id is not None:
-        alias_result = await add_batch_alias(
-            AddBatchIdentifierCommand(
-                workspace_id=workspace_id,
-                batch_id=batch.id,
-                identifier=str(item.cdd_batch_id),
-                identifier_type="cdd_batch_id",
-                source="CDD import",
-                registered_by=submitted_by,
-            ),
-            auth=None,  # Temporal activities run as system; auth=None bypasses guard
-        )
-        if isinstance(alias_result, Failure):
-            # Conflict on re-import is expected (identifier already exists for this
-            # batch); log and continue. Other failures are also non-fatal: the batch
-            # exists, only the alias capture failed.
-            logger.warning(
-                "registration.cdd_batch_alias_failed",
-                cdd_batch_id=item.cdd_batch_id,
-                error=str(alias_result.failure()),
-            )
-
-    return batch.id, batch.batch_number.value, salt_matched
+    return batch_cmd, salt_matched, create_batch

@@ -15,7 +15,9 @@ import asyncio
 import json
 import uuid
 from collections.abc import Awaitable
+from dataclasses import asdict
 from pathlib import Path
+from typing import Any
 
 import structlog
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -23,8 +25,9 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from cellar.application.cdd_import.molecule_identifiers import match_identifiers
-from cellar.application.cdd_import.molecule_mapper import map_cdd_molecules
+from cellar.application.cdd_import.molecule_mapper import compute_labels, map_cdd_molecules
 from cellar.application.cdd_import.plate_mapper import map_cdd_plate
+from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.domain.shared.secret_provider import SecretProvider
 from cellar.domain.workspace_config.data_source import EntityMapping
 from cellar.infrastructure.cdd.client import CddVaultClient
@@ -41,6 +44,7 @@ from cellar.infrastructure.temporal.activities.dtos import (
     CddStartPlateExportInput,
     CddSyncWatermarkInput,
     CddSyncWatermarkOutput,
+    ChunkItem,
     LoadExportChunkInput,
     LoadExportChunkOutput,
     LoadPlateChunkInput,
@@ -52,6 +56,8 @@ logger = structlog.get_logger(__name__)
 
 # The import workflows give the poll activities a 60 s heartbeat timeout.
 _HEARTBEAT_EVERY = 10.0
+
+_LABELS = "labels.json"
 
 
 async def _while_heartbeating[T](work: Awaitable[T], details: str) -> T:
@@ -67,8 +73,15 @@ async def _while_heartbeating[T](work: Awaitable[T], details: str) -> T:
         task.cancel()
 
 
-def _split_export(raw_path: Path, export_dir: Path) -> tuple[int, int]:
+def _split_export(
+    raw_path: Path, export_dir: Path, mapping: ColumnMapping | None = None
+) -> tuple[int, int]:
     """Parse a downloaded export into a manifest plus chunk files. Blocking: run it in a thread.
+
+    With a molecule export's registration ``mapping``, also writes ``labels.json``: the
+    compound IDs on 2+ molecules of this export (``compute_labels``), which
+    ``load_export_chunk`` does not store. A Full run sees the whole vault; Sync and
+    Specific molecules only what they read.
 
     Returns ``(count, number_of_objects)``.
     """
@@ -81,6 +94,8 @@ def _split_export(raw_path: Path, export_dir: Path) -> tuple[int, int]:
 
     # Write manifest
     (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
+    if mapping is not None:
+        (export_dir / _LABELS).write_text(json.dumps(compute_labels(objects, mapping)))
 
     # Split into chunk files
     for i in range(0, len(objects), CHUNK_SIZE):
@@ -234,8 +249,13 @@ class CddFetchActivities:
 
         # In a thread so the loop keeps heartbeating. ponytail: json.load holds the GIL, so
         # the bare parse still stalls heartbeats (~4 s/GB); stream-parse if exports near 10 GB.
+        mapping = (
+            ColumnMapping.from_dict({"columns": input.registration_mapping})
+            if input.registration_mapping
+            else None
+        )
         count, object_count = await _while_heartbeating(
-            asyncio.to_thread(_split_export, raw_path, export_dir),
+            asyncio.to_thread(_split_export, raw_path, export_dir, mapping),
             f"export {input.export_id}: parsing",
         )
         logger.info("cdd_fetch.export_parsed", export_id=input.export_id, object_count=count)
@@ -300,7 +320,8 @@ class CddFetchActivities:
 
     @activity.defn
     async def load_export_chunk(self, input: LoadExportChunkInput) -> LoadExportChunkOutput:
-        """Load a chunk of molecules from a pre-split chunk file and map to ChunkItems."""
+        """Load a chunk of molecules from a pre-split chunk file and map it to ChunkItems:
+        one per CDD batch, or one for a molecule without batches."""
 
         chunk_objects, has_more = self._load_raw_chunk(
             input.storage_path,
@@ -310,74 +331,61 @@ class CddFetchActivities:
         )
 
         if not chunk_objects:
-            return LoadExportChunkOutput(items=[], skipped=0, has_more=False, molecule_count=0)
+            return LoadExportChunkOutput(items=[], has_more=False, molecule_count=0)
 
-        # Deserialize entity mappings from workflow input
-        mol_mapping: EntityMapping | None = None
-        batch_mapping: EntityMapping | None = None
-        if input.entity_mappings:
-            for em_dict in input.entity_mappings:
-                em = EntityMapping.from_dict(em_dict)
-                if em.entity_type == "molecule":
-                    mol_mapping = em
-                elif em.entity_type == "batch":
-                    batch_mapping = em
-
-        if mol_mapping is None:
+        if not input.registration_mapping:
+            raise ApplicationError(
+                "This import was started without a field mapping; start it again",
+                non_retryable=True,
+            )
+        mappings = {
+            em.entity_type: em for em in map(EntityMapping.from_dict, input.entity_mappings or [])
+        }
+        if "molecule" not in mappings:
             raise ValueError("No molecule EntityMapping found in entity_mappings")
+        labels_path = Path(input.storage_path) / _LABELS
+        labels = json.loads(labels_path.read_text()) if labels_path.exists() else {}
 
-        mapped, _ = map_cdd_molecules(chunk_objects, mol_mapping, batch_mapping)
+        mapped, _ = map_cdd_molecules(
+            chunk_objects,
+            ColumnMapping.from_dict({"columns": input.registration_mapping}),
+            id_mapping=mappings["molecule"],
+            batch_id_mapping=mappings.get("batch"),
+            labels=labels,
+        )
 
         items: list[dict] = []
-        skipped = 0
-        molecule_count = 0
         for mol_idx, mol in enumerate(mapped):
-            if mol.skipped:
-                skipped += 1
-                continue
-            row_index = input.offset + mol_idx
-            molecule_count += 1
-            if mol.batches:
-                for batch in mol.batches:
-                    items.append(
-                        {
-                            "row_index": row_index,
-                            "name": mol.name,
-                            "smiles": mol.smiles,
-                            "molecule_type": mol.molecule_type,
-                            "external_ids": mol.external_ids,
-                            "amount_value": batch.amount_value,
-                            "amount_unit": batch.amount_unit,
-                            "salt_code": batch.salt_code,
-                            "salt_stoichiometry": batch.salt_stoichiometry,
-                            "purity": batch.purity,
-                            "batch_source": batch.batch_source,
-                            "appearance": batch.appearance,
-                            "vendor_catalog_number": batch.batch_name,
-                            "cdd_molecule_id": mol.cdd_molecule_id,
-                            "cdd_batch_id": batch.cdd_batch_id,
-                            "cdd_modified_at": mol.cdd_modified_at,
-                        }
-                    )
-            else:
-                items.append(
-                    {
-                        "row_index": row_index,
-                        "name": mol.name,
-                        "smiles": mol.smiles,
-                        "molecule_type": mol.molecule_type,
-                        "external_ids": mol.external_ids,
-                        "cdd_molecule_id": mol.cdd_molecule_id,
-                        "cdd_modified_at": mol.cdd_modified_at,
-                    }
+            base: dict[str, Any] = {
+                "row_index": input.offset + mol_idx,
+                "name": mol.name,
+                "smiles": mol.smiles,
+                "molecule_type": mol.molecule_type,
+                "external_ids": mol.external_ids,
+                "cdd_molecule_id": mol.cdd_molecule_id,
+                "cdd_modified_at": mol.cdd_modified_at,
+            }
+            if not mol.batches:
+                items.append(asdict(ChunkItem(**base, warnings=mol.warnings)))
+            for i, b in enumerate(mol.batches):
+                item = ChunkItem(
+                    **base,
+                    batch_ids=b.batch_ids,
+                    amount_value=b.amount_value,
+                    amount_unit=b.amount_unit,
+                    salt_code=b.salt_code,
+                    salt_stoichiometry=b.salt_stoichiometry,
+                    purity=b.purity,
+                    batch_source=b.batch_source,
+                    appearance=b.appearance,
+                    cdd_batch_id=b.cdd_batch_id,
+                    # the molecule's on its first row only, so a report counts them once
+                    warnings=[*(mol.warnings if i == 0 else ()), *b.warnings],
                 )
+                items.append(asdict(item))
 
-        activity.heartbeat(
-            f"loaded chunk offset={input.offset} items={len(items)} skipped={skipped}"
-        )
-        return LoadExportChunkOutput(
-            items=items, skipped=skipped, has_more=has_more, molecule_count=molecule_count
-        )
+        activity.heartbeat(f"loaded chunk offset={input.offset} items={len(items)}")
+        return LoadExportChunkOutput(items=items, has_more=has_more, molecule_count=len(mapped))
 
     @activity.defn
     async def get_sync_watermark(self, input: CddSyncWatermarkInput) -> CddSyncWatermarkOutput:

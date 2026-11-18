@@ -49,6 +49,8 @@ class CddVaultImportWorkflowInput:
     filter_criteria: dict | None = None  # filtered mode: {"names": [...]}
     max_molecules: int | None = None
     entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
+    # The data source's registration mapping, snapshot at start (vault field → target).
+    registration_mapping: list[dict] | None = None
     create_batch_on_duplicate: bool | None = None
     # Resume fields — populated by continue-as-new to carry state across executions
     import_id: str | None = None
@@ -225,6 +227,7 @@ class CddVaultImportWorkflow:
                     limit=CHUNK_SIZE,
                     max_molecules=input.max_molecules,
                     entity_mappings=input.entity_mappings,
+                    registration_mapping=input.registration_mapping,
                 ),
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=_RETRY,
@@ -387,6 +390,7 @@ class CddVaultImportWorkflow:
                         secret_ref=input.secret_ref,
                         vault_id=input.cdd_vault_id,
                         export_id=export_result.export_id,
+                        registration_mapping=input.registration_mapping,
                     ),
                     start_to_close_timeout=timedelta(minutes=60),
                     heartbeat_timeout=timedelta(seconds=60),

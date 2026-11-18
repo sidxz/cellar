@@ -41,7 +41,8 @@ class ChunkItem:
     purity: float | None = None
     batch_source: str = "synthesized"
     appearance: str | None = None
-    vendor_catalog_number: str | None = None  # CDD molecule_batch_identifier
+    # Values the row had but that are not stored (CDD: labels, too-long IDs).
+    warnings: list[str] = field(default_factory=list)
     cdd_molecule_id: int | None = None
     cdd_batch_id: int | None = None  # CDD batch numeric ID (for plate well resolution)
     cdd_modified_at: str | None = None  # ISO timestamp from CDD
@@ -268,6 +269,8 @@ class CddPollExportInput:
     secret_ref: str
     vault_id: str
     export_id: int
+    # A molecule export's registration mapping: the labels in it are found when it is split.
+    registration_mapping: list[dict] | None = None
 
 
 @dataclass
@@ -293,6 +296,7 @@ class LoadExportChunkInput:
     limit: int
     max_molecules: int | None = None
     entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
+    registration_mapping: list[dict] | None = None  # the data source's, snapshot at start
 
 
 @dataclass

@@ -12,6 +12,7 @@ from returns.result import Success
 from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
     CheckCddMoleculeIdentifiers,
 )
+from cellar.application.cdd_import.registration_mapping import default_cdd_registration_mapping
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.workspace_config.get_data_source_for_import import (
     DataSourceImportConfig,
@@ -29,6 +30,7 @@ class _DataSource:
     config = {"vault_id": "4443"}
     api_key_name = "cdd"
     entity_mappings: list = []
+    registration_mapping = default_cdd_registration_mapping()
     create_batch_on_duplicate = False
 
 
