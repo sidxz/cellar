@@ -170,7 +170,7 @@ export function PreviewTable({
                       )}
                     </td>
                     <td className="px-3 py-1.5">
-                      <IdChips item={r.item} />
+                      <IdChips item={r.item} warnings={r.warnings} />
                     </td>
                   </tr>
                 ))}
@@ -206,11 +206,16 @@ function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}\u2026` : s;
 }
 
-/** Every ID the row stores, with its Source, grouped by where it goes. */
-function IdChips({ item }: { item: PreviewItem }) {
+/** The vault's own numbers, in the words the bench uses (not the type or Source name). */
+const VAULT_NUMBER: Record<string, string> = {
+  cdd_molecule_id: "CDD vault molecule number",
+  cdd_batch_id: "CDD vault batch number",
+};
+
+/** Every ID the row stores, with its Source, grouped by where it goes; then what won't be. */
+function IdChips({ item, warnings }: { item: PreviewItem; warnings: string[] }) {
   const compoundIds = item.external_ids ?? [];
   const batchIds = item.batch_ids ?? [];
-  const warnings = item.warnings ?? [];
   if (compoundIds.length === 0 && batchIds.length === 0 && warnings.length === 0) {
     return <span className="text-muted-foreground">{"\u2014"}</span>;
   }
@@ -221,7 +226,7 @@ function IdChips({ item }: { item: PreviewItem }) {
           <span className="text-muted-foreground">Compound:</span>
           {compoundIds.map((e) => (
             <Badge key={`c-${e.identifier}`} variant="outline" className="font-normal">
-              {e.source ?? e.identifier_type} · {e.identifier}
+              {VAULT_NUMBER[e.identifier_type] ?? e.source ?? e.identifier_type} · {e.identifier}
             </Badge>
           ))}
         </div>
@@ -231,7 +236,7 @@ function IdChips({ item }: { item: PreviewItem }) {
           <span className="text-muted-foreground">Batch:</span>
           {batchIds.map((b) => (
             <Badge key={`b-${b.identifier}`} variant="outline" className="font-normal">
-              {b.source} · {b.identifier}
+              {VAULT_NUMBER[b.identifier_type ?? ""] ?? b.source} · {b.identifier}
             </Badge>
           ))}
         </div>

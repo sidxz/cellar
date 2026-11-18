@@ -9,6 +9,8 @@ export interface PreviewRowView {
   /** "New batch", "Already in ChemCellar CC-…-001", "Same batch as row 4", "No new batch"; null on problem or waiting. */
   batch: string | null;
   problem: string | null;
+  /** Values that won't be stored, and why: the file's or vault's own, then the forecast's. */
+  warnings: string[];
 }
 
 export interface PreviewCounts {
@@ -64,9 +66,12 @@ export function buildPreviewRows(
 
   const rows = items.map((item): PreviewRowView => {
     const fileRow = fileRowOf(item);
+    const warnings = [
+      ...new Set([...(item.warnings ?? []), ...(forecast?.get(item.row_index)?.warnings ?? [])]),
+    ];
     const view = (compound: string | null, batch: string | null, problem: string | null) => {
       if (problem) counts.problems += 1;
-      return { item, fileRow, compound, batch, problem };
+      return { item, fileRow, compound, batch, problem, warnings };
     };
 
     if (item.error) return view(null, null, item.error);

@@ -101,6 +101,9 @@ export function DataImportPage() {
 
   // Find active import from history (survives page reload)
   const activeImport = history?.find((imp) => !isTerminalImportStatus(imp.status));
+  // The newest finished import's report, for a page opened after it ran (newest first).
+  const lastFinished = history?.find((imp) => isTerminalImportStatus(imp.status));
+  const fromHistory = !report && !workflowId && !activeImport ? lastFinished : undefined;
 
   // Auto-resume polling for active imports
   useEffect(() => {
@@ -265,6 +268,15 @@ export function DataImportPage() {
                 </div>
               )}
               {report && <RunReport report={report} />}
+              {fromHistory && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Last import ·{" "}
+                    {formatDateTime(fromHistory.completed_at ?? fromHistory.submitted_at)}
+                  </p>
+                  <RunReport report={fromHistory.report} />
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -890,7 +902,9 @@ function RunReport({ report }: { report: CddMoleculeImportStatus["report"] }) {
       </p>
       {report.problem_lines.length > 0 && (
         <details>
-          <summary className="cursor-pointer">Problems ({n(report.problems)})</summary>
+          <summary className="cursor-pointer">
+            Problems ({n(report.problems + report.values_skipped)})
+          </summary>
           <ul className="mt-1 max-h-64 space-y-0.5 overflow-auto text-xs text-muted-foreground">
             {report.problem_lines.map((line, i) => (
               // biome-ignore lint/suspicious/noArrayIndexKey: lines repeat, the list is static

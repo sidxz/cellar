@@ -30,6 +30,7 @@ export interface MappingRow {
   label: string;
   /** Limits the targets offered to this group's; absent = all. */
   group?: MappingGroup;
+  /** A file column's values; no row with samples = no Sample values column. */
   samples?: string[];
 }
 
@@ -64,13 +65,14 @@ export function ColumnMappingTable({
   const update = (key: string, patch: Partial<ColumnMappingBody["columns"][number]>) =>
     onChange({ columns: mapping.columns.map((c) => (c.header === key ? { ...c, ...patch } : c)) });
 
+  const showSamples = rows.some((r) => r.samples !== undefined);
   let lastGroup: MappingGroup | undefined;
   return (
     <table className="w-full text-sm">
       <thead className="sticky top-0 bg-muted/80 backdrop-blur">
         <tr className="border-b text-xs">
           <th className="px-3 py-2 text-left font-medium">{rowHeading}</th>
-          <th className="px-3 py-2 text-left font-medium">Sample values</th>
+          {showSamples && <th className="px-3 py-2 text-left font-medium">Sample values</th>}
           <th className="px-3 py-2 text-left font-medium">Goes to</th>
           <th className="px-3 py-2 text-left font-medium">Source</th>
         </tr>
@@ -87,20 +89,25 @@ export function ColumnMappingTable({
             <Fragment key={r.key}>
               {title && (
                 <tr className="border-b bg-muted/40">
-                  <th colSpan={4} className="px-3 py-1.5 text-left text-xs font-semibold">
+                  <th
+                    colSpan={showSamples ? 4 : 3}
+                    className="px-3 py-1.5 text-left text-xs font-semibold"
+                  >
                     {title}
                   </th>
                 </tr>
               )}
               <tr className="border-b last:border-b-0">
                 <td className="px-3 py-2 font-medium">{r.label}</td>
-                <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px] truncate">
-                  {r.samples === undefined
-                    ? ""
-                    : samples.length > 0
-                      ? samples.join(", ")
-                      : "(empty in this file)"}
-                </td>
+                {showSamples && (
+                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px] truncate">
+                    {r.samples === undefined
+                      ? ""
+                      : samples.length > 0
+                        ? samples.join(", ")
+                        : "(empty in this file)"}
+                  </td>
+                )}
                 <td className="px-3 py-2">
                   <Select
                     value={c.target}
