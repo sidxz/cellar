@@ -443,6 +443,46 @@ describe("DataImportPage: import modes", () => {
     });
   });
 
+  it("explains what Full does", () => {
+    renderAs(false);
+    expect(
+      screen.getByText(/Compounds and batches already in ChemCellar get the IDs and batches/),
+    ).toBeVisible();
+    chooseMode(SPECIFIC);
+    expect(screen.queryByText(/nothing is created twice/)).toBeNull();
+  });
+
+  it("shows the run report, with its problems, once the import has run", async () => {
+    h.status = {
+      status: "completed",
+      registered_count: 2,
+      duplicate_count: 0,
+      error_count: 0,
+      skipped_count: 0,
+      total_count: 2,
+      pages_processed: 1,
+      report: {
+        compounds_added: 2,
+        compounds_matched: 5,
+        batches_created: 3,
+        batches_matched: 4,
+        ids_added: 9,
+        values_skipped: 1,
+        problems: 1,
+        problem_lines: ["SACC-1: 'Paracetamol' is already an ID of CMP-7; not stored on SACC-1"],
+      },
+    };
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(startButton());
+
+    expect(
+      await screen.findByText(/2 compounds added, 5 matched; 3 batches created/),
+    ).toBeVisible();
+    expect(screen.getByText("Problems (1)")).toBeInTheDocument();
+    expect(screen.getByText(/'Paracetamol' is already an ID of CMP-7/)).toBeInTheDocument();
+  });
+
   it("labels an import of specific molecules Selected in the history", () => {
     const mode = h.molecule.import_mode;
     h.molecule.import_mode = "filtered";

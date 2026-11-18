@@ -34,6 +34,7 @@ class CddMoleculeImportStatusResult:
     skipped_count: int
     current_offset: int
     pages_processed: int
+    report: dict
 
 
 class GetCddMoleculeImportStatusFromDb:
@@ -70,6 +71,7 @@ class GetCddMoleculeImportStatusFromDb:
                 skipped_count=imp.skipped_count,
                 current_offset=imp.last_processed_offset,
                 pages_processed=0,
+                report=imp.report,
             )
         )
 

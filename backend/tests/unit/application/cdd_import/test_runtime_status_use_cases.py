@@ -109,6 +109,7 @@ def _db_status_result(status: str = "processing", import_id: str = "import-1"):
             skipped_count=0,
             current_offset=10,
             pages_processed=0,
+            report={"problems": 2, "problem_lines": ["a: x"]},
         )
     )
 
@@ -136,6 +137,7 @@ class TestGetCddMoleculeImportRuntimeStatus:
         )
         assert isinstance(result, Success)
         assert result.unwrap().status == "processing"
+        assert result.unwrap().report["problem_lines"] == ["a: x"]  # the report comes from the DB
         assert sync_failed.calls == []
 
     @pytest.mark.asyncio

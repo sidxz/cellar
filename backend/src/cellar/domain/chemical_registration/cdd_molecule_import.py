@@ -22,6 +22,22 @@ from cellar.domain.shared.errors import ValidationError
 # State-machine transition table
 # ---------------------------------------------------------------------------
 
+REPORT_COUNTS = (
+    "compounds_added",
+    "compounds_matched",
+    "batches_created",
+    "batches_matched",
+    "ids_added",
+    "values_skipped",
+    "problems",
+)
+MAX_PROBLEM_LINES = 500
+
+
+def empty_report() -> dict:
+    return {**dict.fromkeys(REPORT_COUNTS, 0), "problem_lines": []}
+
+
 _TRANSITIONS: dict[CddMoleculeImportStatus, set[CddMoleculeImportStatus]] = {
     CddMoleculeImportStatus.PENDING: {CddMoleculeImportStatus.DISCOVERING},
     CddMoleculeImportStatus.DISCOVERING: {
@@ -72,6 +88,7 @@ class CddMoleculeImport(AggregateRoot):
         error_count: int = 0,
         skipped_count: int = 0,
         last_processed_offset: int = 0,
+        report: dict | None = None,
         submitted_by: uuid.UUID,
         submitted_at: datetime | None = None,
         completed_at: datetime | None = None,
@@ -97,6 +114,7 @@ class CddMoleculeImport(AggregateRoot):
         self.error_count = error_count
         self.skipped_count = skipped_count
         self.last_processed_offset = last_processed_offset
+        self.report = {**empty_report(), **(report or {})}
         self.submitted_by = submitted_by
         self.submitted_at = submitted_at or datetime.now(UTC)
         self.completed_at = completed_at
@@ -203,6 +221,18 @@ class CddMoleculeImport(AggregateRoot):
         """Increment skipped_count (must be PROCESSING)."""
         self._guard_processing()
         self.skipped_count += count
+        self.updated_at = datetime.now(UTC)
+
+    def record_report(self, delta: dict) -> None:
+        """Add a chunk's report counts; keep its problem lines up to the cap."""
+        self._guard_processing()
+        for key in REPORT_COUNTS:
+            self.report[key] += delta.get(key, 0)
+        room = MAX_PROBLEM_LINES - len(self.report["problem_lines"])
+        self.report["problem_lines"] = [
+            *self.report["problem_lines"],
+            *delta.get("problem_lines", [])[: max(room, 0)],
+        ]
         self.updated_at = datetime.now(UTC)
 
     def update_offset(self, offset: int) -> None:

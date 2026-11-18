@@ -30,6 +30,7 @@ from cellar.application.orchestration.workflow_status import (
     WorkflowOrchestratorUnavailable,
 )
 from cellar.application.shared.query import Query
+from cellar.domain.chemical_registration.cdd_molecule_import import empty_report
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 logger = structlog.get_logger(__name__)
@@ -54,6 +55,7 @@ class CddMoleculeImportStatusView:
     skipped_count: int
     current_offset: int
     pages_processed: int
+    report: dict
 
 
 class GetCddMoleculeImportRuntimeStatus:
@@ -96,6 +98,16 @@ class GetCddMoleculeImportRuntimeStatus:
         if progress.status == "failed":
             await self._sync_failed.run(input.workspace_id, progress.import_id)
 
+        # The report lives in the DB (it can hold hundreds of lines); the
+        # workflow's progress carries only the counters.
+        stored = await self._db_status(
+            GetCddMoleculeImportStatusQuery(
+                workspace_id=input.workspace_id, workflow_id=input.workflow_id
+            ),
+            auth=auth,
+        )
+        report = stored.unwrap().report if isinstance(stored, Success) else empty_report()
+
         return Success(
             CddMoleculeImportStatusView(
                 import_id=progress.import_id,
@@ -107,6 +119,7 @@ class GetCddMoleculeImportRuntimeStatus:
                 skipped_count=progress.skipped_count,
                 current_offset=progress.current_offset,
                 pages_processed=progress.pages_processed,
+                report=report,
             )
         )
 
@@ -136,5 +149,6 @@ class GetCddMoleculeImportRuntimeStatus:
                 skipped_count=data.skipped_count,
                 current_offset=data.current_offset,
                 pages_processed=data.pages_processed,
+                report=data.report,
             )
         )

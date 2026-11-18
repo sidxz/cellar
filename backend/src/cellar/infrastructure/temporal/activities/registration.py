@@ -213,6 +213,8 @@ class RegistrationActivities:
             batch_skipped = False
             batch_problem: str | None = None
             batch_warnings: tuple[str, ...] = ()
+            batch_action: str | None = None
+            ids_added = 0
             if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
                 create_batch_now = should_create_batch(
                     is_new_molecule=outcome.is_new,
@@ -229,6 +231,8 @@ class RegistrationActivities:
                         salt_matched,
                         batch_problem,
                         batch_warnings,
+                        batch_action,
+                        ids_added,
                     ) = await _apply_row_batch(
                         item=item,
                         reg_outcome=outcome,
@@ -246,6 +250,7 @@ class RegistrationActivities:
                         session_factory=session_factory,
                         dispatcher=dispatcher,
                     )
+                    batch_action = "created" if batch_id else None
                 else:
                     batch_skipped = True
 
@@ -273,6 +278,8 @@ class RegistrationActivities:
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
                     warnings=[*item.warnings, *outcome.skipped_ids, *batch_warnings],
+                    batch_action=batch_action,
+                    ids_added=ids_added,
                 )
             )
 
@@ -302,7 +309,37 @@ class RegistrationActivities:
             else:
                 output.mol_error += 1
 
+        output.report = chunk_report(
+            output, {i.row_index: i.name or f"Compound-{i.row_index + 1}" for i in input.items}
+        )
         return output
+
+
+def chunk_report(output: ChunkOutput, names: dict[int, str]) -> dict:
+    """The run-report delta for one chunk (see ``CddMoleculeImport.record_report``).
+
+    A problem is a row that failed, a compound whose batch could not be made, or a
+    conflict; a skipped value is any warning ("not stored"). Both get a line.
+    """
+    lines: list[str] = []
+    problems = 0
+    for r in output.results:
+        name = names.get(r.row_index, f"row {r.row_index + 1}")
+        problem = r.error or (r.conflict_reason if r.action == "conflict" else None)
+        if problem:
+            problems += 1
+            lines.append(f"{name}: {problem}")
+        lines.extend(f"{name}: {w}" for w in r.warnings)
+    return {
+        "compounds_added": output.mol_registered,
+        "compounds_matched": output.mol_duplicate,
+        "batches_created": sum(r.batch_action == "created" for r in output.results),
+        "batches_matched": sum(r.batch_action == "existing" for r in output.results),
+        "ids_added": sum(r.ids_added for r in output.results),
+        "values_skipped": sum(len(r.warnings) for r in output.results),
+        "problems": problems,
+        "problem_lines": lines,
+    }
 
 
 async def _create_batch(
@@ -345,11 +382,11 @@ async def _apply_row_batch(
     submitted_by: uuid.UUID,
     session_factory: async_sessionmaker,
     dispatcher,
-) -> tuple[uuid.UUID | None, str | None, bool, str | None, tuple[str, ...]]:
+) -> tuple[uuid.UUID | None, str | None, bool, str | None, tuple[str, ...], str | None, int]:
     """The row names its batch (``item.batch_ids``): find or create exactly that
     batch (``row_batch.ApplyRowBatch``). Returns ``(batch_id, batch_number,
-    salt_matched, problem, skipped-ID warnings)``; on a problem the compound stays
-    registered."""
+    salt_matched, problem, skipped-ID warnings, batch action, IDs added)``; on a
+    problem the compound stays registered."""
     batch_cmd, salt_matched, create_batch = await _batch_command(
         item=item,
         reg_outcome=reg_outcome,
@@ -381,12 +418,20 @@ async def _apply_row_batch(
             row_index=item.row_index,
             error=str(result.failure()),
         )
-        return None, None, False, str(result.failure()), ()
+        return None, None, False, str(result.failure()), (), None, 0
     r = result.unwrap()
     if r.action == "problem":
-        return None, None, False, r.problem, ()
+        return None, None, False, r.problem, (), None, 0
     created = r.action == "created"
-    return r.batch_id, r.batch_number, salt_matched and created, None, r.skipped
+    return (
+        r.batch_id,
+        r.batch_number,
+        salt_matched and created,
+        None,
+        r.skipped,
+        r.action,
+        r.ids_added,
+    )
 
 
 async def _batch_command(

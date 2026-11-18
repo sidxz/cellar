@@ -266,6 +266,8 @@ class BulkTrackingActivities:
                 imp.record_error(input.error)
             if input.skipped:
                 imp.record_skipped(input.skipped)
+            if input.report:
+                imp.record_report(input.report)
             imp.update_offset(input.last_processed_offset)
             await repo.save(imp)
             await uow.commit()

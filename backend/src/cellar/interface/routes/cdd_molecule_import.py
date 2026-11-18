@@ -65,6 +65,19 @@ class CddMoleculeImportAcceptedResponse(BaseModel):
     status: str = "pending"
 
 
+class CddMoleculeImportReport(BaseModel):
+    """What a run added and what it skipped (problem_lines capped at 500)."""
+
+    compounds_added: int
+    compounds_matched: int
+    batches_created: int
+    batches_matched: int
+    ids_added: int
+    values_skipped: int
+    problems: int
+    problem_lines: list[str]
+
+
 class CddMoleculeImportStatusResponse(BaseModel):
     import_id: str
     status: str
@@ -75,6 +88,7 @@ class CddMoleculeImportStatusResponse(BaseModel):
     skipped_count: int
     current_offset: int
     pages_processed: int
+    report: CddMoleculeImportReport
 
 
 class CddMoleculeImportSummary(BaseModel):
@@ -201,6 +215,7 @@ async def get_cdd_molecule_import_status(
         skipped_count=data.skipped_count,
         current_offset=data.current_offset,
         pages_processed=data.pages_processed,
+        report=CddMoleculeImportReport(**data.report),
     )
 
 

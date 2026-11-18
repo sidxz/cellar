@@ -261,6 +261,7 @@ class CddVaultImportWorkflow:
                         error=reg_result.mol_error,
                         skipped=chunk_result.skipped,
                         last_processed_offset=offset + CHUNK_SIZE,
+                        report=reg_result.report,
                     ),
                     start_to_close_timeout=timedelta(seconds=30),
                 )

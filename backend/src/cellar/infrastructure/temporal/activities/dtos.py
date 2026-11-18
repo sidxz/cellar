@@ -85,6 +85,10 @@ class ChunkItemResult:
     batch_skipped: bool = False
     # Stored-only IDs not stored because another compound / batch holds them.
     warnings: list[str] = field(default_factory=list)
+    # What happened to the row's batch: "created" | "existing" | None (no batch).
+    batch_action: str | None = None
+    # Batch IDs stored on the row's batch (new or existing).
+    ids_added: int = 0
 
 
 @dataclass
@@ -103,6 +107,8 @@ class ChunkOutput:
     mol_registered: int = 0
     mol_duplicate: int = 0
     mol_error: int = 0
+    # Run-report delta for this chunk (see CddMoleculeImport.record_report).
+    report: dict = field(default_factory=dict)
     results: list[ChunkItemResult] = field(default_factory=list)
 
 
@@ -193,6 +199,7 @@ class UpdateCddImportProgressInput:
     error: int = 0
     skipped: int = 0
     last_processed_offset: int = 0
+    report: dict = field(default_factory=dict)
 
 
 @dataclass

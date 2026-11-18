@@ -33,6 +33,7 @@ import { useEffect, useState } from "react";
 import { MOLECULES_KEY } from "../hooks/query-keys";
 import {
   type CddMoleculeIdentifierCheck,
+  type CddMoleculeImportStatus,
   useCancelCddMoleculeImport,
   useCddMoleculeImportStatus,
   useForceFailImport,
@@ -76,6 +77,7 @@ export function DataImportPage() {
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  const [report, setReport] = useState<CddMoleculeImportStatus["report"] | null>(null);
   // Identifiers the vault did not know, for the "specific molecules" import now running or just done.
   // ponytail: page state only, so reloading mid-import drops the list; keep it on the import
   // record if it has to outlive the page.
@@ -109,6 +111,7 @@ export function DataImportPage() {
   useEffect(() => {
     if (liveStatus && isTerminalImportStatus(liveStatus.status)) {
       setWorkflowId(null);
+      setReport(liveStatus.report);
       qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
 
@@ -132,6 +135,7 @@ export function DataImportPage() {
   ) => {
     setError(null);
     setCompletionMessage(null);
+    setReport(null);
     setNotFound(identifiersNotFound);
     try {
       const result = await startMutation.mutateAsync(params);
@@ -256,6 +260,7 @@ export function DataImportPage() {
                   <span>{completionMessage}</span>
                 </div>
               )}
+              {report && <RunReport report={report} />}
 
               {error && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -343,6 +348,13 @@ export function DataImportPage() {
                         </Label>
                       </div>
                     </RadioGroup>
+                    {importMode === "full_vault" && (
+                      <p className="text-xs text-muted-foreground">
+                        Reads every molecule in the vault. Compounds and batches already in
+                        ChemCellar get the IDs and batches they are missing; nothing is created
+                        twice.
+                      </p>
+                    )}
                   </div>
 
                   {isSpecific ? (
@@ -820,6 +832,36 @@ function CounterCard({
     <div className="rounded-md border p-2.5 text-center">
       <div className={`text-lg font-semibold tabular-nums ${color}`}>{value.toLocaleString()}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+/** What a finished run added and what it skipped; the lines say which values and why. */
+function RunReport({ report }: { report: CddMoleculeImportStatus["report"] }) {
+  const n = (v: number) => v.toLocaleString();
+  return (
+    <div className="space-y-2 text-sm">
+      <p>
+        {n(report.compounds_added)} compounds added, {n(report.compounds_matched)} matched;{" "}
+        {n(report.batches_created)} batches created, {n(report.batches_matched)} matched;{" "}
+        {n(report.ids_added)} IDs added; {n(report.values_skipped)} values skipped.
+      </p>
+      {report.problem_lines.length > 0 && (
+        <details>
+          <summary className="cursor-pointer">Problems ({n(report.problems)})</summary>
+          <ul className="mt-1 max-h-64 space-y-0.5 overflow-auto text-xs text-muted-foreground">
+            {report.problem_lines.map((line, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: lines repeat, the list is static
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+          {report.problems + report.values_skipped > report.problem_lines.length && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Showing the first {n(report.problem_lines.length)} lines.
+            </p>
+          )}
+        </details>
+      )}
     </div>
   );
 }

@@ -128,6 +128,7 @@ export * from './cascadePreviewResponseSamplesItem';
 export * from './cddMoleculeIdentifierCheckResponse';
 export * from './cddMoleculeImportAcceptedResponse';
 export * from './cddMoleculeImportFilter';
+export * from './cddMoleculeImportReport';
 export * from './cddMoleculeImportStatusResponse';
 export * from './cddMoleculeImportSummary';
 export * from './cddPlateImportAcceptedResponse';

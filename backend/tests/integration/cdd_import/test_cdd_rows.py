@@ -157,6 +157,7 @@ def run_cdd(session_factory, ws: Ws, tmp_path: Path):  # type: ignore[no-untyped
                 items=[ChunkItem(**d) for d in chunk.items],
             ),
         )
+        _run.report = out.report  # type: ignore[attr-defined]
         return out.results
 
     return _run
@@ -334,3 +335,25 @@ async def test_partial_runs_store_a_shared_name_on_the_first_compound_only(
     assert LABEL in {
         i for i, _, _ in await _compound_ids(session_factory, uuid.UUID(first.molecule_id))
     }
+
+
+async def test_report_counts_what_was_added_and_skipped(ws: Ws, run_cdd) -> None:
+    """§8: one new compound with two new batches; then a second compound (a partial
+    run, so its name is no label) whose Alternate Name is already the first's: that
+    one value is skipped and named in the report."""
+    await run_cdd([MOL])
+    report = run_cdd.report
+    assert (report["compounds_added"], report["compounds_matched"]) == (1, 0)
+    assert (report["batches_created"], report["batches_matched"]) == (2, 0)
+    assert report["ids_added"] == 6  # three IDs on each batch
+    assert (report["values_skipped"], report["problems"], report["problem_lines"]) == (0, 0, [])
+
+    other = molecule(8, "SACC-1", "CCO", alt="Paracetamol", batches=[batch(1, "SACC-1-001")])
+    await run_cdd([other])
+    report = run_cdd.report
+    assert (report["compounds_added"], report["compounds_matched"]) == (1, 0)
+    assert (report["batches_created"], report["batches_matched"]) == (1, 0)
+    assert report["values_skipped"] == 1
+    assert report["problems"] == 0
+    (line,) = report["problem_lines"]
+    assert line.startswith("SACC-1: 'Paracetamol' is already an ID of ")
