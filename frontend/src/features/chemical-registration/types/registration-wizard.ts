@@ -138,3 +138,16 @@ export type ConfirmMergesResponse = GeneratedConfirmMergesResponse;
 
 // Re-export BatchInput so wizard code can import from this module
 export type { Molecule, BatchInput };
+
+// ─── Bulk wizard steps ──────────────────────────────────────────────────────
+
+export const BULK_STEPS = [
+  "Input",
+  "Match columns",
+  "Preview",
+  "Processing",
+  "Results",
+  "Summary",
+] as const;
+
+export const bulkStepIndex = (step: (typeof BULK_STEPS)[number]) => BULK_STEPS.indexOf(step);

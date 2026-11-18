@@ -39,6 +39,7 @@ function toForecastItem(item: PreviewItem) {
 export function StepPreview() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
   const bulkPreview = useRegistrationWizard((s) => s.bulkPreview);
+  const bulkMapping = useRegistrationWizard((s) => s.bulkMapping);
   const setBulkPreview = useRegistrationWizard((s) => s.setBulkPreview);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
   const prevStep = useRegistrationWizard((s) => s.prevStep);
@@ -59,7 +60,7 @@ export function StepPreview() {
     if (hasRequested.current || bulkPreview || !bulkInput.file) return;
     hasRequested.current = true;
     previewMutation
-      .mutateAsync(bulkInput.file)
+      .mutateAsync({ file: bulkInput.file, mapping: bulkMapping })
       .then((data) => setBulkPreview(data))
       .catch(() => {
         // Error surfaced via mutation state below.

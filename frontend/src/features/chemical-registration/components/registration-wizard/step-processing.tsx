@@ -15,6 +15,7 @@ import {
 } from "../../hooks/use-registration-wizard-api";
 import type { RegisterMoleculeInput } from "../../types";
 import type { SubmitDisclosureInput } from "../../types/disclosure";
+import { bulkStepIndex } from "../../types/registration-wizard";
 import { ProjectNames } from "./project-names";
 
 // ---------------------------------------------------------------------------
@@ -249,6 +250,7 @@ function Row({ label, value, mono }: { label: string; value: React.ReactNode; mo
 
 function BulkProcessing() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
+  const bulkMapping = useRegistrationWizard((s) => s.bulkMapping);
   const workflowId = useRegistrationWizard((s) => s.workflowId);
   const setWorkflowId = useRegistrationWizard((s) => s.setWorkflowId);
   const setProgress = useRegistrationWizard((s) => s.setProgress);
@@ -274,6 +276,7 @@ function BulkProcessing() {
         originating_org_id: bulkInput.originatingOrgId,
         create_batch_on_duplicate: bulkInput.createBatchOnDuplicate,
         project_ids: bulkInput.projectIds,
+        column_mapping: bulkMapping ? JSON.stringify(bulkMapping) : null,
       })
       .then((data) => {
         setWorkflowId(data.workflow_id);
@@ -309,8 +312,7 @@ function BulkProcessing() {
         nextStep();
       } else {
         // Skip results step, jump to summary.
-        // Bulk steps: 0=Input, 1=Preview, 2=Processing, 3=Results, 4=Summary
-        setCurrentStep(4);
+        setCurrentStep(bulkStepIndex("Summary"));
       }
     }
   }, [progress]);

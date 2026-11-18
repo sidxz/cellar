@@ -1,6 +1,8 @@
 "use client";
 
+import type { ColumnMappingBody } from "@/shared/lib/api/model";
 import { create } from "zustand";
+import type { FileColumns } from "../lib/read-file-columns";
 import type { RegistrationResponse } from "../types/index";
 import type {
   BulkInput,
@@ -61,6 +63,10 @@ interface RegistrationWizardState {
   bulkInput: BulkInput;
   batchInput: WizardBatchInput | null;
 
+  // Bulk "Match columns": the file's columns and where each one goes
+  bulkColumns: FileColumns | null;
+  bulkMapping: ColumnMappingBody | null;
+
   // Bulk preview (parse-only result before processing starts)
   bulkPreview: PreviewBulkRegistrationResponse | null;
 
@@ -83,6 +89,9 @@ interface RegistrationWizardState {
   updateSingleInput: (patch: Partial<SingleInput>) => void;
   updateBulkInput: (patch: Partial<BulkInput>) => void;
 
+  setBulkColumns: (columns: FileColumns | null) => void;
+  /** A changed mapping invalidates the preview. */
+  setBulkMapping: (mapping: ColumnMappingBody | null) => void;
   setBulkPreview: (preview: PreviewBulkRegistrationResponse | null) => void;
   setWorkflowId: (id: string | null) => void;
   setProgress: (progress: BulkProgress | null) => void;
@@ -111,6 +120,8 @@ export const useRegistrationWizard = create<RegistrationWizardState>()((set, _ge
   singleInput: DEFAULT_SINGLE_INPUT,
   bulkInput: DEFAULT_BULK_INPUT,
   batchInput: null,
+  bulkColumns: null,
+  bulkMapping: null,
   bulkPreview: null,
   workflowId: null,
   progress: null,
@@ -126,9 +137,18 @@ export const useRegistrationWizard = create<RegistrationWizardState>()((set, _ge
 
   // Input updates
   updateSingleInput: (patch) => set((s) => ({ singleInput: { ...s.singleInput, ...patch } })),
-  updateBulkInput: (patch) => set((s) => ({ bulkInput: { ...s.bulkInput, ...patch } })),
+  updateBulkInput: (patch) =>
+    set((s) => {
+      const bulkInput = { ...s.bulkInput, ...patch };
+      // A different file has different columns: start its mapping and preview over.
+      return "file" in patch && patch.file !== s.bulkInput.file
+        ? { bulkInput, bulkColumns: null, bulkMapping: null, bulkPreview: null }
+        : { bulkInput };
+    }),
 
-  // Bulk preview
+  // Bulk mapping + preview
+  setBulkColumns: (bulkColumns) => set({ bulkColumns }),
+  setBulkMapping: (bulkMapping) => set({ bulkMapping, bulkPreview: null }),
   setBulkPreview: (bulkPreview) => set({ bulkPreview }),
 
   // Job tracking
@@ -176,6 +196,8 @@ export const useRegistrationWizard = create<RegistrationWizardState>()((set, _ge
       singleInput: DEFAULT_SINGLE_INPUT,
       bulkInput: DEFAULT_BULK_INPUT,
       batchInput: null,
+      bulkColumns: null,
+      bulkMapping: null,
       bulkPreview: null,
       workflowId: null,
       progress: null,
