@@ -283,17 +283,6 @@ class CddVaultImportWorkflow:
                 self._progress.registered_count += reg_result.mol_registered
                 self._progress.duplicate_count += reg_result.mol_duplicate
                 self._progress.error_count += reg_result.mol_error
-            elif chunk_result.skipped > 0:
-                await workflow.execute_activity(
-                    BulkTrackingActivities.update_cdd_import_progress,
-                    UpdateCddImportProgressInput(
-                        workspace_id=input.workspace_id,
-                        import_id=import_id,
-                        skipped=chunk_result.skipped,
-                        last_processed_offset=offset + CHUNK_SIZE,
-                    ),
-                    start_to_close_timeout=timedelta(seconds=30),
-                )
 
             self._progress.skipped_count += chunk_result.skipped
             self._progress.current_offset = offset + CHUNK_SIZE

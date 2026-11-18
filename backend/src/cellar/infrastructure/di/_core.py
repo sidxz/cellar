@@ -108,31 +108,28 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
     container.define(PeakDetectionService, lambda c: c[DerivativePeakDetection])
 
     # --- Secret Provider chain ---
-    if SecretProvider not in container.defined_types:  # tests stub the secret store
-        container.define(SecretProvider, Singleton(_build_secret_provider))
+    container.define(SecretProvider, Singleton(_build_secret_provider))
 
     # --- Temporal ---
     container.define(TemporalSettings, Singleton(TemporalSettings))
 
-    # Org directory port (strict plate visibility, spec 2026-08-25 §3) —
-    # guarded so create_container(overrides={OrgDirectoryPort: stub}) can
-    # pre-register a stub for API tests. Lazy: DuarSettings is only read on
-    # first resolve, so workers/tests that never resolve it need no env.
+    # Org directory port (strict plate visibility, spec 2026-08-25 §3). Lazy:
+    # DuarSettings is only read on first resolve, so workers/tests that never
+    # resolve it need no env.
     # ponytail: routes still use the module singleton in
     # interface/dependencies/_core.py (its own 5-min cache); unify if the
     # double fetch ever matters.
-    if OrgDirectoryPort not in container.defined_types:
-        container.define(
-            OrgDirectoryPort,
-            Singleton(
-                lambda: OrgDirectory(
-                    base_url=DuarSettings().url,
-                    service_key=DuarSettings().service_key,
-                    # C1: visibility exclusion must not drop orgs Duar admins
-                    # disable mid-collaboration — see plate_visibility.py.
-                    # The /api/v1/orgs picker instance (interface/dependencies/
-                    # _core.py) intentionally keeps the enabled-only default.
-                    include_disabled=True,
-                )
-            ),
-        )
+    container.define(
+        OrgDirectoryPort,
+        Singleton(
+            lambda: OrgDirectory(
+                base_url=DuarSettings().url,
+                service_key=DuarSettings().service_key,
+                # C1: visibility exclusion must not drop orgs Duar admins
+                # disable mid-collaboration — see plate_visibility.py.
+                # The /api/v1/orgs picker instance (interface/dependencies/
+                # _core.py) intentionally keeps the enabled-only default.
+                include_disabled=True,
+            )
+        ),
+    )

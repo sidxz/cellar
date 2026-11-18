@@ -76,8 +76,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def register_cdd_import(container: Container) -> None:
     # CDD client reuses the shared httpx.AsyncClient registered in _core.
-    if CddVaultClient not in container.defined_types:  # tests stub the CDD adapter
-        container.define(CddVaultClient, Singleton(lambda c: CddVaultClient(c[httpx.AsyncClient])))
+    container.define(CddVaultClient, Singleton(lambda c: CddVaultClient(c[httpx.AsyncClient])))
 
     # --- CDD Protocol Import ---
     def _make_get_data_source(c: Container):

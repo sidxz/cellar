@@ -92,3 +92,20 @@ class TestContainer:
     ) -> None:
         check = create_container(test_settings)[CheckCddMoleculeIdentifiers]
         assert isinstance(check._gateway, CddVaultClient)
+
+    def test_overrides_replace_production_definitions(
+        self, test_settings: DatabaseSettings
+    ) -> None:
+        """Tests stub any adapter without the registrar guarding its definition."""
+        from cellar.infrastructure.temporal.settings import TemporalSettings
+
+        stub = object()
+        container = create_container(test_settings, overrides={TemporalSettings: stub})
+        assert container[TemporalSettings] is stub
+
+    def test_overridden_cdd_client_reaches_the_use_cases(
+        self, test_settings: DatabaseSettings
+    ) -> None:
+        stub = object()
+        container = create_container(test_settings, overrides={CddVaultClient: stub})
+        assert container[CheckCddMoleculeIdentifiers]._gateway is stub
