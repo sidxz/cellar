@@ -68,6 +68,8 @@ class RegistrationPreviewItem:
     batch_action: Literal["new", "existing", "problem"] | None = None
     matched_batch_number: str | None = None
     batch_problem: str | None = None
+    # A new batch for a compound already in ChemCellar: how many batches it has.
+    existing_batch_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -140,7 +142,7 @@ class PreviewRegistration:
             compound_key = inchi_key
 
         matched_id = forecast.matched_molecule.id if forecast.matched_molecule else None
-        batch_action, batch_number, batch_problem = await self._forecast_batch(
+        batch_action, batch_number, batch_problem, existing_count = await self._forecast_batch(
             workspace_id, matched_id, item.batch_ids
         )
         return RegistrationPreviewItem(
@@ -152,15 +154,16 @@ class PreviewRegistration:
             batch_action=batch_action,
             matched_batch_number=batch_number,
             batch_problem=batch_problem,
+            existing_batch_count=existing_count,
         )
 
     async def _forecast_batch(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID | None, batch_ids: list[str]
-    ) -> tuple[Literal["new", "existing", "problem"] | None, str | None, str | None]:
+    ) -> tuple[Literal["new", "existing", "problem"] | None, str | None, str | None, int | None]:
         """Same rule as the import (row_batch.classify_row_batch). Database only:
         rows of one file are grouped by the caller via ``compound_key``."""
         if not batch_ids or self._batch_repo is None:
-            return None, None, None
+            return None, None, None, None
         match = await classify_row_batch(
             self._batch_repo,
             workspace_id,
@@ -168,5 +171,10 @@ class PreviewRegistration:
             row_batch_ids([{"identifier": b, "source": ""} for b in batch_ids]),
         )
         if match.kind == "existing" and match.batch is not None:
-            return "existing", match.batch.batch_number.value, None
-        return match.kind, None, match.problem
+            return "existing", match.batch.batch_number.value, None, None
+        if match.kind == "new" and molecule_id is not None:
+            # The compound's batches none of whose real IDs matched: the scientist
+            # should see that a new one is added next to them.
+            n = len(await self._batch_repo.find_by_molecule(workspace_id, molecule_id))
+            return "new", None, None, n
+        return match.kind, None, match.problem, None

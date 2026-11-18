@@ -16,4 +16,5 @@ export interface PreviewRegistrationItemResponse {
   batch_action?: PreviewRegistrationItemResponseBatchAction;
   matched_batch_number?: string | null;
   batch_problem?: string | null;
+  existing_batch_count?: number | null;
 }

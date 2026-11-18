@@ -322,6 +322,10 @@ class PreviewItem(BaseModel):
     molecule_type: str = "small_molecule"
     external_ids: list[PreviewCompoundId] = []
     batch_ids: list[PreviewBatchId] = []
+    # The compound registers but this row gets no batch, and why.
+    batch_problem: str | None = None
+    # Values in the row that are not stored (e.g. too long for an ID).
+    warnings: list[str] = []
     amount_value: float | None = None
     amount_unit: str = "mg"
     salt_code: str | None = None
@@ -415,6 +419,8 @@ async def preview_bulk_registration(
                 molecule_type=i.molecule_type,
                 external_ids=[PreviewCompoundId(**e) for e in i.external_ids],
                 batch_ids=[PreviewBatchId(**b) for b in i.batch_ids],
+                batch_problem=i.batch_problem,
+                warnings=i.warnings,
                 amount_value=i.amount_value,
                 amount_unit=i.amount_unit,
                 salt_code=i.salt_code,

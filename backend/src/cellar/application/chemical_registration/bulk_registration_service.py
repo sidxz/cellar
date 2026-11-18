@@ -62,6 +62,7 @@ class BulkRegistrationItem:
     external_ids: list[dict[str, str]] = field(default_factory=list)
     batch_ids: list[dict[str, str]] = field(default_factory=list)
     error: str | None = None
+    batch_problem: str | None = None  # compound registers, no batch
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"
@@ -301,7 +302,11 @@ class BulkRegistrationService:
                     workspace_default=effective_policy_default,
                 )
 
-                if item.batch_ids:
+                if item.batch_problem:
+                    batch_id, batch_number, salt_matched = None, None, False
+                    batch_err = item.batch_problem
+                    batch_skipped = False
+                elif item.batch_ids:
                     # The row names its batch: find or create exactly that batch.
                     (
                         batch_id,

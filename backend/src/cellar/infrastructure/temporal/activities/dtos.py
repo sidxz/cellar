@@ -27,6 +27,8 @@ class ChunkItem:
     batch_ids: list[dict[str, str]] = field(default_factory=list)
     # Parser's per-row error; the row registers nothing.
     error: str | None = None
+    # The compound registers but the row gets no batch (parser's in-file check).
+    batch_problem: str | None = None
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"

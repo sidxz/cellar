@@ -283,3 +283,73 @@ def test_sdf_mapping_naming_a_missing_property_raises() -> None:
     mapping = ColumnMapping(columns=(MappedColumn("Lot", T.BATCH_ID, "Lot"),))
     with pytest.raises(ValidationError, match="'Lot'"):
         SDFParser().parse(_sdf(_SDF), "rows.sdf", mapping)
+
+
+# --- Final-review fixes -------------------------------------------------------
+
+
+def test_batch_id_shared_by_two_compounds_is_a_batch_problem_on_each_row() -> None:
+    rows = [
+        ["CMP-1", None, "CCO", None, None, None, "001", "001", None],
+        ["CMP-2", None, "CCN", None, None, None, "001", "001", None],
+    ]
+    items = TabularParser().parse(_xlsx(rows), "x.xlsx", CDD_MAPPING)
+    assert [i.error for i in items] == [None, None]  # the compounds still register
+    for i in items:
+        assert i.batch_problem is not None
+        assert i.batch_problem.startswith("001 is on 2 compounds.")
+
+
+def test_same_batch_id_twice_for_one_compound_is_not_a_problem() -> None:
+    rows = [
+        ["CMP-1", None, "CCO", None, None, None, "001", "CMP-1-001", None],
+        ["CMP-1", None, "CCO", None, None, None, "001", "CMP-1-001", None],
+    ]
+    items = TabularParser().parse(_xlsx(rows), "x.xlsx", CDD_MAPPING)
+    assert [i.batch_problem for i in items] == [None, None]
+
+
+def test_ids_longer_than_255_characters_are_not_stored_and_say_so() -> None:
+    long = "X" * 300
+    rows = [["CMP-1", None, "CCO", long, None, None, "001", long, "LEG-1"]]
+    (item,) = TabularParser().parse(_xlsx(rows), "x.xlsx", CDD_MAPPING)
+    assert item.error is None
+    assert all(e["identifier"] != long for e in item.external_ids)
+    assert [b["identifier"] for b in item.batch_ids] == ["LEG-1"]
+    assert len(item.warnings) == 2
+    assert all("longer than 255 characters" in w for w in item.warnings)
+
+
+def test_a_source_label_longer_than_255_characters_is_refused() -> None:
+    mapping = ColumnMapping(
+        columns=(
+            MappedColumn("Molecule Name", T.NAME),
+            MappedColumn("Synonyms", T.COMPOUND_ID, "S" * 256),
+        )
+    )
+    err = mapping.validate(["Molecule Name", "Synonyms"], structure_implied=False)
+    assert err is not None
+    assert "Synonyms" in str(err)
+
+
+def test_headers_with_surrounding_spaces_match_the_trimmed_mapping() -> None:
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Molecule Name ", " SMILES"])
+    ws.append(["CMP-1", "CCO"])
+    buf = io.BytesIO()
+    wb.save(buf)
+    content = buf.getvalue()
+    assert TabularParser().headers(content, "x.xlsx") == ["Molecule Name", "SMILES"]
+    mapping = ColumnMapping(
+        columns=(MappedColumn("Molecule Name", T.NAME), MappedColumn("SMILES", T.SMILES))
+    )
+    (item,) = TabularParser().parse(content, "x.xlsx", mapping)
+    assert (item.name, item.smiles, item.error) == ("CMP-1", "CCO", None)
+
+
+def test_an_ignored_column_the_file_lacks_does_not_reject_the_mapping() -> None:
+    mapping = ColumnMapping(
+        columns=(MappedColumn("Molecule Name", T.NAME), MappedColumn("Ghost", T.IGNORE))
+    )
+    assert mapping.validate(["Molecule Name"], structure_implied=False) is None

@@ -168,6 +168,7 @@ class StartBulkRegistration:
                 molecule_type=p.molecule_type,
                 external_ids=p.external_ids,
                 batch_ids=p.batch_ids,
+                batch_problem=p.batch_problem,
                 error=p.error,
                 amount_value=p.amount_value,
                 amount_unit=p.amount_unit,

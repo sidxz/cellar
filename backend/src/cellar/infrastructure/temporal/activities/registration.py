@@ -36,7 +36,11 @@ from cellar.application.inventory.batch_identifiers import (
     AddBatchIdentifierCommand,
 )
 from cellar.application.inventory.batch_policy import should_create_batch
-from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
+from cellar.application.inventory.create_batch import (
+    CreateBatch,
+    CreateBatchCommand,
+    NewBatchIdentifier,
+)
 from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formula_weight
 from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.shared.actor_context import set_current_actor
@@ -230,7 +234,9 @@ class RegistrationActivities:
                     override=None,
                     workspace_default=effective_policy_default,
                 )
-                if item.batch_ids:
+                if item.batch_problem:
+                    batch_problem = item.batch_problem
+                elif item.batch_ids:
                     batch_id, batch_number, salt_matched, batch_problem = await _apply_row_batch(
                         item=item,
                         reg_outcome=outcome,
@@ -476,6 +482,18 @@ async def _batch_command(
     if item.cdd_batch_id is not None:
         custom_fields = {"cdd_batch_id": item.cdd_batch_id}
 
+    # The CDD batch name becomes a real batch ID (as migration 105 did for earlier
+    # imports), so a later file export of the same batch matches it instead of
+    # creating a second one. Skipped when another batch already holds the text.
+    # ponytail: stopgap until the CDD importer maps batch IDs itself (phase 2 spec).
+    born_with: tuple[NewBatchIdentifier, ...] = ()
+    vcn = (item.vendor_catalog_number or "").strip()
+    if item.cdd_batch_id is not None and vcn and len(vcn) <= 255:
+        async with batch_uow:
+            holder = await batch_repo.find_by_external_identifier(workspace_id, vcn)
+        if holder is None:
+            born_with = (NewBatchIdentifier(vcn, "custom", "CDD batch ID"),)
+
     batch_cmd = CreateBatchCommand(
         workspace_id=workspace_id,
         molecule_id=molecule.id,
@@ -492,6 +510,7 @@ async def _batch_command(
         appearance=item.appearance,
         vendor_catalog_number=item.vendor_catalog_number,
         custom_fields=custom_fields,
+        identifiers=born_with,
     )
 
     return batch_cmd, salt_matched, create_batch, add_batch_alias

@@ -15,6 +15,8 @@ export interface PreviewItem {
   molecule_type?: string;
   external_ids?: PreviewCompoundId[];
   batch_ids?: PreviewBatchId[];
+  batch_problem?: string | null;
+  warnings?: string[];
   amount_value?: number | null;
   amount_unit?: string;
   salt_code?: string | null;

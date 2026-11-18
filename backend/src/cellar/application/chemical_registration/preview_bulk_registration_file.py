@@ -39,6 +39,8 @@ class ParsedItemDTO:
     molecule_type: str = "small_molecule"
     external_ids: list[dict[str, str]] = field(default_factory=list)
     batch_ids: list[dict[str, str]] = field(default_factory=list)
+    batch_problem: str | None = None
+    warnings: list[str] = field(default_factory=list)
     amount_value: float | None = None
     amount_unit: str = "mg"
     salt_code: str | None = None

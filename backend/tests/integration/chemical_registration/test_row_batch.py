@@ -537,7 +537,12 @@ async def test_cdd_imported_batch_after_backfill_is_matched_not_doubled(
         [row(name, smiles, vendor_catalog_number=f"{name}-001", cdd_batch_id=13250)],
         None,
     )
-    assert f"{name}-001" in (await _batches(session_factory, ws))[cdd.batch_id].auto
+    # Since the final-review fix the CDD path stores the batch name as a real ID
+    # itself; migration 105 (run below, as deploy runs it) is then a no-op for it.
+    assert (await _batches(session_factory, ws))[cdd.batch_id].real[f"{name}-001"] == (
+        "custom",
+        "CDD batch ID",
+    )
 
     async with session_factory() as s:  # migration 105, as deploy runs it
         await s.run_sync(_run_m105)
@@ -558,3 +563,42 @@ async def test_cdd_imported_batch_after_backfill_is_matched_not_doubled(
     (batch,) = (await _batches(session_factory, ws)).values()
     assert batch.real[f"{name}-001"] == ("custom", "CDD batch ID")
     assert batch.real["C07278"] == ("custom", "CDD legacy batch ID")
+
+
+# --- Final-review fixes -------------------------------------------------------
+
+
+async def test_row_with_a_file_batch_problem_registers_compound_without_batch(
+    run_rows: Run, session_factory, ws: Ws
+) -> None:
+    msg = (
+        "001 is on 2 compounds. Batch IDs must be unique in the workspace. "
+        "Map the column with the full batch name instead."
+    )
+    (out,) = await run_rows(
+        [row("CMP-SHARED", "CCCCCCCO", batch=[("001", "Batch")], batch_problem=msg)]
+    )
+    assert out.molecule_id is not None and out.batch_id is None
+    assert out.error == PROBLEM + msg
+    assert await _batches(session_factory, ws) == {}
+
+
+async def test_compound_id_too_long_for_an_automatic_alias_does_not_break_the_batch(
+    run_rows: Run, session_factory, ws: Ws
+) -> None:
+    long_id = "Y" * 252  # "<id>-001" would be 256 characters
+    (out,) = await run_rows([row("LONG-SYN", "CCCCCCCCO", ids=[(long_id, "Synonyms")])])
+    assert out.error is None and out.batch_id is not None
+    (batch,) = (await _batches(session_factory, ws)).values()
+    assert all(len(a) <= 255 for a in batch.auto)
+
+
+async def test_cdd_path_stores_the_batch_name_as_a_real_id(session_factory, ws: Ws) -> None:
+    (out,) = await _run_worker(
+        session_factory,
+        ws,
+        [row("SACC-9", "CCCCCCCCCO", vendor_catalog_number="SACC-9-001", cdd_batch_id=99)],
+        None,
+    )
+    batch = (await _batches(session_factory, ws))[out.batch_id]
+    assert batch.real["SACC-9-001"] == ("custom", "CDD batch ID")

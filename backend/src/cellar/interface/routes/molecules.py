@@ -468,6 +468,8 @@ class PreviewRegistrationItemResponse(BaseModel):
     batch_action: Literal["new", "existing", "problem"] | None = None
     matched_batch_number: str | None = None
     batch_problem: str | None = None
+    # A new batch for a compound already in ChemCellar: how many batches it has.
+    existing_batch_count: int | None = None
 
 
 class PreviewRegistrationResponse(BaseModel):
@@ -665,6 +667,7 @@ async def preview_registration(
                 batch_action=i.batch_action,
                 matched_batch_number=i.matched_batch_number,
                 batch_problem=i.batch_problem,
+                existing_batch_count=i.existing_batch_count,
             )
             for i in outcome.items
         ]

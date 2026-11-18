@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -18,6 +18,7 @@ from rdkit import Chem
 
 from cellar.application.chemical_registration.bulk_column_mapping import (
     COMPOUND_ID_TYPES,
+    MAX_ID_LENGTH,
     SDF_TITLE_HEADER,
     ColumnMapping,
     ColumnTarget,
@@ -42,6 +43,11 @@ class ParsedMoleculeItem:
     batch_ids: list[dict[str, str]] = field(default_factory=list)
     custom_fields: dict | None = None
     error: str | None = None
+    # The compound registers but this row gets no batch (e.g. a batch ID shared by
+    # several compounds of the file).
+    batch_problem: str | None = None
+    # Values the row had but that are not stored (e.g. too long for an ID).
+    warnings: list[str] = field(default_factory=list)
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"
@@ -89,6 +95,17 @@ def _extract_item(
     single: dict[ColumnTarget, str] = {}
     external_ids: list[dict[str, str]] = []
     batch_ids: list[dict[str, str]] = []
+    warnings: list[str] = []
+
+    def fits(v: str, header: str) -> bool:
+        if len(v) <= MAX_ID_LENGTH:
+            return True
+        warnings.append(
+            f"{header}: '{v[:40]}…' is longer than {MAX_ID_LENGTH} characters "
+            "and is not stored as an ID"
+        )
+        return False
+
     for col in mapping.columns:
         if col.target == ColumnTarget.IGNORE:
             continue
@@ -97,12 +114,16 @@ def _extract_item(
             continue
         if col.target == ColumnTarget.BATCH_ID:
             for v in split_multi(val):
+                if not fits(v, col.header):
+                    continue
                 batch_ids.append(
                     {"identifier": v, "source": col.source or _DEFAULT_BATCH_ID_SOURCE}
                 )
         elif col.target in COMPOUND_ID_TYPES:
             values = split_multi(val) if col.target == ColumnTarget.COMPOUND_ID else [val]
             for v in values:
+                if not fits(v, col.header):
+                    continue
                 eid = {"identifier": v, "identifier_type": COMPOUND_ID_TYPES[col.target]}
                 if col.source:
                     eid["source"] = col.source
@@ -133,6 +154,7 @@ def _extract_item(
         molecule_type=single.get(ColumnTarget.MOLECULE_TYPE) or "small_molecule",
         external_ids=external_ids,
         batch_ids=batch_ids,
+        warnings=warnings,
         amount_value=_safe_float(single.get(ColumnTarget.AMOUNT_VALUE)),
         amount_unit=single.get(ColumnTarget.AMOUNT_UNIT) or "mg",
         salt_code=single.get(ColumnTarget.SALT_CODE),
@@ -141,6 +163,35 @@ def _extract_item(
         batch_source=single.get(ColumnTarget.BATCH_SOURCE) or "synthesized",
         appearance=single.get(ColumnTarget.APPEARANCE),
     )
+
+
+def _flag_shared_batch_ids(items: list[ParsedMoleculeItem]) -> list[ParsedMoleculeItem]:
+    """A batch ID on rows of different compounds of one file can't be unique in the
+    workspace (e.g. a bare "001" column): every such row registers its compound but
+    gets no batch. Compounds are told apart by the row's name, else its structure."""
+    keys_by_id: dict[str, set[str]] = {}
+    for it in items:
+        key = it.name or it.smiles
+        if it.error or not key:
+            continue
+        for b in it.batch_ids:
+            keys_by_id.setdefault(b["identifier"], set()).add(key)
+    shared = {i: len(k) for i, k in keys_by_id.items() if len(k) > 1}
+    if not shared:
+        return items
+    out: list[ParsedMoleculeItem] = []
+    for it in items:
+        hit = next((b["identifier"] for b in it.batch_ids if b["identifier"] in shared), None)
+        out.append(
+            replace(
+                it,
+                batch_problem=f"{hit} is on {shared[hit]} compounds. Batch IDs must be unique "
+                "in the workspace. Map the column with the full batch name instead.",
+            )
+            if hit is not None and not it.error
+            else it
+        )
+    return out
 
 
 def _check(mapping: ColumnMapping, headers: list[str], *, structure_implied: bool) -> None:
@@ -211,7 +262,7 @@ class SDFParser:
                     structure=Chem.MolToSmiles(mol),
                 )
             )
-        return items
+        return _flag_shared_batch_ids(items)
 
 
 # ---------------------------------------------------------------------------
@@ -227,7 +278,8 @@ class TabularParser:
     ) -> list[ParsedMoleculeItem]:
         fmt = self._detect_format(filename)
         df = self._read_dataframe(content, fmt)
-        headers = [str(c) for c in df.columns]
+        # Exports often pad header cells; the wizard shows them trimmed.
+        headers = [str(c).strip() for c in df.columns]
         if mapping is None:
             mapping = _default_mapping(headers)
         else:
@@ -248,7 +300,7 @@ class TabularParser:
                     file_row=i + 2,  # header is row 1
                 )
             )
-        return items
+        return _flag_shared_batch_ids(items)
 
     def headers(self, content: bytes, filename: str) -> list[str]:
         """The header row only (no rows read)."""
@@ -263,7 +315,7 @@ class TabularParser:
                 )
         except pd.errors.EmptyDataError:
             return []
-        return [str(c) for c in df.columns]
+        return [str(c).strip() for c in df.columns]
 
     def _detect_format(self, filename: str) -> BulkRegistrationFileFormat:
         suffix = Path(filename).suffix.lower()
@@ -367,6 +419,8 @@ class BulkFileParserAdapter:
                 molecule_type=i.molecule_type,
                 external_ids=list(i.external_ids),
                 batch_ids=list(i.batch_ids),
+                batch_problem=i.batch_problem,
+                warnings=list(i.warnings),
                 amount_value=i.amount_value,
                 amount_unit=i.amount_unit,
                 salt_code=i.salt_code,

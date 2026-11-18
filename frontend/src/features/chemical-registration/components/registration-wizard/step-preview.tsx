@@ -298,7 +298,8 @@ function truncate(s: string, n: number): string {
 function IdChips({ item }: { item: PreviewItem }) {
   const compoundIds = item.external_ids ?? [];
   const batchIds = item.batch_ids ?? [];
-  if (compoundIds.length === 0 && batchIds.length === 0) {
+  const warnings = item.warnings ?? [];
+  if (compoundIds.length === 0 && batchIds.length === 0 && warnings.length === 0) {
     return <span className="text-muted-foreground">{"\u2014"}</span>;
   }
   return (
@@ -323,6 +324,11 @@ function IdChips({ item }: { item: PreviewItem }) {
           ))}
         </div>
       )}
+      {warnings.map((w) => (
+        <span key={`w-${w}`} className="text-muted-foreground">
+          {w}
+        </span>
+      ))}
     </div>
   );
 }

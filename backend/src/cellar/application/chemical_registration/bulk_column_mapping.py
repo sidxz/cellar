@@ -19,6 +19,9 @@ from cellar.domain.shared.errors import ValidationError
 
 SDF_TITLE_HEADER = "Title line"
 
+# Identifier and Source columns are String(255) (molecule_identifiers, batch_identifiers).
+MAX_ID_LENGTH = 255
+
 
 class ColumnTarget(StrEnum):
     NAME = "name"
@@ -113,6 +116,8 @@ class ColumnMapping:
         known = set(headers)
         taken: dict[ColumnTarget, str] = {}
         for c in self.columns:
+            if c.target == ColumnTarget.IGNORE:
+                continue  # nothing is read from it, so it need not be there
             if c.header not in known:
                 return ValidationError(f"Column '{c.header}' is not in the file")
             if c.target not in MULTI_TARGETS:
@@ -124,6 +129,10 @@ class ColumnMapping:
                 taken[c.target] = c.header
             if c.target in LABELLED_TARGETS and not c.source:
                 return ValidationError(f"Column '{c.header}' needs a Source")
+            if c.source and len(c.source) > MAX_ID_LENGTH:
+                return ValidationError(
+                    f"The Source for column '{c.header}' is longer than {MAX_ID_LENGTH} characters"
+                )
         if not structure_implied and not (
             ColumnTarget.NAME in taken or ColumnTarget.SMILES in taken
         ):

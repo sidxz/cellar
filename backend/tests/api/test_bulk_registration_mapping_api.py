@@ -333,6 +333,12 @@ async def test_preview_registration_forecasts_batches(client: AsyncClient) -> No
     assert (existing["batch_action"], existing["matched_batch_number"]) == ("existing", batch_001)
     assert existing["batch_problem"] is None
     assert (new["batch_action"], new["matched_batch_number"]) == ("new", None)
+    # A new batch for a compound already in ChemCellar says how many batches it has.
+    api_0001_batches = {
+        r["batch_id"] for r in rows[:2] if r["molecule_id"] == rows[0]["molecule_id"]
+    }
+    assert new["existing_batch_count"] == len(api_0001_batches)
+    assert undisclosed["existing_batch_count"] is None
     assert other["action"] == "registered"
     assert other["batch_action"] == "problem"
     assert "API-0001-002 already belongs to" in other["batch_problem"]

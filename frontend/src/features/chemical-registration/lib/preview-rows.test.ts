@@ -79,6 +79,37 @@ describe("buildPreviewRows", () => {
     expect(counts.existingBatches).toBe(1);
   });
 
+  it("shows the file check's batch problem from the server and counts it", () => {
+    const msg = "001 is on 2 compounds. Batch IDs must be unique in the workspace.";
+    const { rows, counts } = buildPreviewRows(
+      [item(0, { batch_ids: batch("001"), batch_problem: msg })],
+      forecastOf([[0, { compound_key: "KEY-A", batch_action: "new" }]]),
+      false,
+    );
+    expect(rows[0].compound).toBe("New");
+    expect(rows[0].problem).toBe(msg);
+    expect(counts).toMatchObject({ newCompounds: 1, newBatches: 0, problems: 1 });
+  });
+
+  it("says how many batches the compound already has next to a new batch", () => {
+    const { rows } = buildPreviewRows(
+      [item(0, { batch_ids: batch("SACC-1-002") })],
+      forecastOf([
+        [
+          0,
+          {
+            action: "deduplicated",
+            compound_key: "KEY-A",
+            batch_action: "new",
+            existing_batch_count: 2,
+          },
+        ],
+      ]),
+      false,
+    );
+    expect(rows[0].batch).toBe("New batch · compound already has 2");
+  });
+
   it("shows the forecast's batch problem and counts it, still counting the compound", () => {
     const reason = "MSD-1 already belongs to CC-061200-001 (another compound)";
     const { rows, counts } = buildPreviewRows(

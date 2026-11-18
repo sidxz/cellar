@@ -100,6 +100,8 @@ export function buildPreviewRows(
     // Batch — a possible merge waits for the scientist's decision, so no batch yet.
     if (f.action === "merge_candidate") return view(compound, "No new batch", null);
     const batchIds = (item.batch_ids ?? []).map((b) => b.identifier);
+    // The server's own check of the file (same rule the import applies).
+    if (item.batch_problem) return view(compound, null, item.batch_problem);
     if (batchIds.length > 0) {
       const shared = batchIds.find((id) => (keysByBatchId.get(id)?.size ?? 0) > 1);
       if (shared) {
@@ -124,7 +126,12 @@ export function buildPreviewRows(
         return view(compound, `Already in ChemCellar ${f.matched_batch_number ?? ""}`.trim(), null);
       }
       counts.newBatches += 1;
-      return view(compound, "New batch", null);
+      const has = f.existing_batch_count ?? 0;
+      return view(
+        compound,
+        has > 0 ? `New batch · compound already has ${has}` : "New batch",
+        null,
+      );
     }
 
     if (compoundIsNew || createBatchOnDuplicate) {
