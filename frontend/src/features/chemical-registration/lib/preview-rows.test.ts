@@ -59,6 +59,26 @@ describe("buildPreviewRows", () => {
     expect(counts).toMatchObject({ existingBatches: 1, newBatches: 0, problems: 0 });
   });
 
+  it("counts an existing batch once when two rows name it", () => {
+    const existing = {
+      action: "deduplicated",
+      compound_key: "KEY-A",
+      batch_action: "existing" as const,
+      matched_batch_number: "CC-013112-001",
+    };
+    const { rows, counts } = buildPreviewRows(
+      [item(0, { batch_ids: batch("SACC-1-001") }), item(1, { batch_ids: batch("SACC-1-001") })],
+      forecastOf([
+        [0, existing],
+        [1, existing],
+      ]),
+      false,
+    );
+    expect(rows[0].batch).toBe("Already in ChemCellar CC-013112-001");
+    expect(rows[1].batch).toBe("Same batch as row 2");
+    expect(counts.existingBatches).toBe(1);
+  });
+
   it("shows the forecast's batch problem and counts it, still counting the compound", () => {
     const reason = "MSD-1 already belongs to CC-061200-001 (another compound)";
     const { rows, counts } = buildPreviewRows(

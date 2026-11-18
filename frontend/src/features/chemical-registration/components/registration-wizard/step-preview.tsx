@@ -168,14 +168,18 @@ export function StepPreview() {
         <SummaryStat label="Rows" value={counts.rows} tone="default" />
         <SummaryStat
           label="New compounds"
-          value={answered ? counts.newCompounds : 0}
+          value={answered ? counts.newCompounds : "\u2014"}
           tone="success"
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
         />
-        <SummaryStat label="New batches" value={answered ? counts.newBatches : 0} tone="success" />
+        <SummaryStat
+          label="New batches"
+          value={answered ? counts.newBatches : "\u2014"}
+          tone="success"
+        />
         <SummaryStat
           label="Already in ChemCellar"
-          value={answered ? counts.existingBatches : 0}
+          value={answered ? counts.existingBatches : "\u2014"}
           tone="default"
         />
         <SummaryStat
@@ -330,7 +334,8 @@ function SummaryStat({
   icon,
 }: {
   label: string;
-  value: number;
+  /** A dash while the count isn't known yet (forecast pending or failed). */
+  value: number | string;
   tone: "default" | "success" | "destructive";
   icon?: React.ReactNode;
 }) {

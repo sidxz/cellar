@@ -112,15 +112,17 @@ export function buildPreviewRows(
       }
       if (f.batch_action === "problem")
         return view(compound, null, f.batch_problem ?? "Batch problem");
-      if (f.batch_action === "existing") {
-        counts.existingBatches += 1;
-        return view(compound, `Already in ChemCellar ${f.matched_batch_number ?? ""}`.trim(), null);
-      }
+      // An earlier row of this file already names this batch (new or existing):
+      // same batch, counted once.
       const sameBatch = batchIds
         .map((id) => firstRowOfBatchId.get(id))
         .find((r) => r !== undefined);
       if (sameBatch !== undefined) return view(compound, `Same batch as row ${sameBatch}`, null);
       for (const id of batchIds) firstRowOfBatchId.set(id, fileRow);
+      if (f.batch_action === "existing") {
+        counts.existingBatches += 1;
+        return view(compound, `Already in ChemCellar ${f.matched_batch_number ?? ""}`.trim(), null);
+      }
       counts.newBatches += 1;
       return view(compound, "New batch", null);
     }
