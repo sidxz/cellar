@@ -28,7 +28,8 @@ export function ShiftPlot({
 }) {
   const { resolvedTheme } = useTheme();
   const longest = Math.max(0, ...rows.map((r) => r.label.length));
-  const left = Math.min(180, 40 + longest * 7);
+  // Room for a registration number with its aliases; the axis grows past this if it must.
+  const left = Math.min(280, 40 + longest * 7);
   const { shapes, annotations } = shiftBand(band, "x");
   const plot = (
     <Plot

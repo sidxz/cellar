@@ -330,15 +330,26 @@ export interface ShiftRow {
   deltaTm: number;
 }
 
-/** Samples with a ΔTm, ascending; duplicate sample texts get the position appended. */
+/** A sample as the shift plot names it: its text, then its aliases (a vault
+ *  identifier, a name): two at most, the rest counted. */
+const shiftLabel = (r: ResultRow): string => {
+  const [first, second, ...more] = r.identity.aliases;
+  if (!first) return r.sampleText;
+  const shown = second ? `${first}, ${second}` : first;
+  return `${r.sampleText} · ${shown}${more.length ? ` +${more.length}` : ""}`;
+};
+
+/** Samples with a ΔTm, ascending; duplicate labels get the position appended. */
 export function shiftRows(rows: readonly ResultRow[], windowName: string): ShiftRow[] {
-  const have = rows.filter((r) => r.isSample && r.cells[windowName]?.deltaTm != null);
+  const have = rows
+    .filter((r) => r.isSample && r.cells[windowName]?.deltaTm != null)
+    .map((r) => ({ r, text: shiftLabel(r) }));
   const counts = new Map<string, number>();
-  for (const r of have) counts.set(r.sampleText, (counts.get(r.sampleText) ?? 0) + 1);
+  for (const { text } of have) counts.set(text, (counts.get(text) ?? 0) + 1);
   return have
-    .map((r) => ({
+    .map(({ r, text }) => ({
       wellId: r.wellId,
-      label: (counts.get(r.sampleText) ?? 0) > 1 ? `${r.sampleText} · ${r.position}` : r.sampleText,
+      label: (counts.get(text) ?? 0) > 1 ? `${text} · ${r.position}` : text,
       deltaTm: r.cells[windowName].deltaTm as number,
     }))
     .sort((a, b) => a.deltaTm - b.deltaTm);

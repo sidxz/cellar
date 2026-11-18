@@ -437,6 +437,27 @@ describe("melt-results", () => {
     expect(shiftRows(rows, "Main").map((r) => r.wellId)).toEqual(["big", "m1", "up"]);
   });
 
+  it("shiftRows names a registered sample with its aliases: two at most, the rest counted", () => {
+    const w = win([wp("a", 1, 1), wp("b", 1, 2), wp("c", 1, 3), wp("d", 1, 4)]);
+    const positions = [
+      pos("a", { registration_number: "CC-1", synonyms: ["SACC-0455096"] }),
+      pos("b", {
+        registration_number: "CC-2",
+        molecule_name: "Aspirin",
+        synonyms: ["SACC-0455097", "ASA", "NSC-27223"],
+      }),
+      pos("c", { registration_number: "CC-3" }),
+      pos("d", { label: "Lipid X" }),
+    ];
+    const rows = resultRows([w], positions, [], noChecks, []);
+    expect(shiftRows(rows, "Main").map((r) => r.label)).toEqual([
+      "CC-1 · SACC-0455096",
+      "CC-2 · Aspirin, SACC-0455097 +2",
+      "CC-3",
+      "Lipid X",
+    ]);
+  });
+
   it("duplicate labels get the position appended", () => {
     const w = win([wp("a", 1, 1), wp("b", 1, 2), wp("c", 1, 3)]);
     const positions = [
