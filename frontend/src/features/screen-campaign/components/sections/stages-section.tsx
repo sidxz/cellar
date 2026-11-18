@@ -39,6 +39,7 @@ import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { type RunLabel, useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
 import { useRemoveRunFromStage } from "../../hooks/use-campaigns";
+import { compoundsText } from "../../lib/column-description";
 import { protocolColorById } from "../../lib/protocol-colors";
 import type { CampaignResponse, CampaignStageResponse, StageCriterionDTO } from "../../types";
 import { AddFromRunsDialog } from "../add-from-runs-dialog";
@@ -180,7 +181,12 @@ export function StagesSection({
           const hit = stage.counts?.hit ?? 0;
           const population = stage.counts?.population ?? 0;
           const isManual = stage.kind === "manual";
-          const summary = stage.criteria.map(criterionText).join(" · ");
+          // A criteria stage with none yet passes what it measured; say so
+          // where its criteria would sit.
+          const summary =
+            !isManual && stage.criteria.length === 0
+              ? "No criteria yet"
+              : stage.criteria.map(criterionText).join(" · ");
           return (
             <button
               key={stage.id}
@@ -254,7 +260,7 @@ export function StagesSection({
             <p className="text-sm text-muted-foreground">{MANUAL_STAGE_HELP}</p>
           ) : selectedStage.criteria.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No criteria yet — this stage passes its whole population.
+              No criteria yet — compounds measured at this stage pass; the rest stay untested.
             </p>
           ) : (
             <ul className="space-y-1">
@@ -301,6 +307,12 @@ export function StagesSection({
 
 // ── StageRuns ─────────────────────────────────────────────────────────────────
 
+/** What tells a stage's runs apart for the chemist: "10 µM", "20 compounds". */
+const runFacts = (l: RunLabel): string[] =>
+  [l.concentration, l.compoundCount != null ? compoundsText(l.compoundCount) : undefined].filter(
+    (f): f is string => !!f,
+  );
+
 /** The runs a stage owns, each removable from it (confirmed: its columns
  *  recompute without the run, which stays in the campaign). */
 function StageRuns({
@@ -320,7 +332,8 @@ function StageRuns({
     .filter((r) => r.stage_ids.includes(stage.id))
     .map((r) => r.run_id);
   const removingLabel = removing ? runLabel(removing) : null;
-  const fullName = (l: RunLabel) => [l.protocolName, l.text, l.detail].filter(Boolean).join(" · ");
+  const fullName = (l: RunLabel) =>
+    [l.protocolName, l.text, ...runFacts(l), l.detail].filter(Boolean).join(" · ");
 
   return (
     <div className="mt-3 space-y-1.5">
@@ -350,6 +363,9 @@ function StageRuns({
                 <span className="min-w-0 truncate" title={fullName(label)}>
                   <span style={{ color: label.color }}>{label.protocolName}</span> ·{" "}
                   <span>{label.text}</span>
+                  {runFacts(label).map((fact) => (
+                    <span key={fact}> · {fact}</span>
+                  ))}
                   {label.detail && (
                     <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
                       {label.detail}

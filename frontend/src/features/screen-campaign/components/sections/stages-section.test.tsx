@@ -26,6 +26,8 @@ vi.mock("@/shared/lib/api/runs/runs", () => ({
         protocol_id: "proto-1",
         run_date: "2026-11-12",
         created_at: "2026-11-12T09:05:00",
+        conditions: { "Test concentration": "10 µM" },
+        molecule_count: 20,
       },
       { id: "run-2", protocol_id: "proto-1", run_date: "2026-11-14" },
       // A rerun on the same day as run-1.
@@ -34,6 +36,8 @@ vi.mock("@/shared/lib/api/runs/runs", () => ({
         protocol_id: "proto-1",
         run_date: "2026-11-12",
         created_at: "2026-11-12T15:40:00",
+        conditions: { "Test concentration": "50 µM" },
+        molecule_count: 1,
       },
     ],
   }),
@@ -190,7 +194,9 @@ describe("StagesSection", () => {
     ).toBeInTheDocument();
     // Child population is its parent's hits (r3 is gated out as not_in_stage).
     expect(
-      screen.getByRole("button", { name: /^↳ after Screening Hits Confirmed Hits 1 of 2 50%$/ }),
+      screen.getByRole("button", {
+        name: /^↳ after Screening Hits Confirmed Hits 1 of 2 50% No criteria yet$/,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -241,7 +247,7 @@ describe("StagesSection", () => {
       />,
       { wrapper },
     );
-    expect(screen.queryByText(/passes its whole population/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/the rest stay untested/)).not.toBeInTheDocument();
 
     rerender(
       <StagesSection
@@ -251,7 +257,12 @@ describe("StagesSection", () => {
         readOnly={false}
       />,
     );
-    expect(screen.getByText(/No criteria yet/)).toBeInTheDocument();
+    // A criteria stage with none passes what it measured, and nothing else.
+    expect(
+      screen.getByText(
+        "No criteria yet — compounds measured at this stage pass; the rest stay untested.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("after Screening Hits")).toBeInTheDocument();
 
     rerender(
@@ -347,6 +358,10 @@ describe("StagesSection runs", () => {
 
     const row = (await screen.findByText("Run on Nov 12, 2026")).closest("li") as HTMLElement;
     expect(row).toHaveTextContent("Kinase Panel");
+    // The dose and size a chemist tells runs apart by, then the created detail.
+    expect(row).toHaveTextContent(
+      "Kinase Panel · Run on Nov 12, 2026 · 10 µM · 20 compoundscreated 09:05 · run-1",
+    );
     // run-2 belongs to the child stage only.
     expect(screen.queryByText("Run on Nov 14, 2026")).not.toBeInTheDocument();
 
@@ -413,7 +428,7 @@ describe("StagesSection runs", () => {
 
     fireEvent.click(within(rerun).getByRole("button", { name: "Remove from stage" }));
     expect(screen.getByRole("alertdialog")).toHaveTextContent(
-      "Kinase Panel · Run on Nov 12, 2026 · created 15:40 · 3f2a9c1b stays in the campaign",
+      "Kinase Panel · Run on Nov 12, 2026 · 50 µM · 1 compound · created 15:40 · 3f2a9c1b stays in the campaign",
     );
   });
 
@@ -428,5 +443,21 @@ describe("StagesSection runs", () => {
       { wrapper },
     );
     expect(screen.getByText(/No runs at this stage yet/)).toBeInTheDocument();
+  });
+});
+
+describe("StagesSection run facts", () => {
+  it("leaves out a concentration or count the run doesn't record", async () => {
+    render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-confirmed"
+        onSelectStage={vi.fn()}
+        readOnly
+      />,
+      { wrapper },
+    );
+    const row = (await screen.findByText("Run on Nov 14, 2026")).closest("li") as HTMLElement;
+    expect(row).toHaveTextContent(/^Kinase Panel · Run on Nov 14, 2026run-2$/);
   });
 });

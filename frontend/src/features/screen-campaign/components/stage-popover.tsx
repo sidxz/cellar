@@ -368,7 +368,7 @@ export function StagePopoverForm({
         <p className="text-xs text-muted-foreground">
           Criteria judge this stage's own columns.{" "}
           {isEdit ? "Add runs to it" : "Once it's saved, add runs to it"}, then set its criteria
-          here. Until then it passes its whole population.
+          here. Until then, compounds measured at it pass and the rest stay untested.
         </p>
       ) : (
         <div className="space-y-2">
@@ -381,7 +381,7 @@ export function StagePopoverForm({
 
           {fields.length === 0 && (
             <p className="text-xs text-muted-foreground">
-              No criteria — this stage passes its whole population.
+              No criteria — compounds measured at this stage pass; the rest stay untested.
             </p>
           )}
 
