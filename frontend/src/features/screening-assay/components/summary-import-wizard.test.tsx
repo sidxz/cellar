@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { UseSummaryImportWizardResult } from "../hooks/use-summary-import-wizard";
@@ -57,6 +57,7 @@ function baseHook(
     handleFile: vi.fn(),
     setRole: vi.fn(),
     setReadoutDef: vi.fn(),
+    setReplicatesConstant: vi.fn(),
     handleContinueToPreview: vi.fn(),
     handleImport: vi.fn(),
     ...overrides,
@@ -186,5 +187,48 @@ describe("SummaryImportWizard", () => {
     expect(
       screen.getByText(/file attachment failed: attachment failed: disk full/i),
     ).toBeInTheDocument();
+  });
+
+  it("step 2 offers the replicates constant and reports it", () => {
+    const setReplicatesConstant = vi.fn();
+    hookState.value = baseHook({
+      step: 2,
+      setReplicatesConstant,
+      preview: {
+        headers: ["Compound", "n"],
+        suggestions: [
+          { header: "Compound", role: "compound_ref", confidence: "high" },
+          { header: "n", role: "replicates", confidence: "high" },
+        ],
+        sample_rows: [],
+        total_rows: 2,
+      },
+      draft: { roles: { Compound: "compound_ref", n: "replicates" }, readoutDefByHeader: {} },
+    });
+    renderWizard();
+    expect(screen.getByText("Replicates (n)")).toBeInTheDocument();
+    const input = screen.getByLabelText(/replicates in every value/i);
+    fireEvent.change(input, { target: { value: "3" } });
+    expect(setReplicatesConstant).toHaveBeenCalledWith(3);
+    fireEvent.change(input, { target: { value: "0" } });
+    expect(setReplicatesConstant).toHaveBeenLastCalledWith(null);
+  });
+
+  it("step 3 shows a replicate row error", () => {
+    hookState.value = baseHook({
+      step: 3,
+      resolvePreview: {
+        total_rows: 1,
+        matched_compound_count: 1,
+        unmatched_compound_refs: [],
+        unmatched_batch_refs: [],
+        values_to_insert: 0,
+        values_to_update: 0,
+        rows_skipped: 1,
+        errors: [{ row: "2", error: "Replicates must be a whole number of at least 1" }],
+      },
+    });
+    renderWizard();
+    expect(screen.getByText(/whole number of at least 1/i)).toBeInTheDocument();
   });
 });

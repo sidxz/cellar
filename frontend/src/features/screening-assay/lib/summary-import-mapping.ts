@@ -11,6 +11,8 @@ export interface SummaryMappingDraft {
   roles: Record<string, SummaryRole>;
   // header → readout_definition_id, only for headers with role=readout
   readoutDefByHeader: Record<string, string>;
+  /** "Every value is the mean of N replicates"; null/undefined = unset. */
+  replicatesConstant?: number | null;
 }
 
 // ─── Seed from backend suggestions ───────────────────────────────────────────
@@ -33,7 +35,7 @@ export function suggestionsToDraft(
       readoutDefByHeader[s.header] = s.readout_definition_id;
     }
   }
-  return { roles, readoutDefByHeader };
+  return { roles, readoutDefByHeader, replicatesConstant: null };
 }
 
 // ─── Build request mapping ────────────────────────────────────────────────────
@@ -49,6 +51,7 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
   let compoundRef: string | null = null;
   let batchRef: string | null = null;
   let structure: string | null = null;
+  let replicates: string | null = null;
   const readoutColumns: Record<string, string> = {};
 
   for (const [header, role] of Object.entries(draft.roles)) {
@@ -58,6 +61,8 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
       if (batchRef === null) batchRef = header;
     } else if (role === "structure") {
       if (structure === null) structure = header;
+    } else if (role === "replicates") {
+      if (replicates === null) replicates = header;
     } else if (role === "readout") {
       const defId = draft.readoutDefByHeader[header];
       if (!defId) return null;
@@ -72,6 +77,8 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
     compound_ref: compoundRef,
     batch_ref: batchRef,
     structure,
+    replicates,
+    replicates_constant: draft.replicatesConstant ?? null,
     readout_columns: readoutColumns,
   };
 }

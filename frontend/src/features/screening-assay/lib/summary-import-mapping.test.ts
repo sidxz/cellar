@@ -57,6 +57,8 @@ describe("buildMapping", () => {
       compound_ref: "Compound",
       batch_ref: null,
       structure: null,
+      replicates: null,
+      replicates_constant: null,
       readout_columns: { IC50: "def-1" },
     });
   });
@@ -98,6 +100,8 @@ describe("buildMapping", () => {
       compound_ref: null,
       batch_ref: "Batch",
       structure: null,
+      replicates: null,
+      replicates_constant: null,
       readout_columns: { IC50: "def-1" },
     });
   });
@@ -108,5 +112,20 @@ describe("buildMapping", () => {
       readoutDefByHeader: { IC50: "def-1" },
     });
     expect(mapping?.structure).toBe("SMILES");
+  });
+
+  it("sends the replicates column and the constant", () => {
+    const mapping = buildMapping({
+      roles: { Compound: "compound_ref", n: "replicates", IC50: "readout" },
+      readoutDefByHeader: { IC50: "def-1" },
+      replicatesConstant: 3,
+    });
+    expect(mapping?.replicates).toBe("n");
+    expect(mapping?.replicates_constant).toBe(3);
+  });
+
+  it("seeds the replicates role from the backend suggestion", () => {
+    const draft = suggestionsToDraft([suggestion({ header: "n", role: "replicates" })]);
+    expect(draft.roles).toEqual({ n: "replicates" });
   });
 });

@@ -178,7 +178,6 @@ export function AddFromRunsDialog({
   // — Global toggles —
   const [filterMode, setFilterMode] = useState<"any" | "all">("all");
   const [scope, setScope] = useState<"hits_only" | "all">("hits_only");
-  const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
   // "Save these criteria as a hit stage" — shown once any channel config has
   // a threshold. Name + default checked-state derive per-protocol (see
@@ -415,7 +414,6 @@ export function AddFromRunsDialog({
     setUserEditedConfigs(new Map());
     setFilterMode("all");
     setScope("hits_only");
-    setRefreshExisting(false);
     setApprovedOnly(true);
     setSaveStage(false);
     setStageName("Imported hits");
@@ -531,8 +529,6 @@ export function AddFromRunsDialog({
             onFilterModeChange={setFilterMode}
             scope={scope}
             onScopeChange={setScope}
-            refreshExisting={refreshExisting}
-            onRefreshExistingChange={setRefreshExisting}
             hasThreshold={hasThreshold}
             saveStage={saveStage}
             onSaveStageChange={setSaveStage}
@@ -565,7 +561,6 @@ export function AddFromRunsDialog({
                   data: {
                     ...payload,
                     scope,
-                    refresh_existing_cells: refreshExisting,
                     stage_name: hasThreshold && saveStage ? trimmedStageName : null,
                     parent_stage_id:
                       hasThreshold && saveStage && stageParentId !== ROOT_SENTINEL
@@ -624,8 +619,6 @@ interface ConfigureStepProps {
   onFilterModeChange: (v: "any" | "all") => void;
   scope: "hits_only" | "all";
   onScopeChange: (v: "hits_only" | "all") => void;
-  refreshExisting: boolean;
-  onRefreshExistingChange: (v: boolean) => void;
   /** Whether at least one channel config has a threshold — gates the
    *  "Save as hit stage" checkbox below. */
   hasThreshold: boolean;
@@ -971,11 +964,6 @@ function ConfigureStep(p: ConfigureStepProps) {
               </RadioGroup>
             </div>
 
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <Switch checked={p.refreshExisting} onCheckedChange={p.onRefreshExistingChange} />
-              Refresh non-override cells for molecules already in this campaign
-            </label>
-
             {p.hasThreshold && (
               <div className="space-y-2 border-t pt-2">
                 <div className="flex items-center gap-2">
@@ -1044,9 +1032,6 @@ interface PreviewCell {
   test_concentration_unit: string | null;
   replicate_count: number | null;
   qc_pass: boolean | null;
-  /** Chemist-facing explanation for `qc_pass === false`. Backend formats
-   *  ("Source run not approved" / "z' = 0.42 (below 0.5)" / aggregate). */
-  qc_reason: string | null;
   hit_call: string | null;
 }
 
@@ -1191,7 +1176,8 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {cell.qc_reason ?? "QC heuristic failed"}
+                                One or more runs behind this value are not approved, or their Z′ is
+                                below 0.5.
                               </TooltipContent>
                             </Tooltip>
                           )}

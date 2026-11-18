@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -40,6 +41,7 @@ const ROLE_OPTIONS: Array<{ value: SummaryRole; label: string }> = [
   { value: "compound_ref", label: "Compound Ref" },
   { value: "batch_ref", label: "Batch Ref" },
   { value: "structure", label: "Structure (SMILES)" },
+  { value: "replicates", label: "Replicates (n)" },
   { value: "readout", label: "Readout" },
   { value: "ignore", label: "Ignore" },
 ];
@@ -92,6 +94,7 @@ export function SummaryImportWizard({
     handleFile,
     setRole,
     setReadoutDef,
+    setReplicatesConstant,
     handleContinueToPreview,
     handleImport,
   } = useSummaryImportWizard({ runId, protocolId, open, onOpenChange });
@@ -133,6 +136,7 @@ export function SummaryImportWizard({
             readoutDefOptions={readoutDefOptions}
             onSetRole={setRole}
             onSetReadoutDef={setReadoutDef}
+            onSetReplicatesConstant={setReplicatesConstant}
           />
         )}
 
@@ -183,12 +187,14 @@ function MappingStep({
   readoutDefOptions,
   onSetRole,
   onSetReadoutDef,
+  onSetReplicatesConstant,
 }: {
   preview: SummaryPreviewResponse;
   draft: SummaryMappingDraft;
   readoutDefOptions: { id: string; name: string }[];
   onSetRole: (header: string, role: SummaryRole) => void;
   onSetReadoutDef: (header: string, defId: string) => void;
+  onSetReplicatesConstant: (n: number | null) => void;
 }) {
   const sampleRows = preview.sample_rows.slice(0, 5);
   return (
@@ -259,6 +265,24 @@ function MappingStep({
           </tbody>
         </table>
       </div>
+
+      <label className="flex items-center gap-2 text-sm">
+        Every value is the mean of
+        <Input
+          type="number"
+          min={1}
+          step={1}
+          aria-label="Replicates in every value"
+          className="h-8 w-20"
+          value={draft.replicatesConstant ?? ""}
+          onChange={(e) => {
+            const n = Number.parseInt(e.target.value, 10);
+            onSetReplicatesConstant(Number.isInteger(n) && n >= 1 ? n : null);
+          }}
+        />
+        replicates
+        <span className="text-xs text-muted-foreground">(optional)</span>
+      </label>
 
       {sampleRows.length > 0 && (
         <div>
