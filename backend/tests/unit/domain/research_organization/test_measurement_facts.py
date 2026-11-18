@@ -96,6 +96,18 @@ def _label(ch, ms, stage="Primary", readout="% inhibition"):
     ).label
 
 
+def test_empty_column_reads_no_values_yet():
+    ch = _channel()
+    d = describe_column(
+        channel=ch,
+        stage_name="Primary",
+        readout_label="% inhibition",
+        profile=build_column_profile(ch, []),
+    )
+    assert d.short_label == "no values yet"
+    assert d.label == "Primary · % inhibition · no values yet"
+
+
 def test_label_case_k_primary():
     assert _label(_channel(), [_m(conc=10, reps=1)]) == (
         "Primary · % inhibition · single concentration 10 µM · 1 replicate · 1 run · latest run"

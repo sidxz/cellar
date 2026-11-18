@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 
 import pytest
 
@@ -69,6 +69,7 @@ def _reading(
     replicate_count: int | None = None,
     batch_id: uuid.UUID | None = None,
     mol: uuid.UUID = MOL,
+    created_at: datetime | None = None,
 ) -> Candidate:
     """One readout row: a well reading, or (``well=False``) a reported value."""
     return Candidate(
@@ -90,6 +91,7 @@ def _reading(
         well_id=uuid.uuid4() if well else None,
         dose=dose,
         replicate_count=replicate_count,
+        run_created_at=created_at,
     )
 
 
@@ -156,6 +158,18 @@ def _assert_bare(m: CampaignMeasurement) -> None:
 
 
 # --- readout columns -----------------------------------------------------------
+
+
+@pytest.mark.parametrize("newer_first", [True, False])
+def test_latest_run_tie_on_date_goes_to_run_created_later(newer_first):
+    a, b = uuid.uuid4(), uuid.uuid4()
+    older = _reading(10, a, D1, created_at=datetime(2026, 1, 1, 9, 0, tzinfo=UTC))
+    newer = _reading(20, b, D1, created_at=datetime(2026, 1, 1, 9, 6, tzinfo=UTC))
+    m = _resolve(
+        _channel(SelectionRule.LATEST_RUN), [newer, older] if newer_first else [older, newer]
+    )
+    assert m.value == 20
+    assert m.source_run_id == b
 
 
 def test_replicate_wells_combine_per_run_then_rule():

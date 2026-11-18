@@ -109,6 +109,7 @@ def _base_readout_stmt(
             ReadoutDataModel.value_qualifier,
             RunModel.id.label("run_id"),
             RunModel.run_date,
+            RunModel.created_at.label("run_created_at"),
             RunModel.status,
             RunModel.qc_metrics,
             ProtocolModel.name,
@@ -239,6 +240,7 @@ class SQLAlchemyColumnCandidateQuery:
                         dose=_dose(row),
                         replicate_count=row.replicate_count,
                         aggregation=row.aggregation or "none",
+                        run_created_at=row.run_created_at,
                     )
                 )
         return dict(out)
@@ -314,6 +316,7 @@ class SQLAlchemyColumnCandidateQuery:
                 drc.intercept_values,
                 drc.run_id,
                 RunModel.run_date,
+                RunModel.created_at.label("run_created_at"),
                 RunModel.status,
                 RunModel.qc_metrics,
                 ProtocolModel.name,
@@ -364,4 +367,5 @@ def _curve_candidate(row: Any) -> Candidate:
         well_id=None,
         dose=None,
         replicate_count=None,
+        run_created_at=row.run_created_at,
     )

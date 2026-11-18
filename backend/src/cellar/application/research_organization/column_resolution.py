@@ -28,6 +28,7 @@ import statistics
 import uuid
 from collections import Counter
 from dataclasses import dataclass, replace
+from datetime import UTC, date, datetime
 from typing import Any, Literal, Protocol
 
 from cellar.application.screening.curve_snapshot import (
@@ -81,6 +82,8 @@ class Candidate:
     replicate_count: int | None
     #: The readout definition's replicate aggregation, as ``combine_replicates`` names it.
     aggregation: str = "none"
+    #: When the run row was created; breaks a tie between runs of the same ``run_date``.
+    run_created_at: datetime | None = None
 
 
 class ColumnCandidateQuery(Protocol):
@@ -120,6 +123,17 @@ class _Value:
 
     run: ResolvedRun
     readings: tuple[Candidate, ...]
+
+
+def _newest_first(values: list[_Value]) -> list[_Value]:
+    """Newest run first: ``run_date`` is a date, so same-day runs tie and the one
+    created later wins. The rules pick the first of equals, so order is the tie-break."""
+
+    def key(v: _Value) -> tuple[date, datetime]:
+        created = v.readings[0].run_created_at
+        return (v.run.run_date or date.min, created or datetime.min.replace(tzinfo=UTC))
+
+    return sorted(values, key=key, reverse=True)
 
 
 def _passes_qc(run: ResolvedRun, qc: dict[str, Any] | None) -> bool:
@@ -316,6 +330,7 @@ def _measure(
         return _nd_measurement(
             result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER
         )
+    values = _newest_first(values)
     runs = [v.run for v in values]
     result = apply_selection_rule(runs, rule, channel.qualifier_handling, channel.intercept_key)
     # Aggregate modes have no single source run / curve to pin: the value is synthesized.

@@ -236,6 +236,8 @@ def describe_column(
         parts.append(_replicates_text(profile))
     parts += [runs, rule]
     short_label = " · ".join(p for p in parts if p)
+    if not (profile.designs or profile.several_concentrations or profile.run_count):
+        short_label = "no values yet"
     return ColumnDescription(
         stage_name=stage_name,
         readout_label=readout_label,

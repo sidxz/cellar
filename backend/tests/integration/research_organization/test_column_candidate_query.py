@@ -92,6 +92,7 @@ async def test_fetch_joins_well_dose_and_condition(uow, session_factory, workspa
         9.0: (bare, None, None, True, None),
     }
     assert {c.aggregation for c in out[mol]} == {"median"}
+    assert all(c.run_created_at is not None for c in out[mol])
 
 
 @pytest.mark.asyncio
