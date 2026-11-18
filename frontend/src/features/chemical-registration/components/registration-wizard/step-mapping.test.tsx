@@ -136,6 +136,32 @@ describe("StepMapping", () => {
     expect(useRegistrationWizard.getState().bulkMapping).toEqual(SUGGESTED);
   });
 
+  it("offers 'Several values, separated by ;' for Compound ID and Batch ID only, and sets separator", async () => {
+    renderStep();
+    const box = await screen.findByRole("checkbox", {
+      name: "Several values, separated by ; (Synonyms)",
+    });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1); // not for name, smiles, ignore
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(
+        useRegistrationWizard.getState().bulkMapping?.columns.find((c) => c.header === "Synonyms")
+          ?.separator,
+      ).toBe(";"),
+    );
+    fireEvent.click(box);
+    await waitFor(() =>
+      expect(
+        useRegistrationWizard.getState().bulkMapping?.columns.find((c) => c.header === "Synonyms")
+          ?.separator,
+      ).toBeUndefined(),
+    );
+    await choose("LGCY Batch Name", "Batch ID");
+    expect(
+      screen.getByRole("checkbox", { name: "Several values, separated by ; (LGCY Batch Name)" }),
+    ).toBeInTheDocument();
+  });
+
   it("shows a Source, prefilled with the header, for a column sent to a labelled target", async () => {
     renderStep();
     expect(await screen.findByRole("textbox", { name: "Source for Synonyms" })).toHaveValue(

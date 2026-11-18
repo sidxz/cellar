@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import io
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -17,12 +17,9 @@ import pandas as pd
 from rdkit import Chem
 
 from cellar.application.chemical_registration.bulk_column_mapping import (
-    COMPOUND_ID_TYPES,
-    MAX_ID_LENGTH,
     SDF_TITLE_HEADER,
     ColumnMapping,
-    ColumnTarget,
-    split_multi,
+    extract_row,
     suggest_column_mapping,
 )
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
@@ -72,8 +69,6 @@ class ChemicalFileParser(Protocol):
 # Mapping-driven row extraction (shared by the SDF and tabular parsers)
 # ---------------------------------------------------------------------------
 
-_DEFAULT_BATCH_ID_SOURCE = "Bulk registration"
-
 
 def _default_mapping(headers: list[str]) -> ColumnMapping:
     """No mapping sent: today's header names, stored with today's sources."""
@@ -92,77 +87,17 @@ def _extract_item(
 
     ``structure`` (SDF) is the record's own structure; it wins over a mapped column.
     """
-    single: dict[ColumnTarget, str] = {}
-    external_ids: list[dict[str, str]] = []
-    batch_ids: list[dict[str, str]] = []
-    warnings: list[str] = []
-
-    def fits(v: str, header: str) -> bool:
-        if len(v) <= MAX_ID_LENGTH:
-            return True
-        warnings.append(
-            f"{header}: '{v[:40]}…' is longer than {MAX_ID_LENGTH} characters "
-            "and is not stored as an ID"
-        )
-        return False
-
-    for col in mapping.columns:
-        if col.target == ColumnTarget.IGNORE:
-            continue
-        val = get(col.header)
-        if not val:
-            continue
-        if col.target == ColumnTarget.BATCH_ID:
-            for v in split_multi(val):
-                if not fits(v, col.header):
-                    continue
-                batch_ids.append(
-                    {"identifier": v, "source": col.source or _DEFAULT_BATCH_ID_SOURCE}
-                )
-        elif col.target in COMPOUND_ID_TYPES:
-            values = split_multi(val) if col.target == ColumnTarget.COMPOUND_ID else [val]
-            for v in values:
-                if not fits(v, col.header):
-                    continue
-                eid = {"identifier": v, "identifier_type": COMPOUND_ID_TYPES[col.target]}
-                if col.source:
-                    eid["source"] = col.source
-                external_ids.append(eid)
-        else:
-            single[col.target] = val
-
-    name = single.get(ColumnTarget.NAME)
-    smiles = structure or single.get(ColumnTarget.SMILES)
-    if not name and not smiles:
+    row = extract_row(get, mapping, structure=structure)
+    if row is None:
         return ParsedMoleculeItem(
             row_index=row_index,
             file_row=file_row,
             error=f"Row {file_row}: no name or structure",
         )
-
-    stoich = _safe_int(single.get(ColumnTarget.SALT_STOICHIOMETRY))
-    # Leave name as None when the row has none. The application layer falls back
-    # to "Compound-{idx+1}" for a placeholder display name AND keeps
-    # promote_name_as_identifier off — auto-generated names must never be
-    # promoted as identifiers, otherwise re-importing any file without a name
-    # column collides on "Compound-1", "Compound-2", ... in the workspace.
-    return ParsedMoleculeItem(
-        row_index=row_index,
-        file_row=file_row,
-        name=name,
-        smiles=smiles,
-        molecule_type=single.get(ColumnTarget.MOLECULE_TYPE) or "small_molecule",
-        external_ids=external_ids,
-        batch_ids=batch_ids,
-        warnings=warnings,
-        amount_value=_safe_float(single.get(ColumnTarget.AMOUNT_VALUE)),
-        amount_unit=single.get(ColumnTarget.AMOUNT_UNIT) or "mg",
-        salt_code=single.get(ColumnTarget.SALT_CODE),
-        salt_stoichiometry=stoich if stoich is not None else 1,
-        purity=_safe_float(single.get(ColumnTarget.PURITY)),
-        batch_source=single.get(ColumnTarget.BATCH_SOURCE) or "synthesized",
-        appearance=single.get(ColumnTarget.APPEARANCE),
-    )
+    # A name left as None is filled "Compound-{idx+1}" by the application layer, which
+    # keeps promote_name_as_identifier off — auto-generated names must never be
+    # promoted as identifiers, or re-importing a file without a name column collides.
+    return ParsedMoleculeItem(row_index=row_index, file_row=file_row, **asdict(row))
 
 
 def _flag_shared_batch_ids(items: list[ParsedMoleculeItem]) -> list[ParsedMoleculeItem]:

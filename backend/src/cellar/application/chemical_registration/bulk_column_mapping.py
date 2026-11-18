@@ -10,7 +10,7 @@ header names the parser always accepted.
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
@@ -71,6 +71,8 @@ class MappedColumn:
     header: str
     target: ColumnTarget
     source: str | None = None
+    # How a multi-value ID cell is split besides line breaks: only ";" (or None).
+    separator: str | None = None
 
 
 @dataclass(frozen=True)
@@ -80,7 +82,12 @@ class ColumnMapping:
     def to_dict(self) -> dict[str, Any]:
         return {
             "columns": [
-                {"header": c.header, "target": c.target.value, "source": c.source}
+                {
+                    "header": c.header,
+                    "target": c.target.value,
+                    "source": c.source,
+                    "separator": c.separator,
+                }
                 for c in self.columns
             ]
         }
@@ -101,11 +108,13 @@ class ColumnMapping:
                     f"Column '{c['header']}': unknown target {c.get('target')!r}"
                 ) from None
             source = c.get("source")
+            separator = c.get("separator")
             cols.append(
                 MappedColumn(
                     header=c["header"],
                     target=target,
                     source=source.strip() if isinstance(source, str) and source.strip() else None,
+                    separator=separator if isinstance(separator, str) and separator else None,
                 )
             )
         return cls(columns=tuple(cols))
@@ -127,6 +136,13 @@ class ColumnMapping:
                         f"{c.target.value}; only one column can"
                     )
                 taken[c.target] = c.header
+            if c.separator is not None and (
+                c.separator != ";"
+                or c.target not in (ColumnTarget.COMPOUND_ID, ColumnTarget.BATCH_ID)
+            ):
+                return ValidationError(
+                    f"Column '{c.header}': only an ID column can be split, and only on ';'"
+                )
             if c.target in LABELLED_TARGETS and not c.source:
                 return ValidationError(f"Column '{c.header}' needs a Source")
             if c.source and len(c.source) > MAX_ID_LENGTH:
@@ -214,6 +230,126 @@ def suggest_column_mapping(headers: Sequence[str]) -> ColumnMapping:
     return ColumnMapping(columns=tuple(cols))
 
 
-def split_multi(value: str) -> list[str]:
-    """Split a multi-value cell on line breaks only — names contain commas and spaces."""
-    return [p.strip() for p in re.split(r"\r\n|\n|\r", value) if p.strip()]
+def split_multi(value: str, separator: str | None = None) -> list[str]:
+    """Split a multi-value cell on line breaks (and ``separator``, if given) — names
+    contain commas and spaces, so nothing else splits."""
+    pattern = r"\r\n|\n|\r" + (f"|{re.escape(separator)}" if separator else "")
+    return [p.strip() for p in re.split(pattern, value) if p.strip()]
+
+
+def is_cas_number(value: str) -> bool:
+    """CAS Registry Number: ``NNNNN-NN-C`` with a valid check digit."""
+    if not re.fullmatch(r"\d{2,7}-\d{2}-\d", value):
+        return False
+    digits = value.replace("-", "")
+    body, check = digits[:-1], int(digits[-1])
+    return sum(i * int(d) for i, d in enumerate(reversed(body), 1)) % 10 == check
+
+
+@dataclass(frozen=True)
+class ExtractedRow:
+    name: str | None
+    smiles: str | None
+    molecule_type: str
+    external_ids: list[dict[str, str]]  # {"identifier", "identifier_type", optional "source"}
+    batch_ids: list[dict[str, str]]  # {"identifier", "source"}
+    warnings: list[str]
+    amount_value: float | None
+    amount_unit: str
+    salt_code: str | None
+    salt_stoichiometry: int
+    purity: float | None
+    batch_source: str
+    appearance: str | None
+
+
+_DEFAULT_BATCH_ID_SOURCE = "Bulk registration"
+
+
+def _float(s: str | None) -> float | None:
+    try:
+        return float(s) if s else None
+    except ValueError:
+        return None
+
+
+def _int(s: str | None) -> int | None:
+    f = _float(s)
+    return int(f) if f is not None else None
+
+
+def extract_row(
+    get: Callable[[str], str | list[str] | None],
+    mapping: ColumnMapping,
+    *,
+    structure: str | None = None,
+) -> ExtractedRow | None:
+    """Apply a mapping to one row. ``get(header)`` returns the cell (trimmed), a list
+    of values, or None. ``structure`` (SDF) wins over a mapped structure column.
+    Returns None when the row has neither a name nor a structure."""
+    single: dict[ColumnTarget, str] = {}
+    external_ids: list[dict[str, str]] = []
+    batch_ids: list[dict[str, str]] = []
+    warnings: list[str] = []
+
+    def fits(v: str, header: str) -> bool:
+        if len(v) <= MAX_ID_LENGTH:
+            return True
+        warnings.append(
+            f"{header}: '{v[:40]}…' is longer than {MAX_ID_LENGTH} characters "
+            "and is not stored as an ID"
+        )
+        return False
+
+    for col in mapping.columns:
+        if col.target == ColumnTarget.IGNORE:
+            continue
+        val = get(col.header)
+        if not val:
+            continue
+        if isinstance(val, list):
+            values = [p.strip() for p in val if p and p.strip()]
+        elif col.target in (ColumnTarget.COMPOUND_ID, ColumnTarget.BATCH_ID):
+            values = split_multi(val, col.separator)
+        else:
+            values = [val]
+        if col.target == ColumnTarget.BATCH_ID:
+            for v in values:
+                if fits(v, col.header):
+                    batch_ids.append(
+                        {"identifier": v, "source": col.source or _DEFAULT_BATCH_ID_SOURCE}
+                    )
+        elif col.target in COMPOUND_ID_TYPES:
+            for v in values:
+                if not fits(v, col.header):
+                    continue
+                id_type = COMPOUND_ID_TYPES[col.target]
+                if col.target == ColumnTarget.COMPOUND_ID and is_cas_number(v):
+                    id_type = "cas_number"
+                eid = {"identifier": v, "identifier_type": id_type}
+                if col.source:
+                    eid["source"] = col.source
+                external_ids.append(eid)
+        elif values:
+            single[col.target] = values[0]
+
+    name = single.get(ColumnTarget.NAME)
+    smiles = structure or single.get(ColumnTarget.SMILES)
+    if not name and not smiles:
+        return None
+    stoich = _int(single.get(ColumnTarget.SALT_STOICHIOMETRY))
+    return ExtractedRow(
+        name=name,
+        smiles=smiles,
+        molecule_type=single.get(ColumnTarget.MOLECULE_TYPE) or "small_molecule",
+        external_ids=external_ids,
+        batch_ids=batch_ids,
+        warnings=warnings,
+        amount_value=_float(single.get(ColumnTarget.AMOUNT_VALUE)),
+        amount_unit=single.get(ColumnTarget.AMOUNT_UNIT) or "mg",
+        salt_code=single.get(ColumnTarget.SALT_CODE),
+        salt_stoichiometry=stoich if stoich is not None else 1,
+        purity=_float(single.get(ColumnTarget.PURITY)),
+        batch_source=single.get(ColumnTarget.BATCH_SOURCE) or "synthesized",
+        appearance=single.get(ColumnTarget.APPEARANCE),
+    )

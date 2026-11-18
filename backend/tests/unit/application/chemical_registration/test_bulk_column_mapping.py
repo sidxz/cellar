@@ -8,6 +8,8 @@ from cellar.application.chemical_registration.bulk_column_mapping import (
     LABELLED_TARGETS,
     ColumnMapping,
     MappedColumn,
+    extract_row,
+    is_cas_number,
     split_multi,
     suggest_column_mapping,
 )
@@ -218,3 +220,57 @@ def test_split_multi_line_breaks_only() -> None:
     assert split_multi(" X \r\n\r\nY\rZ\n") == ["X", "Y", "Z"]
     assert split_multi("2-(4-chloro phenyl), 3 HCl") == ["2-(4-chloro phenyl), 3 HCl"]
     assert split_multi("\n \n") == []
+
+
+def test_split_on_semicolon_only_when_asked() -> None:
+    assert split_multi("A; B\nC", ";") == ["A", "B", "C"]
+    assert split_multi("A; B\nC") == ["A; B", "C"]
+
+
+def test_separator_only_on_id_columns() -> None:
+    bad = ColumnMapping(columns=(MappedColumn("Name", T.NAME, separator=";"),))
+    err = bad.validate(["Name"], structure_implied=False)
+    assert err is not None and "'Name'" in str(err)
+    odd = ColumnMapping(columns=(MappedColumn("Syn", T.COMPOUND_ID, "Syn", separator=","),))
+    assert odd.validate(["Syn"], structure_implied=True) is not None
+    ok = ColumnMapping(columns=(MappedColumn("Syn", T.COMPOUND_ID, "Syn", separator=";"),))
+    assert ok.validate(["Syn"], structure_implied=True) is None
+    assert ColumnMapping.from_dict(ok.to_dict()) == ok
+
+
+def test_is_cas_number() -> None:
+    assert is_cas_number("51-52-5")
+    assert not is_cas_number("51-52-6")
+    assert not is_cas_number("1234-56-7")  # checksum is 6, not 7
+    assert is_cas_number("1234-56-6")
+    assert not is_cas_number("abc")
+
+
+def test_alternate_names_cell_splits_into_ids_and_a_cas() -> None:
+    mapping = ColumnMapping(
+        columns=(
+            MappedColumn("Name", T.NAME),
+            MappedColumn("Alt", T.COMPOUND_ID, "Alternate Names", separator=";"),
+        )
+    )
+    cell = "LC:F3097-4245; NCGC00016229-01; Propylthiouracil; 51-52-5"
+    row = extract_row({"Name": "X", "Alt": cell}.get, mapping)
+    assert row is not None
+    assert [(e["identifier"], e["identifier_type"]) for e in row.external_ids] == [
+        ("LC:F3097-4245", "custom"),
+        ("NCGC00016229-01", "custom"),
+        ("Propylthiouracil", "custom"),
+        ("51-52-5", "cas_number"),
+    ]
+
+
+def test_extract_row_list_values_and_none() -> None:
+    mapping = ColumnMapping(
+        columns=(
+            MappedColumn("Name", T.NAME),
+            MappedColumn("B", T.BATCH_ID, "Batch"),
+        )
+    )
+    row = extract_row({"Name": "X", "B": ["b1", "b2"]}.get, mapping)
+    assert row is not None and [b["identifier"] for b in row.batch_ids] == ["b1", "b2"]
+    assert extract_row({"B": "b1"}.get, mapping) is None

@@ -10,4 +10,5 @@ export interface ColumnMappingColumnBody {
   header: string;
   target: ColumnTarget;
   source?: string | null;
+  separator?: string | null;
 }

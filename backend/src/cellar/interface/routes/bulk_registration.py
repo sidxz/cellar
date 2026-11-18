@@ -293,6 +293,7 @@ class ColumnMappingColumnBody(BaseModel):
     header: str
     target: ColumnTarget
     source: str | None = None  # the Source label stored with an ID column's values
+    separator: str | None = None  # ';' = split this ID column's cells on ';' as well
 
 
 class ColumnMappingBody(BaseModel):

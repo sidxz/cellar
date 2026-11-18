@@ -62,6 +62,8 @@ const LABELLED = new Set<ColumnTarget>([
 const MULTI = new Set<ColumnTarget>(["compound_id", "batch_id", "ignore"]);
 
 export const isLabelled = (t: ColumnTarget) => LABELLED.has(t);
+/** Only ID columns can hold several values in one cell. */
+export const isSplittable = (t: ColumnTarget) => t === "compound_id" || t === "batch_id";
 export const isMulti = (t: ColumnTarget) => MULTI.has(t);
 
 /** The sentence that blocks Preview, or null when the mapping can be previewed. */
@@ -102,7 +104,14 @@ export function applySavedMapping(
   return {
     columns: suggestion.columns.map((c) => {
       const s = byNorm.get(norm(c.header));
-      return s ? { header: c.header, target: s.target, source: s.source ?? null } : c;
+      return s
+        ? {
+            header: c.header,
+            target: s.target,
+            source: s.source ?? null,
+            separator: s.separator ?? undefined,
+          }
+        : c;
     }),
   };
 }

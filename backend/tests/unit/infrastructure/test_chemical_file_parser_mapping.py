@@ -353,3 +353,19 @@ def test_an_ignored_column_the_file_lacks_does_not_reject_the_mapping() -> None:
         columns=(MappedColumn("Molecule Name", T.NAME), MappedColumn("Ghost", T.IGNORE))
     )
     assert mapping.validate(["Molecule Name"], structure_implied=False) is None
+
+
+def test_semicolon_column_splits_through_the_parser() -> None:
+    mapping = ColumnMapping(
+        columns=(
+            MappedColumn("Name", T.NAME),
+            MappedColumn("Alt", T.COMPOUND_ID, "Alt", separator=";"),
+        )
+    )
+    csv = b"Name,Alt\nX,A; B; 51-52-5\n"
+    (item,) = TabularParser().parse(csv, "f.csv", mapping)
+    assert [(e["identifier"], e["identifier_type"]) for e in item.external_ids] == [
+        ("A", "custom"),
+        ("B", "custom"),
+        ("51-52-5", "cas_number"),
+    ]

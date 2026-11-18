@@ -2,6 +2,7 @@
 
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent } from "@/shared/components/ui/card";
+import { Checkbox } from "@/shared/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -37,6 +38,7 @@ import {
   applySavedMapping,
   isLabelled,
   isMulti,
+  isSplittable,
   mappingProblem,
   scoreSavedMapping,
 } from "../../lib/column-targets";
@@ -190,6 +192,7 @@ export function StepMapping() {
     updateColumn(header, {
       target,
       source: isLabelled(target) ? current?.trim() || header : null,
+      separator: undefined,
     });
 
   return (
@@ -284,6 +287,18 @@ export function StepMapping() {
                             onChange={(e) => updateColumn(c.header, { source: e.target.value })}
                             aria-label={`Source for ${c.header}`}
                           />
+                        )}
+                        {isSplittable(c.target) && (
+                          <label className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                            <Checkbox
+                              checked={c.separator === ";"}
+                              onCheckedChange={(on) =>
+                                updateColumn(c.header, { separator: on ? ";" : undefined })
+                              }
+                              aria-label={`Several values, separated by ; (${c.header})`}
+                            />
+                            Several values, separated by ;
+                          </label>
                         )}
                       </td>
                     </tr>
