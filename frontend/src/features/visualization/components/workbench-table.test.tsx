@@ -387,7 +387,7 @@ describe("WorkbenchTable", () => {
       height: 64,
     } as DOMRect);
     vi.spyOn(body, "getBoundingClientRect").mockReturnValue({ top: 300 } as DOMRect);
-    fireEvent.click(screen.getByRole("button", { name: "Next page" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Next page" }));
     await vi.waitFor(() => expect(pageSummary()).toBe("101 to 200 of 250"));
     expect(body.scrollIntoView).not.toHaveBeenCalled();
   });
