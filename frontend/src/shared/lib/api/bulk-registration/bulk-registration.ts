@@ -27,16 +27,19 @@ import type {
   BodyPreviewBulkRegistrationApiV1BulkRegistrationsPreviewPost,
   BodyStartBulkRegistrationApiV1BulkRegistrationsPost,
   BulkRegistrationAcceptedResponse,
+  BulkRegistrationMappingResponse,
   BulkRegistrationResponse,
   BulkRegistrationStatusResponse,
   ColumnMappingBody,
   ConfirmMergesBody,
   ConfirmMergesResponse,
+  CreateBulkRegistrationMappingRequest,
   HTTPValidationError,
   ListBulkRegItemsResponse,
   ListBulkRegistrationItemsApiV1BulkRegistrationsWorkflowIdItemsGetParams,
   PreviewBulkRegistrationResponse,
-  SuggestColumnMappingBody
+  SuggestColumnMappingBody,
+  UpdateBulkRegistrationMappingRequest
 } from '../model';
 
 import { customInstance } from '.././custom-instance';
@@ -610,3 +613,289 @@ export function useListBulkRegistrationItemsApiV1BulkRegistrationsWorkflowIdItem
 
 
 
+/**
+ * @summary List Bulk Registration Mappings
+ */
+export const listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet = (
+
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<BulkRegistrationMappingResponse[]>(
+      {url: `/api/v1/bulk-registration-mappings`, method: 'GET', signal
+    },
+      );
+    }
+
+
+
+
+export const getListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGetQueryKey = () => {
+    return [
+    `/api/v1/bulk-registration-mappings`
+    ] as const;
+    }
+
+
+export const getListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGetQueryOptions = <TData = Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError, TData>>, }
+) => {
+
+const {query: queryOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGetQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>> = ({ signal }) => listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet(signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type ListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGetQueryResult = NonNullable<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>>
+export type ListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGetQueryError = unknown
+
+
+/** @summary List Bulk Registration Mappings */
+export function useListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet<TData = Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary List Bulk Registration Mappings */
+export function useListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet<TData = Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>,
+          TError,
+          Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>
+        > , 'initialData'
+      >, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary List Bulk Registration Mappings */
+export function useListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet<TData = Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/** @summary List Bulk Registration Mappings */
+export function useListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet<TData = Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof listBulkRegistrationMappingsApiV1BulkRegistrationMappingsGet>>, TError, TData>>, }
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getListBulkRegistrationMappingsApiV1BulkRegistrationMappingsGetQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
+ * @summary Create Bulk Registration Mapping
+ */
+export const createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost = (
+    createBulkRegistrationMappingRequest: CreateBulkRegistrationMappingRequest,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<BulkRegistrationMappingResponse>(
+      {url: `/api/v1/bulk-registration-mappings`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: createBulkRegistrationMappingRequest, signal
+    },
+      );
+    }
+
+
+
+
+export const getCreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationKey = () => ['createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost'] as const;
+
+export const getCreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost>>, TError,CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost>>, TError,CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationVariables, TContext> => {
+
+const mutationKey = getCreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost>>, CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationVariables> = (props) => {
+          const {data} = props ?? {};
+
+          return  createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost(data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationResult = NonNullable<Awaited<ReturnType<typeof createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost>>>
+    export type CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationBody = CreateBulkRegistrationMappingRequest
+    export type CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationError = HTTPValidationError
+    export type CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationVariables = {data: CreateBulkRegistrationMappingRequest}
+
+    /** @summary Create Bulk Registration Mapping */
+export const useCreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPost = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost>>, TError,CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof createBulkRegistrationMappingApiV1BulkRegistrationMappingsPost>>,
+        TError,
+        CreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationVariables,
+        TContext
+      > => {
+      return useMutation(getCreateBulkRegistrationMappingApiV1BulkRegistrationMappingsPostMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Update Bulk Registration Mapping
+ */
+export const updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch = (
+    mappingId: string,
+    updateBulkRegistrationMappingRequest: UpdateBulkRegistrationMappingRequest,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<BulkRegistrationMappingResponse>(
+      {url: `/api/v1/bulk-registration-mappings/${mappingId}`, method: 'PATCH',
+      headers: {'Content-Type': 'application/json', },
+      data: updateBulkRegistrationMappingRequest, signal
+    },
+      );
+    }
+
+
+
+
+export const getUpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationKey = () => ['updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch'] as const;
+
+export const getUpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch>>, TError,UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch>>, TError,UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationVariables, TContext> => {
+
+const mutationKey = getUpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch>>, UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationVariables> = (props) => {
+          const {mappingId,data} = props ?? {};
+
+          return  updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch(mappingId,data,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationResult = NonNullable<Awaited<ReturnType<typeof updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch>>>
+    export type UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationBody = UpdateBulkRegistrationMappingRequest
+    export type UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationError = HTTPValidationError
+    export type UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationVariables = {mappingId: string;data: UpdateBulkRegistrationMappingRequest}
+
+    /** @summary Update Bulk Registration Mapping */
+export const useUpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch>>, TError,UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof updateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatch>>,
+        TError,
+        UpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationVariables,
+        TContext
+      > => {
+      return useMutation(getUpdateBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdPatchMutationOptions(options), queryClient);
+    }
+    /**
+ * @summary Delete Bulk Registration Mapping
+ */
+export const deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete = (
+    mappingId: string,
+ signal?: AbortSignal
+) => {
+
+
+      return customInstance<void>(
+      {url: `/api/v1/bulk-registration-mappings/${mappingId}`, method: 'DELETE', signal
+    },
+      );
+    }
+
+
+
+
+export const getDeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationKey = () => ['deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete'] as const;
+
+export const getDeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete>>, TError,DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationVariables, TContext>, }
+): UseMutationOptions<Awaited<ReturnType<typeof deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete>>, TError,DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationVariables, TContext> => {
+
+const mutationKey = getDeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationKey();
+const {mutation: mutationOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete>>, DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationVariables> = (props) => {
+          const {mappingId} = props ?? {};
+
+          return  deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete(mappingId,)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete>>>
+
+    export type DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationError = HTTPValidationError
+    export type DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationVariables = {mappingId: string}
+
+    /** @summary Delete Bulk Registration Mapping */
+export const useDeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete>>, TError,DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationVariables, TContext>, }
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof deleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDelete>>,
+        TError,
+        DeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationVariables,
+        TContext
+      > => {
+      return useMutation(getDeleteBulkRegistrationMappingApiV1BulkRegistrationMappingsMappingIdDeleteMutationOptions(options), queryClient);
+    }

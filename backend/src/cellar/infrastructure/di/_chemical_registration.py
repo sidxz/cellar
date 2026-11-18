@@ -12,6 +12,12 @@ from cellar.application.admin.admin_delete_registry import register_admin_delete
 from cellar.application.chemical_registration.bulk_registration_item_reader import (
     BulkRegistrationItemReader,
 )
+from cellar.application.chemical_registration.bulk_registration_mappings import (
+    CreateBulkRegistrationMapping,
+    DeleteBulkRegistrationMapping,
+    ListBulkRegistrationMappings,
+    UpdateBulkRegistrationMapping,
+)
 from cellar.application.chemical_registration.bulk_registration_orchestrator import (
     BulkRegistrationOrchestrator,
 )
@@ -114,6 +120,9 @@ from cellar.infrastructure.persistence.sqlalchemy.attachment.attachment_merge_si
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_item_reader import (  # noqa: E501
     SQLAlchemyBulkRegistrationItemReader,
+)
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_mapping_repository import (  # noqa: E501
+    SQLAlchemyBulkRegistrationMappingRepository,
 )
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (  # noqa: E501
     SQLAlchemyBulkRegistrationRepository,
@@ -261,6 +270,28 @@ def register_chemical_registration(container: Container) -> None:
         )
 
     container.define(PreviewRegistration, _preview_registration)
+
+    # --- Saved bulk-registration column mappings ---
+    def _mapping_write(uc_cls: type):
+        def _f(c: Container):
+            uow = AsyncUnitOfWork(c[async_sessionmaker])
+            return uc_cls(
+                uow, SQLAlchemyBulkRegistrationMappingRepository(uow), c[EventDispatcher]
+            )
+
+        return _f
+
+    def _list_mappings(c: Container) -> ListBulkRegistrationMappings:
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListBulkRegistrationMappings(uow, SQLAlchemyBulkRegistrationMappingRepository(uow))
+
+    container.define(ListBulkRegistrationMappings, _list_mappings)
+    for _uc in (
+        CreateBulkRegistrationMapping,
+        UpdateBulkRegistrationMapping,
+        DeleteBulkRegistrationMapping,
+    ):
+        container.define(_uc, _mapping_write(_uc))
 
     def _update_molecule(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])

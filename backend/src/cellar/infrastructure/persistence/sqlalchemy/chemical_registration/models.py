@@ -19,7 +19,7 @@ from sqlalchemy import (
     Uuid,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSON
+from sqlalchemy.dialects.postgresql import JSON, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from cellar.infrastructure.persistence.sqlalchemy.base import (
@@ -184,4 +184,18 @@ class MoleculeRelationshipModel(Base, EntityModelMixin, WorkspaceIdMixin, Versio
             "relationship_type",
             name="uq_mol_rel",
         ),
+    )
+
+
+class BulkRegistrationMappingModel(Base, EntityModelMixin, WorkspaceIdMixin):
+    """Saved column mapping for the bulk-registration wizard (``Match columns``)."""
+
+    __tablename__ = "bulk_registration_mappings"
+
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    columns: Mapped[list] = mapped_column(JSONB, nullable=False)
+    created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "name", name="uq_bulk_registration_mapping_ws_name"),
     )

@@ -27,28 +27,23 @@ down_revision = "104_stage_owned_campaign_values"
 branch_labels = None
 depends_on = None
 
-_CDD_BATCH = """
-    (b.custom_fields ->> 'cdd_batch_id') IS NOT NULL
-    AND coalesce(trim(b.vendor_catalog_number), '') <> ''
-"""
-
-
 def upgrade() -> None:
     op.execute(
-        f"""
+        """
         UPDATE batch_identifiers bi
         SET derived_from_molecule_identifier_id = NULL,
             source = 'CDD batch ID',
             updated_at = now()
         FROM batches b
         WHERE bi.batch_id = b.id
-          AND {_CDD_BATCH}
+          AND (b.custom_fields ->> 'cdd_batch_id') IS NOT NULL
+          AND coalesce(trim(b.vendor_catalog_number), '') <> ''
           AND bi.identifier = trim(b.vendor_catalog_number)
           AND bi.derived_from_molecule_identifier_id IS NOT NULL
         """
     )
     op.execute(
-        f"""
+        """
         INSERT INTO batch_identifiers (
             id, batch_id, workspace_id, identifier, identifier_type, source,
             registered_by, derived_from_molecule_identifier_id, created_at, updated_at
@@ -56,7 +51,8 @@ def upgrade() -> None:
         SELECT gen_random_uuid(), b.id, b.workspace_id, trim(b.vendor_catalog_number),
                'custom', 'CDD batch ID', b.chemist, NULL, now(), now()
         FROM batches b
-        WHERE {_CDD_BATCH}
+        WHERE (b.custom_fields ->> 'cdd_batch_id') IS NOT NULL
+          AND coalesce(trim(b.vendor_catalog_number), '') <> ''
           AND NOT EXISTS (
               SELECT 1 FROM batch_identifiers x
               WHERE x.workspace_id = b.workspace_id

@@ -6,6 +6,12 @@ from typing import Annotated
 
 from fastapi import Depends
 
+from cellar.application.chemical_registration.bulk_registration_mappings import (
+    CreateBulkRegistrationMapping,
+    DeleteBulkRegistrationMapping,
+    ListBulkRegistrationMappings,
+    UpdateBulkRegistrationMapping,
+)
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationService,
 )
@@ -66,8 +72,10 @@ __all__ = [
     # Bulk registration
     "BulkRegistrationServiceDep",
     "ConfirmDisclosureDep",
+    "CreateBulkRegistrationMappingDep",
     "CreateRelationshipDep",
     "DecideMergeCandidatesDep",
+    "DeleteBulkRegistrationMappingDep",
     "DeleteRelationshipDep",
     "DepictMoleculesDep",
     # Disclosure + merge
@@ -80,6 +88,7 @@ __all__ = [
     "GetMoleculeByIdentifierDep",
     "GetMoleculeDep",
     "ListBulkRegistrationItemsDep",
+    "ListBulkRegistrationMappingsDep",
     "ListDisclosuresByWorkspaceDep",
     "ListDisclosuresDep",
     "ListIdentifiersDep",
@@ -96,6 +105,7 @@ __all__ = [
     "ResolveDisclosureConflictDep",
     "SearchMoleculesDep",
     "StartBulkRegistrationDep",
+    "UpdateBulkRegistrationMappingDep",
     "UpdateMoleculeDep",
 ]
 
@@ -154,4 +164,18 @@ PreviewBulkRegistrationFileDep = Annotated[
 ]
 ListBulkRegistrationItemsDep = Annotated[
     ListBulkRegistrationItems, Depends(_get_use_case(ListBulkRegistrationItems))
+]
+
+# --- Saved bulk-registration column mappings ---
+ListBulkRegistrationMappingsDep = Annotated[
+    ListBulkRegistrationMappings, Depends(_get_use_case(ListBulkRegistrationMappings))
+]
+CreateBulkRegistrationMappingDep = Annotated[
+    CreateBulkRegistrationMapping, Depends(_get_use_case(CreateBulkRegistrationMapping))
+]
+UpdateBulkRegistrationMappingDep = Annotated[
+    UpdateBulkRegistrationMapping, Depends(_get_use_case(UpdateBulkRegistrationMapping))
+]
+DeleteBulkRegistrationMappingDep = Annotated[
+    DeleteBulkRegistrationMapping, Depends(_get_use_case(DeleteBulkRegistrationMapping))
 ]

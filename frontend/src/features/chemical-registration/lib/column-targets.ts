@@ -78,3 +78,31 @@ export function mappingProblem(
   }
   return null;
 }
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
+
+/** Share of a saved mapping's headers present in the file (normalised). */
+export function scoreSavedMapping(saved: ColumnMappingBody, headers: string[]): number {
+  const file = new Set(headers.map(norm));
+  if (saved.columns.length === 0) return 0;
+  return saved.columns.filter((c) => file.has(norm(c.header))).length / saved.columns.length;
+}
+
+export const SAVED_MAPPING_MIN_SCORE = 0.7;
+
+/**
+ * The file's columns as the saved mapping says, keeping the file's own header
+ * spelling; headers the saved mapping doesn't know keep their suggestion.
+ */
+export function applySavedMapping(
+  saved: ColumnMappingBody,
+  suggestion: ColumnMappingBody,
+): ColumnMappingBody {
+  const byNorm = new Map(saved.columns.map((c) => [norm(c.header), c]));
+  return {
+    columns: suggestion.columns.map((c) => {
+      const s = byNorm.get(norm(c.header));
+      return s ? { header: c.header, target: s.target, source: s.source ?? null } : c;
+    }),
+  };
+}
