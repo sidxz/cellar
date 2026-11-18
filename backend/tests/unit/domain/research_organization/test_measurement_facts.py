@@ -37,7 +37,7 @@ def test_parse_accepted_forms(raw, expected):
     assert parse_concentration(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["10 um", "ATP", "10 mg/mL", None, True, {"value": "x"}, ""])
+@pytest.mark.parametrize("raw", ["10 um", "ATP", "10 mg", None, True, {"value": "x"}, ""])
 def test_parse_rejects(raw):
     assert parse_concentration(raw) is None
 
@@ -175,3 +175,32 @@ def test_profile_ignores_no_fact_cells_and_counts_runs():
     p = build_column_profile(ch, [a, b, nd])
     assert p.run_count == 1 and p.replicate_not_recorded == 0
     assert p.concentrations == ((Concentration(10, "µM"), 2),)
+
+
+@pytest.mark.parametrize(
+    "raw, expected",
+    [
+        ("10 ug/mL", Concentration(10, "µg/mL")),
+        ("10 µg/mL", Concentration(10, "µg/mL")),
+        ("500 ng/mL", Concentration(500, "ng/mL")),
+    ],
+)
+def test_parse_mass_concentration(raw, expected):
+    assert parse_concentration(raw) == expected
+
+
+def test_same_as_never_crosses_families():
+    assert not Concentration(10, "µg/mL").same_as(Concentration(10, "µM"))
+    assert Concentration(1, "mg/mL").same_as(Concentration(1000, "µg/mL"))
+
+
+def test_mic_multiple_rejected():
+    assert parse_concentration("4 xMIC") is None
+    assert parse_concentration("4 ×MIC") is None
+
+
+def test_mass_concentration_label_text():
+    ch = _channel()
+    m = _m(reps=1)
+    m.test_concentration_value, m.test_concentration_unit = 10, "ug/mL"
+    assert "single concentration 10 µg/mL" in _label(ch, [m])

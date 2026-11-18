@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING, Any
 
 from cellar.domain.research_organization.enums import MeasurementBasis
 from cellar.domain.shared.aggregation_types import SelectionRule
-from cellar.domain.shared.units import MICRO, canonical_unit, comparable_magnitude
+from cellar.domain.shared.units import (
+    MICRO,
+    canonical_unit,
+    comparable_magnitude,
+    is_concentration_unit,
+)
 
 if TYPE_CHECKING:
     from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -19,6 +24,7 @@ if TYPE_CHECKING:
 
 TEST_CONCENTRATION = "Test concentration"
 
+_DOSE_FAMILIES = {"molar", "mass concentration"}
 _TEXT = re.compile(r"^\s*([-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?)\s*(\S*)\s*$")
 
 
@@ -34,7 +40,7 @@ class Concentration:
 
 
 def parse_concentration(raw: object, default_unit: str = f"{MICRO}M") -> Concentration | None:
-    """A molar concentration from "10 µM" / "10 uM" / a bare number / {"value","unit"}.
+    """A molar or mass/volume concentration from "10 µM" / "10 ug/mL" / a bare number / a dict.
     Anything else (including a lone lowercase "um", ambiguous with µm) is None."""
     if isinstance(raw, bool):
         return None
@@ -52,9 +58,9 @@ def parse_concentration(raw: object, default_unit: str = f"{MICRO}M") -> Concent
     else:
         return None
     unit = canonical_unit(unit if isinstance(unit, str) else None)
-    if unit is None or not math.isfinite(value):
+    if unit is None or not math.isfinite(value) or not is_concentration_unit(unit):
         return None
-    if comparable_magnitude(1, unit)[0] != "molar":
+    if comparable_magnitude(1, unit)[0] not in _DOSE_FAMILIES:  # ×MIC is not a dose
         return None
     return Concentration(float(value), unit)
 
