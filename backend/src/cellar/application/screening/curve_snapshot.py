@@ -15,9 +15,9 @@ Two builders, both pure functions over ``ResolvedRun``:
   carrying the cell value (used when the per-curve intercept dashed line
   would mislead, e.g. mean / gmean cells).
 
-Lifted from ``application/research_organization/channel_resolution.py``
-so that ``application/screening/molecule_activity_service.py`` can produce
-the same overlay shape for search grids without a cross-context import.
+Shared by the campaign resolver (``application/research_organization/column_resolution.py``)
+and ``application/screening/molecule_activity_service.py``, so search grids produce
+the same overlay shape without a cross-context import.
 """
 
 from __future__ import annotations

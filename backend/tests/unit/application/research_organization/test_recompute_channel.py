@@ -335,8 +335,8 @@ class TestRecomputeChannel:
         auth = fake_auth()
         campaign, ch_a, _, results = _build_campaign_two_channels_three_results(auth.workspace_id)
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs(
-            [SeedRun(run_a, ch_a.protocol_id), SeedRun(run_b, ch_a.protocol_id)]
+        campaign.add_runs_to_stage(
+            [SeedRun(run_a, ch_a.protocol_id), SeedRun(run_b, ch_a.protocol_id)], None
         )
 
         def _uc(query):

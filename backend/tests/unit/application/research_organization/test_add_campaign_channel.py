@@ -163,7 +163,7 @@ class TestAddCampaignChannel:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         run_id, protocol_id = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, protocol_id)], None)
         query = FakeColumnQuery(42.0, unit="uM")
 
         uc = AddCampaignChannel(
@@ -182,7 +182,7 @@ class TestAddCampaignChannel:
         has no seed runs to scope to, so it resolves protocol-wide."""
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), uuid.uuid4())], None)
         query = FakeColumnQuery(42.0, unit="uM")
 
         uc = AddCampaignChannel(
@@ -200,7 +200,7 @@ class TestAddCampaignChannel:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         protocol_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), protocol_id)], None)
         query = FakeColumnQuery(42.0, unit="uM")
 
         uc = AddCampaignChannel(

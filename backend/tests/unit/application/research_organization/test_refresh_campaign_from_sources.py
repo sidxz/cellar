@@ -394,7 +394,7 @@ class TestRefreshFromSources:
         )
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
         proto = channels[0].protocol_id
-        campaign.record_seed_runs([SeedRun(run_a, proto), SeedRun(run_b, proto)])
+        campaign.add_runs_to_stage([SeedRun(run_a, proto), SeedRun(run_b, proto)], None)
 
         def _uc(query):
             return RefreshFromSources(

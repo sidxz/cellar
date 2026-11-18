@@ -20,7 +20,7 @@ from cellar.application.research_organization.column_resolution import (
 from cellar.application.screening.curve_snapshot import build_aggregate_curve_snapshot
 from cellar.application.screening.run_aggregation import (
     ResolvedRun,
-    _max_dose_from_raw,
+    _dose_range_from_raw,
     resolve_intercept,
 )
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -265,10 +265,14 @@ def _dr_candidate(
     )
 
 
-class TestMaxDoseFromRaw:
+def _top_dose(raw_data):
+    return _dose_range_from_raw(raw_data)[1]
+
+
+class TestDoseRangeFromRaw:
     def test_picks_largest_positive_concentration(self):
         assert (
-            _max_dose_from_raw(
+            _top_dose(
                 [
                     {"concentration": 0.1, "response": 5},
                     {"concentration": 50.0, "response": 90},
@@ -279,13 +283,13 @@ class TestMaxDoseFromRaw:
         )
 
     def test_accepts_x_y_shape_too(self):
-        assert _max_dose_from_raw([{"x": 0.5, "y": 10}, {"x": 25, "y": 80}]) == 25.0
+        assert _top_dose([{"x": 0.5, "y": 10}, {"x": 25, "y": 80}]) == 25.0
 
     def test_ignores_non_positive_and_non_finite(self):
         import math as _math
 
         assert (
-            _max_dose_from_raw(
+            _top_dose(
                 [
                     {"concentration": -1, "response": 5},
                     {"concentration": 0, "response": 5},
@@ -297,8 +301,8 @@ class TestMaxDoseFromRaw:
         )
 
     def test_returns_none_on_empty(self):
-        assert _max_dose_from_raw(None) is None
-        assert _max_dose_from_raw([]) is None
+        assert _top_dose(None) is None
+        assert _top_dose([]) is None
 
 
 class TestResolveIntercept:

@@ -254,7 +254,7 @@ class TestAddResultsFromCollection:
         channel = _make_channel(campaign)
         campaign.add_channel(channel)
         run_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, channel.protocol_id)], None)
 
         def _uc(query, mols):
             return AddResultsFromCollection(

@@ -756,7 +756,7 @@ async def test_mirrored_channel_resolution_is_scoped_to_the_campaigns_source_run
     campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
     protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="% inhibition")])
     run_id = uuid.uuid4()
-    campaign.record_seed_runs([SeedRun(run_id, protocol.id)])
+    campaign.add_runs_to_stage([SeedRun(run_id, protocol.id)], None)
 
     query = FakeColumnQuery(42.0, unit="uM")
     uc = MirrorProtocolChannels(
@@ -786,7 +786,7 @@ async def test_mirroring_an_unseeded_protocol_resolves_protocol_wide() -> None:
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
     campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
-    campaign.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])  # another protocol
+    campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), uuid.uuid4())], None)  # another protocol
     protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="% inhibition")])
 
     query = FakeColumnQuery(42.0, unit="uM")

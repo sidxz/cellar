@@ -309,7 +309,7 @@ class TestAddResultsFromCampaign:
         target = _make_campaign(auth)
         channel = _make_channel(target)
         run_id = uuid.uuid4()
-        target.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+        target.add_runs_to_stage([SeedRun(run_id, channel.protocol_id)], None)
         source, _ = _make_source_campaign(auth, [60.0])
         repo = make_campaign_repo(find_dispatch={target.id: target, source.id: source})
 

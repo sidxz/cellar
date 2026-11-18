@@ -574,7 +574,7 @@ class TestCloseCampaign:
         auth = fake_auth()
         campaign, channels, results = _build_campaign(auth.workspace_id)
         run_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, channels[0].protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, channels[0].protocol_id)], None)
 
         uc, _, _, query = _make_use_case(campaign)
         out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
@@ -599,7 +599,7 @@ class TestCloseCampaign:
     async def test_close_opt_out_channel_resolves_unrestricted(self) -> None:
         auth = fake_auth()
         campaign, channels, results = _build_campaign(auth.workspace_id)
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channels[0].protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), channels[0].protocol_id)], None)
         channels[0].resolve_from_all_runs = True
 
         uc, _, _, query = _make_use_case(campaign)

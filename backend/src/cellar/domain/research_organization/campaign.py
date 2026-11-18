@@ -201,12 +201,6 @@ class Campaign(AggregateRoot):
 
     # ----- seed runs (spec D4) -----
 
-    def record_seed_runs(self, runs: Iterable[SeedRun]) -> None:
-        """Append the runs an add-from-runs call imported from. Runs already
-        recorded are ignored; insertion order is kept. Draft only."""
-        self._ensure_draft("record seed runs")
-        self.add_runs_to_stage(runs, None)
-
     def add_runs_to_stage(self, runs: Iterable[SeedRun], stage_id: uuid.UUID | None) -> None:
         """Union ``stage_id`` into each run's stages; unknown runs are appended.
         ``stage_id=None`` only appends. Insertion order is kept. Draft only."""

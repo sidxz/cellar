@@ -311,7 +311,7 @@ class TestSeedRuns:
         p1, p2 = uuid.uuid4(), uuid.uuid4()
         r1, r2 = uuid.uuid4(), uuid.uuid4()
         stage = campaign.stages[0].id
-        campaign.record_seed_runs([SeedRun(r2, p1, (stage,)), SeedRun(r1, p2)])
+        campaign.add_runs_to_stage([SeedRun(r2, p1, (stage,)), SeedRun(r1, p2)], None)
 
         full = CampaignResponse.from_domain(campaign).model_dump()
         summary = CampaignSummaryResponse.from_domain(campaign).model_dump()

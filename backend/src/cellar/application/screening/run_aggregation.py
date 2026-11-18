@@ -1,7 +1,7 @@
 """Shared aggregator for collapsing N runs of a (compound, intercept) cell.
 
 Single source of truth for two screening contexts:
-- Campaign channel resolution (``application/research_organization/channel_resolution.py``)
+- Campaign column resolution (``application/research_organization/column_resolution.py``)
 - Search & molecule-activity grids (``application/screening/molecule_activity_service.py``)
 
 Both adapt their domain rows into a ``ResolvedRun`` value object, then
@@ -92,8 +92,7 @@ class AggregateResult:
 
 
 # ---------------------------------------------------------------------------
-# Intercept resolution — public versions of the formerly private helpers in
-# channel_resolution.py.
+# Intercept resolution.
 # ---------------------------------------------------------------------------
 
 
@@ -110,11 +109,6 @@ def _dose_range_from_raw(raw_data: list[dict] | None) -> tuple[float | None, flo
         if isinstance(raw, (int, float)) and math.isfinite(raw) and raw > 0:
             doses.append(float(raw))
     return (min(doses), max(doses)) if doses else (None, None)
-
-
-def _max_dose_from_raw(raw_data: list[dict] | None) -> float | None:
-    """Largest positive concentration on a candidate's raw_data."""
-    return _dose_range_from_raw(raw_data)[1]
 
 
 def resolve_intercept(
@@ -282,7 +276,7 @@ def _aggregate_eq(
 
     Note: ``representative_run`` is the latest-by-date EQ contributor — NOT
     the latest of any qualified candidate. This differs subtly from the
-    pre-refactor channel_resolution.py code, which used the latest of any
+    pre-refactor campaign resolver, which used the latest of any
     post-QC candidate (including Inactive ones). The new behavior is a
     defensible improvement: the snapshot reflects a curve that actually
     contributed to the aggregate value, rather than an unrelated curve
