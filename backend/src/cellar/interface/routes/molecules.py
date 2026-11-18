@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -447,6 +447,8 @@ class PreviewRegistrationItemBody(BaseModel):
     smiles: str | None = None  # None = intends an undisclosed registration
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
+    # The row's batch IDs (bulk registration); when given, the batch is forecast too.
+    batch_ids: list[str] = []
 
 
 class PreviewRegistrationBody(BaseModel):
@@ -460,6 +462,12 @@ class PreviewRegistrationItemResponse(BaseModel):
     matched_molecule_id: uuid.UUID | None = None
     conflict_reason: str | None = None
     error: str | None = None
+    # Rows with the same key are the same compound (InChIKey, or identifiers if undisclosed).
+    compound_key: str | None = None
+    # Only when the item sent batch_ids: new | existing | problem.
+    batch_action: Literal["new", "existing", "problem"] | None = None
+    matched_batch_number: str | None = None
+    batch_problem: str | None = None
 
 
 class PreviewRegistrationResponse(BaseModel):
@@ -639,6 +647,7 @@ async def preview_registration(
                 name=item.name,
                 smiles=item.smiles,
                 external_ids=[e.identifier for e in item.external_ids],
+                batch_ids=item.batch_ids,
             )
             for item in body.items
         ],
@@ -652,6 +661,10 @@ async def preview_registration(
                 matched_molecule_id=i.matched_molecule_id,
                 conflict_reason=i.conflict_reason,
                 error=i.error,
+                compound_key=i.compound_key,
+                batch_action=i.batch_action,
+                matched_batch_number=i.matched_batch_number,
+                batch_problem=i.batch_problem,
             )
             for i in outcome.items
         ]

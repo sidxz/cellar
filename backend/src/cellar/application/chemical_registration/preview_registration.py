@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from typing import Literal
 
 from returns.result import Failure, Result, Success
 
@@ -26,10 +27,12 @@ from cellar.application.chemical_registration.registration_classifier import (
     classify_undisclosed,
     collect_identifiers,
 )
+from cellar.application.chemical_registration.row_batch import classify_row_batch, row_batch_ids
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.enums import RegistrationAction
 from cellar.domain.chemical_registration.repository import MoleculeRepository
+from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.errors import DomainError, ValidationError
 
 # find_by_inchi_key is one indexed read per item; keep a batch to something a
@@ -42,6 +45,8 @@ class PreviewRegistrationItem:
     name: str | None
     smiles: str | None  # None = the caller intends an undisclosed registration
     external_ids: list[str] = field(default_factory=list)
+    # The row's batch IDs; when given, the forecast also says what happens to its batch.
+    batch_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -57,6 +62,12 @@ class RegistrationPreviewItem:
     matched_molecule_id: uuid.UUID | None = None
     conflict_reason: str | None = None
     error: str | None = None
+    # What the compound was classified by (InChIKey, or its identifiers when
+    # undisclosed) — rows with the same key are the same compound.
+    compound_key: str | None = None
+    batch_action: Literal["new", "existing", "problem"] | None = None
+    matched_batch_number: str | None = None
+    batch_problem: str | None = None
 
 
 @dataclass(frozen=True)
@@ -70,10 +81,12 @@ class PreviewRegistration:
         uow: UnitOfWork,
         repo: MoleculeRepository,
         structure_processor: StructureProcessorProtocol,
+        batch_repo: BatchRepository | None = None,
     ) -> None:
         self._uow = uow
         self._repo = repo
         self._processor = structure_processor
+        self._batch_repo = batch_repo
 
     async def __call__(
         self,
@@ -109,6 +122,7 @@ class PreviewRegistration:
 
         if item.smiles is None:
             forecast = await classify_undisclosed(self._repo, workspace_id, identifiers)
+            compound_key = "ids:" + "|".join(sorted(identifiers)) if identifiers else None
         else:
             # RDKit work is synchronous and ~ms per structure; 500 in a row would
             # stall the single uvicorn worker, so run it off the event loop.
@@ -123,12 +137,36 @@ class PreviewRegistration:
             forecast = await classify_disclosed(
                 self._repo, workspace_id, inchi_key, identifiers, detect_undisclosed=True
             )
+            compound_key = inchi_key
 
+        matched_id = forecast.matched_molecule.id if forecast.matched_molecule else None
+        batch_action, batch_number, batch_problem = await self._forecast_batch(
+            workspace_id, matched_id, item.batch_ids
+        )
         return RegistrationPreviewItem(
             index,
             forecast.action,
-            matched_molecule_id=forecast.matched_molecule.id
-            if forecast.matched_molecule
-            else None,
+            matched_molecule_id=matched_id,
             conflict_reason=forecast.conflict_reason,
+            compound_key=compound_key,
+            batch_action=batch_action,
+            matched_batch_number=batch_number,
+            batch_problem=batch_problem,
         )
+
+    async def _forecast_batch(
+        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID | None, batch_ids: list[str]
+    ) -> tuple[Literal["new", "existing", "problem"] | None, str | None, str | None]:
+        """Same rule as the import (row_batch.classify_row_batch). Database only:
+        rows of one file are grouped by the caller via ``compound_key``."""
+        if not batch_ids or self._batch_repo is None:
+            return None, None, None
+        match = await classify_row_batch(
+            self._batch_repo,
+            workspace_id,
+            molecule_id,
+            row_batch_ids([{"identifier": b, "source": ""} for b in batch_ids]),
+        )
+        if match.kind == "existing" and match.batch is not None:
+            return "existing", match.batch.batch_number.value, None
+        return match.kind, None, match.problem

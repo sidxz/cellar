@@ -7,11 +7,18 @@ just inspects the result mode to pick a response code.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 
+from cellar.application.chemical_registration.bulk_column_mapping import (
+    ColumnMapping,
+    ColumnTarget,
+    suggest_column_mapping,
+)
 from cellar.application.chemical_registration.bulk_registration_service import (
     BulkRegistrationItemResult,
 )
@@ -151,6 +158,9 @@ async def start_bulk_registration(
     file_format: str = Form(...),
     create_batch_on_duplicate: bool | None = Form(None),
     project_ids: list[uuid.UUID] = Form([]),
+    column_mapping: str | None = Form(
+        None, description="JSON of ColumnMappingBody; omit to use the file's headers as named"
+    ),
 ):
     """Upload a file (SDF, CSV, XLSX) to register molecules in bulk.
 
@@ -169,6 +179,7 @@ async def start_bulk_registration(
         file_format=file_format,
         content=content,
         create_batch_on_duplicate=create_batch_on_duplicate,
+        column_mapping=_parse_column_mapping(column_mapping),
         project_ids=project_ids,
     )
 
@@ -279,12 +290,39 @@ async def confirm_merges(
 # ---------------------------------------------------------------------------
 
 
+class ColumnMappingColumnBody(BaseModel):
+    header: str
+    target: ColumnTarget
+    source: str | None = None  # the Source label stored with an ID column's values
+
+
+class ColumnMappingBody(BaseModel):
+    columns: list[ColumnMappingColumnBody]
+
+
+class SuggestColumnMappingBody(BaseModel):
+    headers: list[str]
+
+
+class PreviewCompoundId(BaseModel):
+    identifier: str
+    identifier_type: str
+    source: str | None = None
+
+
+class PreviewBatchId(BaseModel):
+    identifier: str
+    source: str
+
+
 class PreviewItem(BaseModel):
     row_index: int
+    file_row: int = 0  # the row number a person sees in the file
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = []
+    external_ids: list[PreviewCompoundId] = []
+    batch_ids: list[PreviewBatchId] = []
     amount_value: float | None = None
     amount_unit: str = "mg"
     salt_code: str | None = None
@@ -299,6 +337,27 @@ class PreviewBulkRegistrationResponse(BaseModel):
     total_count: int
     error_count: int
     items: list[PreviewItem]
+
+
+def _parse_column_mapping(raw: str | None) -> ColumnMapping | None:
+    """The ``column_mapping`` form field → ColumnMapping (None when absent)."""
+    if raw is None or not raw.strip():
+        return None
+    try:
+        body = ColumnMappingBody.model_validate(json.loads(raw))
+    except (json.JSONDecodeError, PydanticValidationError) as err:
+        raise ValidationError(f"column_mapping is not a valid mapping: {err}") from err
+    return ColumnMapping.from_dict(body.model_dump(mode="json"))
+
+
+@router.post("/suggest-mapping", response_model=ColumnMappingBody)
+async def suggest_bulk_registration_mapping(
+    auth: AuthDep,
+    body: SuggestColumnMappingBody,
+) -> ColumnMappingBody:
+    """Where each header would go by its name (the wizard's starting point)."""
+    mapping = suggest_column_mapping(body.headers)
+    return ColumnMappingBody.model_validate(mapping.to_dict())
 
 
 def _detect_file_format(filename: str) -> BulkRegistrationFileFormat:
@@ -319,6 +378,9 @@ async def preview_bulk_registration(
     auth: AuthDep,
     preview_uc: PreviewBulkRegistrationFileDep,
     file: UploadFile = File(...),
+    column_mapping: str | None = Form(
+        None, description="JSON of ColumnMappingBody; omit to use the file's headers as named"
+    ),
 ) -> PreviewBulkRegistrationResponse:
     """Parse a bulk-registration file without persisting anything.
 
@@ -336,6 +398,7 @@ async def preview_bulk_registration(
         filename=filename,
         content=content,
         file_format=fmt,
+        column_mapping=_parse_column_mapping(column_mapping),
     )
     result = await preview_uc(query, auth=auth)
     outcome = result_to_response(result)
@@ -346,10 +409,12 @@ async def preview_bulk_registration(
         items=[
             PreviewItem(
                 row_index=i.row_index,
+                file_row=i.file_row,
                 name=i.name,
                 smiles=i.smiles,
                 molecule_type=i.molecule_type,
-                external_ids=i.external_ids,
+                external_ids=[PreviewCompoundId(**e) for e in i.external_ids],
+                batch_ids=[PreviewBatchId(**b) for b in i.batch_ids],
                 amount_value=i.amount_value,
                 amount_unit=i.amount_unit,
                 salt_code=i.salt_code,

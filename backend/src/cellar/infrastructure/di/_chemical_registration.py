@@ -257,6 +257,7 @@ def register_chemical_registration(container: Container) -> None:
             uow=uow,
             repo=SQLAlchemyMoleculeRepository(uow),
             structure_processor=c[StructureProcessorProtocol],
+            batch_repo=SQLAlchemyBatchRepository(uow),
         )
 
     container.define(PreviewRegistration, _preview_registration)

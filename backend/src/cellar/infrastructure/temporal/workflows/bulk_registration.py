@@ -47,6 +47,7 @@ class BulkRegistrationWorkflowInput:
     filename: str
     create_batch_on_duplicate: bool | None = None
     project_ids: list[str] = field(default_factory=list)
+    column_mapping: dict | None = None  # ColumnMapping.to_dict(); None = default headers
     # For continue_as_new
     resume_bulk_reg_id: str | None = None
     resume_chunk_index: int = 0
@@ -153,6 +154,7 @@ class BulkRegistrationWorkflow:
                     storage_path=input.storage_path,
                     file_format=input.file_format,
                     filename=input.filename,
+                    column_mapping=input.column_mapping,
                 ),
                 start_to_close_timeout=timedelta(minutes=10),
                 heartbeat_timeout=timedelta(seconds=60),

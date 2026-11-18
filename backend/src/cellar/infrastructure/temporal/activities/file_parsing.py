@@ -13,11 +13,13 @@ from pathlib import Path
 
 import structlog
 from temporalio import activity
+from temporalio.exceptions import ApplicationError
 
+from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from cellar.domain.shared.errors import ValidationError
 from cellar.infrastructure.parsers.chemical_file_parser import get_parser
 from cellar.infrastructure.storage.fsspec_client import StorageSettings
-from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.infrastructure.temporal.activities.dtos import ChunkItem
 from cellar.infrastructure.temporal.task_queues import CHUNK_SIZE
 
@@ -62,8 +64,14 @@ class FileParsingActivities:
         parser = get_parser(fmt)
 
         activity.heartbeat("parsing file")
-        mapping = ColumnMapping.from_dict(input.column_mapping) if input.column_mapping else None
-        parsed = parser.parse(content, input.filename, mapping)
+        try:
+            mapping = (
+                ColumnMapping.from_dict(input.column_mapping) if input.column_mapping else None
+            )
+            parsed = parser.parse(content, input.filename, mapping)
+        except ValidationError as err:
+            # A mapping that doesn't fit the file won't fit it on retry either.
+            raise ApplicationError(str(err), non_retryable=True) from err
 
         # Convert to ChunkItem dicts and split into chunks
         all_items: list[dict] = []

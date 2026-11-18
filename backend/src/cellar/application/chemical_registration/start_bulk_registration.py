@@ -17,6 +17,7 @@ from typing import Literal
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.application.chemical_registration.bulk_registration_orchestrator import (
     BulkRegistrationOrchestrator,
     StartBulkRegistrationRequest,
@@ -54,6 +55,7 @@ class StartBulkRegistrationFromFileCommand(Command):
     content: bytes
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
     project_ids: list[uuid.UUID] = field(default_factory=list)
+    column_mapping: ColumnMapping | None = None  # None = the file's headers as named
 
 
 @dataclass(frozen=True)
@@ -126,6 +128,7 @@ class StartBulkRegistration:
             content=input.content,
             create_batch_on_duplicate=input.create_batch_on_duplicate,
             project_ids=input.project_ids,
+            column_mapping=input.column_mapping.to_dict() if input.column_mapping else None,
         )
 
         try:
@@ -135,11 +138,15 @@ class StartBulkRegistration:
             pass  # Fall through to in-process pipeline
 
         # --- Sync fallback: parse in-process and run BulkRegistrationService ---
-        parsed = self._parser.parse(
-            content=input.content,
-            filename=input.filename,
-            file_format=file_format,
-        )
+        try:
+            parsed = self._parser.parse(
+                content=input.content,
+                filename=input.filename,
+                file_format=file_format,
+                column_mapping=input.column_mapping,
+            )
+        except ValidationError as err:
+            return Failure(err)
         items = [
             BulkRegistrationItem(
                 row_index=p.row_index,
