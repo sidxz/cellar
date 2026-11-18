@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from datetime import date
 from typing import TYPE_CHECKING, Any
@@ -20,6 +21,8 @@ from cellar.application.chemical_registration.registration_classifier import (
     classify_disclosed,
     classify_undisclosed,
     collect_identifiers,
+    held_elsewhere,
+    skipped_id_warning,
 )
 from cellar.application.research_organization.project_links import (
     ProjectAccess,
@@ -61,6 +64,8 @@ class RegistrationOutcome:
     matched_molecule_id: uuid.UUID | None = None
     disclosure_id: uuid.UUID | None = None
     conflict_reason: str | None = None
+    # Stored-only IDs another compound holds, one warning each (not stored here).
+    skipped_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -68,6 +73,22 @@ class ExternalId:
     identifier: str
     identifier_type: str
     source: str | None = None  # a Source label from the file; None → "Registration (…)"
+    # False = stored only: never matches or conflicts; kept only when no other
+    # compound holds the text (CDD mapper spec 2026-11-18 §3a).
+    decides: bool = True
+
+
+def external_ids(raw: Iterable[Mapping[str, Any]]) -> list[ExternalId]:
+    """Item dicts ``{"identifier", "identifier_type", "source"?, "decides"?}``."""
+    return [
+        ExternalId(
+            identifier=d["identifier"],
+            identifier_type=d["identifier_type"],
+            source=d.get("source"),
+            decides=d.get("decides", True),
+        )
+        for d in raw
+    ]
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -169,10 +190,10 @@ class RegisterMolecule:
         )
 
     def _collect_all_identifiers(self, input: RegisterMoleculeCommand) -> set[str]:
-        """Name + external ids — the identifiers this registration will claim."""
+        """Name + deciding external ids — what finds or conflicts with a compound."""
         return collect_identifiers(
             input.name,
-            (ext.identifier for ext in input.external_ids),
+            (ext.identifier for ext in input.external_ids if ext.decides),
             promote_name=input.promote_name_as_identifier,
         )
 
@@ -186,14 +207,29 @@ class RegisterMolecule:
                 settings = WorkspaceSettings.create_default(workspace_id=workspace_id)
         return settings.registration_number_prefix, settings.registration_number_width
 
-    def _add_name_and_ids(
+    async def _add_name_and_ids(
         self,
         mol: Molecule,
         input: RegisterMoleculeCommand,
         source: str,
-    ) -> None:
-        """Add name as custom identifier + all external_ids to molecule."""
+    ) -> tuple[str, ...]:
+        """Add name as custom identifier + the external_ids to molecule.
+
+        Stored-only IDs another compound already holds are left off; returns one
+        warning per such ID.
+        """
         existing_values = {i.identifier for i in mol.identifiers}
+        held = await held_elsewhere(
+            self._repo,
+            input.workspace_id,
+            (
+                e.identifier
+                for e in input.external_ids
+                if not e.decides and e.identifier not in existing_values
+            ),
+            mol.id,
+        )
+        skipped: list[str] = []
 
         # Auto-promote name as custom identifier (skip for auto-generated names)
         if input.name and input.promote_name_as_identifier and input.name not in existing_values:
@@ -208,19 +244,32 @@ class RegisterMolecule:
             )
             existing_values.add(input.name)
 
-        # Add explicit external IDs
-        for ext_id in input.external_ids:
-            if ext_id.identifier not in existing_values:
-                mol.add_identifier(
-                    MoleculeIdentifier.create(
-                        molecule_id=mol.id,
-                        identifier=ext_id.identifier,
-                        identifier_type=ext_id.identifier_type,
-                        source=ext_id.source or f"Registration ({source})",
-                        registered_by=input.registered_by,
+        # Add explicit external IDs; deciding ones first, so a text given both
+        # ways is stored as the deciding one.
+        for ext_id in sorted(input.external_ids, key=lambda e: not e.decides):
+            if ext_id.identifier in existing_values:
+                continue
+            if not ext_id.decides and ext_id.identifier in held:
+                skipped.append(
+                    skipped_id_warning(
+                        ext_id.identifier,
+                        held[ext_id.identifier],
+                        mol.registration_number.value,
                     )
                 )
-                existing_values.add(ext_id.identifier)
+                existing_values.add(ext_id.identifier)  # one warning per text
+                continue
+            mol.add_identifier(
+                MoleculeIdentifier.create(
+                    molecule_id=mol.id,
+                    identifier=ext_id.identifier,
+                    identifier_type=ext_id.identifier_type,
+                    source=ext_id.source or f"Registration ({source})",
+                    registered_by=input.registered_by,
+                )
+            )
+            existing_values.add(ext_id.identifier)
+        return tuple(skipped)
 
     async def _record_disclosure_provenance(
         self,
@@ -335,7 +384,9 @@ class RegisterMolecule:
                     raise AssertionError(f"unexpected registration forecast {forecast.action}")
             if existing_by_inchi is not None:
                 # 6a. Duplicate InChIKey — add identifiers to existing molecule
-                self._add_name_and_ids(existing_by_inchi, input, source="duplicate")
+                skipped = await self._add_name_and_ids(
+                    existing_by_inchi, input, source="duplicate"
+                )
                 await self._repo.save(existing_by_inchi)
                 await self._record_disclosure_provenance(
                     input,
@@ -353,6 +404,7 @@ class RegisterMolecule:
                     action=RegistrationAction.DEDUPLICATED,
                     qc_warnings=qc_warnings,
                     detected_salt=processed.detected_salt,
+                    skipped_ids=skipped,
                 )
             elif forecast.action is RegistrationAction.REGISTERED:
                 # 6b. New molecule — same transaction as the conflict check, so
@@ -377,7 +429,7 @@ class RegisterMolecule:
                 )
                 mol.morgan_fp = processed.fingerprints.morgan
                 mol.bemis_murcko_smiles = processed.bemis_murcko_smiles
-                self._add_name_and_ids(mol, input, source="name")
+                skipped = await self._add_name_and_ids(mol, input, source="name")
                 await self._repo.save(mol)
                 await self._record_disclosure_provenance(
                     input,
@@ -394,6 +446,7 @@ class RegisterMolecule:
                     action=RegistrationAction.REGISTERED,
                     qc_warnings=qc_warnings,
                     detected_salt=processed.detected_salt,
+                    skipped_ids=skipped,
                 )
 
         if delegate_to_disclosure is not None and self._disclosure_service is not None:
@@ -478,8 +531,9 @@ class RegisterMolecule:
 
             # 3a. Matched existing undisclosed — add new IDs
             events = []
+            skipped: tuple[str, ...] = ()
             if matched_molecule is not None:
-                self._add_name_and_ids(matched_molecule, input, source="duplicate")
+                skipped = await self._add_name_and_ids(matched_molecule, input, source="duplicate")
                 await self._repo.save(matched_molecule)
                 link_events = await self._link_projects(input, matched_molecule.id)
                 events = [*await self._uow.commit(), *link_events]
@@ -488,7 +542,10 @@ class RegisterMolecule:
             await self._dispatcher.dispatch_all(events)
             return Success(
                 RegistrationOutcome(
-                    molecule=matched_molecule, is_new=False, action=RegistrationAction.DEDUPLICATED
+                    molecule=matched_molecule,
+                    is_new=False,
+                    action=RegistrationAction.DEDUPLICATED,
+                    skipped_ids=skipped,
                 )
             )
 
@@ -514,7 +571,7 @@ class RegisterMolecule:
                 custom_fields=input.custom_fields,
                 scientist_name=input.scientist_name,
             )
-            self._add_name_and_ids(mol, input, source="name")
+            skipped = await self._add_name_and_ids(mol, input, source="name")
 
             await self._repo.save(mol)
             link_events = await self._link_projects(input, mol.id)
@@ -522,5 +579,10 @@ class RegisterMolecule:
 
         await self._dispatcher.dispatch_all(events)
         return Success(
-            RegistrationOutcome(molecule=mol, is_new=True, action=RegistrationAction.REGISTERED)
+            RegistrationOutcome(
+                molecule=mol,
+                is_new=True,
+                action=RegistrationAction.REGISTERED,
+                skipped_ids=skipped,
+            )
         )

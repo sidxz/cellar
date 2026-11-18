@@ -7,6 +7,7 @@ Temporal's event history, so they must be small and serializable.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Registration activity
@@ -22,9 +23,12 @@ class ChunkItem:
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = field(default_factory=list)
-    # {"identifier", "source"} — stored on the row's batch (see row_batch.py)
-    batch_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "identifier_type", "source"?, "decides"?}. Any, not str: Temporal's
+    # converter rejects the bool "decides" under a dict[str, str] hint.
+    external_ids: list[dict[str, Any]] = field(default_factory=list)
+    # {"identifier", "source", "identifier_type"?, "decides"?} — stored on the row's
+    # batch (see row_batch.py)
+    batch_ids: list[dict[str, Any]] = field(default_factory=list)
     # Parser's per-row error; the row registers nothing.
     error: str | None = None
     # The compound registers but the row gets no batch (parser's in-file check).
@@ -78,6 +82,8 @@ class ChunkItemResult:
     cdd_molecule_id: int | None = None
     cdd_modified_at: str | None = None
     batch_skipped: bool = False
+    # Stored-only IDs not stored because another compound / batch holds them.
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass

@@ -43,6 +43,31 @@ def collect_identifiers(
     return ids
 
 
+async def held_elsewhere(
+    repo: MoleculeRepository,
+    workspace_id: uuid.UUID,
+    identifiers: Iterable[str],
+    molecule_id: uuid.UUID | None,
+) -> dict[str, str]:
+    """Stored-only IDs another compound than ``molecule_id`` already holds → that
+    compound's registration number. Exact text, as the workspace-unique key is."""
+    wanted = set(identifiers)
+    if not wanted:
+        return {}
+    owners = await repo.find_identifiers_in_workspace(workspace_id, wanted)
+    held: dict[str, str] = {}
+    for text, owner_id in owners.items():
+        if owner_id == molecule_id:
+            continue
+        owner = await repo.find_by_id_in_workspace(workspace_id, owner_id)
+        held[text] = owner.registration_number.value if owner else "another compound"
+    return held
+
+
+def skipped_id_warning(identifier: str, holder: str, this: str) -> str:
+    return f"'{identifier}' is already an ID of {holder}; not stored on {this}"
+
+
 async def _identifier_conflict(
     repo: MoleculeRepository,
     workspace_id: uuid.UUID,

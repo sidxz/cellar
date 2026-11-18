@@ -16,4 +16,6 @@ export interface PreviewRegistrationItemBody {
   molecule_type?: string;
   external_ids?: ExternalIdBody[];
   batch_ids?: string[];
+  stored_only_ids?: string[];
+  stored_only_batch_ids?: string[];
 }

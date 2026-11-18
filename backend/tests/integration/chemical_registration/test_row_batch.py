@@ -74,6 +74,7 @@ class RowOutcome:
     batch_number: str | None
     error: str | None  # the row's message, as the job records it
     batch_skipped: bool
+    warnings: list[str] = field(default_factory=list)  # IDs not stored, and why
 
 
 @dataclass
@@ -164,7 +165,12 @@ async def _run_service(
         )
     return [
         RowOutcome(
-            r.molecule_id, r.batch_id, r.batch_number, recorded[r.row_index], r.batch_skipped
+            r.molecule_id,
+            r.batch_id,
+            r.batch_number,
+            recorded[r.row_index],
+            r.batch_skipped,
+            r.warnings,
         )
         for r in outcome.item_results
     ]
@@ -193,6 +199,7 @@ async def _run_worker(
             r.batch_number,
             r.error,
             r.batch_skipped,
+            r.warnings,
         )
         for r in output.results
     ]

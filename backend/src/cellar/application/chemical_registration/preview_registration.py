@@ -26,8 +26,15 @@ from cellar.application.chemical_registration.registration_classifier import (
     classify_disclosed,
     classify_undisclosed,
     collect_identifiers,
+    held_elsewhere,
+    skipped_id_warning,
 )
-from cellar.application.chemical_registration.row_batch import classify_row_batch, row_batch_ids
+from cellar.application.chemical_registration.row_batch import (
+    RowBatchMatch,
+    classify_row_batch,
+    row_batch_ids,
+    skipped_batch_id_warnings,
+)
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.enums import RegistrationAction
@@ -47,6 +54,10 @@ class PreviewRegistrationItem:
     external_ids: list[str] = field(default_factory=list)
     # The row's batch IDs; when given, the forecast also says what happens to its batch.
     batch_ids: list[str] = field(default_factory=list)
+    # Stored-only IDs (CDD mapper spec §3a): never match or conflict; one another
+    # compound / batch holds becomes a warning.
+    stored_only_ids: list[str] = field(default_factory=list)
+    stored_only_batch_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -70,6 +81,8 @@ class RegistrationPreviewItem:
     batch_problem: str | None = None
     # A new batch for a compound already in ChemCellar: how many batches it has.
     existing_batch_count: int | None = None
+    # Stored-only IDs that would not be stored, one line each.
+    warnings: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -117,7 +130,8 @@ class PreviewRegistration:
         self, index: int, item: PreviewRegistrationItem, workspace_id: uuid.UUID
     ) -> RegistrationPreviewItem:
         # Same rule as RegisterMolecule / bulk registration: a given name is promoted
-        # to an identifier; an absent name (auto-named row) is not.
+        # to an identifier; an absent name (auto-named row) is not. Stored-only IDs
+        # take no part in it.
         identifiers = collect_identifiers(
             item.name, item.external_ids, promote_name=bool(item.name)
         )
@@ -141,40 +155,63 @@ class PreviewRegistration:
             )
             compound_key = inchi_key
 
-        matched_id = forecast.matched_molecule.id if forecast.matched_molecule else None
-        batch_action, batch_number, batch_problem, existing_count = await self._forecast_batch(
-            workspace_id, matched_id, item.batch_ids
-        )
+        matched = forecast.matched_molecule
+        matched_id = matched.id if matched else None
+        this = matched.registration_number.value if matched else item.name or "the new compound"
+        held = await held_elsewhere(self._repo, workspace_id, item.stored_only_ids, matched_id)
+        warnings = [
+            skipped_id_warning(v, held[v], this)
+            for v in dict.fromkeys(item.stored_only_ids)
+            if v in held
+        ]
+
+        match = await self._match_batch(workspace_id, matched_id, item)
+        batch_kind: Literal["new", "existing", "problem"] | None = None
+        batch_number: str | None = None
+        existing_count: int | None = None
+        if match is not None:
+            batch_kind = match.kind
+            if match.kind == "existing" and match.batch is not None:
+                batch_number = match.batch.batch_number.value
+            elif match.kind == "new" and matched_id is not None and self._batch_repo is not None:
+                # The compound's batches none of whose real IDs matched: the scientist
+                # should see that a new one is added next to them.
+                existing_count = len(
+                    await self._batch_repo.find_by_molecule(workspace_id, matched_id)
+                )
+            warnings += skipped_batch_id_warnings(match.held, batch_number or "the new batch")
         return RegistrationPreviewItem(
             index,
             forecast.action,
             matched_molecule_id=matched_id,
             conflict_reason=forecast.conflict_reason,
             compound_key=compound_key,
-            batch_action=batch_action,
+            batch_action=batch_kind,
             matched_batch_number=batch_number,
-            batch_problem=batch_problem,
+            batch_problem=match.problem if match else None,
             existing_batch_count=existing_count,
+            warnings=tuple(warnings),
         )
 
-    async def _forecast_batch(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID | None, batch_ids: list[str]
-    ) -> tuple[Literal["new", "existing", "problem"] | None, str | None, str | None, int | None]:
+    async def _match_batch(
+        self,
+        workspace_id: uuid.UUID,
+        molecule_id: uuid.UUID | None,
+        item: PreviewRegistrationItem,
+    ) -> RowBatchMatch | None:
         """Same rule as the import (row_batch.classify_row_batch). Database only:
         rows of one file are grouped by the caller via ``compound_key``."""
-        if not batch_ids or self._batch_repo is None:
-            return None, None, None, None
-        match = await classify_row_batch(
+        if not (item.batch_ids or item.stored_only_batch_ids) or self._batch_repo is None:
+            return None
+        return await classify_row_batch(
             self._batch_repo,
             workspace_id,
             molecule_id,
-            row_batch_ids([{"identifier": b, "source": ""} for b in batch_ids]),
+            row_batch_ids(
+                [{"identifier": b, "source": ""} for b in item.batch_ids]
+                + [
+                    {"identifier": b, "source": "", "decides": False}
+                    for b in item.stored_only_batch_ids
+                ]
+            ),
         )
-        if match.kind == "existing" and match.batch is not None:
-            return "existing", match.batch.batch_number.value, None, None
-        if match.kind == "new" and molecule_id is not None:
-            # The compound's batches none of whose real IDs matched: the scientist
-            # should see that a new one is added next to them.
-            n = len(await self._batch_repo.find_by_molecule(workspace_id, molecule_id))
-            return "new", None, None, n
-        return match.kind, None, match.problem, None

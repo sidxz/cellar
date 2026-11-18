@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 from returns.result import Failure, Result, Success
@@ -17,10 +18,10 @@ from cellar.application.chemical_registration.protocols import (
     StructureProcessorProtocol,
 )
 from cellar.application.chemical_registration.register_molecule import (
-    ExternalId,
     RegisterMolecule,
     RegisterMoleculeCommand,
     RegistrationOutcome,
+    external_ids,
 )
 from cellar.application.chemical_registration.row_batch import (
     ApplyRowBatch,
@@ -59,8 +60,10 @@ class BulkRegistrationItem:
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = field(default_factory=list)
-    batch_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "identifier_type", "source"?, "decides"?}
+    external_ids: list[dict[str, Any]] = field(default_factory=list)
+    # {"identifier", "source", "identifier_type"?, "decides"?}
+    batch_ids: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     batch_problem: str | None = None  # compound registers, no batch
     # Batch fields
@@ -97,6 +100,8 @@ class BulkRegistrationItemResult:
     error: str | None = None
     batch_error: str | None = None
     batch_skipped: bool = False
+    # Stored-only IDs not stored because another compound / batch holds them.
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -254,14 +259,7 @@ class BulkRegistrationService:
                 name=item.name or f"Compound-{item.row_index + 1}",
                 smiles=item.smiles,
                 molecule_type=item.molecule_type,
-                external_ids=[
-                    ExternalId(
-                        identifier=eid["identifier"],
-                        identifier_type=eid["identifier_type"],
-                        source=eid.get("source"),
-                    )
-                    for eid in item.external_ids
-                ],
+                external_ids=external_ids(item.external_ids),
                 originating_org_id=originating_org_id,
                 registered_by=submitted_by,
                 promote_name_as_identifier=has_explicit_name,
@@ -302,6 +300,7 @@ class BulkRegistrationService:
                     workspace_default=effective_policy_default,
                 )
 
+                batch_warnings: tuple[str, ...] = ()
                 if item.batch_problem:
                     batch_id, batch_number, salt_matched = None, None, False
                     batch_err = item.batch_problem
@@ -313,6 +312,7 @@ class BulkRegistrationService:
                         batch_number,
                         salt_matched,
                         batch_err,
+                        batch_warnings,
                     ) = await self._apply_row_batch(
                         item=item,
                         reg_outcome=outcome,
@@ -367,6 +367,7 @@ class BulkRegistrationService:
                         salt_matched=salt_matched,
                         batch_error=batch_err,
                         batch_skipped=batch_skipped,
+                        warnings=[*outcome.skipped_ids, *batch_warnings],
                     )
                 )
 
@@ -394,9 +395,9 @@ class BulkRegistrationService:
         workspace_id: uuid.UUID,
         submitted_by: uuid.UUID,
         auth: AuthContext | None,
-    ) -> tuple[uuid.UUID | None, str | None, bool, str | None]:
-        """Same return shape as ``_create_batch_for_item``; a row-batch problem is
-        reported as the batch error (the compound stays registered)."""
+    ) -> tuple[uuid.UUID | None, str | None, bool, str | None, tuple[str, ...]]:
+        """``_create_batch_for_item``'s shape plus the skipped-ID warnings; a row-batch
+        problem is reported as the batch error (the compound stays registered)."""
         batch_cmd, salt_matched = await self._batch_command_for_item(
             item=item,
             reg_outcome=reg_outcome,
@@ -420,11 +421,12 @@ class BulkRegistrationService:
             auth=auth,
         )
         if isinstance(result, Failure):
-            return None, None, False, str(result.failure())
+            return None, None, False, str(result.failure()), ()
         r = result.unwrap()
         if r.action == "problem":
-            return None, None, False, r.problem
-        return r.batch_id, r.batch_number, salt_matched and r.action == "created", None
+            return None, None, False, r.problem, ()
+        created = r.action == "created"
+        return r.batch_id, r.batch_number, salt_matched and created, None, r.skipped
 
     async def _create_batch_for_item(
         self,

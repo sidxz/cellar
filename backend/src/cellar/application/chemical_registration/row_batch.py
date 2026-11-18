@@ -8,14 +8,18 @@ in-process fallback (spec 2026-11-18 column mapper §4):
   about which source batch a ChemCellar batch is, so it never matches a row.
 * R2 — the file's ID wins. An automatic alias holding a row's batch ID on
   another batch is removed, and the ID goes on the row's batch.
+
+Only deciding IDs take part in R1/R2. A stored-only ID (``decides`` False, CDD
+mapper spec 2026-11-18 §3a) is stored on the row's batch when no other batch
+holds it, otherwise skipped with a warning; it never matches and is never a problem.
 """
 
 from __future__ import annotations
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from typing import Literal
+from typing import Any, Literal
 
 from returns.result import Failure, Result, Success
 
@@ -40,28 +44,45 @@ BATCH_ID_TYPE = "custom"
 class RowBatchId:
     identifier: str
     source: str
+    identifier_type: str = BATCH_ID_TYPE
+    decides: bool = True  # False = stored only
 
 
 @dataclass(frozen=True)
 class RowBatchMatch:
     kind: Literal["new", "existing", "problem"]
     batch: Batch | None = None
+    # IDs to store on the row's batch: what an existing batch lacks, or all a new
+    # batch is born with.
     missing: tuple[RowBatchId, ...] = ()
     # (batch_id, identifier_id) of automatic aliases to remove (R2)
     evict: tuple[tuple[uuid.UUID, uuid.UUID], ...] = ()
     problem: str | None = None
+    # Stored-only IDs another batch holds: (text, that batch's number).
+    held: tuple[tuple[str, str], ...] = ()
 
 
-def row_batch_ids(raw: Sequence[dict[str, str]]) -> tuple[RowBatchId, ...]:
-    """Item dicts ``{"identifier", "source"}`` → unique RowBatchIds, file order."""
-    seen: set[str] = set()
-    out: list[RowBatchId] = []
+def row_batch_ids(raw: Sequence[Mapping[str, Any]]) -> tuple[RowBatchId, ...]:
+    """Item dicts ``{"identifier", "source", "identifier_type"?, "decides"?}`` →
+    unique RowBatchIds, file order. A text given twice decides if either copy does."""
+    out: dict[str, RowBatchId] = {}
     for d in raw:
         text = (d.get("identifier") or "").strip()
-        if text and text not in seen:
-            seen.add(text)
-            out.append(RowBatchId(identifier=text, source=d.get("source") or "Bulk registration"))
-    return tuple(out)
+        if not text:
+            continue
+        bid = RowBatchId(
+            identifier=text,
+            source=d.get("source") or "Bulk registration",
+            identifier_type=d.get("identifier_type") or BATCH_ID_TYPE,
+            decides=d.get("decides", True),
+        )
+        if text not in out or (bid.decides and not out[text].decides):
+            out[text] = bid
+    return tuple(out.values())
+
+
+def skipped_batch_id_warnings(held: Sequence[tuple[str, str]], this: str) -> tuple[str, ...]:
+    return tuple(f"'{v}' is already an ID of batch {b}; not stored on {this}" for v, b in held)
 
 
 async def classify_row_batch(
@@ -72,9 +93,10 @@ async def classify_row_batch(
 ) -> RowBatchMatch:
     """``molecule_id`` None = the row's compound is new, so any real hit is another
     compound's batch."""
+    deciding = [b for b in batch_ids if b.decides]
     real: dict[uuid.UUID, tuple[Batch, str]] = {}
     aliases: list[tuple[Batch, BatchIdentifier]] = []
-    for bid in batch_ids:
+    for bid in deciding:
         owner = await repo.find_by_external_identifier(workspace_id, bid.identifier)
         if owner is None:
             continue
@@ -97,13 +119,45 @@ async def classify_row_batch(
                 problem=f"{text} already belongs to {owner.batch_number.value} (another compound)",
             )
         on_it = {i.identifier for i in owner.identifiers}
+        free, held = await _stored_only(repo, workspace_id, batch_ids, owner, on_it)
         return RowBatchMatch(
             "existing",
             batch=owner,
-            missing=tuple(b for b in batch_ids if b.identifier not in on_it),
+            missing=(*(b for b in deciding if b.identifier not in on_it), *free),
             evict=tuple((o.id, i.id) for o, i in aliases if o.id != owner.id),
+            held=held,
         )
-    return RowBatchMatch("new", evict=tuple((o.id, i.id) for o, i in aliases))
+    free, held = await _stored_only(repo, workspace_id, batch_ids, None, set())
+    return RowBatchMatch(
+        "new",
+        missing=(*deciding, *free),
+        evict=tuple((o.id, i.id) for o, i in aliases),
+        held=held,
+    )
+
+
+async def _stored_only(
+    repo: BatchRepository,
+    workspace_id: uuid.UUID,
+    batch_ids: Sequence[RowBatchId],
+    row_batch: Batch | None,
+    on_it: set[str],
+) -> tuple[tuple[RowBatchId, ...], tuple[tuple[str, str], ...]]:
+    """Split the row's stored-only IDs it lacks into (free to store, held by
+    another batch as (text, batch number))."""
+    free: list[RowBatchId] = []
+    held: list[tuple[str, str]] = []
+    # ponytail: one lookup per stored-only ID; batch them per chunk if a full
+    # vault run proves too slow.
+    for bid in batch_ids:
+        if bid.decides or bid.identifier in on_it:
+            continue
+        owner = await repo.find_by_external_identifier(workspace_id, bid.identifier)
+        if owner is None:
+            free.append(bid)
+        elif row_batch is None or owner.id != row_batch.id:
+            held.append((bid.identifier, owner.batch_number.value))
+    return tuple(free), tuple(held)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -121,6 +175,8 @@ class RowBatchResult:
     batch_id: uuid.UUID | None = None
     batch_number: str | None = None
     problem: str | None = None
+    ids_added: int = 0  # batch IDs this call stored on the batch (new or existing)
+    skipped: tuple[str, ...] = ()  # stored-only IDs another batch holds, one warning each
 
 
 class ApplyRowBatch:
@@ -172,7 +228,7 @@ class ApplyRowBatch:
                         BatchIdentifier.create(
                             batch_id=batch.id,
                             identifier=b.identifier,
-                            identifier_type=BATCH_ID_TYPE,
+                            identifier_type=b.identifier_type,
                             source=b.source,
                             registered_by=cmd.actor,
                         )
@@ -181,15 +237,24 @@ class ApplyRowBatch:
                     await self._repo.save(batch)
                 events = await self._uow.commit()
             await self._dispatcher.dispatch_all(events)
-            return Success(RowBatchResult("existing", batch.id, batch.batch_number.value))
+            number = batch.batch_number.value
+            return Success(
+                RowBatchResult(
+                    "existing",
+                    batch.id,
+                    number,
+                    ids_added=len(match.missing),
+                    skipped=skipped_batch_id_warnings(match.held, number),
+                )
+            )
 
         # 2b. New batch, born with the row's IDs (before automatic mirrors).
         created = await self._create_batch(
             replace(
                 cmd.create,
                 identifiers=tuple(
-                    NewBatchIdentifier(b.identifier, BATCH_ID_TYPE, b.source)
-                    for b in cmd.batch_ids
+                    NewBatchIdentifier(b.identifier, b.identifier_type, b.source)
+                    for b in match.missing
                 ),
             ),
             auth=auth,
@@ -197,4 +262,13 @@ class ApplyRowBatch:
         if isinstance(created, Failure):
             return created
         batch = created.unwrap().batch
-        return Success(RowBatchResult("created", batch.id, batch.batch_number.value))
+        number = batch.batch_number.value
+        return Success(
+            RowBatchResult(
+                "created",
+                batch.id,
+                number,
+                ids_added=len(match.missing),
+                skipped=skipped_batch_id_warnings(match.held, number),
+            )
+        )

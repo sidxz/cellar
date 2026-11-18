@@ -449,6 +449,10 @@ class PreviewRegistrationItemBody(BaseModel):
     external_ids: list[ExternalIdBody] = []
     # The row's batch IDs (bulk registration); when given, the batch is forecast too.
     batch_ids: list[str] = []
+    # IDs that are only stored, never matched: one another compound / batch already
+    # holds comes back in `warnings` instead of a conflict or a batch problem.
+    stored_only_ids: list[str] = []
+    stored_only_batch_ids: list[str] = []
 
 
 class PreviewRegistrationBody(BaseModel):
@@ -470,6 +474,8 @@ class PreviewRegistrationItemResponse(BaseModel):
     batch_problem: str | None = None
     # A new batch for a compound already in ChemCellar: how many batches it has.
     existing_batch_count: int | None = None
+    # Stored-only IDs that would not be stored, and why.
+    warnings: list[str] = []
 
 
 class PreviewRegistrationResponse(BaseModel):
@@ -641,6 +647,8 @@ async def preview_registration(
     set) / ``disclosed`` (structure discloses an undisclosed molecule) / ``conflict``
     (``conflict_reason`` set). ``merge_candidate`` only arises in a race. ``action`` is
     null with ``error`` set when the structure cannot be processed. At most 500 items.
+    ``stored_only_ids`` / ``stored_only_batch_ids`` never match or conflict; one that
+    another compound or batch already holds is listed in ``warnings``.
     """
     query = PreviewRegistrationQuery(
         workspace_id=auth.workspace_id,
@@ -650,6 +658,8 @@ async def preview_registration(
                 smiles=item.smiles,
                 external_ids=[e.identifier for e in item.external_ids],
                 batch_ids=item.batch_ids,
+                stored_only_ids=item.stored_only_ids,
+                stored_only_batch_ids=item.stored_only_batch_ids,
             )
             for item in body.items
         ],
@@ -668,6 +678,7 @@ async def preview_registration(
                 matched_batch_number=i.matched_batch_number,
                 batch_problem=i.batch_problem,
                 existing_batch_count=i.existing_batch_count,
+                warnings=list(i.warnings),
             )
             for i in outcome.items
         ]

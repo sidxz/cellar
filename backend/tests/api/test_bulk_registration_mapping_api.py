@@ -214,7 +214,7 @@ async def test_start_hands_the_mapping_to_the_workflow(
     assert resp.status_code == 202, resp.text
     (request,) = orchestrator.started
     assert request.column_mapping == {
-        "columns": [{"source": None, **c} for c in MAPPING["columns"]]
+        "columns": [{"source": None, "separator": None, **c} for c in MAPPING["columns"]]
     }
 
 
@@ -275,11 +275,16 @@ async def test_suggest_mapping(client: AsyncClient) -> None:
     assert resp.status_code == 200, resp.text
     assert resp.json() == {
         "columns": [
-            {"header": "Molecule Name", "target": "name", "source": None},
-            {"header": "SMILES", "target": "smiles", "source": None},
-            {"header": "Synonyms", "target": "compound_id", "source": "Synonyms"},
-            {"header": "Lot ID", "target": "batch_id", "source": "Lot ID"},
-            {"header": "LGCY Batch Name", "target": "ignore", "source": None},
+            {"header": "Molecule Name", "target": "name", "source": None, "separator": None},
+            {"header": "SMILES", "target": "smiles", "source": None, "separator": None},
+            {
+                "header": "Synonyms",
+                "target": "compound_id",
+                "source": "Synonyms",
+                "separator": None,
+            },
+            {"header": "Lot ID", "target": "batch_id", "source": "Lot ID", "separator": None},
+            {"header": "LGCY Batch Name", "target": "ignore", "source": None, "separator": None},
         ]
     }
 
@@ -372,6 +377,74 @@ async def test_preview_registration_without_batch_ids_has_no_batch_forecast(
         None,
         None,
     )
+    assert item["warnings"] == []
+
+
+async def test_preview_registration_stored_only_ids_held_elsewhere_warn_not_conflict(
+    client: AsyncClient,
+) -> None:
+    """Stored-only IDs (CDD mapper spec §3a) never match or conflict; one another
+    compound or batch holds is forecast as a warning."""
+    smiles = "CCCCCCCCCCCCCCCCCCCCCCCCO"
+    csv = (
+        "Molecule Name,SMILES,Synonyms,Batch Molecule-Batch ID,LGCY Batch Name,Batch Name\n"
+        f"SO-0001,{smiles},SO-SYN-1,SO-0001-001,SO-LG-1,001\n"
+        f"SO-0001,{smiles},,SO-0001-002,SO-LG-2,002\n"
+    ).encode()
+    started = await client.post(
+        "/api/v1/bulk-registrations",
+        files={"file": ("export.csv", csv, "text/csv")},
+        data={
+            "originating_org_id": await _org(client),
+            "file_format": "csv",
+            "column_mapping": json.dumps(MAPPING),
+        },
+    )
+    assert started.status_code == 200, started.text
+    rows = started.json()["items"]
+    reg = (await client.get(f"/api/v1/molecules/{rows[0]['molecule_id']}")).json()[
+        "registration_number"
+    ]
+    number_001, number_002 = rows[0]["batch_number"], rows[1]["batch_number"]
+
+    resp = await client.post(
+        "/api/v1/molecules/preview-registration",
+        json={
+            "items": [
+                {"name": "SO-NEW", "smiles": smiles + "C", "stored_only_ids": ["SO-SYN-1"]},
+                {
+                    "name": "SO-NEW",
+                    "smiles": smiles + "C",
+                    "external_ids": [{"identifier": "SO-SYN-1", "identifier_type": "custom"}],
+                },
+                {
+                    "name": "SO-0001",
+                    "smiles": smiles,
+                    "batch_ids": ["SO-0001-001"],
+                    "stored_only_batch_ids": ["SO-LG-2"],
+                },
+                {"name": "SO-0001", "smiles": smiles, "batch_ids": ["SO-0001-001", "SO-LG-2"]},
+            ]
+        },
+    )
+
+    assert resp.status_code == 200, resp.text
+    stored_only, deciding, batch_stored_only, batch_deciding = resp.json()["items"]
+    assert stored_only["action"] == "registered"
+    assert stored_only["warnings"] == [
+        f"'SO-SYN-1' is already an ID of {reg}; not stored on SO-NEW"
+    ]
+    assert deciding["action"] == "conflict"  # the same ID as a deciding one
+    assert batch_stored_only["action"] == "deduplicated"
+    assert (batch_stored_only["batch_action"], batch_stored_only["matched_batch_number"]) == (
+        "existing",
+        number_001,
+    )
+    assert batch_stored_only["batch_problem"] is None
+    assert batch_stored_only["warnings"] == [
+        f"'SO-LG-2' is already an ID of batch {number_002}; not stored on {number_001}"
+    ]
+    assert batch_deciding["batch_action"] == "problem"
 
 
 # ---------------------------------------------------------------------------
@@ -396,7 +469,9 @@ async def test_saved_mapping_crud(client: AsyncClient, user_id: uuid.UUID) -> No
     saved = created.json()
     assert saved["name"] == "CDD export"
     assert saved["created_by"] == str(user_id)
-    assert saved["columns"] == [{"source": None, **c} for c in MAPPING["columns"]]
+    assert saved["columns"] == [
+        {"source": None, "separator": None, **c} for c in MAPPING["columns"]
+    ]
 
     listed = await client.get(MAPPINGS)
     assert [m["id"] for m in listed.json()] == [saved["id"]]

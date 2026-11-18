@@ -21,10 +21,10 @@ from cellar.application.chemical_registration.merge_side_effect_registry import 
 )
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.chemical_registration.register_molecule import (
-    ExternalId,
     RegisterMolecule,
     RegisterMoleculeCommand,
     RegistrationOutcome,
+    external_ids,
 )
 from cellar.application.chemical_registration.row_batch import (
     ApplyRowBatch,
@@ -175,14 +175,7 @@ class RegistrationActivities:
                 name=item.name or f"Compound-{item.row_index + 1}",
                 smiles=item.smiles,
                 molecule_type=item.molecule_type,
-                external_ids=[
-                    ExternalId(
-                        identifier=eid["identifier"],
-                        identifier_type=eid["identifier_type"],
-                        source=eid.get("source"),
-                    )
-                    for eid in item.external_ids
-                ],
+                external_ids=external_ids(item.external_ids),
                 originating_org_id=org_id,
                 registered_by=submitted_by,
                 promote_name_as_identifier=has_explicit_name,
@@ -227,6 +220,7 @@ class RegistrationActivities:
             salt_matched = False
             batch_skipped = False
             batch_problem: str | None = None
+            batch_warnings: tuple[str, ...] = ()
             if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
                 create_batch_now = should_create_batch(
                     is_new_molecule=outcome.is_new,
@@ -237,7 +231,13 @@ class RegistrationActivities:
                 if item.batch_problem:
                     batch_problem = item.batch_problem
                 elif item.batch_ids:
-                    batch_id, batch_number, salt_matched, batch_problem = await _apply_row_batch(
+                    (
+                        batch_id,
+                        batch_number,
+                        salt_matched,
+                        batch_problem,
+                        batch_warnings,
+                    ) = await _apply_row_batch(
                         item=item,
                         reg_outcome=outcome,
                         workspace_id=ws_id,
@@ -280,6 +280,7 @@ class RegistrationActivities:
                     else None,
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
+                    warnings=[*outcome.skipped_ids, *batch_warnings],
                 )
             )
 
@@ -351,10 +352,11 @@ async def _apply_row_batch(
     submitted_by: uuid.UUID,
     session_factory: async_sessionmaker,
     dispatcher,
-) -> tuple[uuid.UUID | None, str | None, bool, str | None]:
+) -> tuple[uuid.UUID | None, str | None, bool, str | None, tuple[str, ...]]:
     """The row names its batch (``item.batch_ids``): find or create exactly that
     batch (``row_batch.ApplyRowBatch``). Returns ``(batch_id, batch_number,
-    salt_matched, problem)``; on a problem the compound stays registered."""
+    salt_matched, problem, skipped-ID warnings)``; on a problem the compound stays
+    registered."""
     batch_cmd, salt_matched, create_batch, _ = await _batch_command(
         item=item,
         reg_outcome=reg_outcome,
@@ -386,11 +388,12 @@ async def _apply_row_batch(
             row_index=item.row_index,
             error=str(result.failure()),
         )
-        return None, None, False, str(result.failure())
+        return None, None, False, str(result.failure()), ()
     r = result.unwrap()
     if r.action == "problem":
-        return None, None, False, r.problem
-    return r.batch_id, r.batch_number, salt_matched and r.action == "created", None
+        return None, None, False, r.problem, ()
+    created = r.action == "created"
+    return r.batch_id, r.batch_number, salt_matched and created, None, r.skipped
 
 
 async def _batch_command(
