@@ -21,8 +21,20 @@ vi.mock("@/shared/lib/api/runs/runs", () => ({
   getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions: (id: string) => ({
     queryKey: ["runs", id],
     queryFn: async () => [
-      { id: "run-1", protocol_id: "proto-1", run_date: "2026-11-12" },
+      {
+        id: "run-1",
+        protocol_id: "proto-1",
+        run_date: "2026-11-12",
+        created_at: "2026-11-12T09:05:00",
+      },
       { id: "run-2", protocol_id: "proto-1", run_date: "2026-11-14" },
+      // A rerun on the same day as run-1.
+      {
+        id: "3f2a9c1b-7d4e-4a10-9c2b-5e6f7a8b9c0d",
+        protocol_id: "proto-1",
+        run_date: "2026-11-12",
+        created_at: "2026-11-12T15:40:00",
+      },
     ],
   }),
 }));
@@ -371,6 +383,38 @@ describe("StagesSection runs", () => {
     expect(await screen.findByText("Run on Nov 12, 2026")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Remove from stage" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Add runs to/ })).not.toBeInTheDocument();
+  });
+
+  it("tells same-day runs apart by time created and a short id, in the list and the confirm", async () => {
+    const sameDay = {
+      ...campaign,
+      seed_runs: [
+        ...(campaign.seed_runs ?? []),
+        {
+          run_id: "3f2a9c1b-7d4e-4a10-9c2b-5e6f7a8b9c0d",
+          protocol_id: "proto-1",
+          stage_ids: ["stage-screen"],
+        },
+      ],
+    } as unknown as CampaignResponse;
+    render(
+      <StagesSection
+        campaign={sameDay}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+
+    expect(await screen.findByText("created 09:05 · run-1")).toBeInTheDocument();
+    const rerun = screen.getByText("created 15:40 · 3f2a9c1b").closest("li") as HTMLElement;
+    expect(rerun).toHaveTextContent("Run on Nov 12, 2026");
+
+    fireEvent.click(within(rerun).getByRole("button", { name: "Remove from stage" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "Kinase Panel · Run on Nov 12, 2026 · created 15:40 · 3f2a9c1b stays in the campaign",
+    );
   });
 
   it("says when a stage has no runs yet", () => {

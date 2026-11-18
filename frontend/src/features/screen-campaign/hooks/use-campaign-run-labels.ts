@@ -1,7 +1,8 @@
 /**
  * How the campaign page names a run: its protocol (in the protocol's colour)
  * and "Run on Nov 12, 2026", the way the add-from-runs list shows it — never
- * its id unless the run can't be found.
+ * its id as the name unless the run can't be found. A secondary detail (the
+ * time it was created and a short id) tells same-day runs apart.
  *
  * Runs come from each protocol's run list (the same query the add-from-runs
  * dialog makes, so it is usually cached); the measurement snapshots fill in
@@ -25,7 +26,11 @@ export interface RunLabel {
   color?: string;
   /** "Run on Nov 12, 2026". */
   text: string;
+  /** "created 14:32 · 3f2a9c1b": tells same-day runs apart (secondary text). */
+  detail: string;
 }
+
+const timeOfDay = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 const runsById = (results: { data?: RunResponse[] }[]) =>
   new Map(results.flatMap((r) => r.data ?? []).map((run) => [run.id, run] as const));
@@ -83,6 +88,12 @@ export function useCampaignRunLabels(campaign: CampaignResponse): (runId: string
       protocolName: (protocolId && protocolNames.get(protocolId)) || "Protocol",
       color: protocolId ? colors.get(protocolId) : undefined,
       text: date ? `Run on ${formatDate(date)}` : `Run ${shortId(runId)}`,
+      detail: [
+        run?.created_at && `created ${timeOfDay.format(new Date(run.created_at))}`,
+        date && shortId(runId),
+      ]
+        .filter(Boolean)
+        .join(" · "),
     };
   };
 }

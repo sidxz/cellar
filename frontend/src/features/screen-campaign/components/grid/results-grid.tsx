@@ -682,6 +682,9 @@ export function ResultsGridV2({
 
       cols.push({
         headerName: group.title,
+        // A long stage name over one narrow column clips; DataGrid only adds
+        // automatic tooltips to top-level leaf columns.
+        headerTooltip: group.title,
         groupId: `stage_${group.stageId ?? "other"}`,
         children: groupChildren,
       });

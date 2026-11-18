@@ -37,7 +37,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
-import { useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
+import { type RunLabel, useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
 import { useRemoveRunFromStage } from "../../hooks/use-campaigns";
 import { protocolColorById } from "../../lib/protocol-colors";
 import type { CampaignResponse, CampaignStageResponse, StageCriterionDTO } from "../../types";
@@ -320,6 +320,7 @@ function StageRuns({
     .filter((r) => r.stage_ids.includes(stage.id))
     .map((r) => r.run_id);
   const removingLabel = removing ? runLabel(removing) : null;
+  const fullName = (l: RunLabel) => [l.protocolName, l.text, l.detail].filter(Boolean).join(" · ");
 
   return (
     <div className="mt-3 space-y-1.5">
@@ -346,9 +347,14 @@ function StageRuns({
                 key={id}
                 className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-1 text-sm"
               >
-                <span className="min-w-0 truncate" title={`${label.protocolName} · ${label.text}`}>
+                <span className="min-w-0 truncate" title={fullName(label)}>
                   <span style={{ color: label.color }}>{label.protocolName}</span> ·{" "}
                   <span>{label.text}</span>
+                  {label.detail && (
+                    <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                      {label.detail}
+                    </span>
+                  )}
                 </span>
                 {!readOnly && (
                   <Button
@@ -371,9 +377,9 @@ function StageRuns({
           <AlertDialogHeader>
             <AlertDialogTitle>Remove this run from {stage.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              {removingLabel && `${removingLabel.protocolName} · ${removingLabel.text}`} stays in
-              the campaign. {stage.name}'s columns are worked out again from its other runs; a
-              compound measured only in this run becomes untested at {stage.name}.
+              {removingLabel && fullName(removingLabel)} stays in the campaign. {stage.name}'s
+              columns are worked out again from its other runs; a compound measured only in this run
+              becomes untested at {stage.name}.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

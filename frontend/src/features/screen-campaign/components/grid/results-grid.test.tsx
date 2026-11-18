@@ -1,5 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ColDef, ColGroupDef } from "ag-grid-community";
+import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { columnTooltip } from "../../lib/column-description";
@@ -16,9 +18,32 @@ import {
   MeasurementFacts,
   NotDeterminedCell,
   RemoveSelectedButton,
+  ResultsGridV2,
   StageColumnHeader,
   isReportedEndpoint,
 } from "./results-grid";
+
+// ResultsGridV2 hands its column defs to DataGrid; the mock keeps them for
+// the header tests below instead of mounting AG Grid.
+const { grid } = vi.hoisted(() => ({
+  grid: { columnDefs: [] as (ColDef | ColGroupDef)[] },
+}));
+vi.mock("@/shared/components/data-grid/data-grid", () => ({
+  DataGrid: (props: { columnDefs: (ColDef | ColGroupDef)[] }) => {
+    grid.columnDefs = props.columnDefs;
+    return null;
+  },
+}));
+vi.mock("@/features/chemical-registration", () => ({
+  useMoleculesByIds: () => ({ data: { items: [] } }),
+}));
+vi.mock("../../hooks/use-campaign-curves", () => ({
+  useCampaignCurves: () => ({ data: new Map() }),
+}));
+vi.mock("@/features/screening-assay", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useProtocolSummaries: () => ({ data: [{ id: "proto-1", name: "Kinase Panel" }] }),
+}));
 
 vi.mock("@/features/inventory/hooks/use-batches", () => ({
   useBatchesByMolecule: () => ({ data: [{ id: "b-1", batch_number: "B-007" }] }),
@@ -266,18 +291,68 @@ describe("CompoundValueCell facts", () => {
     fireEvent.click(screen.getByRole("button", { name: "13.6 uM" }));
     expect(screen.getByText("the facts")).toBeInTheDocument();
   });
+});
+
+describe("ResultsGridV2 column headers", () => {
+  const renamed = {
+    ...describedColumn,
+    label: "Retest inhibition",
+    protocol_id: "proto-1",
+    readout_definition_id: "rd-1",
+    source_kind: "readout_data",
+    selection_rule: "mean_across_runs",
+    display_order: 0,
+    stage_id: "st-retest",
+  } as unknown as CampaignChannelResponse;
+  const stageName = "Retest at three concentrations, confirmed by a second operator";
+  const campaign = {
+    id: "c1",
+    stages: [
+      {
+        id: "st-retest",
+        name: stageName,
+        parent_stage_id: null,
+        display_order: 0,
+        kind: "criteria",
+        criteria: [],
+      },
+    ],
+    channels: [renamed],
+    results: [{ id: "r1", molecule_id: "mol-1", measurements: [], stage_outcomes: [] }],
+  } as unknown as CampaignResponse;
+
+  function columnDefs() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ResultsGridV2
+          campaign={campaign}
+          filters={emptyFilters()}
+          selectedStageId={null}
+          readOnly
+        />
+      </QueryClientProvider>,
+    );
+    const group = grid.columnDefs.find(
+      (c) => "groupId" in c && c.groupId === "stage_st-retest",
+    ) as ColGroupDef;
+    return { group, value: group.children.find((c) => "colId" in c && c.colId === "ch-1_value") };
+  }
 
   it("line 1 is the column's own (renamed) name, line 2 the short label", () => {
-    const renamed = { ...describedColumn, label: "Retest inhibition" } as CampaignChannelResponse;
-    render(
-      <StageColumnHeader
-        readout={renamed.label}
-        shortLabel={SHORT}
-        tooltip={columnTooltip(renamed, "Kinase Panel")}
-      />,
-    );
+    const params = (columnDefs().value as ColDef).headerComponentParams;
+    expect(params.innerHeaderComponent).toBe(StageColumnHeader);
+    const Header = params.innerHeaderComponent as ComponentType<
+      typeof params.innerHeaderComponentParams
+    >;
+    render(<Header {...params.innerHeaderComponentParams} />);
+
     expect(screen.getByText("Retest inhibition")).toBeInTheDocument();
     expect(screen.queryByText("% Inhibition")).not.toBeInTheDocument();
     expect(screen.getByText(SHORT)).toBeInTheDocument();
+  });
+
+  it("names a stage group on hover, since a long name over one column clips", () => {
+    expect(columnDefs().group.headerTooltip).toBe(stageName);
   });
 });
