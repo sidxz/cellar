@@ -201,6 +201,20 @@ def test_needs_concentration_false_once_chosen():
     assert not d.needs_concentration
 
 
+def test_chosen_concentration_reads_as_single_concentration():
+    ch = _channel(conc=Concentration(10, "µM"))
+    d = describe_column(
+        channel=ch,
+        stage_name=None,
+        readout_label="r",
+        profile=build_column_profile(ch, [_m(conc=10), _m(conc=5)]),
+    )
+    assert d.design == "single_concentration"
+    assert d.short_label.startswith("single concentration 10 µM")
+    assert len(d.concentrations) == 2
+    assert not d.needs_concentration
+
+
 def test_profile_ignores_no_fact_cells_and_counts_runs():
     ch = _channel()
     shared = uuid.uuid4()

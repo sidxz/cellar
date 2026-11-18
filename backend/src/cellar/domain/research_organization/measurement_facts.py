@@ -222,8 +222,13 @@ def describe_column(
     profile: ColumnProfile,
 ) -> ColumnDescription:
     design, known = _design(profile)
+    if channel.test_concentration is not None and design in (MIXED, NOT_RECORDED):
+        # the chosen dose: every value in the column is at it
+        design, chosen = SINGLE, [channel.test_concentration]
+    else:
+        chosen = known
     design_text = {
-        SINGLE: f"single concentration {_conc_text(known[0])}" if known else "",
+        SINGLE: f"single concentration {_conc_text(chosen[0])}" if chosen else "",
         MIXED: "several concentrations (" + ", ".join(_conc_text(c) for c in known) + ")",
         SERIES: "dose-response",
         REPORTED: "reported value",
