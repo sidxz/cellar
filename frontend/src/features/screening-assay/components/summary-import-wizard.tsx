@@ -30,7 +30,7 @@ import type {
   SummaryRole,
 } from "../hooks/use-summary-import";
 import { useSummaryImportWizard } from "../hooks/use-summary-import-wizard";
-import type { SummaryMappingDraft } from "../lib/summary-import-mapping";
+import { type SummaryMappingDraft, parseReplicatesConstant } from "../lib/summary-import-mapping";
 import { RowErrorsCard, StatCard, UnmatchedRefsCard } from "./import-outcome-cards";
 
 // Summary import recognizes only these roles — no Well / Plate / Concentration
@@ -194,9 +194,10 @@ function MappingStep({
   readoutDefOptions: { id: string; name: string }[];
   onSetRole: (header: string, role: SummaryRole) => void;
   onSetReadoutDef: (header: string, defId: string) => void;
-  onSetReplicatesConstant: (n: number | null) => void;
+  onSetReplicatesConstant: (raw: string) => void;
 }) {
   const sampleRows = preview.sample_rows.slice(0, 5);
+  const replicatesInvalid = parseReplicatesConstant(draft.replicatesConstant) === "invalid";
   return (
     <div className="space-y-4 py-2">
       <div className="overflow-x-auto rounded-md border">
@@ -266,23 +267,28 @@ function MappingStep({
         </table>
       </div>
 
-      <label className="flex items-center gap-2 text-sm">
-        Every value is the mean of
-        <Input
-          type="number"
-          min={1}
-          step={1}
-          aria-label="Replicates in every value"
-          className="h-8 w-20"
-          value={draft.replicatesConstant ?? ""}
-          onChange={(e) => {
-            const n = Number.parseInt(e.target.value, 10);
-            onSetReplicatesConstant(Number.isInteger(n) && n >= 1 ? n : null);
-          }}
-        />
-        replicates
-        <span className="text-xs text-muted-foreground">(optional)</span>
-      </label>
+      <div className="space-y-1">
+        <label className="flex items-center gap-2 text-sm">
+          Every value is the mean of
+          {/* Text, not number: the check below sees exactly what was typed. */}
+          <Input
+            inputMode="numeric"
+            aria-label="Replicates in every value"
+            aria-invalid={replicatesInvalid}
+            aria-describedby={replicatesInvalid ? "replicates-error" : undefined}
+            className="h-8 w-20"
+            value={draft.replicatesConstant ?? ""}
+            onChange={(e) => onSetReplicatesConstant(e.target.value)}
+          />
+          replicates
+          <span className="text-xs text-muted-foreground">(optional)</span>
+        </label>
+        {replicatesInvalid && (
+          <p id="replicates-error" className="text-xs text-destructive">
+            Enter a whole number of 1 or more, or leave it empty.
+          </p>
+        )}
+      </div>
 
       {sampleRows.length > 0 && (
         <div>

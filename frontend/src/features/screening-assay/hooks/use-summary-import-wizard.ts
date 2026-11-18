@@ -58,7 +58,7 @@ export interface UseSummaryImportWizardResult {
   handleFile: (f: File) => void;
   setRole: (header: string, role: SummaryRole) => void;
   setReadoutDef: (header: string, defId: string) => void;
-  setReplicatesConstant: (n: number | null) => void;
+  setReplicatesConstant: (raw: string) => void;
   handleContinueToPreview: () => void;
   handleImport: () => void;
 }
@@ -171,8 +171,8 @@ export function useSummaryImportWizard({
     }));
   }, []);
 
-  const setReplicatesConstant = useCallback((n: number | null) => {
-    setDraft((d) => ({ ...d, replicatesConstant: n }));
+  const setReplicatesConstant = useCallback((raw: string) => {
+    setDraft((d) => ({ ...d, replicatesConstant: raw }));
   }, []);
 
   const canContinueMapping = useMemo(() => buildMapping(draft) !== null, [draft]);

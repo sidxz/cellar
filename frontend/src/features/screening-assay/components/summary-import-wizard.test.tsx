@@ -208,10 +208,34 @@ describe("SummaryImportWizard", () => {
     renderWizard();
     expect(screen.getByText("Replicates (n)")).toBeInTheDocument();
     const input = screen.getByLabelText(/replicates in every value/i);
-    fireEvent.change(input, { target: { value: "3" } });
-    expect(setReplicatesConstant).toHaveBeenCalledWith(3);
-    fireEvent.change(input, { target: { value: "0" } });
-    expect(setReplicatesConstant).toHaveBeenLastCalledWith(null);
+    // The raw text goes to the draft, never a silently changed number.
+    fireEvent.change(input, { target: { value: "3.5" } });
+    expect(setReplicatesConstant).toHaveBeenLastCalledWith("3.5");
+    expect(screen.queryByText(/whole number of 1 or more/)).not.toBeInTheDocument();
+  });
+
+  it.each(["3.5", "0", "-1"])("step 2 flags a replicate count of %s and blocks Continue", (raw) => {
+    hookState.value = baseHook({
+      step: 2,
+      // The hook derives this from buildMapping, which rejects the count.
+      canContinueMapping: false,
+      preview: { headers: ["Compound"], suggestions: [], sample_rows: [], total_rows: 1 },
+      draft: { roles: {}, readoutDefByHeader: {}, replicatesConstant: raw },
+    });
+    renderWizard();
+    expect(screen.getByLabelText(/replicates in every value/i)).toHaveValue(raw);
+    expect(screen.getByText(/whole number of 1 or more/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
+  it.each(["", "1e2"])("step 2 accepts a replicate count of %j", (raw) => {
+    hookState.value = baseHook({
+      step: 2,
+      preview: { headers: ["Compound"], suggestions: [], sample_rows: [], total_rows: 1 },
+      draft: { roles: {}, readoutDefByHeader: {}, replicatesConstant: raw },
+    });
+    renderWizard();
+    expect(screen.queryByText(/whole number of 1 or more/)).not.toBeInTheDocument();
   });
 
   it("step 3 shows a replicate row error", () => {

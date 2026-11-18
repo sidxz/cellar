@@ -71,6 +71,18 @@ function formatValue(row: ReadoutData): string {
   return `${prefix}${row.value_numeric.toFixed(3)}`;
 }
 
+/** "n=3" after a summary value; a quiet "n —" when the count wasn't recorded. */
+function ReplicateCount({ n }: { n: number | null }) {
+  return (
+    <span
+      className="ml-1.5 text-[11px] text-muted-foreground"
+      title={n == null ? "Replicates not recorded" : `Mean of ${n} replicates`}
+    >
+      {n == null ? "n —" : `n=${n}`}
+    </span>
+  );
+}
+
 export function ReadoutDataTable({
   runId,
   protocolId,
@@ -344,14 +356,18 @@ export function ReadoutDataTable({
               );
             }
             return (
-              <span
-                className={cn(
-                  row.is_outlier && "text-destructive line-through decoration-destructive/50",
-                )}
-                title={row.is_outlier ? "Flagged as outlier" : undefined}
-              >
-                {formatValue(row)}
-              </span>
+              <>
+                <span
+                  className={cn(
+                    row.is_outlier && "text-destructive line-through decoration-destructive/50",
+                  )}
+                  title={row.is_outlier ? "Flagged as outlier" : undefined}
+                >
+                  {formatValue(row)}
+                </span>
+                {/* A summary (well-less) value is a reported mean: say of how many. */}
+                {params.data?.wellId === null && <ReplicateCount n={row.replicate_count ?? null} />}
+              </>
             );
           },
         });
