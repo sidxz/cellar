@@ -424,15 +424,18 @@ export function AddFromRunsDialog({
 
   const trimmedStageName = stageName.trim();
   const pickedStage = stages.find((s) => s.id === stageIdOf(target));
-  // A "new" stage named like an existing one reuses it, so the preview reads
-  // that stage's runs too.
-  const reusedStage =
-    target === NEW_STAGE
-      ? stages.find((s) => s.name.toLowerCase() === trimmedStageName.toLowerCase())
-      : undefined;
-  const previewStageId = pickedStage?.id ?? reusedStage?.id ?? null;
+  const isNewStage = target === NEW_STAGE;
+  // The preview and the commit send the same body (the commit adds `scope`),
+  // so a new stage previews exactly what committing it writes.
+  const requestBody = {
+    ...buildPayload(),
+    stage_id: stageIdOf(target),
+    stage_name: isNewStage ? trimmedStageName : null,
+    parent_stage_id: isNewStage && stageParentId !== ROOT_SENTINEL ? stageParentId : null,
+  };
+  const requestKey = JSON.stringify(requestBody);
   // The backend turns these into the target stage's criteria (replacing them).
-  const becomesCriteria = buildPayload().channel_configs.some(
+  const becomesCriteria = requestBody.channel_configs.some(
     (c) => c.use_for_filter && c.hit_threshold,
   );
   const stageNotice =
@@ -455,35 +458,28 @@ export function AddFromRunsDialog({
   const targetName = target === NEW_STAGE ? trimmedStageName : pickedStage?.name;
 
   // — Debounced preview refresh —
-  const [previewData, setPreviewData] = useState<{
-    summary: {
-      runs: number;
-      channels_new: number;
-      channels_reused: number;
-      molecules_total: number;
-      hits: number;
-      non_hits: number;
-      molecules_already_in_campaign: number;
-    };
-    rows: PreviewRow[];
-    channels: { channel_key: string; label: string }[];
-  } | null>(null);
+  // A preview belongs to the body it was computed for (`data: null` = it
+  // failed). Only a successful preview of the current body enables commit.
+  const [preview, setPreview] = useState<{ key: string; data: PreviewData | null } | null>(null);
+  const currentPreview = preview?.key === requestKey ? preview : null;
+  const previewData = currentPreview?.data ?? null;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: buildPayload/previewMutation are derived from the listed state; keying on the underlying state (step/channelConfigs/selectedRunIds/filterMode) is what should re-trigger the debounced preview.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestBody/previewMutation are derived from the listed state; requestKey is the body itself, so a change to it is what should re-trigger the debounced preview.
   useEffect(() => {
     if (step !== "preview") return;
-    const payload = buildPayload();
-    if (payload.run_ids.length === 0 || payload.channel_configs.length === 0) return;
+    if (requestBody.run_ids.length === 0 || requestBody.channel_configs.length === 0) return;
+    const key = requestKey;
     const t = setTimeout(() => {
       previewMutation.mutate(
-        { campaignId, data: { ...payload, stage_id: previewStageId } },
+        { campaignId, data: requestBody },
         {
-          onSuccess: (data) => setPreviewData(data as never),
+          onSuccess: (data) => setPreview({ key, data: data as never }),
+          onError: () => setPreview({ key, data: null }),
         },
       );
     }, 300);
     return () => clearTimeout(t);
-  }, [step, channelConfigs, selectedRunIds, filterMode, previewStageId]);
+  }, [step, requestKey]);
 
   // — Render —
   const filteredRuns = (runs ?? []).filter((r) => (approvedOnly ? r.status === "approved" : true));
@@ -498,6 +494,7 @@ export function AddFromRunsDialog({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
+                aria-label="Back"
                 onClick={() => setStep("configure")}
               >
                 <ChevronLeft className="h-4 w-4" />
@@ -596,7 +593,7 @@ export function AddFromRunsDialog({
             />
           </div>
         ) : (
-          <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
+          <PreviewStep data={previewData} failed={currentPreview?.data === null} />
         )}
 
         <DialogFooter className="gap-2">
@@ -610,21 +607,7 @@ export function AddFromRunsDialog({
           ) : (
             <Button
               disabled={!previewData || addMutation.isPending || !canGoToPreview}
-              onClick={() => {
-                const payload = buildPayload();
-                const isNew = target === NEW_STAGE;
-                addMutation.mutate({
-                  campaignId,
-                  data: {
-                    ...payload,
-                    scope,
-                    stage_id: stageIdOf(target),
-                    stage_name: isNew ? trimmedStageName : null,
-                    parent_stage_id:
-                      isNew && stageParentId !== ROOT_SENTINEL ? stageParentId : null,
-                  } as never,
-                });
-              }}
+              onClick={() => addMutation.mutate({ campaignId, data: { ...requestBody, scope } })}
             >
               {addMutation.isPending
                 ? "Adding…"
@@ -1046,25 +1029,29 @@ interface PreviewRow {
   cells: PreviewCell[];
 }
 
-interface PreviewStepProps {
-  data: {
-    summary: {
-      runs: number;
-      channels_new: number;
-      channels_reused: number;
-      molecules_total: number;
-      hits: number;
-      non_hits: number;
-      molecules_already_in_campaign: number;
-    };
-    rows: PreviewRow[];
-    channels: { channel_key: string; label: string }[];
-  } | null;
-  isLoading: boolean;
+interface PreviewData {
+  summary: {
+    runs: number;
+    channels_new: number;
+    channels_reused: number;
+    molecules_total: number;
+    hits: number;
+    non_hits: number;
+    molecules_already_in_campaign: number;
+  };
+  rows: PreviewRow[];
+  channels: { channel_key: string; label: string }[];
 }
 
-function PreviewStep({ data, isLoading }: PreviewStepProps) {
-  if (isLoading || !data) {
+function PreviewStep({ data, failed }: { data: PreviewData | null; failed: boolean }) {
+  if (failed) {
+    return (
+      <p className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+        The preview failed. Go back, check the runs and readouts, and preview again.
+      </p>
+    );
+  }
+  if (!data) {
     return (
       <div className="flex items-center justify-center h-40">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

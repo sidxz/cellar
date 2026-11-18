@@ -11,4 +11,6 @@ export interface PreviewRunImportRequest {
   channel_configs: ChannelImportConfigDTO[];
   filter_mode?: string;
   stage_id?: string | null;
+  stage_name?: string | null;
+  parent_stage_id?: string | null;
 }

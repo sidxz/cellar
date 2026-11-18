@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -150,5 +150,83 @@ describe("AddFromRunsDialog stage", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Add 1 hit" }));
     expect(addMutate.mock.calls[0][0].data).toMatchObject({ stage_id: null, stage_name: null });
+  });
+
+  it("previews a new stage with the same name and parent the commit sends", async () => {
+    render(
+      <AddFromRunsDialog
+        campaignId="c1"
+        projectId="p1"
+        stages={[primary]}
+        open
+        onOpenChange={vi.fn()}
+      />,
+      { wrapper },
+    );
+    chooseProtocolAndRun();
+    pick(screen.getByRole("combobox", { name: "Stage" }), "New stage…");
+    pick(screen.getByRole("combobox", { name: "Parent stage" }), "Primary");
+    fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+
+    await waitFor(() => expect(previewMutate).toHaveBeenCalled());
+    const previewed = previewMutate.mock.calls[0][0].data;
+    expect(previewed).toMatchObject({
+      stage_id: null,
+      stage_name: "Kinase Panel hits",
+      parent_stage_id: "st-1",
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Add 1 hit to Kinase Panel hits" }));
+    expect(addMutate.mock.calls[0][0].data).toEqual({ ...previewed, scope: "hits_only" });
+  });
+
+  it("commits only a successful preview of what is picked now", async () => {
+    render(
+      <AddFromRunsDialog
+        campaignId="c1"
+        projectId="p1"
+        stages={[primary]}
+        initialStageId="st-1"
+        open
+        onOpenChange={vi.fn()}
+      />,
+      { wrapper },
+    );
+    chooseProtocolAndRun();
+    fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+    expect(await screen.findByRole("button", { name: "Add 1 hit to Primary" })).toBeEnabled();
+
+    // Back, change the stage, preview again: Primary's preview no longer counts.
+    let resolveSecond: (() => void) | undefined;
+    previewMutate.mockImplementation((_vars, opts) => {
+      resolveSecond = () => opts?.onSuccess?.(PREVIEW);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    pick(screen.getByRole("combobox", { name: "Stage" }), /^Other columns/);
+    fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+    expect(screen.getByRole("button", { name: /^Add/ })).toBeDisabled();
+    await waitFor(() => expect(previewMutate).toHaveBeenCalledTimes(2));
+    expect(screen.getByRole("button", { name: /^Add/ })).toBeDisabled();
+
+    act(() => resolveSecond?.());
+    expect(screen.getByRole("button", { name: "Add 1 hit" })).toBeEnabled();
+  });
+
+  it("never commits after a failed preview", async () => {
+    previewMutate.mockImplementation((_vars, opts) => opts?.onError?.(new Error("boom")));
+    render(
+      <AddFromRunsDialog
+        campaignId="c1"
+        projectId="p1"
+        stages={[primary]}
+        initialStageId="st-1"
+        open
+        onOpenChange={vi.fn()}
+      />,
+      { wrapper },
+    );
+    chooseProtocolAndRun();
+    fireEvent.click(screen.getByRole("button", { name: /^Preview/ }));
+    expect(await screen.findByText(/The preview failed/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Add/ })).toBeDisabled();
   });
 });
