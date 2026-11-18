@@ -247,6 +247,9 @@ IGNORED_FKS: set[tuple[str, str, str]] = {
     ("campaign_stage", "campaign_id", "campaign"),
     ("campaign_stage_override", "result_id", "campaign_result"),
     ("campaign_stage_override", "stage_id", "campaign_stage"),
+    # campaign_channel.stage_id (migration 104) — a stage owns its columns;
+    # ondelete=CASCADE, and Campaign.remove_stage removes them in the domain.
+    ("campaign_channel", "stage_id", "campaign_stage"),
     # campaign_stage.parent_stage_id is a self-referential FK for the stage
     # forest (ondelete=RESTRICT — deleting a stage with children fails at the
     # DB level; Campaign.remove_stage already guards this in the domain
@@ -551,6 +554,8 @@ LEFT_ALONE: dict[str, str] = {
     "audit_operations.entity_id": _AUDIT,
     "batches.custom_fields": _NO_IDS,
     "campaign_channel.intercept_key": _NO_IDS,
+    "campaign_channel.test_concentration": _NO_IDS,
+    "campaign_measurement.concentrations_found": _NO_IDS,
     "campaign_channel.qc_filter": _NO_IDS,
     "cdd_molecule_imports.filter_criteria": _NO_IDS,
     "collection_import_templates.column_mapping": _NO_IDS,
@@ -598,6 +603,7 @@ LEFT_ALONE: dict[str, str] = {
     "campaign_result.added_from": _SNAPSHOT,
     "merge_events.snapshot": _SNAPSHOT,
     "bulk_registration_items.batch_id": _HISTORY,
+    "campaign_measurement.batch_ids": _HISTORY,
     "bulk_registration_items.molecule_id": _HISTORY,
     "sample_requests.fulfilled_sample_id": _HISTORY,
     "shipment_items.item_id": _HISTORY,
