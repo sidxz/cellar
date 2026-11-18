@@ -1,0 +1,44 @@
+import uuid
+
+from cellar.application.research_organization.column_descriptions import readout_label
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.enums import (
+    ChannelSourceKind,
+    QualifierHandling,
+    SelectionRule,
+)
+from cellar.domain.shared.hit_criterion import InterceptKey
+
+
+def _channel(**kw) -> CampaignChannel:
+    base = dict(
+        campaign_id=uuid.uuid4(),
+        label="col",
+        protocol_id=uuid.uuid4(),
+        readout_definition_id=uuid.uuid4(),
+        source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+        selection_rule=SelectionRule.LATEST_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=0,
+    )
+    base.update(kw)
+    return CampaignChannel(**base)
+
+
+def test_primary_intercept_column_is_named_for_its_readout():
+    assert readout_label(_channel(), "IC50") == "IC50"
+
+
+def test_secondary_intercept_columns_of_one_readout_get_distinct_labels():
+    ec90 = _channel(intercept_key=InterceptKey(kind="ec", level=90.0))
+    ic99 = _channel(intercept_key=InterceptKey(kind="ic", level=99.0))
+    assert readout_label(ec90, "EC50") == "EC90"
+    assert readout_label(ic99, "IC50") == "IC99"
+    assert readout_label(_channel(), "EC50") != readout_label(ec90, "EC50")
+
+
+def test_readout_column_carries_its_normalization_layer():
+    ch = _channel(
+        source_kind=ChannelSourceKind.READOUT_DATA, normalization_applied="percent_inhibition"
+    )
+    assert readout_label(ch, "Signal") == "Signal (% Inhibition)"

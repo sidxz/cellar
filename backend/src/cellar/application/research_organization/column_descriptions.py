@@ -24,7 +24,12 @@ from cellar.domain.screening_assay.repository import ProtocolRepository
 
 def readout_label(channel: CampaignChannel, readout_name: str | None) -> str:
     """The readout's name plus its normalization layer, as the grid heads it:
-    "Signal (% Inhibition)". A dose-response column has no layer of its own."""
+    "Signal (% Inhibition)". A dose-response column has no layer of its own; one that
+    surfaces a secondary intercept is named for it ("EC90"), so two intercept columns
+    of one readout never share a label."""
+    if channel.intercept_key is not None:
+        ik = channel.intercept_key
+        return f"{ik.kind.upper()}{ik.level:g}"
     name = readout_name or channel.label  # the readout definition is gone
     norm = channel.normalization_applied
     if norm and channel.source_kind == ChannelSourceKind.READOUT_DATA:
