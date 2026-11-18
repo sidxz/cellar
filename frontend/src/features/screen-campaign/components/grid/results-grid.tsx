@@ -13,6 +13,9 @@
  *         stage's pass/fail verdict chip + OVR badge; clicking the value opens
  *         its facts (concentration, n, runs, batches, basis)
  *       - Curve (150, DR only) — <DoseResponseSparkline>
+ *     A column with no values yet is hidden (its Curve with it); the stage
+ *     group's header carries a "+N empty columns" chip that shows them again,
+ *     remembered per campaign in this browser.
  *   - Stage (pinned-right, 150, only while a stage is selected) — <StageOutcomeCell>
  *   - Notes (pinned-right, 220) — <NotesCell>
  *
@@ -273,6 +276,79 @@ export function StageColumnHeader({
   );
 }
 
+/** Inner header of a stage group: its name, and — when some of its columns
+ *  have no values yet and are hidden — the chip that shows them again. */
+export function StageGroupHeader({
+  title,
+  emptyCount,
+  showingEmpty,
+  onToggleEmpty,
+}: {
+  title: string;
+  emptyCount: number;
+  showingEmpty: boolean;
+  onToggleEmpty: () => void;
+}) {
+  const columns = emptyCount === 1 ? "empty column" : "empty columns";
+  return (
+    <span className="flex min-w-0 items-center gap-1.5">
+      <span className="truncate">{title}</span>
+      {emptyCount > 0 && (
+        <button
+          type="button"
+          aria-pressed={showingEmpty}
+          onClick={onToggleEmpty}
+          title="Columns no run at this stage has filled yet"
+          className="shrink-0 rounded-full border px-1.5 text-[10px] font-normal leading-4 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+        >
+          {showingEmpty ? `Hide ${emptyCount} ${columns}` : `+${emptyCount} ${columns}`}
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** A column nothing has filled yet: no run behind any of its cells, no dose
+ *  waiting to be chosen, and no value (a hand-entered one counts). */
+export function isEmptyColumn(
+  channel: CampaignChannelResponse,
+  results: CampaignResultResponse[],
+): boolean {
+  const d = channel.description;
+  if (!d || d.run_count > 0 || d.needs_concentration || d.concentrations.length > 0) return false;
+  return !results.some((r) =>
+    r.measurements?.some((m) => m.channel_id === channel.id && m.value != null),
+  );
+}
+
+/** Stage groups (by stage id, "other" for campaign columns) whose empty
+ *  columns this viewer chose to see, kept per campaign in this browser. */
+function useShownEmptyGroups(campaignId: string): [Set<string>, (key: string) => void] {
+  const storageKey = `campaign-empty-columns:${campaignId}`;
+  const [shown, setShown] = useState<Set<string>>(() => {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(storageKey) ?? "[]") as string[]);
+    } catch {
+      return new Set();
+    }
+  });
+  const toggle = useCallback(
+    (key: string) =>
+      setShown((prev) => {
+        const next = new Set(prev);
+        if (!next.delete(key)) next.add(key);
+        try {
+          localStorage.setItem(storageKey, JSON.stringify([...next]));
+        } catch {
+          // Storage unavailable: the choice holds for this visit only.
+        }
+        return next;
+      }),
+    [storageKey],
+  );
+  return [shown, toggle];
+}
+
 // ── Untested cell ─────────────────────────────────────────────────────────────
 
 const UNRESOLVED_REASON_TEXT: Record<string, string> = {
@@ -326,7 +402,8 @@ export function MeasurementFacts({
       : "not recorded";
 
   return (
-    <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+    // minmax(0,1fr): a long run line wraps inside the card instead of widening it.
+    <dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
       {m.is_manual_override && (
         <>
           <dt className="text-muted-foreground">Hand-entered</dt>
@@ -357,9 +434,12 @@ export function MeasurementFacts({
             {runIds.map((id) => {
               const label = runLabel(id);
               return (
-                <li key={id} className="truncate" title={`${label.protocolName} · ${label.text}`}>
+                <li key={id} className="break-words">
                   <span style={{ color: label.color }}>{label.protocolName}</span> ·{" "}
                   <EntityLink type="run" id={id} label={label.text} className="font-sans text-xs" />
+                  {label.detail && (
+                    <span className="ml-1 text-muted-foreground tabular-nums">{label.detail}</span>
+                  )}
                 </li>
               );
             })}
@@ -398,6 +478,7 @@ export function ResultsGridV2({
     measurement?: CampaignMeasurementResponse;
   } | null>(null);
   const [expandedCurve, setExpandedCurve] = useState<ExpandedCurve | null>(null);
+  const [shownEmptyGroups, toggleEmptyGroup] = useShownEmptyGroups(campaign.id);
 
   // ── Bulk fetches ────────────────────────────────────────────────────────────
 
@@ -519,8 +600,16 @@ export function ResultsGridV2({
 
     // 3. Per-channel, grouped under the stage that owns it in funnel order,
     //    then campaign columns under "Other columns". The protocol's colour
-    //    stays as an accent on each column header.
+    //    stays as an accent on each column header. Columns with no values yet
+    //    are hidden behind a chip on their group's header.
+    const results = campaign.results ?? [];
     for (const group of groupColumnsByStage(sortedChannels, campaign.stages ?? [])) {
+      const groupKey = group.stageId ?? "other";
+      const empty = group.channels.filter((ch) => isEmptyColumn(ch, results));
+      const showingEmpty = shownEmptyGroups.has(groupKey);
+      const visible = showingEmpty
+        ? group.channels
+        : group.channels.filter((ch) => !empty.includes(ch));
       const groupChildren: ColDef<RowData>[] = [];
       // Class + Curve columns are emitted only for the FIRST channel of a
       // given (protocol, readout-def) within a stage — sibling intercept
@@ -528,7 +617,7 @@ export function ResultsGridV2({
       // same Hill fit, so duplicating the curve drawing is pure noise. Value
       // columns stay per-channel since each intercept has its own number.
       const seenReadoutDefs = new Set<string>();
-      for (const ch of group.channels) {
+      for (const ch of visible) {
         const isDR = ch.source_kind === "dose_response_curve";
         const isFirstForReadout = !seenReadoutDefs.has(ch.readout_definition_id);
         if (isFirstForReadout) {
@@ -680,12 +769,34 @@ export function ResultsGridV2({
         }
       }
 
+      // Every column hidden: one narrow placeholder keeps the stage (and the
+      // chip that shows its columns) on the grid.
+      if (groupChildren.length === 0) {
+        groupChildren.push({
+          headerName: "No values yet",
+          colId: `${groupKey}_empty`,
+          width: 150,
+          sortable: false,
+          valueGetter: () => null,
+          cellRenderer: () => null,
+        });
+      }
+
       cols.push({
         headerName: group.title,
         // A long stage name over one narrow column clips; DataGrid only adds
         // automatic tooltips to top-level leaf columns.
         headerTooltip: group.title,
-        groupId: `stage_${group.stageId ?? "other"}`,
+        groupId: `stage_${groupKey}`,
+        headerGroupComponentParams: {
+          innerHeaderGroupComponent: StageGroupHeader,
+          innerHeaderGroupComponentParams: {
+            title: group.title,
+            emptyCount: empty.length,
+            showingEmpty,
+            onToggleEmpty: () => toggleEmptyGroup(groupKey),
+          },
+        },
         children: groupChildren,
       });
     }
@@ -744,6 +855,8 @@ export function ResultsGridV2({
     // column defs keep rendering the previous stage's verdicts/chips.
     selectedStage,
     channelLabelById,
+    shownEmptyGroups,
+    toggleEmptyGroup,
   ]);
 
   // ── External (chip) filters ─────────────────────────────────────────────────

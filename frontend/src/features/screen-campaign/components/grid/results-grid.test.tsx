@@ -1,5 +1,6 @@
+import type { ColumnDescriptionResponse } from "@/shared/lib/api/model";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ColDef, ColGroupDef } from "ag-grid-community";
 import type { ComponentType } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -20,6 +21,8 @@ import {
   RemoveSelectedButton,
   ResultsGridV2,
   StageColumnHeader,
+  StageGroupHeader,
+  isEmptyColumn,
   isReportedEndpoint,
 } from "./results-grid";
 
@@ -52,6 +55,7 @@ vi.mock("../../hooks/use-campaign-run-labels", () => ({
   useCampaignRunLabels: () => (id: string) => ({
     protocolName: "Kinase Panel",
     text: id === "run-1" ? "Run on Nov 12, 2026" : "Run on Nov 14, 2026",
+    detail: id === "run-1" ? "created 09:05 · run-1" : "",
   }),
 }));
 
@@ -277,6 +281,14 @@ describe("MeasurementFacts", () => {
     expect(screen.getByRole("link", { name: "Run on Nov 14, 2026" })).toBeInTheDocument();
   });
 
+  it("tells same-day runs apart the way the stage list does, wrapping inside the card", () => {
+    const dl = facts(measurement);
+    const line = screen.getByText("created 09:05 · run-1").closest("li") as HTMLElement;
+    expect(line).toHaveTextContent("Kinase Panel · Run on Nov 12, 2026created 09:05 · run-1");
+    expect(line).not.toHaveClass("truncate");
+    expect(dl.className).toContain("minmax(0,1fr)");
+  });
+
   it("calls a dose-response value a concentration series and leaves n out", () => {
     const dl = facts({ ...measurement, concentration_series: true, basis: "measured" });
     expect(dl).toHaveTextContent("Concentrationconcentration series");
@@ -354,5 +366,144 @@ describe("ResultsGridV2 column headers", () => {
 
   it("names a stage group on hover, since a long name over one column clips", () => {
     expect(columnDefs().group.headerTooltip).toBe(stageName);
+  });
+});
+
+describe("ResultsGridV2 empty columns", () => {
+  const noValues: ColumnDescriptionResponse = {
+    ...(describedColumn.description as ColumnDescriptionResponse),
+    concentrations: [],
+    replicates: { min: null, max: null, not_recorded: 0 },
+    run_count: 0,
+    basis: [],
+    short_label: "no values yet",
+  };
+  const base = {
+    protocol_id: "proto-1",
+    selection_rule: "latest_run",
+    stage_id: "st-1",
+  };
+  const inhibition = {
+    ...describedColumn,
+    ...base,
+    id: "ch-inh",
+    readout_definition_id: "rd-inh",
+    source_kind: "readout_data",
+    display_order: 0,
+  } as unknown as CampaignChannelResponse;
+  // A dose-response column a mirrored protocol put on a single-dose stage.
+  const ic50 = {
+    ...base,
+    id: "ch-ic50",
+    label: "IC50",
+    readout_definition_id: "rd-ic50",
+    source_kind: "dose_response_curve",
+    display_order: 1,
+    description: noValues,
+  } as unknown as CampaignChannelResponse;
+  const stage = (id: string, name: string, order: number) => ({
+    id,
+    name,
+    parent_stage_id: null,
+    display_order: order,
+    kind: "criteria",
+    criteria: [],
+  });
+  const campaign = {
+    id: "c-empty",
+    stages: [stage("st-1", "Primary", 0), stage("st-2", "Retest", 1)],
+    channels: [inhibition, ic50, { ...ic50, id: "ch-retest", stage_id: "st-2", display_order: 2 }],
+    results: [{ id: "r1", molecule_id: "mol-1", measurements: [], stage_outcomes: [] }],
+  } as unknown as CampaignResponse;
+
+  beforeEach(() => localStorage.clear());
+
+  function renderGrid() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ResultsGridV2
+          campaign={campaign}
+          filters={emptyFilters()}
+          selectedStageId={null}
+          readOnly
+        />
+      </QueryClientProvider>,
+    );
+  }
+  const group = (id: string) =>
+    grid.columnDefs.find((c) => "groupId" in c && c.groupId === id) as ColGroupDef;
+  const colIds = (id: string) => group(id).children.map((c) => (c as ColDef).colId);
+  const headerParams = (id: string) =>
+    group(id).headerGroupComponentParams.innerHeaderGroupComponentParams;
+
+  it("hides a column with no values yet, its curve with it, behind a chip on the stage", () => {
+    renderGrid();
+    expect(colIds("stage_st-1")).toEqual(["ch-inh_value"]);
+    expect(group("stage_st-1").headerGroupComponentParams.innerHeaderGroupComponent).toBe(
+      StageGroupHeader,
+    );
+    expect(headerParams("stage_st-1")).toMatchObject({ emptyCount: 1, showingEmpty: false });
+  });
+
+  it("keeps a stage whose columns are all empty on the grid as one placeholder", () => {
+    renderGrid();
+    expect(colIds("stage_st-2")).toEqual(["st-2_empty"]);
+    expect(headerParams("stage_st-2").emptyCount).toBe(1);
+  });
+
+  it("shows a stage's empty columns from its chip and remembers that per viewer", () => {
+    renderGrid();
+    render(<StageGroupHeader {...headerParams("stage_st-1")} />);
+    fireEvent.click(screen.getByRole("button", { name: "+1 empty column" }));
+
+    expect(colIds("stage_st-1")).toEqual(["ch-inh_value", "ch-ic50_value", "ch-ic50_curve"]);
+    expect(colIds("stage_st-2")).toEqual(["st-2_empty"]); // the other stage is untouched
+    expect(JSON.parse(localStorage.getItem("campaign-empty-columns:c-empty") ?? "")).toEqual([
+      "st-1",
+    ]);
+
+    // A fresh page reads the choice back.
+    cleanup();
+    renderGrid();
+    expect(headerParams("stage_st-1").showingEmpty).toBe(true);
+    expect(colIds("stage_st-1")).toContain("ch-ic50_value");
+  });
+
+  it("names the chip by what it does", () => {
+    const { rerender } = render(
+      <StageGroupHeader
+        title="Primary"
+        emptyCount={2}
+        showingEmpty={false}
+        onToggleEmpty={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "+2 empty columns" })).toBeInTheDocument();
+    rerender(
+      <StageGroupHeader title="Primary" emptyCount={2} showingEmpty onToggleEmpty={vi.fn()} />,
+    );
+    expect(screen.getByRole("button", { name: "Hide 2 empty columns" })).toBeInTheDocument();
+    rerender(
+      <StageGroupHeader
+        title="Primary"
+        emptyCount={0}
+        showingEmpty={false}
+        onToggleEmpty={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("never counts a column with a value or a dose to choose as empty", () => {
+    const withValue = {
+      results: [{ measurements: [{ channel_id: "ch-ic50", value: 3 }] }],
+    } as unknown as CampaignResponse;
+    expect(isEmptyColumn(ic50, campaign.results)).toBe(true);
+    expect(isEmptyColumn(ic50, withValue.results)).toBe(false);
+    expect(
+      isEmptyColumn({ ...ic50, description: { ...noValues, needs_concentration: true } }, []),
+    ).toBe(false);
+    expect(isEmptyColumn({ ...ic50, description: null }, [])).toBe(false);
   });
 });
