@@ -120,7 +120,8 @@ class StageCriterion:
 class CampaignStage:
     """Owned entity of Campaign. Zero-criteria stages are valid — a scaffold
     while the chemist is still building the funnel; the UI flags them as
-    "no criteria yet".
+    "no criteria yet". Such a stage marks a compound untested until it has a
+    tested value in one of the stage's own columns, then a hit.
 
     A MANUAL stage carries no criteria at all: every compound in its
     population evaluates to `StageOutcome.PENDING` until a chemist promotes
