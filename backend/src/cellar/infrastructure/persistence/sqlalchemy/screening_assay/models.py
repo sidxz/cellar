@@ -471,8 +471,13 @@ class ReadoutDataModel(Base, EntityModelMixin, WorkspaceIdMixin):
     # Permits multiple computed rows per (well, readout_def) — one per formula —
     # when a readout def emits multiple views like %inh + z-score.
     normalization_applied: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Replicates behind a summary-imported value; well-less rows only.
+    replicate_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     __table_args__ = (
+        CheckConstraint(
+            "replicate_count IS NULL OR replicate_count >= 1", name="ck_readout_data_replicates"
+        ),
         Index("ix_readout_data_run", "run_id"),
         Index("ix_readout_data_molecule", "molecule_id"),
         Index("ix_readout_data_definition", "readout_definition_id"),

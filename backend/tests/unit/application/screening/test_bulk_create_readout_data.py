@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 from cellar.application.screening.bulk_create_readout_data import (
     BulkCreateReadoutData,
+    BulkCreateReadoutDataCommand,
     ReadoutDataItem,
 )
 from cellar.domain.screening_assay.enums import ReadoutDataType
@@ -33,3 +34,29 @@ async def test_bulk_entry_refuses_melt_readout():
         result = await uc._resolve_readout_definition_id(uuid.uuid4(), item, 0, cache)
         assert isinstance(result.failure(), ValidationError)
         assert "calculated or derived" in str(result.failure())
+
+
+async def test_well_rows_never_get_replicate_count():
+    run_id, rdef = uuid.uuid4(), uuid.uuid4()
+    repo = AsyncMock()
+    uow = AsyncMock()
+    uow.commit.return_value = []
+    uc = BulkCreateReadoutData(uow, repo, AsyncMock(), AsyncMock())
+    common = dict(
+        run_id=run_id,
+        molecule_id=uuid.uuid4(),
+        readout_definition_id=rdef,
+        value_numeric=1.0,
+        replicate_count=3,
+    )
+    items = [
+        ReadoutDataItem(well_id=uuid.uuid4(), batch_id=uuid.uuid4(), **common),
+        ReadoutDataItem(well_id=None, **common),
+    ]
+    result = await uc(
+        BulkCreateReadoutDataCommand(workspace_id=uuid.uuid4(), items=items),
+        auth=None,
+        require_batch=False,
+    )
+    saved = repo.save_bulk.call_args.args[0]
+    assert [r.replicate_count for r in saved] == [None, 3], result

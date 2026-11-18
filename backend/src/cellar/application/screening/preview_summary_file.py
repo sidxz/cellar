@@ -73,6 +73,8 @@ _STRUCTURE_HEADERS = frozenset(
     }
 )
 
+_REPLICATES_HEADERS = frozenset({"n", "replicates", "replicate_count", "reps"})
+
 _SAMPLE_N = 10
 # Hard cap mirrors the run-file sync-import limit.
 _MAX_ROWS = 50_000
@@ -194,6 +196,7 @@ def _infer_suggestions(
     compound_assigned = False
     structure_assigned = False
     batch_assigned = False
+    replicates_assigned = False
 
     for header in headers:
         norm = _norm(header)
@@ -227,6 +230,17 @@ def _infer_suggestions(
                 SummaryHeaderSuggestion(
                     header=header,
                     role=SummaryRole.STRUCTURE,
+                    confidence="high",
+                )
+            )
+            continue
+
+        if norm in _REPLICATES_HEADERS and not replicates_assigned:
+            replicates_assigned = True
+            suggestions.append(
+                SummaryHeaderSuggestion(
+                    header=header,
+                    role=SummaryRole.REPLICATES,
                     confidence="high",
                 )
             )

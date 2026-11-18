@@ -741,6 +741,9 @@ class SummaryColumnMappingRequest(BaseModel):
     # identifier lookup. Never stored, never registers.
     structure: str | None = None
     readout_columns: dict[str, uuid.UUID] = Field(default_factory=dict)
+    # Replicates behind each value: a per-row column, and/or one number for the file.
+    replicates: str | None = None
+    replicates_constant: int | None = Field(default=None, ge=1)
 
     def to_domain(self) -> SummaryColumnMapping:
         return SummaryColumnMapping(
@@ -748,6 +751,8 @@ class SummaryColumnMappingRequest(BaseModel):
             batch_ref=self.batch_ref,
             structure=self.structure,
             readout_columns=dict(self.readout_columns),
+            replicates=self.replicates,
+            replicates_constant=self.replicates_constant,
         )
 
 

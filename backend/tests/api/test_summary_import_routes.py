@@ -322,3 +322,53 @@ class TestSummaryImportRoutes:
         )
         assert bad_uuid_resp.status_code == 422, bad_uuid_resp.text
         assert bad_uuid_resp.status_code != 500
+
+    async def test_import_records_replicate_counts(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        run_id, ic50_id, reg = await _seed(session_factory, fake_auth.workspace_id)
+        csv = f"Compound,IC50,n\n{reg},5.2,3\n".encode()
+        mapping = {
+            "compound_ref": "Compound",
+            "readout_columns": {"IC50": str(ic50_id)},
+            "replicates": "n",
+            "replicates_constant": 2,
+        }
+        resp = await client.post(
+            f"/api/v1/runs/{run_id}/import-summary-file",
+            files={"file": ("summary.csv", csv, "text/csv")},
+            data={"mapping": json.dumps(mapping)},
+        )
+        assert resp.status_code == 201, resp.text
+        uow = AsyncUnitOfWork(session_factory)
+        async with uow:
+            n = await uow.session.scalar(
+                sa.text("SELECT replicate_count FROM readout_data WHERE run_id = :r"),
+                {"r": run_id},
+            )
+        assert n == 3
+        listed = await client.get(f"/api/v1/readout-data?run_id={run_id}")
+        assert listed.status_code == 200, listed.text
+        assert listed.json()[0]["replicate_count"] == 3
+
+    async def test_invalid_replicates_constant_is_422(
+        self,
+        client: AsyncClient,
+        session_factory: async_sessionmaker[AsyncSession],
+        fake_auth: FakeAuth,
+    ) -> None:
+        run_id, ic50_id, reg = await _seed(session_factory, fake_auth.workspace_id)
+        mapping = {
+            "compound_ref": "Compound",
+            "readout_columns": {"IC50": str(ic50_id)},
+            "replicates_constant": 0,
+        }
+        resp = await client.post(
+            f"/api/v1/runs/{run_id}/import-summary-file",
+            files={"file": ("s.csv", f"Compound,IC50\n{reg},1\n".encode(), "text/csv")},
+            data={"mapping": json.dumps(mapping)},
+        )
+        assert resp.status_code == 422, resp.text

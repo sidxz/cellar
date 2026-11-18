@@ -82,6 +82,7 @@ class ReadoutDataResponse(BaseModel):
     value_text: str | None = None
     is_outlier: bool
     is_computed: bool = False
+    replicate_count: int | None = None
 
     @classmethod
     def from_domain(
@@ -111,6 +112,7 @@ class ReadoutDataResponse(BaseModel):
             value_text=rd.value_text,
             is_outlier=rd.is_outlier,
             is_computed=rd.is_computed,
+            replicate_count=rd.replicate_count,
         )
 
 

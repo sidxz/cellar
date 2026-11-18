@@ -12,6 +12,7 @@ class SummaryRole(StrEnum):
     BATCH_REF = "batch_ref"
     STRUCTURE = "structure"  # SMILES column; fallback resolution only, never stored
     READOUT = "readout"
+    REPLICATES = "replicates"  # n behind each reported value (mean of n)
     IGNORE = "ignore"
 
 
@@ -35,6 +36,10 @@ class SummaryColumnMapping:
     structure: str | None = None
     # header -> readout_definition_id
     readout_columns: dict[str, uuid.UUID] = field(default_factory=dict)
+    # header providing how many replicates each value is the mean of; a row
+    # value beats ``replicates_constant``, which applies when a row has none.
+    replicates: str | None = None
+    replicates_constant: int | None = None
 
 
 @dataclass(frozen=True)
