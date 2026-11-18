@@ -500,11 +500,11 @@ export function AddFromRunsDialog({
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             )}
-            Add compounds from protocol run(s)
+            Add runs
           </DialogTitle>
           <DialogDescription>
             {step === "configure"
-              ? "Pick runs and tune the hit criteria. Preview the would-be-added compounds before committing."
+              ? "Values at a stage come only from the runs added to it."
               : "Verify the compounds and cells that will be added. Go back to tweak criteria."}
           </DialogDescription>
         </DialogHeader>

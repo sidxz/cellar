@@ -156,6 +156,7 @@ function CampaignBuilderV2({
         campaign={campaign}
         projectId={projectId}
         readOnly={campaign.status !== "draft"}
+        selectedStageId={effectiveStageId}
       />
       {/* Libraries section hidden for now (owner's call, 2026-09-14). The
           backend endpoints and libraries-section.tsx stay as they are —

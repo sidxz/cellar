@@ -3,8 +3,9 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import type { ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CampaignStageResponse } from "../types";
+import type { CampaignResponse, CampaignStageResponse } from "../types";
 import { AddFromRunsDialog } from "./add-from-runs-dialog";
+import { AddCompoundsPills } from "./add/add-compounds-pills";
 
 const { previewMutate, addMutate } = vi.hoisted(() => ({
   previewMutate: vi.fn(),
@@ -39,6 +40,11 @@ vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
     },
   }),
 }));
+
+// The pills mount every add dialog; only the run dialog is under test here.
+vi.mock("./add-from-collection-dialog", () => ({ AddFromCollectionDialog: () => null }));
+vi.mock("./add-from-campaign-dialog", () => ({ AddFromCampaignDialog: () => null }));
+vi.mock("./add/manual-add-dialog", () => ({ ManualAddDialog: () => null }));
 
 // Radix Select portals a listbox whose items call scrollIntoView +
 // hasPointerCapture — jsdom ships neither.
@@ -90,6 +96,40 @@ function chooseProtocolAndRun() {
   pick(screen.getByRole("combobox", { name: "Protocol" }), "Kinase Panel");
   fireEvent.click(screen.getByRole("checkbox", { name: /Run on/ }));
 }
+
+describe("AddFromRunsDialog wording and default stage", () => {
+  it("says what it adds and where a stage's values come from", () => {
+    render(
+      <AddFromRunsDialog
+        campaignId="c1"
+        projectId="p1"
+        stages={[primary]}
+        open
+        onOpenChange={vi.fn()}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByRole("heading", { name: "Add runs" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Values at a stage come only from the runs added to it."),
+    ).toBeInTheDocument();
+  });
+
+  it("starts Source compounds' + Run on the stage selected in Hit stages", () => {
+    const campaign = { id: "c1", stages: [primary] } as unknown as CampaignResponse;
+    render(
+      <AddCompoundsPills
+        campaign={campaign}
+        projectId="p1"
+        open="run"
+        onOpenChange={vi.fn()}
+        selectedStageId="st-1"
+      />,
+      { wrapper },
+    );
+    expect(screen.getByRole("combobox", { name: "Stage" })).toHaveTextContent("Primary");
+  });
+});
 
 describe("AddFromRunsDialog stage", () => {
   it("blocks the preview until a stage is picked when the campaign has stages", async () => {
