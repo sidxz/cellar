@@ -18,7 +18,9 @@ A single-valued target already taken is dropped too.
 Also stores the numeric vault batch id (``custom_fields.cdd_batch_id``) as a
 ``BatchIdentifier(type="cdd_batch_id", source="CDD import")`` where the batch lacks
 it and the text is not already a batch ID in its workspace. Never reads the vault.
-Downgrade drops the column (the backfilled batch IDs are correct data and stay).
+Downgrade drops the column and gives each ``cdd_vault`` source's empty molecule/batch
+``field_mappings`` the pre-107 defaults back, so an older image still maps names and
+structures (the backfilled batch IDs are correct data and stay).
 """
 
 from __future__ import annotations
@@ -39,6 +41,25 @@ _SAME = {
     "batch": {"amount_value", "amount_unit", "purity", "appearance", "salt_stoichiometry"},
 }
 _MULTI = {"compound_id", "batch_id"}
+
+
+def _fm(source: str, target: str, kind: str) -> dict:
+    return {"source_field": source, "target_field": target, "target_type": kind}
+
+
+# The pre-107 ``_cdd_vault_defaults`` field mappings, for the downgrade.
+_OLD_DEFAULTS = {
+    "molecule": [
+        _fm("name|cdd_registry_number", "name", "core"),
+        _fm("smiles|cxsmiles", "smiles", "core"),
+        _fm("synonyms", "custom", "identifier"),
+        _fm("modified_at", "modified_at", "core"),
+    ],
+    "batch": [
+        _fm("molecule_batch_identifier|name", "vendor_catalog_number", "core"),
+        _fm("salt_name", "salt_name", "core"),
+    ],
+}
 
 
 def _col(header: str, target: str, source: str | None = None) -> dict:
@@ -131,4 +152,19 @@ def backfill_cdd_batch_ids() -> None:
 
 
 def downgrade() -> None:
+    conn = op.get_bind()
+    rows = conn.execute(
+        sa.text("SELECT id, entity_mappings FROM data_sources WHERE source_type = 'cdd_vault'")
+    ).all()
+    for ds_id, mappings in rows:
+        restored = [
+            {**em, "field_mappings": _OLD_DEFAULTS[em.get("entity_type")]}
+            if em.get("entity_type") in _OLD_DEFAULTS and not em.get("field_mappings")
+            else em
+            for em in mappings or []
+        ]
+        conn.execute(
+            sa.text("UPDATE data_sources SET entity_mappings = CAST(:em AS jsonb) WHERE id = :id"),
+            {"em": json.dumps(restored), "id": ds_id},
+        )
     op.drop_column("data_sources", "registration_mapping")

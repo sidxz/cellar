@@ -144,7 +144,15 @@ class MoleculeIdentifierModel(Base, EntityModelMixin):
     source: Mapped[str] = mapped_column(String(255), nullable=False)
     registered_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
-    __table_args__ = (UniqueConstraint("workspace_id", "identifier", name="uq_ws_identifier"),)
+    __table_args__ = (
+        UniqueConstraint("workspace_id", "identifier", name="uq_ws_identifier"),
+        # compound IDs are matched ignoring case (migration 109)
+        Index(
+            "ix_molecule_identifiers_ws_lower_identifier",
+            "workspace_id",
+            text("lower(identifier)"),
+        ),
+    )
 
 
 class MixtureComponentModel(Base, EntityModelMixin):

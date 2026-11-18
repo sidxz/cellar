@@ -228,3 +228,45 @@ async def test_conversion_and_backfill(session_factory, workspace_id) -> None:
     assert {k: v.registration_mapping for k, v in again_ds.items()} == {
         k: v.registration_mapping for k, v in by_id.items()
     }
+
+
+async def test_downgrade_gives_the_old_importer_its_field_mappings_back(
+    session_factory, workspace_id
+) -> None:
+    """An image rollback to before 107 reads molecule/batch ``field_mappings`` again; empty,
+    it would register every molecule as ``EXT-<id>``."""
+    m107 = _load()
+    ds_id = uuid.uuid4()
+    after_107 = _mappings([], [])
+    async with session_factory() as session:
+        await session.execute(
+            sa.text(
+                "INSERT INTO data_sources (id, workspace_id, name, source_type, entity_mappings, "
+                "registration_mapping, created_by, version) VALUES (:id, :ws, 'vault', "
+                "'cdd_vault', CAST(:m AS jsonb), CAST(:rm AS jsonb), :cb, 1)"
+            ),
+            {
+                "id": ds_id,
+                "ws": workspace_id,
+                "m": json.dumps(after_107),
+                "rm": json.dumps(default_cdd_registration_mapping()),
+                "cb": uuid.uuid4(),
+            },
+        )
+
+        def go(sync_session) -> None:  # type: ignore[no-untyped-def]
+            with Operations.context(MigrationContext.configure(sync_session.connection())):
+                m107.downgrade()
+
+        await session.run_sync(go)
+        (mappings,) = (
+            await session.execute(
+                sa.text("SELECT entity_mappings FROM data_sources WHERE id = :id"), {"id": ds_id}
+            )
+        ).one()
+        await session.rollback()
+
+    by_type = {em["entity_type"]: em for em in mappings}
+    assert by_type["molecule"]["field_mappings"] == DEFAULT_MOL
+    assert by_type["batch"]["field_mappings"] == DEFAULT_BATCH
+    assert by_type["plate"] == after_107[2] and by_type["well"] == after_107[3]
