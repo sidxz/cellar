@@ -9,6 +9,7 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_admin, require_same_workspace
+from cellar.application.cdd_import.registration_mapping import default_cdd_registration_mapping
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -58,6 +59,7 @@ class CreateDataSource:
                     name=input.name,
                     vault_id=input.config.get("vault_id", ""),
                     api_key_name=input.api_key_name or "",
+                    registration_mapping=default_cdd_registration_mapping(),
                     created_by=created_by,
                 )
             elif input.source_type == DataSourceType.CHEMBL:

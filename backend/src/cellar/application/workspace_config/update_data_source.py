@@ -9,13 +9,15 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_admin, require_same_workspace
+from cellar.application.cdd_import.registration_mapping import validate_registration_mapping
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.shared.errors import DomainError, NotFoundError
+from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.workspace_config.data_source import (
     DataSource,
+    DataSourceType,
     EntityMapping,
 )
 from cellar.domain.workspace_config.repository import DataSourceRepository
@@ -31,6 +33,7 @@ class UpdateDataSourceCommand(Command):
     api_key_name: str | object | None = UNSET
     entity_mappings: list[dict[str, Any]] | object = UNSET
     create_batch_on_duplicate: bool | object = UNSET
+    registration_mapping: list[dict[str, Any]] | object | None = UNSET
 
 
 class UpdateDataSource:
@@ -56,6 +59,16 @@ class UpdateDataSource:
                 return Failure(NotFoundError("DataSource", str(input.data_source_id)))
 
             update_kwargs: dict[str, Any] = {}
+            if input.registration_mapping is not UNSET:
+                if ds.source_type != DataSourceType.CDD_VAULT:
+                    return Failure(
+                        ValidationError("Only a CDD Vault data source has a registration mapping")
+                    )
+                if input.registration_mapping is not None:
+                    err = validate_registration_mapping(input.registration_mapping)  # type: ignore[arg-type]
+                    if err is not None:
+                        return Failure(err)
+                update_kwargs["registration_mapping"] = input.registration_mapping
             if input.name is not UNSET:
                 update_kwargs["name"] = input.name
             if input.is_active is not UNSET:

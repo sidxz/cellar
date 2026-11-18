@@ -20,3 +20,7 @@ class CddMoleculeLookupGateway(Protocol):
     async def find_molecules_by_names(
         self, vault_id: str, api_key: str, names: list[str]
     ) -> list[dict[str, Any]]: ...
+
+
+class CddFieldsGateway(Protocol):
+    async def list_fields(self, vault_id: str, api_key: str) -> dict[str, Any]: ...

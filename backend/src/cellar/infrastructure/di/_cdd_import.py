@@ -41,6 +41,7 @@ from cellar.application.cdd_import.import_cdd_protocol import ImportCddProtocol
 from cellar.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
 from cellar.application.cdd_import.list_cdd_plate_imports import ListCddPlateImports
 from cellar.application.cdd_import.list_cdd_protocols import ListCddProtocols
+from cellar.application.cdd_import.list_vault_fields import ListVaultFields
 from cellar.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
@@ -74,7 +75,8 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 
 def register_cdd_import(container: Container) -> None:
     # CDD client reuses the shared httpx.AsyncClient registered in _core.
-    container.define(CddVaultClient, Singleton(lambda c: CddVaultClient(c[httpx.AsyncClient])))
+    if CddVaultClient not in container.defined_types:  # tests stub the CDD adapter
+        container.define(CddVaultClient, Singleton(lambda c: CddVaultClient(c[httpx.AsyncClient])))
 
     # --- CDD Protocol Import ---
     def _make_get_data_source(c: Container):
@@ -108,6 +110,17 @@ def register_cdd_import(container: Container) -> None:
         )
 
     container.define(ListCddProtocols, _cdd_query(ListCddProtocols))
+
+    def _list_vault_fields(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListVaultFields(
+            uow=uow,
+            repo=SQLAlchemyDataSourceRepository(uow),
+            gateway=c[CddVaultClient],
+            secret_provider=c[SecretProvider],
+        )
+
+    container.define(ListVaultFields, _list_vault_fields)
     container.define(PreviewCddProtocolImport, _cdd_query(PreviewCddProtocolImport))
     container.define(ImportCddProtocol, _cdd_import_cmd)
 

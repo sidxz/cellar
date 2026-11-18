@@ -35,6 +35,7 @@ class SQLAlchemyDataSourceRepository(SQLAlchemyRepository[DataSource, DataSource
             api_key_name=model.api_key_name,
             is_active=model.is_active,
             entity_mappings=_mappings_to_domain(model.entity_mappings),
+            registration_mapping=model.registration_mapping,
             created_by=model.created_by,
             version=model.version,
             created_at=model.created_at,
@@ -51,6 +52,7 @@ class SQLAlchemyDataSourceRepository(SQLAlchemyRepository[DataSource, DataSource
             api_key_name=aggregate.api_key_name,
             is_active=aggregate.is_active,
             entity_mappings=_mappings_to_json(aggregate.entity_mappings),
+            registration_mapping=aggregate.registration_mapping,
             created_by=aggregate.created_by,
             version=aggregate.version,
         )
@@ -61,6 +63,7 @@ class SQLAlchemyDataSourceRepository(SQLAlchemyRepository[DataSource, DataSource
         model.api_key_name = aggregate.api_key_name
         model.is_active = aggregate.is_active
         model.entity_mappings = _mappings_to_json(aggregate.entity_mappings)
+        model.registration_mapping = aggregate.registration_mapping
 
     # ------------------------------------------------------------------
     # Queries

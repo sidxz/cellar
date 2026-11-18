@@ -108,7 +108,8 @@ def register_core(container: Container, db_settings: DatabaseSettings | None = N
     container.define(PeakDetectionService, lambda c: c[DerivativePeakDetection])
 
     # --- Secret Provider chain ---
-    container.define(SecretProvider, Singleton(_build_secret_provider))
+    if SecretProvider not in container.defined_types:  # tests stub the secret store
+        container.define(SecretProvider, Singleton(_build_secret_provider))
 
     # --- Temporal ---
     container.define(TemporalSettings, Singleton(TemporalSettings))

@@ -100,6 +100,10 @@ class CddVaultClient:
         self._check_response(response)
         return response.json()
 
+    async def list_fields(self, vault_id: str, api_key: str) -> dict[str, Any]:
+        """Field definitions of the vault (GET /vaults/{id}/fields), grouped by entity."""
+        return await self._get(f"{BASE_URL}/vaults/{vault_id}/fields", api_key)
+
     async def list_protocols(self, vault_id: str, api_key: str) -> list[dict[str, Any]]:
         """Fetch all protocols from CDD Vault, handling pagination."""
         all_objects: list[dict[str, Any]] = []

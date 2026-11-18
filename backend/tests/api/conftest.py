@@ -170,6 +170,7 @@ def _create_test_app(
     from cellar.interface.routes.targets import router as targets_router
     from cellar.interface.routes.inventory_hub import router as inventory_hub_router
     from cellar.interface.routes.version import router as version_router
+    from cellar.interface.routes.data_sources import router as data_sources_router
 
     app.include_router(user_router)
     app.include_router(org_router)
@@ -244,6 +245,7 @@ def _create_test_app(
     app.include_router(targets_router)
     app.include_router(inventory_hub_router)
     app.include_router(version_router)
+    app.include_router(data_sources_router)
     app.include_router(bulk_reg_router)
 
     # Override the stable auth wrapper (not the sentinel SDK directly)

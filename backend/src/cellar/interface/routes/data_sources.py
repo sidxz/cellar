@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import APIRouter
 from pydantic import BaseModel
 
+from cellar.application.cdd_import.list_vault_fields import ListVaultFieldsQuery
 from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.create_data_source import (
     CreateDataSourceCommand,
@@ -35,10 +36,12 @@ from cellar.interface.dependencies import (
     DeleteDataSourceDep,
     GetDataSourceDep,
     ListDataSourcesDep,
+    ListVaultFieldsDep,
     UpdateDataSourceDep,
 )
 from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import PaginatedResponse, clamp_limit, parse_cursor
+from cellar.interface.routes.bulk_registration import ColumnMappingColumnBody
 
 router = APIRouter(prefix="/api/v1/data-sources", tags=["data-sources"])
 
@@ -77,6 +80,8 @@ class DataSourceResponse(BaseModel):
     api_key_name: str | None = None
     is_active: bool
     entity_mappings: list[EntityMappingResponse]
+    # CDD sources: vault field path -> registration target (header = the vault field path).
+    registration_mapping: list[ColumnMappingColumnBody] | None = None
     created_by: uuid.UUID
     version: int
     create_batch_on_duplicate: bool = False
@@ -92,6 +97,11 @@ class DataSourceResponse(BaseModel):
             api_key_name=ds.api_key_name,
             is_active=ds.is_active,
             entity_mappings=[_em_to_response(em) for em in ds.entity_mappings],
+            registration_mapping=(
+                None
+                if ds.registration_mapping is None
+                else [ColumnMappingColumnBody(**c) for c in ds.registration_mapping]
+            ),
             created_by=ds.created_by,
             version=ds.version,
             create_batch_on_duplicate=ds.create_batch_on_duplicate,
@@ -111,7 +121,18 @@ class UpdateDataSourceBody(BaseModel):
     config: dict[str, Any] | None = None
     api_key_name: str | None = None
     entity_mappings: list[dict[str, Any]] | None = None
+    registration_mapping: list[ColumnMappingColumnBody] | None = None
     create_batch_on_duplicate: bool | None = None
+
+
+class VaultField(BaseModel):
+    path: str
+    label: str
+
+
+class VaultFieldsResponse(BaseModel):
+    molecule: list[VaultField]
+    batch: list[VaultField]
 
 
 # ======================================================================
@@ -162,6 +183,21 @@ async def get_template(source_type: str, _auth: AuthDep) -> list[EntityMappingRe
     return [_em_to_response(em) for em in template]
 
 
+@router.get("/{data_source_id}/vault-fields", response_model=VaultFieldsResponse)
+async def get_vault_fields(
+    data_source_id: uuid.UUID,
+    auth: AuthDep,
+    use_case: ListVaultFieldsDep,
+) -> VaultFieldsResponse:
+    """The vault's own fields, for the registration mapper (admin)."""
+    query = ListVaultFieldsQuery(workspace_id=auth.workspace_id, data_source_id=data_source_id)
+    fields = result_to_response(await use_case(query, auth=auth))
+    return VaultFieldsResponse(
+        molecule=[VaultField(path=f.path, label=f.label) for f in fields.molecule],
+        batch=[VaultField(path=f.path, label=f.label) for f in fields.batch],
+    )
+
+
 @router.get("/{data_source_id}", response_model=DataSourceResponse)
 async def get_data_source(
     data_source_id: uuid.UUID,
@@ -190,6 +226,15 @@ async def update_data_source(
     }
     for attr in ("name", "is_active", "config", "api_key_name", "entity_mappings"):
         cmd_fields[attr] = getattr(body, attr) if attr in body.model_fields_set else UNSET
+
+    if "registration_mapping" in body.model_fields_set:
+        cmd_fields["registration_mapping"] = (
+            None
+            if body.registration_mapping is None
+            else [c.model_dump(mode="json") for c in body.registration_mapping]
+        )
+    else:
+        cmd_fields["registration_mapping"] = UNSET
 
     if "create_batch_on_duplicate" in body.model_fields_set:
         cmd_fields["create_batch_on_duplicate"] = body.create_batch_on_duplicate

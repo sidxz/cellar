@@ -880,6 +880,8 @@ export * from './validationDetailResponse';
 export * from './validationError';
 export * from './validationErrorCtx';
 export * from './validationResultResponse';
+export * from './vaultField';
+export * from './vaultFieldsResponse';
 export * from './versionResponse';
 export * from './vocabularyResponse';
 export * from './weeklyLoanActivityResponse';

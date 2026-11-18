@@ -565,6 +565,7 @@ LEFT_ALONE: dict[str, str] = {
     "custom_field_definitions.pick_list_values": _NO_IDS,
     "data_sources.config": _NO_IDS,
     "data_sources.entity_mappings": _NO_IDS,
+    "data_sources.registration_mapping": _NO_IDS,
     "dose_response_curves.excluded_points": _NO_IDS,
     "dose_response_curves.fit_quality_warnings": _NO_IDS,
     "dose_response_curves.intercept_values": _NO_IDS,
