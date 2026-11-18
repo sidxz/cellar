@@ -248,6 +248,8 @@ async def preview_run_import(
         channel_configs=[c.to_domain() for c in body.channel_configs],
         filter_mode=body.filter_mode,
         stage_id=body.stage_id,
+        stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     return result_to_response(await uc(q, auth=auth))
 

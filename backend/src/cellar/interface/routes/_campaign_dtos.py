@@ -187,18 +187,19 @@ class PreviewRunImportRequest(BaseModel):
     #: The stage the runs join; its columns compute over all of its runs. Omitted =
     #: campaign runs, feeding campaign columns only.
     stage_id: uuid.UUID | None = None
+    #: When no ``stage_id``: creates — or reuses, by case-insensitive name — this
+    #: stage and puts the runs and columns on it. Configs with thresholds
+    #: (use_for_filter + hit_threshold) replace its criteria; none leave them alone.
+    #: A preview of a new stage resolves its columns from the request's runs only.
+    stage_name: str | None = None
+    #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
+    #: the existing stage's parent alone.
+    parent_stage_id: uuid.UUID | None = None
 
 
 class AddFromRunsRequest(PreviewRunImportRequest):
     scope: str = "hits_only"  # "hits_only" | "all"
     description: str | None = None
-    #: When no ``stage_id``: creates — or reuses, by case-insensitive name — this
-    #: stage and puts the runs and columns on it. Configs with thresholds
-    #: (use_for_filter + hit_threshold) replace its criteria; none leave them alone.
-    stage_name: str | None = None
-    #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
-    #: the existing stage's parent alone.
-    parent_stage_id: uuid.UUID | None = None
 
 
 class AddChannelRequest(BaseModel):

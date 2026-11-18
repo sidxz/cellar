@@ -10,8 +10,10 @@
    criteria are left alone.
 4. The compounds of the request's runs become rows. ``allowed_curve_classes`` is a row
    filter only, never applied to values.
-5. Every target column is recomputed for every row by ``recompute_columns``, over all
-   of the stage's runs, so ``scope: hits_only`` judges the values the commit writes.
+5. Every column whose run scope the runs widen is recomputed for every row by
+   ``recompute_columns``: the configs' columns, every other column of the runs'
+   protocols on the target stage, and those protocols' campaign columns. Each reads
+   all of its runs, so ``scope: hits_only`` judges the values the commit writes.
 
 ``AddResultsFromRuns`` saves the result. ``PreviewRunImport`` reads it and never saves,
 so the preview shows exactly the cells the commit would write.
@@ -105,6 +107,10 @@ class PreviewRunImportQuery(Command):
     filter_mode: Literal["any", "all"] = "all"
     #: The stage the runs would join; None previews them as campaign runs.
     stage_id: uuid.UUID | None = None
+    #: As in add-from-runs: with no ``stage_id``, the stage of this name
+    #: (case-insensitive), else an unsaved new one whose runs are the request's.
+    stage_name: str | None = None
+    parent_stage_id: uuid.UUID | None = None
 
 
 def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
@@ -258,10 +264,16 @@ async def apply_run_import(
     ]
     rows.update((r.molecule_id, r) for r in new_rows)
     rows = {m: rows[m] for m in compounds}
+    # The runs widen the scope of every column of their protocols on the target stage
+    # and of the campaign columns (which read every campaign run), not only the configs'.
+    protocols = {runs[r].protocol_id for r in run_ids}
+    affected = [
+        c for c in campaign.channels if c.protocol_id in protocols and c.stage_id in (target, None)
+    ]
     await recompute_columns(
         query=query,
         campaign=campaign,
-        channels={c.id: c for c in columns}.values(),
+        channels={c.id: c for c in [*columns, *affected]}.values(),
         extra_rows=new_rows,
     )
 
@@ -362,6 +374,8 @@ class PreviewRunImport:
                 filter_mode=q.filter_mode,
                 scope="all",
                 stage_id=q.stage_id,
+                stage_name=q.stage_name,
+                parent_stage_id=q.parent_stage_id,
             )
         except (NotFoundError, ValidationError) as e:
             return Failure(e)

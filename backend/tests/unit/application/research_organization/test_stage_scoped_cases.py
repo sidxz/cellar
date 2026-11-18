@@ -144,7 +144,7 @@ class World:
         repo.find_by_ids = AsyncMock(side_effect=find_by_ids)
         return repo
 
-    async def add(self, run_ids, stage_id, *configs, scope: str = "all", campaign=None):
+    async def add(self, run_ids, stage_id, *configs, scope: str = "all", campaign=None, **kw):
         uc = AddResultsFromRuns(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign or self.campaign),
@@ -160,13 +160,14 @@ class World:
                 channel_configs=list(configs),
                 scope=scope,  # type: ignore[arg-type]
                 stage_id=stage_id,
+                **kw,
             ),
             auth=self.auth,
         )
         assert isinstance(out, Success), out
         return out.unwrap()
 
-    async def preview(self, run_ids, stage_id, *configs) -> dict:
+    async def preview(self, run_ids, stage_id, *configs, **kw) -> dict:
         """Previews against a copy: the use case never saves, and the commit that
         follows must start from the same campaign."""
         molecules = AsyncMock()
@@ -196,6 +197,7 @@ class World:
                 run_ids=list(run_ids),
                 channel_configs=list(configs),
                 stage_id=stage_id,
+                **kw,
             ),
             auth=self.auth,
         )
@@ -527,3 +529,38 @@ async def test_preview_matches_commit() -> None:
     assert by_mol[str(X)]["cells"][0]["value"] == pytest.approx(35.0)
     assert by_mol[str(X)]["already_in_campaign"] is True
     assert by_mol[str(Y)]["already_in_campaign"] is False
+
+
+@pytest.mark.asyncio
+async def test_preview_new_stage_matches_commit() -> None:
+    """``stage_name`` naming no stage previews an unsaved new stage whose runs are
+    exactly the request's: its column ignores the protocol's campaign runs, and the
+    values are the ones the commit then writes."""
+    w = World()
+    await w.add([w.run((PCT, X, 90.0))], None, pct(SelectionRule.MEAN_ACROSS_RUNS))
+    new_run = w.run((PCT, X, 40.0), (PCT, Y, 70.0), day=2)
+    config = pct(SelectionRule.MEAN_ACROSS_RUNS)
+
+    doc = await w.preview([new_run], None, config, stage_name="Retest")
+    assert w.campaign.stages == []
+    await w.add([new_run], None, config, stage_name="Retest")
+
+    [stage] = w.campaign.stages
+    values = {}
+    for row in doc["rows"]:
+        [cell] = row["cells"]
+        mol = uuid.UUID(row["molecule"]["id"])
+        m = w.cell(mol, stage.id)
+        assert cell["value"] == pytest.approx(m.value)
+        assert cell["replicate_count"] == m.replicate_count
+        assert cell["contributing_run_ids"] == [str(r) for r in m.contributing_run_ids or []]
+        assert cell["unresolved_reason"] is None
+        values[mol] = cell["value"]
+    assert values == {X: pytest.approx(40.0), Y: pytest.approx(70.0)}
+
+    # Named again, in another case, it previews the stage that now exists.
+    later = w.run((PCT, X, 60.0), day=3)
+    doc = await w.preview([later], None, config, stage_name="retest")
+    assert doc["channels"][0]["source"] == "reused"
+    x = next(r for r in doc["rows"] if r["molecule"]["id"] == str(X))
+    assert x["cells"][0]["value"] == pytest.approx(50.0)

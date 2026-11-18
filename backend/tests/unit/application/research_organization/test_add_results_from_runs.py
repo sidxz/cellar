@@ -38,11 +38,12 @@ from cellar.domain.research_organization.enums import (
     MeasurementBasis,
     QualifierHandling,
     SelectionRule,
+    UnresolvedReason,
     ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
-from cellar.domain.shared.hit_criterion import HitCriterion
+from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from tests.unit.application.research_organization._helpers import (
     FakeRunData,
     FakeUnitOfWork,
@@ -358,7 +359,7 @@ class TestAddResultsFromRuns:
         campaign = _draft_campaign(auth.workspace_id)
         readout, mol = uuid.uuid4(), uuid.uuid4()
         r1, r2 = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(r1, PROTO)])
+        campaign.add_runs_to_stage([SeedRun(r1, PROTO)], None)
         channel = _channel(campaign, readout)
         campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=mol))
         data = FakeRunData()
@@ -648,3 +649,118 @@ class TestAddResultsFromRuns:
         assert by_mol[endpoint_only].value == 32.0
         # The latest curve wins although its class is not in the allowed set.
         assert by_mol[mixed].value == 7.0
+
+    # ---- every column whose run scope the add changes is recomputed (§6.3, G5) ----
+
+    @pytest.mark.asyncio
+    async def test_add_from_runs_recomputes_sibling_intercept_column(self) -> None:
+        """Mirror-protocol made IC50 and IC90 on the stage before it had runs (IC90 is
+        untested, no runs at stage). An add naming only IC50 still resolves IC90, for
+        the existing row and the new one."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        stage = CampaignStage(campaign_id=campaign.id, name="Confirmation", display_order=0)
+        campaign.add_stage(stage)
+        readout, run_id, old_mol, new_mol = (uuid.uuid4() for _ in range(4))
+        columns = {}
+        for name, key in (("IC50", None), ("IC90", InterceptKey(kind="ic", level=90.0))):
+            columns[name] = CampaignChannel(
+                campaign_id=campaign.id,
+                label=name,
+                display_order=len(campaign.channels),
+                protocol_id=PROTO,
+                readout_definition_id=readout,
+                source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                selection_rule=SelectionRule.LATEST_RUN,
+                qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+                intercept_key=key,
+                stage_id=stage.id,
+            )
+            campaign.add_channel(columns[name])
+        row = CampaignResult(campaign_id=campaign.id, molecule_id=old_mol)
+        untested = CampaignMeasurement(
+            result_id=row.id,
+            channel_id=columns["IC90"].id,
+            value=None,
+            value_qualifier=ValueQualifier.ND,
+            unit="-",
+            protocol_name_snapshot="-",
+            protocol_version_snapshot=0,
+            unresolved_reason=UnresolvedReason.NO_RUNS_AT_STAGE,
+        )
+        row.add_measurement(untested)
+        campaign.add_result(row)
+        ivs = [
+            {"spec": {"kind": "ic", "level": 50.0}, "value": 2.0},
+            {"spec": {"kind": "ic", "level": 90.0}, "value": 8.0},
+        ]
+        data = FakeRunData()
+        for mol in (old_mol, new_mol):
+            data.add(
+                readout,
+                reading(mol, 2.0, run_id, unit="µM", curve_class="full", intercept_values=ivs),
+            )
+
+        out = await _uc(campaign, data, [run_id])(
+            _cmd(
+                auth,
+                campaign,
+                [run_id],
+                _config(readout, kind=ChannelSourceKind.DOSE_RESPONSE_CURVE),
+                scope="all",
+                stage_id=stage.id,
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(out, Success)
+        assert len(campaign.channels) == 2
+        for result in campaign.results:
+            ic90 = result.find_measurement(columns["IC90"].id)
+            assert ic90 is not None, result.molecule_id
+            assert (ic90.value, ic90.unresolved_reason) == (8.0, None)
+            assert result.find_measurement(columns["IC50"].id).value == 2.0
+        assert campaign.results[0].find_measurement(columns["IC90"].id).id == untested.id
+        # One fetch per column for the recompute (plus the config's row lookup).
+        fetched = [channel_id for channel_id, _, _ in data.calls]
+        assert fetched.count(columns["IC90"].id) == 1
+
+    @pytest.mark.asyncio
+    async def test_add_from_runs_recomputes_campaign_columns_of_that_protocol(self) -> None:
+        """A run added to a stage is also a campaign run of its protocol, so the
+        protocol's campaign columns read it: the old row is recomputed and the new
+        row gets a cell there too."""
+        auth = fake_auth()
+        campaign = _draft_campaign(auth.workspace_id)
+        stage = CampaignStage(campaign_id=campaign.id, name="Primary", display_order=0)
+        campaign.add_stage(stage)
+        reference, staged, run_id = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+        old_mol, new_mol = uuid.uuid4(), uuid.uuid4()
+        campaign_column = _channel(campaign, reference)
+        row = CampaignResult(campaign_id=campaign.id, molecule_id=old_mol)
+        row.add_measurement(
+            CampaignMeasurement(
+                result_id=row.id,
+                channel_id=campaign_column.id,
+                value=11.0,
+                value_qualifier=ValueQualifier.EQ,
+                unit="%",
+                protocol_name_snapshot="OLD",
+                protocol_version_snapshot=1,
+            )
+        )
+        campaign.add_result(row)
+        data = FakeRunData()
+        data.add(staged, reading(old_mol, 1.0, run_id), reading(new_mol, 2.0, run_id))
+        data.add(reference, reading(old_mol, 42.0, run_id), reading(new_mol, 43.0, run_id))
+
+        out = await _uc(campaign, data, [run_id])(
+            _cmd(auth, campaign, [run_id], _config(staged), scope="all", stage_id=stage.id),
+            auth=auth,
+        )
+
+        assert isinstance(out, Success)
+        values = {
+            r.molecule_id: r.find_measurement(campaign_column.id).value for r in campaign.results
+        }
+        assert values == {old_mol: 42.0, new_mol: 43.0}
