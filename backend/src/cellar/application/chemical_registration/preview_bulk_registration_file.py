@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
 
 from returns.result import Failure, Result, Success
 
@@ -37,8 +37,8 @@ class ParsedItemDTO:
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = field(default_factory=list)
-    batch_ids: list[dict[str, str]] = field(default_factory=list)
+    external_ids: list[dict[str, Any]] = field(default_factory=list)
+    batch_ids: list[dict[str, Any]] = field(default_factory=list)
     batch_problem: str | None = None
     warnings: list[str] = field(default_factory=list)
     amount_value: float | None = None

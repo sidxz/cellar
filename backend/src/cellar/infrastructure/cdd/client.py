@@ -235,6 +235,20 @@ class CddVaultClient:
                     break
         return molecules
 
+    async def sample_molecules(
+        self, vault_id: str, api_key: str, molecule_ids: list[int] | None, limit: int
+    ) -> list[dict[str, Any]]:
+        """One synchronous page of up to ``limit`` molecules with structures and batches.
+
+        ``molecule_ids`` picks the molecules; None takes the vault's first ``limit``.
+        """
+        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
+        body: dict[str, Any] = {"page_size": limit}
+        if molecule_ids is not None:
+            body["molecules"] = ",".join(str(i) for i in molecule_ids)
+        data = await self._post_query(url, api_key, body)
+        return list(data.get("objects", []))[:limit]
+
     async def check_export_progress(self, vault_id: str, api_key: str, export_id: int) -> str:
         """Lightweight export status check via /export_progress (no data download).
 

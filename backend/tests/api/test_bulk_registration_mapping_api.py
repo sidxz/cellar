@@ -128,8 +128,18 @@ async def test_preview_with_mapping_returns_file_row_and_batch_ids(client: Async
     items = body["items"]
     assert [i["file_row"] for i in items] == [2, 3, 4]
     assert items[0]["batch_ids"] == [
-        {"identifier": "API-0001-001", "source": "CDD batch ID"},
-        {"identifier": "LG-0001-001K001", "source": "CDD legacy batch ID"},
+        {
+            "identifier": "API-0001-001",
+            "source": "CDD batch ID",
+            "identifier_type": None,
+            "decides": True,
+        },
+        {
+            "identifier": "LG-0001-001K001",
+            "source": "CDD legacy batch ID",
+            "identifier_type": None,
+            "decides": True,
+        },
     ]
     assert items[0]["external_ids"] == [
         {"identifier": "JX-1", "identifier_type": "custom", "source": "Synonyms"}
@@ -146,7 +156,12 @@ async def test_preview_without_mapping_reads_todays_headers(client: AsyncClient)
     (item,) = resp.json()["items"]
     assert (item["file_row"], item["name"], item["batch_ids"]) == (2, "A-1", [])
     assert item["external_ids"] == [
-        {"identifier": "64-17-5", "identifier_type": "cas_number", "source": None}
+        {
+            "identifier": "64-17-5",
+            "identifier_type": "cas_number",
+            "source": None,
+            "decides": True,
+        }
     ]
 
 

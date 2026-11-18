@@ -31,6 +31,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { MOLECULES_KEY } from "../hooks/query-keys";
+import { useCddImportPreview } from "../hooks/use-cdd-import-preview";
 import {
   type CddMoleculeIdentifierCheck,
   type CddMoleculeImportStatus,
@@ -47,6 +48,7 @@ import {
   usePlateImportHistory,
   useStartCddPlateImport,
 } from "../hooks/use-cdd-plate-import";
+import { PreviewTable } from "./preview-table";
 import { NotFoundIdentifiers, SelectedMoleculesImport } from "./selected-molecules-import";
 
 /** The Import Mode choices; "filtered" is "Specific molecules", the import of a pasted list. */
@@ -75,6 +77,7 @@ export function DataImportPage() {
     orgId: string;
     result: CddMoleculeIdentifierCheck;
   } | null>(null);
+  const previewMutation = useCddImportPreview();
   const [error, setError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
   const [report, setReport] = useState<CddMoleculeImportStatus["report"] | null>(null);
@@ -398,6 +401,20 @@ export function DataImportPage() {
                         )}
                         Start Import
                       </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          previewMutation.mutate({ names: isSpecific ? checked?.found : null })
+                        }
+                        disabled={
+                          previewMutation.isPending || (isSpecific && !checked?.found.length)
+                        }
+                      >
+                        {previewMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Preview
+                      </Button>
                       {isSpecific && checked && (
                         <span className="text-sm tabular-nums text-muted-foreground">
                           {checked.found.length.toLocaleString()} found
@@ -410,6 +427,20 @@ export function DataImportPage() {
                       </p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!isImportActive && previewMutation.isError && (
+                <p className="text-sm text-destructive">
+                  {previewMutation.error?.message ?? "Could not read a sample from the vault"}
+                </p>
+              )}
+              {!isImportActive && previewMutation.data && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    A sample of up to 20 molecules from the vault.
+                  </p>
+                  <PreviewTable items={previewMutation.data.items} createBatchOnDuplicate={false} />
                 </div>
               )}
 

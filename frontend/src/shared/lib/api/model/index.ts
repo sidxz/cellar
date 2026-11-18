@@ -581,6 +581,7 @@ export * from './positionValuesModel';
 export * from './preferencesResponse';
 export * from './previewBatchId';
 export * from './previewBulkRegistrationResponse';
+export * from './previewCddImportBody';
 export * from './previewCompoundId';
 export * from './previewImportRequest';
 export * from './previewItem';

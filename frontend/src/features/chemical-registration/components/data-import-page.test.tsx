@@ -495,3 +495,47 @@ describe("DataImportPage: import modes", () => {
     }
   });
 });
+
+describe("DataImportPage: Preview", () => {
+  const ITEM = {
+    row_index: 0,
+    file_row: 1,
+    name: "SACC-1",
+    smiles: "CCO",
+    external_ids: [
+      { identifier: "11", identifier_type: "cdd_molecule_id", source: "CDD import", decides: true },
+      { identifier: "JSF-1", identifier_type: "custom", source: "Alternate Names", decides: false },
+    ],
+    batch_ids: [{ identifier: "SACC-1-001", source: "CDD", decides: true }],
+    warnings: ["'X' is on 2 compounds in the vault; not stored as an ID"],
+  };
+
+  it("shows the sample, with warnings under the IDs, and forecasts stored-only IDs apart", async () => {
+    h.request
+      .mockReset()
+      .mockImplementation(async ({ url }: { url: string }) =>
+        url.endsWith("/cdd-import/preview")
+          ? { total_count: 1, error_count: 0, items: [ITEM] }
+          : { items: [] },
+      );
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText("A sample of up to 20 molecules from the vault.")).toBeVisible();
+    expect(screen.getByText("SACC-1")).toBeVisible();
+    expect(screen.getByText(/is on 2 compounds in the vault/)).toBeVisible();
+    await waitFor(() =>
+      expect(h.request).toHaveBeenCalledWith(
+        expect.objectContaining({ url: "/api/v1/molecules/preview-registration" }),
+      ),
+    );
+    const forecast = h.request.mock.calls.find(([r]) => r.url.endsWith("preview-registration"));
+    const sent = forecast?.[0].data.items[0];
+    expect(sent.external_ids.map((e: { identifier: string }) => e.identifier)).toEqual(["11"]);
+    expect(sent.stored_only_ids).toEqual(["JSF-1"]);
+    expect(sent.batch_ids).toEqual(["SACC-1-001"]);
+    expect(sent.stored_only_batch_ids).toBeUndefined();
+    expect(h.request.mock.calls[0][0].data).toEqual({ names: null });
+  });
+});

@@ -9,4 +9,5 @@ export interface PreviewCompoundId {
   identifier: string;
   identifier_type: string;
   source?: string | null;
+  decides?: boolean;
 }

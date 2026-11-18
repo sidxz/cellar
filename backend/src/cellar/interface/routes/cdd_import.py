@@ -14,6 +14,7 @@ from cellar.application.cdd_import.mapper import (
     MappedReadout,
     MappingWarning,
 )
+from cellar.application.cdd_import.preview_cdd_import import PreviewCddImportQuery
 from cellar.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImportQuery
 from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
@@ -22,9 +23,14 @@ from cellar.interface.dependencies import (
     AuthDep,
     ImportCddProtocolDep,
     ListCddProtocolsDep,
+    PreviewCddImportDep,
     PreviewCddProtocolImportDep,
 )
 from cellar.interface.error_handlers import result_to_response
+from cellar.interface.routes.bulk_registration import (
+    PreviewBulkRegistrationResponse,
+    preview_response,
+)
 from cellar.interface.routes.protocols import ProtocolResponse
 
 router = APIRouter(prefix="/api/v1/cdd-import", tags=["cdd-import"])
@@ -168,3 +174,18 @@ async def import_cdd_protocol(
     )
     protocol = result_to_response(await use_case(command, auth=auth))
     return ProtocolResponse.from_domain(protocol)
+
+
+class PreviewCddImportBody(BaseModel):
+    names: list[str] | None = None  # molecule names or synonyms; None = the vault's first
+
+
+@router.post("/preview", response_model=PreviewBulkRegistrationResponse)
+async def preview_cdd_import(
+    auth: AuthDep,
+    use_case: PreviewCddImportDep,
+    body: PreviewCddImportBody,
+) -> PreviewBulkRegistrationResponse:
+    """A sample of up to 20 vault molecules, mapped as an import would map them. Stores nothing."""
+    query = PreviewCddImportQuery(workspace_id=auth.workspace_id, names=body.names)
+    return preview_response(result_to_response(await use_case(query, auth=auth)))

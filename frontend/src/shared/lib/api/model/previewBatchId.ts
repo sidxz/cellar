@@ -8,4 +8,6 @@
 export interface PreviewBatchId {
   identifier: string;
   source: string;
+  identifier_type?: string | null;
+  decides?: boolean;
 }

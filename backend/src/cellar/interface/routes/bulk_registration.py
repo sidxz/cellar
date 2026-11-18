@@ -32,6 +32,7 @@ from cellar.application.chemical_registration.list_bulk_registration_items impor
     ListBulkRegistrationItemsQuery,
 )
 from cellar.application.chemical_registration.preview_bulk_registration_file import (
+    PreviewBulkRegistrationFileOutcome,
     PreviewBulkRegistrationFileQuery,
 )
 from cellar.application.chemical_registration.start_bulk_registration import (
@@ -308,11 +309,15 @@ class PreviewCompoundId(BaseModel):
     identifier: str
     identifier_type: str
     source: str | None = None
+    # False = stored on the compound but never decides whether it is the same compound.
+    decides: bool = True
 
 
 class PreviewBatchId(BaseModel):
     identifier: str
     source: str
+    identifier_type: str | None = None
+    decides: bool = True
 
 
 class PreviewItem(BaseModel):
@@ -341,6 +346,38 @@ class PreviewBulkRegistrationResponse(BaseModel):
     total_count: int
     error_count: int
     items: list[PreviewItem]
+
+
+def preview_response(
+    outcome: PreviewBulkRegistrationFileOutcome,
+) -> PreviewBulkRegistrationResponse:
+    """Preview rows for the wizard (shared by the file and CDD previews)."""
+    return PreviewBulkRegistrationResponse(
+        total_count=outcome.total_count,
+        error_count=outcome.error_count,
+        items=[
+            PreviewItem(
+                row_index=i.row_index,
+                file_row=i.file_row,
+                name=i.name,
+                smiles=i.smiles,
+                molecule_type=i.molecule_type,
+                external_ids=[PreviewCompoundId(**e) for e in i.external_ids],
+                batch_ids=[PreviewBatchId(**b) for b in i.batch_ids],
+                batch_problem=i.batch_problem,
+                warnings=i.warnings,
+                amount_value=i.amount_value,
+                amount_unit=i.amount_unit,
+                salt_code=i.salt_code,
+                salt_stoichiometry=i.salt_stoichiometry,
+                purity=i.purity,
+                batch_source=i.batch_source,
+                appearance=i.appearance,
+                error=i.error,
+            )
+            for i in outcome.items
+        ],
+    )
 
 
 def _parse_column_mapping(raw: str | None) -> ColumnMapping | None:
@@ -408,32 +445,7 @@ async def preview_bulk_registration(
     result = await preview_uc(query, auth=auth)
     outcome = result_to_response(result)
 
-    return PreviewBulkRegistrationResponse(
-        total_count=outcome.total_count,
-        error_count=outcome.error_count,
-        items=[
-            PreviewItem(
-                row_index=i.row_index,
-                file_row=i.file_row,
-                name=i.name,
-                smiles=i.smiles,
-                molecule_type=i.molecule_type,
-                external_ids=[PreviewCompoundId(**e) for e in i.external_ids],
-                batch_ids=[PreviewBatchId(**b) for b in i.batch_ids],
-                batch_problem=i.batch_problem,
-                warnings=i.warnings,
-                amount_value=i.amount_value,
-                amount_unit=i.amount_unit,
-                salt_code=i.salt_code,
-                salt_stoichiometry=i.salt_stoichiometry,
-                purity=i.purity,
-                batch_source=i.batch_source,
-                appearance=i.appearance,
-                error=i.error,
-            )
-            for i in outcome.items
-        ],
-    )
+    return preview_response(outcome)
 
 
 # ---------------------------------------------------------------------------
