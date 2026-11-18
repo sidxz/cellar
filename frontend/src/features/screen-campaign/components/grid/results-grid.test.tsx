@@ -266,4 +266,18 @@ describe("CompoundValueCell facts", () => {
     fireEvent.click(screen.getByRole("button", { name: "13.6 uM" }));
     expect(screen.getByText("the facts")).toBeInTheDocument();
   });
+
+  it("line 1 is the column's own (renamed) name, line 2 the short label", () => {
+    const renamed = { ...describedColumn, label: "Retest inhibition" } as CampaignChannelResponse;
+    render(
+      <StageColumnHeader
+        readout={renamed.label}
+        shortLabel={SHORT}
+        tooltip={columnTooltip(renamed, "Kinase Panel")}
+      />,
+    );
+    expect(screen.getByText("Retest inhibition")).toBeInTheDocument();
+    expect(screen.queryByText("% Inhibition")).not.toBeInTheDocument();
+    expect(screen.getByText(SHORT)).toBeInTheDocument();
+  });
 });

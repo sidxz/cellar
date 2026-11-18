@@ -538,7 +538,7 @@ export function ResultsGridV2({
         const protocolName = protocolNameById.get(ch.protocol_id);
 
         groupChildren.push({
-          headerName: readout,
+          headerName: ch.label,
           colId: `${ch.id}_value`,
           width: 170,
           minWidth: 150,
@@ -547,7 +547,7 @@ export function ResultsGridV2({
           headerComponentParams: {
             innerHeaderComponent: StageColumnHeader,
             innerHeaderComponentParams: {
-              readout,
+              readout: ch.label, // the scientist's own name for the column
               shortLabel: ch.description?.short_label,
               tooltip: columnTooltip(ch, protocolName),
               color: colorByProtocol.get(ch.protocol_id),
