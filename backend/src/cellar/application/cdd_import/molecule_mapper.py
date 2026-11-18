@@ -34,6 +34,7 @@ __all__ = [
     "MappedMolecule",
     "MoleculeMapWarning",
     "compute_labels",
+    "compute_names",
     "map_cdd_molecules",
 ]
 
@@ -98,18 +99,23 @@ def map_cdd_molecules(
     id_mapping: EntityMapping,
     batch_id_mapping: EntityMapping | None,
     labels: Mapping[str, int] | None = None,
+    names: Mapping[str, int] | None = None,
 ) -> tuple[list[MappedMolecule], list[MoleculeMapWarning]]:
     """Map CDD molecule objects with the registration ``mapping``.
 
     ``id_mapping`` / ``batch_id_mapping``: the molecule / batch ``EntityMapping``
     (vault id field, its storage, where batches are); no batch mapping, no batches.
     ``labels``: ``compute_labels`` of the run — those compound IDs are not stored.
+    ``names``: ``compute_names`` of the run — a compound ID that is another molecule's
+    name or vault id is not stored.
     """
     cols = _split(mapping)
     mapped: list[MappedMolecule] = []
     warnings: list[MoleculeMapWarning] = []
     for obj in objects:
-        mol, mol_warnings = _map_single(obj, cols, id_mapping, batch_id_mapping, labels or {})
+        mol, mol_warnings = _map_single(
+            obj, cols, id_mapping, batch_id_mapping, labels or {}, names or {}
+        )
         mapped.append(mol)
         warnings.extend(mol_warnings)
     return mapped, warnings
@@ -125,6 +131,29 @@ def compute_labels(objects: list[dict[str, Any]], mapping: ColumnMapping) -> dic
         row = _row(_getter(obj, 0), molecule_cols)
         counts.update({e["identifier"].lower() for e in _compound_ids(row)})
     return {v: n for v, n in counts.items() if n > 1}
+
+
+def compute_names(
+    objects: list[dict[str, Any]], mapping: ColumnMapping, id_mapping: EntityMapping
+) -> dict[str, int]:
+    """Each molecule's deciding values — its name and vault id, lower-cased — → its vault
+    id. Stored on another compound, such a value would make that molecule's own row
+    find (or conflict with) the wrong compound, whichever is read first.
+
+    ponytail: only the run's own molecules are known; a value equal to the name of a
+    molecule outside the run (an earlier Sync / Specific run, or one not read yet) is
+    still stored when free. A Full run sees every name; a vault-wide name index would
+    close the gap for the others.
+    """
+    molecule_cols, _, _ = _split(mapping)
+    names: dict[str, int] = {}
+    for obj in objects:
+        entity_id: int = _resolve_field(obj, id_mapping.id_field) or 0
+        row = _row(_getter(obj, entity_id), molecule_cols)
+        for value in (row.name, str(entity_id) if entity_id else None):
+            if value:
+                names.setdefault(value.lower(), entity_id)
+    return names
 
 
 # ---------------------------------------------------------------------------
@@ -247,6 +276,7 @@ def _map_single(
     id_mapping: EntityMapping,
     batch_id_mapping: EntityMapping | None,
     labels: Mapping[str, int],
+    names: Mapping[str, int],
 ) -> tuple[MappedMolecule, list[MoleculeMapWarning]]:
     molecule_cols, deciding_cols, batch_cols = cols
     entity_id: int = _resolve_field(obj, id_mapping.id_field) or 0
@@ -270,8 +300,14 @@ def _map_single(
     )
     not_stored = list(row.warnings)
     for e in _compound_ids(row):
-        n = labels.get(e["identifier"].lower())
-        if n:
+        value = e["identifier"].lower()
+        n = labels.get(value)
+        if names.get(value, entity_id) != entity_id:
+            not_stored.append(
+                f"'{e['identifier']}' is the name of another compound in the vault; "
+                "not stored as an ID"
+            )
+        elif n:
             not_stored.append(
                 f"'{e['identifier']}' is on {n} compounds in the vault; not stored as an ID"
             )

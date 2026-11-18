@@ -10,6 +10,7 @@ from temporalio.exceptions import ApplicationError
 from temporalio.testing import ActivityEnvironment
 
 from cellar.application.cdd_import.registration_mapping import default_cdd_registration_mapping
+from cellar.domain.workspace_config.data_source import get_default_template
 from cellar.infrastructure.temporal.activities import cdd_fetch
 from cellar.infrastructure.temporal.activities.cdd_fetch import CddFetchActivities
 from cellar.infrastructure.temporal.activities.dtos import CddPollExportInput
@@ -59,6 +60,7 @@ def _poll(
     vault: _Vault | None = None,
     beats: list | None = None,
     registration_mapping: list[dict] | None = None,
+    entity_mappings: list[dict] | None = None,
 ):
     activities = CddFetchActivities(
         session_factory=None, secret_provider=_Secrets(), cdd_client=vault or _Vault(status)
@@ -69,6 +71,7 @@ def _poll(
         vault_id="4443",
         export_id=77,
         registration_mapping=registration_mapping,
+        entity_mappings=entity_mappings,
     )
     env = ActivityEnvironment()
     if beats is not None:
@@ -104,14 +107,17 @@ class _MoleculeVault(_Vault):
         Path(dest_path).write_text(json.dumps({"count": 2, "objects": objects}))
 
 
-async def test_a_molecule_export_with_a_mapping_gets_its_labels(monkeypatch, tmp_path):
+async def test_a_molecule_export_with_a_mapping_gets_its_labels_and_names(monkeypatch, tmp_path):
     monkeypatch.setenv("STORAGE_ROOT", str(tmp_path))
     out = await _poll(
         "finished",
         vault=_MoleculeVault("finished"),
         registration_mapping=default_cdd_registration_mapping(),
+        entity_mappings=[em.to_dict() for em in get_default_template("cdd_vault")],
     )
     assert json.loads((Path(out.storage_path) / "labels.json").read_text()) == {"series 1": 2}
+    names = json.loads((Path(out.storage_path) / "names.json").read_text())
+    assert names == {"a": 1, "1": 1, "b": 2, "2": 2}
 
 
 @pytest.mark.parametrize("status", ["failed", "canceled"])
@@ -140,7 +146,9 @@ async def test_parse_keeps_heartbeating_off_the_event_loop(monkeypatch, tmp_path
     beats: list = []
     beats_during_parse = 0
 
-    def slow_split(raw_path: Path, export_dir: Path, mapping=None) -> tuple[int, int]:
+    def slow_split(
+        raw_path: Path, export_dir: Path, mapping=None, id_mapping=None
+    ) -> tuple[int, int]:
         nonlocal beats_during_parse
         before = len(beats)
         time.sleep(0.05)  # blocks its thread, the way parsing a huge export does

@@ -133,7 +133,12 @@ def run_cdd(session_factory, ws: Ws, tmp_path: Path):  # type: ignore[no-untyped
         export_dir.mkdir()
         raw = export_dir / "raw_export.json"
         raw.write_text(json.dumps({"count": len(objects), "objects": objects}))
-        _split_export(raw, export_dir, ColumnMapping.from_dict({"columns": MAPPING}))
+        _split_export(
+            raw,
+            export_dir,
+            ColumnMapping.from_dict({"columns": MAPPING}),
+            get_default_template("cdd_vault")[0],  # the molecule's vault id
+        )
         env = ActivityEnvironment()
         chunk = await env.run(
             CddFetchActivities(None, None, None).load_export_chunk,  # type: ignore[arg-type]
@@ -345,7 +350,8 @@ async def test_report_counts_what_was_added_and_skipped(ws: Ws, run_cdd) -> None
     report = run_cdd.report
     assert (report["compounds_added"], report["compounds_matched"]) == (1, 0)
     assert (report["batches_created"], report["batches_matched"]) == (2, 0)
-    assert report["ids_added"] == 6  # three IDs on each batch
+    # three IDs on each batch; the compound's name, vault id, Alternate Name and CAS
+    assert report["ids_added"] == 6 + 4
     assert (report["values_skipped"], report["problems"], report["problem_lines"]) == (0, 0, [])
 
     other = molecule(8, "SACC-1", "CCO", alt="Paracetamol", batches=[batch(1, "SACC-1-001")])
@@ -357,3 +363,121 @@ async def test_report_counts_what_was_added_and_skipped(ws: Ws, run_cdd) -> None
     assert report["problems"] == 0
     (line,) = report["problem_lines"]
     assert line.startswith("SACC-1: 'Paracetamol' is already an ID of ")
+
+
+async def _reg(session_factory, molecule_id: uuid.UUID) -> str:  # type: ignore[no-untyped-def]
+    async with session_factory() as s:
+        return (
+            await s.execute(
+                sa.text("SELECT registration_number FROM molecules WHERE id = :m"),
+                {"m": molecule_id},
+            )
+        ).scalar_one()
+
+
+async def test_fill_in_counts_compound_and_batch_ids_added(ws: Ws, run_cdd) -> None:
+    """A re-run that adds one Alternate Name to the compound and one LGCY Batch Name to
+    its batch reports 2 IDs added."""
+    await run_cdd([molecule(9, "SACC-9", "CCN", batches=[batch(90, "SACC-9-001")])])
+
+    await run_cdd(
+        [molecule(9, "SACC-9", "CCN", alt="ALT-9", batches=[batch(90, "SACC-9-001", "LGCY-9")])]
+    )
+
+    assert run_cdd.report["ids_added"] == 2
+
+
+async def test_molecule_warnings_and_problems_count_once(session_factory, ws: Ws, run_cdd) -> None:
+    """A molecule's skipped value or conflict is one line, not one per batch."""
+    await run_cdd(
+        [molecule(8, "SACC-1", "CCO", alt="Paracetamol", batches=[batch(1, "SACC-1-001")])]
+    )
+    two = [batch(400, "SACC-40-001"), batch(401, "SACC-40-002")]
+
+    first, second = await run_cdd(
+        [molecule(40, "SACC-40", "CCCC", alt="Paracetamol", batches=two)]
+    )
+
+    assert len(first.warnings) == 1 and second.warnings == []
+    assert run_cdd.report["values_skipped"] == 1
+    assert len(run_cdd.report["problem_lines"]) == 1
+
+    # SACC-40's name with another structure and another vault id: a conflict, both rows
+    await run_cdd(
+        [molecule(41, "SACC-40", "CCCCC", batches=[batch(410, "X-001"), batch(411, "X-002")])]
+    )
+    assert run_cdd.report["problems"] == 1
+    assert len(run_cdd.report["problem_lines"]) == 1
+
+
+RUN_NAME_ALT = "'{v}' is the name of another compound in the vault; not stored as an ID"
+
+
+@pytest.mark.parametrize(
+    "smiles", [("CCCl", "CCBr"), (None, None)], ids=["disclosed", "undisclosed"]
+)
+async def test_a_name_of_another_molecule_in_the_run_is_not_stored(
+    session_factory, ws: Ws, run_cdd, smiles
+) -> None:
+    """B is read before A and lists A's name and vault id among its Alternate Names:
+    neither is stored on B, so A registers as itself."""
+    b = molecule(
+        31, "SACC-B", smiles[0], alt="SACC-A; 30; ALT-B", batches=[batch(310, "SACC-B-1")]
+    )
+    a = molecule(30, "SACC-A", smiles[1], batches=[batch(300, "SACC-A-1")])
+
+    rb, ra = await run_cdd([b, a])
+
+    assert (rb.error, ra.error) == (None, None)
+    assert rb.molecule_id != ra.molecule_id
+    assert len(await _molecules(session_factory, ws)) == 2
+    assert rb.warnings == [RUN_NAME_ALT.format(v="SACC-A"), RUN_NAME_ALT.format(v="30")]
+    b_ids = {i for i, _, _ in await _compound_ids(session_factory, uuid.UUID(rb.molecule_id))}
+    assert "ALT-B" in b_ids and not {"SACC-A", "30"} & b_ids
+    a_ids = {i for i, _, _ in await _compound_ids(session_factory, uuid.UUID(ra.molecule_id))}
+    assert {"SACC-A", "30"} <= a_ids
+
+
+VAULT_ID_7 = [{"identifier": "7", "identifier_type": "cdd_molecule_id"}]
+
+
+async def test_vault_id_decides_over_a_structure_match(session_factory, ws: Ws, run_cdd) -> None:
+    """Decision 6: X holds MOL's vault id and name, Y has MOL's structure. MOL's
+    batches go on X, with a warning; nothing conflicts or merges."""
+    x, y = await _run_worker(
+        session_factory,
+        ws,
+        [row(NAME, "CCOC", external_ids=VAULT_ID_7), row("OTHER-1", SMILES)],
+        None,
+    )
+
+    first, second = await run_cdd([MOL])
+
+    assert (first.error, second.error) == (None, None)
+    assert {first.molecule_id, second.molecule_id} == {str(x.molecule_id)}
+    y_reg = await _reg(session_factory, y.molecule_id)
+    assert first.warnings[0] == (
+        f"Structure also matches {y_reg}; not merged (likely a double registration in the vault)"
+    )
+    batches = await _batches(session_factory, ws)
+    assert {batches[uuid.UUID(r.batch_id)].molecule_id for r in (first, second)} == {x.molecule_id}
+    assert len(await _molecules(session_factory, ws)) == 2
+
+
+async def test_vault_id_decides_when_structures_differ(session_factory, ws: Ws, run_cdd) -> None:
+    """X holds MOL's vault id and name with another structure, no compound has MOL's:
+    MOL goes on X, which keeps its structure. A vault molecule without a structure goes
+    on X too, though X has one."""
+    (x,) = await _run_worker(
+        session_factory, ws, [row(NAME, "CCOC", external_ids=VAULT_ID_7)], None
+    )
+    x_reg = await _reg(session_factory, x.molecule_id)
+
+    first, _ = await run_cdd([MOL])
+    assert first.error is None and first.molecule_id == str(x.molecule_id)
+    assert first.warnings[0] == f"Structure differs from {x_reg}'s; not changed"
+
+    undisclosed = molecule(7, NAME, None, batches=[batch(13252, f"{NAME}-003")])
+    (third,) = await run_cdd([undisclosed])
+    assert third.error is None and third.molecule_id == str(x.molecule_id)
+    assert len(await _molecules(session_factory, ws)) == 1

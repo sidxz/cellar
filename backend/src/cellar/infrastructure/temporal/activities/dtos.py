@@ -276,8 +276,10 @@ class CddPollExportInput:
     secret_ref: str
     vault_id: str
     export_id: int
-    # A molecule export's registration mapping: the labels in it are found when it is split.
+    # A molecule export's registration mapping (and its molecule EntityMapping, for the
+    # vault id): the labels and names in it are found when it is split.
     registration_mapping: list[dict] | None = None
+    entity_mappings: list[dict] | None = None
 
 
 @dataclass

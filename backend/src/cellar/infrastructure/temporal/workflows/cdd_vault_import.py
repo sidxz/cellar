@@ -392,6 +392,7 @@ class CddVaultImportWorkflow:
                         vault_id=input.cdd_vault_id,
                         export_id=export_result.export_id,
                         registration_mapping=input.registration_mapping,
+                        entity_mappings=input.entity_mappings,
                     ),
                     start_to_close_timeout=timedelta(minutes=60),
                     heartbeat_timeout=timedelta(seconds=60),

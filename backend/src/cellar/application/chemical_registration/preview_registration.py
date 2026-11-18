@@ -58,6 +58,9 @@ class PreviewRegistrationItem:
     # compound / batch holds becomes a warning.
     stored_only_ids: list[str] = field(default_factory=list)
     stored_only_batch_ids: list[str] = field(default_factory=list)
+    # The row's vault molecule id(s) (``cdd_molecule_id``), also in ``external_ids``:
+    # the compound holding one is the row's compound.
+    vault_ids: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -137,7 +140,9 @@ class PreviewRegistration:
         )
 
         if item.smiles is None:
-            forecast = await classify_undisclosed(self._repo, workspace_id, identifiers)
+            forecast = await classify_undisclosed(
+                self._repo, workspace_id, identifiers, vault_ids=item.vault_ids
+            )
             compound_key = "ids:" + "|".join(sorted(identifiers)) if identifiers else None
         else:
             # RDKit work is synchronous and ~ms per structure; 500 in a row would
@@ -151,7 +156,12 @@ class PreviewRegistration:
                     index, None, error="Structure processor returned no InChI key"
                 )
             forecast = await classify_disclosed(
-                self._repo, workspace_id, inchi_key, identifiers, detect_undisclosed=True
+                self._repo,
+                workspace_id,
+                inchi_key,
+                identifiers,
+                detect_undisclosed=True,
+                vault_ids=item.vault_ids,
             )
             compound_key = inchi_key
 
@@ -160,9 +170,12 @@ class PreviewRegistration:
         this = matched.registration_number.value if matched else item.name or "the new compound"
         held = await held_elsewhere(self._repo, workspace_id, item.stored_only_ids, matched_id)
         warnings = [
-            skipped_id_warning(v, held[v], this)
-            for v in dict.fromkeys(item.stored_only_ids)
-            if v in held
+            *forecast.warnings,
+            *(
+                skipped_id_warning(v, held[v], this)
+                for v in dict.fromkeys(item.stored_only_ids)
+                if v in held
+            ),
         ]
 
         match = await self._match_batch(workspace_id, matched_id, item)

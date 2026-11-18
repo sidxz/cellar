@@ -467,6 +467,40 @@ async def test_preview_registration_stored_only_ids_held_elsewhere_warn_not_conf
     assert batch_deciding["batch_action"] == "problem"
 
 
+async def test_preview_registration_vault_id_decides_over_a_structure_match(
+    client: AsyncClient,
+) -> None:
+    """Decision 6, forecast side: X holds the vault id and name, Y the structure; the
+    forecast names X, with the warning a run gives."""
+    org = await _org(client)
+    smiles_y = "CCCCCCCCCCCCCCCCCCCCCCCCCCO"
+
+    async def register(name: str, smiles: str, ids: list[dict]) -> dict:
+        resp = await client.post(
+            "/api/v1/molecules",
+            json={"name": name, "smiles": smiles, "external_ids": ids, "originating_org_id": org},
+        )
+        assert resp.status_code == 201, resp.text
+        return resp.json()
+
+    vault_id = [{"identifier": "990001", "identifier_type": "cdd_molecule_id"}]
+    x = await register("VX-0001", smiles_y + "C", vault_id)
+    y = await register("VY-0001", smiles_y, [])
+
+    resp = await client.post(
+        "/api/v1/molecules/preview-registration",
+        json={"items": [{"name": "VX-0001", "smiles": smiles_y, "external_ids": vault_id}]},
+    )
+
+    assert resp.status_code == 200, resp.text
+    (item,) = resp.json()["items"]
+    assert (item["action"], item["matched_molecule_id"]) == ("deduplicated", x["molecule"]["id"])
+    assert item["warnings"] == [
+        f"Structure also matches {y['molecule']['registration_number']}; not merged "
+        "(likely a double registration in the vault)"
+    ]
+
+
 # ---------------------------------------------------------------------------
 # /bulk-registration-mappings
 # ---------------------------------------------------------------------------

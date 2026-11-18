@@ -15,8 +15,15 @@ from returns.result import Failure, Result, Success
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
 from cellar.application.cdd_import.errors import CddAuthError, CddConnectionError, CddNotFoundError
 from cellar.application.cdd_import.gateway import CddSampleGateway
-from cellar.application.cdd_import.molecule_identifiers import clean_identifiers
-from cellar.application.cdd_import.molecule_mapper import compute_labels, map_cdd_molecules
+from cellar.application.cdd_import.molecule_identifiers import (
+    clean_identifiers,
+    match_identifiers,
+)
+from cellar.application.cdd_import.molecule_mapper import (
+    compute_labels,
+    compute_names,
+    map_cdd_molecules,
+)
 from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.application.chemical_registration.preview_bulk_registration_file import (
     ParsedItemDTO,
@@ -80,7 +87,8 @@ class PreviewCddImport:
             names = clean_identifiers(input.names or [])
             if names:
                 found = await self._gateway.find_molecules_by_names(vault_id, api_key, names)
-                molecule_ids = [m["id"] for m in found][:SAMPLE_SIZE]
+                # As a run attributes them: a looser vault match is left out.
+                molecule_ids = match_identifiers(names, found).molecule_ids[:SAMPLE_SIZE]
                 if not molecule_ids:
                     return Failure(ValidationError("None of those molecules are in the vault"))
             objects = await self._gateway.sample_molecules(
@@ -100,6 +108,7 @@ class PreviewCddImport:
             id_mapping=id_mapping,
             batch_id_mapping=mappings.get("batch"),
             labels=compute_labels(objects, mapping),
+            names=compute_names(objects, mapping, id_mapping),
         )
 
         items: list[ParsedItemDTO] = []

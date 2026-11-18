@@ -151,8 +151,13 @@ class RegistrationActivities:
         )
 
         output = ChunkOutput()
+        # A CDD molecule is one row per batch, all with its row_index: what is said about
+        # the compound goes on its first row only, so a report counts it once.
+        seen_rows: set[int] = set()
 
         for item in input.items:
+            first_row = item.row_index not in seen_rows
+            seen_rows.add(item.row_index)
             if item.error:
                 # The parser could not read this row; it registers nothing.
                 output.error += 1
@@ -277,9 +282,13 @@ class RegistrationActivities:
                     else None,
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
-                    warnings=[*item.warnings, *outcome.skipped_ids, *batch_warnings],
+                    warnings=[
+                        *item.warnings,
+                        *(outcome.skipped_ids if first_row else ()),
+                        *batch_warnings,
+                    ],
                     batch_action=batch_action,
-                    ids_added=ids_added,
+                    ids_added=outcome.ids_added + ids_added,
                 )
             )
 
@@ -319,13 +328,19 @@ def chunk_report(output: ChunkOutput, names: dict[int, str]) -> dict:
     """The run-report delta for one chunk (see ``CddMoleculeImport.record_report``).
 
     A problem is a row that failed, a compound whose batch could not be made, or a
-    conflict; a skipped value is any warning ("not stored"). Both get a line.
+    conflict; a skipped value is any warning ("not stored"). Both get a line. A
+    compound that failed is one problem, not one per batch row.
     """
     lines: list[str] = []
     problems = 0
+    failed: set[int] = set()
     for r in output.results:
         name = names.get(r.row_index, f"row {r.row_index + 1}")
         problem = r.error or (r.conflict_reason if r.action == "conflict" else None)
+        if not r.success:
+            if r.row_index in failed:
+                continue
+            failed.add(r.row_index)
         if problem:
             problems += 1
             lines.append(f"{name}: {problem}")

@@ -111,3 +111,39 @@ async def test_names_matching_nothing_is_a_validation_error() -> None:
 async def test_viewer_cannot_preview() -> None:
     with pytest.raises(AuthorizationError):
         await _uc(FakeVault([]))(PreviewCddImportQuery(workspace_id=WS), auth=_auth("viewer"))
+
+
+class LooseVault(FakeVault):
+    """The vault's name search also returns molecules it matched more loosely."""
+
+    async def find_molecules_by_names(self, vault_id, api_key, names):
+        return [
+            m for m in self.molecules if any(n.casefold() in m["name"].casefold() for n in names)
+        ]
+
+
+@pytest.mark.asyncio
+async def test_names_take_only_the_molecules_they_name_as_a_run_does() -> None:
+    vault = LooseVault([molecule(2, "SACC-2", "CCN"), molecule(20, "SACC-20", "CCC")])
+    q = PreviewCddImportQuery(workspace_id=WS, names=["SACC-2"])
+    out = (await _uc(vault)(q, auth=_auth())).unwrap()
+
+    assert [i.name for i in out.items] == ["SACC-2"]
+    assert vault.sampled == [([2], SAMPLE_SIZE)]
+
+
+@pytest.mark.asyncio
+async def test_a_name_of_another_sampled_molecule_is_not_stored() -> None:
+    vault = FakeVault(
+        [
+            molecule(31, "SACC-B", "CCCl", molecule_fields={"Alternate Names": "SACC-A; ALT-B"}),
+            molecule(30, "SACC-A", "CCBr"),
+        ]
+    )
+    out = (await _uc(vault)(PreviewCddImportQuery(workspace_id=WS), auth=_auth())).unwrap()
+
+    b = out.items[0]
+    assert [e["identifier"] for e in b.external_ids] == ["31", "ALT-B"]
+    assert b.warnings == [
+        "'SACC-A' is the name of another compound in the vault; not stored as an ID"
+    ]

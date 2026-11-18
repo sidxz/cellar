@@ -25,7 +25,11 @@ from temporalio import activity
 from temporalio.exceptions import ApplicationError
 
 from cellar.application.cdd_import.molecule_identifiers import match_identifiers
-from cellar.application.cdd_import.molecule_mapper import compute_labels, map_cdd_molecules
+from cellar.application.cdd_import.molecule_mapper import (
+    compute_labels,
+    compute_names,
+    map_cdd_molecules,
+)
 from cellar.application.cdd_import.plate_mapper import map_cdd_plate
 from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.domain.shared.secret_provider import SecretProvider
@@ -58,6 +62,7 @@ logger = structlog.get_logger(__name__)
 _HEARTBEAT_EVERY = 10.0
 
 _LABELS = "labels.json"
+_NAMES = "names.json"
 
 
 async def _while_heartbeating[T](work: Awaitable[T], details: str) -> T:
@@ -74,14 +79,18 @@ async def _while_heartbeating[T](work: Awaitable[T], details: str) -> T:
 
 
 def _split_export(
-    raw_path: Path, export_dir: Path, mapping: ColumnMapping | None = None
+    raw_path: Path,
+    export_dir: Path,
+    mapping: ColumnMapping | None = None,
+    id_mapping: EntityMapping | None = None,
 ) -> tuple[int, int]:
     """Parse a downloaded export into a manifest plus chunk files. Blocking: run it in a thread.
 
-    With a molecule export's registration ``mapping``, also writes ``labels.json``: the
-    compound IDs on 2+ molecules of this export (``compute_labels``), which
-    ``load_export_chunk`` does not store. A Full run sees the whole vault; Sync and
-    Specific molecules only what they read.
+    With a molecule export's registration ``mapping`` (and its molecule ``id_mapping``),
+    also writes what ``load_export_chunk`` does not store: ``labels.json``, the compound
+    IDs on 2+ molecules of this export (``compute_labels``), and ``names.json``, every
+    molecule's name and vault id (``compute_names``). A Full run sees the whole vault;
+    Sync and Specific molecules only what they read.
 
     Returns ``(count, number_of_objects)``.
     """
@@ -96,6 +105,9 @@ def _split_export(
     (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
     if mapping is not None:
         (export_dir / _LABELS).write_text(json.dumps(compute_labels(objects, mapping)))
+        if id_mapping is not None:
+            names = compute_names(objects, mapping, id_mapping)
+            (export_dir / _NAMES).write_text(json.dumps(names))
 
     # Split into chunk files
     for i in range(0, len(objects), CHUNK_SIZE):
@@ -254,8 +266,16 @@ class CddFetchActivities:
             if input.registration_mapping
             else None
         )
+        id_mapping = next(
+            (
+                em
+                for em in map(EntityMapping.from_dict, input.entity_mappings or [])
+                if em.entity_type == "molecule"
+            ),
+            None,
+        )
         count, object_count = await _while_heartbeating(
-            asyncio.to_thread(_split_export, raw_path, export_dir, mapping),
+            asyncio.to_thread(_split_export, raw_path, export_dir, mapping, id_mapping),
             f"export {input.export_id}: parsing",
         )
         logger.info("cdd_fetch.export_parsed", export_id=input.export_id, object_count=count)
@@ -343,15 +363,18 @@ class CddFetchActivities:
         }
         if "molecule" not in mappings:
             raise ValueError("No molecule EntityMapping found in entity_mappings")
-        labels_path = Path(input.storage_path) / _LABELS
-        labels = json.loads(labels_path.read_text()) if labels_path.exists() else {}
+
+        def _read(name: str) -> dict:
+            path = Path(input.storage_path) / name
+            return json.loads(path.read_text()) if path.exists() else {}
 
         mapped, _ = map_cdd_molecules(
             chunk_objects,
             ColumnMapping.from_dict({"columns": input.registration_mapping}),
             id_mapping=mappings["molecule"],
             batch_id_mapping=mappings.get("batch"),
-            labels=labels,
+            labels=_read(_LABELS),
+            names=_read(_NAMES),
         )
 
         items: list[dict] = []

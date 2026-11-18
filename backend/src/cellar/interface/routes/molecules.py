@@ -660,6 +660,11 @@ async def preview_registration(
                 batch_ids=item.batch_ids,
                 stored_only_ids=item.stored_only_ids,
                 stored_only_batch_ids=item.stored_only_batch_ids,
+                vault_ids=[
+                    e.identifier
+                    for e in item.external_ids
+                    if e.identifier_type == "cdd_molecule_id"
+                ],
             )
             for item in body.items
         ],
