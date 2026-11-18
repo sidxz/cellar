@@ -13,6 +13,7 @@ import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import { TEST_CONCENTRATION } from "@/features/screening-assay/lib/test-concentration";
 import type { RunResponse } from "@/shared/lib/api/model";
 import { getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions } from "@/shared/lib/api/runs/runs";
 import { formatDate } from "@/shared/lib/format-date";
@@ -28,6 +29,10 @@ export interface RunLabel {
   text: string;
   /** "created 14:32 · 3f2a9c1b": tells same-day runs apart (secondary text). */
   detail: string;
+  /** The run's Test concentration as recorded ("10 µM"), when it has one. */
+  concentration?: string;
+  /** How many compounds the run measured, when known. */
+  compoundCount?: number;
 }
 
 const timeOfDay = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
@@ -84,7 +89,13 @@ export function useCampaignRunLabels(campaign: CampaignResponse): (runId: string
     const snap = snapshots.get(runId);
     const protocolId = run?.protocol_id ?? snap?.protocolId;
     const date = run?.run_date ?? snap?.date;
+    const concentration = run?.conditions?.[TEST_CONCENTRATION];
     return {
+      concentration:
+        concentration != null && String(concentration).trim() !== ""
+          ? String(concentration).trim()
+          : undefined,
+      compoundCount: run?.molecule_count,
       protocolName: (protocolId && protocolNames.get(protocolId)) || "Protocol",
       color: protocolId ? colors.get(protocolId) : undefined,
       text: date ? `Run on ${formatDate(date)}` : `Run ${shortId(runId)}`,

@@ -27,6 +27,21 @@ vi.mock("@/shared/lib/api/campaigns/campaigns", async (importOriginal) => ({
   }),
 }));
 
+// The runs the concentration control reads: two at the chosen 10 µM, one at
+// 50 µM, one with no dose recorded, and one at 50 µM on another stage.
+vi.mock("@/shared/lib/api/runs/runs", () => ({
+  getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions: (id: string) => ({
+    queryKey: ["runs", id],
+    queryFn: async () => [
+      { id: "run-10a", protocol_id: "proto-1", conditions: { "Test concentration": "10 µM" } },
+      { id: "run-10b", protocol_id: "proto-1", conditions: { "Test concentration": "10 uM" } },
+      { id: "run-50", protocol_id: "proto-1", conditions: { "Test concentration": "50 µM" } },
+      { id: "run-none", protocol_id: "proto-1", conditions: {} },
+      { id: "run-other", protocol_id: "proto-1", conditions: { "Test concentration": "50 µM" } },
+    ],
+  }),
+}));
+
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocolSummaries: () => ({
     data: [
@@ -334,9 +349,19 @@ const description: ColumnDescriptionResponse = {
   stage_name: "Primary",
 };
 
+const seedRuns = (stageId: string, ...ids: string[]) =>
+  ids.map((run_id) => ({ run_id, protocol_id: "proto-1", stage_ids: [stageId] }));
+
 const staged = {
   id: "c1",
-  stages: [{ id: "st-1", name: "Primary", display_order: 0, kind: "criteria" }],
+  stages: [
+    { id: "st-1", name: "Primary", display_order: 0, kind: "criteria" },
+    { id: "st-2", name: "Retest", display_order: 1, kind: "criteria" },
+  ],
+  seed_runs: [
+    ...seedRuns("st-1", "run-10a", "run-10b", "run-50", "run-none"),
+    ...seedRuns("st-2", "run-other"),
+  ],
   channels: [
     makeChannel({ id: "ch-mixed", label: "% Inhibition", stage_id: "st-1", description }),
     makeChannel({
@@ -356,6 +381,20 @@ const staged = {
   ],
 } as unknown as CampaignResponse;
 
+// A stage column pinned to 10 µM whose stage also holds a 50 µM run.
+const pinned = {
+  ...staged,
+  channels: [
+    makeChannel({
+      id: "ch-pinned",
+      label: "% Inhibition",
+      stage_id: "st-1",
+      test_concentration: { value: 10, unit: "µM" },
+      description: { ...description, needs_concentration: false },
+    }),
+  ],
+} as unknown as CampaignResponse;
+
 describe("ChannelsSection stages and concentrations", () => {
   beforeEach(() => setConcentration.mockClear());
 
@@ -365,20 +404,22 @@ describe("ChannelsSection stages and concentrations", () => {
     expect(headings).toEqual(["Primary", "Other columns"]);
   });
 
-  it("offers each found concentration only on a column that needs one", () => {
+  it("asks a column measured at several doses to choose one, naming each with its count", () => {
     render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
 
-    const choices = screen.getAllByRole("button", { name: /^Use values at/ });
-    expect(choices.map((b) => b.textContent)).toEqual([
-      "Use values at 10 µM",
-      "Use values at 1 µM",
-    ]);
-    expect(screen.getByText("40 compounds")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Measured at 10 µM (40 compounds) and 1 µM (12) — choose the one this column uses:",
+      ),
+    ).toBeInTheDocument();
+    const choices = screen.getAllByRole("button", { name: /^Use / });
+    expect(choices.map((b) => b.textContent)).toEqual(["Use 10 µM", "Use 1 µM"]);
+    // What the click does to the result lives in the tooltip, not a line of its own.
+    expect(choices[0]).toHaveAttribute("title", "The stage's hits recompute from these values");
+    expect(screen.queryByText(/recompute/)).not.toBeInTheDocument();
     // The not-recorded bucket is a count, never a choice.
     expect(screen.getAllByText("3 compounds: concentration not recorded")).not.toHaveLength(0);
     expect(screen.queryByRole("button", { name: /not recorded/ })).not.toBeInTheDocument();
-    // A stage column's choice says what it does to the result.
-    expect(screen.getByText("The stage's hits recompute.")).toBeInTheDocument();
 
     fireEvent.click(choices[0]);
     expect(setConcentration).toHaveBeenCalledWith({
@@ -387,21 +428,51 @@ describe("ChannelsSection stages and concentrations", () => {
     });
   });
 
-  it("lets a chosen concentration be chosen again", () => {
-    render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
+  it("says which dose a pinned column uses and which of its stage's runs it sets aside", async () => {
+    render(<ChannelsSection campaign={pinned} projectId="p1" readOnly={false} />, { wrapper });
 
-    expect(screen.getByText("Counter: values at 10 µM")).toBeInTheDocument();
-    expect(screen.getByText("Its values recompute.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Choose a concentration again" }));
-    expect(setConcentration).toHaveBeenCalledWith({
-      channelId: "ch-chosen",
+    // run-10b's "10 uM" is the same dose; run-none has none; run-other is another stage's.
+    expect(
+      await screen.findByText("Uses the 10 µM values · 1 run at 50 µM set aside"),
+    ).toBeInTheDocument();
+  });
+
+  it("changes a pinned column to another dose found, or clears the choice", () => {
+    render(<ChannelsSection campaign={pinned} projectId="p1" readOnly={false} />, { wrapper });
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    // The dose already in use isn't offered again.
+    expect(screen.getAllByRole("button", { name: /^Use / }).map((b) => b.textContent)).toEqual([
+      "Use 1 µM",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Use 1 µM" }));
+    expect(setConcentration).toHaveBeenLastCalledWith({
+      channelId: "ch-pinned",
+      testConcentration: { value: 1, unit: "µM" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Change" }));
+    fireEvent.click(screen.getByRole("button", { name: "Clear choice" }));
+    expect(setConcentration).toHaveBeenLastCalledWith({
+      channelId: "ch-pinned",
       testConcentration: null,
     });
   });
 
+  it("leaves out the set-aside part when no run is at another dose", async () => {
+    const allAtTen = {
+      ...pinned,
+      seed_runs: seedRuns("st-1", "run-10a", "run-10b", "run-none"),
+    } as unknown as CampaignResponse;
+    render(<ChannelsSection campaign={allAtTen} projectId="p1" readOnly={false} />, { wrapper });
+    expect(await screen.findByText("Uses the 10 µM values")).toBeInTheDocument();
+    expect(screen.queryByText(/set aside/)).not.toBeInTheDocument();
+  });
+
   it("offers no choice when read-only", () => {
     render(<ChannelsSection campaign={staged} projectId="p1" readOnly />, { wrapper });
-    expect(screen.queryByRole("button", { name: /^Use values at/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Use / })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Change" })).not.toBeInTheDocument();
   });
 
   it("names the rule the column computes, not the one configured", () => {

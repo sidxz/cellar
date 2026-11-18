@@ -37,8 +37,14 @@ import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
+import { useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
 import { campaignKeys, useSetColumnConcentration } from "../../hooks/use-campaigns";
-import { concentrationText } from "../../lib/column-description";
+import {
+  compoundsText,
+  concentrationText,
+  listText,
+  setAsideText,
+} from "../../lib/column-description";
 import { protocolColorById } from "../../lib/protocol-colors";
 import { groupColumnsByStage } from "../../lib/stage-column-groups";
 import { stageNameNotice } from "../../lib/stage-name-notice";
@@ -206,9 +212,9 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
                   ))}
                 </div>
                 {!readOnly &&
-                  group.channels.map((c) => (
-                    <ConcentrationChoice key={c.id} campaignId={campaign.id} channel={c} />
-                  ))}
+                  group.channels
+                    .filter(hasConcentrationChoice)
+                    .map((c) => <ConcentrationChoice key={c.id} campaign={campaign} channel={c} />)}
               </div>
             </Fragment>
           ))}
@@ -352,73 +358,117 @@ function ReorderButton({
 
 // ── ConcentrationChoice ───────────────────────────────────────────────────────
 
-const compounds = (n: number) => `${n} ${n === 1 ? "compound" : "compounds"}`;
+/** Whether a column shows the concentration control: it has a chosen dose, or
+ *  its runs hold it at several and it needs one. */
+const hasConcentrationChoice = (c: CampaignChannelResponse) =>
+  !!c.test_concentration || !!c.description?.needs_concentration;
 
 /**
- * Under a column whose runs hold it at several concentrations: one button per
- * concentration found (its compound count beside it), or — once one is chosen —
- * the way to choose again. Either click saves at once and recomputes the column,
- * so the line under the buttons says so. Compounds with no recorded
- * concentration are a count, never a choice. Renders nothing otherwise.
+ * The concentration a column uses. Once chosen: "Uses the 10 µM values", the
+ * runs it reads that were recorded at another dose ("1 run at 50 µM set
+ * aside"), and Change (the other doses found, or Clear choice). Until then: the
+ * doses found with their compound counts and one "Use 10 µM" button each.
+ * Every click saves at once and recomputes the column, which the buttons'
+ * tooltip says. Compounds with no recorded concentration are a count, never a
+ * choice.
  */
 function ConcentrationChoice({
-  campaignId,
+  campaign,
   channel,
 }: {
-  campaignId: string;
+  campaign: CampaignResponse;
   channel: CampaignChannelResponse;
 }) {
-  const setConcentration = useSetColumnConcentration(campaignId);
+  const setConcentration = useSetColumnConcentration(campaign.id);
+  const runLabel = useCampaignRunLabels(campaign);
+  const [changing, setChanging] = useState(false);
   const d = channel.description;
   const chosen = channel.test_concentration;
-  if (!chosen && !d?.needs_concentration) return null;
 
   const name = d?.readout_label ?? channel.label;
-  const choose = (testConcentration: { value: number; unit: string } | null) =>
+  const recomputes = channel.stage_id
+    ? "The stage's hits recompute"
+    : "The column's values recompute";
+  const choose = (testConcentration: { value: number; unit: string } | null) => {
+    setChanging(false);
     setConcentration.mutate({ channelId: channel.id, testConcentration });
+  };
   const concentrations = d?.concentrations ?? [];
+  const found = concentrations.filter(
+    (c): c is { value: number; unit: string; count: number } => c.value != null && !!c.unit,
+  );
   const notRecorded = concentrations.find((c) => c.value == null)?.count ?? 0;
+  const choiceButton = (c: { value: number; unit: string }) => (
+    <Button
+      key={`${c.value}${c.unit}`}
+      size="xs"
+      variant="outline"
+      title={`${recomputes} from these values`}
+      disabled={setConcentration.isPending}
+      onClick={() => choose({ value: c.value, unit: c.unit })}
+    >
+      Use {concentrationText(c)}
+    </Button>
+  );
+  const label = <span className="font-medium text-foreground">{name}:</span>;
 
-  return (
-    <div className="space-y-0.5 text-xs text-muted-foreground">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        {chosen ? (
-          <>
-            <span>
-              {name}: values at {concentrationText(chosen)}
-            </span>
+  if (chosen) {
+    // The runs this column reads: its stage's (or, for a campaign column, the
+    // campaign's) runs of its protocol. All-runs columns read beyond them.
+    const runIds = channel.resolve_from_all_runs
+      ? []
+      : (campaign.seed_runs ?? [])
+          .filter(
+            (r) =>
+              r.protocol_id === channel.protocol_id &&
+              (!channel.stage_id || r.stage_ids.includes(channel.stage_id)),
+          )
+          .map((r) => r.run_id);
+    const setAside = setAsideText(
+      runIds.map((id) => runLabel(id).concentration),
+      chosen,
+    );
+    const others = found.filter((c) => !(c.value === chosen.value && c.unit === chosen.unit));
+    return (
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+        {label}
+        <span>
+          Uses the {concentrationText(chosen)} values{setAside && ` · ${setAside}`}
+        </span>
+        <Popover open={changing} onOpenChange={setChanging}>
+          <PopoverTrigger asChild>
+            <Button size="xs" variant="outline" disabled={setConcentration.isPending}>
+              Change
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="flex w-auto flex-col items-stretch gap-1 p-2">
+            {others.map(choiceButton)}
             <Button
               size="xs"
-              variant="outline"
+              variant="ghost"
+              title={`${recomputes} with no concentration chosen`}
               disabled={setConcentration.isPending}
               onClick={() => choose(null)}
             >
-              Choose a concentration again
+              Clear choice
             </Button>
-          </>
-        ) : (
-          <>
-            <span>{name} was measured at several concentrations:</span>
-            {concentrations
-              .filter((c) => c.value != null && c.unit)
-              .map((c) => (
-                <span key={`${c.value}${c.unit}`} className="inline-flex items-center gap-1.5">
-                  <Button
-                    size="xs"
-                    variant="outline"
-                    disabled={setConcentration.isPending}
-                    onClick={() => choose({ value: c.value as number, unit: c.unit as string })}
-                  >
-                    Use values at {concentrationText(c)}
-                  </Button>
-                  <span className="tabular-nums">{compounds(c.count)}</span>
-                </span>
-              ))}
-          </>
-        )}
+          </PopoverContent>
+        </Popover>
       </div>
-      {notRecorded > 0 && <p>{compounds(notRecorded)}: concentration not recorded</p>}
-      <p>{channel.stage_id ? "The stage's hits recompute." : "Its values recompute."}</p>
+    );
+  }
+
+  const measuredAt = listText(
+    found.map((c, i) => `${concentrationText(c)} (${i === 0 ? compoundsText(c.count) : c.count})`),
+  );
+  return (
+    <div className="space-y-0.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        {label}
+        <span>Measured at {measuredAt} — choose the one this column uses:</span>
+        {found.map(choiceButton)}
+      </div>
+      {notRecorded > 0 && <p>{compoundsText(notRecorded)}: concentration not recorded</p>}
     </div>
   );
 }

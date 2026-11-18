@@ -39,7 +39,7 @@ export function readoutTestConcentration(name: string): { value: string; unit: s
 const stripConcentration = (name: string) =>
   name.replace(CONCENTRATION_PHRASE, "").replace(/\s+/g, " ").trim();
 
-const sameConcentration = (
+export const sameConcentration = (
   a: { value: string; unit: string },
   b: { value: string; unit: string },
 ) =>
