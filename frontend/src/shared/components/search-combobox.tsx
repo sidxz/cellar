@@ -106,7 +106,9 @@ export function SearchCombobox<T>({
   const listId = useId();
 
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
+    // Never modal, even inside a dialog: a modal popup traps focus, and the user types in the
+    // input, which is outside it.
+    <Popover open={open} onOpenChange={onOpenChange} modal={false}>
       <PopoverAnchor asChild>
         <div className={cn("relative", className)}>
           <Input

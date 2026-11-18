@@ -328,6 +328,8 @@ export interface ShiftRow {
   wellId: string;
   label: string;
   deltaTm: number;
+  /** The registered compound's structure, drawn when the point is hovered. */
+  smiles?: string | null;
 }
 
 /** A sample as the shift plot names it: its text, then its aliases (a vault
@@ -351,6 +353,7 @@ export function shiftRows(rows: readonly ResultRow[], windowName: string): Shift
       wellId: r.wellId,
       label: (counts.get(text) ?? 0) > 1 ? `${text} · ${r.position}` : text,
       deltaTm: r.cells[windowName].deltaTm as number,
+      smiles: r.identity.smiles,
     }))
     .sort((a, b) => a.deltaTm - b.deltaTm);
 }

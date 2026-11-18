@@ -469,6 +469,10 @@ export interface Protocol extends Partial<Pick<ProtocolResponse, "has_measured_c
  *  redefine its shape. `target_type` is widened by `TargetType` at use sites. */
 export type Target = TargetResponse;
 
+/** What a picker finds a target by — never its id. The name comes first: `keywordFilter` ranks by it. */
+export const targetKeywords = (t: Target): string[] =>
+  [t.name, t.organism, t.gene_name, t.uniprot_id].filter((k): k is string => Boolean(k));
+
 /** Result of `POST /targets/sync` (admin → Targets → Sync from Prot-Cellar). */
 export type TargetSyncReport = TargetSyncReportResponse;
 

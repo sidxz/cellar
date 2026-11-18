@@ -1,11 +1,22 @@
 "use client";
 
+import { StructureThumbnail } from "@/shared/components/chemistry/structure-thumbnail";
 import { CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
+import { useState } from "react";
+import { createPortal } from "react-dom";
 import type { Band } from "../lib/melt-hits";
 import { type ShiftRow, formatDelta } from "../lib/melt-results";
 import { GRID, saveAsSvg, selectedOutline, shiftBand, shiftColour } from "../lib/shift-figure";
+
+/** The hover card's structure box, and the room the card is given beside the cursor. */
+const STRUCTURE = { width: 168, height: 96 };
+const CARD = { width: 192, height: 168, gap: 12 };
+
+/** What the cursor is over: a Plotly hover label is text and cannot draw a
+ *  structure, so the point's own card is shown beside the cursor instead. */
+type Hovered = { x: number; y: number; row: ShiftRow };
 
 export function ShiftPlot({
   rows,
@@ -27,6 +38,7 @@ export function ShiftPlot({
   onSelect: (wellId: string) => void;
 }) {
   const { resolvedTheme } = useTheme();
+  const [hovered, setHovered] = useState<Hovered | null>(null);
   const longest = Math.max(0, ...rows.map((r) => r.label.length));
   // Room for a registration number with its aliases; the axis grows past this if it must.
   const left = Math.min(280, 40 + longest * 7);
@@ -50,7 +62,8 @@ export function ShiftPlot({
               color: selectedOutline(resolvedTheme),
             },
           },
-          hovertemplate: "%{y}: %{text} °C<extra></extra>",
+          // The card below stands in for Plotly's label.
+          hoverinfo: "none",
         },
       ]}
       layout={{
@@ -77,8 +90,61 @@ export function ShiftPlot({
         const id = (event as { points: { customdata?: unknown }[] }).points[0]?.customdata;
         if (typeof id === "string") onSelect(id);
       }}
+      onHover={(event) => {
+        const { event: at, points } = event as {
+          event?: { clientX?: number; clientY?: number };
+          points?: { customdata?: unknown }[];
+        };
+        const row = rows.find((r) => r.wellId === points?.[0]?.customdata);
+        setHovered(
+          row && at?.clientX != null && at.clientY != null
+            ? { x: at.clientX, y: at.clientY, row }
+            : null,
+        );
+      }}
+      onUnhover={() => setHovered(null)}
     />
   );
-  // Beyond 60 rows the panel scrolls; the figure keeps its full height inside.
-  return rows.length > 60 ? <div style={{ maxHeight: 560, overflowY: "auto" }}>{plot}</div> : plot;
+  // ponytail: placed from a fixed card size, past the cursor or before it where it
+  // would leave the window; measure the card if its contents grow.
+  const card =
+    hovered &&
+    createPortal(
+      <div
+        role="tooltip"
+        className="pointer-events-none fixed z-50 space-y-1 rounded-md border bg-popover p-2 text-xs text-popover-foreground shadow-md"
+        style={{
+          width: CARD.width,
+          left:
+            hovered.x + CARD.gap + CARD.width > window.innerWidth
+              ? hovered.x - CARD.gap - CARD.width
+              : hovered.x + CARD.gap,
+          top:
+            hovered.y + CARD.gap + CARD.height > window.innerHeight
+              ? hovered.y - CARD.gap - CARD.height
+              : hovered.y + CARD.gap,
+        }}
+      >
+        <p className="break-words font-medium">{hovered.row.label}</p>
+        <p className="tabular-nums text-muted-foreground">
+          {`ΔTm ${formatDelta(hovered.row.deltaTm, limits)} °C`}
+        </p>
+        {hovered.row.smiles && (
+          <StructureThumbnail
+            smiles={hovered.row.smiles}
+            size={STRUCTURE.width}
+            height={STRUCTURE.height}
+            className="rounded bg-white dark:invert-0"
+          />
+        )}
+      </div>,
+      document.body,
+    );
+  return (
+    <>
+      {/* Beyond 60 rows the panel scrolls; the figure keeps its full height inside. */}
+      {rows.length > 60 ? <div style={{ maxHeight: 560, overflowY: "auto" }}>{plot}</div> : plot}
+      {card}
+    </>
+  );
 }

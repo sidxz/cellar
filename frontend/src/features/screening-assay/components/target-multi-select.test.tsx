@@ -135,6 +135,56 @@ describe("TargetMultiSelect", () => {
     expect(onChange).toHaveBeenCalledWith(["t-4"]);
   });
 
+  it("search keeps only targets that contain what was typed", () => {
+    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
+    openPopover();
+    // Fuzzy matching also kept EGFR: an "r" in the name, then an "a" in "Homo sapiens".
+    fireEvent.change(screen.getByPlaceholderText(/search targets/i), { target: { value: "ra" } });
+    expect(screen.getByText("BRAF")).toBeInTheDocument();
+    expect(screen.queryByText("EGFR")).not.toBeInTheDocument();
+    expect(screen.queryByText("DHODH")).not.toBeInTheDocument();
+  });
+
+  it("search never matches a target by its internal id", () => {
+    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
+    openPopover();
+    fireEvent.change(screen.getByPlaceholderText(/search targets/i), { target: { value: "t-1" } });
+    expect(screen.queryByText("EGFR")).not.toBeInTheDocument();
+    expect(screen.getByText(/no targets found/i)).toBeInTheDocument();
+  });
+
+  it("search finds a target by organism", () => {
+    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
+    openPopover();
+    fireEvent.change(screen.getByPlaceholderText(/search targets/i), {
+      target: { value: "dhodh plasmodium" },
+    });
+    expect(screen.getByText("Plasmodium falciparum")).toBeInTheDocument();
+    expect(screen.queryByText("Homo sapiens")).not.toBeInTheDocument();
+  });
+
+  it("'Request a new target' stays visible when the search finds nothing", () => {
+    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
+    openPopover();
+    fireEvent.change(screen.getByPlaceholderText(/search targets/i), {
+      target: { value: "hERG" },
+    });
+    expect(screen.getByText(/request a new target/i)).toBeVisible();
+  });
+
+  it("lists matches above the actions and highlights the top match", () => {
+    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
+    openPopover();
+    fireEvent.change(screen.getByPlaceholderText(/search targets/i), { target: { value: "ra" } });
+    const rows = [...document.querySelectorAll("[data-slot='command-item']")];
+    expect(rows.map((r) => r.textContent)).toEqual([
+      expect.stringContaining("BRAF"),
+      "Request a new target",
+      "Manage in Prot-Cellar",
+    ]);
+    expect(rows[0]).toHaveAttribute("aria-selected", "true");
+  });
+
   it("'Request a new target' opens the dialog and selects the created target", () => {
     const onChange = vi.fn();
     render(<TargetMultiSelect value={["t-1"]} onChange={onChange} />);

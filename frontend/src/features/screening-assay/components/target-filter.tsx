@@ -10,10 +10,12 @@ import {
   CommandList,
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
+import { keywordFilter } from "@/shared/lib/keyword-filter";
 import { cn } from "@/shared/lib/utils";
 import { Check, Target as TargetIcon } from "lucide-react";
 import { useState } from "react";
 import { useTargets } from "../hooks/use-targets";
+import { targetKeywords } from "../types";
 
 export interface TargetFilterValue {
   targetIds: string[];
@@ -49,7 +51,7 @@ export function TargetFilter({ value, onChange }: TargetFilterProps) {
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="start">
-        <Command>
+        <Command filter={keywordFilter}>
           <CommandInput
             value={q}
             onValueChange={setQ}
@@ -64,7 +66,8 @@ export function TargetFilter({ value, onChange }: TargetFilterProps) {
               {targets?.map((t) => (
                 <CommandItem
                   key={t.id}
-                  value={t.name}
+                  value={t.id}
+                  keywords={targetKeywords(t)}
                   onSelect={() => toggle(t.id)}
                   className="gap-1.5 text-sm"
                 >

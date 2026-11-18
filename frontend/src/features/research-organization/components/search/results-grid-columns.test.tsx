@@ -405,10 +405,10 @@ describe("wide tables", () => {
   // biome-ignore lint/suspicious/noExplicitAny: AG Grid renderer params
   const renderCell = (column: ColDef, row: unknown) => (column.cellRenderer as any)({ data: row });
 
-  it("groups a thermal protocol by window with the Activity tab's labels, every readout shown", () => {
+  it("groups a thermal protocol by transition with the Activity tab's labels, every readout shown", () => {
     const [group] = build(thermalCols, thermal);
     const sub = group.children as ColGroupDef[];
-    expect(sub.map((g) => g.headerName)).toEqual(["Main window · 50–85 °C", "Other readouts"]);
+    expect(sub.map((g) => g.headerName)).toEqual(["Main transition · 50–85 °C", "Other readouts"]);
     expect((sub[0].children as ColDef[]).map((c) => c.headerName)).toEqual([
       "Max ΔTm (°C)",
       "Tm (°C)",

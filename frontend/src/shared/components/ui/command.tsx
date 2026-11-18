@@ -1,8 +1,8 @@
 "use client";
 
-import { Command as CommandPrimitive } from "cmdk";
+import { Command as CommandPrimitive, useCommandState } from "cmdk";
 import { SearchIcon } from "lucide-react";
-import type * as React from "react";
+import * as React from "react";
 
 import {
   Dialog,
@@ -77,8 +77,20 @@ function CommandInput({
 }
 
 function CommandList({ className, ...props }: React.ComponentProps<typeof CommandPrimitive.List>) {
+  const ref = React.useRef<HTMLDivElement>(null);
+  const search = useCommandState((state) => state.search);
+  // Works around a cmdk defect (1.1.1, the latest release): after a search re-sorts the rows it
+  // scrolls the row that *was* highlighted into view, not the top match it then highlights, so on a
+  // long list the best matches end up above the fold. A search always highlights the first row, so
+  // the list belongs at the top. Runs after cmdk's own scroll (a layout effect). Remove once fixed
+  // upstream.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-run on every search change
+  React.useEffect(() => {
+    if (ref.current) ref.current.scrollTop = 0;
+  }, [search]);
   return (
     <CommandPrimitive.List
+      ref={ref}
       data-slot="command-list"
       className={cn("max-h-[300px] scroll-py-1 overflow-x-hidden overflow-y-auto", className)}
       {...props}

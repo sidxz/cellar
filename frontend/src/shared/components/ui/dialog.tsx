@@ -2,10 +2,17 @@
 
 import { XIcon } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import type * as React from "react";
+import * as React from "react";
 
 import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+
+/**
+ * True for anything rendered inside a Dialog or Sheet. Those lock scrolling for everything outside
+ * their own element, and a popover renders outside it (in `<body>`), so `Popover` reads this to
+ * join the lock — otherwise the wheel is cancelled over its list.
+ */
+const ModalLayerContext = React.createContext(false);
 
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />;
@@ -58,7 +65,7 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        <ModalLayerContext.Provider value={true}>{children}</ModalLayerContext.Provider>
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
@@ -141,4 +148,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  ModalLayerContext,
 };

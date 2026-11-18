@@ -13,11 +13,12 @@ import {
 } from "@/shared/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { useAppConfig } from "@/shared/lib/app-config";
+import { keywordFilter } from "@/shared/lib/keyword-filter";
 import { cn } from "@/shared/lib/utils";
 import { Check, ChevronsUpDown, ExternalLink, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { useTargets } from "../hooks/use-targets";
-import { TARGET_TYPE_LABELS, type Target, type TargetType } from "../types";
+import { TARGET_TYPE_LABELS, type Target, type TargetType, targetKeywords } from "../types";
 import { RequestTargetDialog } from "./request-target-dialog";
 
 interface TargetMultiSelectProps {
@@ -88,7 +89,7 @@ export function TargetMultiSelect({
           className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0"
           align="start"
         >
-          <Command>
+          <Command filter={keywordFilter}>
             <CommandInput placeholder="Search targets…" />
             <CommandList>
               <CommandEmpty>No targets found.</CommandEmpty>
@@ -96,8 +97,9 @@ export function TargetMultiSelect({
                 {(targets ?? []).map((t) => (
                   <CommandItem
                     key={t.id}
-                    // Unique per target: same-named targets in different organisms must not collide.
-                    value={`${t.name} ${t.organism ?? ""} ${t.id}`}
+                    // The id keeps same-named targets in different organisms apart; it is not searched.
+                    value={t.id}
+                    keywords={targetKeywords(t)}
                     onSelect={() => toggle(t.id)}
                   >
                     <Check
@@ -119,11 +121,11 @@ export function TargetMultiSelect({
                 ))}
               </CommandGroup>
               <CommandSeparator />
-              <CommandGroup>
+              {/* Kept while searching: a search that finds nothing is when these are needed. The
+                  group carries it, since cmdk hides a group none of whose rows match. */}
+              <CommandGroup forceMount>
                 <CommandItem
                   value="__request_target__"
-                  // Kept while searching: a search that finds nothing is when it's needed.
-                  forceMount
                   onSelect={() => {
                     setOpen(false);
                     setRequesting(true);

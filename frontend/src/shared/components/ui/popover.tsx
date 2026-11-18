@@ -3,10 +3,14 @@
 import * as React from "react";
 import { Popover as PopoverPrimitive } from "radix-ui";
 
+import { ModalLayerContext } from "@/shared/components/ui/dialog";
 import { cn } from "@/shared/lib/utils";
 
-function Popover({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
-  return <PopoverPrimitive.Root data-slot="popover" {...props} />;
+function Popover({ modal, ...props }: React.ComponentProps<typeof PopoverPrimitive.Root>) {
+  // Inside a Dialog or Sheet a popover is modal unless told otherwise: that is how it joins the
+  // layer's scroll lock, without which its list cannot be scrolled (see ModalLayerContext).
+  const inModalLayer = React.useContext(ModalLayerContext);
+  return <PopoverPrimitive.Root data-slot="popover" modal={modal ?? inModalLayer} {...props} />;
 }
 
 function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Trigger>) {

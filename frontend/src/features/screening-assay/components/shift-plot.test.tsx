@@ -1,4 +1,4 @@
-import { fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type P = {
@@ -6,7 +6,12 @@ type P = {
   layout: Record<string, any>;
   config: Record<string, unknown>;
   onClick?: (e: unknown) => void;
+  onHover?: (e: unknown) => void;
+  onUnhover?: () => void;
 };
+vi.mock("@/shared/components/chemistry/structure-thumbnail", () => ({
+  StructureThumbnail: (p: { smiles: string }) => <div data-testid="structure">{p.smiles}</div>,
+}));
 const plots: P[] = [];
 const downloadImage = vi.fn();
 vi.mock("@/shared/lib/plotly", () => ({
@@ -160,10 +165,44 @@ describe("ShiftPlot", () => {
       />,
     );
     expect(last().data[0].text).toEqual(["−2.02", "+0.5", "+2.0"]);
-    expect(last().data[0].hovertemplate).toBe("%{y}: %{text} °C<extra></extra>");
+    // Plotly's own label is off: the card beside the cursor says it, with the structure.
+    expect(last().data[0].hoverinfo).toBe("none");
     // Without limits, one decimal as before.
     show();
     expect(last().data[0].text).toEqual(["−5.0", "+0.5", "+3.0"]);
+  });
+
+  it("hovering a point shows its name, ΔTm and structure beside the cursor; leaving hides it", () => {
+    render(
+      <ShiftPlot
+        rows={[
+          { wellId: "a", label: "CC-1 · SACC-0455096", deltaTm: 3.04, smiles: "CCO" },
+          { wellId: "b", label: "Lipid X", deltaTm: -1 },
+        ]}
+        hits={new Set()}
+        band={null}
+        selected={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    const hover = (id: string) =>
+      act(() =>
+        last().onHover?.({ event: { clientX: 40, clientY: 50 }, points: [{ customdata: id }] }),
+      );
+    hover("a");
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("CC-1 · SACC-0455096");
+    expect(card).toHaveTextContent("ΔTm +3.0 °C");
+    expect(screen.getByTestId("structure")).toHaveTextContent("CCO");
+    expect(card.style.left).toBe("52px");
+    expect(card.style.top).toBe("62px");
+    // A sample without a registered structure: the card, and no drawing.
+    hover("b");
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Lipid X");
+    expect(screen.queryByTestId("structure")).toBeNull();
+    act(() => last().onUnhover?.());
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("click selects the position", () => {
