@@ -225,7 +225,7 @@ const CHIP =
 const CHIP_EDITABLE =
   "cursor-pointer transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary";
 
-const DEFAULT_RULE = "latest_run";
+const DEFAULT_RULE = "latest run";
 
 function ChannelChip({
   channel,
@@ -250,7 +250,9 @@ function ChannelChip({
   const [editOpen, setEditOpen] = useState(false);
 
   const isDR = channel.source_kind === "dose_response_curve";
-  const rule = channel.selection_rule.replace(/_/g, " ");
+  // The rule the column computes (the description's), not the one configured:
+  // a geometric mean of % reads as a mean.
+  const rule = channel.description?.rule ?? channel.selection_rule.replace(/_/g, " ");
   const title = `${isDR ? "Dose-response curve" : "Readout data"} · ${rule}`;
 
   const content = (
@@ -261,7 +263,7 @@ function ChannelChip({
           DR
         </span>
       )}
-      {channel.selection_rule !== DEFAULT_RULE && (
+      {rule !== DEFAULT_RULE && (
         <span className="text-xs font-normal text-muted-foreground">· {rule}</span>
       )}
       {/* Opted out of its run scope — reads every run of its protocol, not
@@ -350,10 +352,14 @@ function ReorderButton({
 
 // ── ConcentrationChoice ───────────────────────────────────────────────────────
 
+const compounds = (n: number) => `${n} ${n === 1 ? "compound" : "compounds"}`;
+
 /**
- * One line under a column whose runs hold it at several concentrations: one
- * button per concentration found (its compound count beside it), or — once
- * one is chosen — the way back to all of them. Renders nothing otherwise.
+ * Under a column whose runs hold it at several concentrations: one button per
+ * concentration found (its compound count beside it), or — once one is chosen —
+ * the way to choose again. Either click saves at once and recomputes the column,
+ * so the line under the buttons says so. Compounds with no recorded
+ * concentration are a count, never a choice. Renders nothing otherwise.
  */
 function ConcentrationChoice({
   campaignId,
@@ -365,47 +371,54 @@ function ConcentrationChoice({
   const setConcentration = useSetColumnConcentration(campaignId);
   const d = channel.description;
   const chosen = channel.test_concentration;
+  if (!chosen && !d?.needs_concentration) return null;
+
   const name = d?.readout_label ?? channel.label;
   const choose = (testConcentration: { value: number; unit: string } | null) =>
     setConcentration.mutate({ channelId: channel.id, testConcentration });
+  const concentrations = d?.concentrations ?? [];
+  const notRecorded = concentrations.find((c) => c.value == null)?.count ?? 0;
 
-  if (chosen) {
-    return (
-      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>
-          {name}: values at {concentrationText(chosen)}
-        </span>
-        <Button
-          size="xs"
-          variant="outline"
-          disabled={setConcentration.isPending}
-          onClick={() => choose(null)}
-        >
-          Show all concentrations
-        </Button>
-      </div>
-    );
-  }
-  if (!d?.needs_concentration) return null;
-  const found = d.concentrations.filter((c) => c.value != null && c.unit);
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-      <span>{name} was measured at several concentrations:</span>
-      {found.map((c) => (
-        <span key={`${c.value}${c.unit}`} className="inline-flex items-center gap-1.5">
-          <Button
-            size="xs"
-            variant="outline"
-            disabled={setConcentration.isPending}
-            onClick={() => choose({ value: c.value as number, unit: c.unit as string })}
-          >
-            Show values at {concentrationText(c)}
-          </Button>
-          <span className="tabular-nums">
-            {c.count} {c.count === 1 ? "compound" : "compounds"}
-          </span>
-        </span>
-      ))}
+    <div className="space-y-0.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {chosen ? (
+          <>
+            <span>
+              {name}: values at {concentrationText(chosen)}
+            </span>
+            <Button
+              size="xs"
+              variant="outline"
+              disabled={setConcentration.isPending}
+              onClick={() => choose(null)}
+            >
+              Choose a concentration again
+            </Button>
+          </>
+        ) : (
+          <>
+            <span>{name} was measured at several concentrations:</span>
+            {concentrations
+              .filter((c) => c.value != null && c.unit)
+              .map((c) => (
+                <span key={`${c.value}${c.unit}`} className="inline-flex items-center gap-1.5">
+                  <Button
+                    size="xs"
+                    variant="outline"
+                    disabled={setConcentration.isPending}
+                    onClick={() => choose({ value: c.value as number, unit: c.unit as string })}
+                  >
+                    Use values at {concentrationText(c)}
+                  </Button>
+                  <span className="tabular-nums">{compounds(c.count)}</span>
+                </span>
+              ))}
+          </>
+        )}
+      </div>
+      {notRecorded > 0 && <p>{compounds(notRecorded)}: concentration not recorded</p>}
+      <p>{channel.stage_id ? "The stage's hits recompute." : "Its values recompute."}</p>
     </div>
   );
 }

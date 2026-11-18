@@ -368,12 +368,17 @@ describe("ChannelsSection stages and concentrations", () => {
   it("offers each found concentration only on a column that needs one", () => {
     render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
 
-    const choices = screen.getAllByRole("button", { name: /^Show values at/ });
+    const choices = screen.getAllByRole("button", { name: /^Use values at/ });
     expect(choices.map((b) => b.textContent)).toEqual([
-      "Show values at 10 µM",
-      "Show values at 1 µM",
+      "Use values at 10 µM",
+      "Use values at 1 µM",
     ]);
     expect(screen.getByText("40 compounds")).toBeInTheDocument();
+    // The not-recorded bucket is a count, never a choice.
+    expect(screen.getAllByText("3 compounds: concentration not recorded")).not.toHaveLength(0);
+    expect(screen.queryByRole("button", { name: /not recorded/ })).not.toBeInTheDocument();
+    // A stage column's choice says what it does to the result.
+    expect(screen.getByText("The stage's hits recompute.")).toBeInTheDocument();
 
     fireEvent.click(choices[0]);
     expect(setConcentration).toHaveBeenCalledWith({
@@ -382,10 +387,12 @@ describe("ChannelsSection stages and concentrations", () => {
     });
   });
 
-  it("lets a chosen concentration go back to all concentrations", () => {
+  it("lets a chosen concentration be chosen again", () => {
     render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
 
-    fireEvent.click(screen.getByRole("button", { name: "Show all concentrations" }));
+    expect(screen.getByText("Counter: values at 10 µM")).toBeInTheDocument();
+    expect(screen.getByText("Its values recompute.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Choose a concentration again" }));
     expect(setConcentration).toHaveBeenCalledWith({
       channelId: "ch-chosen",
       testConcentration: null,
@@ -394,6 +401,26 @@ describe("ChannelsSection stages and concentrations", () => {
 
   it("offers no choice when read-only", () => {
     render(<ChannelsSection campaign={staged} projectId="p1" readOnly />, { wrapper });
-    expect(screen.queryByRole("button", { name: /^Show values at/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Use values at/ })).not.toBeInTheDocument();
+  });
+
+  it("names the rule the column computes, not the one configured", () => {
+    const meanOfPercent = {
+      id: "c1",
+      stages: [],
+      channels: [
+        makeChannel({
+          id: "ch-gm",
+          label: "% Inhibition",
+          selection_rule: "geometric_mean",
+          description: { ...description, rule: "mean across runs", needs_concentration: false },
+        }),
+      ],
+    } as unknown as CampaignResponse;
+    render(<ChannelsSection campaign={meanOfPercent} projectId="p1" readOnly />, { wrapper });
+
+    const chip = screen.getByText("% Inhibition").closest("[title]");
+    expect(chip).toHaveAttribute("title", "Readout data · mean across runs");
+    expect(chip).not.toHaveTextContent("geometric mean");
   });
 });
