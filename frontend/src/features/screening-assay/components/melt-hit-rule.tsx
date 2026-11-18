@@ -2,6 +2,7 @@
 
 import { MemberName } from "@/shared/components/entity-name";
 import { Button } from "@/shared/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { formatDate } from "@/shared/lib/format-date";
 import { useState } from "react";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
@@ -22,6 +23,7 @@ export function MeltHitRule({
   applicable,
   other,
   canEdit,
+  compact = false,
 }: {
   run: Pick<
     Run,
@@ -34,6 +36,7 @@ export function MeltHitRule({
   /** The run's other rules, listed but not evaluated here. */
   other: readonly HitCriterion[];
   canEdit: boolean;
+  compact?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const setHitCriteria = useSetRunHitCriteria();
@@ -113,12 +116,45 @@ export function MeltHitRule({
     );
   }
 
-  return (
+  const details = (
     <div className="space-y-1 text-sm">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">{line}</div>
       {leftOut}
       {other.length > 0 && (
         <p className="text-xs text-muted-foreground">{`Not evaluated here: ${labels(other)}`}</p>
+      )}
+    </div>
+  );
+  return (
+    <>
+      {compact ? (
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              aria-label="Hit rule details"
+              className="text-left text-sm hover:text-primary"
+            >
+              <span className="font-medium">
+                {recorded === null
+                  ? "Not set"
+                  : recorded.length === 0
+                    ? "Show all"
+                    : applicable.length
+                      ? labels(applicable.map((a) => a.rule))
+                      : "Other readouts"}
+              </span>
+              <span className="ml-2 text-xs text-primary">
+                {canEdit && !run.is_locked ? (recorded === null ? "Configure" : "Edit") : "Details"}
+              </span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-96 max-w-[90vw]">
+            {details}
+          </PopoverContent>
+        </Popover>
+      ) : (
+        details
       )}
       {canEdit && (
         <RunHitCriteriaDialog
@@ -130,6 +166,6 @@ export function MeltHitRule({
           onOpenChange={setOpen}
         />
       )}
-    </div>
+    </>
   );
 }

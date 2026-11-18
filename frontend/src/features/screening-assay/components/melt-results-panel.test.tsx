@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { useState } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { type ReactNode, useState } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { formatDateTime } from "@/shared/lib/format-date";
 import type { CurvePosition } from "../lib/curve-plot";
@@ -9,7 +9,9 @@ import type { ApplicableRule } from "../lib/melt-hits";
 import type { MeltWindow, MeltingAnalysis, MeltingStep } from "../types";
 
 vi.mock("@/shared/components/chemistry/structure-thumbnail", () => ({
-  StructureThumbnail: () => <div data-testid="structure" />,
+  StructureThumbnail: ({ smiles }: { smiles: string }) => (
+    <div data-testid="structure" data-smiles={smiles} />
+  ),
 }));
 
 const plots: { data: Record<string, any>[]; onClick?: (e: unknown) => void }[] = [];
@@ -139,6 +141,7 @@ function Harness({
   applicable = OUTSIDE_MAIN,
   at = positions,
   onNamePeaks,
+  workspace,
 }: {
   /** The run's positions. */
   at?: CurvePosition[];
@@ -149,6 +152,7 @@ function Harness({
   data?: MeltingAnalysis;
   hits?: ReadonlySet<string>;
   applicable?: ApplicableRule[];
+  workspace?: ReactNode;
 }) {
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
   return (
@@ -166,6 +170,7 @@ function Harness({
       hits={hits}
       applicable={applicable}
       onNamePeaks={onNamePeaks}
+      workspace={workspace}
     />
   );
 }
@@ -818,5 +823,57 @@ describe("shift plot toggle", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
     fireEvent.click(screen.getByRole("tab", { name: "Compare" }));
     expect(screen.getByRole("tab", { name: "Shift plot" })).toBeDisabled();
+  });
+});
+
+describe("thermal structure inspection", () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+  const withStructures = positions.map((p) => (p.well_id === "s3" ? { ...p, smiles: "CCN" } : p));
+
+  it("shows every available structure in its own column while keeping Position and Compound first", () => {
+    const onChange = vi.fn();
+    render(
+      <Harness at={withStructures} workspace={<div>Trace details</div>} onChange={onChange} />,
+    );
+    expect(screen.queryByRole("columnheader", { name: "Structure" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show structures" }));
+    expect(screen.getByRole("button", { name: "Hide structures" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    const headers = within(table())
+      .getAllByRole("columnheader")
+      .map((h) => h.textContent)
+      .filter(Boolean);
+    expect(headers.slice(0, 3)).toEqual(["Position", "Compound", "Structure"]);
+    const resultCells = (row("s1") as HTMLTableRowElement).cells;
+    expect(resultCells[headers.indexOf("ΔTm (°C)")]).toHaveTextContent("−8.5");
+    expect(resultCells[headers.indexOf("Tm (°C)")]).toHaveTextContent("62.8");
+    for (const id of ["s1", "s3"]) {
+      const cells = (row(id) as HTMLTableRowElement).cells;
+      expect(within(cells[1]).queryByTestId("structure")).toBeNull();
+      expect(within(cells[2]).getByTestId("structure")).toBeInTheDocument();
+    }
+    fireEvent.click(row("s1"));
+    fireEvent.click(row("s3"), { metaKey: true });
+    expect(lastSelected(onChange)).toEqual(["s1", "s3"]);
+    expect(within(table()).getAllByTestId("structure")).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "View structure" })).toBeNull();
+    expect(within(row("s2")).getByLabelText("No structure recorded")).toBeInTheDocument();
+  });
+
+  it("restores the table structure choice and retains hover previews when structures are hidden", () => {
+    localStorage.setItem("cellar.traces.structures", "1");
+    render(<Harness at={withStructures} workspace={<div>Trace details</div>} />);
+    expect(screen.getByRole("button", { name: "Hide structures" })).toBeInTheDocument();
+    expect(within(table()).getAllByTestId("structure")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Hide structures" }));
+    expect(screen.queryByRole("columnheader", { name: "Structure" })).toBeNull();
+    expect(within(table()).queryByTestId("structure")).toBeNull();
+    expect(localStorage.getItem("cellar.traces.structures")).toBe("0");
+    act(() => within(row("s1")).getByRole("link", { name: "CC-014538" }).focus());
+    expect(screen.getByTestId("structure")).toHaveAttribute("data-smiles", "CCO");
+    expect(within(table()).queryByTestId("structure")).toBeNull();
   });
 });

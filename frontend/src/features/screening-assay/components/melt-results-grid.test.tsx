@@ -12,16 +12,23 @@ vi.mock("@/shared/components/chemistry/structure-thumbnail", () => ({
 }));
 
 let defs: any[] = [];
-let height = 0;
+let height: number | string = 0;
+let domLayout: "normal" | "autoHeight" | "print" | undefined;
 /** Draw the grid itself, not only capture its columns. */
 let drawGrid = false;
 vi.mock("@/shared/components/data-grid/data-grid", async (importOriginal) => {
   const { DataGrid } =
     await importOriginal<typeof import("@/shared/components/data-grid/data-grid")>();
   return {
-    DataGrid: (p: { columnDefs: any[]; rowData: unknown[]; height: number }) => {
+    DataGrid: (p: {
+      columnDefs: any[];
+      rowData: unknown[];
+      height: number | string;
+      domLayout?: "normal" | "autoHeight" | "print";
+    }) => {
       defs = p.columnDefs;
       height = p.height;
+      domLayout = p.domLayout;
       // jsdom has no layout, so the real grid draws every row instead of a screenful.
       return drawGrid ? <DataGrid {...p} suppressRowVirtualisation /> : null;
     },
@@ -170,14 +177,17 @@ describe("MeltResultsGrid with structures", () => {
   it("lets the Sample column size the rows only while structures are shown", () => {
     show(["Main"], { rows });
     expect(column("sample").autoHeight).toBeFalsy();
-    const plain = height;
     show(["Main"], { rows, showStructures: true });
     expect(column("sample").autoHeight).toBe(true);
-    // The grid makes room for the one row that carries a structure: 100 px, not the usual 36.
-    expect(height).toBe(plain - 36 + 100);
-    // Rows without a structure add nothing.
-    show(["Main"], { rows: { pinned: [], body: [row, row] }, showStructures: true });
-    expect(height).toBe(plain);
+  });
+
+  it("is as tall as its rows, so the page scrolls and the table never does", () => {
+    show(["Main"], { rows });
+    expect(height).toBe("auto");
+    expect(domLayout).toBe("autoHeight");
+    show(["Main"], { rows, showStructures: true });
+    expect(height).toBe("auto");
+    expect(domLayout).toBe("autoHeight");
   });
 
   it("draws the structure in the Sample cell of the row that has one", async () => {

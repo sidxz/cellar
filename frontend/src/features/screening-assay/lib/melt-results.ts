@@ -90,12 +90,18 @@ export interface WindowSummary {
   down: number;
 }
 
-const RESULT_FILTERS = ["needs_review", "hits", "up", "down", "not_evaluated"] as const;
+const RESULT_FILTERS = [
+  "unreviewed",
+  "needs_review",
+  "hits",
+  "up",
+  "down",
+  "not_evaluated",
+] as const;
 
 export type ResultFilter = (typeof RESULT_FILTERS)[number] | null;
 
-/** A filter as it was remembered: one no longer offered (an older
- *  "provisional") is no filter, so all rows show. */
+/** Unknown remembered filters fall back to showing all rows. */
 export const knownFilter = (f: unknown): ResultFilter =>
   RESULT_FILTERS.find((known) => known === f) ?? null;
 
@@ -270,6 +276,8 @@ export function matchesFilter(
   if (!row.isSample) return false;
   const cells = cellsOf(row, windowNames);
   switch (filter) {
+    case "unreviewed":
+      return cells.some((c) => c.review === "provisional");
     case "needs_review":
       return cells.some((c) => c.status === "several_steps" || c.status === "no_step");
     case "hits":

@@ -3,6 +3,12 @@
 import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import {
@@ -165,6 +171,8 @@ export interface MeltingStepsPanelProps {
   /** Directly under the list of peaks. */
   underList?: ReactNode;
   onReload: () => Promise<unknown>;
+  compactActions?: boolean;
+  headerAction?: ReactNode;
 }
 
 /** Review the melting steps of the selected positions on the current signal:
@@ -187,6 +195,8 @@ export function MeltingStepsPanel({
   onAdded,
   underList,
   onReload,
+  compactActions = false,
+  headerAction,
 }: MeltingStepsPanelProps) {
   const canEdit = useCanEdit();
   const editable = canEdit && !analysis.edit_refusal;
@@ -404,12 +414,13 @@ export function MeltingStepsPanel({
     <section className="space-y-3">
       <div className="flex items-center gap-3">
         <h3 className="text-sm font-medium">Peaks</h3>
+        {headerAction && <span className="ml-auto">{headerAction}</span>}
         {editable && positions.length > 0 && (
           <Button
             type="button"
             variant="outline"
             size="sm"
-            className="ml-auto"
+            className={headerAction ? undefined : "ml-auto"}
             disabled={busy}
             onClick={() =>
               open({ kind: "add", wellId: positions[0].well_id, window: null, reason: "" }, "")
@@ -435,6 +446,13 @@ export function MeltingStepsPanel({
           rows.flatMap((s) => {
             const rejected = s.status === "rejected";
             const p = byWell.get(s.well_id);
+            // One of the peaks the line above asks to pick from.
+            const pickThis =
+              toPickFrom > 1 &&
+              s.well_id === lookedAt &&
+              !rejected &&
+              !!lead &&
+              inRange(s.value, lead);
             return [
               toPickFrom > 1 && s.id === firstLookedAt && (
                 <li key="to-pick-from" className="px-2 py-1 text-xs text-muted-foreground">
@@ -460,6 +478,7 @@ export function MeltingStepsPanel({
                     className="no-underline"
                   >
                     {peakKind(s)}
+                    {compactActions && s.status === "unreviewed" ? " · Unreviewed" : ""}
                   </Badge>
                   {s.instrument_value !== null && s.instrument_value !== s.value && (
                     <span className="text-xs text-muted-foreground">{`was ${fmt(s.instrument_value)}`}</span>
@@ -487,65 +506,150 @@ export function MeltingStepsPanel({
                     ))}
                   {editable && (
                     <span className="ml-auto flex flex-wrap gap-x-1 no-underline">
-                      {s.status !== "accepted" && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => setStatus(s, "accepted")}
-                        >
-                          Mark reviewed
-                        </Button>
-                      )}
-                      {s.status !== "unreviewed" && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => setStatus(s, "unreviewed")}
-                        >
-                          Unmark
-                        </Button>
-                      )}
-                      {!rejected && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() =>
-                            open({ kind: "reject", step: s, reason: s.reason ?? "" }, "")
-                          }
-                        >
-                          Exclude
-                        </Button>
-                      )}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={busy}
-                        onClick={() =>
-                          open(
-                            { kind: "correct", step: s, reason: s.reason ?? "" },
-                            stepInput(s.value),
-                          )
-                        }
-                      >
-                        Edit temperature
-                      </Button>
-                      {canUseAsTm(s, analysis, channel, windows) && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => openAssign(s)}
-                        >
-                          Use as Tm
-                        </Button>
+                      {compactActions ? (
+                        <>
+                          {pickThis ? (
+                            // Several peaks and none chosen: choosing is the action needed.
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() =>
+                                lead && windows.length === 1
+                                  ? sendAssignment(s, lead.window)
+                                  : openAssign(s)
+                              }
+                            >
+                              Use as Tm
+                            </Button>
+                          ) : (
+                            s.status === "unreviewed" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={busy}
+                                onClick={() => setStatus(s, "accepted")}
+                              >
+                                Mark reviewed
+                              </Button>
+                            )
+                          )}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={busy}
+                                aria-label={`Actions for peak at ${fmt(s.value)} ${unit}`}
+                              >
+                                More
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              {s.status !== "accepted" &&
+                                (s.status !== "unreviewed" || pickThis) && (
+                                  <DropdownMenuItem onSelect={() => setStatus(s, "accepted")}>
+                                    Mark reviewed
+                                  </DropdownMenuItem>
+                                )}
+                              {s.status !== "unreviewed" && (
+                                <DropdownMenuItem onSelect={() => setStatus(s, "unreviewed")}>
+                                  Unmark
+                                </DropdownMenuItem>
+                              )}
+                              {!rejected && (
+                                <DropdownMenuItem
+                                  onSelect={() =>
+                                    open({ kind: "reject", step: s, reason: s.reason ?? "" }, "")
+                                  }
+                                >
+                                  Exclude peak
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                onSelect={() =>
+                                  open(
+                                    { kind: "correct", step: s, reason: s.reason ?? "" },
+                                    stepInput(s.value),
+                                  )
+                                }
+                              >
+                                Edit temperature
+                              </DropdownMenuItem>
+                              {!pickThis && canUseAsTm(s, analysis, channel, windows) && (
+                                <DropdownMenuItem onSelect={() => openAssign(s)}>
+                                  Use as Tm
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </>
+                      ) : (
+                        <>
+                          {s.status !== "accepted" && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => setStatus(s, "accepted")}
+                            >
+                              Mark reviewed
+                            </Button>
+                          )}
+                          {s.status !== "unreviewed" && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => setStatus(s, "unreviewed")}
+                            >
+                              Unmark
+                            </Button>
+                          )}
+                          {!rejected && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() =>
+                                open({ kind: "reject", step: s, reason: s.reason ?? "" }, "")
+                              }
+                            >
+                              Exclude
+                            </Button>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            disabled={busy}
+                            onClick={() =>
+                              open(
+                                { kind: "correct", step: s, reason: s.reason ?? "" },
+                                stepInput(s.value),
+                              )
+                            }
+                          >
+                            Edit temperature
+                          </Button>
+                          {canUseAsTm(s, analysis, channel, windows) && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              onClick={() => openAssign(s)}
+                            >
+                              Use as Tm
+                            </Button>
+                          )}
+                        </>
                       )}
                     </span>
                   )}

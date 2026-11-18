@@ -72,7 +72,7 @@ import {
   matchesFilter,
 } from "../lib/curve-selection";
 import { sampleTextOf } from "../lib/melt-results";
-import { DOSE_UNIT_LABELS, type DoseUnit } from "../types";
+import { DOSE_UNIT_LABELS, type DoseUnit, WELL_TYPE_LABELS, type WellType } from "../types";
 import { PositionSelector } from "./position-selector";
 import { Segmented } from "./segmented";
 
@@ -83,6 +83,16 @@ const PLOT_HEIGHT = "h-[400px]";
 const COMPACT_PLOT_STYLE = { width: "100%", height: 340 };
 const COMPACT_PLOT_HEIGHT = "h-[340px]";
 const NOTHING_SELECTED = "Select a sample in the results to see its trace and peaks.";
+/** The view switch's third choice, beside the two views of one signal. */
+const ALL_SIGNALS = "all";
+
+/** What the plot is drawn with besides its curves: the positions, the markers
+ *  switch and the colors. */
+export interface CurveDraw {
+  drawn: ReadonlySet<string>;
+  showReported: boolean;
+  colouring: CurveColouring;
+}
 
 function Field({
   label,
@@ -168,7 +178,20 @@ export interface CurveViewerProps {
    *  shows as chosen at once. Without it the viewer shows the one it last asked for. */
   channel?: string;
   onChannelChange: (key: string) => void;
+  /** The view asked for, from a parent that can also switch it itself; without
+   *  it the viewer shows the one it last asked for. */
+  view?: CurveView;
   onViewChange: (view: CurveView) => void;
+  /** Given, the view switch offers "All signals" as well. While `on`, `render`
+   *  stands in for the plot wherever there is something to draw, and the image
+   *  export is left out. Derivatives are then on screen whatever the view, so
+   *  the smoothing field shows: `render` reports through `onWindow` the window
+   *  they were calculated with. Choosing a view leaves it: `onViewChange` says so. */
+  allSignals?: {
+    on: boolean;
+    onShow: () => void;
+    render: (draw: CurveDraw, onWindow: (window: number | null) => void) => ReactNode;
+  };
   /** On blur or Enter, never per keystroke; undefined lets the API choose. */
   onWindowChange: (window: number | undefined) => void;
   /** The next curves are loading: the plot is dimmed. */
@@ -200,6 +223,12 @@ export interface CurveViewerProps {
   compactControls?: boolean;
   /** Between the plot and the per-position table. */
   belowPlot?: ReactNode;
+  /** A host may put signal selection above its linked results and plot. */
+  hideSignalControl?: boolean;
+  /** The host already identifies the selected sample above the plot. */
+  hideSelectionCaption?: boolean;
+  /** Thermal controls to distinguish from compounds in Highlight mode. */
+  controlOverlays?: ReadonlySet<string>;
 }
 
 /** Pick positions, overlay their curves for one signal with the instrument's
@@ -232,7 +261,9 @@ function CurveViewerBody({
   onSelectionChange,
   channel: askedChannel,
   onChannelChange,
+  view: askedView,
   onViewChange,
+  allSignals,
   onWindowChange,
   pending = false,
   failed = false,
@@ -246,6 +277,9 @@ function CurveViewerBody({
   onPlotPick,
   compactControls = false,
   belowPlot,
+  hideSignalControl = false,
+  hideSelectionCaption = false,
+  controlOverlays,
   scientistOf,
 }: CurveViewerProps & { scientistOf: (userId: string) => string }) {
   // The signal and view last asked for, shown at once while their curves load.
@@ -261,7 +295,10 @@ function CurveViewerBody({
   const switchId = useId();
   const { resolvedTheme } = useTheme();
   const palette: CurvePalette = resolvedTheme === "light" ? "light" : "dark";
-  const shownView = view ?? set.view;
+  const shownView = askedView ?? view ?? set.view;
+  const stacked = !!allSignals?.on;
+  // The smoothing of the derivatives drawn while stacked, as last reported.
+  const [stackedWindow, setStackedWindow] = useState<number | null>(null);
 
   const ordered = useMemo(() => orderedPositions(set), [set]);
   const byId = useMemo(() => new Map(ordered.map((p) => [p.well_id, p])), [ordered]);
@@ -342,15 +379,31 @@ function CurveViewerBody({
     () =>
       effectiveMode === "group"
         ? { colourMode: effectiveMode, slots: groupSlots, groups: groupOf, focusedId, palette }
-        : { colourMode: effectiveMode, slots, selected: selection.selected, focusedId, palette },
-    [effectiveMode, slots, groupSlots, groupOf, selection.selected, focusedId, palette],
+        : {
+            colourMode: effectiveMode,
+            slots,
+            selected: selection.selected,
+            controlOverlays,
+            focusedId,
+            palette,
+          },
+    [
+      effectiveMode,
+      slots,
+      groupSlots,
+      groupOf,
+      selection.selected,
+      controlOverlays,
+      focusedId,
+      palette,
+    ],
   );
 
   // Memoised on its real inputs: a re-render for anything else hands Plotly
   // the same figure, and the constant uirevision keeps the user's zoom.
   const figure = useMemo(
     () =>
-      tooMany
+      tooMany || stacked
         ? null
         : buildCurveFigure({
             set,
@@ -361,7 +414,7 @@ function CurveViewerBody({
             windows,
             ...colouring,
           }),
-    [tooMany, set, drawn, showReported, colouring, steps, windows],
+    [tooMany, stacked, set, drawn, showReported, colouring, steps, windows],
   );
   const columns = useMemo(() => reportedColumns(set), [set]);
   const rows = useMemo(
@@ -462,17 +515,23 @@ function CurveViewerBody({
     setWindowDraft(null);
   };
 
-  const hasTraces = !failed && !!figure && figure.data.length > 0;
+  // Stacked, each panel answers for its own curves: there is something to draw
+  // whenever positions are selected.
+  const hasTraces = stacked
+    ? !tooMany && selectedIds.length > 0
+    : !failed && !!figure && figure.data.length > 0;
   const colours = MEASURED_CURVE_COLORS[palette];
   const selectedPositions = ordered.filter((p) => selection.selected.has(p.well_id));
-  const selectedSamples = selectedPositions.filter((p) => p.well_type !== "reference").length;
+  const selectedSamples = selectedPositions.filter(
+    (p) => p.well_type !== "reference" && !controlOverlays?.has(p.well_id),
+  ).length;
   const doseUnit = DOSE_UNIT_LABELS[set.doseUnit as DoseUnit] ?? set.doseUnit;
-  const notShown = pending || tooMany || failed ? [] : positionsNotShown(set, drawnIds);
+  const notShown = pending || tooMany || failed || stacked ? [] : positionsNotShown(set, drawnIds);
   const addedReferences = drawnIds.length > selectedIds.length;
 
   const signalAndView = (
     <>
-      {set.channels.length > 0 && (
+      {!hideSignalControl && set.channels.length > 0 && (
         <Field label="Signal" bare={compactControls}>
           <Segmented
             label="Signal"
@@ -487,19 +546,24 @@ function CurveViewerBody({
       )}
       <Field label="View" bare={compactControls}>
         <div className="flex items-center gap-2">
-          <Segmented
+          <Segmented<CurveView | typeof ALL_SIGNALS>
             label="View"
-            value={shownView}
+            value={stacked ? ALL_SIGNALS : shownView}
             options={[
               { value: "measured", label: "Measured" },
               { value: "derivative", label: "Derivative" },
+              ...(allSignals ? [{ value: ALL_SIGNALS, label: "All signals" } as const] : []),
             ]}
             onChange={(v) => {
+              if (v === ALL_SIGNALS) {
+                allSignals?.onShow();
+                return;
+              }
               setView(v);
               onViewChange(v);
             }}
           />
-          {shownView === "derivative" && (
+          {(stacked || shownView === "derivative") && (
             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
               smoothing window
               <Input
@@ -508,7 +572,7 @@ function CurveViewerBody({
                 min={0}
                 step="any"
                 className="h-8 w-20"
-                value={windowDraft ?? set.window ?? ""}
+                value={windowDraft ?? (stacked ? stackedWindow : set.window) ?? ""}
                 onChange={(e) => setWindowDraft(e.target.value)}
                 onBlur={commitWindow}
                 onKeyDown={(e) => {
@@ -582,7 +646,7 @@ function CurveViewerBody({
       </Field>
     </>
   );
-  const exportField = (
+  const exportField = !stacked && (
     <Field label="Export, white background">
       <div className="flex gap-2">
         {(["png", "svg"] as const).map((format) => (
@@ -788,7 +852,9 @@ function CurveViewerBody({
         </div>
       )}
 
-      {hasTraces && figure ? (
+      {allSignals?.on && hasTraces ? (
+        allSignals.render({ drawn, showReported, colouring }, setStackedWindow)
+      ) : hasTraces && figure ? (
         <div className={cn("transition-opacity", pending && "opacity-60")}>
           <Plot
             data={figure.data}
@@ -836,11 +902,13 @@ function CurveViewerBody({
 
       {compactControls && selectedPositions.length > 0 && !failed && (
         <div className="space-y-1 text-xs text-muted-foreground">
-          <p className="text-sm text-foreground">
-            {selectedPositions.length === 1
-              ? selectionName(selectedPositions[0], doseUnit)
-              : `${selectedPositions.length} samples selected`}
-          </p>
+          {!hideSelectionCaption && (
+            <p className="text-sm text-foreground">
+              {selectedPositions.length === 1
+                ? selectionName(selectedPositions[0], doseUnit)
+                : `${selectedPositions.length} samples selected`}
+            </p>
+          )}
           {hasTraces && (
             <div data-testid="curve-key" className="flex flex-wrap gap-x-4 gap-y-1">
               <span>
@@ -855,6 +923,16 @@ function CurveViewerBody({
                   {selectedSamples === 1 ? "Selected sample" : "Selected samples"}
                 </span>
               )}
+              {effectiveMode === "highlight" &&
+                selectedPositions
+                  .filter((p) => controlOverlays?.has(p.well_id))
+                  .map((p) => (
+                    <span key={p.well_id}>
+                      <Swatch line colour={colourOf(p.well_id)} />
+                      {sampleTextOf(p)} · {WELL_TYPE_LABELS[p.well_type as WellType] ?? p.well_type}{" "}
+                      · {p.position_label}
+                    </span>
+                  ))}
               {steps && showReported && (
                 <>
                   <span>

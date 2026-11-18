@@ -215,6 +215,16 @@ const selectedRows = () =>
 /** The run tab keeps Markers, Color and Export behind the Display button. */
 const openDisplay = () => fireEvent.click(screen.getByRole("button", { name: "Display" }));
 
+function choose(name: string, option: string) {
+  fireEvent.keyDown(screen.getByRole("combobox", { name }), { key: "Enter" });
+  fireEvent.click(screen.getByRole("option", { name: option }));
+}
+
+function analysisSetting(name: string) {
+  fireEvent.keyDown(screen.getByRole("button", { name: "Analysis settings" }), { key: "Enter" });
+  fireEvent.click(screen.getByRole("menuitem", { name }));
+}
+
 const drawnWells = () => lastPlot().data.map((t) => t.meta);
 
 function lastParams() {
@@ -228,6 +238,7 @@ function lastPlot() {
 }
 
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   canEdit.value = true;
   protocolData.value = PROTOCOL;
   setHitCriteria.mockReset();
@@ -529,10 +540,15 @@ describe("RunCurvesPanel", () => {
         },
       ];
       render(<RunCurvesPanel runId="r1" run={{ ...RUN, status: "completed" }} />);
-      for (const name of ["Mark reviewed", "Exclude", "Edit temperature", "Add peak"])
+      for (const name of ["Mark reviewed", "Add peak"])
         expect(screen.getByRole("button", { name })).toBeEnabled();
+      fireEvent.keyDown(screen.getByRole("button", { name: "Actions for peak at 59 °C" }), {
+        key: "Enter",
+      });
+      for (const name of ["Exclude peak", "Edit temperature"])
+        expect(screen.getByRole("menuitem", { name })).toBeEnabled();
       // The only peak, inside the only transition: there is nothing to choose.
-      expect(screen.queryByRole("button", { name: "Use as Tm" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Use as Tm" })).not.toBeInTheDocument();
     });
 
     it("selects the first position needing review on load", () => {
@@ -608,7 +624,7 @@ describe("RunCurvesPanel", () => {
       withAnalysis({ w2: { tm: 55, delta_tm: -5 }, w3: { flags: ["no_step_in_window"] } });
       render(<RunCurvesPanel runId="r1" run={RULE_RUN} />);
       expect(selectedRows()).toEqual(["w3"]);
-      fireEvent.click(screen.getByRole("button", { name: "1 down" }));
+      fireEvent.click(screen.getByRole("button", { name: "down 1" }));
       expect(document.querySelector('tr[data-row-id="w3"]')).toBeNull();
       expect(drawnWells()).toContain("w3");
     });
@@ -629,13 +645,12 @@ describe("RunCurvesPanel", () => {
       expect(screen.queryByText(/positions above/)).toBeNull();
     });
 
-    it("edit labeling sits in the results header", () => {
+    it("opens edit labeling from thermal analysis settings", () => {
       withAnalysis({});
       render(<RunCurvesPanel runId="r1" run={RUN} />);
-      const results = screen.getByRole("heading", { name: "Results" }).closest("section");
-      if (!results) throw new Error("no results section");
-      expect(within(results).getByRole("button", { name: "Edit labeling" })).toBeEnabled();
-      expect(screen.getAllByRole("button", { name: "Edit labeling" })).toHaveLength(1);
+      analysisSetting("Edit labeling");
+      expect(screen.getByTestId("edit-labelling")).toBeInTheDocument();
+      expect(saveStep).not.toHaveBeenCalled();
     });
 
     it("the no-window note opens the setting up of windows", () => {
@@ -650,7 +665,7 @@ describe("RunCurvesPanel", () => {
     it("an editor sets up windows on any run status, with every trace of the signal", () => {
       withAnalysis({});
       const draft = render(<RunCurvesPanel runId="r1" run={RUN} />);
-      fireEvent.click(screen.getByRole("button", { name: "Name transitions" }));
+      analysisSetting("Name transitions");
       expect(naming.at(-1)).toMatchObject({
         open: true,
         runId: "r1",
@@ -667,7 +682,7 @@ describe("RunCurvesPanel", () => {
         { ...RUN, is_locked: true },
       ]) {
         const view = render(<RunCurvesPanel runId="r1" run={run} />);
-        fireEvent.click(screen.getByRole("button", { name: "Name transitions" }));
+        analysisSetting("Name transitions");
         expect(naming.at(-1)).toMatchObject({ open: true, canRecalculate: false });
         view.unmount();
       }
@@ -738,7 +753,7 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
     setup();
     fireEvent.click(gridRow("Position 2"));
     expect(screen.getByText("REG-1 · B2 — ΔTm (Main) by concentration")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt 10–30 °C" }));
+    choose("Analysis transition", "Alt 10–30 °C");
     expect(screen.getByText("REG-1 · B2 — ΔTm (Alt) by concentration")).toBeInTheDocument();
   });
 
@@ -871,12 +886,12 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       ["Main", true],
       ["Alt", false],
     ]);
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Alt 10–30 °C" }));
+    choose("Analysis transition", "Alt 10–30 °C");
     expect(bands()).toEqual([
       ["Main", false],
       ["Alt", true],
     ]);
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Compare" }));
+    choose("Analysis transition", "Compare transitions");
     expect(bands()).toEqual([
       ["Main", true],
       ["Alt", true],
@@ -891,15 +906,18 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
         w4: { tm: 61, delta_tm: 1 },
       });
       render(<RunCurvesPanel runId="r1" run={RULE_RUN} />);
-      expect(screen.getByText("Hit rule: ΔTm (Main) outside -2 – 2")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Hit rule details" })).toHaveTextContent(
+        "ΔTm (Main) outside -2 – 2",
+      );
       expect(screen.getByRole("button", { name: "Hits 2" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "1 up" })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "1 down" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "up 1" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "down 1" })).toBeInTheDocument();
     });
 
     it("an unset run shows the recommendation and calls no hits until applied", () => {
       withAnalysis({ w2: { tm: 55, delta_tm: -5 } });
       render(<RunCurvesPanel runId="r1" run={RUN} />);
+      fireEvent.click(screen.getByRole("button", { name: "Hit rule details" }));
       expect(
         screen.getByText("Protocol recommends: ΔTm (Main) outside -2 – 2"),
       ).toBeInTheDocument();
@@ -1177,7 +1195,7 @@ describe("RunCurvesPanel picking on the plot", () => {
     expect(noBar()).toBe(true);
     clickTrace("w2", 52.3);
     expect(bar("Spot")).toBeInTheDocument();
-    fireEvent.mouseDown(screen.getByRole("tab", { name: "Signal B" }));
+    choose("Signal", "Signal B");
     expect(noBar()).toBe(true);
   });
 
@@ -1216,5 +1234,217 @@ describe("RunCurvesPanel picking on the plot", () => {
     expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
     expect(bar("Peak")).toHaveTextContent("Read-only access — peaks cannot be changed.");
     expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
+  });
+});
+
+describe("thermal workspace", () => {
+  function setupThermal(includeOtherControls = false) {
+    const thermalPositions = positions.map((p, i) =>
+      i === 8
+        ? { ...p, well_type: "positive_control", label: "CoA", batch_id: "control-stock" }
+        : includeOtherControls && i === 7
+          ? { ...p, well_type: "negative_control", label: "Vehicle", batch_id: "control-stock" }
+          : includeOtherControls && i === 6
+            ? { ...p, well_type: "blank", label: "Buffer" }
+            : p,
+    );
+    useRunCurves.mockReturnValue({
+      data: { ...curves, positions: thermalPositions },
+      isLoading: false,
+      isPlaceholderData: false,
+    });
+    withAnalysis({
+      w1: { tm: 60, delta_tm: 0, step_id: "p-w1", named_by: "range" },
+      w2: { tm: 68, delta_tm: 8, step_id: "p-w2", named_by: "range" },
+      w3: { tm: 65, delta_tm: 5, step_id: "p-w3", named_by: "range" },
+      w9: { tm: 66, delta_tm: 6, step_id: "p-w9", named_by: "range" },
+      ...(includeOtherControls
+        ? {
+            w8: { tm: 60.2, delta_tm: 0.2, step_id: "p-w8", named_by: "range" as const },
+            w7: { flags: ["no_step_in_window"] },
+          }
+        : {}),
+    });
+    const analysis = melting.data as MeltingAnalysis;
+    analysis.steps = ["w1", "w2", "w3", "w9"].map((well, i) => ({
+      id: `p-${well}`,
+      well_id: well,
+      channel_key: "a",
+      source: "instrument",
+      value: [60, 68, 65, 66][i],
+      instrument_value: [60, 68, 65, 66][i],
+      instrument_label: null,
+      status: i === 0 ? "accepted" : "unreviewed",
+      reason: null,
+      changed_by: null,
+      changed_at: null,
+      assigned_window: null,
+      assignment_reason: null,
+      assigned_by: null,
+      assigned_at: null,
+      version: 3,
+    }));
+    if (includeOtherControls)
+      analysis.steps.push({
+        ...analysis.steps[3],
+        id: "p-w8",
+        well_id: "w8",
+        value: 60.2,
+        instrument_value: 60.2,
+        status: "accepted",
+      });
+    return render(<RunCurvesPanel runId="r1" run={RUN} />);
+  }
+
+  it("keeps controls available outside the compound table and links them to their traces", () => {
+    setupThermal();
+    const summary = screen.getByRole("region", { name: "Thermal analysis summary" });
+    expect(within(summary).getByText("Positive Control")).toBeInTheDocument();
+    expect(
+      within(summary).getByRole("button", {
+        name: "View CoA positive control trace at Position 9",
+      }),
+    ).toBeInTheDocument();
+    expect(summary).toHaveTextContent("ΔTm +6.0 °C");
+    expect(document.querySelector('tr[data-row-id="w1"]')).toBeNull();
+    expect(document.querySelector('tr[data-row-id="w9"]')).toBeNull();
+    expect(screen.queryByRole("columnheader", { name: "Hit" })).toBeNull();
+    expect(within(summary).getByRole("button", { name: "2 unreviewed compounds" })).toBeEnabled();
+    fireEvent.click(within(summary).getByRole("button", { name: /CoA/ }));
+    expect(screen.getByRole("heading", { name: "CoA" })).toBeInTheDocument();
+    expect(drawnWells()).toContain("w9");
+    fireEvent.click(within(summary).getByRole("button", { name: /Protein alone/ }));
+    expect(screen.getByRole("heading", { name: "Protein alone" })).toBeInTheDocument();
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("overlays a positive control without replacing the compound and keeps it while browsing", () => {
+    setupThermal();
+    const overlay = screen.getByRole("button", { name: "Overlay CoA positive control" });
+    expect(overlay).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(overlay);
+    expect(overlay).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Selected sample")).toHaveTextContent("ABC-0000002");
+    expect(selectedRows()).toEqual(["w2"]);
+    expect(drawnWells()).toEqual(expect.arrayContaining(["w1", "w2", "w9"]));
+    const sampleLine = lastPlot().data.find((t) => t.meta === "w2")?.line;
+    const controlLine = lastPlot().data.find((t) => t.meta === "w9")?.line;
+    expect(controlLine).not.toEqual(sampleLine);
+    expect(screen.getByTestId("curve-key")).toHaveTextContent(
+      "CoA · Positive Control · Position 9",
+    );
+    fireEvent.click(gridRow("Position 3"));
+    expect(screen.getByLabelText("Selected sample")).toHaveTextContent("ABC-0000003");
+    expect(drawnWells()).toEqual(expect.arrayContaining(["w1", "w3", "w9"]));
+    fireEvent.click(overlay);
+    expect(drawnWells()).not.toContain("w9");
+    expect(drawnWells()).toContain("w3");
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("keeps the positive control overlaid during review navigation and accepts only the selected sample", () => {
+    setupThermal();
+    fireEvent.click(screen.getByRole("button", { name: "Overlay CoA positive control" }));
+    fireEvent.click(screen.getByRole("button", { name: "Next unreviewed" }));
+    expect(screen.getByLabelText("Selected sample")).toHaveTextContent("ABC-0000003");
+    expect(drawnWells()).toEqual(expect.arrayContaining(["w3", "w9"]));
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    expect(saveStep).toHaveBeenCalledTimes(1);
+    expect(saveStep).toHaveBeenCalledWith(
+      { stepId: "p-w3", body: { expected_version: 3, status: "accepted", value: 65 } },
+      expect.anything(),
+    );
+  });
+
+  it("shows positive, negative and blank controls and overlays them independently", () => {
+    setupThermal(true);
+    const summary = screen.getByRole("region", { name: "Thermal analysis summary" });
+    for (const name of ["Positive Control", "Negative Control", "Blank"])
+      expect(within(summary).getByText(name)).toBeInTheDocument();
+    expect(
+      within(summary).getByRole("button", {
+        name: "View Vehicle negative control trace at Position 8",
+      }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Overlay CoA positive control" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overlay Vehicle negative control" }));
+    fireEvent.click(screen.getByRole("button", { name: "Overlay Buffer blank" }));
+    expect(drawnWells()).toEqual(expect.arrayContaining(["w1", "w2", "w7", "w8", "w9"]));
+    const color = (id: string) =>
+      (lastPlot().data.find((t) => t.meta === id)?.line as { color: string }).color;
+    expect(new Set([color("w1"), color("w2"), color("w8"), color("w9")]).size).toBe(4);
+    expect(screen.getByTestId("curve-key")).toHaveTextContent(
+      "Vehicle · Negative Control · Position 8",
+    );
+    expect(screen.getByTestId("curve-key")).toHaveTextContent("Buffer · Blank · Position 7");
+    fireEvent.click(gridRow("Position 3"));
+    expect(drawnWells()).toEqual(expect.arrayContaining(["w3", "w7", "w8", "w9"]));
+    fireEvent.click(screen.getByRole("button", { name: "Overlay Vehicle negative control" }));
+    expect(drawnWells()).not.toContain("w8");
+    expect(drawnWells()).toContain("w9");
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("filters unreviewed compounds while preserving the selected evidence", () => {
+    setupThermal();
+    fireEvent.click(gridRow("Position 4"));
+    fireEvent.click(screen.getByRole("button", { name: "Unreviewed 2" }));
+    expect(document.querySelector('tr[data-row-id="w4"]')).toBeNull();
+    expect(selectedRows()).toEqual([]);
+    expect(screen.getByRole("heading", { name: "ABC-0000004" })).toBeInTheDocument();
+    expect(drawnWells()).toContain("w4");
+    expect(document.querySelectorAll("tr[data-row-id]")).toHaveLength(2);
+    expect(saveStep).not.toHaveBeenCalled();
+  });
+
+  it("keeps an identity above the plot when the last focused row is deselected", () => {
+    setupThermal();
+    fireEvent.click(gridRow("Position 3"), { metaKey: true });
+    expect(screen.getByLabelText("Selected sample")).toHaveTextContent("ABC-0000003");
+    fireEvent.click(gridRow("Position 3"), { metaKey: true });
+    expect(screen.getByLabelText("Selected sample")).toHaveTextContent("ABC-0000002");
+    expect(selectedRows()).toEqual(["w2"]);
+  });
+
+  it("moves through unreviewed peaks without saving, then accepts only the chosen peak", () => {
+    setupThermal();
+    expect(screen.getByRole("heading", { name: "ABC-0000002" })).toBeInTheDocument();
+    const selected = screen.getByLabelText("Selected sample");
+    expect(
+      selected.compareDocumentPosition(screen.getByTestId("plot")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next unreviewed" }));
+    expect(screen.getByRole("heading", { name: "ABC-0000003" })).toBeInTheDocument();
+    expect(saveStep).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Mark reviewed" }));
+    expect(saveStep).toHaveBeenCalledWith(
+      { stepId: "p-w3", body: { expected_version: 3, status: "accepted", value: 65 } },
+      expect.anything(),
+    );
+  });
+
+  it("keeps the existing measured-trace layout for a nonthermal assay", () => {
+    protocolData.value = { id: "p1", readout_definitions: [], recommended_hit_criteria: null };
+    withAnalysis({}, 0);
+    useRunCurves.mockReturnValue({
+      data: { ...curves, channels: curves.channels.map((c) => ({ ...c, x_unit: "s" })) },
+      isLoading: false,
+      isPlaceholderData: false,
+    });
+    render(<RunCurvesPanel runId="r1" run={RUN} />);
+    expect(screen.queryByRole("region", { name: "Thermal traces workspace" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "Signal A" })).toBeInTheDocument();
+    expect(document.querySelector('tr[data-row-id="w1"]')).toBeInTheDocument();
+  });
+
+  it("keeps thermal review navigation available to viewers without offering edits", () => {
+    canEdit.value = false;
+    setupThermal();
+    expect(screen.getByRole("button", { name: "Next unreviewed" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Review actions" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Analysis settings" })).toBeNull();
+    expect(saveStep).not.toHaveBeenCalled();
   });
 });

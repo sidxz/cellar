@@ -47,9 +47,7 @@ const ROW_HEIGHT = 36;
 /** The box a structure is drawn in, directly under the Sample text: wider than
  *  tall, as most structures are drawn, so the drawing fills it. */
 const STRUCTURE = { width: 144, height: 72 };
-/** A row with a structure: one line of text (26 px in the grid's theme), the
- *  drawing and the cell's two borders. */
-const STRUCTURE_ROW_HEIGHT = 26 + STRUCTURE.height + 2;
+const THERMAL_STRUCTURE_ROW_HEIGHT = STRUCTURE.height + 16;
 /** One line of a cell, at its top: where AG Grid puts a plain value in a row
  *  taller than a line. What a renderer draws on it lines up with those. */
 const TOP_LINE = "h-[1lh]";
@@ -155,10 +153,10 @@ function AssignedMark({
 
 /** A hit is blue up (stabilising) or red down; everything else is muted. The
  *  sign says the same without colour. */
-function deltaTint(d: number, isHit: boolean): string {
+function deltaTint(d: number, isHit: boolean, emphasize = false): string {
   if (isHit && d > 0) return "font-semibold text-blue-700 dark:text-blue-300";
   if (isHit && d < 0) return "font-semibold text-red-700 dark:text-red-300";
-  return "text-muted-foreground";
+  return emphasize ? "font-semibold text-foreground" : "text-muted-foreground";
 }
 
 function SampleCell({ row }: { row: ResultRow }) {
@@ -270,16 +268,23 @@ function StatusCell({
   row,
   windowNames,
   top,
+  explicitReview = false,
 }: {
   row: ResultRow;
   windowNames: readonly string[];
   /** The row is taller than a line (it draws a structure): the chip goes on
    *  the top line with the row's other values, not at the row's middle. */
   top: boolean;
+  explicitReview?: boolean;
 }) {
   const status = worstStatus(row, windowNames);
   const differs = windowNames.some((n) => row.cells[n]?.differs);
-  const chip = status && status !== "provisional" ? STATUS[status] : null;
+  const chip =
+    status === "provisional" && explicitReview
+      ? { label: "Unreviewed", variant: "ghost" as const, className: "px-0 text-muted-foreground" }
+      : status && status !== "provisional"
+        ? STATUS[status]
+        : null;
   // The same for every window of the signal, so the first shown one speaks.
   const outside =
     status === "no_step"
@@ -319,16 +324,24 @@ function StatusCell({
 function windowColumns(
   name: string,
   hits: ReadonlySet<string>,
-  grouped: boolean,
+  _grouped: boolean,
   steps: readonly MeltingStep[],
   windows: readonly Range[],
   applicable: readonly ApplicableRule[],
+  prioritizeShift = false,
+  centerValues = false,
 ): ColDef<ResultRow>[] {
   const cell = (r: ResultRow | undefined): WindowCell | undefined => r?.cells[name];
   // A value beside a limit of the run's hit rule is shown to two decimals.
   const tmLimits = limitsFor(applicable, name, "tm");
   const deltaLimits = limitsFor(applicable, name, "delta_tm");
-  return [
+  const deltaText = (p: Pick<Params, "data" | "value">) =>
+    p.data?.wellType === "reference"
+      ? "—"
+      : p.value == null
+        ? ""
+        : formatDelta(p.value, deltaLimits);
+  const columns: ColDef<ResultRow>[] = [
     {
       colId: `${name}:tm`,
       headerName: "Tm (°C)",
@@ -341,12 +354,19 @@ function windowColumns(
       // A Tm named by assignment carries a marker; the rest read as plain numbers.
       cellRenderer: (p: Params) => {
         const c = cell(p.data);
-        if (c?.namedBy !== "assignment") return fmtTm(c?.tm, tmLimits);
-        return (
-          <span className="inline-flex items-center gap-1">
-            <AssignedMark step={steps.find((s) => s.id === c.stepId)} windows={windows} />
-            {fmtTm(c.tm, tmLimits)}
-          </span>
+        const text =
+          c?.namedBy === "assignment" ? (
+            <span className="inline-flex items-center gap-1">
+              <AssignedMark step={steps.find((s) => s.id === c.stepId)} windows={windows} />
+              {fmtTm(c.tm, tmLimits)}
+            </span>
+          ) : (
+            fmtTm(c?.tm, tmLimits)
+          );
+        return centerValues ? (
+          <span className="flex h-full items-center justify-end">{text}</span>
+        ) : (
+          text
         );
       },
     },
@@ -358,36 +378,26 @@ function windowColumns(
       getQuickFilterText: NOT_SEARCHED,
       valueGetter: (p) =>
         p.data?.wellType === "reference" ? null : (cell(p.data)?.deltaTm ?? null),
-      valueFormatter: (p) =>
-        p.data?.wellType === "reference"
-          ? "—"
-          : p.value == null
-            ? ""
-            : formatDelta(p.value, deltaLimits),
+      valueFormatter: deltaText,
+      cellRenderer: centerValues
+        ? (p: Params) => (
+            <span className="flex h-full items-center justify-end">{deltaText(p)}</span>
+          )
+        : undefined,
       cellClass: (p) =>
         cn(
           NUMERIC,
           p.data?.isSample &&
             p.value != null &&
-            deltaTint(p.value as number, hits.has(p.data.wellId)),
+            deltaTint(p.value as number, hits.has(p.data.wellId), prioritizeShift),
         ),
     },
   ];
+  return prioritizeShift ? [columns[1], columns[0]] : columns;
 }
 
 const statusRank = (s: CellStatus | null) =>
   s === "reference" ? -1 : s === null ? STATUS_ORDER.length : STATUS_ORDER.indexOf(s);
-
-/** Grid height that fits the rows (`structures` of them with a drawing) up to
- *  560 px, then scrolls. */
-const gridHeight = (rows: number, structures: number, grouped: boolean) =>
-  Math.min(
-    560,
-    48 +
-      ROW_HEIGHT * (rows - structures) +
-      STRUCTURE_ROW_HEIGHT * structures +
-      (grouped ? GROUP_HEADER_HEIGHT : 0),
-  );
 
 /** The results of a run's temperature windows, one row per position: the
  *  references pinned, then samples by largest |ΔTm|, then the rest. Doubles as
@@ -404,6 +414,7 @@ export function MeltResultsGrid({
   showStructures = false,
   selection,
   onRowClick,
+  prioritizeShift = false,
 }: {
   rows: { pinned: ResultRow[]; body: ResultRow[] };
   windowNames: readonly string[];
@@ -420,6 +431,8 @@ export function MeltResultsGrid({
   showConcentration: boolean;
   /** Draw each registered compound's structure in its Sample cell; off, it shows on hover. */
   showStructures?: boolean;
+  /** Thermal workspace: lead with ΔTm and show explicit review status. */
+  prioritizeShift?: boolean;
   selection: SelectionState;
   onRowClick: (
     wellId: string,
@@ -428,11 +441,12 @@ export function MeltResultsGrid({
   ) => void;
 }) {
   const compare = windowNames.length > 1;
+  const structureColumn = prioritizeShift && showStructures;
   const columnDefs = useMemo<Col[]>(() => {
     const identity: ColDef<ResultRow>[] = [
       {
         colId: "sample",
-        headerName: "Sample",
+        headerName: prioritizeShift ? "Compound" : "Sample",
         flex: 1,
         minWidth: 180,
         width: WIDTH.sample + (showConcentration ? 0 : WIDTH.concentration),
@@ -448,10 +462,14 @@ export function MeltResultsGrid({
                 .filter(Boolean)
                 .join(" ")
             : "",
-        autoHeight: showStructures,
+        autoHeight: showStructures && !prioritizeShift,
         cellRenderer: (p: Params) =>
-          !p.data ? null : showStructures ? (
+          !p.data ? null : showStructures && !prioritizeShift ? (
             <SampleWithStructure row={p.data} />
+          ) : prioritizeShift ? (
+            <div className="flex h-full items-center">
+              <SampleCell row={p.data} />
+            </div>
           ) : (
             <SampleCell row={p.data} />
           ),
@@ -460,6 +478,10 @@ export function MeltResultsGrid({
         colId: "position",
         headerName: "Position",
         width: WIDTH.position,
+        minWidth: prioritizeShift ? WIDTH.position : undefined,
+        cellRenderer: structureColumn
+          ? (p: Params) => <span className="flex h-full items-center">{p.data?.position}</span>
+          : undefined,
         valueGetter: (p) => p.data?.position,
         // As the holder is laid out (Capillary 2 before 11, A2 before A10), not as text.
         comparator: (_a, _b, a, b) => (a.data?.holderRank ?? 0) - (b.data?.holderRank ?? 0),
@@ -472,37 +494,101 @@ export function MeltResultsGrid({
         width: WIDTH.concentration,
         headerClass: "ag-right-aligned-header",
         cellClass: NUMERIC,
+        cellRenderer: structureColumn
+          ? (p: Params) => (
+              <span className="flex h-full items-center justify-end">
+                {p.value == null ? "" : String(p.value)}
+              </span>
+            )
+          : undefined,
         getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => p.data?.concentration ?? null,
         valueFormatter: (p) => (p.value == null ? "" : String(p.value)),
+      });
+    const position = identity.splice(1, 1)[0];
+    if (prioritizeShift) identity.unshift(position);
+    else identity.splice(1, 0, position);
+    if (structureColumn)
+      identity.splice(2, 0, {
+        colId: "structure",
+        headerName: "Structure",
+        width: STRUCTURE.width + 16,
+        minWidth: STRUCTURE.width + 16,
+        sortable: false,
+        getQuickFilterText: NOT_SEARCHED,
+        cellRenderer: (p: Params) =>
+          p.data?.identity.smiles ? (
+            <div className="flex h-full items-center justify-center">
+              <div
+                role="img"
+                aria-label={`Chemical structure of ${p.data.sampleText}`}
+                className="rounded bg-white"
+              >
+                <StructureThumbnail
+                  smiles={p.data.identity.smiles}
+                  size={STRUCTURE.width}
+                  height={STRUCTURE.height}
+                  className="dark:invert-0"
+                />
+              </div>
+            </div>
+          ) : (
+            <span
+              className="flex h-full items-center text-muted-foreground"
+              aria-label="No structure recorded"
+            >
+              —
+            </span>
+          ),
       });
     if (windowNames.length === 0) return identity;
     const values: Col[] = compare
       ? windowNames.map((n) => ({
           headerName: n,
-          children: windowColumns(n, hits, true, steps, windows, applicable),
+          children: windowColumns(
+            n,
+            hits,
+            true,
+            steps,
+            windows,
+            applicable,
+            prioritizeShift,
+            structureColumn,
+          ),
         }))
-      : windowColumns(windowNames[0], hits, false, steps, windows, applicable);
+      : windowColumns(
+          windowNames[0],
+          hits,
+          false,
+          steps,
+          windows,
+          applicable,
+          prioritizeShift,
+          structureColumn,
+        );
     return [
       ...identity,
       ...values,
       {
         colId: "hit",
         headerName: "Hit",
+        hide: prioritizeShift && applicable.length === 0,
         width: WIDTH.hit,
         getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => (p.data && hits.has(p.data.wellId) ? 1 : 0),
         cellRenderer: (p: Params) =>
           p.data && hits.has(p.data.wellId) ? (
-            <Badge variant="secondary" className="px-1.5">
-              Hit
-            </Badge>
+            <span className={structureColumn ? "flex h-full items-center" : undefined}>
+              <Badge variant="secondary" className="px-1.5">
+                Hit
+              </Badge>
+            </span>
           ) : null,
       },
       {
         colId: "status",
-        headerName: "Status",
-        width: WIDTH.status,
+        headerName: prioritizeShift ? "Review" : "Status",
+        width: prioritizeShift ? 120 : WIDTH.status,
         getQuickFilterText: NOT_SEARCHED,
         valueGetter: (p) => (p.data ? statusRank(worstStatus(p.data, windowNames)) : null),
         cellRenderer: (p: Params) =>
@@ -510,7 +596,8 @@ export function MeltResultsGrid({
             <StatusCell
               row={p.data}
               windowNames={windowNames}
-              top={showStructures && !!structureOf(p.data)}
+              top={!prioritizeShift && showStructures && !!structureOf(p.data)}
+              explicitReview={prioritizeShift}
             />
           ) : null,
       },
@@ -525,6 +612,8 @@ export function MeltResultsGrid({
     applicable,
     showConcentration,
     showStructures,
+    prioritizeShift,
+    structureColumn,
   ]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
@@ -570,7 +659,6 @@ export function MeltResultsGrid({
     select(e.api, e.data, ev);
   };
 
-  const shown = [...rows.pinned, ...rows.body];
   return (
     <TooltipProvider delayDuration={200}>
       <DataGrid<ResultRow>
@@ -583,15 +671,13 @@ export function MeltResultsGrid({
         onRowClicked={handleRowClicked}
         onCellKeyDown={handleCellKeyDown}
         suppressCellFocus={false}
-        rowHeight={ROW_HEIGHT}
+        rowHeight={structureColumn ? THERMAL_STRUCTURE_ROW_HEIGHT : ROW_HEIGHT}
         groupHeaderHeight={GROUP_HEADER_HEIGHT}
-        height={gridHeight(
-          shown.length,
-          showStructures ? shown.filter(structureOf).length : 0,
-          compare,
-        )}
+        // As tall as its rows: the page scrolls, never the table.
+        height="auto"
+        domLayout="autoHeight"
         suppressFilters
-        suppressOverlays={NO_EMPTY_NOTICE}
+        suppressOverlays={prioritizeShift ? undefined : NO_EMPTY_NOTICE}
         searchPlaceholder={SEARCH}
       />
     </TooltipProvider>

@@ -175,6 +175,8 @@ export interface CurveColouring {
   /** Highlight mode: the selected positions, drawn in the selected colour
    *  unless they are references. */
   selected?: ReadonlySet<string>;
+  /** Optional thermal controls pinned over the selected sample in Highlight mode. */
+  controlOverlays?: ReadonlySet<string>;
   focusedId: string | null;
   palette: CurvePalette;
 }
@@ -211,8 +213,19 @@ export function curveStyle(
     // The selected sample outweighs the reference; under the pointer a trace
     // keeps its own colour and is only drawn thicker.
     const selected = !reference && !!c.selected?.has(position.well_id);
+    const overlay = c.controlOverlays?.has(position.well_id);
     return {
-      color: reference ? colours.reference : selected ? colours.selected : colours.neutral,
+      color: reference
+        ? colours.reference
+        : overlay
+          ? position.well_type === "negative_control"
+            ? colours.series[0]
+            : position.well_type === "blank"
+              ? colours.neutral
+              : colours.series[2]
+          : selected
+            ? colours.selected
+            : colours.neutral,
       width: focused ? 3 : selected ? 2 : 1.6,
       opacity,
     };

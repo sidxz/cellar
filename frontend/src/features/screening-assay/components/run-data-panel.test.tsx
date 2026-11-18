@@ -102,6 +102,20 @@ afterEach(() => {
 });
 
 describe("RunDataPanel navigation", () => {
+  it("keeps dose-response first when a run also has measured traces", () => {
+    state.plateMap = plateMap("plate", true);
+    render(<RunDataPanel run={run} />);
+    expect(screen.getByRole("tab", { name: "Dose-response" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByText("Dose-response results")).toBeVisible();
+    expect(screen.queryByText("Measured traces")).not.toBeInTheDocument();
+    selectTab("Traces");
+    expect(screen.getByText("Measured traces")).toBeVisible();
+    selectTab("Dose-response");
+    expect(screen.getByText("Dose-response results")).toBeVisible();
+  });
   it("opens dose-response first without mounting readouts, quality, or metadata", () => {
     render(<RunDataPanel run={run} />);
     expect(screen.getByRole("tablist", { name: "Run sections" })).toHaveTextContent(

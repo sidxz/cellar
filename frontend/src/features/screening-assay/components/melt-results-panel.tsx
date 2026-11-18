@@ -1,6 +1,21 @@
 "use client";
 
 import { Button } from "@/shared/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
+import { cn } from "@/shared/lib/utils";
+import { ChevronDown, Settings2 } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import type { CurvePosition } from "../lib/curve-plot";
 import { type SelectionState, applyClick } from "../lib/curve-selection";
@@ -22,6 +37,7 @@ import { MeltSummaryStrip } from "./melt-summary-strip";
 import { Segmented } from "./segmented";
 import { ShiftPlot } from "./shift-plot";
 import { StructuresToggle, useStructuresChoice } from "./structures-toggle";
+import { ThermalResultsSummary } from "./thermal-results-summary";
 
 const COMPARE = "__compare__";
 const STRUCTURES_KEY = "cellar.traces.structures";
@@ -52,6 +68,14 @@ export interface MeltResultsPanelProps {
   onNamePeaks?: () => void;
   /** Accepting every peak at once; given to editors, shown at the end of the counts. */
   reviewAction?: ReactNode;
+  /** Opt-in thermal workspace; other trace hosts keep their existing layout. */
+  workspace?: ReactNode;
+  /** The workspace is taller than a screen: it scrolls with the page instead of staying in view. */
+  workspaceScrolls?: boolean;
+  signalControl?: ReactNode;
+  exportAction?: ReactNode;
+  onEditLabelling?: () => void;
+  editLabellingRefusal?: string | null;
 }
 
 /** The run's results for the signal on screen: a window picker, the counts
@@ -71,7 +95,14 @@ export function MeltResultsPanel({
   hitRule,
   onNamePeaks,
   reviewAction,
+  workspace,
+  workspaceScrolls = false,
+  signalControl,
+  exportAction,
+  onEditLabelling,
+  editLabellingRefusal,
 }: MeltResultsPanelProps) {
+  const thermal = workspace !== undefined;
   // The window last chosen by name; kept across signals and used where it exists.
   const [chosen, setChosen] = useState<string | null>(null);
   const [compare, setCompare] = useState(false);
@@ -132,10 +163,14 @@ export function MeltResultsPanel({
   const ordered = useMemo(() => {
     const { pinned, body } = orderRows(rows, windowNames);
     return {
-      pinned,
-      body: body.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
+      pinned: thermal ? [] : pinned,
+      body: body.filter(
+        (r) =>
+          (!thermal || r.isSample) &&
+          matchesFilter(r, windowNames, activeFilter, hits, unevaluated),
+      ),
     };
-  }, [rows, windowNames, activeFilter, hits, unevaluated]);
+  }, [rows, windowNames, activeFilter, hits, unevaluated, thermal]);
 
   const sampleCount = useMemo(() => rows.filter((r) => r.isSample).length, [rows]);
   const each = useMemo<WindowSummary[]>(
@@ -166,6 +201,201 @@ export function MeltResultsPanel({
       down: n("down"),
     };
   }, [each, rows, hits, windowNames]);
+
+  const results = plotShown ? (
+    <ShiftPlot
+      rows={shiftRows(
+        rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
+        lead.window,
+      )}
+      hits={hits}
+      band={bandFor(applicable, lead.window)}
+      limits={limitsFor(applicable, lead.window, "delta_tm")}
+      selected={selection.selected}
+      onSelect={(id) =>
+        onSelectionChange(applyClick(selection, [id], id, { shift: false, toggle: false }))
+      }
+    />
+  ) : (
+    <MeltResultsGrid
+      rows={ordered}
+      windowNames={windowNames}
+      steps={analysis.steps}
+      windows={windows}
+      hits={hits}
+      applicable={applicable}
+      doseUnit={doseUnit}
+      showConcentration={hasConcentration}
+      showStructures={showStructures}
+      selection={selection}
+      prioritizeShift={thermal}
+      onRowClick={(id, mods, order) => onSelectionChange(applyClick(selection, order, id, mods))}
+    />
+  );
+
+  if (thermal) {
+    const samplesUnreviewed = rows.filter((r) =>
+      matchesFilter(r, windowNames, "unreviewed", hits),
+    ).length;
+    const filters: { value: ResultFilter; label: string; count: number }[] = [
+      { value: null, label: "All", count: sampleCount },
+      { value: "unreviewed", label: "Unreviewed", count: samplesUnreviewed },
+      { value: "needs_review", label: "Peak issues", count: summary?.needsReview ?? 0 },
+      ...(applicable.length
+        ? [
+            { value: "hits" as const, label: "Hits", count: summary?.hits ?? 0 },
+            { value: "up" as const, label: "up", count: summary?.up ?? 0 },
+            { value: "down" as const, label: "down", count: summary?.down ?? 0 },
+            ...(unevaluated.size
+              ? [
+                  {
+                    value: "not_evaluated" as const,
+                    label: "Not evaluated",
+                    count: unevaluated.size,
+                  },
+                ]
+              : []),
+          ]
+        : []),
+    ];
+    return (
+      <section aria-label="Thermal traces workspace" className="space-y-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          {signalControl}
+          {windows.length === 1 && (
+            <span className="text-sm text-muted-foreground">{windowLabel(windows[0])}</span>
+          )}
+          {windows.length > 1 && (
+            <Select
+              value={comparing ? COMPARE : (leadName ?? "")}
+              onValueChange={(v) => {
+                setCompare(v === COMPARE);
+                if (v !== COMPARE) setChosen(v);
+              }}
+            >
+              <SelectTrigger size="sm" aria-label="Analysis transition">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {windows.map((w) => (
+                  <SelectItem key={w.window} value={w.window}>
+                    {windowLabel(w)}
+                  </SelectItem>
+                ))}
+                <SelectItem value={COMPARE}>Compare transitions</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {(onNamePeaks || onEditLabelling) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" size="sm" variant="outline">
+                    <Settings2 className="size-4" />
+                    Analysis settings
+                    <ChevronDown className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {onNamePeaks && (
+                    <DropdownMenuItem onSelect={onNamePeaks}>Name transitions</DropdownMenuItem>
+                  )}
+                  {onEditLabelling && (
+                    <DropdownMenuItem
+                      disabled={!!editLabellingRefusal}
+                      title={editLabellingRefusal ?? undefined}
+                      onSelect={onEditLabelling}
+                    >
+                      Edit labeling
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+            {exportAction}
+          </div>
+        </div>
+        <ThermalResultsSummary
+          rows={rows}
+          windowNames={windowNames}
+          summaries={each}
+          unreviewed={samplesUnreviewed}
+          issues={summary?.needsReview ?? 0}
+          filter={activeFilter}
+          onFilterChange={setFilter}
+          onSelect={(ids) => onSelectionChange({ selected: new Set(ids), anchor: ids[0] ?? null })}
+          hitRule={hitRule}
+        />
+        {windows.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No transition named on this signal.
+            {onNamePeaks && (
+              <Button type="button" variant="link" size="sm" onClick={onNamePeaks}>
+                Name transitions
+              </Button>
+            )}
+          </p>
+        )}
+        <div className="grid items-start gap-6 @[1100px]:grid-cols-12">
+          <div className="min-w-0 space-y-3 @[1100px]:col-span-7">
+            <div className="flex flex-wrap items-center gap-2">
+              <Segmented
+                label="Results view"
+                value={view === "plot" && !comparing ? "plot" : "table"}
+                options={[
+                  { value: "table", label: "Table" },
+                  { value: "plot", label: "Shift plot", disabled: comparing || !lead },
+                ]}
+                onChange={setView}
+              />
+              <fieldset
+                aria-label="Filter compounds"
+                className="flex min-w-0 flex-wrap items-center gap-1 border-0 p-0"
+              >
+                {filters.map((f) => (
+                  <Button
+                    key={f.value ?? "all"}
+                    type="button"
+                    size="sm"
+                    variant={activeFilter === f.value ? "secondary" : "ghost"}
+                    aria-pressed={activeFilter === f.value}
+                    disabled={f.count === 0 && activeFilter !== f.value}
+                    onClick={() => setFilter(activeFilter === f.value ? null : f.value)}
+                    className="h-7 gap-1.5 px-2 text-xs"
+                  >
+                    {f.label}
+                    <span className="text-muted-foreground tabular-nums">{f.count}</span>
+                  </Button>
+                ))}
+              </fieldset>
+              <div className="ml-auto flex items-center gap-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={showStructures ? "secondary" : "outline"}
+                  aria-pressed={showStructures}
+                  disabled={plotShown}
+                  onClick={() => setShowStructures(!showStructures)}
+                >
+                  {showStructures ? "Hide structures" : "Show structures"}
+                </Button>
+                {reviewAction}
+              </div>
+            </div>
+            {results}
+          </div>
+          <div
+            className={cn(
+              "min-w-0 space-y-3 @[1100px]:col-span-5",
+              !workspaceScrolls && "@[1100px]:sticky @[1100px]:top-4",
+            )}
+          >
+            {workspace}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="space-y-3">
@@ -261,37 +491,7 @@ export function MeltResultsPanel({
           )}
         </p>
       )}
-      {plotShown ? (
-        <ShiftPlot
-          rows={shiftRows(
-            rows.filter((r) => matchesFilter(r, windowNames, activeFilter, hits, unevaluated)),
-            lead.window,
-          )}
-          hits={hits}
-          band={bandFor(applicable, lead.window)}
-          limits={limitsFor(applicable, lead.window, "delta_tm")}
-          selected={selection.selected}
-          onSelect={(id) =>
-            onSelectionChange(applyClick(selection, [id], id, { shift: false, toggle: false }))
-          }
-        />
-      ) : (
-        <MeltResultsGrid
-          rows={ordered}
-          windowNames={windowNames}
-          steps={analysis.steps}
-          windows={windows}
-          hits={hits}
-          applicable={applicable}
-          doseUnit={doseUnit}
-          showConcentration={hasConcentration}
-          showStructures={showStructures}
-          selection={selection}
-          onRowClick={(id, mods, order) =>
-            onSelectionChange(applyClick(selection, order, id, mods))
-          }
-        />
-      )}
+      {results}
     </section>
   );
 }

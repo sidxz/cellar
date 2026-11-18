@@ -3,10 +3,18 @@
 import { ExportToolbar } from "@/shared/components/export/export-toolbar";
 import type { ExportFormat, ExportRequest } from "@/shared/components/export/types";
 import { Button } from "@/shared/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/components/ui/select";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { useCanEdit } from "@/shared/hooks/use-current-user";
 import { useWorkspaceMembers } from "@/shared/hooks/use-workspace-members";
 import { cn, shortId } from "@/shared/lib/utils";
+import { Check, Plus } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMeltingAnalysis, usePeakCandidates } from "../hooks/use-melting-analysis";
 import { useProtocol } from "../hooks/use-protocols";
@@ -26,6 +34,7 @@ import {
   batchSeries,
   batchSuffix,
   firstToSelect,
+  orderRows,
   resultRows,
   sampleTextOf,
   seriesCaption,
@@ -33,8 +42,16 @@ import {
 } from "../lib/melt-results";
 import { hintsFor, snapTarget } from "../lib/peak-candidates";
 import { labellingEditRefusal } from "../lib/position-edits";
-import { DOSE_UNIT_LABELS, type DoseUnit, type Run } from "../types";
+import {
+  DOSE_UNIT_LABELS,
+  type DoseUnit,
+  type MeltingAnalysis,
+  type Run,
+  WELL_TYPE_LABELS,
+  type WellType,
+} from "../types";
 import { AcceptAllPeaks } from "./accept-all-peaks";
+import { AllSignalsPlot, type SignalMarks } from "./all-signals-plot";
 import { ConcentrationChart } from "./concentration-chart";
 import { CurveViewer } from "./curve-viewer";
 import { EditLabellingDialog } from "./edit-labelling-dialog";
@@ -43,8 +60,26 @@ import { MeltResultsPanel } from "./melt-results-panel";
 import { MeltingStepsPanel, type StepRequest, canUseAsTm, stepInput } from "./melting-steps-panel";
 import { NamePeaksDialog } from "./name-peaks-dialog";
 import { type PeakPick, PeakPickBar } from "./peak-pick-bar";
+import { ThermalSelectionSummary } from "./thermal-selection-summary";
 
 const PLOT_HEIGHT = "h-[400px]";
+
+/** By well id, the counted peaks of one signal, as the plot draws them. */
+function plotSteps(
+  steps: MeltingAnalysis["steps"],
+  channelKey: string | null,
+  pickedId: string | null,
+) {
+  const byWell = new Map<string, PlotStep[]>();
+  for (const s of steps) {
+    if (s.channel_key !== channelKey || s.status === "rejected") continue;
+    byWell.set(s.well_id, [
+      ...(byWell.get(s.well_id) ?? []),
+      { value: s.value, reviewed: s.status === "accepted", picked: s.id === pickedId },
+    ]);
+  }
+  return byWell;
+}
 
 /** The Traces tab: the results grid beside the trace viewer, one linked
  *  workspace. The grid picks the positions; the viewer overlays their traces
@@ -54,7 +89,10 @@ const PLOT_HEIGHT = "h-[400px]";
  *  steps are reviewed and the batch's ΔTm is charted by concentration. An
  *  editor names the reference's peaks from the results header, which adds the
  *  protocol's windows. Without an analysis (it failed to load) the viewer
- *  keeps its own position selector. */
+ *  keeps its own position selector. On a run with several signals the view
+ *  switch can stack every signal's derivative and measured trace in place of
+ *  the one plot, to look at and not to pick on: the results, the steps and the
+ *  signal they are for stay as they are. */
 const RUN_FORMATS: readonly ExportFormat[] = ["xlsx", "csv", "pdf"];
 
 export function RunCurvesPanel({
@@ -81,6 +119,9 @@ export function RunCurvesPanel({
   const [namingOpen, setNamingOpen] = useState(false);
   const [channel, setChannel] = useState<string | undefined>();
   const [view, setView] = useState<CurveView>("measured");
+  // Every signal's derivative and measured trace at once, in place of the one
+  // plot. Only the plot changes: `channel` and `view` stay what all the rest reads.
+  const [allSignals, setAllSignals] = useState(false);
   // The committed window; undefined lets the API choose.
   const [derivativeWindow, setDerivativeWindow] = useState<number | undefined>();
   // The smoothing in use: the one set in the Derivative view, else the API's default.
@@ -100,6 +141,18 @@ export function RunCurvesPanel({
   const failed = !!error && !fetched;
 
   const [selection, setSelection] = useState<SelectionState>(EMPTY_SELECTION);
+  // Comparison controls stay pinned while the compound selection changes.
+  const [controlOverlays, setControlOverlays] = useState<ReadonlySet<string>>(new Set());
+  const plotSelection = useMemo<SelectionState>(
+    () =>
+      controlOverlays.size
+        ? {
+            selected: new Set([...selection.selected, ...controlOverlays]),
+            anchor: selection.anchor,
+          }
+        : selection,
+    [selection, controlOverlays],
+  );
   const [showReferences, setShowReferences] = useState(true);
   const set = useMemo(() => (data ? curveSetFromRun(data) : null), [data]);
 
@@ -178,18 +231,10 @@ export function RunCurvesPanel({
   }, [pick, clearPick]);
   const channelKey = set?.channel ?? null;
   const pickedId = pick?.stepId ?? null;
-  const steps = useMemo(() => {
-    if (!analysis) return undefined;
-    const byWell = new Map<string, PlotStep[]>();
-    for (const s of analysis.steps) {
-      if (s.channel_key !== channelKey || s.status === "rejected") continue;
-      byWell.set(s.well_id, [
-        ...(byWell.get(s.well_id) ?? []),
-        { value: s.value, reviewed: s.status === "accepted", picked: s.id === pickedId },
-      ]);
-    }
-    return byWell;
-  }, [analysis, channelKey, pickedId]);
+  const steps = useMemo(
+    () => analysis && plotSteps(analysis.steps, channelKey, pickedId),
+    [analysis, channelKey, pickedId],
+  );
   // Once per run: with nothing selected yet, start on the row most worth a look.
   const [leadWindow, setLeadWindow] = useState<string | null>(null);
   const [shown, setShown] = useState<readonly string[]>([]);
@@ -223,6 +268,34 @@ export function RunCurvesPanel({
         })),
     [analysis, channelKey, shown],
   );
+  // The all-signals view: what each signal's own single view draws beside its traces.
+  const signals = set?.channels;
+  const marks = useMemo(() => {
+    const bySignal = new Map<string, SignalMarks>();
+    if (!allSignals || !analysis) return bySignal;
+    for (const { key } of signals ?? []) {
+      if (key === channelKey) {
+        bySignal.set(key, { steps, windows });
+        continue;
+      }
+      const on = analysis.windows.filter((w) => w.channel_key === key);
+      // ponytail: another signal's filled band follows the results' choice by
+      // name (all in Compare; the transition of the same name, else its first).
+      // The results panel keeps the choice itself; lift it if signals whose
+      // transitions are named differently must match their single view exactly.
+      const lead = on.find((w) => shown.includes(w.window)) ?? on[0];
+      bySignal.set(key, {
+        steps: plotSteps(analysis.steps, key, null),
+        windows: on.map((w) => ({
+          low: w.low,
+          high: w.high,
+          label: w.window,
+          active: shown.length > 1 || w === lead,
+        })),
+      });
+    }
+    return bySignal;
+  }, [allSignals, analysis, signals, channelKey, steps, windows, shown]);
 
   if (isLoading && !data) return <Skeleton className={cn("w-full", PLOT_HEIGHT)} />;
   if (!data || !set) {
@@ -261,7 +334,9 @@ export function RunCurvesPanel({
   const pickPosition = data.positions.find(
     (p) =>
       p.well_id === pick?.wellId &&
-      (selection.selected.has(p.well_id) || (showReferences && p.well_type === "reference")),
+      (selection.selected.has(p.well_id) ||
+        controlOverlays.has(p.well_id) ||
+        (showReferences && p.well_type === "reference")),
   );
   const pickedStep = (pick && drawnPeaks(pick.wellId).find((s) => s.id === pick.stepId)) ?? null;
   const picked =
@@ -307,6 +382,11 @@ export function RunCurvesPanel({
   };
   const showSignal = (key: string) => {
     setChannel(key);
+    // One signal was asked for: from every signal at once, back to its measured trace.
+    if (allSignals) {
+      setAllSignals(false);
+      setView("measured");
+    }
     // The peaks, and so what a spot is, belong to the signal.
     clearPick();
   };
@@ -348,6 +428,41 @@ export function RunCurvesPanel({
   // The grid is the selector; without an analysis (it failed) the viewer's own stays.
   const fallback = !analysis && !melting.isLoading;
   const signalWindows = analysis?.windows.filter((w) => w.channel_key === set.channel) ?? [];
+  // Measured traces are shared with other assays. Opt in only with thermal
+  // configuration, existing melting windows, or a temperature axis.
+  const thermalWorkspace =
+    !!run &&
+    !!analysis &&
+    (analysis.windows.length > 0 ||
+      readouts.some((r) => r.melt_config != null) ||
+      set.channels.some((c) => c.x_unit === "°C" || c.x_unit === "degC"));
+  const thermalRows = thermalWorkspace
+    ? resultRows(
+        signalWindows,
+        data.positions,
+        analysis.steps,
+        analysis.step_checks,
+        analysis.outside_every_window,
+      )
+    : [];
+  const activeWindows = shown.length ? shown : lead ? [lead.window] : [];
+  const comparisonControls = new Map<string, typeof thermalRows>();
+  for (const row of thermalRows) {
+    if (row.isSample || row.wellType === "reference") continue;
+    const key = `${row.wellType}:${row.batchId ?? row.sampleText}`;
+    comparisonControls.set(key, [...(comparisonControls.get(key) ?? []), row]);
+  }
+  const ordered = orderRows(thermalRows, activeWindows);
+  const reviewQueue = [...ordered.pinned, ...ordered.body].filter((r) =>
+    activeWindows.some((w) => r.cells[w]?.review === "provisional"),
+  );
+  const focusedResult =
+    thermalRows.find((r) => r.wellId === selection.anchor && selection.selected.has(r.wellId)) ??
+    thermalRows.find((r) => selection.selected.has(r.wellId));
+  const queueIndex = reviewQueue.findIndex((r) => r.wellId === focusedResult?.wellId);
+  const nextReview = reviewQueue.length
+    ? reviewQueue[(queueIndex + 1) % reviewQueue.length]
+    : undefined;
   const unit = currentChannel(set)?.x_unit ?? "";
   // A picked reference trace is drawn without being selected: its peaks are
   // listed while it is picked, so the forms have their position.
@@ -438,6 +553,29 @@ export function RunCurvesPanel({
           )
         }
         onReload={melting.refetch}
+        compactActions={thermalWorkspace}
+        headerAction={
+          thermalWorkspace && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!nextReview || nextReview.wellId === selection.anchor}
+              onClick={() => {
+                if (!nextReview) return;
+                clearPick();
+                setSelection(
+                  applyClick(EMPTY_SELECTION, [nextReview.wellId], nextReview.wellId, {
+                    shift: false,
+                    toggle: false,
+                  }),
+                );
+              }}
+            >
+              Next unreviewed
+            </Button>
+          )
+        }
       />
       {lead && anchor && series.length > 0 ? (
         <ConcentrationChart
@@ -485,6 +623,202 @@ export function RunCurvesPanel({
       />
     </>
   );
+
+  const viewer = (
+    <>
+      {focusedResult && (
+        <ThermalSelectionSummary
+          row={focusedResult}
+          windowNames={activeWindows}
+          applicable={applicable}
+          doseUnit={doseUnit}
+          selectedCount={selection.selected.size}
+        />
+      )}
+      {comparisonControls.size > 0 && (
+        <fieldset
+          aria-label="Control overlays"
+          className="flex min-w-0 flex-wrap items-center gap-2 border-0 p-0"
+        >
+          <span className="text-xs font-medium text-muted-foreground">Compare with</span>
+          {[...comparisonControls].map(([key, controls]) => {
+            const on = controls.every((r) => controlOverlays.has(r.wellId));
+            const label = controls[0].sampleText;
+            const roleLabel =
+              WELL_TYPE_LABELS[controls[0].wellType as WellType] ?? controls[0].wellType;
+            return (
+              <Button
+                key={key}
+                type="button"
+                variant="outline"
+                size="sm"
+                aria-label={`Overlay ${label} ${roleLabel.toLowerCase()}`}
+                aria-pressed={on}
+                className={cn("h-7 gap-1.5 px-2 text-xs", on && "border-primary/50 bg-primary/10")}
+                title={`Keep ${label} overlaid while you select compounds`}
+                onClick={() =>
+                  setControlOverlays((current) => {
+                    const next = new Set(current);
+                    for (const row of controls) {
+                      if (on) next.delete(row.wellId);
+                      else next.add(row.wellId);
+                    }
+                    return next;
+                  })
+                }
+              >
+                {on ? <Check className="size-3.5" /> : <Plus className="size-3.5" />}
+                {label} · {roleLabel}
+                {controls.length > 1 ? ` (n=${controls.length})` : ""}
+              </Button>
+            );
+          })}
+        </fieldset>
+      )}
+      <CurveViewer
+        set={set}
+        steps={steps}
+        windows={windows}
+        onPlotPick={onPlotPick}
+        showReferences={showReferences}
+        onShowReferencesChange={setShowReferences}
+        selection={plotSelection}
+        onSelectionChange={setSelection}
+        channel={channel}
+        onChannelChange={showSignal}
+        view={view}
+        onViewChange={(v) => {
+          setView(v);
+          setAllSignals(false);
+        }}
+        allSignals={
+          set.channels.length > 1
+            ? {
+                on: allSignals,
+                onShow: () => {
+                  setAllSignals(true);
+                  // Nothing is picked on the stacked panels.
+                  clearPick();
+                },
+                render: (draw, onWindow) => (
+                  <AllSignalsPlot
+                    runId={runId}
+                    signals={set.channels}
+                    request={(key, v) => ({
+                      // As the single view asks, so both read one cache: the
+                      // first signal goes unnamed until a signal is chosen.
+                      channel: channel === undefined && key === set.channel ? undefined : key,
+                      view: v,
+                      window: v === "derivative" ? derivativeWindow : undefined,
+                    })}
+                    marks={marks}
+                    draw={draw}
+                    onWindow={onWindow}
+                  />
+                ),
+              }
+            : undefined
+        }
+        onWindowChange={setDerivativeWindow}
+        pending={isPlaceholderData}
+        // Stacked, a request that failed says so in its own panel.
+        failed={failed && !allSignals}
+        exportName={`traces-run-${shortId(data.run_id)}`}
+        hideSelector={!fallback}
+        collapseReportedTable={!fallback}
+        selectorAction={fallback && editLabelling}
+        compactControls
+        hideSignalControl={thermalWorkspace}
+        hideSelectionCaption={thermalWorkspace}
+        controlOverlays={thermalWorkspace ? controlOverlays : undefined}
+        belowPlot={underPlot}
+      />
+    </>
+  );
+
+  if (thermalWorkspace)
+    return (
+      <div className="@container">
+        {canEdit && (
+          <>
+            <NamePeaksDialog
+              open={namingOpen}
+              onOpenChange={setNamingOpen}
+              runId={runId}
+              protocolId={run.protocol_id}
+              set={set}
+              analysis={analysis}
+              canRecalculate={run.status !== "approved" && !run.is_locked}
+            />
+            <EditLabellingDialog
+              run={run}
+              positions={data.positions}
+              doseUnit={doseUnit}
+              open={editOpen}
+              onOpenChange={setEditOpen}
+              onReload={refetch}
+            />
+          </>
+        )}
+        <MeltResultsPanel
+          analysis={analysis}
+          positions={data.positions}
+          channel={set.channel}
+          doseUnit={doseUnit}
+          selection={selection}
+          onSelectionChange={setSelection}
+          onLeadWindowChange={setLeadWindow}
+          onShownWindowsChange={setShown}
+          hits={hits}
+          applicable={applicable}
+          onNamePeaks={canEdit ? () => setNamingOpen(true) : undefined}
+          onEditLabelling={canEdit ? () => setEditOpen(true) : undefined}
+          editLabellingRefusal={editRefusal}
+          exportAction={<ExportToolbar formats={RUN_FORMATS} buildRequest={buildExport} />}
+          signalControl={
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Signal</span>
+              <Select value={channel ?? set.channel ?? ""} onValueChange={showSignal}>
+                <SelectTrigger size="sm" aria-label="Signal">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {set.channels.map((c) => (
+                    <SelectItem key={c.key} value={c.key}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          }
+          hitRule={
+            <MeltHitRule
+              run={run}
+              readoutDefinitions={readouts}
+              recommendation={protocol?.recommended_hit_criteria ?? null}
+              applicable={applicable}
+              other={other}
+              canEdit={canEdit}
+              compact
+            />
+          }
+          reviewAction={
+            canEdit && (
+              <AcceptAllPeaks
+                runId={runId}
+                analysis={analysis}
+                channel={set.channel}
+                channelLabel={currentChannel(set)?.label}
+                menu
+              />
+            )
+          }
+          workspace={viewer}
+          workspaceScrolls={allSignals}
+        />
+      </div>
+    );
 
   return (
     <div className="@container">
@@ -548,29 +882,14 @@ export function RunCurvesPanel({
             </p>
           )}
         </div>
-        <div className="order-1 min-w-0 self-start @[1100px]:sticky @[1100px]:top-4 @[1100px]:order-2 @[1100px]:col-span-5">
-          <CurveViewer
-            set={set}
-            steps={steps}
-            windows={windows}
-            onPlotPick={onPlotPick}
-            showReferences={showReferences}
-            onShowReferencesChange={setShowReferences}
-            selection={selection}
-            onSelectionChange={setSelection}
-            channel={channel}
-            onChannelChange={showSignal}
-            onViewChange={setView}
-            onWindowChange={setDerivativeWindow}
-            pending={isPlaceholderData}
-            failed={failed}
-            exportName={`traces-run-${shortId(data.run_id)}`}
-            hideSelector={!fallback}
-            collapseReportedTable={!fallback}
-            selectorAction={fallback && editLabelling}
-            compactControls
-            belowPlot={underPlot}
-          />
+        <div
+          className={cn(
+            "order-1 min-w-0 self-start @[1100px]:order-2 @[1100px]:col-span-5",
+            // Every signal's panels are taller than a screen: they scroll with the page.
+            !allSignals && "@[1100px]:sticky @[1100px]:top-4",
+          )}
+        >
+          {viewer}
         </div>
       </div>
     </div>
