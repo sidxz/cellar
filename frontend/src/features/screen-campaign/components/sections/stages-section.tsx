@@ -16,17 +16,32 @@
  *
  * The panel below the tabs shows the *selected* stage's criteria (read-only
  * rows) plus its parent and, when editable, a MoreHorizontal menu opening
- * the same StagePopoverForm used for "+ Stage". Selecting "All" shows
- * nothing below the tabs.
+ * the same StagePopoverForm used for "+ Stage". Under the criteria it lists
+ * the runs the stage owns (`seed_runs` whose `stage_ids` hold it), each with
+ * a confirmed "Remove from stage", and "Add runs to <stage>". Selecting "All"
+ * shows nothing below the tabs.
  */
 
 import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
+import { useRemoveRunFromStage } from "../../hooks/use-campaigns";
 import { protocolColorById } from "../../lib/protocol-colors";
-import type { CampaignResponse, StageCriterionDTO } from "../../types";
+import type { CampaignResponse, CampaignStageResponse, StageCriterionDTO } from "../../types";
+import { AddFromRunsDialog } from "../add-from-runs-dialog";
 import { MANUAL_STAGE_HELP, StagePopoverForm } from "../stage-popover";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -276,8 +291,112 @@ export function StagesSection({
               })}
             </ul>
           )}
+
+          <StageRuns campaign={campaign} stage={selectedStage} readOnly={readOnly} />
         </div>
       )}
     </section>
+  );
+}
+
+// ── StageRuns ─────────────────────────────────────────────────────────────────
+
+/** The runs a stage owns, each removable from it (confirmed: its columns
+ *  recompute without the run, which stays in the campaign). */
+function StageRuns({
+  campaign,
+  stage,
+  readOnly,
+}: {
+  campaign: CampaignResponse;
+  stage: CampaignStageResponse;
+  readOnly: boolean;
+}) {
+  const runLabel = useCampaignRunLabels(campaign);
+  const removeRun = useRemoveRunFromStage(campaign.id);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const runIds = (campaign.seed_runs ?? [])
+    .filter((r) => r.stage_ids.includes(stage.id))
+    .map((r) => r.run_id);
+  const removingLabel = removing ? runLabel(removing) : null;
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          Runs <span className="tabular-nums">{runIds.length}</span>
+        </span>
+        {!readOnly && (
+          <Button variant="ghost" size="xs" onClick={() => setAddOpen(true)}>
+            <Plus /> Add runs to {stage.name}
+          </Button>
+        )}
+      </div>
+      {runIds.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No runs at this stage yet — its columns stay untested.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {runIds.map((id) => {
+            const label = runLabel(id);
+            return (
+              <li
+                key={id}
+                className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-1 text-sm"
+              >
+                <span className="min-w-0 truncate" title={`${label.protocolName} · ${label.text}`}>
+                  <span style={{ color: label.color }}>{label.protocolName}</span> ·{" "}
+                  <span>{label.text}</span>
+                </span>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setRemoving(id)}
+                  >
+                    Remove from stage
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <AlertDialog open={removing !== null} onOpenChange={(o) => !o && setRemoving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this run from {stage.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removingLabel && `${removingLabel.protocolName} · ${removingLabel.text}`} stays in
+              the campaign. {stage.name}'s columns are worked out again from its other runs; a
+              compound measured only in this run becomes untested at {stage.name}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => removing && removeRun.mutate({ stageId: stage.id, runId: removing })}
+            >
+              Remove from stage
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {addOpen && (
+        <AddFromRunsDialog
+          campaignId={campaign.id}
+          projectId={campaign.project_id}
+          stages={campaign.stages}
+          initialStageId={stage.id}
+          open
+          onOpenChange={(o) => !o && setAddOpen(false)}
+        />
+      )}
+    </div>
   );
 }

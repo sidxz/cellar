@@ -54,7 +54,8 @@ import {
 } from "@/shared/lib/api/campaigns/campaigns";
 import { Trash2 } from "lucide-react";
 import { campaignKeys } from "../hooks/use-campaigns";
-import type { CampaignChannelResponse } from "../types";
+import type { CampaignChannelResponse, CampaignStageResponse } from "../types";
+import { StageTargetSelect, stageIdOf } from "./stage-target-select";
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -77,9 +78,9 @@ const channelSchema = z.object({
   // Locked at create-time — Radix Select forbids empty-string values, hence
   // the explicit sentinel.
   normalization_applied: z.string(),
-  /** Opt out of the campaign's run scope: by default a readout resolves only
-   *  from the runs the campaign was seeded from; on, it resolves from every
-   *  run of its protocol (a counter-screen measured whenever). */
+  /** Opt out of the column's run scope: by default it reads only the runs
+   *  added to its stage (or, for other columns, the campaign); on, it reads
+   *  every run of its protocol (a counter-screen measured whenever). */
   resolve_from_all_runs: z.boolean(),
 });
 
@@ -91,6 +92,9 @@ export interface ChannelPopoverFormProps {
   campaignId: string;
   projectId: string;
   existing?: CampaignChannelResponse;
+  /** The campaign's stages. A new readout must pick one (or "Other columns")
+   *  once there are any; the stage is fixed after creation. */
+  stages?: CampaignStageResponse[];
   onClose: () => void;
 }
 
@@ -99,6 +103,7 @@ export interface ChannelPopoverFormProps {
 export function ChannelPopoverForm({
   campaignId,
   existing,
+  stages = [],
   onClose,
   projectId,
 }: ChannelPopoverFormProps) {
@@ -135,8 +140,12 @@ export function ChannelPopoverForm({
     },
   });
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Where a new readout goes; "" until picked. Only asked once there are stages.
+  const [stageTarget, setStageTarget] = useState("");
+  const needsStage = !existing && stages.length > 0;
 
   const isEdit = !!existing;
+  const inStage = isEdit ? !!existing.stage_id : !!stageIdOf(stageTarget);
 
   // Parse existing qc_filter — it's typed as `{ [key: string]: unknown } | null`
   const existingQc = existing?.qc_filter as Record<string, unknown> | null | undefined;
@@ -271,6 +280,7 @@ export function ChannelPopoverForm({
         // channel.
         intercept_key: computeInterceptKey(),
         resolve_from_all_runs: values.resolve_from_all_runs,
+        stage_id: stageIdOf(stageTarget),
       },
     });
   };
@@ -288,6 +298,13 @@ export function ChannelPopoverForm({
         {errors.label && <p className="text-xs text-destructive">{errors.label.message}</p>}
       </div>
 
+      {needsStage && (
+        <div className="space-y-1">
+          <Label>Stage</Label>
+          <StageTargetSelect stages={stages} value={stageTarget} onChange={setStageTarget} />
+        </div>
+      )}
+
       {!isEdit && (
         <>
           <div className="space-y-1">
@@ -304,7 +321,7 @@ export function ChannelPopoverForm({
                     setValue("readout_definition_id", "");
                   }}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Protocol">
                     <SelectValue placeholder="Select protocol..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -333,7 +350,7 @@ export function ChannelPopoverForm({
                   onValueChange={field.onChange}
                   disabled={!watchedProtocol || readouts.length === 0}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger aria-label="Readout">
                     <SelectValue placeholder="Select readout..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -575,9 +592,9 @@ export function ChannelPopoverForm({
         </div>
       </div>
 
-      {/* Run scope. A campaign resolves from the runs it was seeded from;
-          this opts one readout out of that, so it pulls from every run of
-          its protocol — the counter-screen that gets measured whenever. */}
+      {/* Run scope. A column reads the runs added to its stage (or, for other
+          columns, the campaign); this opts it out, so it pulls from every run
+          of its protocol — the counter-screen that gets measured whenever. */}
       <div className="flex items-start gap-2">
         <Controller
           name="resolve_from_all_runs"
@@ -596,7 +613,7 @@ export function ChannelPopoverForm({
             Resolve from all runs of the protocol
           </label>
           <p className="text-xs text-muted-foreground">
-            Off: only the runs this campaign was seeded from.
+            Off: only the runs added to {inStage ? "its stage" : "the campaign"}.
           </p>
         </div>
       </div>
@@ -621,7 +638,7 @@ export function ChannelPopoverForm({
           <Button type="button" variant="outline" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button type="submit" size="sm" disabled={isPending}>
+          <Button type="submit" size="sm" disabled={isPending || (needsStage && !stageTarget)}>
             {isPending ? "Saving..." : isEdit ? "Update" : "Add Readout"}
           </Button>
         </div>

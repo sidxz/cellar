@@ -1,3 +1,4 @@
+import type { ColumnDescriptionResponse } from "@/shared/lib/api/model";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -5,9 +6,14 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CampaignChannelResponse, CampaignResponse } from "../../types";
 import { ChannelsSection } from "./channels-section";
 
-const { mutateAsync, mirrorMutate } = vi.hoisted(() => ({
+const { mutateAsync, mirrorMutate, setConcentration } = vi.hoisted(() => ({
   mutateAsync: vi.fn(async () => ({})),
   mirrorMutate: vi.fn(),
+  setConcentration: vi.fn(),
+}));
+vi.mock("../../hooks/use-campaigns", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useSetColumnConcentration: () => ({ mutate: setConcentration, isPending: false }),
 }));
 vi.mock("@/shared/lib/api/campaigns/campaigns", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -129,7 +135,7 @@ describe("ChannelsSection", () => {
     expect(screen.getByText("Counter-screen").closest("li")).toContainElement(marker);
     expect(marker).toHaveAttribute(
       "title",
-      "Resolves from all runs of the protocol. Off: only the runs this campaign was seeded from.",
+      "Reads every run of the protocol, not only the runs added to its stage or campaign.",
     );
   });
 
@@ -209,39 +215,77 @@ const withStage = {
   channels: [makeChannel({ id: "ch-a", label: "IC50" })],
 } as unknown as CampaignResponse;
 
-/** Open the Nth <Select> and click the option whose text matches. */
-function pick(comboboxIndex: number, optionText: string | RegExp) {
-  fireEvent.click(screen.getAllByRole("combobox")[comboboxIndex]);
+/** Open the <Select> with this accessible name and click the matching option. */
+function pick(name: string, optionText: string | RegExp) {
+  fireEvent.click(screen.getByRole("combobox", { name }));
   fireEvent.click(within(screen.getByRole("listbox")).getByText(optionText));
 }
 
 describe("MirrorProtocolPopover", () => {
   beforeEach(() => mirrorMutate.mockClear());
 
-  it("sends the picked parent stage alongside stage_name", async () => {
+  function openAndPickProtocol() {
+    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
+    pick("Protocol", "Kinase Panel");
+  }
+
+  it("needs a stage once the campaign has stages, and sends the picked one", () => {
     render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
 
-    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
-    pick(0, "Kinase Panel");
+    openAndPickProtocol();
+    expect(screen.getByRole("button", { name: "Mirror" })).toBeDisabled();
+    pick("Stage", "Primary");
+    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+
+    expect(mirrorMutate).toHaveBeenCalledWith({
+      campaignId: "c1",
+      data: { protocol_id: "proto-1", stage_id: "st-1", stage_name: null, parent_stage_id: null },
+    });
+  });
+
+  it("sends a new stage's name and its picked parent", async () => {
+    render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
+
+    openAndPickProtocol();
+    pick("Stage", "New stage…");
     await screen.findByLabelText("Parent stage");
-    pick(1, "Primary");
+    pick("Parent stage", "Primary");
     fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
 
     expect(mirrorMutate).toHaveBeenCalledWith({
       campaignId: "c1",
       data: {
         protocol_id: "proto-1",
+        stage_id: null,
         stage_name: "Kinase Panel hits",
         parent_stage_id: "st-1",
       },
     });
   });
 
-  it("reuses a colliding criteria stage — advisory, Mirror still enabled", async () => {
+  it("starts a first stage when the campaign has none, at the root", () => {
+    const noStages = { ...withStage, stages: [] } as unknown as CampaignResponse;
+    render(<ChannelsSection campaign={noStages} projectId="p1" readOnly={false} />, { wrapper });
+
+    openAndPickProtocol();
+    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+
+    expect(mirrorMutate).toHaveBeenCalledWith({
+      campaignId: "c1",
+      data: {
+        protocol_id: "proto-1",
+        stage_id: null,
+        stage_name: "Kinase Panel hits",
+        parent_stage_id: null,
+      },
+    });
+  });
+
+  it("reuses a colliding criteria stage — advisory, Mirror still enabled", () => {
     render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
 
-    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
-    pick(0, "Kinase Panel");
+    openAndPickProtocol();
+    pick("Stage", "New stage…");
     fireEvent.change(screen.getByPlaceholderText("e.g. Screening Hits"), {
       target: { value: "primary" },
     });
@@ -252,15 +296,15 @@ describe("MirrorProtocolPopover", () => {
     expect(screen.getByRole("button", { name: "Mirror" })).toBeEnabled();
   });
 
-  it("blocks a name that belongs to a manual stage", async () => {
+  it("blocks a name that belongs to a manual stage", () => {
     const manual = {
       ...withStage,
       stages: [{ id: "st-m", name: "Confirmed", display_order: 0, kind: "manual" }],
     } as unknown as CampaignResponse;
     render(<ChannelsSection campaign={manual} projectId="p1" readOnly={false} />, { wrapper });
 
-    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
-    pick(0, "Kinase Panel");
+    openAndPickProtocol();
+    pick("Stage", "New stage…");
     fireEvent.change(screen.getByPlaceholderText("e.g. Screening Hits"), {
       target: { value: "Confirmed" },
     });
@@ -268,22 +312,88 @@ describe("MirrorProtocolPopover", () => {
     expect(screen.getByText("Confirmed is a manual stage; pick another name")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Mirror" })).toBeDisabled();
   });
+});
 
-  it("leaves parent_stage_id off when the stage stays at the root", async () => {
-    render(<ChannelsSection campaign={withStage} projectId="p1" readOnly={false} />, { wrapper });
+// ── Stage groups + concentration choice ──────────────────────────────────────
 
-    fireEvent.click(screen.getByRole("button", { name: /Mirror protocol/ }));
-    pick(0, "Kinase Panel");
-    await screen.findByLabelText("Parent stage");
-    fireEvent.click(screen.getByRole("button", { name: "Mirror" }));
+const description: ColumnDescriptionResponse = {
+  readout_label: "% Inhibition",
+  design: "single_concentration_mixed",
+  concentrations: [
+    { value: 10, unit: "µM", count: 40 },
+    { value: 1, unit: "µM", count: 12 },
+    { value: null, unit: null, count: 3 },
+  ],
+  replicates: { min: 1, max: 1, not_recorded: 0 },
+  run_count: 2,
+  rule: "latest run",
+  basis: ["reported"],
+  needs_concentration: true,
+  label: "Primary · % Inhibition · several concentrations",
+  short_label: "several concentrations",
+  stage_name: "Primary",
+};
 
-    expect(mirrorMutate).toHaveBeenCalledWith({
-      campaignId: "c1",
-      data: {
-        protocol_id: "proto-1",
-        stage_name: "Kinase Panel hits",
-        parent_stage_id: undefined,
-      },
+const staged = {
+  id: "c1",
+  stages: [{ id: "st-1", name: "Primary", display_order: 0, kind: "criteria" }],
+  channels: [
+    makeChannel({ id: "ch-mixed", label: "% Inhibition", stage_id: "st-1", description }),
+    makeChannel({
+      id: "ch-plain",
+      label: "IC50",
+      stage_id: "st-1",
+      display_order: 1,
+      description: { ...description, needs_concentration: false },
+    }),
+    makeChannel({
+      id: "ch-chosen",
+      label: "Counter",
+      display_order: 2,
+      test_concentration: { value: 10, unit: "µM" },
+      description: { ...description, readout_label: "Counter", needs_concentration: false },
+    }),
+  ],
+} as unknown as CampaignResponse;
+
+describe("ChannelsSection stages and concentrations", () => {
+  beforeEach(() => setConcentration.mockClear());
+
+  it("heads readouts by their stage, campaign columns last under Other columns", () => {
+    render(<ChannelsSection campaign={staged} projectId="p1" readOnly />, { wrapper });
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(["Primary", "Other columns"]);
+  });
+
+  it("offers each found concentration only on a column that needs one", () => {
+    render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
+
+    const choices = screen.getAllByRole("button", { name: /^Show values at/ });
+    expect(choices.map((b) => b.textContent)).toEqual([
+      "Show values at 10 µM",
+      "Show values at 1 µM",
+    ]);
+    expect(screen.getByText("40 compounds")).toBeInTheDocument();
+
+    fireEvent.click(choices[0]);
+    expect(setConcentration).toHaveBeenCalledWith({
+      channelId: "ch-mixed",
+      testConcentration: { value: 10, unit: "µM" },
     });
+  });
+
+  it("lets a chosen concentration go back to all concentrations", () => {
+    render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
+
+    fireEvent.click(screen.getByRole("button", { name: "Show all concentrations" }));
+    expect(setConcentration).toHaveBeenCalledWith({
+      channelId: "ch-chosen",
+      testConcentration: null,
+    });
+  });
+
+  it("offers no choice when read-only", () => {
+    render(<ChannelsSection campaign={staged} projectId="p1" readOnly />, { wrapper });
+    expect(screen.queryByRole("button", { name: /^Show values at/ })).not.toBeInTheDocument();
   });
 });

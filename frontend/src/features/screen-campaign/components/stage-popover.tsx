@@ -11,10 +11,11 @@
  * with `criteria: []`; the backend rejects manual + criteria with a 422.
  *
  * The criteria list is a react-hook-form field array — each row picks one of
- * the campaign's own channels (never a raw protocol readout: a stage checks
- * a *channel*, the same value the grid and filters already key off) plus an
- * operator and one or two numeric bounds. The whole criteria list is sent on
- * every save, per the backend's "replace whole" PATCH contract.
+ * the stage's own columns (never a raw protocol readout, and never another
+ * stage's or a campaign column: the backend 422s those) plus an operator and
+ * one or two numeric bounds. The whole criteria list is sent on every save,
+ * per the backend's "replace whole" PATCH contract. A stage with no columns
+ * yet (every new one) explains that instead of offering criteria.
  */
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -161,23 +162,39 @@ export function StagePopoverForm({
     [protocolSummaries],
   );
 
+  // A criterion may only name a column of its own stage.
+  const ownColumns = useMemo(
+    () =>
+      existing
+        ? [...(campaign.channels ?? [])]
+            .filter((ch) => ch.stage_id === existing.id)
+            .sort((a, b) => a.display_order - b.display_order)
+        : [],
+    [campaign.channels, existing],
+  );
+  // Hand-entered cells in those columns — deleting the stage drops them.
+  const handEntered = useMemo(() => {
+    const ids = new Set(ownColumns.map((c) => c.id));
+    return (campaign.results ?? [])
+      .flatMap((r) => r.measurements ?? [])
+      .filter((m) => ids.has(m.channel_id) && m.is_manual_override).length;
+  }, [campaign.results, ownColumns]);
+
   const channelOptions = useMemo(() => {
-    return [...(campaign.channels ?? [])]
-      .sort((a, b) => a.display_order - b.display_order)
-      .map((ch) => {
-        const protocolName = protocolNameById.get(ch.protocol_id) ?? "Protocol";
-        // Unit lives on measurements, not the channel — same derivation as
-        // results-grid.tsx's sampleUnit.
-        const unit = (campaign.results ?? [])
-          .map((r) => r.measurements?.find((m) => m.channel_id === ch.id)?.unit ?? "")
-          .find((u) => u && u !== "-");
-        return {
-          id: ch.id,
-          // Readout first: a narrow picker cut at the protocol name hid which readout it was.
-          label: `${ch.label}${unit ? ` (${unit})` : ""} · ${protocolName}`,
-        };
-      });
-  }, [campaign.channels, campaign.results, protocolNameById]);
+    return ownColumns.map((ch) => {
+      const protocolName = protocolNameById.get(ch.protocol_id) ?? "Protocol";
+      // Unit lives on measurements, not the channel — same derivation as
+      // results-grid.tsx's sampleUnit.
+      const unit = (campaign.results ?? [])
+        .map((r) => r.measurements?.find((m) => m.channel_id === ch.id)?.unit ?? "")
+        .find((u) => u && u !== "-");
+      return {
+        id: ch.id,
+        // Readout first: a narrow picker cut at the protocol name hid which readout it was.
+        label: `${ch.label}${unit ? ` (${unit})` : ""} · ${protocolName}`,
+      };
+    });
+  }, [ownColumns, campaign.results, protocolNameById]);
 
   const parentOptions = useMemo(() => {
     const excluded = existing
@@ -347,6 +364,12 @@ export function StagePopoverForm({
 
       {isManual ? (
         <p className="text-xs text-muted-foreground">{MANUAL_STAGE_HELP}</p>
+      ) : channelOptions.length === 0 && fields.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          Criteria judge this stage's own columns.{" "}
+          {isEdit ? "Add runs to it" : "Once it's saved, add runs to it"}, then set its criteria
+          here. Until then it passes its whole population.
+        </p>
       ) : (
         <div className="space-y-2">
           <div className="flex items-center justify-between">
@@ -516,8 +539,11 @@ export function StagePopoverForm({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete stage "{existing.name}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This removes the stage and every override recorded against it for this campaign.
-                Stages with children can't be deleted until the children are removed or re-parented.
+                {ownColumns.length > 0
+                  ? `This removes the stage, every override recorded against it, and its columns — ${ownColumns.map((c) => c.label).join(", ")} — with their values, ${handEntered === 0 ? "none of them hand-entered" : `including ${handEntered} hand-entered ${handEntered === 1 ? "value" : "values"}`}.`
+                  : "This removes the stage and every override recorded against it."}{" "}
+                Its runs stay in the campaign. Stages with children can't be deleted until the
+                children are removed or re-parented.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

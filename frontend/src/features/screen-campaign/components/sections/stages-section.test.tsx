@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -10,6 +10,22 @@ import type {
   StageCountsResponse,
 } from "../../types";
 import { StagesSection } from "./stages-section";
+
+const { removeRun } = vi.hoisted(() => ({ removeRun: vi.fn() }));
+vi.mock("../../hooks/use-campaigns", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useRemoveRunFromStage: () => ({ mutate: removeRun, isPending: false }),
+}));
+
+vi.mock("@/shared/lib/api/runs/runs", () => ({
+  getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions: (id: string) => ({
+    queryKey: ["runs", id],
+    queryFn: async () => [
+      { id: "run-1", protocol_id: "proto-1", run_date: "2026-11-12" },
+      { id: "run-2", protocol_id: "proto-1", run_date: "2026-11-14" },
+    ],
+  }),
+}));
 
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocolSummaries: () => ({
@@ -114,6 +130,11 @@ const manualCampaign = {
 
 const campaign = {
   id: "c1",
+  project_id: "p1",
+  seed_runs: [
+    { run_id: "run-1", protocol_id: "proto-1", stage_ids: ["stage-screen"] },
+    { run_id: "run-2", protocol_id: "proto-1", stage_ids: ["stage-confirmed"] },
+  ],
   channels: [makeChannel({ id: "ch-1", label: "% Inhibition", protocol_id: "proto-1" })],
   stages: [screeningStage, confirmedStage],
   results: [
@@ -296,5 +317,72 @@ describe("StagesSection", () => {
       { wrapper },
     );
     expect(screen.queryByRole("button", { name: "Stage" })).not.toBeInTheDocument();
+  });
+});
+
+describe("StagesSection runs", () => {
+  it("lists the selected stage's runs by protocol and date, and removes one after confirming", async () => {
+    removeRun.mockClear();
+    render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+
+    const row = (await screen.findByText("Run on Nov 12, 2026")).closest("li") as HTMLElement;
+    expect(row).toHaveTextContent("Kinase Panel");
+    // run-2 belongs to the child stage only.
+    expect(screen.queryByText("Run on Nov 14, 2026")).not.toBeInTheDocument();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Remove from stage" }));
+    expect(removeRun).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("alertdialog");
+    expect(confirm).toHaveTextContent("Remove this run from Screening Hits?");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Remove from stage" }));
+    expect(removeRun).toHaveBeenCalledWith({ stageId: "stage-screen", runId: "run-1" });
+  });
+
+  it("offers to add runs to the stage, and shows the list without actions when read-only", async () => {
+    const { unmount } = render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByRole("button", { name: "Add runs to Screening Hits" })).toBeInTheDocument();
+    unmount();
+
+    render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly
+      />,
+      { wrapper },
+    );
+    expect(await screen.findByText("Run on Nov 12, 2026")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove from stage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Add runs to/ })).not.toBeInTheDocument();
+  });
+
+  it("says when a stage has no runs yet", () => {
+    render(
+      <StagesSection
+        campaign={{ ...campaign, seed_runs: [] } as unknown as CampaignResponse}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText(/No runs at this stage yet/)).toBeInTheDocument();
   });
 });

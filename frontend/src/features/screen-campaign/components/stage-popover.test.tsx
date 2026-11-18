@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CampaignResponse, CampaignStageResponse } from "../types";
 import { StagePopoverForm } from "./stage-popover";
@@ -62,11 +62,37 @@ const campaign = {
       label: "% Inhibition",
       protocol_id: "proto-1",
       display_order: 0,
+      stage_id: "stage-screen",
     },
+    {
+      id: "ch-2",
+      label: "IC50",
+      protocol_id: "proto-1",
+      display_order: 1,
+      stage_id: "stage-other",
+    },
+    { id: "ch-3", label: "Counter", protocol_id: "proto-1", display_order: 2, stage_id: null },
   ],
   stages: [existing],
-  results: [],
+  results: [
+    {
+      id: "r1",
+      measurements: [
+        { channel_id: "ch-1", unit: "%", is_manual_override: true },
+        { channel_id: "ch-3", unit: "%", is_manual_override: true },
+      ],
+    },
+    { id: "r2", measurements: [{ channel_id: "ch-1", unit: "%", is_manual_override: false }] },
+  ],
 } as unknown as CampaignResponse;
+
+// Radix Select portals a listbox whose items call scrollIntoView +
+// hasPointerCapture — jsdom ships neither.
+beforeAll(() => {
+  Element.prototype.scrollIntoView ??= vi.fn();
+  Element.prototype.hasPointerCapture ??= vi.fn(() => false);
+  Element.prototype.releasePointerCapture ??= vi.fn();
+});
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -192,6 +218,47 @@ describe("StagePopoverForm — readout picker", () => {
       />,
       { wrapper },
     );
-    expect(screen.getByTitle("% Inhibition · Kinase Panel")).toBeInTheDocument();
+    expect(screen.getByTitle("% Inhibition (%) · Kinase Panel")).toBeInTheDocument();
+  });
+
+  it("offers only the stage's own columns", () => {
+    render(
+      <StagePopoverForm
+        campaignId="c1"
+        campaign={campaign}
+        existing={existing}
+        onClose={vi.fn()}
+      />,
+      { wrapper },
+    );
+    fireEvent.click(screen.getByTitle("% Inhibition (%) · Kinase Panel"));
+    const options = within(screen.getByRole("listbox")).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual(["% Inhibition (%) · Kinase Panel"]);
+  });
+
+  it("explains that a stage without columns can't have criteria yet", () => {
+    render(<StagePopoverForm campaignId="c1" campaign={campaign} onClose={vi.fn()} />, { wrapper });
+    expect(screen.getByText(/Criteria judge this stage's own columns/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Criterion/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("StagePopoverForm — delete", () => {
+  it("names the columns and the hand-entered values that go with the stage", () => {
+    render(
+      <StagePopoverForm
+        campaignId="c1"
+        campaign={campaign}
+        existing={existing}
+        onClose={vi.fn()}
+      />,
+      { wrapper },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    const confirm = screen.getByRole("alertdialog");
+    expect(confirm).toHaveTextContent("% Inhibition");
+    expect(confirm).not.toHaveTextContent("IC50");
+    // ch-3's override is a campaign column's, not this stage's.
+    expect(confirm).toHaveTextContent("1 hand-entered value");
   });
 });

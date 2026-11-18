@@ -6,9 +6,12 @@
  * Columns:
  *   - Compound (pinned-left, flex, min 230) — reg# + molecule name
  *   - Structure (130) — <StructureThumbnail size={104}>
- *   - per channel:
- *       - Value (120) — formatMeasurementValue + n=replicate_count + the selected
- *         stage's pass/fail verdict chip + OVR badge
+ *   - per channel, grouped under the stage that owns it (funnel order, then
+ *     "Other columns"); the header reads the readout with the column's short
+ *     label beneath and the full label + parts on hover:
+ *       - Value (170) — formatMeasurementValue + n=replicate_count + the selected
+ *         stage's pass/fail verdict chip + OVR badge; clicking the value opens
+ *         its facts (concentration, n, runs, batches, basis)
  *       - Curve (150, DR only) — <DoseResponseSparkline>
  *   - Stage (pinned-right, 150, only while a stage is selected) — <StageOutcomeCell>
  *   - Notes (pinned-right, 220) — <NotesCell>
@@ -25,7 +28,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColDef, ColGroupDef, ICellRendererParams, IRowNode } from "ag-grid-community";
 import { Pencil, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useMemo, useState } from "react";
 
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -42,21 +45,25 @@ import {
 } from "@/shared/components/ui/alert-dialog";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { useBulkRemoveResultRowsApiV1CampaignsCampaignIdResultsBulkRemovePost } from "@/shared/lib/api/campaigns/campaigns";
 import { formatMeasurementValue } from "@/shared/lib/format-number";
-import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
 
 import { DoseResponseSparkline, useProtocolSummaries } from "@/features/screening-assay";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
-import { type CurveClass, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
+import type { CurveClass } from "@/features/screening-assay/types";
 
 import { showError, showSuccess } from "@/shared/lib/toast";
 
 import { useMoleculesByIds } from "@/features/chemical-registration";
+import { useBatchesByMolecule } from "@/features/inventory/hooks/use-batches";
 import { useCampaignCurves } from "../../hooks/use-campaign-curves";
+import { useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
 import { campaignKeys } from "../../hooks/use-campaigns";
+import { columnTooltip } from "../../lib/column-description";
 import { protocolColorById } from "../../lib/protocol-colors";
+import { groupColumnsByStage } from "../../lib/stage-column-groups";
 import { outcomeFor } from "../../lib/stage-outcomes";
 import { type CampaignFilters, filtersActive, rowPassesFilters } from "../campaign-filter-bar";
 import { OverrideModal } from "../override-modal";
@@ -160,6 +167,8 @@ export interface CompoundValueCellProps {
   reported: boolean;
   readOnly: boolean;
   onEdit: () => void;
+  /** The value's facts, opened by clicking the value. */
+  facts?: ReactNode;
 }
 
 export function CompoundValueCell({
@@ -173,15 +182,29 @@ export function CompoundValueCell({
   reported,
   readOnly,
   onEdit,
+  facts,
 }: CompoundValueCellProps) {
+  const text = `${prefix}${formatMeasurementValue(value)}${unit ? ` ${unit}` : ""}`;
   return (
     <div className="group flex items-center gap-1 py-2">
       <div className="leading-tight">
-        <span className="text-sm">
-          {prefix}
-          {formatMeasurementValue(value)}
-          {unit ? ` ${unit}` : ""}
-        </span>
+        {facts ? (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="text-sm underline-offset-4 decoration-dotted hover:underline"
+              >
+                {text}
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-3">
+              {facts}
+            </PopoverContent>
+          </Popover>
+        ) : (
+          <span className="text-sm">{text}</span>
+        )}
         {/* Verdict + override markers sit on their own line so they never
             push past the 120px value column (a "pass" chip inline after
             "13.6 uM" clipped to "pa"). */}
@@ -215,6 +238,135 @@ export function CompoundValueCell({
         </button>
       )}
     </div>
+  );
+}
+
+// ── Column header ─────────────────────────────────────────────────────────────
+
+/** Inner header of a value column (AG Grid keeps its own sort/resize around
+ *  it): the readout, the column's short label beneath, the full label and its
+ *  parts on hover, and the protocol's colour as a left accent. */
+export function StageColumnHeader({
+  readout,
+  shortLabel,
+  tooltip,
+  color,
+}: {
+  readout: string;
+  shortLabel?: string;
+  tooltip: string;
+  color?: string;
+}) {
+  return (
+    <div
+      title={tooltip}
+      className="flex min-w-0 flex-col gap-0.5 whitespace-normal border-l-2 py-1.5 pl-1.5 leading-tight"
+      style={{ borderColor: color ?? "transparent" }}
+    >
+      <span className="font-medium">{readout}</span>
+      {shortLabel && (
+        <span className="line-clamp-3 text-[11px] font-normal text-muted-foreground">
+          {shortLabel}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// ── Untested cell ─────────────────────────────────────────────────────────────
+
+const UNRESOLVED_REASON_TEXT: Record<string, string> = {
+  several_concentrations: "Measured at several concentrations — choose one for this column",
+  no_runs_at_stage: "No runs at this stage yet",
+};
+
+/** ND, with the reason it is untested on hover when the column knows it. */
+export function NotDeterminedCell({ unresolvedReason }: { unresolvedReason?: string | null }) {
+  const reason = unresolvedReason ? UNRESOLVED_REASON_TEXT[unresolvedReason] : undefined;
+  return (
+    <span
+      className={`font-mono text-muted-foreground ${reason ? "cursor-help" : ""}`}
+      title={
+        reason ??
+        "ND = Not Determined. The curve has no tested dose to quote or no such intercept, or no candidate is available for this cell. An inactive curve reads as a bound above its top dose."
+      }
+    >
+      ND
+    </span>
+  );
+}
+
+// ── Value facts ───────────────────────────────────────────────────────────────
+
+const BASIS_TEXT: Record<string, string> = {
+  measured: "measured",
+  reported: "reported",
+  mixed: "measured and reported",
+};
+
+/** What stands behind one value: concentration, n, basis, batches, runs. */
+export function MeasurementFacts({
+  measurement: m,
+  moleculeId,
+  campaign,
+}: {
+  measurement: CampaignMeasurementResponse;
+  moleculeId: string;
+  campaign: CampaignResponse;
+}) {
+  const runLabel = useCampaignRunLabels(campaign);
+  const batchIds = m.batch_ids ?? [];
+  const { data: batches } = useBatchesByMolecule(batchIds.length > 0 ? moleculeId : undefined);
+  const batchNumber = new Map((batches ?? []).map((b) => [b.id, b.batch_number] as const));
+  const runIds = m.contributing_run_ids ?? (m.source_run_id ? [m.source_run_id] : []);
+  const concentration = m.concentration_series
+    ? "concentration series"
+    : m.test_concentration_value != null
+      ? `${m.test_concentration_value} ${m.test_concentration_unit ?? ""}`.trim()
+      : "not recorded";
+
+  return (
+    <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+      {m.is_manual_override && (
+        <>
+          <dt className="text-muted-foreground">Hand-entered</dt>
+          <dd>{m.override_reason || "yes"}</dd>
+        </>
+      )}
+      <dt className="text-muted-foreground">Concentration</dt>
+      <dd>{concentration}</dd>
+      {!m.concentration_series && (
+        <>
+          <dt className="text-muted-foreground">n</dt>
+          <dd className="tabular-nums">{m.replicate_count ?? "not recorded"}</dd>
+        </>
+      )}
+      <dt className="text-muted-foreground">Basis</dt>
+      <dd>{(m.basis && BASIS_TEXT[m.basis]) ?? "not recorded"}</dd>
+      <dt className="text-muted-foreground">Batches</dt>
+      <dd>
+        {batchIds.length === 0
+          ? "not recorded"
+          : batchIds.map((id) => batchNumber.get(id) ?? shortId(id)).join(", ")}
+      </dd>
+      <dt className="text-muted-foreground">Runs</dt>
+      <dd>
+        <span className="tabular-nums">{runIds.length}</span>
+        {runIds.length > 0 && (
+          <ul className="mt-0.5 space-y-0.5">
+            {runIds.map((id) => {
+              const label = runLabel(id);
+              return (
+                <li key={id} className="truncate" title={`${label.protocolName} · ${label.text}`}>
+                  <span style={{ color: label.color }}>{label.protocolName}</span> ·{" "}
+                  <EntityLink type="run" id={id} label={label.text} className="font-sans text-xs" />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </dd>
+    </dl>
   );
 }
 
@@ -365,49 +517,42 @@ export function ResultsGridV2({
       },
     });
 
-    // 3. Per-channel grouped by protocol — mirrors the search-results layout
-    //    so chemists comparing multiple protocols can scan "NadD-Sumo HTS"
-    //    columns separately from "NadD Dose Response".
-    const groupedChannels = groupBy(sortedChannels, (ch) => ch.protocol_id);
-
-    for (const [protoId, channels] of groupedChannels) {
-      const protoName = protocolNameById.get(protoId) ?? "Protocol";
+    // 3. Per-channel, grouped under the stage that owns it in funnel order,
+    //    then campaign columns under "Other columns". The protocol's colour
+    //    stays as an accent on each column header.
+    for (const group of groupColumnsByStage(sortedChannels, campaign.stages ?? [])) {
       const groupChildren: ColDef<RowData>[] = [];
       // Class + Curve columns are emitted only for the FIRST channel of a
-      // given (protocol, readout-def) — sibling intercept channels (e.g.
-      // EC50 + EC90 on the same Resazurin curve) share the same Hill fit,
-      // so duplicating Class and the curve drawing is pure noise. Value
+      // given (protocol, readout-def) within a stage — sibling intercept
+      // channels (e.g. EC50 + EC90 on the same Resazurin curve) share the
+      // same Hill fit, so duplicating the curve drawing is pure noise. Value
       // columns stay per-channel since each intercept has its own number.
       const seenReadoutDefs = new Set<string>();
-      for (const ch of channels) {
+      for (const ch of group.channels) {
         const isDR = ch.source_kind === "dose_response_curve";
         const isFirstForReadout = !seenReadoutDefs.has(ch.readout_definition_id);
         if (isFirstForReadout) {
           seenReadoutDefs.add(ch.readout_definition_id);
         }
-        // For non-DR channels the channel header includes the normalization
-        // label (e.g. "Raw Data (% Inhibition)") so the chemist sees what
-        // formula produced each cell.
-        const norm = ch.normalization_applied ?? null;
-        const normLabel = norm
-          ? (READOUT_NORMALIZATION_LABELS[norm as keyof typeof READOUT_NORMALIZATION_LABELS] ??
-            norm)
-          : null;
-        // Derive a representative unit from the first non-empty measurement
-        // on this channel (CampaignChannelResponse has no `unit` field — the
-        // unit lives on each measurement, derived per layer at resolve time).
-        const sampleUnit =
-          (campaign.results ?? [])
-            .map((r) => r.measurements?.find((mm) => mm.channel_id === ch.id)?.unit ?? "")
-            .find((u) => u && u !== "-") ?? "";
-        // Pick which suffix to show — normalization label wins (more
-        // chemist-meaningful than a raw "%" unit), else fall back to unit.
-        const headerSuffix = normLabel ? ` (${normLabel})` : sampleUnit ? ` (${sampleUnit})` : "";
+        const readout = ch.description?.readout_label ?? ch.label;
+        const protocolName = protocolNameById.get(ch.protocol_id);
 
         groupChildren.push({
-          headerName: `${ch.label}${headerSuffix}`,
+          headerName: readout,
           colId: `${ch.id}_value`,
-          width: 120,
+          width: 170,
+          minWidth: 150,
+          wrapHeaderText: true,
+          autoHeaderHeight: true,
+          headerComponentParams: {
+            innerHeaderComponent: StageColumnHeader,
+            innerHeaderComponentParams: {
+              readout,
+              shortLabel: ch.description?.short_label,
+              tooltip: columnTooltip(ch, protocolName),
+              color: colorByProtocol.get(ch.protocol_id),
+            },
+          },
           valueGetter: (p) => {
             const r = p.data?.result;
             const m = r?.measurements?.find((mm) => mm.channel_id === ch.id);
@@ -426,14 +571,7 @@ export function ResultsGridV2({
             // (Was lowercase italic "nd" — cosmetic inconsistency that
             // chemists would read as a different qualifier kind.)
             if (q === "nd") {
-              return (
-                <span
-                  className="font-mono text-muted-foreground"
-                  title="ND = Not Determined. The curve has no tested dose to quote or no such intercept, or no candidate is available for this cell. An inactive curve reads as a bound above its top dose."
-                >
-                  ND
-                </span>
-              );
+              return <NotDeterminedCell unresolvedReason={m.unresolved_reason} />;
             }
             if (q === "excluded") {
               return (
@@ -464,6 +602,13 @@ export function ResultsGridV2({
                 reported={isReportedEndpoint(isDR, m)}
                 readOnly={readOnly}
                 onEdit={() => setOverrideTarget({ result: r, channel: ch, measurement: m })}
+                facts={
+                  <MeasurementFacts
+                    measurement={m}
+                    moleculeId={r.molecule_id}
+                    campaign={campaign}
+                  />
+                }
               />
             );
           },
@@ -472,6 +617,7 @@ export function ResultsGridV2({
         if (isDR && isFirstForReadout) {
           groupChildren.push({
             headerName: "Curve",
+            headerTooltip: `Curve · ${readout}`,
             colId: `${ch.id}_curve`,
             width: 240,
             // DataGrid calls sizeColumnsToFit, which would otherwise squeeze
@@ -535,9 +681,8 @@ export function ResultsGridV2({
       }
 
       cols.push({
-        headerName: protoName,
-        headerClass: "ag-protocol-group-header",
-        headerStyle: { color: colorByProtocol.get(protoId) ?? "inherit" },
+        headerName: group.title,
+        groupId: `stage_${group.stageId ?? "other"}`,
         children: groupChildren,
       });
     }
@@ -585,6 +730,7 @@ export function ResultsGridV2({
     return cols;
   }, [
     protocolNameById,
+    campaign,
     campaign.channels,
     campaign.id,
     campaign.results,
