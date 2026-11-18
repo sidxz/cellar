@@ -263,9 +263,43 @@ async def test_patch_test_concentration(
     assert campaign["channels"][0]["description"]["needs_concentration"] is True
     assert _cell(campaign)["unresolved_reason"] == "several_concentrations"
 
-    # Not a concentration: refused at the boundary.
-    bad = await client.patch(url, json={"test_concentration": {"value": 10, "unit": "banana"}})
-    assert bad.status_code == 422, bad.text
+    # Not a concentration, or not above zero: refused.
+    for bad_value in ({"value": 10, "unit": "banana"}, {"value": 0, "unit": "µM"}):
+        bad = await client.patch(url, json={"test_concentration": bad_value})
+        assert bad.status_code == 422, bad.text
+
+
+async def test_patch_test_concentration_on_a_dose_response_column_422(
+    client: AsyncClient,
+) -> None:
+    """A dose-response column reads the whole series: a pinned dose would do nothing."""
+    campaign_id = await _campaign(client)
+    protocol = await client.post(
+        "/api/v1/protocols",
+        json={
+            **await _protocol_body(client),
+            "readout_definitions": [{"name": "IC50", "data_type": "numeric", "display_order": 0}],
+        },
+    )
+    assert protocol.status_code in (200, 201), protocol.text
+    resp = await client.post(
+        f"/api/v1/campaigns/{campaign_id}/channels",
+        json={
+            "label": "IC50",
+            "protocol_id": protocol.json()["id"],
+            "readout_definition_id": protocol.json()["readout_definitions"][0]["id"],
+            "source_kind": "dose_response_curve",
+            "selection_rule": "latest_run",
+            "qualifier_handling": "include_qualified",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    [channel] = resp.json()["channels"]
+    pin = await client.patch(
+        f"/api/v1/campaigns/{campaign_id}/channels/{channel['id']}",
+        json={"test_concentration": {"value": 10, "unit": "µM"}},
+    )
+    assert pin.status_code == 422, pin.text
 
 
 async def test_delete_stage_run_204_and_recompute(

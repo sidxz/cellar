@@ -145,7 +145,10 @@ class UpdateCampaignChannel:
             if not isinstance(input.test_concentration, _Unset):
                 if input.test_concentration != channel.test_concentration:
                     gating_changed = True
-                channel.test_concentration = input.test_concentration  # type: ignore[assignment]
+                try:
+                    channel.pin_concentration(input.test_concentration)  # type: ignore[arg-type]
+                except ValidationError as exc:
+                    return Failure(exc)
 
             if not isinstance(input.label, _Unset):
                 label = input.label

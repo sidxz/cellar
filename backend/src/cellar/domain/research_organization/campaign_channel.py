@@ -66,6 +66,21 @@ class CampaignChannel:
         self.label = self.label.strip()
         self.reorder(self.display_order)
 
+    def pin_concentration(self, concentration: Concentration | None) -> None:
+        """Set (or, with None, clear) the one concentration this column reads (§6.4).
+
+        Only a readout column reads one concentration; a dose-response column reads
+        the whole series, so a pin there would silently do nothing."""
+        if concentration is not None:
+            if self.source_kind != ChannelSourceKind.READOUT_DATA:
+                raise ValidationError(
+                    "A test concentration applies to a readout column only; a "
+                    "dose-response column reads the whole concentration series"
+                )
+            if concentration.value <= 0:
+                raise ValidationError("A test concentration must be greater than zero")
+        self.test_concentration = concentration
+
     def reorder(self, display_order: int) -> None:
         """Move this channel to a new grid position (re-validates the invariant)."""
         if display_order < 0:

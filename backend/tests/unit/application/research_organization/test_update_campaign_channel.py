@@ -423,7 +423,7 @@ class TestUpdateCampaignChannel:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
         run_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, channel.protocol_id)], None)
 
         query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
@@ -447,7 +447,7 @@ class TestUpdateCampaignChannel:
         recomputed, now sweeping every run of the protocol."""
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channel.protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), channel.protocol_id)], None)
 
         query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
@@ -533,3 +533,38 @@ class TestUpdateCampaignChannel:
         cell = result.find_measurement(channel.id)
         assert cell.value is None
         assert cell.unresolved_reason == UnresolvedReason.SEVERAL_CONCENTRATIONS
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "kind, concentration",
+        [
+            # a dose-response column reads the whole series; a pin would do nothing
+            (ChannelSourceKind.DOSE_RESPONSE_CURVE, Concentration(10.0, "µM")),
+            (ChannelSourceKind.READOUT_DATA, Concentration(0.0, "µM")),
+            (ChannelSourceKind.READOUT_DATA, Concentration(-5.0, "µM")),
+        ],
+    )
+    async def test_test_concentration_refused(self, kind, concentration) -> None:
+        auth = fake_auth()
+        campaign, channel, _ = _make_campaign_with_channel(auth.workspace_id)
+        channel.source_kind = kind
+        query = FakeColumnQuery(99.0)
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            query=query,
+            dispatcher=AsyncMock(),
+        )
+        out = await uc(
+            UpdateCampaignChannelCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                channel_id=channel.id,
+                test_concentration=concentration,
+            ),
+            auth=auth,
+        )
+        assert isinstance(out, Failure)
+        assert isinstance(out.failure(), ValidationError)
+        assert channel.test_concentration is None
+        assert query.calls == []
