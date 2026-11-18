@@ -4,7 +4,7 @@ import { StructureThumbnail } from "@/shared/components/chemistry/structure-thum
 import { CHART_AXIS } from "@/shared/lib/chart-colors";
 import { Plot } from "@/shared/lib/plotly";
 import { useTheme } from "next-themes";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { createPortal } from "react-dom";
 import type { Band } from "../lib/melt-hits";
 import { type ShiftRow, formatDelta } from "../lib/melt-results";
@@ -18,14 +18,7 @@ const CARD = { width: 192, height: 168, gap: 12 };
  *  structure, so the point's own card is shown beside the cursor instead. */
 type Hovered = { x: number; y: number; row: ShiftRow };
 
-export function ShiftPlot({
-  rows,
-  hits,
-  band,
-  limits,
-  selected,
-  onSelect,
-}: {
+interface ShiftPlotProps {
   rows: readonly ShiftRow[];
   /** The positions the run's hit rule calls hits. */
   hits: ReadonlySet<string>;
@@ -36,9 +29,21 @@ export function ShiftPlot({
   limits?: readonly number[];
   selected: ReadonlySet<string>;
   onSelect: (wellId: string) => void;
-}) {
+}
+
+/** The figure alone. Memoized so that showing the hover card does not draw it
+ *  again: a redraw makes Plotly forget what is hovered, and it then never
+ *  reports the pointer leaving the point. */
+const ShiftFigure = memo(function ShiftFigure({
+  rows,
+  hits,
+  band,
+  limits,
+  selected,
+  onSelect,
+  onHover,
+}: ShiftPlotProps & { onHover: (hovered: Hovered | null) => void }) {
   const { resolvedTheme } = useTheme();
-  const [hovered, setHovered] = useState<Hovered | null>(null);
   const longest = Math.max(0, ...rows.map((r) => r.label.length));
   // Room for a registration number with its aliases; the axis grows past this if it must.
   const left = Math.min(280, 40 + longest * 7);
@@ -96,15 +101,22 @@ export function ShiftPlot({
           points?: { customdata?: unknown }[];
         };
         const row = rows.find((r) => r.wellId === points?.[0]?.customdata);
-        setHovered(
+        onHover(
           row && at?.clientX != null && at.clientY != null
             ? { x: at.clientX, y: at.clientY, row }
             : null,
         );
       }}
-      onUnhover={() => setHovered(null)}
+      onUnhover={() => onHover(null)}
     />
   );
+  // Beyond 60 rows the panel scrolls; the figure keeps its full height inside.
+  return rows.length > 60 ? <div style={{ maxHeight: 560, overflowY: "auto" }}>{plot}</div> : plot;
+});
+
+export function ShiftPlot(props: ShiftPlotProps) {
+  const { limits } = props;
+  const [hovered, setHovered] = useState<Hovered | null>(null);
   // ponytail: placed from a fixed card size, past the cursor or before it where it
   // would leave the window; measure the card if its contents grow.
   const card =
@@ -141,10 +153,10 @@ export function ShiftPlot({
       document.body,
     );
   return (
-    <>
-      {/* Beyond 60 rows the panel scrolls; the figure keeps its full height inside. */}
-      {rows.length > 60 ? <div style={{ maxHeight: 560, overflowY: "auto" }}>{plot}</div> : plot}
+    // Leaving the figure always hides the card, whatever Plotly reports.
+    <div onMouseLeave={() => setHovered(null)}>
+      <ShiftFigure {...props} onHover={setHovered} />
       {card}
-    </>
+    </div>
   );
 }

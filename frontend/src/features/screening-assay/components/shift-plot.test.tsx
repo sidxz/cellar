@@ -37,6 +37,8 @@ const rows = [
   { wellId: "c", label: "C", deltaTm: 3 },
 ];
 const last = () => plots[plots.length - 1];
+const NO_HITS: ReadonlySet<string> = new Set();
+const NOOP = () => {};
 const OUTSIDE = { kind: "outside", low: -2, high: 2 } as const;
 const show = (selected: string[] = [], onSelect = () => {}) =>
   render(
@@ -202,6 +204,28 @@ describe("ShiftPlot", () => {
     expect(screen.getByRole("tooltip")).toHaveTextContent("Lipid X");
     expect(screen.queryByTestId("structure")).toBeNull();
     act(() => last().onUnhover?.());
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
+  it("showing the card does not draw the figure again, and leaving the figure hides the card", () => {
+    render(
+      <ShiftPlot
+        rows={[{ wellId: "a", label: "A", deltaTm: 1, smiles: "CCO" }]}
+        hits={NO_HITS}
+        band={null}
+        selected={NO_HITS}
+        onSelect={NOOP}
+      />,
+    );
+    const drawn = plots.length;
+    act(() =>
+      last().onHover?.({ event: { clientX: 40, clientY: 50 }, points: [{ customdata: "a" }] }),
+    );
+    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    // A redraw here would make Plotly drop its hover state and never report the leave.
+    expect(plots.length).toBe(drawn);
+    // The pointer leaves the figure without Plotly reporting it.
+    fireEvent.mouseLeave(screen.getByTestId("plot").parentElement as HTMLElement);
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
