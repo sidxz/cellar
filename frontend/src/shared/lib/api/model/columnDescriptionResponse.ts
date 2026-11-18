@@ -27,4 +27,6 @@ export interface ColumnDescriptionResponse {
   needs_concentration: boolean;
   label: string;
   short_label: string;
+  scope_run_count?: number | null;
+  value_count: number;
 }

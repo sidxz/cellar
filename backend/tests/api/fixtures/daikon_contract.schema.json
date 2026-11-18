@@ -167,7 +167,7 @@
           "test_concentration": { "$ref": "#/definitions/concentration_or_null" },
           "description": {
             "type": "object",
-            "required": ["stage_name", "readout_label", "design", "concentrations", "replicates", "run_count", "rule", "basis", "needs_concentration", "label", "short_label", "scope_run_count"],
+            "required": ["stage_name", "readout_label", "design", "concentrations", "replicates", "run_count", "rule", "basis", "needs_concentration", "label", "short_label", "scope_run_count", "value_count"],
             "additionalProperties": false,
             "properties": {
               "stage_name":    { "type": ["string", "null"] },
@@ -208,7 +208,8 @@
               "needs_concentration": { "type": "boolean" },
               "label":               { "type": "string" },
               "short_label":         { "type": "string" },
-              "scope_run_count":     { "type": ["integer", "null"] }
+              "scope_run_count":     { "type": ["integer", "null"] },
+              "value_count":         { "type": "integer", "minimum": 0 }
             }
           }
         }

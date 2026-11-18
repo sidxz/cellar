@@ -546,6 +546,10 @@ class ColumnDescriptionResponse(BaseModel):
     short_label: str
     #: Runs the column's scope holds; None for a column reading all protocol runs.
     scope_run_count: int | None = None
+    #: Cells with a numeric value across the whole column (after its rule and any
+    #: typed override); ND, excluded and unresolved cells don't count. 0 = nothing
+    #: to show — the column is empty or every cell is ND.
+    value_count: int
 
     @classmethod
     def from_domain(cls, d: ColumnDescription) -> ColumnDescriptionResponse:

@@ -208,6 +208,7 @@ async def test_channel_description_in_summary(
         "label": f"Primary · Signal (% Inhibition) · {short}",
         "short_label": short,
         "scope_run_count": 2,
+        "value_count": 1,
     }
     assert "needs_concentration" not in channel  # only inside the description
 

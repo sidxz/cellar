@@ -347,6 +347,7 @@ const description: ColumnDescriptionResponse = {
   label: "Primary · % Inhibition · several concentrations",
   short_label: "several concentrations",
   stage_name: "Primary",
+  value_count: 40,
 };
 
 const seedRuns = (stageId: string, ...ids: string[]) =>

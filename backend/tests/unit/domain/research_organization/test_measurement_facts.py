@@ -306,3 +306,45 @@ def test_pinned_concentration_is_named_when_no_value_is_at_it():
     assert d.design == "single_concentration"
     assert d.short_label == "single concentration 10 µM · no values yet"
     assert d.concentrations == [{"value": 20.0, "unit": "µM", "count": 1}]
+
+
+def test_value_count_counts_only_cells_with_a_numeric_value():
+    """A column whose runs measured but every cell is ND (or excluded, or left
+    unresolved) has run_count > 0 and value_count 0 — the stage-wide answer a
+    paged reader needs to hide an all-ND column."""
+    ch = _channel()
+    tested_nd = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=ch.id,
+        value=None,
+        value_qualifier=ValueQualifier.ND,
+        unit="%",
+        protocol_name_snapshot="p",
+        protocol_version_snapshot=1,
+        contributing_run_ids=[uuid.uuid4()],
+        basis=MeasurementBasis.MEASURED,
+    )
+    excluded = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=ch.id,
+        value=None,
+        value_qualifier=ValueQualifier.EXCLUDED,
+        unit="%",
+        protocol_name_snapshot="p",
+        protocol_version_snapshot=1,
+    )
+    unresolved = _m(reason=UnresolvedReason.SEVERAL_CONCENTRATIONS)
+    all_nd = build_column_profile(ch, [tested_nd, excluded, unresolved])
+    assert all_nd.run_count == 1
+    assert all_nd.value_count == 0
+
+    censored = _m()
+    censored.value_qualifier = ValueQualifier.GT
+    override = _m()
+    override.mark_manual_override("retyped from the notebook")
+    profile = build_column_profile(ch, [tested_nd, _m(), censored, override])
+    assert profile.value_count == 3
+    d = describe_column(
+        channel=ch, rule=ch.selection_rule, stage_name="P", readout_label="r", profile=profile
+    )
+    assert d.value_count == 3

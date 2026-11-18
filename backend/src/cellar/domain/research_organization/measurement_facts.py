@@ -93,6 +93,9 @@ class ColumnProfile:
     run_count: int
     several_concentrations: int
     basis: frozenset[MeasurementBasis]
+    #: Cells holding a numeric value (incl. censored bounds and typed overrides);
+    #: ND, excluded and unresolved cells don't count.
+    value_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,8 @@ class ColumnDescription:
     #: How many runs the column's scope holds (its stage's, or the campaign's);
     #: None when the column reads every run of the protocol, so nothing to compare.
     scope_run_count: int | None = None
+    #: Cells with a numeric value, stage-wide: 0 means the column is empty or all ND.
+    value_count: int = 0
 
 
 def build_column_profile(
@@ -123,6 +128,7 @@ def build_column_profile(
     not_recorded = several = 0
     runs: set[uuid.UUID] = set()
     basis: set[MeasurementBasis] = set()
+    values = 0
 
     def tally(conc: Concentration | None) -> None:
         for b in buckets:
@@ -134,6 +140,7 @@ def build_column_profile(
         buckets.append([conc, 1])
 
     for m in measurements:
+        values += m.value is not None
         # Every cell lists the doses it was measured at, resolved or not; older rows
         # without the list fall back to their own concentration below.
         for c in m.concentrations_found or []:
@@ -184,6 +191,7 @@ def build_column_profile(
         run_count=len(runs),
         several_concentrations=several,
         basis=frozenset(basis),
+        value_count=values,
     )
 
 
@@ -284,4 +292,5 @@ def describe_column(
         label=" · ".join(p for p in (stage_name, readout_label, short_label) if p),
         short_label=short_label,
         scope_run_count=scope_run_count,
+        value_count=profile.value_count,
     )

@@ -13,7 +13,7 @@
  *         stage's pass/fail verdict chip + OVR badge; clicking the value opens
  *         its facts (concentration, n, runs, batches, basis)
  *       - Curve (150, DR only) — <DoseResponseSparkline>
- *     A column with no values yet is hidden (its Curve with it); the stage
+ *     A column with no value anywhere (unfilled, or all ND) is hidden (its Curve with it); the stage
  *     group's header carries a "+N empty columns" chip that shows them again,
  *     remembered per campaign in this browser.
  *   - Stage (pinned-right, 150, only while a stage is selected) — <StageOutcomeCell>
@@ -298,7 +298,7 @@ export function StageGroupHeader({
           type="button"
           aria-pressed={showingEmpty}
           onClick={onToggleEmpty}
-          title="Columns no run at this stage has filled yet"
+          title="Columns with no values at this stage: not filled yet, or every value ND"
           className="shrink-0 rounded-full border px-1.5 text-[10px] font-normal leading-4 text-muted-foreground hover:border-primary/40 hover:text-foreground"
         >
           {showingEmpty ? `Hide ${emptyCount} ${columns}` : `+${emptyCount} ${columns}`}
@@ -308,17 +308,13 @@ export function StageGroupHeader({
   );
 }
 
-/** A column nothing has filled yet: no run behind any of its cells, no dose
- *  waiting to be chosen, and no value (a hand-entered one counts). */
-export function isEmptyColumn(
-  channel: CampaignChannelResponse,
-  results: CampaignResultResponse[],
-): boolean {
+/** A column with nothing to show: no cell anywhere in it holds a value — it is
+ *  unfilled or every cell is ND (a hand-entered value counts) — and it isn't
+ *  waiting for a concentration to be chosen. Cellar counts this stage-wide
+ *  (`description.value_count`), so a paged reader like daikon agrees. */
+export function isEmptyColumn(channel: CampaignChannelResponse): boolean {
   const d = channel.description;
-  if (!d || d.run_count > 0 || d.needs_concentration || d.concentrations.length > 0) return false;
-  return !results.some((r) =>
-    r.measurements?.some((m) => m.channel_id === channel.id && m.value != null),
-  );
+  return d != null && d.value_count === 0 && !d.needs_concentration;
 }
 
 /** Stage groups (by stage id, "other" for campaign columns) whose empty
@@ -605,7 +601,7 @@ export function ResultsGridV2({
     const results = campaign.results ?? [];
     for (const group of groupColumnsByStage(sortedChannels, campaign.stages ?? [])) {
       const groupKey = group.stageId ?? "other";
-      const empty = group.channels.filter((ch) => isEmptyColumn(ch, results));
+      const empty = group.channels.filter((ch) => isEmptyColumn(ch));
       const showingEmpty = shownEmptyGroups.has(groupKey);
       const visible = showingEmpty
         ? group.channels

@@ -202,6 +202,7 @@ const describedColumn = {
     needs_concentration: false,
     label: LABEL,
     short_label: SHORT,
+    value_count: 40,
   },
 } as unknown as CampaignChannelResponse;
 
@@ -377,6 +378,7 @@ describe("ResultsGridV2 empty columns", () => {
     run_count: 0,
     basis: [],
     short_label: "no values yet",
+    value_count: 0,
   };
   const base = {
     protocol_id: "proto-1",
@@ -495,15 +497,15 @@ describe("ResultsGridV2 empty columns", () => {
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
-  it("never counts a column with a value or a dose to choose as empty", () => {
-    const withValue = {
-      results: [{ measurements: [{ channel_id: "ch-ic50", value: 3 }] }],
-    } as unknown as CampaignResponse;
-    expect(isEmptyColumn(ic50, campaign.results)).toBe(true);
-    expect(isEmptyColumn(ic50, withValue.results)).toBe(false);
+  it("hides a column with no value anywhere — unfilled or all ND — but never one waiting for a dose", () => {
+    expect(isEmptyColumn(ic50)).toBe(true);
+    // Measured, but every cell ND: runs behind it, still nothing to show.
+    const allNd = { ...noValues, run_count: 2, short_label: "dose-response · 2 runs" };
+    expect(isEmptyColumn({ ...ic50, description: allNd })).toBe(true);
+    expect(isEmptyColumn({ ...ic50, description: { ...allNd, value_count: 1 } })).toBe(false);
     expect(
-      isEmptyColumn({ ...ic50, description: { ...noValues, needs_concentration: true } }, []),
+      isEmptyColumn({ ...ic50, description: { ...noValues, needs_concentration: true } }),
     ).toBe(false);
-    expect(isEmptyColumn({ ...ic50, description: null }, [])).toBe(false);
+    expect(isEmptyColumn({ ...ic50, description: null })).toBe(false);
   });
 });
