@@ -121,7 +121,6 @@ def test_empty_unit_accepted_for_excluded_qualifier():
     assert m.unit == ""
 
 
-
 def test_mark_manual_override_with_reason():
     """mark_manual_override accepts an optional reason (B8)."""
     m = CampaignMeasurement(
@@ -167,3 +166,24 @@ def test_mark_override_flips_flag():
     assert m.is_manual_override is False
     m.mark_manual_override()
     assert m.is_manual_override is True
+
+
+def test_measurement_new_fields_default():
+    from cellar.domain.research_organization.campaign_measurement import CampaignMeasurement
+    from cellar.domain.research_organization.enums import ValueQualifier
+
+    m = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=uuid.uuid4(),
+        value=1.0,
+        value_qualifier=ValueQualifier.EQ,
+        unit="nM",
+        protocol_name_snapshot="p",
+        protocol_version_snapshot=1,
+    )
+    assert (m.batch_ids, m.basis, m.concentration_series, m.unresolved_reason) == (
+        None,
+        None,
+        False,
+        None,
+    )

@@ -945,6 +945,7 @@ class TestAddResultsFromRuns:
             display_order=0,
             criteria=[StageCriterion(channel_id=other_channel.id, operator="lt", value=1.0)],
         )
+        other_channel.stage_id = existing_stage.id
         campaign.add_stage(existing_stage)
 
         candidates = {(proto, readout): {mol: [_candidate(value=42.0, run_id=run_id)]}}

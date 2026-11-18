@@ -89,6 +89,7 @@ def _make_source_campaign(auth, values: list[float]) -> tuple[Campaign, Campaign
         display_order=0,
         criteria=[StageCriterion(channel_id=channel.id, operator="gte", value=50.0)],
     )
+    channel.stage_id = stage.id
     source.add_stage(stage)
     for v in values:
         r = CampaignResult(campaign_id=source.id, molecule_id=uuid.uuid4())

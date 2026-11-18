@@ -198,18 +198,25 @@ class SeedRun:
     Recorded on the campaign itself, never derived from row ``RunRef``s: a
     ``RunRef`` names only the run that won a pick, so a union of them drops
     runs whose values never won (a three-run mean would collapse to one run).
-    ``protocol_id`` lets resolution scope each channel to the seed runs of
-    its own protocol (spec D4).
+    ``protocol_id`` scopes a channel to the runs of its own protocol; ``stage_ids``
+    are the stages the run belongs to (a run may serve several, or none).
     """
 
     run_id: uuid.UUID
     protocol_id: uuid.UUID
+    stage_ids: tuple[uuid.UUID, ...] = ()
 
-    def to_dict(self) -> dict[str, str]:
-        return {"run_id": str(self.run_id), "protocol_id": str(self.protocol_id)}
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "run_id": str(self.run_id),
+            "protocol_id": str(self.protocol_id),
+            "stage_ids": [str(s) for s in self.stage_ids],
+        }
 
     @staticmethod
     def from_dict(data: dict[str, Any]) -> SeedRun:
         return SeedRun(
-            run_id=uuid.UUID(data["run_id"]), protocol_id=uuid.UUID(data["protocol_id"])
+            run_id=uuid.UUID(data["run_id"]),
+            protocol_id=uuid.UUID(data["protocol_id"]),
+            stage_ids=tuple(uuid.UUID(s) for s in data.get("stage_ids") or ()),
         )

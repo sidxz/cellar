@@ -18,6 +18,7 @@ from cellar.domain.research_organization.enums import (
     QualifierHandling,
     SelectionRule,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.shared.errors import ValidationError
 from cellar.domain.shared.hit_criterion import InterceptKey
 
@@ -54,6 +55,10 @@ class CampaignChannel:
     #: or physchem readout that was measured whenever, not in the campaign's
     #: own screening runs.
     resolve_from_all_runs: bool = False
+    #: The stage that owns this column; None for a campaign-level column.
+    stage_id: uuid.UUID | None = None
+    #: Concentration this column is pinned to, when set.
+    test_concentration: Concentration | None = None
 
     def __post_init__(self) -> None:
         if not self.label or not self.label.strip():

@@ -15,7 +15,11 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
-from cellar.domain.research_organization.enums import ValueQualifier
+from cellar.domain.research_organization.enums import (
+    MeasurementBasis,
+    UnresolvedReason,
+    ValueQualifier,
+)
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -50,6 +54,10 @@ class CampaignMeasurement:
     #    "curve_class", "raw_data": [{"x", "y"}, ...],
     #    "excluded_points": [{"x", "y"}, ...] | null}
     curve_snapshot: dict[str, Any] | None = None
+    batch_ids: list[uuid.UUID] | None = None
+    basis: MeasurementBasis | None = None
+    concentration_series: bool = False
+    unresolved_reason: UnresolvedReason | None = None
 
     def __post_init__(self) -> None:
         numeric_qualifiers = {

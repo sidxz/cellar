@@ -53,6 +53,17 @@ class ChannelSourceKind(StrEnum):
     DOSE_RESPONSE_CURVE = "dose_response_curve"
 
 
+class MeasurementBasis(StrEnum):
+    MEASURED = "measured"
+    REPORTED = "reported"
+    MIXED = "mixed"
+
+
+class UnresolvedReason(StrEnum):
+    SEVERAL_CONCENTRATIONS = "several_concentrations"
+    NO_RUNS_AT_STAGE = "no_runs_at_stage"
+
+
 class StageKind(StrEnum):
     """How a stage decides its outcome.
 

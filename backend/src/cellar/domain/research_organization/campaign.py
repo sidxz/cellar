@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -141,6 +142,10 @@ class Campaign(AggregateRoot):
             )
         if any(c.id == channel.id for c in self.channels):
             raise ValidationError(f"Channel {channel.id} already on campaign")
+        if channel.stage_id is not None and self.find_stage(channel.stage_id) is None:
+            raise ValidationError(
+                f"Channel stage {channel.stage_id} is not a stage of this campaign"
+            )
         self.channels.append(channel)
         self.updated_at = datetime.now(UTC)
 
@@ -200,13 +205,59 @@ class Campaign(AggregateRoot):
         """Append the runs an add-from-runs call imported from. Runs already
         recorded are ignored; insertion order is kept. Draft only."""
         self._ensure_draft("record seed runs")
-        seen = {s.run_id for s in self.seed_runs}
+        self.add_runs_to_stage(runs, None)
+
+    def add_runs_to_stage(self, runs: Iterable[SeedRun], stage_id: uuid.UUID | None) -> None:
+        """Union ``stage_id`` into each run's stages; unknown runs are appended.
+        ``stage_id=None`` only appends. Insertion order is kept. Draft only."""
+        self._ensure_draft("add runs to stage")
+        if stage_id is not None and self.find_stage(stage_id) is None:
+            raise NotFoundError("CampaignStage", str(stage_id))
+        by_id = {s.run_id: i for i, s in enumerate(self.seed_runs)}
+        changed = False
         for run in runs:
-            if run.run_id in seen:
-                continue
-            self.seed_runs.append(run)
-            seen.add(run.run_id)
+            i = by_id.get(run.run_id)
+            if i is None:
+                ids = run.stage_ids
+                if stage_id is not None and stage_id not in ids:
+                    ids = (*ids, stage_id)
+                self.seed_runs.append(replace(run, stage_ids=ids))
+                by_id[run.run_id] = len(self.seed_runs) - 1
+                changed = True
+            elif stage_id is not None and stage_id not in self.seed_runs[i].stage_ids:
+                cur = self.seed_runs[i]
+                self.seed_runs[i] = replace(cur, stage_ids=(*cur.stage_ids, stage_id))
+                changed = True
+        if changed:
             self.updated_at = datetime.now(UTC)
+
+    def remove_run_from_stage(self, stage_id: uuid.UUID, run_id: uuid.UUID) -> None:
+        """Drop the run from the stage; it stays a run of the campaign."""
+        self._ensure_draft("remove run from stage")
+        if self.find_stage(stage_id) is None:
+            raise NotFoundError("CampaignStage", str(stage_id))
+        for i, s in enumerate(self.seed_runs):
+            if s.run_id == run_id:
+                self.seed_runs[i] = replace(
+                    s, stage_ids=tuple(x for x in s.stage_ids if x != stage_id)
+                )
+                self.updated_at = datetime.now(UTC)
+                return
+        raise NotFoundError("SeedRun", str(run_id))
+
+    def stage_run_ids(self, stage_id: uuid.UUID, protocol_id: uuid.UUID) -> list[uuid.UUID]:
+        return [
+            s.run_id
+            for s in self.seed_runs
+            if s.protocol_id == protocol_id and stage_id in s.stage_ids
+        ]
+
+    def campaign_run_ids(self, protocol_id: uuid.UUID) -> list[uuid.UUID]:
+        """Every campaign run of the protocol, whatever its stages."""
+        return [s.run_id for s in self.seed_runs if s.protocol_id == protocol_id]
+
+    def channels_of_stage(self, stage_id: uuid.UUID) -> list[CampaignChannel]:
+        return [c for c in self.channels if c.stage_id == stage_id]
 
     def seed_run_ids_for(self, protocol_id: uuid.UUID) -> list[uuid.UUID]:
         """Seed run ids of ``protocol_id``, in the order they were recorded.
@@ -252,13 +303,20 @@ class Campaign(AggregateRoot):
                 raise ValidationError("stage parent would create a cycle")
             current = self.find_stage(current.parent_stage_id) if current.parent_stage_id else None
 
-    def _check_stage_criteria_channels(self, criteria: list[StageCriterion]) -> None:
-        channel_ids = {c.id for c in self.channels}
+    def _check_stage_criteria_channels(
+        self, stage_id: uuid.UUID, criteria: list[StageCriterion]
+    ) -> None:
+        channels = {c.id: c for c in self.channels}
         for criterion in criteria:
-            if criterion.channel_id not in channel_ids:
+            channel = channels.get(criterion.channel_id)
+            if channel is None:
                 raise ValidationError(
                     f"StageCriterion channel {criterion.channel_id} is not a channel "
                     "of this campaign"
+                )
+            if channel.stage_id != stage_id:
+                raise ValidationError(
+                    f"StageCriterion channel {criterion.channel_id} belongs to another stage"
                 )
 
     def add_stage(self, stage: CampaignStage) -> None:
@@ -271,7 +329,7 @@ class Campaign(AggregateRoot):
             raise ValidationError(f"CampaignStage {stage.id} already on campaign")
         self._check_stage_name_available(stage.name, exclude_stage_id=None)
         self._check_stage_parent(stage.parent_stage_id, stage_id=stage.id)
-        self._check_stage_criteria_channels(stage.criteria)
+        self._check_stage_criteria_channels(stage.id, stage.criteria)
         self.stages.append(stage)
         self.updated_at = datetime.now(UTC)
 
@@ -310,7 +368,7 @@ class Campaign(AggregateRoot):
             )
         self._check_stage_name_available(new_name, exclude_stage_id=stage.id)
         self._check_stage_parent(new_parent, stage_id=stage.id)  # type: ignore[arg-type]
-        self._check_stage_criteria_channels(new_criteria)  # type: ignore[arg-type]
+        self._check_stage_criteria_channels(stage.id, new_criteria)  # type: ignore[arg-type]
         if new_kind == StageKind.MANUAL and new_criteria:
             raise ValidationError(
                 "A manual stage has no criteria; clear them or use a criteria stage"
@@ -331,6 +389,12 @@ class Campaign(AggregateRoot):
             raise NotFoundError("CampaignStage", str(stage_id))
         if any(s.parent_stage_id == stage_id for s in self.stages):
             raise ConflictError(f"CampaignStage {stage_id} has child stages; remove them first")
+        for channel in self.channels_of_stage(stage_id):
+            self.remove_channel(channel.id)
+        self.seed_runs = [
+            replace(s, stage_ids=tuple(x for x in s.stage_ids if x != stage_id))
+            for s in self.seed_runs
+        ]
         self.stages = [s for s in self.stages if s.id != stage_id]
         for result in self.results:
             result.clear_stage_override(stage_id)

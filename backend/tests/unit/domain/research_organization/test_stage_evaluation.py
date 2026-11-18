@@ -107,6 +107,11 @@ def _make_stage(campaign: Campaign, **overrides) -> CampaignStage:
     )
     defaults.update(overrides)
     stage = CampaignStage(**defaults)
+    # A criterion's column belongs to its stage.
+    for criterion in stage.criteria:
+        for channel in campaign.channels:
+            if channel.id == criterion.channel_id:
+                channel.stage_id = stage.id
     campaign.add_stage(stage)
     return stage
 

@@ -93,6 +93,7 @@ def _campaign(workspace_id: uuid.UUID) -> tuple[Campaign, CampaignChannel, Campa
         display_order=0,
         criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=10.0)],
     )
+    channel.stage_id = stage.id
     campaign.add_stage(stage)
 
     # (value, qualifier) per compound, in add order.
@@ -224,6 +225,7 @@ def _confirmation_stage(campaign: Campaign, parent: CampaignStage) -> CampaignSt
         parent_stage_id=parent.id,
         criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=3.0)],
     )
+    channel.stage_id = stage.id
     campaign.add_stage(stage)
     # Only the parent's hits are in this stage's population: the first was
     # never run on the confirmation channel, the last clears it.

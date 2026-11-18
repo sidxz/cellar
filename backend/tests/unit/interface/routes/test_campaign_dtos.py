@@ -138,6 +138,7 @@ def _make_campaign_with_chained_stages() -> tuple[Campaign, uuid.UUID]:
         display_order=0,
         criteria=[StageCriterion(channel_id=channel.id, operator="lte", value=10.0)],
     )
+    channel.stage_id = stage_a.id
     campaign.add_stage(stage_a)
     stage_b = CampaignStage(
         campaign_id=campaign.id,
@@ -146,6 +147,7 @@ def _make_campaign_with_chained_stages() -> tuple[Campaign, uuid.UUID]:
         parent_stage_id=stage_a.id,
         criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=1.0)],
     )
+    channel.stage_id = stage_b.id
     campaign.add_stage(stage_b)
 
     result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
