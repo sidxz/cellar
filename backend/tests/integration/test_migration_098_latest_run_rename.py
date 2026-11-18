@@ -133,6 +133,12 @@ async def test_upgrade_renames_every_stored_copy_and_downgrade_restores(
     ids = {t: uuid.uuid4() for t in _ROWS if t != "sar_activity_values"}
 
     def run(sync_conn):  # type: ignore[no-untyped-def]
+        # 098 rewrites every channel; 104's lock on closed campaigns' columns did not
+        # exist yet. Off for this rolled-back transaction only (other tests' closed
+        # campaigns share the database).
+        sync_conn.execute(
+            text("ALTER TABLE campaign_channel DISABLE TRIGGER campaign_channel_reject_locked")
+        )
         _seed(sync_conn, ids, workspace_id, user_id)
         audit_before = _audit_count(sync_conn)
         with Operations.context(MigrationContext.configure(sync_conn)):

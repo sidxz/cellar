@@ -622,7 +622,7 @@ async def test_seed_runs_round_trip_in_recorded_order(
     c = _build_campaign(add_result=False, add_measurement=False)
     p1, p2 = uuid.uuid4(), uuid.uuid4()
     r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    c.record_seed_runs([SeedRun(r2, p1), SeedRun(r1, p2)])
+    c.add_runs_to_stage([SeedRun(r2, p1), SeedRun(r1, p2)], None)
     async with AsyncUnitOfWork(session_factory) as uow:
         repo = SQLAlchemyCampaignRepository(uow)
         await repo.save(c)
@@ -633,7 +633,7 @@ async def test_seed_runs_round_trip_in_recorded_order(
         loaded = await repo.find_by_id(c.id)
         assert loaded is not None
         assert loaded.seed_runs == [SeedRun(r2, p1), SeedRun(r1, p2)]
-        loaded.record_seed_runs([SeedRun(r3, p1), SeedRun(r2, p1)])  # r2 already there
+        loaded.add_runs_to_stage([SeedRun(r3, p1), SeedRun(r2, p1)], None)  # r2 already there
         await repo.save(loaded)
         await uow.commit()
 
@@ -737,3 +737,77 @@ async def test_a_campaign_column_has_no_stage_and_a_fresh_cell_no_facts(
     m = loaded.results[0].measurements[0]
     assert (m.batch_ids, m.basis, m.concentration_series) == (None, None, False)
     assert (m.unresolved_reason, m.concentrations_found) == (None, None)
+
+
+async def test_removing_a_stage_that_owns_columns_persists(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Spec §9: removing a stage removes its columns, their cells and its overrides,
+    and its id from every run's stages, in one save; the run and the campaign's
+    other columns stay."""
+    c = _build_campaign(stage_name="Primary")
+    stage, owned = c.stages[0], c.channels[0]
+    other = CampaignChannel(
+        campaign_id=c.id,
+        label="Counter-screen",
+        protocol_id=uuid.uuid4(),
+        readout_definition_id=uuid.uuid4(),
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=SelectionRule.LATEST_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=1,
+    )
+    c.add_channel(other)
+    result = c.results[0]
+    result.add_measurement(
+        CampaignMeasurement(
+            result_id=result.id,
+            channel_id=other.id,
+            value=7.0,
+            value_qualifier=ValueQualifier.EQ,
+            unit="%",
+            protocol_name_snapshot="Counter",
+            protocol_version_snapshot=1,
+        )
+    )
+    result.set_stage_override(
+        stage_id=stage.id,
+        forced_outcome=StageOutcome.HIT,
+        reason="kept by hand",
+        overridden_by=uuid.uuid4(),
+    )
+    run = uuid.uuid4()
+    c.add_runs_to_stage([SeedRun(run, owned.protocol_id)], stage.id)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        loaded.remove_stage(stage.id)
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        again = await SQLAlchemyCampaignRepository(uow).find_by_id(c.id)
+    assert again is not None
+    assert again.stages == []
+    assert [ch.id for ch in again.channels] == [other.id]
+    assert again.seed_runs == [SeedRun(run, owned.protocol_id, ())]
+    [row] = again.results
+    assert [m.channel_id for m in row.measurements] == [other.id]
+    assert row.stage_overrides == {}
+    async with session_factory() as s:
+        left = (
+            await s.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM campaign_channel WHERE id = :ch),"
+                    "       (SELECT count(*) FROM campaign_measurement WHERE channel_id = :ch),"
+                    "       (SELECT count(*) FROM campaign_stage WHERE id = :stage)"
+                ),
+                {"ch": owned.id, "stage": stage.id},
+            )
+        ).one()
+    assert tuple(left) == (0, 0, 0)

@@ -250,16 +250,17 @@ async def test_migration_104_clones_shared_column(tx) -> None:  # type: ignore[n
             continue
         assert copy is not None and copy.id != src.id
         assert (copy.value, copy.unit, copy.replicate_count) == (src.value, "µM", 3)
-    # The lock triggers are back on after the data steps.
+    # The lock triggers are back on after the data steps, with 104's own two.
     enabled = (
         await conn.execute(
             sa.text(
                 "SELECT tgenabled::text FROM pg_trigger WHERE tgname IN "
-                "('campaign_stage_reject_locked', 'campaign_measurement_reject_locked')"
+                "('campaign_stage_reject_locked', 'campaign_measurement_reject_locked',"
+                " 'campaign_channel_reject_locked', 'campaign_seed_runs_reject_locked')"
             )
         )
     ).scalars()
-    assert sorted(enabled) == ["O", "O"]
+    assert sorted(enabled) == ["O", "O", "O", "O"]
 
 
 async def test_migration_104_unreferenced_stays_campaign_column(tx) -> None:  # type: ignore[no-untyped-def]
@@ -333,7 +334,13 @@ async def test_migration_104_downgrade_strips_stage_ids(tx) -> None:  # type: ig
                 "'unresolved_reason', 'concentrations_found'))"
             )
         ).scalar_one()
-        return seed_runs, left
+        triggers = sync_conn.execute(
+            sa.text(
+                "SELECT count(*) FROM pg_trigger WHERE tgname IN "
+                "('campaign_channel_reject_locked', 'campaign_seed_runs_reject_locked')"
+            )
+        ).scalar_one()
+        return seed_runs, left + triggers
 
     seed_runs, left = await conn.run_sync(down)
     assert seed_runs == [

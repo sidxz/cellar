@@ -24,9 +24,16 @@ migrations never met them (074 backfilled before attaching its trigger, 075 only
 dropped columns, 079 wrote ``campaign``, which has none), so this one disables the
 two triggers around its data steps and re-enables them.
 
-Downgrade drops the new columns and strips ``stage_ids`` from every seed run.
-Stage membership is lost and clones stay as ordinary campaign columns (their
-criteria still point at them, which the old schema allows); nothing is un-cloned.
+Lock (spec §9): after the data steps, the 074 trigger function gains two branches
+and two triggers, so a closed or superseded campaign also refuses at the database
+any write of its columns (``campaign_channel``: stage, test concentration, ...) and
+any change of its stage runs (``campaign.seed_runs``; the campaign's other fields,
+such as the status reopen flips, stay writable).
+
+Downgrade drops those two triggers and restores 074's function body, then drops
+the new columns and strips ``stage_ids`` from every seed run. Stage membership is
+lost and clones stay as ordinary campaign columns (their criteria still point at
+them, which the old schema allows); nothing is un-cloned.
 
 Revision ID: 104_stage_owned_campaign_values
 Revises: 103_readout_data_replicate_count
@@ -43,6 +50,66 @@ revision = "104_stage_owned_campaign_values"
 down_revision = "103_readout_data_replicate_count"
 
 _LOCKED = ("campaign_stage", "campaign_measurement")
+
+# Migration 074's reject_locked_campaign_write(); ``-- 104 branches`` marks where
+# this migration adds its own (and where the downgrade leaves none).
+_LOCK_FUNCTION = """
+CREATE OR REPLACE FUNCTION reject_locked_campaign_write() RETURNS trigger AS $$
+DECLARE
+    cstat text;
+BEGIN
+    IF TG_TABLE_NAME = 'campaign_result' THEN
+        SELECT status INTO cstat
+          FROM campaign
+         WHERE id = COALESCE(NEW.campaign_id, OLD.campaign_id);
+    ELSIF TG_TABLE_NAME = 'campaign_measurement' THEN
+        SELECT c.status INTO cstat
+          FROM campaign_result r
+          JOIN campaign c ON c.id = r.campaign_id
+         WHERE r.id = COALESCE(NEW.result_id, OLD.result_id);
+    ELSIF TG_TABLE_NAME = 'campaign_stage' THEN
+        SELECT status INTO cstat
+          FROM campaign
+         WHERE id = COALESCE(NEW.campaign_id, OLD.campaign_id);
+    ELSIF TG_TABLE_NAME = 'campaign_stage_override' THEN
+        SELECT c.status INTO cstat
+          FROM campaign_result r
+          JOIN campaign c ON c.id = r.campaign_id
+         WHERE r.id = COALESCE(NEW.result_id, OLD.result_id);
+    -- 104 branches
+    END IF;
+    IF cstat IN ('closed', 'superseded') THEN
+        RAISE EXCEPTION 'Campaign is %, writes blocked', cstat USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN COALESCE(NEW, OLD);
+END;
+$$ LANGUAGE plpgsql;
+"""
+
+_BRANCHES_104 = """
+    ELSIF TG_TABLE_NAME = 'campaign_channel' THEN
+        SELECT status INTO cstat
+          FROM campaign
+         WHERE id = COALESCE(NEW.campaign_id, OLD.campaign_id);
+    ELSIF TG_TABLE_NAME = 'campaign' THEN
+        -- Fired only by a change of seed_runs: locked while the campaign was.
+        cstat := OLD.status;
+"""
+
+# (trigger, table, when it fires); each runs reject_locked_campaign_write().
+_TRIGGERS_104 = (
+    (
+        "campaign_channel_reject_locked",
+        "campaign_channel",
+        "BEFORE INSERT OR UPDATE OR DELETE ON campaign_channel FOR EACH ROW",
+    ),
+    (
+        "campaign_seed_runs_reject_locked",
+        "campaign",
+        "BEFORE UPDATE OF seed_runs ON campaign FOR EACH ROW"
+        " WHEN (OLD.seed_runs IS DISTINCT FROM NEW.seed_runs)",
+    ),
+)
 
 # Every (stage, column) a criterion names; the first stage per column keeps it,
 # every other stage gets a fresh id for its clone.
@@ -179,8 +246,17 @@ def upgrade() -> None:
     for table in _LOCKED:
         op.execute(f"ALTER TABLE {table} ENABLE TRIGGER {table}_reject_locked")
 
+    op.execute(_LOCK_FUNCTION.replace("    -- 104 branches\n", _BRANCHES_104))
+    for name, _, fires in _TRIGGERS_104:
+        op.execute(
+            f"CREATE TRIGGER {name} {fires} EXECUTE FUNCTION reject_locked_campaign_write()"
+        )
+
 
 def downgrade() -> None:
+    for name, table, _ in _TRIGGERS_104:
+        op.execute(f"DROP TRIGGER IF EXISTS {name} ON {table}")
+    op.execute(_LOCK_FUNCTION.replace("    -- 104 branches\n", ""))
     op.execute(
         """
         UPDATE campaign c

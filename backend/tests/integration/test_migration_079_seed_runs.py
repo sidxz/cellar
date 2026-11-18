@@ -106,7 +106,15 @@ async def test_backfill_derives_seed_runs_from_run_refs(session_factory) -> None
         await uow.commit()
 
     async with session_factory() as session, session.begin():
+        # The backfill rewrites every run-seeded campaign; 104's lock on closed
+        # campaigns' seed runs did not exist yet when 079 ran.
+        await session.execute(
+            sa.text("ALTER TABLE campaign DISABLE TRIGGER campaign_seed_runs_reject_locked")
+        )
         await session.execute(sa.text(m079.BACKFILL_SQL))
+        await session.execute(
+            sa.text("ALTER TABLE campaign ENABLE TRIGGER campaign_seed_runs_reject_locked")
+        )
 
     async with AsyncUnitOfWork(session_factory) as uow:
         repo = SQLAlchemyCampaignRepository(uow)

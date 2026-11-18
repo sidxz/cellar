@@ -461,6 +461,56 @@ async def test_stage_writes_blocked_while_closed_then_allowed_after_reopen(
     assert override_count == 1
 
 
+# Each write a closed campaign must refuse at the database (spec §9): its stage
+# runs, and its columns' concentration and stage.
+_LOCKED_WRITES = (
+    "UPDATE campaign SET seed_runs = jsonb_build_array(jsonb_build_object("
+    "'run_id', gen_random_uuid(), 'protocol_id', gen_random_uuid(), "
+    "'stage_ids', '[]'::jsonb)) WHERE id = :id",
+    "UPDATE campaign_channel SET test_concentration = "
+    '\'{"value": 10, "unit": "µM"}\'::jsonb WHERE campaign_id = :id',
+    "UPDATE campaign_channel SET stage_id = NULL WHERE campaign_id = :id",
+)
+
+
+@pytest.mark.asyncio
+async def test_stage_run_and_column_writes_blocked_while_closed_then_allowed_after_reopen(
+    session_factory,
+) -> None:
+    """A direct SQL write of a closed campaign's stage runs, or of a column's test
+    concentration or stage, fails with "writes blocked"; reopened, it succeeds."""
+    ws_id, campaign_id, _protocol_id, user_id = await _seed_and_close_campaign(
+        session_factory, note="closing for trigger test"
+    )
+
+    for sql in _LOCKED_WRITES:  # one transaction each: the first error aborts it
+        async with AsyncUnitOfWork(session_factory) as uow:
+            with pytest.raises(sa.exc.IntegrityError, match="writes blocked"):
+                await uow.session.execute(sa.text(sql), {"id": campaign_id})
+            await uow.rollback()
+
+    uow_reopen = AsyncUnitOfWork(session_factory)
+    out = await ReopenCampaign(
+        uow=uow_reopen,
+        campaign_repo=SQLAlchemyCampaignRepository(uow_reopen),
+        dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
+    )(
+        ReopenCampaignCommand(
+            workspace_id=ws_id,
+            campaign_id=campaign_id,
+            user_id=user_id,
+            reason="reopen for trigger test",
+        ),
+        auth=_make_fake_auth(user_id, ws_id),
+    )
+    assert isinstance(out, Success), f"Expected Success, got {out}"
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        for sql in _LOCKED_WRITES:
+            await uow.session.execute(sa.text(sql), {"id": campaign_id})
+        await uow.commit()
+
+
 async def _insert_run_with_readout(  # type: ignore[no-untyped-def]
     session_factory,
     *,
@@ -671,7 +721,7 @@ async def test_refresh_resolves_only_the_campaigns_seed_runs(session_factory) ->
     campaign = h.new_campaign("Run Scope")
     channel = _readout_channel(campaign, protocol_id=protocol_id, readout_id=readout_id)
     campaign.add_channel(channel)
-    campaign.record_seed_runs([SeedRun(run_a, protocol_id)])
+    campaign.add_runs_to_stage([SeedRun(run_a, protocol_id)], None)
     await h.save()
 
     await h.refresh()
@@ -735,7 +785,7 @@ async def test_three_run_mean_survives_close_reopen_refresh(session_factory) -> 
     campaign.add_channel(channel)
     # As add-from-runs attributes it: the row names one run, the campaign all three.
     campaign.results[0].added_from = RunRef(run_id=seed_runs[0])
-    campaign.record_seed_runs(SeedRun(r, protocol_id) for r in seed_runs)
+    campaign.add_runs_to_stage([SeedRun(r, protocol_id) for r in seed_runs], None)
     await h.save()
 
     await h.refresh()
@@ -772,7 +822,7 @@ async def test_channel_on_an_unseeded_protocol_resolves_protocol_wide(session_fa
     counter = _readout_channel(campaign, protocol_id=p2, readout_id=r2, display_order=1)
     campaign.add_channel(primary)
     campaign.add_channel(counter)
-    campaign.record_seed_runs([SeedRun(seed_run, p1)])
+    campaign.add_runs_to_stage([SeedRun(seed_run, p1)], None)
     await h.save()
 
     await h.refresh()
