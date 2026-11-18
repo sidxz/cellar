@@ -291,7 +291,8 @@ def _map_single(
     if not row.smiles:
         warnings.append(MoleculeMapWarning(entity_id, "No SMILES — registering as undisclosed"))
 
-    # The vault id decides (with the name, promoted by the registration).
+    # The vault id decides (with the name, promoted by the registration); the compound
+    # holding it, with this type, is the row's compound.
     storage = id_mapping.id_storage
     id_type = (
         storage.identifier_type
@@ -299,7 +300,9 @@ def _map_single(
         else storage.custom_field_name
     )
     external_ids: list[dict[str, Any]] = (
-        [{"identifier": str(entity_id), "identifier_type": id_type}] if id_type else []
+        [{"identifier": str(entity_id), "identifier_type": id_type, "vault_id": True}]
+        if id_type
+        else []
     )
     not_stored = list(row.warnings)
     for e in _compound_ids(row):

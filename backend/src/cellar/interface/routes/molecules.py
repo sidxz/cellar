@@ -397,6 +397,9 @@ class RegistrationResponse(BaseModel):
 class ExternalIdBody(BaseModel):
     identifier: str
     identifier_type: str
+    # The row's own id in its source (a CDD vault molecule id): the compound holding this
+    # text with this type is the row's compound, whatever its structure.
+    vault_id: bool = False
 
 
 class BatchBody(BaseModel):
@@ -516,7 +519,9 @@ async def register_molecule(
         smiles=body.smiles,
         molecule_type=body.molecule_type,
         external_ids=[
-            ExternalId(identifier=e.identifier, identifier_type=e.identifier_type)
+            ExternalId(
+                identifier=e.identifier, identifier_type=e.identifier_type, vault_id=e.vault_id
+            )
             for e in body.external_ids
         ],
         originating_org_id=body.originating_org_id,
@@ -661,9 +666,7 @@ async def preview_registration(
                 stored_only_ids=item.stored_only_ids,
                 stored_only_batch_ids=item.stored_only_batch_ids,
                 vault_ids=[
-                    e.identifier
-                    for e in item.external_ids
-                    if e.identifier_type == "cdd_molecule_id"
+                    (e.identifier, e.identifier_type) for e in item.external_ids if e.vault_id
                 ],
             )
             for item in body.items

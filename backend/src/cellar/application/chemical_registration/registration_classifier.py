@@ -64,19 +64,26 @@ def skipped_id_warning(identifier: str, holder: str, this: str) -> str:
 
 
 async def _vault_id_holder(
-    repo: MoleculeRepository, workspace_id: uuid.UUID, vault_ids: Iterable[str]
+    repo: MoleculeRepository,
+    workspace_id: uuid.UUID,
+    vault_ids: Iterable[tuple[str, str]],
 ) -> Molecule | None:
-    """The compound holding the row's vault molecule id (``cdd_molecule_id``). Only the
+    """The compound holding the row's vault id, ``(text, identifier_type)``. Only the
     vault's own IDs decide which compound a CDD row is (CDD mapper spec 2026-11-18,
-    decision 6), so it is the row's compound whatever its structure."""
-    wanted = set(vault_ids)
+    decision 6), so it is the row's compound whatever its structure. The same text
+    under another type (a PubChem CID, a number from a file) is not the vault id."""
+    wanted = dict(vault_ids)
     if not wanted:
         return None
-    owners = set((await repo.find_identifiers_in_workspace(workspace_id, wanted)).values())
+    found = await repo.find_identifiers_in_workspace(workspace_id, set(wanted))
+    owners = set(found.values())
     if len(owners) != 1:
         return None
     holder = await repo.find_by_id_in_workspace(workspace_id, owners.pop())
-    return holder if holder is not None and holder.merged_into_id is None else None
+    if holder is None or holder.merged_into_id is not None:
+        return None
+    held = {(i.identifier, i.identifier_type) for i in holder.identifiers}
+    return holder if all((text, wanted[text]) in held for text in found) else None
 
 
 async def _identifier_conflict(
@@ -103,7 +110,7 @@ async def classify_disclosed(
     identifiers: set[str],
     *,
     detect_undisclosed: bool,
-    vault_ids: Iterable[str] = (),
+    vault_ids: Iterable[tuple[str, str]] = (),
 ) -> RegistrationForecast:
     """Forecast for an input WITH a structure.
 
@@ -112,8 +119,8 @@ async def classify_disclosed(
     already taken is a conflict — checked after the two matches so identifiers on
     the matched molecule itself do not count.
 
-    ``vault_ids`` (a CDD row's vault molecule id): the compound holding it is the row's
-    compound even when the structure is another compound's or differs from its own;
+    ``vault_ids`` (a CDD row's vault id, ``(text, type)``): the compound holding it is the
+    row's compound even when the structure is another compound's or differs from its own;
     nothing is merged or changed, a warning says so. An undisclosed holder whose
     structure matches nothing is disclosed as usual.
     """
@@ -158,11 +165,11 @@ async def classify_undisclosed(
     workspace_id: uuid.UUID,
     identifiers: set[str],
     *,
-    vault_ids: Iterable[str] = (),
+    vault_ids: Iterable[tuple[str, str]] = (),
 ) -> RegistrationForecast:
     """Forecast for an input WITHOUT a structure: identifiers are all there is.
 
-    ``vault_ids`` (a CDD row's vault molecule id): the compound holding it is the row's
+    ``vault_ids`` (a CDD row's vault id, ``(text, type)``): the compound holding it is the row's
     compound, disclosed or not.
     """
     holder = await _vault_id_holder(repo, workspace_id, vault_ids)

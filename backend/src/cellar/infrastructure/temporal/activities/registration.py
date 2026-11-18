@@ -284,11 +284,15 @@ class RegistrationActivities:
                     cdd_modified_at=item.cdd_modified_at,
                     warnings=[
                         *item.warnings,
-                        *(outcome.skipped_ids if first_row else ()),
+                        *((*outcome.notes, *outcome.skipped_ids) if first_row else ()),
                         *batch_warnings,
                     ],
                     batch_action=batch_action,
                     ids_added=outcome.ids_added + ids_added,
+                    # a note (a structure left as it was) is a line, not a skipped value
+                    values_skipped=len(item.warnings)
+                    + (len(outcome.skipped_ids) if first_row else 0)
+                    + len(batch_warnings),
                 )
             )
 
@@ -328,8 +332,9 @@ def chunk_report(output: ChunkOutput, names: dict[int, str]) -> dict:
     """The run-report delta for one chunk (see ``CddMoleculeImport.record_report``).
 
     A problem is a row that failed, a compound whose batch could not be made, or a
-    conflict; a skipped value is any warning ("not stored"). Both get a line. A
-    compound that failed is one problem, not one per batch row.
+    conflict; a skipped value is a warning that a value was not stored. Both, and notes
+    (a structure the vault id left as it was), get a line. A compound that failed is
+    one problem, not one per batch row.
     """
     lines: list[str] = []
     problems = 0
@@ -351,7 +356,7 @@ def chunk_report(output: ChunkOutput, names: dict[int, str]) -> dict:
         "batches_created": sum(r.batch_action == "created" for r in output.results),
         "batches_matched": sum(r.batch_action == "existing" for r in output.results),
         "ids_added": sum(r.ids_added for r in output.results),
-        "values_skipped": sum(len(r.warnings) for r in output.results),
+        "values_skipped": sum(r.values_skipped for r in output.results),
         "problems": problems,
         "problem_lines": lines,
     }

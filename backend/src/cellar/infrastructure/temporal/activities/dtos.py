@@ -89,6 +89,7 @@ class ChunkItemResult:
     batch_action: str | None = None
     # Batch IDs stored on the row's batch (new or existing).
     ids_added: int = 0
+    values_skipped: int = 0  # of ``warnings``, those that say a value was not stored
 
 
 @dataclass

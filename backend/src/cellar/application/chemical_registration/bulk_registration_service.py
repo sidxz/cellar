@@ -367,7 +367,7 @@ class BulkRegistrationService:
                         salt_matched=salt_matched,
                         batch_error=batch_err,
                         batch_skipped=batch_skipped,
-                        warnings=[*outcome.skipped_ids, *batch_warnings],
+                        warnings=[*outcome.notes, *outcome.skipped_ids, *batch_warnings],
                     )
                 )
 

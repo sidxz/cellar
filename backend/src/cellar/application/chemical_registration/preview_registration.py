@@ -58,9 +58,9 @@ class PreviewRegistrationItem:
     # compound / batch holds becomes a warning.
     stored_only_ids: list[str] = field(default_factory=list)
     stored_only_batch_ids: list[str] = field(default_factory=list)
-    # The row's vault molecule id(s) (``cdd_molecule_id``), also in ``external_ids``:
-    # the compound holding one is the row's compound.
-    vault_ids: list[str] = field(default_factory=list)
+    # The row's vault id, (text, identifier_type), also in ``external_ids``: the
+    # compound holding it with that type is the row's compound.
+    vault_ids: list[tuple[str, str]] = field(default_factory=list)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -535,7 +535,13 @@ describe("DataImportPage: Preview", () => {
     name: "SACC-1",
     smiles: "CCO",
     external_ids: [
-      { identifier: "11", identifier_type: "cdd_molecule_id", source: "CDD import", decides: true },
+      {
+        identifier: "11",
+        identifier_type: "cdd_molecule_id",
+        source: "CDD import",
+        decides: true,
+        vault_id: true,
+      },
       { identifier: "JSF-1", identifier_type: "custom", source: "Alternate Names", decides: false },
     ],
     batch_ids: [{ identifier: "SACC-1-001", source: "CDD", decides: true }],
@@ -564,7 +570,9 @@ describe("DataImportPage: Preview", () => {
     );
     const forecast = h.request.mock.calls.find(([r]) => r.url.endsWith("preview-registration"));
     const sent = forecast?.[0].data.items[0];
-    expect(sent.external_ids.map((e: { identifier: string }) => e.identifier)).toEqual(["11"]);
+    expect(sent.external_ids).toEqual([
+      { identifier: "11", identifier_type: "cdd_molecule_id", vault_id: true },
+    ]);
     expect(sent.stored_only_ids).toEqual(["JSF-1"]);
     expect(sent.batch_ids).toEqual(["SACC-1-001"]);
     expect(sent.stored_only_batch_ids).toBeUndefined();

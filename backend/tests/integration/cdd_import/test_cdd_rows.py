@@ -481,3 +481,47 @@ async def test_vault_id_decides_when_structures_differ(session_factory, ws: Ws, 
     (third,) = await run_cdd([undisclosed])
     assert third.error is None and third.molecule_id == str(x.molecule_id)
     assert len(await _molecules(session_factory, ws)) == 1
+
+
+@pytest.mark.parametrize("smiles", [SMILES, None], ids=["structure", "no structure"])
+async def test_the_vault_id_text_under_another_type_is_not_the_row_s_compound(
+    session_factory, ws: Ws, run_cdd, smiles
+) -> None:
+    """Z holds "7" as a PubChem CID, not as a vault molecule id: MOL's vault id "7" does
+    not make Z MOL's compound; the old rule decides (here: a conflict)."""
+    (z,) = await _run_worker(
+        session_factory,
+        ws,
+        [
+            row(
+                "Z-1",
+                "CCOCC",
+                external_ids=[{"identifier": "7", "identifier_type": "pubchem_cid"}],
+            )
+        ],
+        None,
+    )
+
+    results = await run_cdd([molecule(7, NAME, smiles, batches=[batch(13250, f"{NAME}-001")])])
+
+    assert all(r.molecule_id != str(z.molecule_id) for r in results)
+    assert NAME not in {i for i, _, _ in await _compound_ids(session_factory, z.molecule_id)}
+    assert len(await _batches(session_factory, ws)) == 1  # Z's own
+
+
+async def test_structure_notes_are_report_lines_not_skipped_values(
+    session_factory, ws: Ws, run_cdd
+) -> None:
+    await _run_worker(
+        session_factory,
+        ws,
+        [row(NAME, "CCOC", external_ids=VAULT_ID_7), row("OTHER-1", SMILES)],
+        None,
+    )
+
+    await run_cdd([molecule(7, NAME, SMILES, batches=[batch(13250, f"{NAME}-001")])])
+
+    report = run_cdd.report
+    assert report["values_skipped"] == 0
+    (line,) = report["problem_lines"]
+    assert line.startswith(f"{NAME}: Structure also matches ")

@@ -311,6 +311,8 @@ class PreviewCompoundId(BaseModel):
     source: str | None = None
     # False = stored on the compound but never decides whether it is the same compound.
     decides: bool = True
+    # The row's own id in its source (a CDD vault molecule id); sent back as such in a forecast.
+    vault_id: bool = False
 
 
 class PreviewBatchId(BaseModel):

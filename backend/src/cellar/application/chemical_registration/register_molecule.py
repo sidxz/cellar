@@ -64,9 +64,10 @@ class RegistrationOutcome:
     matched_molecule_id: uuid.UUID | None = None
     disclosure_id: uuid.UUID | None = None
     conflict_reason: str | None = None
-    # What was not stored, one warning each: stored-only IDs another compound holds, a
-    # structure the vault id overrode.
+    # Stored-only IDs another compound holds, one warning each (not stored here).
     skipped_ids: tuple[str, ...] = ()
+    # What the registration left as it was: a structure the vault id overrode.
+    notes: tuple[str, ...] = ()
     ids_added: int = 0  # identifiers this call stored on the compound (the name included)
 
 
@@ -78,6 +79,9 @@ class ExternalId:
     # False = stored only: never matches or conflicts; kept only when no other
     # compound holds the text (CDD mapper spec 2026-11-18 §3a).
     decides: bool = True
+    # The row's own id in the source it came from (a CDD vault molecule id): the compound
+    # holding this text with this type is the row's compound (decision 6).
+    vault_id: bool = False
 
 
 def external_ids(raw: Iterable[Mapping[str, Any]]) -> list[ExternalId]:
@@ -88,6 +92,7 @@ def external_ids(raw: Iterable[Mapping[str, Any]]) -> list[ExternalId]:
             identifier_type=d["identifier_type"],
             source=d.get("source"),
             decides=d.get("decides", True),
+            vault_id=d.get("vault_id", False),
         )
         for d in raw
     ]
@@ -199,12 +204,12 @@ class RegisterMolecule:
             promote_name=input.promote_name_as_identifier,
         )
 
-    def _vault_ids(self, input: RegisterMoleculeCommand) -> list[str]:
-        """The row's vault molecule id: it decides which compound a CDD row is."""
+    def _vault_ids(self, input: RegisterMoleculeCommand) -> list[tuple[str, str]]:
+        """The row's vault id, (text, type): it decides which compound a CDD row is."""
         return [
-            e.identifier
+            (e.identifier, e.identifier_type)
             for e in input.external_ids
-            if e.decides and e.identifier_type == "cdd_molecule_id"
+            if e.decides and e.vault_id
         ]
 
     async def _resolve_reg_number_config(self, workspace_id: uuid.UUID) -> tuple[str, int]:
@@ -423,7 +428,8 @@ class RegisterMolecule:
                     action=RegistrationAction.DEDUPLICATED,
                     qc_warnings=qc_warnings,
                     detected_salt=processed.detected_salt,
-                    skipped_ids=(*forecast.warnings, *skipped),
+                    skipped_ids=skipped,
+                    notes=forecast.warnings,
                     ids_added=added,
                 )
             elif forecast.action is RegistrationAction.REGISTERED:

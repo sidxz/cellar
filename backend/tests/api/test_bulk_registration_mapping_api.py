@@ -147,6 +147,7 @@ async def test_preview_with_mapping_returns_file_row_and_batch_ids(client: Async
             "identifier_type": "custom",
             "source": "Synonyms",
             "decides": True,
+            "vault_id": False,
         }
     ]
     assert items[1]["external_ids"] == []
@@ -166,6 +167,7 @@ async def test_preview_without_mapping_reads_todays_headers(client: AsyncClient)
             "identifier_type": "cas_number",
             "source": None,
             "decides": True,
+            "vault_id": False,
         }
     ]
 
@@ -483,7 +485,7 @@ async def test_preview_registration_vault_id_decides_over_a_structure_match(
         assert resp.status_code == 201, resp.text
         return resp.json()
 
-    vault_id = [{"identifier": "990001", "identifier_type": "cdd_molecule_id"}]
+    vault_id = [{"identifier": "990001", "identifier_type": "cdd_molecule_id", "vault_id": True}]
     x = await register("VX-0001", smiles_y + "C", vault_id)
     y = await register("VY-0001", smiles_y, [])
 

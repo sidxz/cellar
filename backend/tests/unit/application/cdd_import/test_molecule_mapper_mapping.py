@@ -84,7 +84,7 @@ def test_alternate_names_split_on_semicolon_are_stored_only_compound_ids() -> No
 
     alt = {"identifier_type": "custom", "source": "Alternate Names", "decides": False}
     assert mol.external_ids == [
-        {"identifier": "7", "identifier_type": "cdd_molecule_id"},  # vault id decides
+        {"identifier": "7", "identifier_type": "cdd_molecule_id", "vault_id": True},  # decides
         {
             "identifier": "JSF-1187",
             "identifier_type": "custom",

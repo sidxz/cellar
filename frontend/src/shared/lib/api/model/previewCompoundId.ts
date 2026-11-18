@@ -10,4 +10,5 @@ export interface PreviewCompoundId {
   identifier_type: string;
   source?: string | null;
   decides?: boolean;
+  vault_id?: boolean;
 }

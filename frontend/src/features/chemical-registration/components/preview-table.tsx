@@ -26,10 +26,15 @@ function toForecastItem(item: PreviewItem) {
     name: item.name ?? null,
     smiles: item.smiles ?? null,
     molecule_type: item.molecule_type,
-    // IDs that don't decide are stored only: they never match or conflict.
+    // IDs that don't decide are stored only: they never match or conflict. The vault id
+    // says so: the compound holding it is the row's compound.
     external_ids: (item.external_ids ?? [])
       .filter((e) => e.decides !== false)
-      .map((e) => ({ identifier: e.identifier, identifier_type: e.identifier_type })),
+      .map((e) => ({
+        identifier: e.identifier,
+        identifier_type: e.identifier_type,
+        ...(e.vault_id && { vault_id: true }),
+      })),
     batch_ids: (item.batch_ids ?? []).filter((b) => b.decides !== false).map((b) => b.identifier),
     // sent only when there are some, so a file's request is unchanged
     ...(storedOnly.length > 0 && { stored_only_ids: storedOnly }),
