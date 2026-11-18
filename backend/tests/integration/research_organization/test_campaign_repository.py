@@ -652,4 +652,4 @@ async def test_seed_runs_round_trip_in_recorded_order(
         again = await repo.find_by_id(c.id)
     assert again is not None
     assert again.seed_runs == [SeedRun(r2, p1), SeedRun(r1, p2), SeedRun(r3, p1)]
-    assert again.seed_run_ids_for(p1) == [r2, r3]
+    assert again.campaign_run_ids(p1) == [r2, r3]

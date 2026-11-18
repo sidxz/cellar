@@ -9,7 +9,7 @@ the campaign.
 DRY: hit-call computation reuses ``HitCriterion.is_met``; candidate fetching
 reuses ``ChannelResolutionQuery.fetch_candidates_for_runs``; selection-rule
 application delegates to the shared ``apply_selection_rule`` aggregator —
-the same single source of truth the close-time ``ChannelResolver`` uses.
+the same single source of truth the close-time ``ColumnResolver`` uses.
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ class PreviewRunImportQuery(Command):
 
 
 # ---------------------------------------------------------------------------
-# Selection-rule inline (matches ChannelResolver.resolve; see module docstring)
+# Selection-rule inline (see module docstring)
 # ---------------------------------------------------------------------------
 
 
@@ -209,7 +209,7 @@ def _apply_selection_rule(
     ND handling for Inactive / at_bound / missing intercepts) to the shared
     ``apply_selection_rule`` in ``application/screening/run_aggregation.py``
     so that the wizard's preview can never drift from what the close-time
-    ``ChannelResolver`` writes on Save.
+    ``ColumnResolver`` writes on Save.
 
     Returns ``None`` only when:
     - candidates is empty, or

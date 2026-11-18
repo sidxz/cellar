@@ -259,12 +259,6 @@ class Campaign(AggregateRoot):
     def channels_of_stage(self, stage_id: uuid.UUID) -> list[CampaignChannel]:
         return [c for c in self.channels if c.stage_id == stage_id]
 
-    def seed_run_ids_for(self, protocol_id: uuid.UUID) -> list[uuid.UUID]:
-        """Seed run ids of ``protocol_id``, in the order they were recorded.
-        Empty for a protocol the campaign was never seeded from — such a
-        channel resolves protocol-wide."""
-        return [s.run_id for s in self.seed_runs if s.protocol_id == protocol_id]
-
     # ----- stages -----
 
     def find_stage(self, stage_id: uuid.UUID) -> CampaignStage | None:

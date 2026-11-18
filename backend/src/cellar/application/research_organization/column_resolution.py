@@ -28,13 +28,8 @@ import statistics
 import uuid
 from collections import Counter
 from dataclasses import dataclass, replace
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
-from cellar.application.research_organization.channel_resolution import (
-    _ND_UNIT_PLACEHOLDER,
-    _nd_measurement,
-    _passes_qc,
-)
 from cellar.application.screening.curve_snapshot import (
     build_aggregate_curve_snapshot,
     build_curve_snapshot,
@@ -59,6 +54,10 @@ from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.screening_assay.activity_types import ReplicateStats
 
 _AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN}
+
+# The domain forbids an empty unit, even on an ND cell; this stands in when no
+# reading contributes one, without inventing a unit we don't know.
+_ND_UNIT_PLACEHOLDER = "-"
 
 
 @dataclass(frozen=True)
@@ -115,6 +114,48 @@ class _Value:
 
     run: ResolvedRun
     readings: tuple[Candidate, ...]
+
+
+def _passes_qc(run: ResolvedRun, qc: dict[str, Any] | None) -> bool:
+    if not qc:
+        return True
+    if qc.get("require_approved", False) and not run.run_approved:
+        return False
+    min_z = qc.get("min_z_prime")
+    return not (min_z is not None and (run.z_prime is None or run.z_prime < min_z))
+
+
+def _nd_measurement(
+    *,
+    result_id: uuid.UUID,
+    channel_id: uuid.UUID,
+    unit: str,
+    protocol_name: str = "",
+    protocol_version: int = 0,
+    source: ResolvedRun | None = None,
+    pin_source: bool = True,
+) -> CampaignMeasurement:
+    """An ND cell. ``source`` is the run it was resolved *from*, when one exists: an
+    inactive curve, or a fit with no readable intercept.
+
+    Its snapshot (and, with ``pin_source``, its run/curve ids) is what tells "tested,
+    no value" from "nothing to resolve": ``stage_evaluation._is_tested_nd`` reads
+    exactly these fields to call the first a miss and the second untested. The
+    aggregate rules pass ``pin_source=False``: they have no single run to point at.
+    """
+    return CampaignMeasurement(
+        result_id=result_id,
+        channel_id=channel_id,
+        value=None,
+        value_qualifier=ValueQualifier.ND,
+        unit=unit or _ND_UNIT_PLACEHOLDER,
+        protocol_name_snapshot=protocol_name or "-",
+        protocol_version_snapshot=protocol_version,
+        source_run_id=source.run_id if source and pin_source else None,
+        source_curve_id=source.curve_id if source and pin_source else None,
+        run_date_snapshot=source.run_date if source and pin_source else None,
+        curve_snapshot=build_curve_snapshot(source) if source else None,
+    )
 
 
 class ColumnResolver:
@@ -231,7 +272,7 @@ def _measure(
     *,
     series: bool,
 ) -> CampaignMeasurement:
-    """The column's rule over ``values``; today's ``ChannelResolver`` cell rules."""
+    """The column's rule over ``values``, building the cell (snapshot, source pin, ND)."""
     if not values:
         return _nd_measurement(
             result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER

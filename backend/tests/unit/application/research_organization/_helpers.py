@@ -7,12 +7,15 @@ every test file can import and compose freely.
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
+from datetime import date
 from types import TracebackType
-from typing import Self
+from typing import Any, Self
 from unittest.mock import AsyncMock
 
+from cellar.application.research_organization.column_resolution import Candidate
+from cellar.application.screening.run_aggregation import ResolvedRun
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.enums import ValueQualifier
 from cellar.domain.shared.events import DomainEvent
 
 # ---------------------------------------------------------------------------
@@ -127,6 +130,7 @@ def make_campaign_repo(
     repo.saved = captured  # type: ignore[attr-defined]
 
     if find_dispatch is not None:
+
         async def _find(ws_id: uuid.UUID, camp_id: uuid.UUID) -> Campaign | None:
             return find_dispatch.get(camp_id)
 
@@ -149,35 +153,69 @@ def make_collection_repo(
 ) -> AsyncMock:
     """Return an AsyncMock collection repository."""
     repo = AsyncMock()
-    repo.find_by_id_in_workspace = AsyncMock(
-        return_value=object() if in_ws else None
-    )
+    repo.find_by_id_in_workspace = AsyncMock(return_value=object() if in_ws else None)
     repo.get_molecule_ids = AsyncMock(return_value=molecule_ids or [])
     return repo
 
 
 # ---------------------------------------------------------------------------
-# FakeResolver
+# FakeColumnQuery
 # ---------------------------------------------------------------------------
 
 
-class FakeResolver:
-    """Async channel resolver that delegates measurement construction to a factory.
+def reported_reading(
+    molecule_id: uuid.UUID,
+    value: float,
+    *,
+    unit: str = "nM",
+    run_id: uuid.UUID | None = None,
+    readout_id: uuid.UUID | None = None,
+) -> Candidate:
+    """One well-less reading: the value itself, for a readout or a dose-response column."""
+    return Candidate(
+        run=ResolvedRun(
+            run_id=run_id or uuid.uuid4(),
+            run_date=date(2026, 1, 1),
+            run_approved=True,
+            curve_id=None,
+            value=value,
+            qualifier=ValueQualifier.EQ,
+            unit=unit,
+            z_prime=None,
+            protocol_name="Proto",
+            protocol_version=1,
+            readout_id=readout_id or uuid.uuid4(),
+        ),
+        molecule_id=molecule_id,
+        batch_id=None,
+        well_id=None,
+        dose=None,
+        replicate_count=None,
+    )
 
-    Args:
-        factory: Callable ``(channel, result_id, molecule_id) -> CampaignMeasurement``.
-            Required — callers must supply an appropriate factory for their test.
+
+class FakeColumnQuery:
+    """``ColumnCandidateQuery`` fake: every requested molecule gets one reported
+    reading of ``value``. ``None`` returns nothing, so every cell resolves bare ND.
+
+    ``calls`` records each fetch as ``(channel_id, run_ids, molecule_ids)``.
     """
 
-    def __init__(self, factory: Callable) -> None:
-        self._factory = factory
-        self.calls: list = []
-        #: Run scope each ``resolve`` received, in call order (``None`` =
-        #: unrestricted). Lets a use-case test assert the campaign's run
-        #: scope reached the resolver.
-        self.run_ids_seen: list = []
+    def __init__(self, value: float | None = 99.0, *, unit: str = "nM") -> None:
+        self._value = value
+        self._unit = unit
+        self.calls: list[tuple[uuid.UUID, Any, Any]] = []
 
-    async def resolve(self, *, workspace_id, channel, result_id, molecule_id, run_ids=None):
-        self.calls.append((channel.id, result_id, molecule_id))
-        self.run_ids_seen.append(run_ids)
-        return self._factory(channel, result_id, molecule_id)
+    @property
+    def run_ids_seen(self) -> list:
+        """Run scope of each fetch, in call order (``None`` = protocol-wide)."""
+        return [run_ids for _, run_ids, _ in self.calls]
+
+    async def fetch(self, *, workspace_id, channel, run_ids, molecule_ids):
+        self.calls.append((channel.id, run_ids, molecule_ids))
+        if self._value is None:
+            return {}
+        return {
+            mid: [reported_reading(mid, self._value, unit=self._unit)]
+            for mid in molecule_ids or []
+        }

@@ -1,6 +1,6 @@
 """SQL implementation of ColumnCandidateQuery: every candidate of one column at once.
 
-Readout rows reuse ``_readout_stmt`` (workspace, numeric, non-outlier, molecule present,
+Readout rows reuse ``_base_readout_stmt`` (workspace, numeric, non-outlier, molecule present,
 compound result, one normalization layer) and add what the resolver groups on: the
 well's dose (a well on a plate of the row's own run, as ``COMPOUND_RESULT`` reads it),
 the run's Test concentration condition, batch and recorded replicate count. A
@@ -26,12 +26,11 @@ from cellar.domain.research_organization.measurement_facts import (
     Concentration,
     parse_concentration,
 )
+from cellar.domain.screening_assay.enums import unit_for_normalization
 from cellar.domain.shared.units import MICRO, canonical_unit
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (  # noqa: E501
-    _extract_min_z_prime,
-    _readout_candidate,
-    _readout_stmt,
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
+    COMPOUND_RESULT,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     ConditionDefinitionModel,
@@ -43,6 +42,145 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
     RunModel,
     WellModel,
 )
+
+
+def _normalization_clause(normalization_applied: str | None) -> ColumnElement[bool]:
+    """SQL predicate that pins readout_data to one ``normalization_applied`` layer.
+
+    Without this filter raw rows and their computed siblings
+    (percent_inhibition / z_score / …) share a single ``readout_definition_id``
+    and would all be returned, mixing absorbance with percentages.
+    """
+    if normalization_applied is None:
+        return ReadoutDataModel.normalization_applied.is_(None)
+    return ReadoutDataModel.normalization_applied == normalization_applied
+
+
+def _extract_min_z_prime(qc_metrics: dict[str, Any] | None) -> float | None:
+    """Return the worst-case scalar z' from a Run's qc_metrics JSONB.
+
+    Production shape is nested per-plate:
+        {"z_prime": {"<plate_uuid>": {"z_prime": 0.834, ...}, ...}}
+
+    Test fixtures (and some early data) used the flat shape:
+        {"z_prime": 0.8}
+
+    We support both, returning the minimum (most conservative) across plates
+    when the nested shape is present. Returns None when the value is missing
+    or unparseable.
+    """
+    if not qc_metrics:
+        return None
+    raw = qc_metrics.get("z_prime")
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw)
+    if isinstance(raw, dict):
+        values: list[float] = []
+        for plate_entry in raw.values():
+            if isinstance(plate_entry, (int, float)):
+                values.append(float(plate_entry))
+            elif isinstance(plate_entry, dict):
+                v = plate_entry.get("z_prime")
+                if isinstance(v, (int, float)):
+                    values.append(float(v))
+        return min(values) if values else None
+    return None
+
+
+def _base_readout_stmt(
+    *,
+    workspace_id: uuid.UUID,
+    readout_definition_id: uuid.UUID,
+    normalization_applied: str | None,
+    wellless_only: bool = False,
+) -> Select[Any]:
+    """Base SELECT over readout_data candidates; callers add the scoping clause.
+
+    Shared by the column query and the run-scoped add-from-runs queries so they
+    can't drift on which rows count as a candidate.
+    """
+    return (
+        select(
+            ReadoutDataModel.id,
+            ReadoutDataModel.molecule_id,
+            ReadoutDataModel.value_numeric,
+            ReadoutDataModel.value_qualifier,
+            RunModel.id.label("run_id"),
+            RunModel.run_date,
+            RunModel.status,
+            RunModel.qc_metrics,
+            ProtocolModel.name,
+            ProtocolModel.protocol_version,
+            ReadoutDefinitionModel.unit,
+            ReadoutDefinitionModel.dose_response_config,
+        )
+        .join(RunModel, ReadoutDataModel.run_id == RunModel.id)
+        .join(ProtocolModel, RunModel.protocol_id == ProtocolModel.id)
+        .join(
+            ReadoutDefinitionModel,
+            ReadoutDataModel.readout_definition_id == ReadoutDefinitionModel.id,
+        )
+        .where(
+            ReadoutDataModel.workspace_id == workspace_id,
+            ReadoutDataModel.readout_definition_id == readout_definition_id,
+            # Skip rows with no numeric value — qualitative-only text
+            # readouts can't be averaged or compared to numeric hit
+            # thresholds.
+            ReadoutDataModel.value_numeric.is_not(None),
+            # Skip outliers — they would otherwise corrupt MEAN / GEOMEAN
+            # aggregations.
+            ReadoutDataModel.is_outlier.is_(False),
+            # A row with no compound would crash the downstream CampaignResult
+            # insert (campaign_result.molecule_id is NOT NULL).
+            ReadoutDataModel.molecule_id.is_not(None),
+            # Sample wells and well-less rows only: control and reference wells
+            # that name a compound are plate QC, never one of its picks.
+            COMPOUND_RESULT,
+            # Restrict to one normalization layer so a raw readout's computed
+            # siblings (percent_inhibition / z_score) don't bleed into the
+            # aggregate.
+            _normalization_clause(normalization_applied),
+            # Reported endpoints are well-less by construction (a summary
+            # import records no plate position). Per-well response readings on
+            # the same definition must never be averaged into an endpoint.
+            *([ReadoutDataModel.well_id.is_(None)] if wellless_only else []),
+        )
+    )
+
+
+def _readout_candidate(row: Any, normalization_applied: str | None) -> ResolvedRun:
+    """Map one ``_base_readout_stmt`` row onto a candidate."""
+    # ponytail: the summary import accepts ">=" / "<=", campaigns only know
+    # ">" / "<". Read them as the strict form so ">=40" stays censored instead
+    # of falling through to an exact 40. Only a criterion cut at exactly that
+    # number can differ; add inclusive qualifiers if that ever matters.
+    raw = {">=": ">", "<=": "<"}.get(row.value_qualifier, row.value_qualifier)
+    try:
+        qualifier = ValueQualifier(raw or "=")
+    except ValueError:
+        qualifier = ValueQualifier.EQ
+    value = float(row.value_numeric)
+    # A reported endpoint on a dose-response readout is the value at the
+    # readout's primary (first) intercept — a CRO's IC50 column. Tagging it
+    # lets a channel keyed to that intercept find it and every other
+    # intercept channel skip it (see ``resolve_intercept``).
+    intercepts = (row.dose_response_config or {}).get("intercepts") or []
+    return ResolvedRun(
+        value=value,
+        qualifier=qualifier,
+        unit=unit_for_normalization(normalization_applied, row.unit) or "",
+        run_id=row.run_id,
+        run_date=row.run_date,
+        run_approved=row.status == "approved",
+        z_prime=_extract_min_z_prime(row.qc_metrics),
+        protocol_name=row.name,
+        protocol_version=row.protocol_version,
+        curve_id=None,
+        readout_id=row.id,
+        intercept_values=[{"spec": intercepts[0], "value": value}] if intercepts else None,
+    )
 
 
 def _scope(
@@ -124,7 +262,7 @@ class SQLAlchemyColumnCandidateQuery:
             .scalar_subquery()
         )
         well_on_plate = join(WellModel, PlateModel, PlateModel.id == WellModel.plate_id)
-        base: Select[Any] = _readout_stmt(
+        base: Select[Any] = _base_readout_stmt(
             workspace_id=workspace_id,
             readout_definition_id=channel.readout_definition_id,
             normalization_applied=channel.normalization_applied,

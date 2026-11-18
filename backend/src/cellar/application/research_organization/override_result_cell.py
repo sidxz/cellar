@@ -128,6 +128,10 @@ class OverrideResultCell:
                     replicate_count=existing.replicate_count,
                     qc_pass=existing.qc_pass,
                     contributing_run_ids=existing.contributing_run_ids,
+                    batch_ids=existing.batch_ids,
+                    basis=existing.basis,
+                    concentration_series=existing.concentration_series,
+                    unresolved_reason=existing.unresolved_reason,
                 )
             except ValidationError as e:
                 return Failure(e)

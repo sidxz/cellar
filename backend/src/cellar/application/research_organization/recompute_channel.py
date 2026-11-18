@@ -21,10 +21,8 @@ from datetime import UTC, datetime
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -65,12 +63,12 @@ class RecomputeChannel:
         *,
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -99,25 +97,7 @@ class RecomputeChannel:
             if channel is None:
                 return Failure(NotFoundError("CampaignChannel", str(input.channel_id)))
 
-            # Snapshot results list to avoid mutation-during-iteration issues
-            results = list(campaign.results)
-            run_ids = resolution_run_ids(campaign, channel)
-
-            for result in results:
-                measurement = result.find_measurement(channel.id)
-                if measurement is not None and measurement.is_manual_override:
-                    continue
-                new_measurement = await self._resolver.resolve(
-                    workspace_id=input.workspace_id,
-                    channel=channel,
-                    result_id=result.id,
-                    molecule_id=result.molecule_id,
-                    run_ids=run_ids,
-                )
-                if measurement is not None:
-                    new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT
-                    result.remove_measurement_for_channel(channel.id)
-                result.add_measurement(new_measurement)
+            await recompute_columns(query=self._query, campaign=campaign, channels=[channel])
 
             campaign.updated_at = datetime.now(UTC)
             await self._campaign_repo.save(campaign)

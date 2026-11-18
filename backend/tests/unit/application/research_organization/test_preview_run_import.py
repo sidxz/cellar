@@ -56,14 +56,6 @@ class FakeChannelQuery:
         self.calls: list = []
         self.endpoint_calls: list = []
 
-    async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
-        return []
-
-    async def fetch_endpoint_candidates(
-        self, *, workspace_id, channel, molecule_id, wellless_only=False
-    ):
-        return []
-
     async def fetch_endpoint_candidates_for_runs(
         self,
         *,

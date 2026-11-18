@@ -67,14 +67,6 @@ class FakeChannelQuery:
                 out[mol_id] = kept
         return out
 
-    async def fetch_candidates(self, *, workspace_id, channel, molecule_id):
-        return []
-
-    async def fetch_endpoint_candidates(
-        self, *, workspace_id, channel, molecule_id, wellless_only=False
-    ):
-        return []
-
     async def fetch_candidates_for_runs(
         self,
         *,
@@ -671,7 +663,7 @@ class TestAddResultsFromRuns:
         )
         assert isinstance(await uc(cmd, auth=auth), Success)
         assert campaign.results[0].measurements[0].value == 2.0
-        assert campaign.seed_run_ids_for(proto) == [r1, r2, r3]
+        assert campaign.campaign_run_ids(proto) == [r1, r2, r3]
 
     @pytest.mark.asyncio
     async def test_refresh_existing_cells_records_the_new_run(self) -> None:
@@ -715,7 +707,7 @@ class TestAddResultsFromRuns:
         assert isinstance(out, Success)
         assert out.unwrap().added == 0
         assert campaign.results[0].find_measurement(channel.id).value == 42.0
-        assert campaign.seed_run_ids_for(proto) == [r1, r2]
+        assert campaign.campaign_run_ids(proto) == [r1, r2]
 
     @pytest.mark.asyncio
     async def test_hits_only_import_that_adds_no_row_still_records_the_run(self) -> None:

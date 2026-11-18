@@ -31,7 +31,6 @@ from cellar.application.research_organization.campaign_collection_coverage impor
 from cellar.application.research_organization.campaign_scientist_reader import (
     CampaignScientistReader,
 )
-from cellar.application.research_organization.channel_resolution import ChannelResolver
 from cellar.application.research_organization.close_campaign import CloseCampaign
 from cellar.application.research_organization.collection_import_templates import (
     CreateCollectionImportTemplate,
@@ -159,6 +158,9 @@ from cellar.infrastructure.persistence.sqlalchemy.research_organization.collecti
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.collection_repository import (  # noqa: E501
     SQLAlchemyCollectionRepository,
+)
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.column_candidate_query import (  # noqa: E501
+    SQLAlchemyColumnCandidateQuery,
 )
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.project_member_repository import (  # noqa: E501
     SQLAlchemyProjectMemberRepository,
@@ -499,11 +501,11 @@ def register_research_organization(container: Container) -> None:
     def _channel_resolution_query(c: Container) -> SQLAlchemyChannelResolutionQuery:
         return SQLAlchemyChannelResolutionQuery(c[async_sessionmaker])
 
-    def _channel_resolver(c: Container) -> ChannelResolver:
-        return ChannelResolver(query=c[SQLAlchemyChannelResolutionQuery])
+    def _column_candidate_query(c: Container) -> SQLAlchemyColumnCandidateQuery:
+        return SQLAlchemyColumnCandidateQuery(c[async_sessionmaker])
 
     container.define(SQLAlchemyChannelResolutionQuery, _channel_resolution_query)
-    container.define(ChannelResolver, _channel_resolver)
+    container.define(SQLAlchemyColumnCandidateQuery, _column_candidate_query)
 
     def _campaign_repo(c: Container) -> SQLAlchemyCampaignRepository:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -531,7 +533,7 @@ def register_research_organization(container: Container) -> None:
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             collection_repo=SQLAlchemyCollectionRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -540,7 +542,7 @@ def register_research_organization(container: Container) -> None:
         return AddResultsFromCampaignUC(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -569,7 +571,7 @@ def register_research_organization(container: Container) -> None:
         return AddCampaignChannel(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -578,7 +580,7 @@ def register_research_organization(container: Container) -> None:
         return UpdateCampaignChannel(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -628,7 +630,7 @@ def register_research_organization(container: Container) -> None:
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -653,7 +655,7 @@ def register_research_organization(container: Container) -> None:
         return AddResultRow(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -670,7 +672,7 @@ def register_research_organization(container: Container) -> None:
         return RecomputeChannel(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -687,7 +689,7 @@ def register_research_organization(container: Container) -> None:
         return RefreshFromSources(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 
@@ -697,7 +699,7 @@ def register_research_organization(container: Container) -> None:
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
-            resolver=c[ChannelResolver],
+            query=c[SQLAlchemyColumnCandidateQuery],
             dispatcher=c[EventDispatcher],
         )
 

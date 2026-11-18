@@ -614,14 +614,14 @@ def test_record_seed_runs_appends_in_order_and_ignores_repeats():
     assert c.seed_runs == [SeedRun(run_b, p1), SeedRun(run_a, p1), SeedRun(run_c, p2)]
 
 
-def test_seed_run_ids_for_filters_by_protocol_in_insertion_order():
+def test_campaign_run_ids_filters_by_protocol_in_insertion_order():
     c = _make_campaign()
     p1, p2 = uuid.uuid4(), uuid.uuid4()
     run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
     c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_c, p2), SeedRun(run_a, p1)])
-    assert c.seed_run_ids_for(p1) == [run_b, run_a]
-    assert c.seed_run_ids_for(p2) == [run_c]
-    assert c.seed_run_ids_for(uuid.uuid4()) == []
+    assert c.campaign_run_ids(p1) == [run_b, run_a]
+    assert c.campaign_run_ids(p2) == [run_c]
+    assert c.campaign_run_ids(uuid.uuid4()) == []
 
 
 def test_seed_runs_are_not_derived_from_run_refs():

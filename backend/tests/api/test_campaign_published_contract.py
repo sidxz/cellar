@@ -37,6 +37,8 @@ from cellar.application.research_organization.close_campaign import (
     CloseCampaign,
     CloseCampaignCommand,
 )
+from cellar.application.research_organization.column_resolution import Candidate
+from cellar.application.screening.run_aggregation import ResolvedRun
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
@@ -53,7 +55,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
-from cellar.domain.research_organization.source_ref import ManualRef
+from cellar.domain.research_organization.source_ref import ManualRef, SeedRun
 from cellar.domain.screening_assay.enums import (
     ProtocolType,
     ReadoutAggregation,
@@ -76,7 +78,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 _SCHEMA_PATH = Path(__file__).parent / "fixtures" / "daikon_contract.schema.json"
 
 
-#: Provenance ids the resolver stamps on the sole measurement, asserted
+#: Provenance ids of the sole reading the fake query returns, asserted
 #: on the published document.
 _MEASUREMENT_RUN_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000002")
 _MEASUREMENT_READOUT_ID = uuid.UUID("dddddddd-0000-0000-0000-000000000001")
@@ -92,31 +94,40 @@ def daikon_schema() -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-class _FakeResolver:
-    """Returns a real measurement for any (channel, molecule) pair."""
+class _FakeColumnQuery:
+    """One reported endpoint (42 uM) for every requested molecule."""
 
-    async def resolve(
-        self,
-        *,
-        workspace_id: Any,
-        channel: Any,
-        result_id: Any,
-        molecule_id: Any,
-        run_ids: Any = None,
-    ) -> CampaignMeasurement:
-        return CampaignMeasurement(
-            result_id=result_id,
-            channel_id=channel.id,
+    async def fetch(
+        self, *, workspace_id: Any, channel: Any, run_ids: Any, molecule_ids: Any
+    ) -> dict[uuid.UUID, list[Candidate]]:
+        # Provenance (D8) — a reported-endpoint cell: the published `source`
+        # block must carry both id keys.
+        reading = ResolvedRun(
+            run_id=_MEASUREMENT_RUN_ID,
+            run_date=None,
+            run_approved=True,
+            curve_id=None,
             value=42.0,
-            value_qualifier=ValueQualifier.EQ,
+            qualifier=ValueQualifier.EQ,
             unit="uM",
-            # Provenance (D8) — a reported-endpoint cell: the published
-            # `source` block must carry both id keys.
-            source_run_id=_MEASUREMENT_RUN_ID,
-            source_readout_id=_MEASUREMENT_READOUT_ID,
-            protocol_name_snapshot="Test Protocol",
-            protocol_version_snapshot=1,
+            z_prime=None,
+            protocol_name="Test Protocol",
+            protocol_version=1,
+            readout_id=_MEASUREMENT_READOUT_ID,
         )
+        return {
+            mid: [
+                Candidate(
+                    run=reading,
+                    molecule_id=mid,
+                    batch_id=None,
+                    well_id=None,
+                    dose=None,
+                    replicate_count=None,
+                )
+            ]
+            for mid in molecule_ids or []
+        }
 
 
 class _NoOpDispatcher:
@@ -222,6 +233,10 @@ async def _seed_closed_campaign(
         description="Schema validation fixture",
         created_by=user_id,
     )
+    # One stage owning the column, its run, and one criterion on it — the
+    # value close resolves (42.0) is < 100, so this stage's outcome is "hit".
+    stage = CampaignStage(campaign_id=campaign.id, name="Contract Test Stage", display_order=0)
+    campaign.add_stage(stage)
     ch = CampaignChannel(
         campaign_id=campaign.id,
         label="IC50 (target binding)",
@@ -231,18 +246,13 @@ async def _seed_closed_campaign(
         selection_rule=SelectionRule.LATEST_RUN,
         qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
         display_order=0,
+        stage_id=stage.id,
     )
     campaign.add_channel(ch)
-
-    # One stage with one criterion on the seeded channel — the seeded
-    # measurement value (10.0) is < 100, so this stage's outcome is "hit".
-    stage = CampaignStage(
-        campaign_id=campaign.id,
-        name="Contract Test Stage",
-        display_order=0,
-        criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=100.0)],
+    campaign.update_stage(
+        stage.id, criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=100.0)]
     )
-    campaign.add_stage(stage)
+    campaign.add_runs_to_stage([SeedRun(_MEASUREMENT_RUN_ID, protocol_id)], stage.id)
 
     result = CampaignResult(
         campaign_id=campaign.id,
@@ -289,7 +299,7 @@ async def _seed_closed_campaign(
         uow=uow_uc,
         campaign_repo=SQLAlchemyCampaignRepository(uow_uc),
         protocol_repo=SQLAlchemyProtocolRepository(uow_uc),
-        resolver=_FakeResolver(),
+        query=_FakeColumnQuery(),
         dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
     )
     from returns.result import Success

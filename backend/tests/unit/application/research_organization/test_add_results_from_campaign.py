@@ -37,7 +37,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -108,25 +108,13 @@ def _make_source_campaign(auth, values: list[float]) -> tuple[Campaign, Campaign
     return source, stage
 
 
-def _fake_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=None,
-        value_qualifier=ValueQualifier.ND,
-        unit="-",
-        protocol_name_snapshot="x",
-        protocol_version_snapshot=1,
-    )
-
-
 def _make_uc(campaign_repo) -> AddResultsFromCampaign:
     dispatcher = AsyncMock()
     dispatcher.dispatch_all = AsyncMock()
     return AddResultsFromCampaign(
         uow=FakeUnitOfWork(),
         campaign_repo=campaign_repo,
-        resolver=FakeResolver(_fake_measurement),
+        query=FakeColumnQuery(None),
         dispatcher=dispatcher,
     )
 
@@ -325,11 +313,11 @@ class TestAddResultsFromCampaign:
         source, _ = _make_source_campaign(auth, [60.0])
         repo = make_campaign_repo(find_dispatch={target.id: target, source.id: source})
 
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         uc = AddResultsFromCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=repo,
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = AddResultsFromCampaignCommand(
@@ -338,16 +326,16 @@ class TestAddResultsFromCampaign:
             source_campaign_id=source.id,
         )
         assert isinstance(await uc(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [[run_id]]
+        assert query.run_ids_seen == [[run_id]]
 
         channel.resolve_from_all_runs = True
-        opted_out = FakeResolver(_fake_measurement)
+        opted_out = FakeColumnQuery(None)
         source2, _ = _make_source_campaign(auth, [70.0])
         repo2 = make_campaign_repo(find_dispatch={target.id: target, source2.id: source2})
         uc = AddResultsFromCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=repo2,
-            resolver=opted_out,
+            query=opted_out,
             dispatcher=AsyncMock(),
         )
         cmd = AddResultsFromCampaignCommand(

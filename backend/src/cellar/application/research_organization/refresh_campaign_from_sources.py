@@ -1,8 +1,8 @@
 """RefreshFromSources — re-resolve every non-override measurement in a DRAFT campaign.
 
-Iterates all (result, channel) pairs. Cells with ``is_manual_override == True``
-are skipped. All other cells are re-resolved via ``ChannelResolver`` and
-replaced in-place. Missing cells (defensive case) are resolved and added.
+Every column is recomputed by ``recompute_columns``: cells with
+``is_manual_override == True`` are skipped, all others are re-resolved and
+replaced in place. Missing cells (defensive case) are resolved and added.
 
 Pipeline:
   1. ``require_editor`` auth guard.
@@ -21,10 +21,8 @@ from datetime import UTC, datetime
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -63,12 +61,12 @@ class RefreshFromSources:
         *,
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -91,29 +89,9 @@ class RefreshFromSources:
                     ValidationError(f"Cannot refresh: campaign is {campaign.status.value}")
                 )
 
-            # Snapshot both lists to avoid mutation-during-iteration issues
-            channels = list(campaign.channels)
-            results = list(campaign.results)
-            scope = {ch.id: resolution_run_ids(campaign, ch) for ch in channels}
-
-            for result in results:
-                for channel in channels:
-                    measurement = result.find_measurement(channel.id)
-                    if measurement is not None and measurement.is_manual_override:
-                        continue
-                    new_measurement = await self._resolver.resolve(
-                        workspace_id=input.workspace_id,
-                        channel=channel,
-                        result_id=result.id,
-                        molecule_id=result.molecule_id,
-                        run_ids=scope[channel.id],
-                    )
-                    if measurement is not None:
-                        new_measurement.id = (
-                            measurement.id
-                        )  # preserve id → UPDATE not DELETE+INSERT
-                        result.remove_measurement_for_channel(channel.id)
-                    result.add_measurement(new_measurement)
+            await recompute_columns(
+                query=self._query, campaign=campaign, channels=campaign.channels
+            )
 
             campaign.updated_at = datetime.now(UTC)
             await self._campaign_repo.save(campaign)

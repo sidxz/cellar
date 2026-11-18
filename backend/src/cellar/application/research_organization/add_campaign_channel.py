@@ -2,7 +2,7 @@
 
 Binds a protocol readout to a selection rule, qualifier handling, and an
 optional QC filter. After the channel is appended, one ``CampaignMeasurement``
-is resolved for every existing ``CampaignResult`` via ``ChannelResolver``.
+is resolved for every existing ``CampaignResult`` via ``recompute_columns``.
 Hit/miss criteria live on ``CampaignStage``, not the channel.
 """
 
@@ -14,10 +14,8 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -68,8 +66,7 @@ class AddCampaignChannel:
       2. Load campaign (workspace-scoped).
       3. Construct the ``CampaignChannel``.
       4. ``campaign.add_channel(channel)`` (aggregate enforces DRAFT guard).
-      5. For every existing result call ``resolver.resolve`` and append the
-         returned measurement to the result.
+      5. Resolve the new column for every existing result (``recompute_columns``).
       6. Save + commit inside the UoW; dispatch events outside.
     """
 
@@ -78,12 +75,12 @@ class AddCampaignChannel:
         *,
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -124,16 +121,7 @@ class AddCampaignChannel:
             except ValidationError as e:
                 return Failure(e)
 
-            run_ids = resolution_run_ids(campaign, channel)
-            for result in campaign.results:
-                measurement = await self._resolver.resolve(
-                    workspace_id=input.workspace_id,
-                    channel=channel,
-                    result_id=result.id,
-                    molecule_id=result.molecule_id,
-                    run_ids=run_ids,
-                )
-                result.add_measurement(measurement)
+            await recompute_columns(query=self._query, campaign=campaign, channels=[channel])
 
             await self._campaign_repo.save(campaign)
             events = await self._uow.commit()

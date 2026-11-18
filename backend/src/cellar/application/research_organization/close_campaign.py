@@ -4,8 +4,8 @@ Pipeline:
   1. ``require_editor`` auth guard.
   2. Load campaign by (workspace_id, campaign_id); ``Failure(NotFoundError)`` if missing.
   3. Inline DRAFT check — ``Failure(ValidationError)`` if not DRAFT.
-  4. Re-resolve every non-override cell across all (result, channel) pairs (same
-     3-branch loop as ``RefreshFromSources``).
+  4. Re-resolve every non-override cell via ``recompute_columns`` (as
+     ``RefreshFromSources`` does).
   5. Materialize ``source_protocols`` snapshot from distinct protocol_ids on channels.
   6. Repair ND placeholder units: non-override measurements with ``unit=="-"`` get the
      real ``ReadoutDefinition.unit`` from the loaded protocols when it is non-empty.
@@ -26,10 +26,8 @@ from typing import Any
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -66,13 +64,13 @@ class CloseCampaign:
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
         protocol_repo: ProtocolRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
         self._protocol_repo = protocol_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -95,32 +93,9 @@ class CloseCampaign:
                     ValidationError(f"Cannot close: campaign is {campaign.status.value}")
                 )
 
-            # Step 4 — re-resolve all non-override cells
-            # (same 3-branch loop as RefreshFromSources).
+            # Step 4 — re-resolve all non-override cells.
             channels = list(campaign.channels)
-            results = list(campaign.results)
-            scope = {ch.id: resolution_run_ids(campaign, ch) for ch in channels}
-
-            for result in results:
-                for channel in channels:
-                    measurement = result.find_measurement(channel.id)
-                    if measurement is not None and measurement.is_manual_override:
-                        continue
-                    new_measurement = await self._resolver.resolve(
-                        workspace_id=input.workspace_id,
-                        channel=channel,
-                        result_id=result.id,
-                        molecule_id=result.molecule_id,
-                        run_ids=scope[channel.id],
-                    )
-                    # Preserve the existing measurement id when replacing — this avoids
-                    # the unique constraint on (result_id, channel_id) firing when the
-                    # old row is DELETEd and a new row with the same (result_id, channel_id)
-                    # is INSERTed within the same flush cycle.  Same pattern as in-place update.
-                    if measurement is not None:
-                        new_measurement.id = measurement.id
-                        result.remove_measurement_for_channel(channel.id)
-                    result.add_measurement(new_measurement)
+            await recompute_columns(query=self._query, campaign=campaign, channels=channels)
 
             # Step 5 — materialize source_protocols snapshot.
             distinct_protocol_ids: list[uuid.UUID] = []

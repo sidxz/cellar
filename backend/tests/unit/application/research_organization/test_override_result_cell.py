@@ -20,6 +20,8 @@ from cellar.domain.research_organization.campaign_measurement import (
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
+    MeasurementBasis,
+    UnresolvedReason,
     ValueQualifier,
 )
 from cellar.domain.shared.errors import (
@@ -428,12 +430,14 @@ class TestOverrideResultCell:
     @pytest.mark.asyncio
     async def test_override_carries_forward_snapshot_fields(self) -> None:
         """B6: override preserves test_concentration, replicate_count, qc_pass,
-        contributing_run_ids from the existing measurement."""
+        contributing_run_ids and the per-value facts (batches, basis, series,
+        unresolved reason) from the existing measurement."""
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         channel_id = uuid.uuid4()
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         run_ids = [uuid.uuid4(), uuid.uuid4()]
+        batch_ids = [uuid.uuid4()]
         existing = CampaignMeasurement(
             result_id=result.id,
             channel_id=channel_id,
@@ -447,6 +451,10 @@ class TestOverrideResultCell:
             replicate_count=3,
             qc_pass=True,
             contributing_run_ids=run_ids,
+            batch_ids=batch_ids,
+            basis=MeasurementBasis.MIXED,
+            concentration_series=True,
+            unresolved_reason=UnresolvedReason.SEVERAL_CONCENTRATIONS,
         )
         result.add_measurement(existing)
         campaign.add_result(result)
@@ -475,4 +483,8 @@ class TestOverrideResultCell:
         assert new_m.replicate_count == 3
         assert new_m.qc_pass is True
         assert new_m.contributing_run_ids == run_ids
+        assert new_m.batch_ids == batch_ids
+        assert new_m.basis is MeasurementBasis.MIXED
+        assert new_m.concentration_series is True
+        assert new_m.unresolved_reason is UnresolvedReason.SEVERAL_CONCENTRATIONS
         assert new_m.override_reason == "reviewer corrected value"

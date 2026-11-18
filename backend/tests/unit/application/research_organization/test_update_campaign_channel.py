@@ -32,7 +32,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -97,19 +97,6 @@ def _make_campaign_with_channel(
     return campaign, channel, result
 
 
-def _new_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
-    """Factory used by _FakeResolver to return a distinguishable fresh measurement."""
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=99.0,  # distinguishable from original 10.0
-        value_qualifier=ValueQualifier.EQ,
-        unit="nM",
-        protocol_name_snapshot="Proto",
-        protocol_version_snapshot=1,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -120,14 +107,14 @@ class TestUpdateCampaignChannel:
     async def test_label_only_update_does_not_trigger_resolver(self) -> None:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = UpdateCampaignChannelCommand(
@@ -142,22 +129,22 @@ class TestUpdateCampaignChannel:
         assert isinstance(result_out, Success)
         campaign_out = result_out.unwrap()
         assert campaign_out.channels[0].label == "New Label"
-        # Resolver must NOT have been called — no gating field changed
-        assert resolver.calls == []
+        # Nothing fetched — no gating field changed
+        assert query.calls == []
         dispatcher.dispatch_all.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_display_order_update_moves_the_channel(self) -> None:
         auth = fake_auth()
         campaign, channel, _result = _make_campaign_with_channel(auth.workspace_id)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = UpdateCampaignChannelCommand(
@@ -171,7 +158,7 @@ class TestUpdateCampaignChannel:
         assert isinstance(result_out, Success)
         assert result_out.unwrap().channels[0].display_order == 3
         # display_order is not a gating field — no re-resolution.
-        assert resolver.calls == []
+        assert query.calls == []
 
     @pytest.mark.asyncio
     async def test_negative_display_order_returns_validation_failure(self) -> None:
@@ -181,7 +168,7 @@ class TestUpdateCampaignChannel:
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -207,7 +194,7 @@ class TestUpdateCampaignChannel:
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=dispatcher,
         )
         cmd = UpdateCampaignChannelCommand(
@@ -231,14 +218,14 @@ class TestUpdateCampaignChannel:
         # Original measurement value is 10.0 (from _make_measurement)
         assert result.measurements[0].value == 10.0
 
-        resolver = FakeResolver(factory=_new_measurement)  # will return value=99.0
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = UpdateCampaignChannelCommand(
@@ -250,9 +237,9 @@ class TestUpdateCampaignChannel:
         result_out = await uc(cmd, auth=auth)
 
         assert isinstance(result_out, Success)
-        # Resolver was called once (one result)
-        assert len(resolver.calls) == 1
-        # Measurement replaced — value is now 99.0 (from resolver factory)
+        # One fetch for the column
+        assert len(query.calls) == 1
+        # Measurement replaced — value is now 99.0 (the fake reading)
         assert campaign.results[0].measurements[0].value == 99.0
 
     @pytest.mark.asyncio
@@ -264,11 +251,11 @@ class TestUpdateCampaignChannel:
         )
         original_value = result.measurements[0].value  # 10.0
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -279,8 +266,8 @@ class TestUpdateCampaignChannel:
         )
         await uc(cmd, auth=auth)
 
-        # Resolver must NOT have been called for the manual-override measurement
-        assert resolver.calls == []
+        # Nothing fetched for the manual-override measurement
+        assert query.calls == []
         # Original value preserved
         assert campaign.results[0].measurements[0].value == original_value
 
@@ -291,11 +278,11 @@ class TestUpdateCampaignChannel:
             auth.workspace_id,
             qc_filter={"require_approved": True},  # starts non-None
         )
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -306,7 +293,7 @@ class TestUpdateCampaignChannel:
         )
         await uc(cmd, auth=auth)
 
-        assert len(resolver.calls) == 1
+        assert len(query.calls) == 1
         assert campaign.channels[0].qc_filter is None
 
     @pytest.mark.asyncio
@@ -318,7 +305,7 @@ class TestUpdateCampaignChannel:
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -340,7 +327,7 @@ class TestUpdateCampaignChannel:
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -360,7 +347,7 @@ class TestUpdateCampaignChannel:
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=None),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -381,7 +368,7 @@ class TestUpdateCampaignChannel:
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -405,11 +392,11 @@ class TestUpdateCampaignChannel:
         assert original_m is not None
         original_id = original_m.id
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -434,11 +421,11 @@ class TestUpdateCampaignChannel:
         run_id = uuid.uuid4()
         campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -448,7 +435,7 @@ class TestUpdateCampaignChannel:
             selection_rule=SelectionRule.MEAN_ACROSS_RUNS,
         )
         assert isinstance(await uc(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [[run_id]]
+        assert query.run_ids_seen == [[run_id]]
 
     @pytest.mark.asyncio
     async def test_setting_resolve_from_all_runs_re_resolves_unrestricted(self) -> None:
@@ -458,11 +445,11 @@ class TestUpdateCampaignChannel:
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
         campaign.record_seed_runs([SeedRun(uuid.uuid4(), channel.protocol_id)])
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -475,18 +462,18 @@ class TestUpdateCampaignChannel:
 
         assert isinstance(out, Success)
         assert channel.resolve_from_all_runs is True
-        assert resolver.run_ids_seen == [None]
+        assert query.run_ids_seen == [None]
         assert result.find_measurement(channel.id).value == 99.0
 
     @pytest.mark.asyncio
     async def test_resolve_from_all_runs_unchanged_does_not_re_resolve(self) -> None:
         auth = fake_auth()
         campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = UpdateCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = UpdateCampaignChannelCommand(
@@ -496,4 +483,4 @@ class TestUpdateCampaignChannel:
             resolve_from_all_runs=False,
         )
         assert isinstance(await uc(cmd, auth=auth), Success)
-        assert resolver.calls == []
+        assert query.calls == []

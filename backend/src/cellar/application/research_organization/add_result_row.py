@@ -14,10 +14,8 @@ from datetime import UTC, datetime
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -63,12 +61,12 @@ class AddResultRow:
         *,
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -101,15 +99,12 @@ class AddResultRow:
             except ValidationError as e:
                 return Failure(e)
 
-            for channel in campaign.channels:
-                measurement = await self._resolver.resolve(
-                    workspace_id=input.workspace_id,
-                    channel=channel,
-                    result_id=result.id,
-                    molecule_id=result.molecule_id,
-                    run_ids=resolution_run_ids(campaign, channel),
-                )
-                result.add_measurement(measurement)
+            await recompute_columns(
+                query=self._query,
+                campaign=campaign,
+                channels=campaign.channels,
+                molecule_ids=[result.molecule_id],
+            )
 
             campaign.updated_at = datetime.now(UTC)
             await self._campaign_repo.save(campaign)

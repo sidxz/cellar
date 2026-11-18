@@ -2,7 +2,7 @@
 
 Exercises the full SQL+session+flush path:
   - inserts a Molecule + Protocol + Campaign in DRAFT,
-  - runs CloseCampaign with a FakeResolver (no real runs/curves needed),
+  - runs CloseCampaign with a fake column query (no real runs/curves needed),
   - asserts campaign is CLOSED, source_protocols populated, close_note
     persisted, and no Collection row is created (soft close publishes
     nothing — spec §4/§5),
@@ -20,7 +20,7 @@ import pytest
 import sqlalchemy as sa
 from returns.result import Success
 
-from cellar.application.research_organization.channel_resolution import ChannelResolver
+from cellar.application.research_organization.column_resolution import Candidate
 from cellar.application.research_organization.close_campaign import (
     CloseCampaign,
     CloseCampaignCommand,
@@ -33,6 +33,7 @@ from cellar.application.research_organization.reopen_campaign import (
     ReopenCampaign,
     ReopenCampaignCommand,
 )
+from cellar.application.screening.run_aggregation import ResolvedRun
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import (
@@ -56,8 +57,8 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
     SQLAlchemyCampaignRepository,
 )
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (
-    SQLAlchemyChannelResolutionQuery,
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.column_candidate_query import (
+    SQLAlchemyColumnCandidateQuery,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repository import (
     SQLAlchemyProtocolRepository,
@@ -69,9 +70,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 # ---------------------------------------------------------------------------
 
 
-async def _insert_molecule(
-    uow: AsyncUnitOfWork, mol_id: uuid.UUID, ws_id: uuid.UUID
-) -> None:
+async def _insert_molecule(uow: AsyncUnitOfWork, mol_id: uuid.UUID, ws_id: uuid.UUID) -> None:
     """Insert a minimal molecule row (mirrors existing integration test helpers)."""
     org_id = ws_id
     async with uow:
@@ -97,9 +96,7 @@ async def _insert_molecule(
         await uow.commit()
 
 
-async def _insert_project(
-    uow: AsyncUnitOfWork, project_id: uuid.UUID, ws_id: uuid.UUID
-) -> None:
+async def _insert_project(uow: AsyncUnitOfWork, project_id: uuid.UUID, ws_id: uuid.UUID) -> None:
     """Insert a minimal project row."""
     async with uow:
         await uow.session.execute(
@@ -144,21 +141,36 @@ async def _insert_protocol(
         await uow.commit()
 
 
-class _FakeResolver:
-    """Returns a fresh measurement (value=99.0, unit='uM') for any cell."""
+class _FakeColumnQuery:
+    """One reported reading (value=99.0, unit='uM') for every requested molecule."""
 
-    async def resolve(
-        self, *, workspace_id, channel, result_id, molecule_id, run_ids=None
-    ) -> CampaignMeasurement:
-        return CampaignMeasurement(
-            result_id=result_id,
-            channel_id=channel.id,
+    async def fetch(self, *, workspace_id, channel, run_ids, molecule_ids):
+        reading = ResolvedRun(
+            run_id=uuid.uuid4(),
+            run_date=date(2026, 1, 1),
+            run_approved=True,
+            curve_id=None,
             value=99.0,
-            value_qualifier=ValueQualifier.EQ,
+            qualifier=ValueQualifier.EQ,
             unit="uM",
-            protocol_name_snapshot="Test Protocol",
-            protocol_version_snapshot=1,
+            z_prime=None,
+            protocol_name="Test Protocol",
+            protocol_version=1,
+            readout_id=uuid.uuid4(),
         )
+        return {
+            mid: [
+                Candidate(
+                    run=reading,
+                    molecule_id=mid,
+                    batch_id=None,
+                    well_id=None,
+                    dose=None,
+                    replicate_count=None,
+                )
+            ]
+            for mid in molecule_ids or []
+        }
 
 
 class _NoOpDispatcher:
@@ -247,7 +259,7 @@ async def _seed_and_close_campaign(
         uow=uow_uc,
         campaign_repo=SQLAlchemyCampaignRepository(uow_uc),
         protocol_repo=SQLAlchemyProtocolRepository(uow_uc),
-        resolver=_FakeResolver(),
+        query=_FakeColumnQuery(),
         dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
     )
     auth = _make_fake_auth(user_id, ws_id)
@@ -285,9 +297,7 @@ async def test_close_campaign_integration(session_factory) -> None:
     async with AsyncUnitOfWork(session_factory) as uow_coll:
         row_count = (
             await uow_coll.session.execute(
-                sa.text(
-                    "SELECT count(*) FROM collections WHERE derived_from_campaign_id = :cid"
-                ),
+                sa.text("SELECT count(*) FROM collections WHERE derived_from_campaign_id = :cid"),
                 {"cid": campaign_id},
             )
         ).scalar_one()
@@ -472,7 +482,13 @@ async def _insert_run_with_readout(  # type: ignore[no-untyped-def]
                 "status, is_locked, version, notes) "
                 "VALUES (:id, :ws, :proto, :run_date, :user, 'approved', false, 1, NULL)"
             ),
-            {"id": run_id, "ws": ws_id, "proto": protocol_id, "run_date": run_date, "user": user_id},
+            {
+                "id": run_id,
+                "ws": ws_id,
+                "proto": protocol_id,
+                "run_date": run_date,
+                "user": user_id,
+            },
         )
         await session.execute(
             sa.text(
@@ -516,7 +532,7 @@ def _readout_channel(
 
 
 class _RunScopeHarness:
-    """One molecule, one project, the real resolver + SQL query, and the
+    """One molecule, one project, the real column query, and the
     real Refresh / Close / Reopen use cases against ``session_factory``."""
 
     def __init__(self, session_factory) -> None:  # type: ignore[no-untyped-def]
@@ -526,7 +542,7 @@ class _RunScopeHarness:
         self.project_id = uuid.uuid4()
         self.user_id = uuid.uuid4()
         self.auth = _make_fake_auth(self.user_id, self.ws_id)
-        self.resolver = ChannelResolver(SQLAlchemyChannelResolutionQuery(session_factory))
+        self.query = SQLAlchemyColumnCandidateQuery(session_factory)
         self.campaign: Campaign | None = None
 
     async def setup(self) -> None:
@@ -591,7 +607,7 @@ class _RunScopeHarness:
         uc = RefreshFromSources(
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
-            resolver=self.resolver,
+            query=self.query,
             dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
         )
         out = await uc(
@@ -606,7 +622,7 @@ class _RunScopeHarness:
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             protocol_repo=SQLAlchemyProtocolRepository(uow),
-            resolver=self.resolver,
+            query=self.query,
             dispatcher=_NoOpDispatcher(),  # type: ignore[arg-type]
         )
         out = await uc(

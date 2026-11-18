@@ -115,5 +115,5 @@ async def test_backfill_derives_seed_runs_from_run_refs(session_factory) -> None
     assert seeded_after is not None and unseeded_after is not None
     # Ordered by run_date: a (Jan, P1), c (Feb, P2), b (Mar, P1).
     assert seeded_after.seed_runs == [SeedRun(run_a, p1), SeedRun(run_c, p2), SeedRun(run_b, p1)]
-    assert seeded_after.seed_run_ids_for(p1) == [run_a, run_b]
+    assert seeded_after.campaign_run_ids(p1) == [run_a, run_b]
     assert unseeded_after.seed_runs == []

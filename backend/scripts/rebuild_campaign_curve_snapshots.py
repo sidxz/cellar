@@ -55,10 +55,10 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from cellar.application.research_organization.channel_resolution import (
-    ResolvedCandidate,
-    _build_curve_snapshot,
+from cellar.application.screening.curve_snapshot import (
+    build_curve_snapshot as _build_curve_snapshot,
 )
+from cellar.application.screening.run_aggregation import ResolvedRun as ResolvedCandidate
 from cellar.domain.research_organization.enums import ValueQualifier
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 
