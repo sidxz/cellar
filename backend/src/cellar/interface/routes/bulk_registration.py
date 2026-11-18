@@ -12,7 +12,6 @@ import uuid
 
 from fastapi import APIRouter, File, Form, Query, UploadFile, status
 from pydantic import BaseModel
-from pydantic import ValidationError as PydanticValidationError
 
 from cellar.application.chemical_registration.bulk_column_mapping import (
     ColumnMapping,
@@ -344,10 +343,11 @@ def _parse_column_mapping(raw: str | None) -> ColumnMapping | None:
     if raw is None or not raw.strip():
         return None
     try:
-        body = ColumnMappingBody.model_validate(json.loads(raw))
-    except (json.JSONDecodeError, PydanticValidationError) as err:
-        raise ValidationError(f"column_mapping is not a valid mapping: {err}") from err
-    return ColumnMapping.from_dict(body.model_dump(mode="json"))
+        data = json.loads(raw)
+    except json.JSONDecodeError as err:
+        raise ValidationError(f"column_mapping is not valid JSON: {err}") from err
+    # from_dict (not the Pydantic model) so a bad column is named in the message.
+    return ColumnMapping.from_dict(data)
 
 
 @router.post("/suggest-mapping", response_model=ColumnMappingBody)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -60,7 +61,7 @@ def _to_response(m: BulkRegistrationMapping) -> BulkRegistrationMappingResponse:
     )
 
 
-def _columns(cols: list[ColumnMappingColumnBody]) -> list[dict]:
+def _columns(cols: list[ColumnMappingColumnBody]) -> list[dict[str, Any]]:
     return [c.model_dump(mode="json") for c in cols]
 
 

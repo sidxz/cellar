@@ -59,6 +59,8 @@ class ChemicalFileParser(Protocol):
         self, content: bytes, filename: str, mapping: ColumnMapping | None = None
     ) -> list[ParsedMoleculeItem]: ...
 
+    def headers(self, content: bytes, filename: str) -> list[str]: ...
+
 
 # ---------------------------------------------------------------------------
 # Mapping-driven row extraction (shared by the SDF and tabular parsers)
@@ -159,10 +161,8 @@ class SDFParser:
     The structure always comes from the record itself.
     """
 
-    def parse(
-        self, content: bytes, filename: str, mapping: ColumnMapping | None = None
-    ) -> list[ParsedMoleculeItem]:
-        mols = list(Chem.ForwardSDMolSupplier(io.BytesIO(content)))
+    @staticmethod
+    def _headers(mols: list[Chem.Mol | None]) -> list[str]:
         headers = [SDF_TITLE_HEADER]
         for mol in mols:
             if mol is None:
@@ -170,6 +170,16 @@ class SDFParser:
             for p in mol.GetPropsAsDict():
                 if not p.startswith("_") and p not in headers:
                     headers.append(p)
+        return headers
+
+    def headers(self, content: bytes, filename: str) -> list[str]:
+        return self._headers(list(Chem.ForwardSDMolSupplier(io.BytesIO(content))))
+
+    def parse(
+        self, content: bytes, filename: str, mapping: ColumnMapping | None = None
+    ) -> list[ParsedMoleculeItem]:
+        mols = list(Chem.ForwardSDMolSupplier(io.BytesIO(content)))
+        headers = self._headers(mols)
         if mapping is None:
             mapping = _default_mapping(headers)
         else:
@@ -225,16 +235,35 @@ class TabularParser:
         df.columns = headers
         items: list[ParsedMoleculeItem] = []
         for idx, row in df.iterrows():
-            i = int(idx)  # type: ignore[arg-type]
+            i = int(idx)
+
+            def get(header: str, row: pd.Series = row) -> str | None:
+                return _safe_str(row.get(header))
+
             items.append(
                 _extract_item(
-                    lambda h, row=row: _safe_str(row.get(h)),
+                    get,
                     mapping,
                     row_index=i,
                     file_row=i + 2,  # header is row 1
                 )
             )
         return items
+
+    def headers(self, content: bytes, filename: str) -> list[str]:
+        """The header row only (no rows read)."""
+        buf = io.BytesIO(content)
+        fmt = self._detect_format(filename)
+        try:
+            if fmt == BulkRegistrationFileFormat.CSV:
+                df = pd.read_csv(buf, dtype=str, keep_default_na=False, nrows=0)
+            else:
+                df = pd.read_excel(
+                    buf, dtype=str, keep_default_na=False, engine="openpyxl", nrows=0
+                )
+        except pd.errors.EmptyDataError:
+            return []
+        return [str(c) for c in df.columns]
 
     def _detect_format(self, filename: str) -> BulkRegistrationFileFormat:
         suffix = Path(filename).suffix.lower()
@@ -301,6 +330,12 @@ def get_parser(file_format: BulkRegistrationFileFormat) -> ChemicalFileParser:
 
 
 class BulkFileParserAdapter:
+    def headers(
+        self, *, content: bytes, filename: str, file_format: BulkRegistrationFileFormat
+    ) -> list[str]:
+        """The file's column names, without parsing its rows."""
+        return get_parser(file_format).headers(content, filename)
+
     """Adapter that satisfies the application BulkFileParserProtocol.
 
     Bridges the infra ``ChemicalFileParser`` factory and the application

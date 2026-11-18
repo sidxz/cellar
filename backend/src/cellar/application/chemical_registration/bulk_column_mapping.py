@@ -13,6 +13,7 @@ import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from typing import Any
 
 from cellar.domain.shared.errors import ValidationError
 
@@ -73,7 +74,7 @@ class MappedColumn:
 class ColumnMapping:
     columns: tuple[MappedColumn, ...]
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "columns": [
                 {"header": c.header, "target": c.target.value, "source": c.source}
@@ -82,7 +83,7 @@ class ColumnMapping:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> ColumnMapping:
+    def from_dict(cls, d: object) -> ColumnMapping:
         raw = d.get("columns") if isinstance(d, dict) else None
         if not isinstance(raw, list):
             raise ValidationError("column_mapping needs a 'columns' list")
@@ -91,7 +92,7 @@ class ColumnMapping:
             if not isinstance(c, dict) or not isinstance(c.get("header"), str):
                 raise ValidationError("Each mapped column needs a 'header'")
             try:
-                target = ColumnTarget(c.get("target"))
+                target = ColumnTarget(str(c.get("target")))
             except ValueError:
                 raise ValidationError(
                     f"Column '{c['header']}': unknown target {c.get('target')!r}"

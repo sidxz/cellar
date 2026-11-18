@@ -63,6 +63,12 @@ class BulkFileParserProtocol(Protocol):
         """Raises ``ValidationError`` when ``column_mapping`` doesn't fit the file."""
         ...
 
+    def headers(
+        self, *, content: bytes, filename: str, file_format: BulkRegistrationFileFormat
+    ) -> list[str]:
+        """The file's column names (SDF: title line + properties), rows unread."""
+        ...
+
 
 # ---------------------------------------------------------------------------
 # Query

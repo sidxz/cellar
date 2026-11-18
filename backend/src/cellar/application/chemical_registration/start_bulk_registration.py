@@ -109,6 +109,18 @@ class StartBulkRegistration:
         except ValueError:
             return Failure(ValidationError(f"Unsupported file format: {input.file_format!r}"))
 
+        if input.column_mapping is not None:
+            # Check the mapping against the file's headers before a workflow starts;
+            # only the header row is read here, the worker parses the rows.
+            mapping_err = input.column_mapping.validate(
+                self._parser.headers(
+                    content=input.content, filename=input.filename, file_format=file_format
+                ),
+                structure_implied=file_format == BulkRegistrationFileFormat.SDF,
+            )
+            if mapping_err is not None:
+                return Failure(mapping_err)
+
         if input.project_ids:
             # Validate once here: the worker registers rows as the system and
             # trusts this list.

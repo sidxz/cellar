@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from typing import Any
 
 from returns.result import Failure, Result, Success
 
@@ -25,7 +26,7 @@ from cellar.domain.chemical_registration.repository import BulkRegistrationMappi
 from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 
 
-def _valid_columns(columns: list[dict]) -> Result[list[dict], DomainError]:
+def _valid_columns(columns: list[dict[str, Any]]) -> Result[list[dict[str, Any]], DomainError]:
     """Same rules as a mapping sent with an upload, minus the file's headers."""
     try:
         mapping = ColumnMapping.from_dict({"columns": columns})
@@ -34,9 +35,9 @@ def _valid_columns(columns: list[dict]) -> Result[list[dict], DomainError]:
     headers = [c.header for c in mapping.columns]
     if len(set(headers)) != len(headers):
         return Failure(ValidationError("Each column can appear only once in a mapping"))
-    err = mapping.validate(headers, structure_implied=True)
-    if err is not None:
-        return Failure(err)
+    problem = mapping.validate(headers, structure_implied=True)
+    if problem is not None:
+        return Failure(problem)
     return Success(mapping.to_dict()["columns"])
 
 
@@ -62,7 +63,7 @@ class ListBulkRegistrationMappingsQuery(Query):
 class CreateBulkRegistrationMappingCommand(Command):
     workspace_id: uuid.UUID
     name: str
-    columns: list[dict]
+    columns: list[dict[str, Any]]
     created_by: uuid.UUID
 
 
@@ -71,7 +72,7 @@ class UpdateBulkRegistrationMappingCommand(Command):
     workspace_id: uuid.UUID
     mapping_id: uuid.UUID
     name: str | None = None
-    columns: list[dict] | None = None
+    columns: list[dict[str, Any]] | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -139,7 +140,7 @@ class UpdateBulkRegistrationMapping(_MappingWrite):
     ) -> Result[BulkRegistrationMapping, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
-        columns: list[dict] | None = None
+        columns: list[dict[str, Any]] | None = None
         if input.columns is not None:
             checked = _valid_columns(input.columns)
             if isinstance(checked, Failure):

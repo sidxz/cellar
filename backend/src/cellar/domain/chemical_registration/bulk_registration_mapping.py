@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
@@ -21,7 +22,7 @@ class BulkRegistrationMapping(Entity):
         id: uuid.UUID | None = None,
         workspace_id: uuid.UUID,
         name: str,
-        columns: list[dict],
+        columns: list[dict[str, Any]],
         created_by: uuid.UUID,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
@@ -34,11 +35,18 @@ class BulkRegistrationMapping(Entity):
 
     @classmethod
     def create(
-        cls, *, workspace_id: uuid.UUID, name: str, columns: list[dict], created_by: uuid.UUID
+        cls,
+        *,
+        workspace_id: uuid.UUID,
+        name: str,
+        columns: list[dict[str, Any]],
+        created_by: uuid.UUID,
     ) -> BulkRegistrationMapping:
         return cls(workspace_id=workspace_id, name=name, columns=columns, created_by=created_by)
 
-    def update(self, *, name: str | None = None, columns: list[dict] | None = None) -> None:
+    def update(
+        self, *, name: str | None = None, columns: list[dict[str, Any]] | None = None
+    ) -> None:
         if name is not None:
             self.name = self._valid_name(name)
         if columns is not None:
