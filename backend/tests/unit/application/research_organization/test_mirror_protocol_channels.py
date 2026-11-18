@@ -506,9 +506,9 @@ async def test_mirror_none_stage_name_creates_no_stage() -> None:
 
 @pytest.mark.asyncio
 async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
-    """Re-mirroring an already-fully-mirrored protocol creates zero new
-    channels; a stage_name that maps onto the pre-existing channel must
-    still be persisted (channels_created==0 must not skip the save)."""
+    """Re-mirroring under a stage_name puts the protocol's columns on that
+    stage; the campaign-level column is never re-homed, and the new stage
+    and its column are persisted."""
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
     rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
@@ -550,9 +550,14 @@ async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
     )
     assert isinstance(out2, Success)
     outcome2 = out2.unwrap()
-    assert outcome2.channels_created == 0
+    assert outcome2.channels_created == 1
     assert outcome2.stage_created is True
     assert len(campaign.stages) == 1
+    stage = campaign.stages[0]
+    assert sorted(c.stage_id is None for c in campaign.channels) == [False, True]
+    assert [k.channel_id for k in stage.criteria] == [
+        c.id for c in campaign.channels_of_stage(stage.id)
+    ]
     assert len(saved) == 1
 
 

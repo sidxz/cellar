@@ -47,7 +47,10 @@ from cellar.application.research_organization.preview_run_import import (
     _cfg_norm,
     fetch_run_candidates,
 )
-from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
+from cellar.application.research_organization.stage_upsert import (
+    get_or_create_stage,
+    set_stage_criteria,
+)
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -195,11 +198,31 @@ class AddResultsFromRuns:
             # The intercept-key fourth element uses the frozen InterceptKey VO
             # directly (hashable by `@dataclass(frozen=True)`); None means
             # the channel targets the primary intercept.
-            ChannelKey = tuple[uuid.UUID, uuid.UUID, str | None, object]
+            ChannelKey = tuple[uuid.UUID | None, uuid.UUID, uuid.UUID, str | None, object]
+
+            # With a stage_name the columns belong to that stage: it is created
+            # (or reused) before them, but only when some config yields a
+            # criterion, so a threshold-less import makes no stage.
+            stage = None
+            stage_created = False
+            if input.stage_name and any(
+                c.use_for_filter
+                and c.hit_threshold is not None
+                and c.hit_threshold.operator != "in"
+                for c in input.channel_configs
+            ):
+                try:
+                    stage, stage_created = get_or_create_stage(
+                        campaign, name=input.stage_name, parent_stage_id=input.parent_stage_id
+                    )
+                except ValidationError as e:
+                    return Failure(e)
+            stage_id = stage.id if stage else None
 
             channel_by_config: dict[ChannelKey, CampaignChannel] = {}
             existing_by_key: dict[ChannelKey, CampaignChannel] = {
                 (
+                    ch.stage_id,
                     ch.protocol_id,
                     ch.readout_definition_id,
                     ch.normalization_applied,
@@ -214,6 +237,7 @@ class AddResultsFromRuns:
             for cfg in input.channel_configs:
                 norm = _cfg_norm(cfg)
                 key: ChannelKey = (
+                    stage_id,
                     cfg.protocol_id,
                     cfg.readout_definition_id,
                     norm,
@@ -240,6 +264,7 @@ class AddResultsFromRuns:
                         display_order=next_display_order,
                         normalization_applied=norm,
                         intercept_key=cfg.intercept_key,
+                        stage_id=stage_id,
                     )
                     next_display_order += 1
                     try:
@@ -256,8 +281,7 @@ class AddResultsFromRuns:
             # mirror path: a config using the string-based ``in`` operator
             # contributes nothing (StageCriterion doesn't accept it).
             # A stage of that name already on the campaign is reused and its
-            # criteria replaced (see ``upsert_stage_by_name``).
-            stage_created = False
+            # criteria replaced (see ``set_stage_criteria``).
             if input.stage_name:
                 stage_criteria: list[StageCriterion] = []
                 try:
@@ -268,7 +292,13 @@ class AddResultsFromRuns:
                             continue
                         norm = _cfg_norm(cfg)
                         channel = channel_by_config[
-                            (cfg.protocol_id, cfg.readout_definition_id, norm, cfg.intercept_key)
+                            (
+                                stage_id,
+                                cfg.protocol_id,
+                                cfg.readout_definition_id,
+                                norm,
+                                cfg.intercept_key,
+                            )
                         ]
                         stage_criteria.append(
                             StageCriterion(
@@ -277,13 +307,8 @@ class AddResultsFromRuns:
                                 value=cfg.hit_threshold.value,
                             )
                         )
-                    if stage_criteria:
-                        _, stage_created = upsert_stage_by_name(
-                            campaign,
-                            name=input.stage_name,
-                            criteria=stage_criteria,
-                            parent_stage_id=input.parent_stage_id,
-                        )
+                    if stage is not None and stage_criteria:
+                        set_stage_criteria(campaign, stage, stage_criteria)
                 except ValidationError as e:
                     return Failure(e)
 
@@ -296,6 +321,7 @@ class AddResultsFromRuns:
             for cfg in input.channel_configs:
                 norm = _cfg_norm(cfg)
                 key = (
+                    stage_id,
                     cfg.protocol_id,
                     cfg.readout_definition_id,
                     norm,

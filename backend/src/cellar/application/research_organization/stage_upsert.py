@@ -13,7 +13,6 @@ import uuid
 
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_stage import (
-    UNSET,
     CampaignStage,
     StageCriterion,
     normalize_stage_name,
@@ -22,20 +21,21 @@ from cellar.domain.research_organization.enums import StageKind
 from cellar.domain.shared.errors import ValidationError
 
 
-def upsert_stage_by_name(
+def get_or_create_stage(
     campaign: Campaign,
     *,
     name: str,
-    criteria: list[StageCriterion],
     parent_stage_id: uuid.UUID | None,
 ) -> tuple[CampaignStage, bool]:
-    """Reuse the stage with this name (case-insensitive) and replace its criteria,
-    else append a new criteria stage. Returns (stage, created). A manual stage of
+    """Reuse the stage with this name (case-insensitive), else append a new
+    criteria stage with no criteria. Returns (stage, created). A manual stage of
     that name is a ValidationError — its membership is hand-picked, not rule-driven.
 
+    The caller puts columns on the stage, then calls ``set_stage_criteria``: a
+    criterion's column must belong to its stage, so a new stage starts empty.
+
     Raises ``ValidationError`` (also from the domain guards: unknown/cyclic
-    parent, a criterion on a foreign channel, a non-DRAFT campaign). Callers
-    already translate that into ``Failure``.
+    parent, a non-DRAFT campaign). Callers already translate that into ``Failure``.
     """
     normalized = normalize_stage_name(name)
     existing = next(
@@ -47,7 +47,6 @@ def upsert_stage_by_name(
             campaign_id=campaign.id,
             name=normalized,
             display_order=max((s.display_order for s in campaign.stages), default=-1) + 1,
-            criteria=criteria,
             parent_stage_id=parent_stage_id,
         )
         campaign.add_stage(stage)
@@ -61,9 +60,13 @@ def upsert_stage_by_name(
         )
     # An omitted parent leaves the existing parent alone — re-importing into a
     # stage must not silently detach it from its funnel.
-    campaign.update_stage(
-        existing.id,
-        criteria=criteria,
-        parent_stage_id=parent_stage_id if parent_stage_id is not None else UNSET,
-    )
+    if parent_stage_id is not None:
+        campaign.update_stage(existing.id, parent_stage_id=parent_stage_id)
     return existing, False
+
+
+def set_stage_criteria(
+    campaign: Campaign, stage: CampaignStage, criteria: list[StageCriterion]
+) -> None:
+    """Replace the stage's criteria whole (each must be on one of its columns)."""
+    campaign.update_stage(stage.id, criteria=criteria)

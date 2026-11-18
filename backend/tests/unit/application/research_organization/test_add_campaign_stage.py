@@ -74,9 +74,9 @@ def _make_draft_campaign_with_channel(
 
 class TestAddCampaignStage:
     @pytest.mark.asyncio
-    async def test_happy_path_appends_stage_with_criteria(self) -> None:
+    async def test_happy_path_appends_stage(self) -> None:
         auth = fake_auth()
-        campaign, channel = _make_draft_campaign_with_channel(auth.workspace_id)
+        campaign, _ = _make_draft_campaign_with_channel(auth.workspace_id)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
         repo = make_campaign_repo(find_in_ws=campaign)
@@ -86,22 +86,41 @@ class TestAddCampaignStage:
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
             name="Primary Hit",
-            criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=10.0)],
+            criteria=[],
         )
         result = await uc(cmd, auth=auth)
 
         assert isinstance(result, Success)
-        campaign_out = result.unwrap()
-        assert len(campaign_out.stages) == 1
-        stage = campaign_out.stages[0]
+        stage = result.unwrap().stages[0]
         assert stage.name == "Primary Hit"
         assert stage.display_order == 0
         assert stage.parent_stage_id is None
         assert stage.kind == StageKind.CRITERIA
-        assert len(stage.criteria) == 1
-        assert stage.criteria[0].channel_id == channel.id
+        assert stage.criteria == []
         repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_criteria_on_a_campaign_column_is_validation_failure(self) -> None:
+        """A new stage owns no column yet, so a criterion can only name a
+        campaign-level one, which belongs to no stage."""
+        auth = fake_auth()
+        campaign, channel = _make_draft_campaign_with_channel(auth.workspace_id)
+        repo = make_campaign_repo(find_in_ws=campaign)
+        uc = AddCampaignStage(uow=FakeUnitOfWork(), campaign_repo=repo, dispatcher=AsyncMock())
+
+        result = await uc(
+            AddCampaignStageCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                name="Primary Hit",
+                criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=10.0)],
+            ),
+            auth=auth,
+        )
+
+        assert isinstance(result, Failure)
+        assert isinstance(result.failure(), ValidationError)
 
     @pytest.mark.asyncio
     async def test_manual_kind_threads_through(self) -> None:
