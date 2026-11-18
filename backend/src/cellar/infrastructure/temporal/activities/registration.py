@@ -26,6 +26,11 @@ from cellar.application.chemical_registration.register_molecule import (
     RegisterMoleculeCommand,
     RegistrationOutcome,
 )
+from cellar.application.chemical_registration.row_batch import (
+    ApplyRowBatch,
+    ApplyRowBatchCommand,
+    row_batch_ids,
+)
 from cellar.application.inventory.batch_identifiers import (
     AddBatchIdentifier,
     AddBatchIdentifierCommand,
@@ -152,6 +157,14 @@ class RegistrationActivities:
         output = ChunkOutput()
 
         for item in input.items:
+            if item.error:
+                # The parser could not read this row; it registers nothing.
+                output.error += 1
+                output.results.append(
+                    ChunkItemResult(row_index=item.row_index, success=False, error=item.error)
+                )
+                continue
+
             has_explicit_name = bool(item.name)
             cmd = RegisterMoleculeCommand(
                 workspace_id=ws_id,
@@ -209,6 +222,7 @@ class RegistrationActivities:
             batch_number: str | None = None
             salt_matched = False
             batch_skipped = False
+            batch_problem: str | None = None
             if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
                 create_batch_now = should_create_batch(
                     is_new_molecule=outcome.is_new,
@@ -216,7 +230,16 @@ class RegistrationActivities:
                     override=None,
                     workspace_default=effective_policy_default,
                 )
-                if create_batch_now:
+                if item.batch_ids:
+                    batch_id, batch_number, salt_matched, batch_problem = await _apply_row_batch(
+                        item=item,
+                        reg_outcome=outcome,
+                        workspace_id=ws_id,
+                        submitted_by=submitted_by,
+                        session_factory=session_factory,
+                        dispatcher=dispatcher,
+                    )
+                elif create_batch_now:
                     batch_id, batch_number, salt_matched = await _create_batch(
                         item=item,
                         reg_outcome=outcome,
@@ -245,6 +268,10 @@ class RegistrationActivities:
                     else None,
                     disclosure_id=str(outcome.disclosure_id) if outcome.disclosure_id else None,
                     conflict_reason=outcome.conflict_reason,
+                    # The compound is registered; this says why its batch is not.
+                    error=f"Compound registered, batch not created: {batch_problem}"
+                    if batch_problem
+                    else None,
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
                 )
@@ -289,6 +316,87 @@ async def _create_batch(
     dispatcher,
 ) -> tuple[uuid.UUID | None, str | None, bool]:
     """Resolve salt and create a batch. Uses a fresh UoW for each call."""
+    batch_cmd, salt_matched, create_batch, add_batch_alias = await _batch_command(
+        item=item,
+        reg_outcome=reg_outcome,
+        workspace_id=workspace_id,
+        submitted_by=submitted_by,
+        session_factory=session_factory,
+        dispatcher=dispatcher,
+    )
+    molecule = reg_outcome.molecule
+    return await _run_create_batch(
+        item=item,
+        molecule_id=molecule.id,
+        workspace_id=workspace_id,
+        submitted_by=submitted_by,
+        batch_cmd=batch_cmd,
+        salt_matched=salt_matched,
+        create_batch=create_batch,
+        add_batch_alias=add_batch_alias,
+    )
+
+
+async def _apply_row_batch(
+    *,
+    item: ChunkItem,
+    reg_outcome: RegistrationOutcome,
+    workspace_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    session_factory: async_sessionmaker,
+    dispatcher,
+) -> tuple[uuid.UUID | None, str | None, bool, str | None]:
+    """The row names its batch (``item.batch_ids``): find or create exactly that
+    batch (``row_batch.ApplyRowBatch``). Returns ``(batch_id, batch_number,
+    salt_matched, problem)``; on a problem the compound stays registered."""
+    batch_cmd, salt_matched, create_batch, _ = await _batch_command(
+        item=item,
+        reg_outcome=reg_outcome,
+        workspace_id=workspace_id,
+        submitted_by=submitted_by,
+        session_factory=session_factory,
+        dispatcher=dispatcher,
+    )
+    row_uow = AsyncUnitOfWork(session_factory)
+    apply = ApplyRowBatch(
+        uow=row_uow,
+        batch_repo=SQLAlchemyBatchRepository(row_uow),
+        create_batch=create_batch,
+        dispatcher=dispatcher,
+    )
+    result = await apply(
+        ApplyRowBatchCommand(
+            workspace_id=workspace_id,
+            molecule_id=reg_outcome.molecule.id,
+            batch_ids=row_batch_ids(item.batch_ids),
+            create=batch_cmd,
+            actor=submitted_by,
+        )
+    )
+    if isinstance(result, Failure):
+        logger.warning(
+            "registration.row_batch_failed",
+            molecule_id=str(reg_outcome.molecule.id),
+            row_index=item.row_index,
+            error=str(result.failure()),
+        )
+        return None, None, False, str(result.failure())
+    r = result.unwrap()
+    if r.action == "problem":
+        return None, None, False, r.problem
+    return r.batch_id, r.batch_number, salt_matched and r.action == "created", None
+
+
+async def _batch_command(
+    *,
+    item: ChunkItem,
+    reg_outcome: RegistrationOutcome,
+    workspace_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    session_factory: async_sessionmaker,
+    dispatcher,
+) -> tuple[CreateBatchCommand, bool, CreateBatch, AddBatchIdentifier]:
+    """Resolve salt; build the batch command and the use cases that run it."""
     molecule = reg_outcome.molecule
     detected_salt = reg_outcome.detected_salt
 
@@ -386,12 +494,26 @@ async def _create_batch(
         custom_fields=custom_fields,
     )
 
+    return batch_cmd, salt_matched, create_batch, add_batch_alias
+
+
+async def _run_create_batch(
+    *,
+    item: ChunkItem,
+    molecule_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    batch_cmd: CreateBatchCommand,
+    salt_matched: bool,
+    create_batch: CreateBatch,
+    add_batch_alias: AddBatchIdentifier,
+) -> tuple[uuid.UUID | None, str | None, bool]:
     batch_result = await create_batch(batch_cmd)
 
     if isinstance(batch_result, Failure):
         logger.warning(
             "registration.batch_create_failed",
-            molecule_id=str(molecule.id),
+            molecule_id=str(molecule_id),
             row_index=item.row_index,
             error=str(batch_result.failure()),
         )

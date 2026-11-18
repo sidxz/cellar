@@ -142,9 +142,7 @@ _SUGGESTIONS: dict[str, ColumnTarget] = {
     **dict.fromkeys(
         ["name", "compoundname", "molname", "moleculename", "title"], ColumnTarget.NAME
     ),
-    **dict.fromkeys(
-        ["smiles", "canonicalsmiles", "structure", "molsmiles"], ColumnTarget.SMILES
-    ),
+    **dict.fromkeys(["smiles", "canonicalsmiles", "structure", "molsmiles"], ColumnTarget.SMILES),
     **dict.fromkeys(["moleculetype", "moltype", "type"], ColumnTarget.MOLECULE_TYPE),
     **dict.fromkeys(["cas", "casnumber", "casno"], ColumnTarget.CAS_NUMBER),
     **dict.fromkeys(
@@ -201,9 +199,7 @@ def suggest_column_mapping(headers: Sequence[str]) -> ColumnMapping:
             else:
                 taken.add(target)
         cols.append(
-            MappedColumn(
-                header=h, target=target, source=h if target in LABELLED_TARGETS else None
-            )
+            MappedColumn(header=h, target=target, source=h if target in LABELLED_TARGETS else None)
         )
     return ColumnMapping(columns=tuple(cols))
 

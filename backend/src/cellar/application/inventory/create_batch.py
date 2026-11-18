@@ -21,6 +21,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.application.workspace_config.custom_field_validator import CustomFieldValidator
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.inventory.batch import Batch
+from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.enums import AmountUnit, ConcentrationUnit
@@ -29,6 +30,18 @@ from cellar.domain.shared.value_objects import Amount, Concentration
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 from cellar.domain.workspace_config.workspace_settings import WorkspaceSettings
+
+
+@dataclass(frozen=True)
+class NewBatchIdentifier:
+    """An ID the new batch is born with (e.g. a source system's batch name).
+
+    The caller has checked workspace uniqueness (see ``row_batch.classify_row_batch``).
+    """
+
+    identifier: str
+    identifier_type: str
+    source: str
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -63,6 +76,7 @@ class CreateBatchCommand(Command):
     notebook_reference: str | None = None
     appearance: str | None = None
     custom_fields: dict[str, Any] | None = None
+    identifiers: tuple[NewBatchIdentifier, ...] = ()
 
 
 class CreateBatch:
@@ -150,6 +164,19 @@ class CreateBatch:
                 appearance=input.appearance,
                 custom_fields=input.custom_fields,
             )
+
+            # Born-with IDs go on before the automatic mirrors, so a mirror with the
+            # same text is skipped as already_mapped instead of taking the ID.
+            for ident in input.identifiers:
+                batch.add_identifier(
+                    BatchIdentifier.create(
+                        batch_id=batch.id,
+                        identifier=ident.identifier,
+                        identifier_type=ident.identifier_type,
+                        source=ident.source,
+                        registered_by=input.chemist,
+                    )
+                )
 
             mirror_summary = MirrorSummary.empty()
             if self._sync is not None:

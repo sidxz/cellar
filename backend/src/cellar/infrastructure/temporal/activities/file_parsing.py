@@ -62,9 +62,7 @@ class FileParsingActivities:
         parser = get_parser(fmt)
 
         activity.heartbeat("parsing file")
-        mapping = (
-            ColumnMapping.from_dict(input.column_mapping) if input.column_mapping else None
-        )
+        mapping = ColumnMapping.from_dict(input.column_mapping) if input.column_mapping else None
         parsed = parser.parse(content, input.filename, mapping)
 
         # Convert to ChunkItem dicts and split into chunks
