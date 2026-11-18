@@ -114,6 +114,9 @@ def _create_test_app(
     from cellar.interface.routes.collection_import_templates import (
         router as collection_import_templates_router,
     )
+    from cellar.interface.routes.bulk_registration_mappings import (
+        router as bulk_registration_mappings_router,
+    )
     from cellar.interface.routes.saved_searches import router as saved_search_router
     from cellar.interface.routes.saved_visualizations import (
         router as saved_visualization_router,
@@ -203,6 +206,7 @@ def _create_test_app(
     app.include_router(collection_router)
     app.include_router(collection_import_previews_router)
     app.include_router(collection_import_templates_router)
+    app.include_router(bulk_registration_mappings_router)
     app.include_router(saved_search_router)
     app.include_router(saved_visualization_router)
     app.include_router(search_router)

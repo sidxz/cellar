@@ -171,8 +171,8 @@ class TestTabularParser:
         items = parser.parse(csv_bytes, "compounds.csv")
 
         assert len(items) == 1
-        assert items[0].error is not None
-        assert "no name or SMILES" in items[0].error
+        # Numbered as the person sees the file: the header is row 1.
+        assert items[0].error == "Row 2: no name or structure"
 
     def test_parse_smiles_only(self) -> None:
         csv_bytes = self._make_csv([

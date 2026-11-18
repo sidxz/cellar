@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
 import pytest
 from returns.result import Failure, Success
 
+from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.application.chemical_registration.preview_bulk_registration_file import (
     ParsedItemDTO,
     PreviewBulkRegistrationFile,
@@ -30,6 +31,7 @@ class StubParser:
         content: bytes,
         filename: str,
         file_format: BulkRegistrationFileFormat,
+        column_mapping: ColumnMapping | None = None,
     ) -> list[ParsedItemDTO]:
         self.calls.append((filename, file_format))
         return list(self.items)

@@ -553,6 +553,7 @@ LEFT_ALONE: dict[str, str] = {
     "audit_entries.entity_id": _AUDIT,
     "audit_operations.entity_id": _AUDIT,
     "batches.custom_fields": _NO_IDS,
+    "bulk_registration_mappings.columns": _NO_IDS,
     "campaign_channel.intercept_key": _NO_IDS,
     "campaign_channel.test_concentration": _NO_IDS,
     "campaign_measurement.concentrations_found": _NO_IDS,
