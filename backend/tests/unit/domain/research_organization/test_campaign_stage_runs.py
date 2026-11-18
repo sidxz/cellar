@@ -88,9 +88,17 @@ def test_remove_run_from_stage_keeps_run_in_campaign():
     assert c.stage_run_ids(a.id, P1) == []
     assert c.campaign_run_ids(P1) == [r.run_id]
     with pytest.raises(NotFoundError):
-        c.remove_run_from_stage(a.id, uuid.uuid4())
-    with pytest.raises(NotFoundError):
         c.remove_run_from_stage(uuid.uuid4(), r.run_id)
+
+
+def test_remove_unknown_run_is_noop():
+    c = _campaign()
+    a = _stage(c, "A")
+    r = _run()
+    c.add_runs_to_stage([r], a.id)
+    before = (list(c.seed_runs), c.updated_at)
+    c.remove_run_from_stage(a.id, uuid.uuid4())
+    assert (c.seed_runs, c.updated_at) == before
 
 
 def test_stage_run_ids_filters_by_stage_and_protocol():

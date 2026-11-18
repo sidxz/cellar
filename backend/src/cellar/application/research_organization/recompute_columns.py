@@ -11,7 +11,7 @@ and re-INSERTed against the unique (result_id, channel_id).
 from __future__ import annotations
 
 import uuid
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 
 from cellar.application.research_organization.column_resolution import (
     Candidate,
@@ -21,6 +21,7 @@ from cellar.application.research_organization.column_resolution import (
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import UnresolvedReason
 
 
@@ -30,11 +31,17 @@ async def recompute_columns(
     campaign: Campaign,
     channels: Iterable[CampaignChannel],
     molecule_ids: list[uuid.UUID] | None = None,
+    extra_rows: Sequence[CampaignResult] = (),
 ) -> int:
     """Re-resolve ``channels`` for the campaign's rows (all, or those of
-    ``molecule_ids``), skipping manual overrides. Returns the cells written."""
+    ``molecule_ids``), skipping manual overrides. Returns the cells written.
+
+    ``extra_rows`` are rows not yet on the campaign that resolve with it in the same
+    fetch (add-from-runs judges new compounds on their values before adding them)."""
     wanted = None if molecule_ids is None else set(molecule_ids)
-    rows = [r for r in campaign.results if wanted is None or r.molecule_id in wanted]
+    rows = [
+        r for r in [*campaign.results, *extra_rows] if wanted is None or r.molecule_id in wanted
+    ]
     resolver = ColumnResolver()
     written = 0
     for channel in channels:

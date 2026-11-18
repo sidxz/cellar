@@ -419,9 +419,9 @@ async def test_mirrored_recommended_not_between_becomes_a_stage_criterion() -> N
 
 
 @pytest.mark.asyncio
-async def test_mirror_no_recommendations_stage_not_created() -> None:
-    """stage_name given but the protocol has no recommended_hit_criteria ->
-    stage_created is False and no stage is added."""
+async def test_mirror_stage_name_without_recommendation_creates_empty_stage() -> None:
+    """stage_name given but no recommendation maps -> the stage is still created
+    and the columns go on it (no stray campaign columns); it has no criteria."""
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
     rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
@@ -445,9 +445,80 @@ async def test_mirror_no_recommendations_stage_not_created() -> None:
     )
 
     assert isinstance(out, Success)
-    outcome = out.unwrap()
-    assert outcome.stage_created is False
-    assert campaign.stages == []
+    assert out.unwrap().stage_created is True
+    [stage] = campaign.stages
+    assert stage.name == "Primary Hits"
+    assert stage.criteria == []
+    assert [c.stage_id for c in campaign.channels] == [stage.id]
+
+
+@pytest.mark.asyncio
+async def test_mirror_with_stage_id_puts_columns_on_it_and_never_touches_criteria() -> None:
+    """A mirror by stage_id adds only the columns that stage lacks (daikon
+    re-mirrors on every sync) and leaves its criteria as they are, even when the
+    protocol recommends some."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    stage = CampaignStage(campaign_id=campaign.id, name="Retest", display_order=0)
+    campaign.add_stage(stage)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+    saved: list[Campaign] = []
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        query=FakeColumnQuery(42.0, unit="uM"),
+        dispatcher=_make_dispatcher(),
+    )
+    cmd = MirrorProtocolChannelsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign.id,
+        protocol_id=protocol.id,
+        stage_id=stage.id,
+    )
+
+    first = await uc(cmd, auth=auth)
+    again = await uc(cmd, auth=auth)
+
+    assert isinstance(first, Success)
+    assert isinstance(again, Success)
+    assert (first.unwrap().channels_created, again.unwrap().channels_created) == (1, 0)
+    assert again.unwrap().channels_skipped == 1
+    assert [c.stage_id for c in campaign.channels] == [stage.id]
+    assert stage.criteria == []
+    assert first.unwrap().stage_created is False
+    assert len(saved) == 1  # the idempotent re-mirror writes nothing
+
+
+@pytest.mark.asyncio
+async def test_mirror_unknown_stage_id_is_not_found() -> None:
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="IC50")])
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        query=FakeColumnQuery(42.0, unit="uM"),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_id=uuid.uuid4(),
+        ),
+        auth=auth,
+    )
+    assert isinstance(out, Failure)
+    assert isinstance(out.failure(), NotFoundError)
+    assert campaign.channels == []
 
 
 @pytest.mark.asyncio

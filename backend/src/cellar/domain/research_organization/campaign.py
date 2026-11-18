@@ -232,18 +232,18 @@ class Campaign(AggregateRoot):
             self.updated_at = datetime.now(UTC)
 
     def remove_run_from_stage(self, stage_id: uuid.UUID, run_id: uuid.UUID) -> None:
-        """Drop the run from the stage; it stays a run of the campaign."""
+        """Drop the run from the stage; it stays a run of the campaign. A run that
+        is not on the stage, or not in the campaign, is a no-op."""
         self._ensure_draft("remove run from stage")
         if self.find_stage(stage_id) is None:
             raise NotFoundError("CampaignStage", str(stage_id))
         for i, s in enumerate(self.seed_runs):
-            if s.run_id == run_id:
+            if s.run_id == run_id and stage_id in s.stage_ids:
                 self.seed_runs[i] = replace(
                     s, stage_ids=tuple(x for x in s.stage_ids if x != stage_id)
                 )
                 self.updated_at = datetime.now(UTC)
                 return
-        raise NotFoundError("SeedRun", str(run_id))
 
     def stage_run_ids(self, stage_id: uuid.UUID, protocol_id: uuid.UUID) -> list[uuid.UUID]:
         return [

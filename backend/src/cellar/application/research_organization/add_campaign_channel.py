@@ -56,6 +56,9 @@ class AddCampaignChannelCommand(Command):
     intercept_key: InterceptKey | None = None
     #: Opt out of the campaign's run scope — resolve protocol-wide (spec D4).
     resolve_from_all_runs: bool = False
+    #: The stage that owns the column (it reads that stage's runs); None for a
+    #: campaign column.
+    stage_id: uuid.UUID | None = None
 
 
 class AddCampaignChannel:
@@ -116,6 +119,7 @@ class AddCampaignChannel:
                     ),
                     intercept_key=input.intercept_key,
                     resolve_from_all_runs=input.resolve_from_all_runs,
+                    stage_id=input.stage_id,
                 )
                 campaign.add_channel(channel)
             except ValidationError as e:

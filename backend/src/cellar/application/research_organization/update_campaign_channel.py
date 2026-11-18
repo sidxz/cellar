@@ -1,10 +1,11 @@
-"""UpdateCampaignChannel — mutate label, display order, selection rule, or qc_filter.
+"""UpdateCampaignChannel — mutate label, display order, selection rule, qc_filter,
+or the column's test concentration.
 
 Uses the UNSET sentinel to distinguish "don't touch this field" from
 ``None`` (which is a meaningful value for ``qc_filter`` — it clears it).
 
-When a gating field (selection_rule, qc_filter, resolve_from_all_runs)
-actually changes value,
+When a gating field (selection_rule, qc_filter, resolve_from_all_runs,
+test_concentration) actually changes value,
 every non-manual-override measurement for this channel across all results
 is re-resolved via ``recompute_columns``.
 """
@@ -28,6 +29,7 @@ from cellar.domain.research_organization.enums import (
     CampaignStatus,
     SelectionRule,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -65,6 +67,8 @@ class UpdateCampaignChannelCommand(Command):
     display_order: int | object = UNSET
     #: Opt out of the campaign's run scope — gating, like selection_rule.
     resolve_from_all_runs: bool | object = UNSET
+    #: The one concentration the column reads (spec §6.4); None clears it — gating.
+    test_concentration: Concentration | object | None = UNSET
 
 
 class UpdateCampaignChannel:
@@ -76,8 +80,8 @@ class UpdateCampaignChannel:
       3. Locate the channel by id.
       4. Detect which fields are changing (sentinel-aware).
       5. Mutate label / display_order in-place when supplied.
-      6. If any gating field (selection_rule, qc_filter, resolve_from_all_runs)
-         changed, re-resolve
+      6. If any gating field (selection_rule, qc_filter, resolve_from_all_runs,
+         test_concentration) changed, re-resolve
          every non-manual-override measurement for this channel.
       7. Bump ``campaign.updated_at``.
       8. Save + commit; dispatch events; return ``Success(campaign)``.
@@ -137,6 +141,11 @@ class UpdateCampaignChannel:
                 if input.resolve_from_all_runs != channel.resolve_from_all_runs:
                     gating_changed = True
                 channel.resolve_from_all_runs = bool(input.resolve_from_all_runs)
+
+            if not isinstance(input.test_concentration, _Unset):
+                if input.test_concentration != channel.test_concentration:
+                    gating_changed = True
+                channel.test_concentration = input.test_concentration  # type: ignore[assignment]
 
             if not isinstance(input.label, _Unset):
                 label = input.label

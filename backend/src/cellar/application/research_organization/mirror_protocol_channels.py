@@ -12,22 +12,26 @@ one transaction. For each readout:
   readout's primary normalization layer if any (matches the
   channel-popover's auto-pick).
 
-Idempotent: channels with the same ``(protocol_id, readout_definition_id,
-normalization_applied, intercept_key)`` are silently skipped, so the
-chemist can re-trigger after editing the protocol's intercepts without
+Idempotent: channels with the same ``(stage_id, protocol_id,
+readout_definition_id, normalization_applied, intercept_key)`` are silently
+skipped, so the chemist (or daikon, on every sync) can re-trigger without
 duplicates.
 
 The single-channel ``AddCampaignChannel`` use case stays the authoritative
 path for one-at-a-time creation; this just iterates the same shape inside
 one UoW for atomicity.
 
-An optional ``stage_name`` additionally creates (or reuses, by
-case-insensitive name — re-mirroring after a threshold tweak rewrites the
-stage rather than failing) one CampaignStage, mapping
-the protocol's ``recommended_hit_criteria`` onto the channels this mirror
-touched (created or already present) via ``_match_recommended_threshold``.
-Numeric-only — a recommendation using the string-based ``in`` operator is
-skipped. No recommendation maps -> no stage (not an error).
+The columns go on a stage (spec §10):
+
+- ``stage_id``: on that stage. Its criteria are never touched.
+- ``stage_name`` (with ``parent_stage_id``): the stage is always created or reused
+  (by case-insensitive name) and the columns go on it, even when no recommendation
+  maps, so no stray campaign column is left. The protocol's
+  ``recommended_hit_criteria`` replace the stage's criteria only when some map onto
+  the columns this mirror touched (created or already present), via
+  ``_match_recommended_threshold``. Numeric only: a recommendation using the
+  string-based ``in`` operator is skipped.
+- Neither: campaign columns.
 """
 
 from __future__ import annotations
@@ -73,11 +77,11 @@ class MirrorProtocolChannelsCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     protocol_id: uuid.UUID
-    #: When set, creates — or reuses, by case-insensitive name — a
-    #: CampaignStage named ``stage_name`` from the protocol's
-    #: ``recommended_hit_criteria``, mapped onto the mirrored (created or
-    #: already-present) channels via ``_match_recommended_threshold``.
-    #: No recommendation maps -> no stage (not an error).
+    #: The stage the columns go on; its criteria are never touched.
+    stage_id: uuid.UUID | None = None
+    #: When no ``stage_id``: creates — or reuses, by case-insensitive name — this
+    #: stage and puts the columns on it; the protocol's recommended criteria that
+    #: map onto them replace its criteria.
     stage_name: str | None = None
     #: Parent for the stage ``stage_name`` creates, making it a child in the
     #: funnel. On reuse of an existing stage, ``None`` leaves the current
@@ -165,26 +169,6 @@ def _match_recommended_threshold(
     return None
 
 
-def _recommendation_maps(protocol) -> bool:
-    """True when the protocol's recommended criteria map onto at least one
-    readout/intercept this mirror would emit (numeric operators only)."""
-    recommended = protocol.recommended_hit_criteria or []
-    for rd in protocol.readout_definitions:
-        specs = (
-            list(rd.dose_response_config.intercepts or ())
-            if rd.data_type == ReadoutDataType.DOSE_RESPONSE and rd.dose_response_config
-            else []
-        )
-        keys: list[InterceptKey | None] = [None]
-        if len(specs) >= 2:
-            keys += [InterceptKey(kind=sp.kind.value, level=float(sp.level)) for sp in specs[1:]]
-        for ik in keys:
-            matched = _match_recommended_threshold(recommended, rd.name, ik)
-            if matched is not None and matched.operator in _NUMERIC_STAGE_OPERATORS:
-                return True
-    return False
-
-
 class MirrorProtocolChannels:
     """Iterates a protocol's readouts and creates campaign channels for each."""
 
@@ -228,14 +212,15 @@ class MirrorProtocolChannels:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
-            # With a stage_name, the columns belong to that stage: it is
-            # created (or reused) before the columns, but only when the
-            # recommendation maps to at least one criterion, so "no
-            # recommendation, no stage" holds.
+            # The stage comes before its columns: a column's stage must exist.
             stage = None
             stage_created = False
-            stage_touched = False  # created OR reused-and-rewritten: must persist
-            if input.stage_name and _recommendation_maps(protocol):
+            stage_touched = False  # the stage_name path created or rewrote it: persist
+            if input.stage_id is not None:
+                stage = campaign.find_stage(input.stage_id)
+                if stage is None:
+                    return Failure(NotFoundError("CampaignStage", str(input.stage_id)))
+            elif input.stage_name:
                 try:
                     stage, stage_created = get_or_create_stage(
                         campaign, name=input.stage_name, parent_stage_id=input.parent_stage_id
@@ -330,13 +315,12 @@ class MirrorProtocolChannels:
                     channel_targets.append((rd.name, intercept_key, channel))
                     new_channels.append(channel)
 
-            # Optional hit stage — maps the protocol's recommended criteria
-            # onto the channels this mirror just touched (created or already
-            # present). Numeric-only; a recommendation with no match, or
-            # using the string-based ``in`` operator, contributes nothing.
-            # A stage of that name already on the campaign is reused and its
-            # criteria replaced (see ``set_stage_criteria``).
-            if stage is not None:
+            # stage_name only: the protocol's recommended criteria, mapped onto the
+            # channels this mirror touched (created or already present), replace
+            # the stage's criteria when some map. Numeric-only; a recommendation
+            # with no match, or using the string-based ``in`` operator, contributes
+            # nothing. A stage_id mirror never touches criteria.
+            if stage_touched and stage is not None:
                 recommended = protocol.recommended_hit_criteria or []
                 stage_criteria: list[StageCriterion] = []
                 for readout_name, intercept_key, channel in channel_targets:
@@ -352,10 +336,11 @@ class MirrorProtocolChannels:
                             value=matched.value,
                         )
                     )
-                try:
-                    set_stage_criteria(campaign, stage, stage_criteria)
-                except ValidationError as e:
-                    return Failure(e)
+                if stage_criteria:
+                    try:
+                        set_stage_criteria(campaign, stage, stage_criteria)
+                    except ValidationError as e:
+                        return Failure(e)
 
             # Resolve cells for the newly created channels — last, so the
             # cheap validation above can bail out first.

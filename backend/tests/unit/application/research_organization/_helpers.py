@@ -16,6 +16,7 @@ from cellar.application.research_organization.column_resolution import Candidate
 from cellar.application.screening.run_aggregation import ResolvedRun
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.enums import ValueQualifier
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.shared.events import DomainEvent
 
 # ---------------------------------------------------------------------------
@@ -192,6 +193,72 @@ def reported_reading(
         dose=None,
         replicate_count=None,
     )
+
+
+def reading(
+    molecule_id: uuid.UUID,
+    value: float | None,
+    run_id: uuid.UUID,
+    *,
+    run_date: date = date(2026, 1, 1),
+    unit: str = "%",
+    qualifier: ValueQualifier = ValueQualifier.EQ,
+    dose: Concentration | None = None,
+    well: bool = True,
+    curve_class: str | None = None,
+    intercept_values: list[dict] | None = None,
+    batch_id: uuid.UUID | None = None,
+    replicate_count: int | None = None,
+) -> Candidate:
+    """One reading of a compound in a run: a fitted curve when ``curve_class`` is
+    given, else a well reading (``well=True``) or a well-less reported value."""
+    curve = curve_class is not None
+    return Candidate(
+        run=ResolvedRun(
+            run_id=run_id,
+            run_date=run_date,
+            run_approved=True,
+            curve_id=uuid.uuid4() if curve else None,
+            value=value,
+            qualifier=qualifier,
+            unit=unit,
+            z_prime=None,
+            protocol_name="Proto",
+            protocol_version=1,
+            readout_id=None if curve else uuid.uuid4(),
+            curve_class=curve_class,
+            intercept_values=intercept_values,
+        ),
+        molecule_id=molecule_id,
+        batch_id=batch_id,
+        well_id=uuid.uuid4() if well and not curve else None,
+        dose=dose,
+        replicate_count=replicate_count,
+    )
+
+
+class FakeRunData:
+    """``ColumnCandidateQuery`` fake over fixed readings, scoped like the SQL query:
+    by the column's readout definition, then ``run_ids`` and ``molecule_ids``
+    (``None`` = all). ``calls`` records ``(channel_id, run_ids, molecule_ids)``."""
+
+    def __init__(self) -> None:
+        self.readings: dict[uuid.UUID, list[Candidate]] = {}
+        self.calls: list[tuple[uuid.UUID, Any, Any]] = []
+
+    def add(self, readout_definition_id: uuid.UUID, *candidates: Candidate) -> None:
+        self.readings.setdefault(readout_definition_id, []).extend(candidates)
+
+    async def fetch(self, *, workspace_id, channel, run_ids, molecule_ids):
+        self.calls.append((channel.id, run_ids, molecule_ids))
+        out: dict[uuid.UUID, list[Candidate]] = {}
+        for c in self.readings.get(channel.readout_definition_id, []):
+            if run_ids is not None and c.run.run_id not in run_ids:
+                continue
+            if molecule_ids is not None and c.molecule_id not in molecule_ids:
+                continue
+            out.setdefault(c.molecule_id, []).append(c)
+        return out
 
 
 class FakeColumnQuery:

@@ -147,6 +147,56 @@ async def test_fetch_run_and_molecule_filters(uow, session_factory, workspace_id
     assert by_kind[False].well_id is None
 
 
+@pytest.mark.asyncio
+async def test_dr_endpoint_is_the_raw_row_with_its_qualifier_and_primary_tag(
+    uow, session_factory, workspace_id
+):
+    """D1 — a dose-response column's reported endpoint is the raw well-less row:
+    its computed (% inhibition) sibling never surfaces, its censored qualifier is
+    kept, and it is tagged as the readout's primary intercept so only that
+    intercept's column takes it."""
+    from cellar.domain.research_organization.enums import ValueQualifier
+
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m")
+        p = await seed.protocol(s, ws)
+        ic50 = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 1, 1))
+        await seed.readout(s, ws, run, ic50, mol, 32.0, qualifier=">", wellless=True)
+        await seed.readout(
+            s,
+            ws,
+            run,
+            ic50,
+            mol,
+            91.0,
+            wellless=True,
+            normalization="percent_inhibition",
+            batch_id=await seed.batch(s, ws, mol, "B1"),  # the well-less key ignores the layer
+        )
+        await uow.commit()
+
+    out = await SQLAlchemyColumnCandidateQuery(session_factory).fetch(
+        workspace_id=ws,
+        channel=_channel(p, ic50, ChannelSourceKind.DOSE_RESPONSE_CURVE),
+        run_ids=[run],
+        molecule_ids=None,
+    )
+
+    [endpoint] = out[mol]
+    assert (endpoint.run.value, endpoint.run.qualifier, endpoint.run.unit) == (
+        32.0,
+        ValueQualifier.GT,
+        "uM",
+    )
+    assert endpoint.run.curve_id is None
+    assert endpoint.run.intercept_values == [
+        {"spec": seed.DR_CONFIG["intercepts"][0], "value": 32.0}
+    ]
+
+
 async def _runs(
     query: SQLAlchemyColumnCandidateQuery,
     ws: uuid.UUID,

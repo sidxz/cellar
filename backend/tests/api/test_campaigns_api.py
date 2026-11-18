@@ -202,7 +202,7 @@ async def _seed_closeable_campaign(client: AsyncClient, project_id: str, molecul
     """Create a draft campaign with 1 real protocol-backed channel + 1 result —
     satisfies CloseCampaign's prerequisites (>=1 channel, >=1 result). No real
     screening data backs the channel, so re-resolution falls back to an ND cell
-    (empty candidates -> ND measurement; see channel_resolution.py). Returns
+    (empty candidates -> ND measurement; see column_resolution.py). Returns
     the campaign id.
     """
     protocol_id, rd_id = await _make_published_protocol_with_readout(client)

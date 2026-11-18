@@ -23,8 +23,10 @@ from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
+    UnresolvedReason,
     ValueQualifier,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
     AuthorizationError,
@@ -33,9 +35,11 @@ from cellar.domain.shared.errors import (
 )
 from tests.unit.application.research_organization._helpers import (
     FakeColumnQuery,
+    FakeRunData,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
+    reading,
 )
 
 
@@ -484,3 +488,48 @@ class TestUpdateCampaignChannel:
         )
         assert isinstance(await uc(cmd, auth=auth), Success)
         assert query.calls == []
+
+    @pytest.mark.asyncio
+    async def test_test_concentration_set_and_cleared_recomputes_the_column(self) -> None:
+        """Pinning a column to one concentration resolves the compound measured at
+        several; clearing it brings the untested cell back."""
+        auth = fake_auth()
+        campaign, channel, result = _make_campaign_with_channel(auth.workspace_id)
+        channel.source_kind = ChannelSourceKind.READOUT_DATA
+        r1, r2 = uuid.uuid4(), uuid.uuid4()
+        data = FakeRunData()
+        data.add(
+            channel.readout_definition_id,
+            reading(result.molecule_id, 40.0, r1, dose=Concentration(10.0, "µM")),
+            reading(result.molecule_id, 90.0, r2, dose=Concentration(50.0, "µM")),
+        )
+        uc = UpdateCampaignChannel(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            query=data,
+            dispatcher=AsyncMock(),
+        )
+
+        def cmd(**kw) -> UpdateCampaignChannelCommand:
+            return UpdateCampaignChannelCommand(
+                workspace_id=auth.workspace_id,
+                campaign_id=campaign.id,
+                channel_id=channel.id,
+                **kw,
+            )
+
+        assert isinstance(
+            await uc(cmd(test_concentration=Concentration(10_000.0, "nM")), auth=auth), Success
+        )
+        assert channel.test_concentration == Concentration(10_000.0, "nM")
+        assert result.find_measurement(channel.id).value == 40.0
+
+        calls = len(data.calls)
+        await uc(cmd(test_concentration=Concentration(10_000.0, "nM")), auth=auth)
+        assert len(data.calls) == calls  # unchanged: no recompute
+
+        assert isinstance(await uc(cmd(test_concentration=None), auth=auth), Success)
+        assert channel.test_concentration is None
+        cell = result.find_measurement(channel.id)
+        assert cell.value is None
+        assert cell.unresolved_reason == UnresolvedReason.SEVERAL_CONCENTRATIONS

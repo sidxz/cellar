@@ -268,7 +268,6 @@ async def add_results_from_runs(
         filter_mode=body.filter_mode,
         scope=body.scope,
         description=body.description,
-        refresh_existing_cells=body.refresh_existing_cells,
         stage_name=body.stage_name,
         parent_stage_id=body.parent_stage_id,
     )
