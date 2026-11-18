@@ -207,3 +207,34 @@ def test_chunk_item_with_decides_survives_temporal_serialization() -> None:
 
     assert back.items[0].external_ids[-1]["decides"] is False
     assert back.items[0].batch_ids[-1]["decides"] is False
+
+
+async def test_stored_only_compound_id_matches_holders_case_insensitively(
+    run_rows: Run, session_factory, ws: Ws
+) -> None:
+    """Compound lookup by identifier ignores case, so a case variant on a second
+    compound would make it ambiguous; the compound's own IDs never count."""
+    (a,) = await run_rows([rb.row("CMP-A", "CCCCCCCCCCCCCN", ids=[("A-SYN-1", "Syn")])])
+    (b,) = await run_rows([rb.row("CMP-B", "CCCCCCCCCCCCCCN", ids=[("Rifampicin", "Syn")])])
+
+    (again,) = await run_rows(
+        [
+            cdd_row(
+                "CMP-A",
+                "CCCCCCCCCCCCCN",
+                stored_ids=[("rifampicin", "Alternate Names"), ("a-syn-1", "Alternate Names")],
+            )
+        ]
+    )
+
+    assert again.error is None and again.molecule_id == a.molecule_id
+    assert again.warnings == [
+        _compound_warning(
+            "rifampicin",
+            await _reg(session_factory, b.molecule_id),
+            await _reg(session_factory, a.molecule_id),
+        )
+    ]
+    ids = {i[0] for i in await rb._compound_ids(session_factory, a.molecule_id)}
+    assert "rifampicin" not in ids
+    assert "a-syn-1" not in ids  # A-SYN-1 is already A's own; no second copy

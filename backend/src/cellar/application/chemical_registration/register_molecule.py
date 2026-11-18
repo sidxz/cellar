@@ -219,13 +219,14 @@ class RegisterMolecule:
         warning per such ID.
         """
         existing_values = {i.identifier for i in mol.identifiers}
+        own = {v.lower() for v in existing_values}
         held = await held_elsewhere(
             self._repo,
             input.workspace_id,
             (
                 e.identifier
                 for e in input.external_ids
-                if not e.decides and e.identifier not in existing_values
+                if not e.decides and e.identifier.lower() not in own
             ),
             mol.id,
         )
@@ -243,12 +244,15 @@ class RegisterMolecule:
                 )
             )
             existing_values.add(input.name)
+            own.add(input.name.lower())
 
         # Add explicit external IDs; deciding ones first, so a text given both
         # ways is stored as the deciding one.
         for ext_id in sorted(input.external_ids, key=lambda e: not e.decides):
             if ext_id.identifier in existing_values:
                 continue
+            if not ext_id.decides and ext_id.identifier.lower() in own:
+                continue  # already on the compound, in another case
             if not ext_id.decides and ext_id.identifier in held:
                 skipped.append(
                     skipped_id_warning(
@@ -269,6 +273,7 @@ class RegisterMolecule:
                 )
             )
             existing_values.add(ext_id.identifier)
+            own.add(ext_id.identifier.lower())
         return tuple(skipped)
 
     async def _record_disclosure_provenance(

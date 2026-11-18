@@ -50,18 +50,10 @@ async def held_elsewhere(
     molecule_id: uuid.UUID | None,
 ) -> dict[str, str]:
     """Stored-only IDs another compound than ``molecule_id`` already holds → that
-    compound's registration number. Exact text, as the workspace-unique key is."""
-    wanted = set(identifiers)
-    if not wanted:
-        return {}
-    owners = await repo.find_identifiers_in_workspace(workspace_id, wanted)
-    held: dict[str, str] = {}
-    for text, owner_id in owners.items():
-        if owner_id == molecule_id:
-            continue
-        owner = await repo.find_by_id_in_workspace(workspace_id, owner_id)
-        held[text] = owner.registration_number.value if owner else "another compound"
-    return held
+    compound's registration number. Case-insensitive, as compound lookup by
+    identifier is (``find_by_identifier``): a case variant on a second compound
+    would make that lookup ambiguous."""
+    return await repo.find_identifier_holders(workspace_id, set(identifiers), molecule_id)
 
 
 def skipped_id_warning(identifier: str, holder: str, this: str) -> str:

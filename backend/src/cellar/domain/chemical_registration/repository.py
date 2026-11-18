@@ -61,6 +61,16 @@ class MoleculeRepository(Protocol):
         self, workspace_id: uuid.UUID, identifiers: set[str]
     ) -> dict[str, uuid.UUID]: ...
 
+    async def find_identifier_holders(
+        self,
+        workspace_id: uuid.UUID,
+        identifiers: set[str],
+        exclude_molecule_id: uuid.UUID | None,
+    ) -> dict[str, str]:
+        """Given texts that a molecule other than ``exclude_molecule_id`` holds as an
+        identifier, compared case-insensitively → that molecule's registration number."""
+        ...
+
     async def add_to_project_many(
         self,
         workspace_id: uuid.UUID,
