@@ -48,7 +48,7 @@ _MOLECULE_BUILTINS = [
 ]
 _BATCH_BUILTINS = [
     VaultField(f"{BATCH_PREFIX}name", "Batch name"),
-    VaultField(f"{BATCH_PREFIX}molecule_batch_identifier", "Batch ID"),
+    VaultField(f"{BATCH_PREFIX}molecule_batch_identifier", "Molecule-Batch ID"),
     VaultField(f"{BATCH_PREFIX}salt_name", "Salt name"),
     VaultField(f"{BATCH_PREFIX}formula_weight", "Formula weight"),
 ]

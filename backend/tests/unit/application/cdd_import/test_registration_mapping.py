@@ -88,3 +88,8 @@ def test_unknown_vault_fields_shape_falls_back_to_built_ins() -> None:
     assert f.molecule[0].path == "name"
     assert len(f.molecule) == 4 and len(f.batch) == 4
     assert len(build_vault_fields(["x"]).molecule) == 4
+
+
+def test_the_cdd_batch_name_reads_as_cdd_calls_it() -> None:
+    labels = {x.path: x.label for x in build_vault_fields({}).batch}
+    assert labels["batch.molecule_batch_identifier"] == "Molecule-Batch ID"

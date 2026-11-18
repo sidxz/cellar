@@ -104,6 +104,7 @@ class CddMoleculeImportSummary(BaseModel):
     skipped_count: int
     submitted_at: str
     completed_at: str | None
+    report: CddMoleculeImportReport
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +141,7 @@ async def list_cdd_molecule_imports(
             skipped_count=imp.skipped_count,
             submitted_at=imp.submitted_at.isoformat(),
             completed_at=imp.completed_at.isoformat() if imp.completed_at else None,
+            report=CddMoleculeImportReport(**imp.report),
         )
         for imp in imports
     ]
