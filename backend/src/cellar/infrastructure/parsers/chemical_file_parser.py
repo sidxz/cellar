@@ -8,6 +8,7 @@ RegisterMolecule use case.
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
@@ -15,6 +16,14 @@ from typing import Protocol
 import pandas as pd
 from rdkit import Chem
 
+from cellar.application.chemical_registration.bulk_column_mapping import (
+    COMPOUND_ID_TYPES,
+    SDF_TITLE_HEADER,
+    ColumnMapping,
+    ColumnTarget,
+    split_multi,
+    suggest_column_mapping,
+)
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 
 
@@ -23,10 +32,14 @@ class ParsedMoleculeItem:
     """A single parsed molecule record from a bulk import file."""
 
     row_index: int
+    file_row: int = 0  # the row number a person sees in the file
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
+    # {"identifier", "identifier_type", optional "source"}
     external_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "source"} — stored on the row's batch
+    batch_ids: list[dict[str, str]] = field(default_factory=list)
     custom_fields: dict | None = None
     error: str | None = None
     # Batch fields
@@ -42,38 +55,96 @@ class ParsedMoleculeItem:
 class ChemicalFileParser(Protocol):
     """Protocol for parsing chemical data files."""
 
-    def parse(self, content: bytes, filename: str) -> list[ParsedMoleculeItem]: ...
+    def parse(
+        self, content: bytes, filename: str, mapping: ColumnMapping | None = None
+    ) -> list[ParsedMoleculeItem]: ...
 
 
 # ---------------------------------------------------------------------------
-# Column name normalization
+# Mapping-driven row extraction (shared by the SDF and tabular parsers)
 # ---------------------------------------------------------------------------
 
-_NAME_ALIASES = {"name", "compound_name", "mol_name", "molecule_name", "title"}
-_SMILES_ALIASES = {"smiles", "canonical_smiles", "structure", "mol_smiles"}
-_TYPE_ALIASES = {"molecule_type", "mol_type", "type"}
-_CAS_ALIASES = {"cas", "cas_number", "cas_no"}
-_VENDOR_ALIASES = {"vendor_id", "vendor_code", "catalog_number", "catalog_no"}
-_CHEMBL_ALIASES = {"chembl_id", "chembl"}
-_PUBCHEM_ALIASES = {"pubchem_cid", "pubchem", "pubchem_id"}
-_CUSTOM_ID_PREFIX = "custom_id"  # custom_id, custom_id_1, custom_id_2, etc.
-
-# Batch-related column aliases
-_AMOUNT_ALIASES = {"amount", "amount_value", "quantity"}
-_AMOUNT_UNIT_ALIASES = {"amount_unit", "unit"}
-_SALT_CODE_ALIASES = {"salt", "salt_code", "salt_form"}
-_SALT_STOICH_ALIASES = {"salt_stoichiometry", "stoichiometry"}
-_PURITY_ALIASES = {"purity", "purity_percent"}
-_BATCH_SOURCE_ALIASES = {"source", "batch_source"}
-_APPEARANCE_ALIASES = {"appearance"}
+_DEFAULT_BATCH_ID_SOURCE = "Bulk registration"
 
 
-def _find_column(columns: list[str], aliases: set[str]) -> str | None:
-    lower_map = {c.lower().strip(): c for c in columns}
-    for alias in aliases:
-        if alias in lower_map:
-            return lower_map[alias]
-    return None
+def _default_mapping(headers: list[str]) -> ColumnMapping:
+    """No mapping sent: today's header names, stored with today's sources."""
+    return suggest_column_mapping(headers).without_sources()
+
+
+def _extract_item(
+    get: Callable[[str], str | None],
+    mapping: ColumnMapping,
+    *,
+    row_index: int,
+    file_row: int,
+    structure: str | None = None,
+) -> ParsedMoleculeItem:
+    """Build one item from a row. ``get(header)`` returns the trimmed cell or None.
+
+    ``structure`` (SDF) is the record's own structure; it wins over a mapped column.
+    """
+    single: dict[ColumnTarget, str] = {}
+    external_ids: list[dict[str, str]] = []
+    batch_ids: list[dict[str, str]] = []
+    for col in mapping.columns:
+        if col.target == ColumnTarget.IGNORE:
+            continue
+        val = get(col.header)
+        if not val:
+            continue
+        if col.target == ColumnTarget.BATCH_ID:
+            for v in split_multi(val):
+                batch_ids.append(
+                    {"identifier": v, "source": col.source or _DEFAULT_BATCH_ID_SOURCE}
+                )
+        elif col.target in COMPOUND_ID_TYPES:
+            values = split_multi(val) if col.target == ColumnTarget.COMPOUND_ID else [val]
+            for v in values:
+                eid = {"identifier": v, "identifier_type": COMPOUND_ID_TYPES[col.target]}
+                if col.source:
+                    eid["source"] = col.source
+                external_ids.append(eid)
+        else:
+            single[col.target] = val
+
+    name = single.get(ColumnTarget.NAME)
+    smiles = structure or single.get(ColumnTarget.SMILES)
+    if not name and not smiles:
+        return ParsedMoleculeItem(
+            row_index=row_index,
+            file_row=file_row,
+            error=f"Row {file_row}: no name or structure",
+        )
+
+    stoich = _safe_int(single.get(ColumnTarget.SALT_STOICHIOMETRY))
+    # Leave name as None when the row has none. The application layer falls back
+    # to "Compound-{idx+1}" for a placeholder display name AND keeps
+    # promote_name_as_identifier off — auto-generated names must never be
+    # promoted as identifiers, otherwise re-importing any file without a name
+    # column collides on "Compound-1", "Compound-2", ... in the workspace.
+    return ParsedMoleculeItem(
+        row_index=row_index,
+        file_row=file_row,
+        name=name,
+        smiles=smiles,
+        molecule_type=single.get(ColumnTarget.MOLECULE_TYPE) or "small_molecule",
+        external_ids=external_ids,
+        batch_ids=batch_ids,
+        amount_value=_safe_float(single.get(ColumnTarget.AMOUNT_VALUE)),
+        amount_unit=single.get(ColumnTarget.AMOUNT_UNIT) or "mg",
+        salt_code=single.get(ColumnTarget.SALT_CODE),
+        salt_stoichiometry=stoich if stoich is not None else 1,
+        purity=_safe_float(single.get(ColumnTarget.PURITY)),
+        batch_source=single.get(ColumnTarget.BATCH_SOURCE) or "synthesized",
+        appearance=single.get(ColumnTarget.APPEARANCE),
+    )
+
+
+def _check(mapping: ColumnMapping, headers: list[str], *, structure_implied: bool) -> None:
+    err = mapping.validate(headers, structure_implied=structure_implied)
+    if err is not None:
+        raise err
 
 
 # ---------------------------------------------------------------------------
@@ -82,85 +153,54 @@ def _find_column(columns: list[str], aliases: set[str]) -> str | None:
 
 
 class SDFParser:
-    """Parse SDF/MOL files using RDKit's ForwardSDMolSupplier."""
+    """Parse SDF/MOL files using RDKit's ForwardSDMolSupplier.
 
-    def parse(self, content: bytes, filename: str) -> list[ParsedMoleculeItem]:
+    Columns are the record's properties plus ``SDF_TITLE_HEADER`` (the title line).
+    The structure always comes from the record itself.
+    """
+
+    def parse(
+        self, content: bytes, filename: str, mapping: ColumnMapping | None = None
+    ) -> list[ParsedMoleculeItem]:
+        mols = list(Chem.ForwardSDMolSupplier(io.BytesIO(content)))
+        headers = [SDF_TITLE_HEADER]
+        for mol in mols:
+            if mol is None:
+                continue
+            for p in mol.GetPropsAsDict():
+                if not p.startswith("_") and p not in headers:
+                    headers.append(p)
+        if mapping is None:
+            mapping = _default_mapping(headers)
+        else:
+            _check(mapping, headers, structure_implied=True)
+
         items: list[ParsedMoleculeItem] = []
-        supplier = Chem.ForwardSDMolSupplier(io.BytesIO(content))
-
-        for idx, mol in enumerate(supplier):
+        for idx, mol in enumerate(mols):
             if mol is None:
                 items.append(
                     ParsedMoleculeItem(
                         row_index=idx,
-                        error=f"Failed to parse molecule at record {idx}",
+                        file_row=idx + 1,
+                        error=f"Record {idx + 1}: structure could not be read",
                     )
                 )
                 continue
 
-            smiles = Chem.MolToSmiles(mol)
-            name = mol.GetProp("_Name") if mol.HasProp("_Name") else None
-
-            external_ids: list[dict[str, str]] = []
-            # Batch fields from SDF properties
-            amount_value: float | None = None
-            amount_unit: str = "mg"
-            salt_code: str | None = None
-            salt_stoichiometry: int = 1
-            purity: float | None = None
-            batch_source: str = "synthesized"
-            appearance: str | None = None
-
-            for prop_name in mol.GetPropsAsDict():
-                if prop_name.startswith("_"):
-                    continue
-                prop_lower = prop_name.lower()
-                val = str(mol.GetProp(prop_name)).strip()
-                if not val:
-                    continue
-                if prop_lower in _CAS_ALIASES:
-                    external_ids.append({"identifier": val, "identifier_type": "cas_number"})
-                elif prop_lower in _VENDOR_ALIASES:
-                    external_ids.append({"identifier": val, "identifier_type": "vendor_id"})
-                elif prop_lower in _CHEMBL_ALIASES:
-                    external_ids.append({"identifier": val, "identifier_type": "chembl_id"})
-                elif prop_lower in _PUBCHEM_ALIASES:
-                    external_ids.append({"identifier": val, "identifier_type": "pubchem_cid"})
-                elif prop_lower.startswith(_CUSTOM_ID_PREFIX):
-                    external_ids.append({"identifier": val, "identifier_type": "custom"})
-                elif prop_lower in _AMOUNT_ALIASES:
-                    amount_value = _safe_float(val)
-                elif prop_lower in _AMOUNT_UNIT_ALIASES:
-                    amount_unit = val or "mg"
-                elif prop_lower in _SALT_CODE_ALIASES:
-                    salt_code = val or None
-                elif prop_lower in _SALT_STOICH_ALIASES:
-                    salt_stoichiometry = _safe_int(val) or 1
-                elif prop_lower in _PURITY_ALIASES:
-                    purity = _safe_float(val)
-                elif prop_lower in _BATCH_SOURCE_ALIASES:
-                    batch_source = val or "synthesized"
-                elif prop_lower in _APPEARANCE_ALIASES:
-                    appearance = val or None
+            def get(header: str, mol: Chem.Mol = mol) -> str | None:
+                if header == SDF_TITLE_HEADER:
+                    return _safe_str(mol.GetProp("_Name")) if mol.HasProp("_Name") else None
+                return _safe_str(mol.GetProp(header)) if mol.HasProp(header) else None
 
             items.append(
-                ParsedMoleculeItem(
+                _extract_item(
+                    get,
+                    mapping,
                     row_index=idx,
-                    # Leave None when the SDF molecule has no _Name property —
-                    # see the matching comment in TabularParser.
-                    name=name,
-                    smiles=smiles,
-                    external_ids=external_ids,
-                    amount_value=amount_value,
-                    amount_unit=amount_unit,
-                    salt_code=salt_code,
-                    salt_stoichiometry=salt_stoichiometry,
-                    purity=purity,
-                    batch_source=batch_source,
-                    appearance=appearance,
+                    file_row=idx + 1,
+                    structure=Chem.MolToSmiles(mol),
                 )
             )
-
         return items
 
 
@@ -172,10 +212,29 @@ class SDFParser:
 class TabularParser:
     """Parse CSV and XLSX files using pandas."""
 
-    def parse(self, content: bytes, filename: str) -> list[ParsedMoleculeItem]:
+    def parse(
+        self, content: bytes, filename: str, mapping: ColumnMapping | None = None
+    ) -> list[ParsedMoleculeItem]:
         fmt = self._detect_format(filename)
         df = self._read_dataframe(content, fmt)
-        return self._dataframe_to_items(df)
+        headers = [str(c) for c in df.columns]
+        if mapping is None:
+            mapping = _default_mapping(headers)
+        else:
+            _check(mapping, headers, structure_implied=False)
+        df.columns = headers
+        items: list[ParsedMoleculeItem] = []
+        for idx, row in df.iterrows():
+            i = int(idx)  # type: ignore[arg-type]
+            items.append(
+                _extract_item(
+                    lambda h, row=row: _safe_str(row.get(h)),
+                    mapping,
+                    row_index=i,
+                    file_row=i + 2,  # header is row 1
+                )
+            )
+        return items
 
     def _detect_format(self, filename: str) -> BulkRegistrationFileFormat:
         suffix = Path(filename).suffix.lower()
@@ -193,97 +252,6 @@ class TabularParser:
             return pd.read_excel(buf, dtype=str, keep_default_na=False, engine="openpyxl")
         except pd.errors.EmptyDataError:
             return pd.DataFrame()
-
-    def _dataframe_to_items(self, df: pd.DataFrame) -> list[ParsedMoleculeItem]:
-        columns = list(df.columns)
-        name_col = _find_column(columns, _NAME_ALIASES)
-        smiles_col = _find_column(columns, _SMILES_ALIASES)
-        type_col = _find_column(columns, _TYPE_ALIASES)
-        cas_col = _find_column(columns, _CAS_ALIASES)
-        vendor_col = _find_column(columns, _VENDOR_ALIASES)
-        chembl_col = _find_column(columns, _CHEMBL_ALIASES)
-        pubchem_col = _find_column(columns, _PUBCHEM_ALIASES)
-
-        # Batch-related columns
-        amount_col = _find_column(columns, _AMOUNT_ALIASES)
-        amount_unit_col = _find_column(columns, _AMOUNT_UNIT_ALIASES)
-        salt_code_col = _find_column(columns, _SALT_CODE_ALIASES)
-        salt_stoich_col = _find_column(columns, _SALT_STOICH_ALIASES)
-        purity_col = _find_column(columns, _PURITY_ALIASES)
-        batch_source_col = _find_column(columns, _BATCH_SOURCE_ALIASES)
-        appearance_col = _find_column(columns, _APPEARANCE_ALIASES)
-
-        # Detect custom_id columns: custom_id, custom_id_1, custom_id_2, ...
-        lower_map = {c.lower().strip(): c for c in columns}
-        custom_cols = [lower_map[k] for k in sorted(lower_map) if k.startswith(_CUSTOM_ID_PREFIX)]
-
-        # Map of (column, identifier_type) for all recognized ID columns
-        id_columns: list[tuple[str | None, str]] = [
-            (cas_col, "cas_number"),
-            (vendor_col, "vendor_id"),
-            (chembl_col, "chembl_id"),
-            (pubchem_col, "pubchem_cid"),
-        ]
-        for cc in custom_cols:
-            id_columns.append((cc, "custom"))
-
-        items: list[ParsedMoleculeItem] = []
-        for idx, row in df.iterrows():
-            name = _safe_str(row.get(name_col)) if name_col else None
-            smiles = _safe_str(row.get(smiles_col)) if smiles_col else None
-            mol_type = _safe_str(row.get(type_col)) if type_col else "small_molecule"
-
-            external_ids: list[dict[str, str]] = []
-            for col, id_type in id_columns:
-                if col is not None:
-                    val = _safe_str(row.get(col))
-                    if val:
-                        external_ids.append({"identifier": val, "identifier_type": id_type})
-
-            # Batch fields
-            amount_value = _safe_float(row.get(amount_col)) if amount_col else None
-            amount_unit = _safe_str(row.get(amount_unit_col)) if amount_unit_col else "mg"
-            salt_code = _safe_str(row.get(salt_code_col)) if salt_code_col else None
-            salt_stoich = _safe_int(row.get(salt_stoich_col)) if salt_stoich_col else 1
-            purity = _safe_float(row.get(purity_col)) if purity_col else None
-            batch_source = (
-                _safe_str(row.get(batch_source_col)) if batch_source_col else "synthesized"
-            )
-            appearance = _safe_str(row.get(appearance_col)) if appearance_col else None
-
-            if not name and not smiles:
-                items.append(
-                    ParsedMoleculeItem(
-                        row_index=int(idx),  # type: ignore[arg-type]
-                        error=f"Row {idx}: no name or SMILES provided",
-                    )
-                )
-                continue
-
-            # Leave name as None when the file has no name column (or the cell
-            # is empty). The application layer falls back to "Compound-{idx+1}"
-            # for a placeholder display name AND keeps promote_name_as_identifier
-            # off — auto-generated names must never be promoted as identifiers,
-            # otherwise re-importing any file without a name column collides on
-            # "Compound-1", "Compound-2", ... in the workspace.
-            items.append(
-                ParsedMoleculeItem(
-                    row_index=int(idx),  # type: ignore[arg-type]
-                    name=name,
-                    smiles=smiles,
-                    molecule_type=mol_type or "small_molecule",
-                    external_ids=external_ids,
-                    amount_value=amount_value,
-                    amount_unit=amount_unit or "mg",
-                    salt_code=salt_code,
-                    salt_stoichiometry=salt_stoich if salt_stoich is not None else 1,
-                    purity=purity,
-                    batch_source=batch_source or "synthesized",
-                    appearance=appearance,
-                )
-            )
-
-        return items
 
 
 def _safe_str(val: object) -> str | None:
@@ -346,20 +314,24 @@ class BulkFileParserAdapter:
         content: bytes,
         filename: str,
         file_format: BulkRegistrationFileFormat,
+        column_mapping: ColumnMapping | None = None,
     ) -> list:
+        """Raises ``ValidationError`` when ``column_mapping`` doesn't fit the file."""
         from cellar.application.chemical_registration.preview_bulk_registration_file import (
             ParsedItemDTO,
         )
 
         parser = get_parser(file_format)
-        items = parser.parse(content, filename)
+        items = parser.parse(content, filename, column_mapping)
         return [
             ParsedItemDTO(
                 row_index=i.row_index,
+                file_row=i.file_row,
                 name=i.name,
                 smiles=i.smiles,
                 molecule_type=i.molecule_type,
                 external_ids=list(i.external_ids),
+                batch_ids=list(i.batch_ids),
                 amount_value=i.amount_value,
                 amount_unit=i.amount_unit,
                 salt_code=i.salt_code,

@@ -18,10 +18,15 @@ class ChunkItem:
     """A single molecule record within a processing chunk."""
 
     row_index: int
+    file_row: int = 0  # the row number a person sees in the file
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
     external_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "source"} — stored on the row's batch (see row_batch.py)
+    batch_ids: list[dict[str, str]] = field(default_factory=list)
+    # Parser's per-row error; the row registers nothing.
+    error: str | None = None
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"

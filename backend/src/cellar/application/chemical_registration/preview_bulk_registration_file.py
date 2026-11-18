@@ -14,6 +14,7 @@ from typing import Protocol
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.application.shared.query import Query
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
 from cellar.domain.shared.errors import DomainError, ValidationError
@@ -32,10 +33,12 @@ class ParsedItemDTO:
     """
 
     row_index: int
+    file_row: int = 0
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
     external_ids: list[dict[str, str]] = field(default_factory=list)
+    batch_ids: list[dict[str, str]] = field(default_factory=list)
     amount_value: float | None = None
     amount_unit: str = "mg"
     salt_code: str | None = None
@@ -55,7 +58,10 @@ class BulkFileParserProtocol(Protocol):
         content: bytes,
         filename: str,
         file_format: BulkRegistrationFileFormat,
-    ) -> list[ParsedItemDTO]: ...
+        column_mapping: ColumnMapping | None = None,
+    ) -> list[ParsedItemDTO]:
+        """Raises ``ValidationError`` when ``column_mapping`` doesn't fit the file."""
+        ...
 
 
 # ---------------------------------------------------------------------------
@@ -69,6 +75,7 @@ class PreviewBulkRegistrationFileQuery(Query):
     filename: str
     content: bytes
     file_format: BulkRegistrationFileFormat
+    column_mapping: ColumnMapping | None = None
 
 
 @dataclass(frozen=True)
@@ -105,11 +112,15 @@ class PreviewBulkRegistrationFile:
         if len(input.content) > _MAX_FILE_BYTES:
             return Failure(ValidationError("file exceeds 50 MB cap"))
 
-        items = self._parser.parse(
-            content=input.content,
-            filename=input.filename,
-            file_format=input.file_format,
-        )
+        try:
+            items = self._parser.parse(
+                content=input.content,
+                filename=input.filename,
+                file_format=input.file_format,
+                column_mapping=input.column_mapping,
+            )
+        except ValidationError as err:
+            return Failure(err)
         if not items:
             return Failure(ValidationError("file contains no records"))
 

@@ -162,6 +162,7 @@ class RegistrationActivities:
                     ExternalId(
                         identifier=eid["identifier"],
                         identifier_type=eid["identifier_type"],
+                        source=eid.get("source"),
                     )
                     for eid in item.external_ids
                 ],

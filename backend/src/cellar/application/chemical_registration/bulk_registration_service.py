@@ -50,10 +50,12 @@ class BulkRegistrationItem:
     """Application-layer DTO for a single parsed molecule record."""
 
     row_index: int
+    file_row: int = 0
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
     external_ids: list[dict[str, str]] = field(default_factory=list)
+    batch_ids: list[dict[str, str]] = field(default_factory=list)
     error: str | None = None
     # Batch fields
     amount_value: float | None = None
@@ -250,6 +252,7 @@ class BulkRegistrationService:
                     ExternalId(
                         identifier=eid["identifier"],
                         identifier_type=eid["identifier_type"],
+                        source=eid.get("source"),
                     )
                     for eid in item.external_ids
                 ],

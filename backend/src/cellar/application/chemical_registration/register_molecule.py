@@ -67,6 +67,7 @@ class RegistrationOutcome:
 class ExternalId:
     identifier: str
     identifier_type: str
+    source: str | None = None  # a Source label from the file; None → "Registration (…)"
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -215,7 +216,7 @@ class RegisterMolecule:
                         molecule_id=mol.id,
                         identifier=ext_id.identifier,
                         identifier_type=ext_id.identifier_type,
-                        source=f"Registration ({source})",
+                        source=ext_id.source or f"Registration ({source})",
                         registered_by=input.registered_by,
                     )
                 )
