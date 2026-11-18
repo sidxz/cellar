@@ -11,6 +11,7 @@ import {
   usePreviewBulkRegistration,
   usePreviewRegistration,
 } from "../../hooks/use-registration-wizard-api";
+import { buildPreviewRows } from "../../lib/preview-rows";
 import type { PreviewItem, PreviewRegistrationItemResponse } from "../../types/registration-wizard";
 import { ProjectNames } from "./project-names";
 
@@ -29,6 +30,7 @@ function toForecastItem(item: PreviewItem) {
       identifier: e.identifier,
       identifier_type: e.identifier_type,
     })),
+    batch_ids: (item.batch_ids ?? []).map((b) => b.identifier),
   };
 }
 
@@ -136,10 +138,13 @@ export function StepPreview() {
 
   if (!bulkPreview) return null;
 
-  const validCount = bulkPreview.total_count - bulkPreview.error_count;
-  const hasErrors = bulkPreview.error_count > 0;
   const answered = forecast instanceof Map ? forecast : null;
-  const counts = countForecast(answered);
+  const { rows, counts } = buildPreviewRows(
+    bulkPreview.items,
+    answered,
+    bulkInput.createBatchOnDuplicate,
+  );
+  const importable = rows.some((r) => !r.item.error);
 
   return (
     <div className="space-y-5">
@@ -148,7 +153,7 @@ export function StepPreview() {
         <div>
           <h2 className="text-lg font-semibold">Preview</h2>
           <p className="text-sm text-muted-foreground">
-            Review the parsed rows before kicking off the import.
+            What each row will do. Nothing is saved until you register.
           </p>
           {bulkInput.projectIds.length > 0 && (
             <p className="text-sm text-muted-foreground">
@@ -159,109 +164,81 @@ export function StepPreview() {
       </div>
 
       {/* Counters */}
-      <div className="grid grid-cols-3 gap-3 max-w-xl">
-        <SummaryStat label="Total" value={bulkPreview.total_count} tone="default" />
+      <div className="grid grid-cols-5 gap-3 max-w-4xl">
+        <SummaryStat label="Rows" value={counts.rows} tone="default" />
         <SummaryStat
-          label="Parseable"
-          value={validCount}
+          label="New compounds"
+          value={answered ? counts.newCompounds : 0}
           tone="success"
           icon={<CheckCircle2 className="h-3.5 w-3.5" />}
         />
+        <SummaryStat label="New batches" value={answered ? counts.newBatches : 0} tone="success" />
         <SummaryStat
-          label="Parse errors"
-          value={bulkPreview.error_count}
-          tone={hasErrors ? "destructive" : "default"}
-          icon={hasErrors ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
+          label="Already in ChemCellar"
+          value={answered ? counts.existingBatches : 0}
+          tone="default"
+        />
+        <SummaryStat
+          label="Problems"
+          value={counts.problems}
+          tone={counts.problems > 0 ? "destructive" : "default"}
+          icon={counts.problems > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
         />
       </div>
-
-      {/* Forecast counters — what confirming would do */}
-      {answered && (
-        <div className="grid grid-cols-4 gap-3 max-w-3xl">
-          <SummaryStat label="Will register" value={counts.registered} tone="success" />
-          <SummaryStat label="Duplicates" value={counts.deduplicated} tone="default" />
-          <SummaryStat label="Will disclose" value={counts.disclosed} tone="default" />
-          <SummaryStat
-            label="Conflicts"
-            value={counts.conflict}
-            tone={counts.conflict > 0 ? "destructive" : "default"}
-            icon={counts.conflict > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
-          />
-        </div>
-      )}
 
       {/* Per-row table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Parsed rows</CardTitle>
+          <CardTitle className="text-sm">Rows</CardTitle>
         </CardHeader>
         <CardContent className="px-0 pb-0">
-          <div className="max-h-[420px] overflow-auto">
+          <div className="max-h-[480px] overflow-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 bg-muted/80 backdrop-blur">
                 <tr className="border-b">
                   <th className="px-3 py-2 text-left font-medium w-12">#</th>
                   <th className="px-3 py-2 text-left font-medium">Name</th>
-                  <th className="px-3 py-2 text-left font-medium">SMILES</th>
-                  <th className="px-3 py-2 text-left font-medium">Identifiers</th>
-                  <th className="px-3 py-2 text-left font-medium">Amount</th>
-                  <th className="px-3 py-2 text-left font-medium">Salt</th>
-                  <th className="px-3 py-2 text-left font-medium">Purity</th>
-                  <th className="px-3 py-2 text-left font-medium">Source</th>
-                  <th className="px-3 py-2 text-left font-medium">Outcome</th>
-                  <th className="px-3 py-2 text-left font-medium">Issue</th>
+                  <th className="px-3 py-2 text-left font-medium">Structure</th>
+                  <th className="px-3 py-2 text-left font-medium">Compound</th>
+                  <th className="px-3 py-2 text-left font-medium">Batch</th>
+                  <th className="px-3 py-2 text-left font-medium">IDs to store</th>
                 </tr>
               </thead>
               <tbody>
-                {bulkPreview.items.map((item) => (
+                {rows.map((r) => (
                   <tr
-                    key={item.row_index}
+                    key={r.item.row_index}
                     className={cn(
-                      "border-b last:border-b-0",
-                      item.error && "bg-destructive/5",
-                      answered?.get(item.row_index)?.action === "conflict" && "bg-amber-500/5",
+                      "border-b last:border-b-0 align-top",
+                      r.problem && "bg-destructive/5",
                     )}
                   >
-                    <td className="px-3 py-1.5 text-muted-foreground">{item.row_index + 1}</td>
-                    <td className="px-3 py-1.5">{item.name ?? "\u2014"}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground tabular-nums">{r.fileRow}</td>
+                    <td className="px-3 py-1.5">{r.item.name ?? "\u2014"}</td>
                     <td className="px-3 py-1.5 font-mono">
-                      {item.smiles ? truncate(item.smiles, 40) : "\u2014"}
-                    </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.external_ids && item.external_ids.length > 0
-                        ? item.external_ids
-                            .map((e) => `${e.identifier_type}:${e.identifier}`)
-                            .join(", ")
-                        : "\u2014"}
-                    </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.amount_value != null
-                        ? `${item.amount_value} ${item.amount_unit}`
-                        : "\u2014"}
-                    </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.salt_code ?? "\u2014"}
-                    </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.purity != null ? `${item.purity}%` : "\u2014"}
-                    </td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {item.batch_source ?? "\u2014"}
-                    </td>
-                    <td className="px-3 py-1.5">
-                      {item.error || forecast === "failed" ? (
-                        "\u2014"
-                      ) : answered ? (
-                        <OutcomeBadge outcome={answered.get(item.row_index)} />
+                      {r.item.smiles ? (
+                        truncate(r.item.smiles, 32)
                       ) : (
-                        <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        <span className="font-sans text-muted-foreground">no structure</span>
                       )}
                     </td>
-                    <td className="px-3 py-1.5 text-destructive">
-                      {item.error ??
-                        answered?.get(item.row_index)?.conflict_reason ??
-                        answered?.get(item.row_index)?.error ??
-                        ""}
+                    <td className="px-3 py-1.5">
+                      {r.compound ??
+                        (r.problem || forecast === "failed" ? (
+                          "\u2014"
+                        ) : (
+                          <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />
+                        ))}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      {r.problem ? (
+                        <span className="text-destructive">{r.problem}</span>
+                      ) : (
+                        (r.batch ?? "")
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5">
+                      <IdChips item={r.item} />
                     </td>
                   </tr>
                 ))}
@@ -280,29 +257,26 @@ export function StepPreview() {
       {answered && (
         <p className="text-xs text-muted-foreground">
           Forecast only — outcomes are decided when the job runs, and a registration landing in
-          between can change them.
+          between can change them. A row with a batch problem still registers its compound.
         </p>
       )}
 
-      {hasErrors && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
-          <p className="text-muted-foreground">
-            {bulkPreview.error_count} row{bulkPreview.error_count === 1 ? "" : "s"} failed to parse
-            and will be reported as errors. The remaining {validCount} row
-            {validCount === 1 ? "" : "s"} will be imported.
-          </p>
-        </div>
-      )}
-
-      <div className="flex justify-between border-t pt-4">
+      <div className="flex items-center justify-between border-t pt-4">
         <Button variant="outline" onClick={prevStep}>
           <ArrowLeft className="mr-2 h-4 w-4" />
           Back
         </Button>
-        <Button onClick={nextStep} disabled={validCount === 0}>
-          Confirm &amp; Register {validCount > 0 ? `(${validCount})` : ""}
-        </Button>
+        <div className="flex items-center gap-3">
+          {answered && (
+            <span className="text-sm text-muted-foreground tabular-nums">
+              {counts.newCompounds} new compound{counts.newCompounds === 1 ? "" : "s"} ·{" "}
+              {counts.newBatches} new batch{counts.newBatches === 1 ? "" : "es"}
+            </span>
+          )}
+          <Button onClick={nextStep} disabled={!importable}>
+            Register
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -316,31 +290,37 @@ function truncate(s: string, n: number): string {
   return s.length > n ? `${s.slice(0, n - 1)}\u2026` : s;
 }
 
-function countForecast(forecast: Forecast | null) {
-  const counts = { registered: 0, deduplicated: 0, disclosed: 0, merge_candidate: 0, conflict: 0 };
-  if (!forecast) return counts;
-  for (const it of forecast.values()) {
-    if (it.action && it.action in counts) counts[it.action as keyof typeof counts] += 1;
+/** Every ID the row stores, with its Source, grouped by where it goes. */
+function IdChips({ item }: { item: PreviewItem }) {
+  const compoundIds = item.external_ids ?? [];
+  const batchIds = item.batch_ids ?? [];
+  if (compoundIds.length === 0 && batchIds.length === 0) {
+    return <span className="text-muted-foreground">{"\u2014"}</span>;
   }
-  return counts;
-}
-
-const OUTCOME_LABELS: Record<
-  string,
-  { label: string; variant: "success" | "warning" | "secondary" | "destructive" }
-> = {
-  registered: { label: "New", variant: "success" },
-  deduplicated: { label: "Duplicate", variant: "warning" },
-  disclosed: { label: "Discloses", variant: "secondary" },
-  merge_candidate: { label: "Merge?", variant: "warning" },
-  conflict: { label: "Conflict", variant: "destructive" },
-};
-
-function OutcomeBadge({ outcome }: { outcome: PreviewRegistrationItemResponse | undefined }) {
-  const spec = outcome?.action ? OUTCOME_LABELS[outcome.action] : undefined;
-  // The reason / error is printed in the Issue column, so the badge stays a label.
-  if (!spec) return <Badge variant="outline">Unknown</Badge>;
-  return <Badge variant={spec.variant}>{spec.label}</Badge>;
+  return (
+    <div className="flex flex-col gap-1">
+      {compoundIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground">Compound:</span>
+          {compoundIds.map((e) => (
+            <Badge key={`c-${e.identifier}`} variant="outline" className="font-normal">
+              {e.source ?? e.identifier_type} · {e.identifier}
+            </Badge>
+          ))}
+        </div>
+      )}
+      {batchIds.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-muted-foreground">Batch:</span>
+          {batchIds.map((b) => (
+            <Badge key={`b-${b.identifier}`} variant="outline" className="font-normal">
+              {b.source} · {b.identifier}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SummaryStat({
