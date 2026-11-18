@@ -49,6 +49,16 @@ def _computed_rule(channel: CampaignChannel, readout: ReadoutDefinition | None) 
     return effective_rule(channel.selection_rule, unit=unit, single_point=True)
 
 
+def _scope_run_count(campaign: Campaign, ch: CampaignChannel) -> int | None:
+    """Runs the column may draw from: its stage's, or the campaign's for a campaign
+    column; None for a column that reads every run of the protocol."""
+    if ch.resolve_from_all_runs:
+        return None
+    if ch.stage_id is not None:
+        return len(campaign.stage_run_ids(ch.stage_id, ch.protocol_id))
+    return len(campaign.campaign_run_ids(ch.protocol_id))
+
+
 def describe_channels(
     campaign: Campaign, readouts: Mapping[uuid.UUID, ReadoutDefinition]
 ) -> dict[uuid.UUID, ColumnDescription]:
@@ -67,6 +77,7 @@ def describe_channels(
             readout_label=readout_label(ch, readout.name if readout else None),
             profile=build_column_profile(ch, by_channel.get(ch.id, [])),
             rule=_computed_rule(ch, readout),
+            scope_run_count=_scope_run_count(campaign, ch),
         )
     return out
 

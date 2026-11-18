@@ -109,6 +109,9 @@ class ColumnDescription:
     label: str
     #: ``label`` without its stage and readout parts, for headers already under both.
     short_label: str
+    #: How many runs the column's scope holds (its stage's, or the campaign's);
+    #: None when the column reads every run of the protocol, so nothing to compare.
+    scope_run_count: int | None = None
 
 
 def build_column_profile(
@@ -221,9 +224,12 @@ def describe_column(
     readout_label: str,
     profile: ColumnProfile,
     rule: SelectionRule,
+    scope_run_count: int | None = None,
 ) -> ColumnDescription:
     """``rule`` is the rule the column computes (its effective rule, which the
-    caller decides), not necessarily the one configured on it."""
+    caller decides), not necessarily the one configured on it. ``scope_run_count``
+    is how many runs the column's scope holds; when it exceeds the runs that
+    contribute, the description says so ("2 of 3 runs")."""
     design, known = _design(profile)
     if channel.test_concentration is not None:
         # the chosen dose: every value in the column is at it, whatever else was found
@@ -238,7 +244,13 @@ def describe_column(
         NOT_RECORDED: "concentration not recorded",
     }[design]
     rule_text = RULE_NAMES[rule]
-    runs = f"{profile.run_count} run" + ("" if profile.run_count == 1 else "s")
+    of_scope = (
+        f" of {scope_run_count}"
+        if scope_run_count is not None and scope_run_count > profile.run_count
+        else ""
+    )
+    plural = "" if profile.run_count == 1 and not of_scope else "s"
+    runs = f"{profile.run_count}{of_scope} run{plural}"
     scope = "all runs of the protocol" if channel.resolve_from_all_runs else ""
     parts = [design_text]
     if design != SERIES:
@@ -271,4 +283,5 @@ def describe_column(
         and (len(known) > 1 or profile.several_concentrations > 0),
         label=" · ".join(p for p in (stage_name, readout_label, short_label) if p),
         short_label=short_label,
+        scope_run_count=scope_run_count,
     )

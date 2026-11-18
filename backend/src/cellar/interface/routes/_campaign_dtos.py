@@ -544,6 +544,8 @@ class ColumnDescriptionResponse(BaseModel):
     needs_concentration: bool
     label: str
     short_label: str
+    #: Runs the column's scope holds; None for a column reading all protocol runs.
+    scope_run_count: int | None = None
 
     @classmethod
     def from_domain(cls, d: ColumnDescription) -> ColumnDescriptionResponse:

@@ -9,6 +9,7 @@ from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_measurement import CampaignMeasurement
 from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import CampaignStage
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     MeasurementBasis,
@@ -16,6 +17,7 @@ from cellar.domain.research_organization.enums import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.hit_criterion import InterceptKey
 
 
@@ -104,3 +106,61 @@ def test_rule_part_is_the_rule_a_readout_column_computes():
 def test_rule_part_of_a_dose_response_column_is_as_configured():
     gmean = _channel(selection_rule=SelectionRule.GEOMETRIC_MEAN)
     assert _described(gmean, "µM", "µM") == "geometric mean"
+
+
+def _stage_column_description(*, stage_runs: int, contributing: int, all_runs: bool = False):
+    """A stage column whose stage holds ``stage_runs`` runs, ``contributing`` of
+    which fed its one value."""
+    campaign = Campaign.create(
+        workspace_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        name="C",
+        description=None,
+        created_by=uuid.uuid4(),
+    )
+    stage = CampaignStage(campaign_id=campaign.id, name="Retest", display_order=0)
+    campaign.add_stage(stage)
+    ch = _channel(campaign_id=campaign.id, stage_id=stage.id, resolve_from_all_runs=all_runs)
+    campaign.add_channel(ch)
+    campaign.seed_runs = [
+        SeedRun(run_id=uuid.uuid4(), protocol_id=ch.protocol_id, stage_ids=(stage.id,))
+        for _ in range(stage_runs)
+    ]
+    row = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+    row.add_measurement(
+        CampaignMeasurement(
+            result_id=row.id,
+            channel_id=ch.id,
+            value=40.0,
+            value_qualifier=ValueQualifier.EQ,
+            unit="µM",
+            protocol_name_snapshot="P",
+            protocol_version_snapshot=1,
+            contributing_run_ids=[uuid.uuid4() for _ in range(contributing)],
+            basis=MeasurementBasis.MEASURED,
+            concentration_series=True,
+        )
+    )
+    campaign.add_result(row)
+    readouts = {ch.readout_definition_id: SimpleNamespace(name="IC50", unit="µM")}
+    return describe_channels(campaign, readouts)[ch.id]
+
+
+def test_runs_part_reads_n_of_m_when_some_runs_set_aside():
+    d = _stage_column_description(stage_runs=3, contributing=2)
+    assert "2 of 3 runs" in d.short_label
+    assert (d.run_count, d.scope_run_count) == (2, 3)
+    one = _stage_column_description(stage_runs=2, contributing=1)
+    assert "1 of 2 runs" in one.short_label
+
+
+def test_runs_part_plain_when_all_runs_contribute():
+    d = _stage_column_description(stage_runs=2, contributing=2)
+    assert " 2 runs" in f" {d.short_label}" and " of " not in d.short_label
+    assert d.scope_run_count == 2
+
+
+def test_all_runs_column_has_no_scope_count():
+    d = _stage_column_description(stage_runs=3, contributing=2, all_runs=True)
+    assert d.scope_run_count is None
+    assert "2 runs" in d.short_label and " of 3" not in d.short_label

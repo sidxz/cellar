@@ -862,7 +862,7 @@ class TestStageOverride:
         assert stage_resp.status_code == 200, stage_resp.text
         stage_id = stage_resp.json()["stages"][0]["id"]
 
-        # A zero-criteria stage always computes "hit" (spec §3.1) — force
+        # A no-criteria stage with no column computes "untested" — force
         # "miss" so the override is visibly distinct from the base verdict.
         override_url = (
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage_id}/override"
@@ -887,7 +887,7 @@ class TestStageOverride:
         assert delete_resp.status_code == 204, delete_resp.text
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         outcome = _find_stage_outcome(get_resp.json(), result_id, stage_id)
-        assert outcome["outcome"] == "hit"
+        assert outcome["outcome"] == "untested"
         assert outcome["overridden"] is False
         assert outcome["override_reason"] is None
         assert outcome["overridden_by"] is None
@@ -1165,13 +1165,13 @@ class TestListCampaignResults:
         )
         stage_id = stage_resp.json()["stages"][0]["id"]
 
-        # A criteria stage with no criteria computes "hit" (spec 3.1).
-        hits = await client.get(
-            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=hit"
+        # A criteria stage with no criteria and no measurement there is untested.
+        untested = await client.get(
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=untested"
         )
-        assert hits.status_code == 200, hits.text
-        assert [r["id"] for r in hits.json()["items"]] == [result_id]
-        assert hits.json()["total_count"] == 1
+        assert untested.status_code == 200, untested.text
+        assert [r["id"] for r in untested.json()["items"]] == [result_id]
+        assert untested.json()["total_count"] == 1
 
         misses = await client.get(
             f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=miss"
@@ -1192,7 +1192,7 @@ class TestListCampaignResults:
     async def test_a_repeated_outcome_keeps_a_row_matching_any_of_them(
         self, client: AsyncClient
     ) -> None:
-        """``?outcome=hit&outcome=miss`` is how a consumer asks for a whole
+        """``?outcome=untested&outcome=miss`` is how a consumer asks for a whole
         stage. It has to be read as both values — a query string that repeats
         a scalar param silently keeps only the last one."""
         project_id = await _create_project(client)
@@ -1205,8 +1205,8 @@ class TestListCampaignResults:
             f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Any Stage"}
         )
         stage_id = stage_resp.json()["stages"][0]["id"]
-        # A criteria stage with no criteria computes "hit"; demote one row so
-        # the stage holds one of each.
+        # A criteria stage with no criteria and no measurement is untested;
+        # demote one row so the stage holds one of each.
         demoted = campaign["results"][1]["id"]
         await client.put(
             f"/api/v1/campaigns/{campaign_id}/results/{demoted}/stages/{stage_id}/override",
@@ -1214,7 +1214,7 @@ class TestListCampaignResults:
         )
 
         both = await client.get(
-            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=hit&outcome=miss"
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=untested&outcome=miss"
         )
         assert both.status_code == 200, both.text
         assert both.json()["total_count"] == 2
@@ -1227,7 +1227,7 @@ class TestListCampaignResults:
         assert [r["id"] for r in one.json()["items"]] == [demoted]
 
         no_stage = await client.get(
-            f"/api/v1/campaigns/{campaign_id}/results?outcome=hit&outcome=miss"
+            f"/api/v1/campaigns/{campaign_id}/results?outcome=untested&outcome=miss"
         )
         assert no_stage.status_code == 422, no_stage.text
 
