@@ -118,7 +118,21 @@ def build_column_profile(
     not_recorded = several = 0
     runs: set[uuid.UUID] = set()
     basis: set[MeasurementBasis] = set()
+
+    def tally(conc: Concentration | None) -> None:
+        for b in buckets:
+            if (b[0] is None and conc is None) or (
+                b[0] is not None and conc is not None and b[0].same_as(conc)
+            ):
+                b[1] += 1
+                return
+        buckets.append([conc, 1])
+
     for m in measurements:
+        # Every cell lists the doses it was measured at, resolved or not; older rows
+        # without the list fall back to their own concentration below.
+        for c in m.concentrations_found or []:
+            tally(c)
         if m.unresolved_reason is not None:
             several += m.unresolved_reason.value == "several_concentrations"
             continue
@@ -150,14 +164,8 @@ def build_column_profile(
             designs.add(REPORTED)
         else:
             designs.add(NOT_RECORDED)
-        for b in buckets:
-            if (b[0] is None and conc is None) or (
-                b[0] is not None and conc is not None and b[0].same_as(conc)
-            ):
-                b[1] += 1
-                break
-        else:
-            buckets.append([conc, 1])
+        if m.concentrations_found is None or conc is None:
+            tally(conc)  # a recorded dose is already counted from the list
         if m.replicate_count is None:
             not_recorded += 1
         else:

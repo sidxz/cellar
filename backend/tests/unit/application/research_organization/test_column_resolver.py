@@ -238,6 +238,124 @@ def test_test_concentration_selects_dose():
     _assert_bare(_resolve(_channel(test_concentration=Concentration(3.0, "µM")), readings))
 
 
+UM50 = Concentration(50.0, "µM")
+
+
+def _two_conc_compounds(n: int = 3):
+    a, b = uuid.uuid4(), uuid.uuid4()
+    mols = [uuid.uuid4() for _ in range(n)]
+    readings = [
+        r
+        for m in mols
+        for r in (_reading(40, a, D1, dose=UM10, mol=m), _reading(20, b, D2, dose=UM50, mol=m))
+    ]
+    return mols, readings
+
+
+def test_case_m_all_compounds_two_concentrations_lists_both():
+    from cellar.domain.research_organization.measurement_facts import (
+        build_column_profile,
+        describe_column,
+    )
+
+    mols, readings = _two_conc_compounds(3)
+    ch = _channel()
+    out = _resolve_all(ch, readings, mols)
+    assert all(
+        m.unresolved_reason == UnresolvedReason.SEVERAL_CONCENTRATIONS for m in out.values()
+    )
+    assert all(m.concentrations_found == [UM10, UM50] for m in out.values())
+    d = describe_column(
+        channel=ch,
+        stage_name=None,
+        readout_label="r",
+        profile=build_column_profile(ch, out.values()),
+    )
+    assert [(c["value"], c["count"]) for c in d.concentrations] == [(10.0, 3), (50.0, 3)]
+    assert d.needs_concentration
+
+
+def test_case_m_choosing_one_resolves_every_cell():
+    mols, readings = _two_conc_compounds(3)
+    out = _resolve_all(_channel(test_concentration=UM50), readings, mols)
+    assert all(
+        m.unresolved_reason is None and m.value == pytest.approx(20.0) for m in out.values()
+    )
+    assert all(m.concentrations_found == [UM10, UM50] for m in out.values())
+
+
+def test_clearing_choice_restores_list_and_flag():
+    from cellar.domain.research_organization.measurement_facts import (
+        build_column_profile,
+        describe_column,
+    )
+
+    mols, readings = _two_conc_compounds(2)
+
+    def needs(ch):
+        out = _resolve_all(ch, readings, mols)
+        return describe_column(
+            channel=ch,
+            stage_name=None,
+            readout_label="r",
+            profile=build_column_profile(ch, out.values()),
+        )
+
+    assert not needs(_channel(test_concentration=UM10)).needs_concentration
+    restored = needs(_channel())
+    assert restored.needs_concentration
+    assert len(restored.concentrations) == 2
+
+
+def test_series_run_doses_not_listed():
+    series, single = uuid.uuid4(), uuid.uuid4()
+    readings = [
+        _reading(5, series, D2, dose=UM1),
+        _reading(40, series, D2, dose=UM10),
+        _reading(42, single, D1, dose=UM50),
+    ]
+    m = _resolve(_channel(), readings)
+    assert m.concentrations_found == [UM50]
+
+
+def test_partial_overlap_counts_over_compounds():
+    from cellar.domain.research_organization.measurement_facts import build_column_profile
+
+    a, b = uuid.uuid4(), uuid.uuid4()
+    m1, m2, m3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
+    readings = [
+        _reading(1, a, D1, dose=UM10, mol=m1),
+        _reading(1, b, D2, dose=UM50, mol=m1),
+        _reading(1, a, D1, dose=UM10, mol=m2),
+        _reading(1, b, D2, dose=UM50, mol=m3),
+    ]
+    ch = _channel()
+    out = _resolve_all(ch, readings, [m1, m2, m3])
+    p = build_column_profile(ch, out.values())
+    assert [(c.value, n) for c, n in p.concentrations if c] == [(10.0, 2), (50.0, 2)]
+
+
+def test_concentrations_found_set_on_resolved_and_unresolved_cells():
+    a, b = uuid.uuid4(), uuid.uuid4()
+    one, two = uuid.uuid4(), uuid.uuid4()
+    out = _resolve_all(
+        _channel(),
+        [
+            _reading(1, a, D1, dose=UM10, mol=one),
+            _reading(1, a, D1, dose=UM10, mol=two),
+            _reading(1, b, D2, dose=UM50, mol=two),
+            _reading(1, b, D2, dose=None, mol=two),
+        ],
+        [one, two],
+    )
+    assert out[one].unresolved_reason is None
+    assert out[one].concentrations_found == [UM10]
+    assert out[two].unresolved_reason == UnresolvedReason.SEVERAL_CONCENTRATIONS
+    assert out[two].concentrations_found == [UM10, UM50]  # not-recorded never listed
+    dr = _resolve(_channel(source_kind=ChannelSourceKind.DOSE_RESPONSE_CURVE), [_curve(1, a)])
+    assert dr.concentrations_found is None
+
+
 def test_wellless_reported_uses_recorded_replicates():
     a = uuid.uuid4()
     r = _reading(7.5, a, D1, well=False, replicate_count=3)

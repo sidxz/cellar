@@ -20,6 +20,7 @@ from cellar.domain.research_organization.enums import (
     UnresolvedReason,
     ValueQualifier,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -58,6 +59,9 @@ class CampaignMeasurement:
     basis: MeasurementBasis | None = None
     concentration_series: bool = False
     unresolved_reason: UnresolvedReason | None = None
+    #: Single-concentration columns: the distinct known doses this compound was measured
+    #: at (series runs and not-recorded excluded), whatever the cell resolved to.
+    concentrations_found: list[Concentration] | None = None
 
     def __post_init__(self) -> None:
         numeric_qualifiers = {

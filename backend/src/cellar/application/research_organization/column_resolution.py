@@ -52,7 +52,10 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.screening_assay.activity_types import ReplicateStats
+from cellar.domain.shared.aggregation_types import QualifierHandling
+from cellar.domain.shared.units import comparable_magnitude
 
+_CENSORED = {ValueQualifier.GT, ValueQualifier.LT}
 _AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN}
 
 # The domain forbids an empty unit, even on an ND cell; this stands in when no
@@ -187,22 +190,25 @@ def _resolve(
         values = [_Value(c.run, (c,)) for c in chosen]
         return _measure(channel, channel.selection_rule, result_id, values, series=True)
 
-    groups = _groups_at_one_concentration(passed, channel.test_concentration)
+    recorded = _single_point_groups(passed)
+    found = _concentrations_found(recorded, channel.qualifier_handling)
+    groups = _at_one_concentration(recorded, channel.test_concentration)
     if groups is None:
         m = _nd_measurement(result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER)
         m.unresolved_reason = UnresolvedReason.SEVERAL_CONCENTRATIONS
-        return m
-    values = [_combine(g) for g in groups]
-    unit = values[0].run.unit if values else None
-    rule = effective_rule(channel.selection_rule, unit=unit, single_point=True)
-    return _measure(channel, rule, result_id, values, series=False)
+    else:
+        values = [_combine(g) for g in groups]
+        unit = values[0].run.unit if values else None
+        rule = effective_rule(channel.selection_rule, unit=unit, single_point=True)
+        m = _measure(channel, rule, result_id, values, series=False)
+    m.concentrations_found = found
+    return m
 
 
-def _groups_at_one_concentration(
-    candidates: list[Candidate], test_concentration: Concentration | None
-) -> list[list[Candidate]] | None:
-    """Readings grouped by (run, concentration), series runs dropped, at one
-    concentration. ``None`` when several remain and the column names none."""
+def _single_point_groups(
+    candidates: list[Candidate],
+) -> dict[tuple[uuid.UUID, Concentration | None], list[Candidate]]:
+    """Readings grouped by (run, concentration), concentration-series runs dropped."""
     known: list[Concentration] = []
 
     def bucket(dose: Concentration | None) -> Concentration | None:
@@ -219,7 +225,37 @@ def _groups_at_one_concentration(
     for c in candidates:
         groups.setdefault((c.run.run_id, bucket(c.dose)), []).append(c)
     recorded_per_run = Counter(run for run, dose in groups if dose is not None)
-    groups = {k: g for k, g in groups.items() if recorded_per_run[k[0]] < 2}
+    return {k: g for k, g in groups.items() if recorded_per_run[k[0]] < 2}
+
+
+def _concentrations_found(
+    groups: dict[tuple[uuid.UUID, Concentration | None], list[Candidate]],
+    handling: QualifierHandling,
+) -> list[Concentration]:
+    """Distinct known doses of the groups the column could read, by magnitude. Taken
+    before the column's ``test_concentration`` so a chosen dose still sees the others."""
+    doses = [
+        d
+        for (_, d), g in groups.items()
+        if d is not None
+        and not (
+            handling == QualifierHandling.EXCLUDE_QUALIFIED
+            and _combine(g).run.qualifier in _CENSORED
+        )
+    ]
+    out: list[Concentration] = []
+    for d in sorted(doses, key=lambda d: comparable_magnitude(d.value, d.unit)):
+        if not any(o.same_as(d) for o in out):
+            out.append(d)
+    return out
+
+
+def _at_one_concentration(
+    groups: dict[tuple[uuid.UUID, Concentration | None], list[Candidate]],
+    test_concentration: Concentration | None,
+) -> list[list[Candidate]] | None:
+    """The groups at one concentration: the column's, else the only one there is.
+    ``None`` when several remain and the column names none."""
     if test_concentration is not None:
         return [
             g for (_, d), g in groups.items() if d is not None and d.same_as(test_concentration)
