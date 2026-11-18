@@ -389,3 +389,26 @@ async def test_published_endpoint_matches_daikon_schema(
     assert body["stages"][0]["counts"]["hit"] == 1
     assert len(body["results"][0]["stage_outcomes"]) == 1
     assert body["results"][0]["stage_outcomes"][0]["outcome"] == "hit"
+    # Stage-owned values (spec §10): runs and columns name their stage, a column
+    # describes itself, and every value carries the facts behind it.
+    stage_id = body["stages"][0]["id"]
+    assert body["seed_runs"] == [
+        {
+            "run_id": str(_MEASUREMENT_RUN_ID),
+            "protocol_id": str(protocol_id),
+            "stage_ids": [stage_id],
+        }
+    ]
+    channel = body["channels"][0]
+    assert channel["stage_id"] == stage_id
+    assert channel["test_concentration"] is None
+    assert channel["description"]["short_label"] == "dose-response · 1 run · latest run"
+    assert channel["description"]["label"] == (
+        "Contract Test Stage · IC50 · dose-response · 1 run · latest run"
+    )
+    measurement = body["results"][0]["measurements"][0]
+    assert measurement["basis"] == "reported"
+    assert measurement["batch_ids"] == []
+    assert measurement["concentration_series"] is True
+    assert measurement["unresolved_reason"] is None
+    assert measurement["concentrations_found"] is None

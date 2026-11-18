@@ -107,6 +107,8 @@ class ColumnDescription:
     basis: list[str]
     needs_concentration: bool
     label: str
+    #: ``label`` without its stage and readout parts, for headers already under both.
+    short_label: str
 
 
 def build_column_profile(
@@ -229,10 +231,11 @@ def describe_column(
     }[design]
     rule = RULE_NAMES[channel.selection_rule]
     runs = f"{profile.run_count} run" + ("" if profile.run_count == 1 else "s")
-    parts = [stage_name, readout_label, design_text]
+    parts = [design_text]
     if design != SERIES:
         parts.append(_replicates_text(profile))
     parts += [runs, rule]
+    short_label = " · ".join(p for p in parts if p)
     return ColumnDescription(
         stage_name=stage_name,
         readout_label=readout_label,
@@ -253,5 +256,6 @@ def describe_column(
         basis=sorted(b.value for b in profile.basis),
         needs_concentration=channel.test_concentration is None
         and (len(known) > 1 or profile.several_concentrations > 0),
-        label=" · ".join(p for p in parts if p),
+        label=" · ".join(p for p in (stage_name, readout_label, short_label) if p),
+        short_label=short_label,
     )

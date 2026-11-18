@@ -449,9 +449,6 @@ def _cell(key: str, cfg: ChannelImportConfig, m: CampaignMeasurement) -> dict[st
         "test_concentration_unit": m.test_concentration_unit,
         "replicate_count": m.replicate_count,
         "qc_pass": m.qc_pass,
-        # The import-time QC heuristic is gone: the column's own QC filter decides
-        # which readings count, and no reason is recorded on the value.
-        "qc_reason": None,
         "hit_call": _hit_call(cfg, m),
         "source_run_id": str(m.source_run_id) if m.source_run_id else None,
         "source_run_date": m.run_date_snapshot.isoformat() if m.run_date_snapshot else None,

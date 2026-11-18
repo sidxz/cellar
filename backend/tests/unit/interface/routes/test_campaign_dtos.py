@@ -310,13 +310,14 @@ class TestSeedRuns:
         campaign, _channel_id = _make_campaign_with_chained_stages()
         p1, p2 = uuid.uuid4(), uuid.uuid4()
         r1, r2 = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(r2, p1), SeedRun(r1, p2)])
+        stage = campaign.stages[0].id
+        campaign.record_seed_runs([SeedRun(r2, p1, (stage,)), SeedRun(r1, p2)])
 
         full = CampaignResponse.from_domain(campaign).model_dump()
         summary = CampaignSummaryResponse.from_domain(campaign).model_dump()
 
         assert full["seed_runs"] == [
-            {"run_id": r2, "protocol_id": p1},
-            {"run_id": r1, "protocol_id": p2},
+            {"run_id": r2, "protocol_id": p1, "stage_ids": [stage]},
+            {"run_id": r1, "protocol_id": p2, "stage_ids": []},
         ]
         assert summary["seed_runs"] == full["seed_runs"]

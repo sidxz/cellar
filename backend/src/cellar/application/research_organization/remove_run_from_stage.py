@@ -22,7 +22,7 @@ from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import DataLockedError, DomainError, NotFoundError
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -62,11 +62,8 @@ class RemoveRunFromStage:
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
             if campaign.status != CampaignStatus.DRAFT:
-                return Failure(
-                    ValidationError(
-                        f"Cannot remove run from stage: campaign is {campaign.status.value}"
-                    )
-                )
+                # 423, like every other stage write.
+                return Failure(DataLockedError(f"Campaign is {campaign.status.value}"))
             if campaign.find_stage(input.stage_id) is None:
                 return Failure(NotFoundError("CampaignStage", str(input.stage_id)))
             if not any(

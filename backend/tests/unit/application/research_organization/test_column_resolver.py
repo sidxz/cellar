@@ -8,6 +8,7 @@ column's rule combines runs only at one concentration.
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import date
 
 import pytest
@@ -517,3 +518,22 @@ def test_resolution_run_ids_scope():
     assert resolution_run_ids(campaign, ch) == [r1, r2, r3]
     ch.protocol_id = uuid.uuid4()  # ... or protocol-wide when there are none
     assert resolution_run_ids(campaign, ch) is None
+
+
+def test_qc_pass_every_contributor_approved_with_z_prime_at_least_half():
+    """The default QC heuristic (run approved, z′ ≥ 0.5 when present) over the readings
+    behind the value only; a cell with no readings has no QC flag."""
+    a, b = uuid.uuid4(), uuid.uuid4()
+    old, new = _reading(10, a, D1), _reading(20, b, D2)
+
+    def with_run(c: Candidate, **kw: object) -> Candidate:
+        return replace(c, run=replace(c.run, **kw))
+
+    mean = _channel(SelectionRule.MEAN_ACROSS_RUNS)
+    assert _resolve(mean, [old, new]).qc_pass is True
+    assert _resolve(mean, [with_run(old, z_prime=0.49), new]).qc_pass is False
+    assert _resolve(mean, [with_run(old, run_approved=False), new]).qc_pass is False
+    assert _resolve(mean, [with_run(old, z_prime=None), new]).qc_pass is True
+    # Latest run: the older, failing run does not contribute.
+    assert _resolve(_channel(), [with_run(old, z_prime=0.1), new]).qc_pass is True
+    assert _resolve(_channel(), []).qc_pass is None

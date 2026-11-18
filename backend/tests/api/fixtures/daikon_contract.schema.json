@@ -3,6 +3,23 @@
   "title": "DAIKON Published Campaign Contract",
   "description": "JSON Schema for GET /api/v1/campaigns/{id}/published — spec §6.",
   "type": "object",
+  "definitions": {
+    "concentration": {
+      "type": "object",
+      "required": ["value", "unit"],
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": "number" },
+        "unit":  { "type": "string" }
+      }
+    },
+    "concentration_or_null": {
+      "oneOf": [
+        { "$ref": "#/definitions/concentration" },
+        { "type": "null" }
+      ]
+    }
+  },
   "required": ["campaign", "compound_sources", "source_protocols", "seed_runs", "channels", "stages", "results"],
   "additionalProperties": false,
   "properties": {
@@ -95,11 +112,12 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["run_id", "protocol_id"],
+        "required": ["run_id", "protocol_id", "stage_ids"],
         "additionalProperties": false,
         "properties": {
           "run_id":      { "type": "string", "format": "uuid" },
-          "protocol_id": { "type": "string", "format": "uuid" }
+          "protocol_id": { "type": "string", "format": "uuid" },
+          "stage_ids":   { "type": "array", "items": { "type": "string", "format": "uuid" } }
         }
       }
     },
@@ -108,7 +126,7 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule", "resolve_from_all_runs"],
+        "required": ["id", "label", "display_order", "protocol_ref", "readout", "source_kind", "selection_rule", "resolve_from_all_runs", "stage_id", "test_concentration", "description"],
         "additionalProperties": false,
         "properties": {
           "id":             { "type": "string", "format": "uuid" },
@@ -144,6 +162,53 @@
               { "type": "object" },
               { "type": "null" }
             ]
+          },
+          "stage_id":           { "type": ["string", "null"] },
+          "test_concentration": { "$ref": "#/definitions/concentration_or_null" },
+          "description": {
+            "type": "object",
+            "required": ["stage_name", "readout_label", "design", "concentrations", "replicates", "run_count", "rule", "basis", "needs_concentration", "label", "short_label"],
+            "additionalProperties": false,
+            "properties": {
+              "stage_name":    { "type": ["string", "null"] },
+              "readout_label": { "type": "string" },
+              "design": {
+                "type": "string",
+                "enum": ["single_concentration", "single_concentration_mixed", "concentration_series", "reported", "not_recorded"]
+              },
+              "concentrations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["value", "unit", "count"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "value": { "type": ["number", "null"] },
+                    "unit":  { "type": ["string", "null"] },
+                    "count": { "type": "integer" }
+                  }
+                }
+              },
+              "replicates": {
+                "type": "object",
+                "required": ["min", "max", "not_recorded"],
+                "additionalProperties": false,
+                "properties": {
+                  "min":          { "type": ["integer", "null"] },
+                  "max":          { "type": ["integer", "null"] },
+                  "not_recorded": { "type": "integer" }
+                }
+              },
+              "run_count":           { "type": "integer" },
+              "rule":                { "type": "string" },
+              "basis": {
+                "type": "array",
+                "items": { "type": "string", "enum": ["measured", "reported", "mixed"] }
+              },
+              "needs_concentration": { "type": "boolean" },
+              "label":               { "type": "string" },
+              "short_label":         { "type": "string" }
+            }
           }
         }
       }
@@ -234,7 +299,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["channel_id", "value_qualifier", "unit", "is_manual_override"],
+              "required": ["channel_id", "value_qualifier", "unit", "is_manual_override", "batch_ids", "basis", "concentration_series", "unresolved_reason", "concentrations_found"],
               "additionalProperties": false,
               "properties": {
                 "channel_id":        { "type": "string", "format": "uuid" },
@@ -265,6 +330,24 @@
                       "type": "array",
                       "items": { "type": "string", "format": "uuid" }
                     },
+                    { "type": "null" }
+                  ]
+                },
+                "batch_ids": {
+                  "oneOf": [
+                    {
+                      "type": "array",
+                      "items": { "type": "string", "format": "uuid" }
+                    },
+                    { "type": "null" }
+                  ]
+                },
+                "basis":                { "type": ["string", "null"], "enum": ["measured", "reported", "mixed", null] },
+                "concentration_series": { "type": "boolean" },
+                "unresolved_reason":    { "type": ["string", "null"], "enum": ["several_concentrations", "no_runs_at_stage", null] },
+                "concentrations_found": {
+                  "oneOf": [
+                    { "type": "array", "items": { "$ref": "#/definitions/concentration" } },
                     { "type": "null" }
                   ]
                 },

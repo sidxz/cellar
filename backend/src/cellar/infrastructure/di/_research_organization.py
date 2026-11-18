@@ -735,7 +735,11 @@ def register_research_organization(container: Container) -> None:
 
     def _list_campaigns(c: Container) -> ListCampaigns:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
-        return ListCampaigns(uow=uow, campaign_repo=SQLAlchemyCampaignRepository(uow))
+        return ListCampaigns(
+            uow=uow,
+            campaign_repo=SQLAlchemyCampaignRepository(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
+        )
 
     def _campaign_scientist_reader(c: Container) -> CampaignScientistReader:
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -747,6 +751,7 @@ def register_research_organization(container: Container) -> None:
             uow=uow,
             campaign_repo=SQLAlchemyCampaignRepository(uow),
             scientist_reader=SQLAlchemyCampaignScientistReader(uow),
+            protocol_repo=SQLAlchemyProtocolRepository(uow),
         )
 
     def _list_campaign_results(c: Container) -> ListCampaignResults:

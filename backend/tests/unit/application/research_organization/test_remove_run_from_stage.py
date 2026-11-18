@@ -26,7 +26,7 @@ from cellar.domain.research_organization.enums import (
     UnresolvedReason,
 )
 from cellar.domain.research_organization.source_ref import SeedRun
-from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
+from cellar.domain.shared.errors import AuthorizationError, DataLockedError, NotFoundError
 from tests.unit.application.research_organization._helpers import (
     FakeRunData,
     FakeUnitOfWork,
@@ -157,7 +157,7 @@ async def test_closed_campaign_is_rejected() -> None:
     c.status = CampaignStatus.CLOSED  # type: ignore[misc]
     out = await _uc(c, data)(_cmd(auth, c, stage.id, run), auth=auth)
     assert isinstance(out, Failure)
-    assert isinstance(out.failure(), ValidationError)
+    assert isinstance(out.failure(), DataLockedError)
     assert stage.id in c.seed_runs[0].stage_ids
 
 

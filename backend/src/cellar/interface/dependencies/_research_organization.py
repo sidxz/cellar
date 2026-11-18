@@ -97,6 +97,7 @@ from cellar.application.research_organization.refresh_campaign_from_sources impo
 from cellar.application.research_organization.remove_campaign_channel import RemoveCampaignChannel
 from cellar.application.research_organization.remove_campaign_stage import RemoveCampaignStage
 from cellar.application.research_organization.remove_result_row import RemoveResultRow
+from cellar.application.research_organization.remove_run_from_stage import RemoveRunFromStage
 from cellar.application.research_organization.reopen_campaign import ReopenCampaign
 from cellar.application.research_organization.saved_visualizations import (
     CreateSavedVisualization,
@@ -198,6 +199,7 @@ __all__ = [
     "RemoveMoleculesFromCollectionDep",
     "RemoveProjectMemberDep",
     "RemoveResultRowDep",
+    "RemoveRunFromStageDep",
     "ReopenCampaignDep",
     "SetResultNotesDep",
     "SetStageOverrideDep",
@@ -359,6 +361,7 @@ UpdateCampaignStageDep = Annotated[
 RemoveCampaignStageDep = Annotated[
     RemoveCampaignStage, Depends(_get_use_case(RemoveCampaignStage))
 ]
+RemoveRunFromStageDep = Annotated[RemoveRunFromStage, Depends(_get_use_case(RemoveRunFromStage))]
 SetStageOverrideDep = Annotated[SetStageOverride, Depends(_get_use_case(SetStageOverride))]
 SetResultNotesDep = Annotated[SetResultNotes, Depends(_get_use_case(SetResultNotes))]
 OverrideResultCellDep = Annotated[OverrideResultCell, Depends(_get_use_case(OverrideResultCell))]

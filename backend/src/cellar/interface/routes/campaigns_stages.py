@@ -12,6 +12,9 @@ from cellar.application.research_organization.add_campaign_stage import (
 from cellar.application.research_organization.remove_campaign_stage import (
     RemoveCampaignStageCommand,
 )
+from cellar.application.research_organization.remove_run_from_stage import (
+    RemoveRunFromStageCommand,
+)
 from cellar.application.research_organization.set_stage_override import (
     SetStageOverrideCommand,
 )
@@ -24,6 +27,7 @@ from cellar.interface.dependencies import (
     AddCampaignStageDep,
     AuthDep,
     RemoveCampaignStageDep,
+    RemoveRunFromStageDep,
     SetStageOverrideDep,
     UpdateCampaignStageDep,
 )
@@ -124,6 +128,30 @@ async def remove_campaign_stage(
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
+
+
+@router.delete("/{campaign_id}/stages/{stage_id}/runs/{run_id}", status_code=204)
+async def remove_run_from_stage(
+    campaign_id: uuid.UUID,
+    stage_id: uuid.UUID,
+    run_id: uuid.UUID,
+    auth: AuthDep,
+    uc: RemoveRunFromStageDep,
+) -> Response:
+    """Take a run off a stage; the stage's columns recompute over the runs it has left.
+
+    The run stays in the campaign (a campaign run once it is on no stage). Idempotent:
+    a run not on the stage, or not in the campaign, is a 204 no-op. 404 for an unknown
+    stage; 423 once the campaign is closed.
+    """
+    cmd = RemoveRunFromStageCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign_id,
+        stage_id=stage_id,
+        run_id=run_id,
+    )
+    result_to_response(await uc(cmd, auth=auth))
+    return Response(status_code=204)
 
 
 @router.put(

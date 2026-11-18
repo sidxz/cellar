@@ -225,6 +225,55 @@ async def _seed_closeable_campaign(client: AsyncClient, project_id: str, molecul
     return campaign_id
 
 
+async def _add_stage(
+    client: AsyncClient, campaign_id: str, name: str, parent_stage_id: str | None = None
+) -> str:
+    resp = await client.post(
+        f"/api/v1/campaigns/{campaign_id}/stages",
+        json={"name": name, "parent_stage_id": parent_stage_id},
+    )
+    assert resp.status_code == 200, resp.text
+    return next(s["id"] for s in resp.json()["stages"] if s["name"] == name)
+
+
+async def _add_stage_channel(
+    client: AsyncClient,
+    campaign_id: str,
+    stage_id: str,
+    protocol_id: str,
+    rd_id: str,
+    label: str = "IC50",
+    display_order: int = 0,
+) -> dict:
+    """A column owned by ``stage_id`` — the only kind a stage's criteria may name.
+    Returns the campaign the write answers with."""
+    resp = await client.post(
+        f"/api/v1/campaigns/{campaign_id}/channels",
+        json={
+            "label": label,
+            "protocol_id": protocol_id,
+            "readout_definition_id": rd_id,
+            "source_kind": "readout_data",
+            "selection_rule": "latest_run",
+            "qualifier_handling": "include_qualified",
+            "display_order": display_order,
+            "stage_id": stage_id,
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
+async def _set_criteria(
+    client: AsyncClient, campaign_id: str, stage_id: str, criteria: list[dict]
+) -> dict:
+    resp = await client.patch(
+        f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}", json={"criteria": criteria}
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()
+
+
 async def _make_run_with_target(client: AsyncClient, protocol_id: str, target_id: str) -> str:
     resp = await client.post(
         "/api/v1/runs",
@@ -581,32 +630,15 @@ class TestCampaignChannels:
 
 class TestCampaignStages:
     async def test_add_stage_returns_200_with_criteria_echoed(self, client: AsyncClient) -> None:
+        """A new stage owns no column yet, so its criteria land once it does (a
+        criterion names a column of its own stage)."""
         project_id = await _create_project(client)
         campaign = await _create_empty_campaign(client, project_id)
         campaign_id = campaign["id"]
         protocol_id, rd_id = await _make_published_protocol_with_readout(client)
 
-        channel_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/channels",
-            json={
-                "label": "IC50",
-                "protocol_id": protocol_id,
-                "readout_definition_id": rd_id,
-                "source_kind": "readout_data",
-                "selection_rule": "latest_run",
-                "qualifier_handling": "include_qualified",
-                "display_order": 0,
-            },
-        )
-        assert channel_resp.status_code == 200, channel_resp.text
-        channel_id = channel_resp.json()["channels"][0]["id"]
-
         resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/stages",
-            json={
-                "name": "Primary Hit",
-                "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
-            },
+            f"/api/v1/campaigns/{campaign_id}/stages", json={"name": "Primary Hit"}
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()
@@ -615,7 +647,15 @@ class TestCampaignStages:
         assert stage["name"] == "Primary Hit"
         assert stage["parent_stage_id"] is None
         assert stage["display_order"] == 0
-        assert stage["criteria"] == [{"channel_id": channel_id, "operator": "lt", "value": 10.0}]
+        assert stage["criteria"] == []
+
+        channel_resp = await _add_stage_channel(
+            client, campaign_id, stage["id"], protocol_id, rd_id
+        )
+        channel_id = channel_resp["channels"][0]["id"]
+        criteria = [{"channel_id": channel_id, "operator": "lt", "value": 10.0}]
+        data = await _set_criteria(client, campaign_id, stage["id"], criteria)
+        assert data["stages"][0]["criteria"] == criteria
 
     async def test_add_stage_unknown_channel_in_criteria_422(self, client: AsyncClient) -> None:
         project_id = await _create_project(client)
@@ -687,6 +727,7 @@ class TestCampaignStages:
         override_url = (
             f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage['id']}/override"
         )
+
         async def outcome_now() -> dict:
             campaign_json = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
             return _find_stage_outcome(campaign_json, result_id, stage["id"])
@@ -730,30 +771,15 @@ class TestCampaignStages:
         protocol_id, rd_id = await _make_published_protocol_with_readout(client)
         campaign = await _create_empty_campaign(client, project_id)
         campaign_id = campaign["id"]
-        channel_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/channels",
-            json={
-                "label": "IC50",
-                "protocol_id": protocol_id,
-                "readout_definition_id": rd_id,
-                "source_kind": "readout_data",
-                "selection_rule": "latest_run",
-                "qualifier_handling": "include_qualified",
-                "display_order": 0,
-            },
+        stage_id = await _add_stage(client, campaign_id, "Primary Hit")
+        channel_resp = await _add_stage_channel(client, campaign_id, stage_id, protocol_id, rd_id)
+        channel_id = channel_resp["channels"][0]["id"]
+        await _set_criteria(
+            client,
+            campaign_id,
+            stage_id,
+            [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
         )
-        assert channel_resp.status_code == 200, channel_resp.text
-        channel_id = channel_resp.json()["channels"][0]["id"]
-
-        stage_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/stages",
-            json={
-                "name": "Primary Hit",
-                "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
-            },
-        )
-        assert stage_resp.status_code == 200, stage_resp.text
-        stage_id = stage_resp.json()["stages"][0]["id"]
 
         keep = await client.patch(
             f"/api/v1/campaigns/{campaign_id}/stages/{stage_id}", json={"kind": "manual"}
@@ -1031,39 +1057,18 @@ class TestStageOverride:
         protocol_x, rd_x = await _make_published_protocol_with_readout(client)
         protocol_y, rd_y = await _make_published_protocol_with_readout(client)
 
-        channel_x_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/channels",
-            json={
-                "label": "Channel X",
-                "protocol_id": protocol_x,
-                "readout_definition_id": rd_x,
-                "source_kind": "readout_data",
-                "selection_rule": "latest_run",
-                "qualifier_handling": "include_qualified",
-                "display_order": 0,
-            },
+        # Each stage owns the column its criterion judges.
+        stage_a_id = await _add_stage(client, campaign_id, "Stage A")
+        stage_b_id = await _add_stage(client, campaign_id, "Stage B", parent_stage_id=stage_a_id)
+        channel_x_resp = await _add_stage_channel(
+            client, campaign_id, stage_a_id, protocol_x, rd_x, "Channel X", 0
         )
-        assert channel_x_resp.status_code == 200, channel_x_resp.text
-        channel_x_id = channel_x_resp.json()["channels"][0]["id"]
-
-        channel_y_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/channels",
-            json={
-                "label": "Channel Y",
-                "protocol_id": protocol_y,
-                "readout_definition_id": rd_y,
-                "source_kind": "readout_data",
-                "selection_rule": "latest_run",
-                "qualifier_handling": "include_qualified",
-                "display_order": 1,
-            },
+        channel_x_id = channel_x_resp["channels"][0]["id"]
+        campaign = await _add_stage_channel(
+            client, campaign_id, stage_b_id, protocol_y, rd_y, "Channel Y", 1
         )
-        assert channel_y_resp.status_code == 200, channel_y_resp.text
-        channel_y_id = next(
-            c for c in channel_y_resp.json()["channels"] if c["label"] == "Channel Y"
-        )["id"]
+        channel_y_id = next(c for c in campaign["channels"] if c["label"] == "Channel Y")["id"]
 
-        campaign = channel_y_resp.json()
         result_hit = _find_result_id(campaign, mol_hit)
         result_miss_b = _find_result_id(campaign, mol_miss_b)
         result_miss_a = _find_result_id(campaign, mol_miss_a)
@@ -1082,26 +1087,18 @@ class TestStageOverride:
                 )
                 assert resp.status_code == 204, resp.text
 
-        stage_a_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/stages",
-            json={
-                "name": "Stage A",
-                "criteria": [{"channel_id": channel_x_id, "operator": "gte", "value": 50.0}],
-            },
+        await _set_criteria(
+            client,
+            campaign_id,
+            stage_a_id,
+            [{"channel_id": channel_x_id, "operator": "gte", "value": 50.0}],
         )
-        assert stage_a_resp.status_code == 200, stage_a_resp.text
-        stage_a_id = next(s["id"] for s in stage_a_resp.json()["stages"] if s["name"] == "Stage A")
-
-        stage_b_resp = await client.post(
-            f"/api/v1/campaigns/{campaign_id}/stages",
-            json={
-                "name": "Stage B",
-                "parent_stage_id": stage_a_id,
-                "criteria": [{"channel_id": channel_y_id, "operator": "lt", "value": 10.0}],
-            },
+        await _set_criteria(
+            client,
+            campaign_id,
+            stage_b_id,
+            [{"channel_id": channel_y_id, "operator": "lt", "value": 10.0}],
         )
-        assert stage_b_resp.status_code == 200, stage_b_resp.text
-        stage_b_id = next(s["id"] for s in stage_b_resp.json()["stages"] if s["name"] == "Stage B")
 
         get_resp = await client.get(f"/api/v1/campaigns/{campaign_id}")
         assert get_resp.status_code == 200, get_resp.text
@@ -1184,8 +1181,7 @@ class TestListCampaignResults:
 
         # The filter reads the verdict after an override, not the computed one.
         await client.put(
-            f"/api/v1/campaigns/{campaign_id}/results/{result_id}"
-            f"/stages/{stage_id}/override",
+            f"/api/v1/campaigns/{campaign_id}/results/{result_id}/stages/{stage_id}/override",
             json={"outcome": "miss", "reason": "Chemist call"},
         )
         misses = await client.get(
@@ -1218,8 +1214,7 @@ class TestListCampaignResults:
         )
 
         both = await client.get(
-            f"/api/v1/campaigns/{campaign_id}/results"
-            f"?stage_id={stage_id}&outcome=hit&outcome=miss"
+            f"/api/v1/campaigns/{campaign_id}/results?stage_id={stage_id}&outcome=hit&outcome=miss"
         )
         assert both.status_code == 200, both.text
         assert both.json()["total_count"] == 2
@@ -1943,21 +1938,21 @@ class TestCampaignTargets:
 
 
 async def _seed_campaign_with_stage(client: AsyncClient, project_id: str) -> tuple[str, str]:
-    """Draft campaign with one molecule, one channel and one stage over it."""
+    """Draft campaign with one molecule and one stage judging the column it owns."""
     mol_id = await _register_molecule(client, ASPIRIN_SMILES, f"Asp-{uuid.uuid4().hex[:8]}")
-    campaign_id = await _seed_closeable_campaign(client, project_id, mol_id)
-    campaign = (await client.get(f"/api/v1/campaigns/{campaign_id}")).json()
-    channel_id = campaign["channels"][0]["id"]
-
-    resp = await client.post(
-        f"/api/v1/campaigns/{campaign_id}/stages",
-        json={
-            "name": "Primary Hit",
-            "criteria": [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
-        },
+    campaign_id = (await _create_campaign_with_molecules(client, project_id, [mol_id]))["id"]
+    protocol_id, rd_id = await _make_published_protocol_with_readout(client)
+    stage_id = await _add_stage(client, campaign_id, "Primary Hit")
+    channel_id = (await _add_stage_channel(client, campaign_id, stage_id, protocol_id, rd_id))[
+        "channels"
+    ][0]["id"]
+    await _set_criteria(
+        client,
+        campaign_id,
+        stage_id,
+        [{"channel_id": channel_id, "operator": "lt", "value": 10.0}],
     )
-    assert resp.status_code == 200, resp.text
-    return campaign_id, resp.json()["stages"][0]["id"]
+    return campaign_id, stage_id
 
 
 class TestCampaignSummary:
@@ -1975,7 +1970,7 @@ class TestCampaignSummary:
         assert data["result_count"] == 1
         assert data["id"] == campaign_id
         stage = next(s for s in data["stages"] if s["id"] == stage_id)
-        # The channel resolves to an ND cell (no screening data) -> untested.
+        # The stage has no runs, so its column is untested (never protocol-wide).
         assert stage["counts"] == {
             "population": 1,
             "hit": 0,

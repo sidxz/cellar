@@ -8,10 +8,11 @@ shapes without circular imports.
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from cellar.application.research_organization.campaign_collection_coverage import (
     LibraryCoverage,
@@ -29,6 +30,11 @@ from cellar.domain.research_organization.campaign_stage import CampaignStage, St
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
     SelectionRule,
+)
+from cellar.domain.research_organization.measurement_facts import (
+    ColumnDescription,
+    Concentration,
+    parse_concentration,
 )
 from cellar.domain.research_organization.source_ref import (
     ManualRef,
@@ -50,6 +56,27 @@ from cellar.interface.routes._target_refs import TargetRefResponse
 # ---------------------------------------------------------------------------
 # DTOs — requests
 # ---------------------------------------------------------------------------
+
+
+class ConcentrationDTO(BaseModel):
+    """A molar or mass/volume concentration, e.g. ``{"value": 10, "unit": "µM"}``."""
+
+    value: float
+    unit: str
+
+    @model_validator(mode="after")
+    def _is_a_concentration(self) -> ConcentrationDTO:
+        if self.to_domain() is None:
+            raise ValueError(f"{self.value} {self.unit!r} is not a concentration")
+        return self
+
+    def to_domain(self) -> Concentration | None:
+        return parse_concentration({"value": self.value, "unit": self.unit})
+
+    @classmethod
+    def from_domain(cls, c: Concentration) -> ConcentrationDTO:
+        # Already a parsed concentration: the request-side check would be a re-parse.
+        return cls.model_construct(value=c.value, unit=c.unit)
 
 
 class InterceptKeyDTO(BaseModel):
@@ -157,16 +184,17 @@ class PreviewRunImportRequest(BaseModel):
     run_ids: list[uuid.UUID]
     channel_configs: list[ChannelImportConfigDTO]
     filter_mode: str = "all"  # "any" | "all"
+    #: The stage the runs join; its columns compute over all of its runs. Omitted =
+    #: campaign runs, feeding campaign columns only.
+    stage_id: uuid.UUID | None = None
 
 
 class AddFromRunsRequest(PreviewRunImportRequest):
     scope: str = "hits_only"  # "hits_only" | "all"
     description: str | None = None
-    refresh_existing_cells: bool = False
-    #: When set, creates a CampaignStage from the configs that opt into
-    #: import-time filtering (use_for_filter + hit_threshold). No qualifying
-    #: config -> no stage. An existing stage with this name (case-insensitive)
-    #: is reused and its criteria replaced.
+    #: When no ``stage_id``: creates — or reuses, by case-insensitive name — this
+    #: stage and puts the runs and columns on it. Configs with thresholds
+    #: (use_for_filter + hit_threshold) replace its criteria; none leave them alone.
     stage_name: str | None = None
     #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
     #: the existing stage's parent alone.
@@ -192,6 +220,8 @@ class AddChannelRequest(BaseModel):
     #: Opt out of the campaign's run scope — resolve protocol-wide even when
     #: the campaign was seeded from runs (spec D4).
     resolve_from_all_runs: bool = False
+    #: The stage that owns the column; omitted = a campaign-wide column.
+    stage_id: uuid.UUID | None = None
 
 
 class UpdateChannelRequest(BaseModel):
@@ -210,6 +240,9 @@ class UpdateChannelRequest(BaseModel):
     #: Opt out of the campaign's run scope. Omitted = unchanged; flipping it
     #: re-resolves every cell of the channel.
     resolve_from_all_runs: bool | None = None
+    #: The one concentration the column reads; null clears it. Omitted =
+    #: unchanged; a change re-resolves every cell of the channel.
+    test_concentration: ConcentrationDTO | None = None
 
     model_config = {"extra": "forbid"}
 
@@ -308,10 +341,11 @@ class ReopenCampaignRequest(BaseModel):
 
 class MirrorProtocolRequest(BaseModel):
     protocol_id: uuid.UUID
-    #: When set, creates a CampaignStage from the protocol's
-    #: recommended_hit_criteria mapped onto the mirrored channels. No
-    #: recommendation maps -> no stage. An existing stage with this name
-    #: (case-insensitive) is reused and its criteria replaced.
+    #: The stage the columns go on; its criteria are never touched.
+    stage_id: uuid.UUID | None = None
+    #: When no ``stage_id``: creates — or reuses, by case-insensitive name — this
+    #: stage and puts the columns on it. The protocol's recommended criteria
+    #: replace its criteria only when some map onto the columns.
     stage_name: str | None = None
     #: Parent for the stage ``stage_name`` creates. Omitted on reuse leaves
     #: the existing stage's parent alone.
@@ -361,6 +395,19 @@ class CampaignMeasurementResponse(BaseModel):
     # Populated for source_kind=dose_response_curve cells; ReadoutData
     # cells serialize this as null.
     curve_snapshot: dict[str, Any] | None = None
+    #: The batches the readings behind the value came from.
+    batch_ids: list[uuid.UUID] | None = None
+    #: ``measured`` (wells or a fitted curve), ``reported`` (a well-less reading)
+    #: or ``mixed``; null when no reading is behind the cell.
+    basis: Literal["measured", "reported", "mixed"] | None = None
+    #: True for a dose-response value.
+    concentration_series: bool = False
+    #: Why an untested cell resolved nothing: ``several_concentrations`` or
+    #: ``no_runs_at_stage``; null otherwise.
+    unresolved_reason: Literal["several_concentrations", "no_runs_at_stage"] | None = None
+    #: Single-concentration columns: every known concentration this compound had
+    #: in the column's runs, resolved or not. Null for dose-response columns.
+    concentrations_found: list[ConcentrationDTO] | None = None
 
     @classmethod
     def from_domain(cls, m: CampaignMeasurement) -> CampaignMeasurementResponse:
@@ -386,6 +433,13 @@ class CampaignMeasurementResponse(BaseModel):
             qc_pass=m.qc_pass,
             contributing_run_ids=m.contributing_run_ids,
             curve_snapshot=m.curve_snapshot,
+            batch_ids=m.batch_ids,
+            basis=m.basis.value if m.basis is not None else None,
+            concentration_series=m.concentration_series,
+            unresolved_reason=m.unresolved_reason.value if m.unresolved_reason else None,
+            concentrations_found=[ConcentrationDTO.from_domain(c) for c in m.concentrations_found]
+            if m.concentrations_found is not None
+            else None,
         )
 
 
@@ -449,6 +503,52 @@ class CampaignResultResponse(BaseModel):
         )
 
 
+class ConcentrationCountResponse(BaseModel):
+    """One concentration a column's compounds were measured at; null value and unit
+    for "not recorded"."""
+
+    value: float | None = None
+    unit: str | None = None
+    count: int
+
+
+class ReplicatesResponse(BaseModel):
+    min: int | None = None
+    max: int | None = None
+    not_recorded: int
+
+
+class ColumnDescriptionResponse(BaseModel):
+    """What a column holds (spec §6.6), computed on read from its values.
+
+    ``label`` is the whole sentence; ``short_label`` is the same sentence without
+    its stage and readout parts, for a header already under both.
+    """
+
+    stage_name: str | None = None
+    readout_label: str
+    design: Literal[
+        "single_concentration",
+        "single_concentration_mixed",
+        "concentration_series",
+        "reported",
+        "not_recorded",
+    ]
+    concentrations: list[ConcentrationCountResponse]
+    replicates: ReplicatesResponse
+    run_count: int
+    rule: str
+    basis: list[Literal["measured", "reported", "mixed"]]
+    #: The column's runs hold more than one concentration and it names none.
+    needs_concentration: bool
+    label: str
+    short_label: str
+
+    @classmethod
+    def from_domain(cls, d: ColumnDescription) -> ColumnDescriptionResponse:
+        return cls.model_validate(asdict(d))
+
+
 class CampaignChannelResponse(BaseModel):
     id: uuid.UUID
     label: str
@@ -464,9 +564,18 @@ class CampaignChannelResponse(BaseModel):
     #: ``None`` = primary intercept (legacy single-intercept channels).
     intercept_key: InterceptKeyDTO | None = None
     resolve_from_all_runs: bool = False
+    #: The stage that owns the column; null for a campaign-wide column.
+    stage_id: uuid.UUID | None = None
+    #: The one concentration the column reads, when it names one.
+    test_concentration: ConcentrationDTO | None = None
+    #: Computed on the reads (summary, full campaign, list); null on the
+    #: responses of writes — read the campaign back for it.
+    description: ColumnDescriptionResponse | None = None
 
     @classmethod
-    def from_domain(cls, ch: CampaignChannel) -> CampaignChannelResponse:
+    def from_domain(
+        cls, ch: CampaignChannel, description: ColumnDescription | None = None
+    ) -> CampaignChannelResponse:
         return cls(
             id=ch.id,
             label=ch.label,
@@ -482,6 +591,13 @@ class CampaignChannelResponse(BaseModel):
             if ch.intercept_key is not None
             else None,
             resolve_from_all_runs=ch.resolve_from_all_runs,
+            stage_id=ch.stage_id,
+            test_concentration=ConcentrationDTO.from_domain(ch.test_concentration)
+            if ch.test_concentration is not None
+            else None,
+            description=ColumnDescriptionResponse.from_domain(description)
+            if description is not None
+            else None,
         )
 
 
@@ -619,10 +735,12 @@ class SeedRunResponse(BaseModel):
 
     run_id: uuid.UUID
     protocol_id: uuid.UUID
+    #: The stages the run feeds; empty for a campaign run (campaign columns only).
+    stage_ids: list[uuid.UUID]
 
     @classmethod
     def from_domain(cls, s: SeedRun) -> SeedRunResponse:
-        return cls(run_id=s.run_id, protocol_id=s.protocol_id)
+        return cls(run_id=s.run_id, protocol_id=s.protocol_id, stage_ids=list(s.stage_ids))
 
 
 class _CampaignFieldsResponse(BaseModel):
@@ -665,6 +783,7 @@ class _CampaignFieldsResponse(BaseModel):
         c: Campaign,
         scientist_by_run_id: dict[uuid.UUID, str] | None,
         targets: list[TargetRef] | None,
+        descriptions: dict[uuid.UUID, ColumnDescription] | None,
     ) -> tuple[dict[str, Any], StageOutcomes]:
         """Build the shared kwargs and hand back the stage outcomes.
 
@@ -700,7 +819,7 @@ class _CampaignFieldsResponse(BaseModel):
             # re-orders on reload, so a mutation response that returns the
             # in-memory aggregate would otherwise disagree with the next GET.
             "channels": [
-                CampaignChannelResponse.from_domain(ch)
+                CampaignChannelResponse.from_domain(ch, (descriptions or {}).get(ch.id))
                 for ch in sorted(c.channels, key=lambda x: (x.display_order, x.id))
             ],
             "stages": [CampaignStageResponse.from_domain(s, stage_counts[s.id]) for s in c.stages],
@@ -717,8 +836,9 @@ class CampaignResponse(_CampaignFieldsResponse):
         c: Campaign,
         scientist_by_run_id: dict[uuid.UUID, str] | None = None,
         targets: list[TargetRef] | None = None,
+        descriptions: dict[uuid.UUID, ColumnDescription] | None = None,
     ) -> CampaignResponse:
-        shared, stage_outcomes = cls._shared(c, scientist_by_run_id, targets)
+        shared, stage_outcomes = cls._shared(c, scientist_by_run_id, targets, descriptions)
         return cls(
             **shared,
             results=[
@@ -745,8 +865,9 @@ class CampaignSummaryResponse(_CampaignFieldsResponse):
         c: Campaign,
         scientist_by_run_id: dict[uuid.UUID, str] | None = None,
         targets: list[TargetRef] | None = None,
+        descriptions: dict[uuid.UUID, ColumnDescription] | None = None,
     ) -> CampaignSummaryResponse:
-        shared, _ = cls._shared(c, scientist_by_run_id, targets)
+        shared, _ = cls._shared(c, scientist_by_run_id, targets, descriptions)
         return cls(**shared, result_count=len(c.results))
 
 

@@ -133,6 +133,30 @@ def test_no_stage_drops_stage_part():
     assert _label(_channel(), [_m(conc=10, reps=1)], stage=None).startswith("% inhibition · ")
 
 
+def test_short_label_drops_stage_and_readout():
+    ch = _channel(SelectionRule.MEAN_ACROSS_RUNS)
+    ms = [_m(conc=10, reps=3, runs=3)]
+    d = describe_column(
+        channel=ch,
+        stage_name="Retest",
+        readout_label="% inhibition",
+        profile=build_column_profile(ch, ms),
+    )
+    assert d.short_label == (
+        "single concentration 10 µM · mean of 3 replicates · 3 runs · mean across runs"
+    )
+    assert d.label == f"Retest · % inhibition · {d.short_label}"
+    dr = _channel(SelectionRule.GEOMETRIC_MEAN)
+    d = describe_column(
+        channel=dr,
+        stage_name=None,
+        readout_label="IC50",
+        profile=build_column_profile(dr, [_m(series=True, runs=2)]),
+    )
+    assert d.short_label == "dose-response · 2 runs · geometric mean"
+    assert d.label == f"IC50 · {d.short_label}"
+
+
 def test_needs_concentration_true_when_two_concentrations():
     ch = _channel()
     d = describe_column(
