@@ -142,7 +142,12 @@ async def test_preview_with_mapping_returns_file_row_and_batch_ids(client: Async
         },
     ]
     assert items[0]["external_ids"] == [
-        {"identifier": "JX-1", "identifier_type": "custom", "source": "Synonyms"}
+        {
+            "identifier": "JX-1",
+            "identifier_type": "custom",
+            "source": "Synonyms",
+            "decides": True,
+        }
     ]
     assert items[1]["external_ids"] == []
     assert items[2]["error"] == "Row 4: no name or structure"
