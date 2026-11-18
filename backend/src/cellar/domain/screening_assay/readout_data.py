@@ -35,6 +35,7 @@ class ReadoutData(Entity):
         is_outlier: bool = False,
         is_computed: bool = False,
         normalization_applied: ReadoutNormalization | None = None,
+        replicate_count: int | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
@@ -53,6 +54,9 @@ class ReadoutData(Entity):
         # Identifies which normalization formula produced this row.
         # None for raw rows (is_computed=False); the formula for computed rows.
         self.normalization_applied = normalization_applied
+        # How many replicates a summary-imported value is the mean of. Well-less
+        # rows only; null = unknown (never 1).
+        self.replicate_count = replicate_count
 
     def update_value(
         self,
@@ -60,6 +64,7 @@ class ReadoutData(Entity):
         value: QualifiedValue | None,
         value_text: str | None,
         is_outlier: bool = False,
+        replicate_count: int | None = None,
     ) -> None:
         """Overwrite the recorded value in place (keeps the same identity).
 
@@ -71,3 +76,4 @@ class ReadoutData(Entity):
         self.value = value
         self.value_text = value_text
         self.is_outlier = is_outlier
+        self.replicate_count = replicate_count

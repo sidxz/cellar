@@ -502,3 +502,77 @@ def test_both_refs_batch_misses_compound_hits_reports_batch_only():
     assert plan.items == []  # batch stays authoritative: the row still skips
     assert plan.unmatched_batch_refs == frozenset({"GHOST"})
     assert plan.unmatched_compound_refs == frozenset()
+
+
+# ---------------------------------------------------------------------------
+# Replicate count (n behind each reported value)
+# ---------------------------------------------------------------------------
+
+
+def _plan_n(rows, *, constant=None, header="n"):
+    mapping = SummaryColumnMapping(
+        compound_ref="Compound",
+        readout_columns={"IC50": RDEF_NUM},
+        replicates=header,
+        replicates_constant=constant,
+    )
+    return plan_summary_rows(
+        rows,
+        mapping=mapping,
+        defs_by_id=_DEFS,
+        compound_index={"A": MOL_A, "B": MOL_B},
+        batch_index={},
+    )
+
+
+def test_row_replicates_written():
+    plan = _plan_n([{"Compound": "A", "IC50": "1", "n": "3"}])
+    assert [i.replicate_count for i in plan.items] == [3]
+
+
+def test_constant_applies_when_no_column():
+    mapping = SummaryColumnMapping(
+        compound_ref="Compound", readout_columns={"IC50": RDEF_NUM}, replicates_constant=2
+    )
+    plan = plan_summary_rows(
+        [{"Compound": "A", "IC50": "1"}],
+        mapping=mapping,
+        defs_by_id=_DEFS,
+        compound_index={"A": MOL_A},
+        batch_index={},
+    )
+    assert plan.items[0].replicate_count == 2
+
+
+def test_no_column_no_constant_is_null():
+    plan = _plan([{"Compound": "A", "IC50": "1"}], compound_index={"A": MOL_A})
+    assert plan.items[0].replicate_count is None
+
+
+def test_row_value_beats_constant():
+    plan = _plan_n(
+        [{"Compound": "A", "IC50": "1", "n": "4"}, {"Compound": "B", "IC50": "2", "n": ""}],
+        constant=2,
+    )
+    assert {i.molecule_id: i.replicate_count for i in plan.items} == {MOL_A: 4, MOL_B: 2}
+
+
+def test_rejects_non_integer_and_zero_per_row():
+    plan = _plan_n(
+        [
+            {"Compound": "A", "IC50": "1", "n": "2.5"},
+            {"Compound": "B", "IC50": "2", "n": "0"},
+            {"Compound": "A", "IC50": "3", "n": "3.0"},
+        ]
+    )
+    assert [e["row"] for e in plan.errors] == ["1", "2"]
+    assert [(i.molecule_id, i.replicate_count) for i in plan.items] == [(MOL_A, 3)]
+
+
+def test_suggests_replicates_role_for_n_header():
+    from cellar.application.screening.preview_summary_file import _infer_suggestions
+    from cellar.application.screening.summary_import_models import SummaryRole
+
+    for header in ("n", "N", "Replicates", " replicate count ", "reps"):
+        (s,) = _infer_suggestions([header], {})
+        assert s.role == SummaryRole.REPLICATES, header

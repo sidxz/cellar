@@ -138,6 +138,7 @@ def _make_campaign_with_chained_stages() -> tuple[Campaign, uuid.UUID]:
         display_order=0,
         criteria=[StageCriterion(channel_id=channel.id, operator="lte", value=10.0)],
     )
+    channel.stage_id = stage_a.id
     campaign.add_stage(stage_a)
     stage_b = CampaignStage(
         campaign_id=campaign.id,
@@ -146,6 +147,7 @@ def _make_campaign_with_chained_stages() -> tuple[Campaign, uuid.UUID]:
         parent_stage_id=stage_a.id,
         criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=1.0)],
     )
+    channel.stage_id = stage_b.id
     campaign.add_stage(stage_b)
 
     result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
@@ -308,13 +310,14 @@ class TestSeedRuns:
         campaign, _channel_id = _make_campaign_with_chained_stages()
         p1, p2 = uuid.uuid4(), uuid.uuid4()
         r1, r2 = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(r2, p1), SeedRun(r1, p2)])
+        stage = campaign.stages[0].id
+        campaign.add_runs_to_stage([SeedRun(r2, p1, (stage,)), SeedRun(r1, p2)], None)
 
         full = CampaignResponse.from_domain(campaign).model_dump()
         summary = CampaignSummaryResponse.from_domain(campaign).model_dump()
 
         assert full["seed_runs"] == [
-            {"run_id": r2, "protocol_id": p1},
-            {"run_id": r1, "protocol_id": p2},
+            {"run_id": r2, "protocol_id": p1, "stage_ids": [stage]},
+            {"run_id": r1, "protocol_id": p2, "stage_ids": []},
         ]
         assert summary["seed_runs"] == full["seed_runs"]

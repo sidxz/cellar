@@ -8,6 +8,9 @@ evaluated before their children. `evaluate_stages` recurses with a per-result
 memo rather than relying on `campaign.stages` list order — see
 `test_parent_listed_after_child_still_evaluated_first`.
 
+A CRITERIA stage with no criteria marks a compound HIT once it has a tested
+value in one of the stage's own columns, UNTESTED until then.
+
 Outcomes are never persisted (spec §7): recomputed on every read from the
 live campaign, results, and stages.
 """
@@ -117,10 +120,25 @@ def _combine(checks: tuple[StageCheck, ...]) -> StageOutcome:
     return StageOutcome.HIT
 
 
+def _measured_at_stage(result: CampaignResult, own_channel_ids: frozenset[uuid.UUID]) -> bool:
+    """True when the compound has a tested value (or a tested ND) in one of the
+    stage's own columns."""
+    for channel_id in own_channel_ids:
+        m = result.find_measurement(channel_id)
+        if m is None:
+            continue
+        if _is_tested_nd(m) or (
+            m.value is not None and m.value_qualifier not in _UNTESTED_QUALIFIERS
+        ):
+            return True
+    return False
+
+
 def _evaluate_stage(
     stage: CampaignStage,
     result: CampaignResult,
     stages_by_id: dict[uuid.UUID, CampaignStage],
+    own_columns: dict[uuid.UUID, frozenset[uuid.UUID]],
     memo: dict[uuid.UUID, StageResultOutcome],
     visiting: set[uuid.UUID] | None = None,
 ) -> StageResultOutcome:
@@ -143,7 +161,7 @@ def _evaluate_stage(
         in_stage = True
     else:
         visiting.add(stage.id)
-        parent_outcome = _evaluate_stage(parent, result, stages_by_id, memo, visiting)
+        parent_outcome = _evaluate_stage(parent, result, stages_by_id, own_columns, memo, visiting)
         visiting.discard(stage.id)
         in_stage = parent_outcome.outcome == StageOutcome.HIT
 
@@ -152,6 +170,15 @@ def _evaluate_stage(
         # waits at `pending` until an override promotes or demotes them.
         checks = ()
         base_outcome = StageOutcome.PENDING
+    elif in_stage and not stage.criteria:
+        # No criteria: nothing to pass, so the compound counts once it has been
+        # measured in one of the stage's own columns, and is untested until then.
+        checks = ()
+        base_outcome = (
+            StageOutcome.HIT
+            if _measured_at_stage(result, own_columns.get(stage.id, frozenset()))
+            else StageOutcome.UNTESTED
+        )
     elif in_stage:
         checks = tuple(_check_criterion(result, c) for c in stage.criteria)
         base_outcome = _combine(checks)
@@ -184,11 +211,16 @@ def _evaluate_stage(
 
 def evaluate_stages(campaign: Campaign) -> StageOutcomes:
     stages_by_id = {stage.id: stage for stage in campaign.stages}
+    own_columns: dict[uuid.UUID, set[uuid.UUID]] = {}
+    for ch in campaign.channels:
+        if ch.stage_id is not None:
+            own_columns.setdefault(ch.stage_id, set()).add(ch.id)
+    frozen = {k: frozenset(v) for k, v in own_columns.items()}
     outcomes: StageOutcomes = {}
     for result in campaign.results:
         memo: dict[uuid.UUID, StageResultOutcome] = {}
         for stage in campaign.stages:
-            _evaluate_stage(stage, result, stages_by_id, memo)
+            _evaluate_stage(stage, result, stages_by_id, frozen, memo)
         outcomes[result.id] = memo
     return outcomes
 

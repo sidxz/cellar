@@ -158,3 +158,18 @@ def test_from_dict_rejects_unknown_kind():
 def test_from_dict_rejects_missing_kind():
     with pytest.raises(ValidationError):
         SourceRef.from_dict({})
+
+
+def test_seed_run_from_dict_without_stage_ids():
+    from cellar.domain.research_organization.source_ref import SeedRun
+
+    run, proto = uuid.uuid4(), uuid.uuid4()
+    s = SeedRun.from_dict({"run_id": str(run), "protocol_id": str(proto)})
+    assert s.stage_ids == ()
+
+
+def test_seed_run_stage_ids_round_trip():
+    from cellar.domain.research_organization.source_ref import SeedRun
+
+    s = SeedRun(uuid.uuid4(), uuid.uuid4(), (uuid.uuid4(), uuid.uuid4()))
+    assert SeedRun.from_dict(s.to_dict()) == s

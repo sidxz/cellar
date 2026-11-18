@@ -13,17 +13,12 @@ from cellar.application.research_organization.add_campaign_channel import (
     AddCampaignChannelCommand,
 )
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
-    ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import (
@@ -32,7 +27,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -57,19 +52,9 @@ def _make_draft_campaign(workspace_id: uuid.UUID, *, user_id: uuid.UUID | None =
     return c
 
 
-def _fake_measurement(channel: CampaignChannel, result_id: uuid.UUID, molecule_id: uuid.UUID) -> CampaignMeasurement:
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=42.0,
-        value_qualifier=ValueQualifier.EQ,
-        unit="uM",
-        protocol_name_snapshot="Test Protocol",
-        protocol_version_snapshot=1,
-    )
-
-
-def _base_command(workspace_id: uuid.UUID, campaign_id: uuid.UUID, **overrides) -> AddCampaignChannelCommand:
+def _base_command(
+    workspace_id: uuid.UUID, campaign_id: uuid.UUID, **overrides
+) -> AddCampaignChannelCommand:
     defaults = dict(
         workspace_id=workspace_id,
         campaign_id=campaign_id,
@@ -96,7 +81,7 @@ class TestAddCampaignChannel:
     async def test_happy_path_appends_channel_and_measurements(self) -> None:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        resolver = FakeResolver(factory=_fake_measurement)
+        query = FakeColumnQuery(42.0, unit="uM")
 
         cmd = _base_command(auth.workspace_id, campaign.id)
         dispatcher = AsyncMock()
@@ -105,7 +90,7 @@ class TestAddCampaignChannel:
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         result = await uc(cmd, auth=auth)
@@ -115,8 +100,8 @@ class TestAddCampaignChannel:
         assert len(campaign_out.channels) == 1
         ch = campaign_out.channels[0]
         assert ch.label == "IC50 (uM)"
-        # One resolver call per result
-        assert len(resolver.calls) == len(campaign_out.results) == 1
+        # One fetch for the new column
+        assert len(query.calls) == len(campaign_out.results) == 1
         # Measurement added to the result
         assert len(campaign_out.results[0].measurements) == 1
         assert campaign_out.results[0].measurements[0].channel_id == ch.id
@@ -128,7 +113,7 @@ class TestAddCampaignChannel:
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=None),
-            resolver=FakeResolver(factory=_fake_measurement),
+            query=FakeColumnQuery(42.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(auth.workspace_id, uuid.uuid4())
@@ -147,7 +132,7 @@ class TestAddCampaignChannel:
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_fake_measurement),
+            query=FakeColumnQuery(42.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(auth.workspace_id, campaign.id)
@@ -164,7 +149,7 @@ class TestAddCampaignChannel:
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=FakeResolver(factory=_fake_measurement),
+            query=FakeColumnQuery(42.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(auth.workspace_id, campaign.id)
@@ -178,18 +163,18 @@ class TestAddCampaignChannel:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         run_id, protocol_id = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, protocol_id)])
-        resolver = FakeResolver(factory=_fake_measurement)
+        campaign.add_runs_to_stage([SeedRun(run_id, protocol_id)], None)
+        query = FakeColumnQuery(42.0, unit="uM")
 
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(auth.workspace_id, campaign.id, protocol_id=protocol_id)
         assert isinstance(await uc(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [[run_id]]
+        assert query.run_ids_seen == [[run_id]]
 
     @pytest.mark.asyncio
     async def test_channel_on_an_unseeded_protocol_resolves_unrestricted(self) -> None:
@@ -197,31 +182,31 @@ class TestAddCampaignChannel:
         has no seed runs to scope to, so it resolves protocol-wide."""
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])
-        resolver = FakeResolver(factory=_fake_measurement)
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), uuid.uuid4())], None)
+        query = FakeColumnQuery(42.0, unit="uM")
 
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(auth.workspace_id, campaign.id, protocol_id=uuid.uuid4())
         assert isinstance(await uc(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [None]
+        assert query.run_ids_seen == [None]
 
     @pytest.mark.asyncio
     async def test_opt_out_channel_resolves_unrestricted(self) -> None:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         protocol_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), protocol_id)])
-        resolver = FakeResolver(factory=_fake_measurement)
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), protocol_id)], None)
+        query = FakeColumnQuery(42.0, unit="uM")
 
         uc = AddCampaignChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = _base_command(
@@ -231,4 +216,4 @@ class TestAddCampaignChannel:
 
         assert isinstance(out, Success)
         assert out.unwrap().channels[0].resolve_from_all_runs is True
-        assert resolver.run_ids_seen == [None]
+        assert query.run_ids_seen == [None]

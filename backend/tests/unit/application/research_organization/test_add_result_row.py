@@ -14,16 +14,12 @@ from cellar.application.research_organization.add_result_row import (
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
-    ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import ManualRef, SeedRun
 from cellar.domain.shared.errors import (
@@ -32,7 +28,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -62,18 +58,6 @@ def _make_channel(campaign_id: uuid.UUID) -> CampaignChannel:
     )
 
 
-def _add_result_measurement_factory(channel, result_id, molecule_id) -> CampaignMeasurement:
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=10.0,
-        value_qualifier=ValueQualifier.EQ,
-        unit="uM",
-        protocol_name_snapshot="Proto",
-        protocol_version_snapshot=1,
-    )
-
-
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
@@ -89,7 +73,7 @@ class TestAddResultRow:
         channel = _make_channel(campaign.id)
         campaign.add_channel(channel)
 
-        resolver = FakeResolver(factory=_add_result_measurement_factory)
+        query = FakeColumnQuery(10.0, unit="uM")
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
@@ -97,7 +81,7 @@ class TestAddResultRow:
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         new_mol_id = uuid.uuid4()
@@ -113,12 +97,12 @@ class TestAddResultRow:
         assert len(campaign_out.results) == 1
         assert campaign_out.results[0].molecule_id == new_mol_id
         assert len(campaign_out.results[0].measurements) == 1
-        assert len(resolver.calls) == 1
+        assert len(query.calls) == 1
         campaign_repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_happy_path_two_channels_calls_resolver_twice(self) -> None:
+    async def test_happy_path_two_channels_one_fetch_each(self) -> None:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         ch1 = _make_channel(campaign.id)
@@ -126,11 +110,11 @@ class TestAddResultRow:
         campaign.add_channel(ch1)
         campaign.add_channel(ch2)
 
-        resolver = FakeResolver(factory=_add_result_measurement_factory)
+        query = FakeColumnQuery(10.0, unit="uM")
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -142,7 +126,7 @@ class TestAddResultRow:
 
         assert isinstance(out, Success)
         assert len(out.unwrap().results[0].measurements) == 2
-        assert len(resolver.calls) == 2
+        assert len(query.calls) == 2
 
     @pytest.mark.asyncio
     async def test_happy_path_no_channels_adds_result_with_empty_measurements(
@@ -151,11 +135,11 @@ class TestAddResultRow:
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         # No channels added
-        resolver = FakeResolver(factory=_add_result_measurement_factory)
+        query = FakeColumnQuery(10.0, unit="uM")
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -168,7 +152,7 @@ class TestAddResultRow:
         assert isinstance(out, Success)
         result = out.unwrap().results[0]
         assert result.measurements == []
-        assert resolver.calls == []
+        assert query.calls == []
 
     @pytest.mark.asyncio
     async def test_duplicate_molecule_returns_validation_failure(self) -> None:
@@ -182,7 +166,7 @@ class TestAddResultRow:
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=FakeResolver(factory=_add_result_measurement_factory),
+            query=FakeColumnQuery(10.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -203,7 +187,7 @@ class TestAddResultRow:
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=FakeResolver(factory=_add_result_measurement_factory),
+            query=FakeColumnQuery(10.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -227,7 +211,7 @@ class TestAddResultRow:
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=FakeResolver(factory=_add_result_measurement_factory),
+            query=FakeColumnQuery(10.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -248,7 +232,7 @@ class TestAddResultRow:
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=FakeResolver(factory=_add_result_measurement_factory),
+            query=FakeColumnQuery(10.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -259,7 +243,6 @@ class TestAddResultRow:
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
         campaign_repo.save.assert_not_awaited()
-
 
     @pytest.mark.asyncio
     async def test_added_row_has_manual_ref_attribution(self) -> None:
@@ -272,7 +255,7 @@ class TestAddResultRow:
         uc = AddResultRow(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=FakeResolver(factory=_add_result_measurement_factory),
+            query=FakeColumnQuery(10.0, unit="uM"),
             dispatcher=AsyncMock(),
         )
         cmd = AddResultRowCommand(
@@ -295,18 +278,18 @@ class TestAddResultRow:
         channel = _make_channel(campaign.id)
         campaign.add_channel(channel)
         run_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, channel.protocol_id)], None)
 
-        def _run(resolver) -> None:
+        def _run(query) -> None:
             return AddResultRow(
                 uow=FakeUnitOfWork(),
                 campaign_repo=make_campaign_repo(find_in_ws=campaign),
-                resolver=resolver,
+                query=query,
                 dispatcher=AsyncMock(),
             )
 
-        resolver = FakeResolver(factory=_add_result_measurement_factory)
-        out = await _run(resolver)(
+        query = FakeColumnQuery(10.0, unit="uM")
+        out = await _run(query)(
             AddResultRowCommand(
                 workspace_id=auth.workspace_id,
                 campaign_id=campaign.id,
@@ -315,10 +298,10 @@ class TestAddResultRow:
             auth=auth,
         )
         assert isinstance(out, Success)
-        assert resolver.run_ids_seen == [[run_id]]
+        assert query.run_ids_seen == [[run_id]]
 
         channel.resolve_from_all_runs = True
-        opted_out = FakeResolver(factory=_add_result_measurement_factory)
+        opted_out = FakeColumnQuery(10.0, unit="uM")
         out = await _run(opted_out)(
             AddResultRowCommand(
                 workspace_id=auth.workspace_id,

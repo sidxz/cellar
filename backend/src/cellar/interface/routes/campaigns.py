@@ -134,7 +134,9 @@ async def list_campaigns(
     out = result_to_response(await uc(query, auth=auth))
     return PaginatedResponse(
         items=[
-            CampaignSummaryResponse.from_domain(c, targets=out.targets_by_campaign.get(c.id, []))
+            CampaignSummaryResponse.from_domain(
+                c, targets=out.targets_by_campaign.get(c.id, []), descriptions=out.descriptions
+            )
             for c in out.page.items
         ],
         next_cursor=out.page.next_cursor,
@@ -151,7 +153,7 @@ async def get_campaign_summary(
     query = GetCampaignQuery(workspace_id=auth.workspace_id, campaign_id=campaign_id)
     out = result_to_response(await uc(query, auth=auth))
     return CampaignSummaryResponse.from_domain(
-        out.campaign, out.scientist_by_run_id, targets=out.targets
+        out.campaign, out.scientist_by_run_id, targets=out.targets, descriptions=out.descriptions
     )
 
 
@@ -164,7 +166,9 @@ async def get_campaign(
     """Get a campaign by id (full draft view including channels + results)."""
     query = GetCampaignQuery(workspace_id=auth.workspace_id, campaign_id=campaign_id)
     out = result_to_response(await uc(query, auth=auth))
-    return CampaignResponse.from_domain(out.campaign, out.scientist_by_run_id, targets=out.targets)
+    return CampaignResponse.from_domain(
+        out.campaign, out.scientist_by_run_id, targets=out.targets, descriptions=out.descriptions
+    )
 
 
 @router.patch("/{campaign_id}", response_model=CampaignResponse)
@@ -243,6 +247,9 @@ async def preview_run_import(
         run_ids=body.run_ids,
         channel_configs=[c.to_domain() for c in body.channel_configs],
         filter_mode=body.filter_mode,
+        stage_id=body.stage_id,
+        stage_name=body.stage_name,
+        parent_stage_id=body.parent_stage_id,
     )
     return result_to_response(await uc(q, auth=auth))
 
@@ -256,9 +263,10 @@ async def add_results_from_runs(
 ) -> AddResultsOutcomeResponse:
     """Add compound results from one or more protocol Runs (B6).
 
-    Creates campaign channels for each unique (protocol_id, readout_definition_id),
-    reusing existing ones. Filters molecules by hit-criteria when scope=hits_only.
-    Snapshots concentration/replicate/QC per cell.
+    The runs join ``stage_id`` (else the ``stage_name`` stage, else they are campaign
+    runs). Creates the stage's columns for each config, reusing existing ones, and
+    recomputes them over all of the stage's runs. Filters molecules by hit-criteria
+    when scope=hits_only.
     """
     cmd = AddResultsFromRunsCommand(
         workspace_id=auth.workspace_id,
@@ -268,7 +276,7 @@ async def add_results_from_runs(
         filter_mode=body.filter_mode,
         scope=body.scope,
         description=body.description,
-        refresh_existing_cells=body.refresh_existing_cells,
+        stage_id=body.stage_id,
         stage_name=body.stage_name,
         parent_stage_id=body.parent_stage_id,
     )

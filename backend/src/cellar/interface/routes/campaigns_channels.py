@@ -24,6 +24,7 @@ from cellar.domain.research_organization.enums import (
     QualifierHandling,
     SelectionRule,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.interface.dependencies import (
     AddCampaignChannelDep,
     AuthDep,
@@ -65,6 +66,7 @@ async def add_campaign_channel(
         normalization_applied=body.normalization_applied,
         intercept_key=body.intercept_key.to_domain() if body.intercept_key is not None else None,
         resolve_from_all_runs=body.resolve_from_all_runs,
+        stage_id=body.stage_id,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -81,7 +83,7 @@ async def update_campaign_channel(
     """Update a campaign channel.
 
     Semantics: omitted fields are left unchanged (UNSET); null-valued fields
-    are cleared where applicable (qc_filter).
+    are cleared where applicable (qc_filter, test_concentration).
     """
     provided = body.model_fields_set
 
@@ -105,6 +107,12 @@ async def update_campaign_channel(
         else UNSET
     )
 
+    test_concentration: Concentration | object | None = (
+        (body.test_concentration.to_domain() if body.test_concentration is not None else None)
+        if "test_concentration" in provided
+        else UNSET
+    )
+
     cmd = UpdateCampaignChannelCommand(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
@@ -114,6 +122,7 @@ async def update_campaign_channel(
         qc_filter=qc_filter,
         display_order=display_order,
         resolve_from_all_runs=resolve_from_all_runs,
+        test_concentration=test_concentration,
     )
     campaign = result_to_response(await uc(cmd, auth=auth))
     return CampaignResponse.from_domain(campaign)
@@ -143,6 +152,7 @@ async def mirror_protocol_channels(
         workspace_id=auth.workspace_id,
         campaign_id=campaign_id,
         protocol_id=body.protocol_id,
+        stage_id=body.stage_id,
         stage_name=body.stage_name,
         parent_stage_id=body.parent_stage_id,
     )

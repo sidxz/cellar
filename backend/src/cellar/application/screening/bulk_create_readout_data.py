@@ -41,6 +41,8 @@ class ReadoutDataItem:
     value_qualifier: str | None = None
     value_text: str | None = None
     is_outlier: bool = False
+    # Summary rows only (well-less); ignored when the item has a well_id.
+    replicate_count: int | None = None
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -344,6 +346,7 @@ class BulkCreateReadoutData:
 
                 try:
                     value = self._build_value(item)
+                    replicate_count = item.replicate_count if item.well_id is None else None
 
                     key = (item.run_id, molecule_id, batch_id, readout_definition_id)
                     pending = pending_by_key.get(key) if upsert else None
@@ -355,6 +358,7 @@ class BulkCreateReadoutData:
                             value=value,
                             value_text=item.value_text,
                             is_outlier=item.is_outlier,
+                            replicate_count=replicate_count,
                         )
                         result.success_count += 1
                         continue
@@ -376,6 +380,7 @@ class BulkCreateReadoutData:
                             value=value,
                             value_text=item.value_text,
                             is_outlier=item.is_outlier,
+                            replicate_count=replicate_count,
                         )
                         await self._repo.save(existing)
                     else:
@@ -389,6 +394,7 @@ class BulkCreateReadoutData:
                             value=value,
                             value_text=item.value_text,
                             is_outlier=item.is_outlier,
+                            replicate_count=replicate_count,
                         )
                         entities.append(rd)
                         if upsert and item.well_id is None:

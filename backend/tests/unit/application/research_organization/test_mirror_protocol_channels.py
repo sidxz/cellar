@@ -13,16 +13,11 @@ from cellar.application.research_organization.mirror_protocol_channels import (
     MirrorProtocolChannelsCommand,
 )
 from cellar.domain.research_organization.campaign import Campaign
-from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.campaign_stage import CampaignStage
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
-    ValueQualifier,
 )
 from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.screening_assay.dose_response_config import (
@@ -40,7 +35,7 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.shared.errors import NotFoundError, ValidationError
 from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -51,20 +46,6 @@ def _make_protocol_repo(*, protocol=None) -> AsyncMock:
     repo = AsyncMock()
     repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
     return repo
-
-
-def _fake_measurement(
-    channel: CampaignChannel, result_id: uuid.UUID, molecule_id: uuid.UUID
-) -> CampaignMeasurement:
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=42.0,
-        value_qualifier=ValueQualifier.EQ,
-        unit="uM",
-        protocol_name_snapshot="Test Protocol",
-        protocol_version_snapshot=1,
-    )
 
 
 def _make_draft_campaign(workspace_id: uuid.UUID) -> Campaign:
@@ -159,7 +140,7 @@ async def test_mirror_creates_one_channel_per_intercept() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -203,7 +184,7 @@ async def test_mirror_is_idempotent_skips_duplicates() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     cmd = MirrorProtocolChannelsCommand(
@@ -240,7 +221,7 @@ async def test_mirror_handles_non_dr_readout_with_normalization() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -275,7 +256,7 @@ async def test_mirror_requires_draft_campaign() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -300,7 +281,7 @@ async def test_mirror_protocol_not_found_returns_failure() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=None),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -339,7 +320,7 @@ async def test_mirror_label_dedups_cdd_style_readout_name() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -378,7 +359,7 @@ async def test_mirror_creates_stage_from_recommended_criteria() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -418,7 +399,7 @@ async def test_mirrored_recommended_not_between_becomes_a_stage_criterion() -> N
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -438,9 +419,9 @@ async def test_mirrored_recommended_not_between_becomes_a_stage_criterion() -> N
 
 
 @pytest.mark.asyncio
-async def test_mirror_no_recommendations_stage_not_created() -> None:
-    """stage_name given but the protocol has no recommended_hit_criteria ->
-    stage_created is False and no stage is added."""
+async def test_mirror_stage_name_without_recommendation_creates_empty_stage() -> None:
+    """stage_name given but no recommendation maps -> the stage is still created
+    and the columns go on it (no stray campaign columns); it has no criteria."""
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
     rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
@@ -450,7 +431,7 @@ async def test_mirror_no_recommendations_stage_not_created() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -464,9 +445,80 @@ async def test_mirror_no_recommendations_stage_not_created() -> None:
     )
 
     assert isinstance(out, Success)
-    outcome = out.unwrap()
-    assert outcome.stage_created is False
-    assert campaign.stages == []
+    assert out.unwrap().stage_created is True
+    [stage] = campaign.stages
+    assert stage.name == "Primary Hits"
+    assert stage.criteria == []
+    assert [c.stage_id for c in campaign.channels] == [stage.id]
+
+
+@pytest.mark.asyncio
+async def test_mirror_with_stage_id_puts_columns_on_it_and_never_touches_criteria() -> None:
+    """A mirror by stage_id adds only the columns that stage lacks (daikon
+    re-mirrors on every sync) and leaves its criteria as they are, even when the
+    protocol recommends some."""
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    stage = CampaignStage(campaign_id=campaign.id, name="Retest", display_order=0)
+    campaign.add_stage(stage)
+    rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
+    protocol = _make_protocol(
+        auth.workspace_id,
+        readouts=[rd],
+        recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
+    )
+    saved: list[Campaign] = []
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        query=FakeColumnQuery(42.0, unit="uM"),
+        dispatcher=_make_dispatcher(),
+    )
+    cmd = MirrorProtocolChannelsCommand(
+        workspace_id=auth.workspace_id,
+        campaign_id=campaign.id,
+        protocol_id=protocol.id,
+        stage_id=stage.id,
+    )
+
+    first = await uc(cmd, auth=auth)
+    again = await uc(cmd, auth=auth)
+
+    assert isinstance(first, Success)
+    assert isinstance(again, Success)
+    assert (first.unwrap().channels_created, again.unwrap().channels_created) == (1, 0)
+    assert again.unwrap().channels_skipped == 1
+    assert [c.stage_id for c in campaign.channels] == [stage.id]
+    assert stage.criteria == []
+    assert first.unwrap().stage_created is False
+    assert len(saved) == 1  # the idempotent re-mirror writes nothing
+
+
+@pytest.mark.asyncio
+async def test_mirror_unknown_stage_id_is_not_found() -> None:
+    auth = fake_auth()
+    campaign = _make_draft_campaign(auth.workspace_id)
+    protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="IC50")])
+    uc = MirrorProtocolChannels(
+        uow=FakeUnitOfWork(),
+        campaign_repo=make_campaign_repo(find_in_ws=campaign),
+        protocol_repo=_make_protocol_repo(protocol=protocol),
+        query=FakeColumnQuery(42.0, unit="uM"),
+        dispatcher=_make_dispatcher(),
+    )
+    out = await uc(
+        MirrorProtocolChannelsCommand(
+            workspace_id=auth.workspace_id,
+            campaign_id=campaign.id,
+            protocol_id=protocol.id,
+            stage_id=uuid.uuid4(),
+        ),
+        auth=auth,
+    )
+    assert isinstance(out, Failure)
+    assert isinstance(out.failure(), NotFoundError)
+    assert campaign.channels == []
 
 
 @pytest.mark.asyncio
@@ -486,7 +538,7 @@ async def test_mirror_none_stage_name_creates_no_stage() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -506,9 +558,9 @@ async def test_mirror_none_stage_name_creates_no_stage() -> None:
 
 @pytest.mark.asyncio
 async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
-    """Re-mirroring an already-fully-mirrored protocol creates zero new
-    channels; a stage_name that maps onto the pre-existing channel must
-    still be persisted (channels_created==0 must not skip the save)."""
+    """Re-mirroring under a stage_name puts the protocol's columns on that
+    stage; the campaign-level column is never re-homed, and the new stage
+    and its column are persisted."""
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
     rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
@@ -523,7 +575,7 @@ async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
 
@@ -550,9 +602,14 @@ async def test_mirror_saves_when_only_stage_created_no_new_channels() -> None:
     )
     assert isinstance(out2, Success)
     outcome2 = out2.unwrap()
-    assert outcome2.channels_created == 0
+    assert outcome2.channels_created == 1
     assert outcome2.stage_created is True
     assert len(campaign.stages) == 1
+    stage = campaign.stages[0]
+    assert sorted(c.stage_id is None for c in campaign.channels) == [False, True]
+    assert [k.channel_id for k in stage.criteria] == [
+        c.id for c in campaign.channels_of_stage(stage.id)
+    ]
     assert len(saved) == 1
 
 
@@ -575,7 +632,7 @@ async def test_mirror_reuses_stage_with_same_name() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(saved=saved, find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     cmd = MirrorProtocolChannelsCommand(
@@ -631,7 +688,7 @@ async def test_mirror_stage_created_under_parent_stage_id() -> None:
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=FakeResolver(factory=_fake_measurement),
+        query=FakeColumnQuery(42.0, unit="uM"),
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -654,12 +711,10 @@ async def test_mirror_stage_created_under_parent_stage_id() -> None:
 @pytest.mark.asyncio
 async def test_mirror_bad_parent_fails_before_resolving_any_measurement() -> None:
     """The stage step runs before the per-result resolve loop, so a bad
-    parent id costs no resolver work."""
+    parent id costs no query work."""
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
-    campaign.results.append(
-        CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
-    )
+    campaign.results.append(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
     rd = _numeric_readout(name="IC50", normalizations=[ReadoutNormalization.NONE])
     protocol = _make_protocol(
         auth.workspace_id,
@@ -667,12 +722,12 @@ async def test_mirror_bad_parent_fails_before_resolving_any_measurement() -> Non
         recommended=[HitCriterion(readout_name="IC50", operator="lt", value=10.0)],
     )
 
-    resolver = FakeResolver(factory=_fake_measurement)
+    query = FakeColumnQuery(42.0, unit="uM")
     uc = MirrorProtocolChannels(
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=resolver,
+        query=query,
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -688,7 +743,7 @@ async def test_mirror_bad_parent_fails_before_resolving_any_measurement() -> Non
 
     assert isinstance(out, Failure)
     assert isinstance(out.failure(), ValidationError)
-    assert resolver.calls == []
+    assert query.calls == []
     assert campaign.stages == []
 
 
@@ -701,14 +756,14 @@ async def test_mirrored_channel_resolution_is_scoped_to_the_campaigns_source_run
     campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
     protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="% inhibition")])
     run_id = uuid.uuid4()
-    campaign.record_seed_runs([SeedRun(run_id, protocol.id)])
+    campaign.add_runs_to_stage([SeedRun(run_id, protocol.id)], None)
 
-    resolver = FakeResolver(factory=_fake_measurement)
+    query = FakeColumnQuery(42.0, unit="uM")
     uc = MirrorProtocolChannels(
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=resolver,
+        query=query,
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -720,7 +775,7 @@ async def test_mirrored_channel_resolution_is_scoped_to_the_campaigns_source_run
         auth=auth,
     )
     assert isinstance(out, Success)
-    assert resolver.run_ids_seen == [[run_id]]
+    assert query.run_ids_seen == [[run_id]]
 
 
 @pytest.mark.asyncio
@@ -731,15 +786,15 @@ async def test_mirroring_an_unseeded_protocol_resolves_protocol_wide() -> None:
     auth = fake_auth()
     campaign = _make_draft_campaign(auth.workspace_id)
     campaign.add_result(CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4()))
-    campaign.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])  # another protocol
+    campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), uuid.uuid4())], None)  # another protocol
     protocol = _make_protocol(auth.workspace_id, readouts=[_numeric_readout(name="% inhibition")])
 
-    resolver = FakeResolver(factory=_fake_measurement)
+    query = FakeColumnQuery(42.0, unit="uM")
     uc = MirrorProtocolChannels(
         uow=FakeUnitOfWork(),
         campaign_repo=make_campaign_repo(find_in_ws=campaign),
         protocol_repo=_make_protocol_repo(protocol=protocol),
-        resolver=resolver,
+        query=query,
         dispatcher=_make_dispatcher(),
     )
     out = await uc(
@@ -751,4 +806,4 @@ async def test_mirroring_an_unseeded_protocol_resolves_protocol_wide() -> None:
         auth=auth,
     )
     assert isinstance(out, Success)
-    assert resolver.run_ids_seen == [None]
+    assert query.run_ids_seen == [None]

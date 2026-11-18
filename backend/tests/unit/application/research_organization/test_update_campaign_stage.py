@@ -68,6 +68,7 @@ def _make_draft_campaign_with_stage(
         display_order=0,
         criteria=[StageCriterion(channel_id=channel.id, operator="lt", value=10.0)],
     )
+    channel.stage_id = stage.id
     campaign.add_stage(stage)
     campaign.status = status
     campaign.clear_events()

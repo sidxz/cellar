@@ -32,7 +32,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -71,19 +71,6 @@ def _make_measurement(
     if is_manual_override:
         m.mark_manual_override()
     return m
-
-
-def _new_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
-    """Factory used by FakeResolver to return a distinguishable fresh measurement."""
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=99.0,  # distinguishable from original 10.0
-        value_qualifier=ValueQualifier.EQ,
-        unit="nM",
-        protocol_name_snapshot="Proto",
-        protocol_version_snapshot=1,
-    )
 
 
 def _build_campaign_two_channels_three_results(
@@ -139,7 +126,7 @@ class TestRecomputeChannel:
             auth.workspace_id
         )
 
-        resolver = FakeResolver(factory=_new_measurement)  # returns value=99.0
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
@@ -147,7 +134,7 @@ class TestRecomputeChannel:
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = RecomputeChannelCommand(
@@ -158,9 +145,8 @@ class TestRecomputeChannel:
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        # Resolver called exactly 3 times — one per result, only for channel A
-        assert len(resolver.calls) == 3
-        assert all(call[0] == ch_a.id for call in resolver.calls)
+        # One fetch for channel A, covering its 3 results; channel B never fetched
+        assert query.calls == [(ch_a.id, None, [r.molecule_id for r in results])]
 
         # Channel A measurements replaced with 99.0
         for result in results:
@@ -187,11 +173,11 @@ class TestRecomputeChannel:
             auth.workspace_id, override_indices=override_indices
         )
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
@@ -202,9 +188,8 @@ class TestRecomputeChannel:
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        # Resolver called 2 times (3 results − 1 override)
-        assert len(resolver.calls) == 2
-        assert all(call[0] == ch_a.id for call in resolver.calls)
+        # One fetch for channel A, without the override's row (3 results - 1)
+        assert query.calls == [(ch_a.id, None, [results[0].molecule_id, results[2].molecule_id])]
 
         # Override measurement for result[1] is unchanged
         m_override = results[1].find_measurement(ch_a.id)
@@ -221,16 +206,14 @@ class TestRecomputeChannel:
     @pytest.mark.asyncio
     async def test_channel_not_found_returns_not_found_failure(self) -> None:
         auth = fake_auth()
-        campaign, ch_a, ch_b, _ = _build_campaign_two_channels_three_results(
-            auth.workspace_id
-        )
-        resolver = FakeResolver(factory=_new_measurement)
+        campaign, ch_a, ch_b, _ = _build_campaign_two_channels_three_results(auth.workspace_id)
+        query = FakeColumnQuery(99.0)
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
 
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
@@ -245,18 +228,18 @@ class TestRecomputeChannel:
         assert isinstance(err, NotFoundError)
         assert "CampaignChannel" in str(err)
         campaign_repo.save.assert_not_awaited()
-        assert resolver.calls == []
+        assert query.calls == []
 
     @pytest.mark.asyncio
     async def test_campaign_not_found_returns_not_found_failure(self) -> None:
         auth = fake_auth()
         campaign_repo = make_campaign_repo(find_in_ws=None)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
 
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
@@ -269,22 +252,20 @@ class TestRecomputeChannel:
         assert isinstance(out, Failure)
         assert isinstance(out.failure(), NotFoundError)
         campaign_repo.save.assert_not_awaited()
-        assert resolver.calls == []
+        assert query.calls == []
 
     @pytest.mark.asyncio
     async def test_campaign_not_draft_returns_validation_failure(self) -> None:
         auth = fake_auth()
-        campaign, ch_a, _, _ = _build_campaign_two_channels_three_results(
-            auth.workspace_id
-        )
+        campaign, ch_a, _, _ = _build_campaign_two_channels_three_results(auth.workspace_id)
         campaign.status = CampaignStatus.CLOSED  # type: ignore[misc]
 
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
@@ -304,7 +285,7 @@ class TestRecomputeChannel:
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=None),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
@@ -314,6 +295,7 @@ class TestRecomputeChannel:
         )
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
     @pytest.mark.asyncio
     async def test_re_resolve_preserves_measurement_id(self) -> None:
         """Re-resolved measurement inherits the old measurement's id to avoid DELETE+INSERT."""
@@ -326,11 +308,11 @@ class TestRecomputeChannel:
         assert original_m is not None
         original_id = original_m.id
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RecomputeChannel(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RecomputeChannelCommand(
@@ -351,17 +333,17 @@ class TestRecomputeChannel:
         """Spec D4 — recompute honours the campaign's runs, and the channel's
         opt-out lifts the restriction."""
         auth = fake_auth()
-        campaign, ch_a, _, results = _build_campaign_two_channels_three_results(
-            auth.workspace_id
-        )
+        campaign, ch_a, _, results = _build_campaign_two_channels_three_results(auth.workspace_id)
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_a, ch_a.protocol_id), SeedRun(run_b, ch_a.protocol_id)])
+        campaign.add_runs_to_stage(
+            [SeedRun(run_a, ch_a.protocol_id), SeedRun(run_b, ch_a.protocol_id)], None
+        )
 
-        def _uc(resolver):
+        def _uc(query):
             return RecomputeChannel(
                 uow=FakeUnitOfWork(),
                 campaign_repo=make_campaign_repo(find_in_ws=campaign),
-                resolver=resolver,
+                query=query,
                 dispatcher=AsyncMock(),
             )
 
@@ -370,11 +352,11 @@ class TestRecomputeChannel:
             campaign_id=campaign.id,
             channel_id=ch_a.id,
         )
-        resolver = FakeResolver(factory=_new_measurement)
-        assert isinstance(await _uc(resolver)(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [[run_a, run_b]] * 3
+        query = FakeColumnQuery(99.0)
+        assert isinstance(await _uc(query)(cmd, auth=auth), Success)
+        assert query.run_ids_seen == [[run_a, run_b]]
 
         ch_a.resolve_from_all_runs = True
-        opted_out = FakeResolver(factory=_new_measurement)
+        opted_out = FakeColumnQuery(99.0)
         assert isinstance(await _uc(opted_out)(cmd, auth=auth), Success)
-        assert opted_out.run_ids_seen == [None] * 3
+        assert opted_out.run_ids_seen == [None]

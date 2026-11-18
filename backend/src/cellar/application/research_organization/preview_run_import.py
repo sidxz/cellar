@@ -1,20 +1,28 @@
-"""PreviewRunImport — read-only query for the multi-run import dialog (B6).
+"""Add-from-runs: the one computation behind the import dialog's preview and commit (B6).
 
-Given a campaign + a set of run_ids + per-readout channel configs (with
-hit criteria), this resolves every molecule × channel cell that *would*
-be added, applies the user's filter mode (ANY/ALL), and returns a
-DAIKON-shaped preview document for the FE to render — without mutating
-the campaign.
+``apply_run_import`` applies a request to the loaded campaign (spec §6.3, §10):
 
-DRY: hit-call computation reuses ``HitCriterion.is_met``; candidate fetching
-reuses ``ChannelResolutionQuery.fetch_candidates_for_runs``; selection-rule
-application delegates to the shared ``apply_selection_rule`` aggregator —
-the same single source of truth the close-time ``ChannelResolver`` uses.
+1. The runs join the target stage: ``stage_id``, else the ``stage_name`` upsert, else
+   none (campaign runs feeding campaign columns).
+2. Each config's column on that stage is reused or created, keyed
+   ``(stage, protocol, readout, normalization, intercept)``.
+3. Configs carrying thresholds replace the stage's criteria; without thresholds the
+   criteria are left alone.
+4. The compounds of the request's runs become rows. ``allowed_curve_classes`` is a row
+   filter only, never applied to values.
+5. Every column whose run scope the runs widen is recomputed for every row by
+   ``recompute_columns``: the configs' columns, every other column of the runs'
+   protocols on the target stage, and those protocols' campaign columns. Each reads
+   all of its runs, so ``scope: hits_only`` judges the values the commit writes.
+
+``AddResultsFromRuns`` saves the result. ``PreviewRunImport`` reads it and never saves,
+so the preview shows exactly the cells the commit would write.
 """
 
 from __future__ import annotations
 
 import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, Literal
@@ -22,26 +30,29 @@ from typing import Any, Literal
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolutionQuery,
-    ResolvedCandidate,
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
+from cellar.application.research_organization.stage_upsert import (
+    get_or_create_stage,
+    set_stage_criteria,
 )
-from cellar.application.screening.curve_snapshot import (
-    build_aggregate_curve_snapshot,
-    build_curve_snapshot,
-)
-from cellar.application.screening.run_aggregation import apply_selection_rule
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import MoleculeRepository
+from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import CampaignMeasurement
+from cellar.domain.research_organization.campaign_result import CampaignResult
+from cellar.domain.research_organization.campaign_stage import StageCriterion
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
+    QualifierHandling,
     SelectionRule,
-    ValueQualifier,
 )
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.screening_assay.aggregation_types import QualifierHandling
+from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.screening_assay.repository import RunRepository
+from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import (
     DomainError,
     NotFoundError,
@@ -58,13 +69,13 @@ from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey
 class ChannelImportConfig:
     """One row in the import dialog's channel-configuration section.
 
-    Maps to a (protocol_id, readout_definition_id) tuple within the
-    selected runs. If a campaign channel already exists for the same
-    (protocol, readout), the preview marks it as `reused`.
+    Maps to a (protocol_id, readout_definition_id) tuple within the selected runs.
+    If the target stage already has a column for it, the preview marks it `reused`.
 
-    ``allowed_curve_classes`` is only meaningful when source_kind is
-    ``DOSE_RESPONSE_CURVE`` — restricts candidates to curves whose
-    ``curve_class`` is in the supplied set (e.g. ``["full"]``).
+    ``hit_threshold`` and ``allowed_curve_classes`` decide which compounds are added
+    (``allowed_curve_classes`` only for ``DOSE_RESPONSE_CURVE``: a compound whose
+    every curve in the runs is out of class is skipped). Neither is saved on the
+    column, and neither is ever applied to a value.
     """
 
     protocol_id: uuid.UUID
@@ -94,42 +105,12 @@ class PreviewRunImportQuery(Command):
     run_ids: list[uuid.UUID]
     channel_configs: list[ChannelImportConfig]
     filter_mode: Literal["any", "all"] = "all"
-
-
-# ---------------------------------------------------------------------------
-# Selection-rule inline (matches ChannelResolver.resolve; see module docstring)
-# ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class _Picked:
-    #: The channel's value for this molecule — the curve's primary fitted
-    #: value when ``intercept_key`` is None, or the matching intercept's
-    #: scalar otherwise. After Option A, channel identity is on the
-    #: channel itself; this single field IS the cell value and the input
-    #: to the hit-call comparison.
-    value: float | None
-    qualifier: ValueQualifier
-    unit: str
-    source_run_id: uuid.UUID | None
-    source_curve_id: uuid.UUID | None
-    source_readout_id: uuid.UUID | None
-    protocol_name: str
-    protocol_version: int
-    run_date: date | None
-    contributing_run_ids: list[uuid.UUID]
-    replicate_count: int
-    #: Frozen curve shape (DR-curve picks only). Built from the
-    #: representative candidate so the campaign cell can render the
-    #: dose-response figure without a live FK lookup.
-    curve_snapshot: dict | None = None
-
-
-_AGGREGATE_RULES = {SelectionRule.MEAN_ACROSS_RUNS, SelectionRule.GEOMETRIC_MEAN}
-_AGGREGATE_LABELS = {
-    SelectionRule.MEAN_ACROSS_RUNS: "mean",
-    SelectionRule.GEOMETRIC_MEAN: "gmean",
-}
+    #: The stage the runs would join; None previews them as campaign runs.
+    stage_id: uuid.UUID | None = None
+    #: As in add-from-runs: with no ``stage_id``, the stage of this name
+    #: (case-insensitive), else an unsaved new one whose runs are the request's.
+    stage_name: str | None = None
+    parent_stage_id: uuid.UUID | None = None
 
 
 def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
@@ -141,131 +122,210 @@ def _cfg_norm(cfg: ChannelImportConfig) -> str | None:
     return cfg.normalization_applied if cfg.source_kind == ChannelSourceKind.READOUT_DATA else None
 
 
-async def fetch_run_candidates(
-    query: ChannelResolutionQuery,
+# ---------------------------------------------------------------------------
+# The import
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RunImport:
+    """What one add-from-runs request did to the loaded campaign."""
+
+    #: The target column of each config, in config order.
+    columns: list[CampaignChannel]
+    reused: list[bool]
+    stage_created: bool
+    #: Every compound of the request's runs that passed the row filter, with its
+    #: row: an existing one, or a new one whose cells are resolved (on the campaign
+    #: only when it was added).
+    rows: dict[uuid.UUID, CampaignResult]
+    is_hit: dict[uuid.UUID, bool]
+    added: int
+    skipped: int
+
+
+async def apply_run_import(
+    campaign: Campaign,
     *,
-    workspace_id: uuid.UUID,
+    query: ColumnCandidateQuery,
+    runs: Mapping[uuid.UUID, Run],
     run_ids: list[uuid.UUID],
-    cfg: ChannelImportConfig,
-) -> dict[uuid.UUID, list[ResolvedCandidate]]:
-    """Per-molecule candidates for one channel config over the selected runs.
+    configs: list[ChannelImportConfig],
+    filter_mode: Literal["any", "all"],
+    scope: Literal["hits_only", "all"],
+    description: str | None = None,
+    stage_id: uuid.UUID | None = None,
+    stage_name: str | None = None,
+    parent_stage_id: uuid.UUID | None = None,
+) -> RunImport:
+    """Apply an add-from-runs request to ``campaign`` (see the module docstring).
 
-    Shared by ``PreviewRunImport`` and ``AddResultsFromRuns`` so the wizard's
-    preview and its commit can never resolve different candidate sets.
-
-    D1 — a dose-response channel falls back to reported endpoint rows
-    (summary-imported, well-less ``readout_data`` on the same readout
-    definition) for molecules with no fitted curve in the selected runs. A
-    molecule that has a curve keeps its curve.
-
-    ``allowed_curve_classes`` is a curve attribute, so it filters curve
-    candidate sets only: a molecule whose candidates are endpoint fallback
-    rows goes straight through, exactly as a numeric readout channel's rows
-    would, while a molecule whose every curve is out of class is dropped
-    (not backfilled from its endpoint rows).
+    ``runs`` are the request's runs found in the workspace. Raises the domain's
+    ``NotFoundError`` (unknown stage) and ``ValidationError``.
     """
-    candidates_by_mol = await query.fetch_candidates_for_runs(
-        workspace_id=workspace_id,
-        run_ids=run_ids,
-        protocol_id=cfg.protocol_id,
-        readout_definition_id=cfg.readout_definition_id,
-        source_kind=cfg.source_kind,
-        normalization_applied=_cfg_norm(cfg),
-    )
-    if cfg.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE:
-        endpoints_by_mol = await query.fetch_endpoint_candidates_for_runs(
-            workspace_id=workspace_id,
-            run_ids=run_ids,
-            readout_definition_id=cfg.readout_definition_id,
-            wellless_only=True,
+    run_ids = [r for r in run_ids if r in runs]
+
+    stage = None
+    stage_created = False
+    if stage_id is not None:
+        stage = campaign.find_stage(stage_id)
+        if stage is None:
+            raise NotFoundError("CampaignStage", str(stage_id))
+    elif stage_name:
+        stage, stage_created = get_or_create_stage(
+            campaign, name=stage_name, parent_stage_id=parent_stage_id
         )
-        for mol_id, endpoints in endpoints_by_mol.items():
-            candidates_by_mol.setdefault(mol_id, endpoints)
+    target = stage.id if stage else None
+    campaign.add_runs_to_stage((SeedRun(r, runs[r].protocol_id) for r in run_ids), target)
 
-    if not cfg.allowed_curve_classes:
-        return candidates_by_mol
-
-    allowed = set(cfg.allowed_curve_classes)
-    filtered: dict[uuid.UUID, list[ResolvedCandidate]] = {}
-    for mol_id, candidates in candidates_by_mol.items():
-        if any(c.curve_id is not None for c in candidates):
-            candidates = [
-                c for c in candidates if c.curve_class is not None and c.curve_class in allowed
-            ]
-            if not candidates:
-                continue
-        filtered[mol_id] = candidates
-    return filtered
-
-
-def _apply_selection_rule(
-    candidates: list[ResolvedCandidate],
-    rule: SelectionRule,
-    intercept_key: InterceptKey | None = None,
-) -> _Picked | None:
-    """Adapt the shared aggregator's output to the preview's ``_Picked`` shape.
-
-    Delegates all selection-rule logic (LATEST / MEAN / GMEAN / MANUAL_PICK +
-    ND handling for Inactive / at_bound / missing intercepts) to the shared
-    ``apply_selection_rule`` in ``application/screening/run_aggregation.py``
-    so that the wizard's preview can never drift from what the close-time
-    ``ChannelResolver`` writes on Save.
-
-    Returns ``None`` only when:
-    - candidates is empty, or
-    - rule is ``MANUAL_PICK`` (preview surfaces no cell — chemist will pick).
-
-    All other ND outcomes (all-Inactive LATEST, mean with no EQ contributors,
-    gmean with no positives) round-trip as ``_Picked(value=None, qualifier=ND)``
-    so the preview cell still carries the rep run's metadata for the FE.
-    """
-    if not candidates:
-        return None
-    if rule == SelectionRule.MANUAL_PICK:
-        return None
-
-    result = apply_selection_rule(
-        candidates,
-        rule,
-        QualifierHandling.INCLUDE_QUALIFIED,
-        intercept_key,
-    )
-
-    rep = result.representative_run or max(candidates, key=lambda c: c.run_date or date.min)
-    is_aggregate = rule in _AGGREGATE_RULES
-
-    if is_aggregate and result.qualifier == ValueQualifier.EQ:
-        snapshot = build_aggregate_curve_snapshot(
-            candidates,
-            aggregate_value=result.value,
-            aggregate_label=_AGGREGATE_LABELS[rule],
+    by_key = {
+        (
+            c.stage_id,
+            c.protocol_id,
+            c.readout_definition_id,
+            c.normalization_applied,
+            c.intercept_key,
+        ): c
+        for c in campaign.channels
+    }
+    order = max((c.display_order for c in campaign.channels), default=-1) + 1
+    columns: list[CampaignChannel] = []
+    reused: list[bool] = []
+    for cfg in configs:
+        key = (
+            target,
+            cfg.protocol_id,
+            cfg.readout_definition_id,
+            _cfg_norm(cfg),
+            cfg.intercept_key,
         )
-    else:
-        snapshot = build_curve_snapshot(rep)
+        column = by_key.get(key)
+        reused.append(column is not None)
+        if column is None:
+            column = CampaignChannel(
+                campaign_id=campaign.id,
+                label=cfg.label,
+                protocol_id=cfg.protocol_id,
+                readout_definition_id=cfg.readout_definition_id,
+                source_kind=cfg.source_kind,
+                selection_rule=cfg.selection_rule,
+                qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+                display_order=order,
+                normalization_applied=_cfg_norm(cfg),
+                intercept_key=cfg.intercept_key,
+                stage_id=target,
+            )
+            campaign.add_channel(column)
+            by_key[key] = column
+            order += 1
+        else:
+            # The chemist's rule applies; intercept identity is locked at creation.
+            column.selection_rule = cfg.selection_rule
+        columns.append(column)
 
-    return _Picked(
-        value=result.value,
-        qualifier=result.qualifier,
-        unit=rep.unit or "-",
-        source_run_id=None if is_aggregate else rep.run_id,
-        source_curve_id=None if is_aggregate else rep.curve_id,
-        source_readout_id=None if is_aggregate else rep.readout_id,
-        protocol_name=rep.protocol_name,
-        protocol_version=rep.protocol_version,
-        run_date=None if is_aggregate else rep.run_date,
-        contributing_run_ids=result.contributing_run_ids or [c.run_id for c in candidates],
-        replicate_count=len(candidates),
-        curve_snapshot=snapshot,
+    # Numeric only: StageCriterion has no string-based ``in``.
+    criteria = [
+        StageCriterion(
+            channel_id=col.id,
+            operator=cfg.hit_threshold.operator,
+            value=cfg.hit_threshold.value,  # type: ignore[arg-type]  # numeric once "in" is out
+        )
+        for cfg, col in zip(configs, columns, strict=True)
+        if cfg.use_for_filter and cfg.hit_threshold and cfg.hit_threshold.operator != "in"
+    ]
+    if stage is not None and criteria:
+        set_stage_criteria(campaign, stage, criteria)
+
+    # The request's compounds, with the earliest run each was measured in (its RunRef).
+    first_run: dict[uuid.UUID, tuple[date, uuid.UUID]] = {}
+    out_of_class: set[uuid.UUID] = set()
+    for cfg, column in zip(configs, columns, strict=True):
+        found = await query.fetch(
+            workspace_id=campaign.workspace_id, channel=column, run_ids=run_ids, molecule_ids=None
+        )
+        allowed = set(cfg.allowed_curve_classes or ())
+        for mid, candidates in found.items():
+            classes = {c.run.curve_class for c in candidates if c.run.curve_id is not None}
+            if allowed and classes and not classes & allowed:
+                out_of_class.add(mid)
+            earliest = min((c.run.run_date or date.max, c.run.run_id) for c in candidates)
+            first_run[mid] = min(first_run.get(mid, earliest), earliest)
+    compounds = [m for m in first_run if m not in out_of_class]
+
+    rows = {r.molecule_id: r for r in campaign.results if r.molecule_id in first_run}
+    new_rows = [
+        CampaignResult(
+            campaign_id=campaign.id,
+            molecule_id=m,
+            added_from=RunRef(run_id=first_run[m][1], description=description),
+        )
+        for m in compounds
+        if m not in rows
+    ]
+    rows.update((r.molecule_id, r) for r in new_rows)
+    rows = {m: rows[m] for m in compounds}
+    # The runs widen the scope of every column of their protocols on the target stage
+    # and of the campaign columns (which read every campaign run), not only the configs'.
+    protocols = {runs[r].protocol_id for r in run_ids}
+    affected = [
+        c for c in campaign.channels if c.protocol_id in protocols and c.stage_id in (target, None)
+    ]
+    await recompute_columns(
+        query=query,
+        campaign=campaign,
+        channels={c.id: c for c in [*columns, *affected]}.values(),
+        extra_rows=new_rows,
     )
+
+    is_hit = {m: _is_hit(rows[m], configs, columns, filter_mode) for m in compounds}
+    kept = [r for r in new_rows if scope == "all" or is_hit[r.molecule_id]]
+    campaign.add_results(kept)
+    passing = sum(1 for m in compounds if scope == "all" or is_hit[m])
+    return RunImport(
+        columns=columns,
+        reused=reused,
+        stage_created=stage_created,
+        rows=rows,
+        is_hit=is_hit,
+        added=len(kept),
+        skipped=passing - len(kept),
+    )
+
+
+def _hit_call(cfg: ChannelImportConfig, m: CampaignMeasurement) -> str | None:
+    if cfg.hit_threshold is None or m.value is None:
+        return None
+    met = cfg.hit_threshold.is_met(m.value, m.value_qualifier)
+    return None if met is None else ("hit" if met else "miss")
+
+
+def _is_hit(
+    row: CampaignResult,
+    configs: list[ChannelImportConfig],
+    columns: list[CampaignChannel],
+    filter_mode: Literal["any", "all"],
+) -> bool:
+    """The request's filter over the row's cells. A cell with no reading behind it
+    is skipped; no filtering cell at all is never a hit."""
+    calls = [
+        _hit_call(cfg, m) == "hit"
+        for cfg, column in zip(configs, columns, strict=True)
+        if cfg.use_for_filter
+        and cfg.hit_threshold is not None
+        and (m := row.find_measurement(column.id)) is not None
+        and (m.value is not None or m.contributing_run_ids)
+    ]
+    return bool(calls) and (any(calls) if filter_mode == "any" else all(calls))
 
 
 # ---------------------------------------------------------------------------
-# Use case
+# Preview
 # ---------------------------------------------------------------------------
 
 
 class PreviewRunImport:
-    """Resolves every molecule x channel cell from a candidate run set."""
+    """The would-be cells of an add-from-runs request, computed by the commit's own
+    path against the loaded campaign, which is never saved."""
 
     def __init__(
         self,
@@ -274,13 +334,13 @@ class PreviewRunImport:
         campaign_repo: CampaignRepository,
         run_repo: RunRepository,
         molecule_repo: MoleculeRepository,
-        channel_query: ChannelResolutionQuery,
+        query: ColumnCandidateQuery,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
         self._run_repo = run_repo
         self._molecule_repo = molecule_repo
-        self._query = channel_query
+        self._query = query
 
     async def __call__(
         self,
@@ -289,174 +349,93 @@ class PreviewRunImport:
     ) -> Result[dict[str, Any], DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+        # Never committed: the import below only mutates the loaded aggregate.
         async with self._uow:
             return await self._execute(input)
 
     async def _execute(self, q: PreviewRunImportQuery) -> Result[dict[str, Any], DomainError]:
-        # Step 1 — load campaign (preview is read-only; DRAFT not required).
         campaign = await self._campaign_repo.find_by_id_in_workspace(q.workspace_id, q.campaign_id)
         if campaign is None:
             return Failure(NotFoundError("Campaign", str(q.campaign_id)))
-
         if not q.run_ids:
             return Failure(ValidationError("At least one run_id is required"))
         if not q.channel_configs:
             return Failure(ValidationError("At least one channel_config is required"))
 
-        # Step 2 — channel meta (new vs reused). Reuse key is
-        # (protocol, readout, normalization_applied, intercept_key) so the
-        # same readout exposed through different intercepts (e.g. Resazurin
-        # EC50 + Resazurin EC90) becomes distinct channels — they each
-        # display their own intercept's value and have independent hit
-        # decisions. After Option A the intercept_key lives on the channel
-        # / config directly, not under hit_threshold, so a display-only
-        # channel (no threshold) still keeps its intercept identity.
-        existing_by_key: dict[tuple[Any, ...], Any] = {
-            (
-                ch.protocol_id,
-                ch.readout_definition_id,
-                ch.normalization_applied,
-                ch.intercept_key,
-            ): ch
-            for ch in campaign.channels
-        }
-        channels_meta: list[dict[str, Any]] = []
-
-        def _channel_key(cfg: ChannelImportConfig) -> str:
-            norm = _cfg_norm(cfg)
-            norm_suffix = f":{norm}" if norm else ""
-            ik = cfg.intercept_key
-            ik_suffix = f":{ik.kind}{ik.level}" if ik else ""
-            return f"{cfg.protocol_id}/{cfg.readout_definition_id}{norm_suffix}{ik_suffix}"
-
-        for cfg in q.channel_configs:
-            key = (
-                cfg.protocol_id,
-                cfg.readout_definition_id,
-                _cfg_norm(cfg),
-                cfg.intercept_key,
-            )
-            existing = existing_by_key.get(key)
-            channels_meta.append(
-                {
-                    "channel_key": _channel_key(cfg),
-                    "label": cfg.label,
-                    "source": "reused" if existing else "new",
-                    "reuse_of_channel_id": str(existing.id) if existing else None,
-                    "selection_rule": cfg.selection_rule.value,
-                    "hit_threshold": (cfg.hit_threshold.to_dict() if cfg.hit_threshold else None),
-                    "use_for_filter": cfg.use_for_filter,
-                }
-            )
-
-        # Step 3 — resolve cells per channel.
-        rows_by_molecule: dict[uuid.UUID, dict[str, Any]] = {}
-        active_keys: set[str] = set()
-        for cfg in q.channel_configs:
-            key = _channel_key(cfg)
-            if cfg.use_for_filter and cfg.hit_threshold is not None:
-                active_keys.add(key)
-            candidates_by_mol = await fetch_run_candidates(
-                self._query,
-                workspace_id=q.workspace_id,
-                run_ids=q.run_ids,
-                cfg=cfg,
-            )
-            for molecule_id, candidates in candidates_by_mol.items():
-                picked = _apply_selection_rule(candidates, cfg.selection_rule, cfg.intercept_key)
-                if picked is None:
-                    cell = _nd_cell(key)
-                else:
-                    # After Option A, picked.value already IS the channel's
-                    # intercept value (primary if intercept_key is None,
-                    # intercept-specific otherwise). Threshold compares
-                    # against that value directly. picked.value can still be
-                    # None (e.g. an aggregate rule with no positive
-                    # contributors) even though picked itself is not None.
-                    met = (
-                        cfg.hit_threshold.is_met(picked.value, picked.qualifier)
-                        if cfg.hit_threshold and picked.value is not None
-                        else None
-                    )
-                    qc_pass_all = all(_qc_pass(c) for c in candidates)
-                    qc_reason = _aggregate_qc_reason(candidates) if not qc_pass_all else None
-                    cell = {
-                        "channel_key": key,
-                        "value": picked.value,
-                        "value_qualifier": picked.qualifier.value,
-                        "unit": picked.unit,
-                        "test_concentration_value": None,
-                        "test_concentration_unit": None,
-                        "replicate_count": picked.replicate_count,
-                        "qc_pass": qc_pass_all,
-                        "qc_reason": qc_reason,
-                        "hit_call": ("hit" if met else "miss") if met is not None else None,
-                        "source_run_id": (
-                            str(picked.source_run_id) if picked.source_run_id else None
-                        ),
-                        "source_run_date": (
-                            picked.run_date.isoformat() if picked.run_date else None
-                        ),
-                        "protocol_name": picked.protocol_name,
-                        "protocol_version": picked.protocol_version,
-                        "contributing_run_ids": [str(rid) for rid in picked.contributing_run_ids],
-                    }
-                row = rows_by_molecule.setdefault(molecule_id, {"cells": []})
-                row["cells"].append(cell)
-
-        # Step 4 — is_hit per molecule.
         in_campaign = {r.molecule_id for r in campaign.results}
-        for mid, row in rows_by_molecule.items():
-            active_cells = [c for c in row["cells"] if c["channel_key"] in active_keys]
-            if not active_cells:
-                row["is_hit"] = False
-            else:
-                hits = [c["hit_call"] == "hit" for c in active_cells]
-                row["is_hit"] = any(hits) if q.filter_mode == "any" else all(hits)
-            row["already_in_campaign"] = mid in in_campaign
+        runs = await self._run_repo.find_by_ids(q.workspace_id, q.run_ids)
+        try:
+            imp = await apply_run_import(
+                campaign,
+                query=self._query,
+                runs=runs,
+                run_ids=q.run_ids,
+                configs=q.channel_configs,
+                filter_mode=q.filter_mode,
+                scope="all",
+                stage_id=q.stage_id,
+                stage_name=q.stage_name,
+                parent_stage_id=q.parent_stage_id,
+            )
+        except (NotFoundError, ValidationError) as e:
+            return Failure(e)
 
-        # Step 5 — hydrate molecules.
-        mol_ids = list(rows_by_molecule.keys())
-        molecules = await self._molecule_repo.find_by_ids(q.workspace_id, mol_ids)
+        keys = [_channel_key(cfg) for cfg in q.channel_configs]
+        channels_meta = [
+            {
+                "channel_key": key,
+                "label": cfg.label,
+                "source": "reused" if was_reused else "new",
+                "reuse_of_channel_id": str(column.id) if was_reused else None,
+                "selection_rule": cfg.selection_rule.value,
+                "hit_threshold": cfg.hit_threshold.to_dict() if cfg.hit_threshold else None,
+                "use_for_filter": cfg.use_for_filter,
+            }
+            for cfg, key, column, was_reused in zip(
+                q.channel_configs, keys, imp.columns, imp.reused, strict=True
+            )
+        ]
+
+        molecules = await self._molecule_repo.find_by_ids(q.workspace_id, list(imp.rows))
         mol_lookup = {m.id: m for m in molecules}
-
         rows_response: list[dict[str, Any]] = []
-        hits_count = non_hits_count = already_count = 0
-        for mid, row in rows_by_molecule.items():
+        for mid, row in imp.rows.items():
             mol = mol_lookup.get(mid)
             if mol is None:
                 continue
-            if row["already_in_campaign"]:
-                already_count += 1
-            if row["is_hit"]:
-                hits_count += 1
-            else:
-                non_hits_count += 1
-            smiles = mol.structure.smiles if mol.structure else None
             rows_response.append(
                 {
                     "molecule": {
                         "id": str(mol.id),
                         "registration_number": mol.registration_number.value,
                         "name": mol.name,
-                        "smiles": smiles,
+                        "smiles": mol.structure.smiles if mol.structure else None,
                     },
-                    "is_hit": row["is_hit"],
-                    "already_in_campaign": row["already_in_campaign"],
-                    "cells": row["cells"],
+                    "is_hit": imp.is_hit[mid],
+                    "already_in_campaign": mid in in_campaign,
+                    "cells": [
+                        _cell(key, cfg, m)
+                        for cfg, key, column in zip(
+                            q.channel_configs, keys, imp.columns, strict=True
+                        )
+                        if (m := row.find_measurement(column.id)) is not None
+                    ],
                 }
             )
 
+        hits = sum(1 for r in rows_response if r["is_hit"])
         return Success(
             {
                 "summary": {
                     "runs": len(q.run_ids),
-                    "channels_new": sum(1 for c in channels_meta if c["source"] == "new"),
-                    "channels_reused": sum(1 for c in channels_meta if c["source"] == "reused"),
+                    "channels_new": imp.reused.count(False),
+                    "channels_reused": imp.reused.count(True),
                     "molecules_total": len(rows_response),
-                    "hits": hits_count,
-                    "non_hits": non_hits_count,
-                    "molecules_already_in_campaign": already_count,
+                    "hits": hits,
+                    "non_hits": len(rows_response) - hits,
+                    "molecules_already_in_campaign": sum(
+                        1 for r in rows_response if r["already_in_campaign"]
+                    ),
                 },
                 "channels": channels_meta,
                 "rows": rows_response,
@@ -464,60 +443,39 @@ class PreviewRunImport:
         )
 
 
-def _nd_cell(channel_key: str) -> dict[str, Any]:
+def _channel_key(cfg: ChannelImportConfig) -> str:
+    norm = _cfg_norm(cfg)
+    ik = cfg.intercept_key
+    return (
+        f"{cfg.protocol_id}/{cfg.readout_definition_id}"
+        f"{f':{norm}' if norm else ''}{f':{ik.kind}{ik.level}' if ik else ''}"
+    )
+
+
+def _cell(key: str, cfg: ChannelImportConfig, m: CampaignMeasurement) -> dict[str, Any]:
+    """A preview cell: the measurement the commit writes, plus the request's hit call."""
     return {
-        "channel_key": channel_key,
-        "value": None,
-        "value_qualifier": ValueQualifier.ND.value,
-        "unit": "-",
-        "test_concentration_value": None,
-        "test_concentration_unit": None,
-        "replicate_count": 0,
-        "qc_pass": None,
-        "qc_reason": None,
-        "hit_call": None,
-        "source_run_id": None,
-        "source_run_date": None,
-        "protocol_name": None,
-        "protocol_version": None,
-        "contributing_run_ids": [],
+        "channel_key": key,
+        "value": m.value,
+        "value_qualifier": m.value_qualifier.value,
+        "unit": m.unit,
+        "test_concentration_value": m.test_concentration_value,
+        "test_concentration_unit": m.test_concentration_unit,
+        "replicate_count": m.replicate_count,
+        "qc_pass": m.qc_pass,
+        "hit_call": _hit_call(cfg, m),
+        "source_run_id": str(m.source_run_id) if m.source_run_id else None,
+        "source_run_date": m.run_date_snapshot.isoformat() if m.run_date_snapshot else None,
+        "protocol_name": m.protocol_name_snapshot,
+        "protocol_version": m.protocol_version_snapshot,
+        "contributing_run_ids": [str(r) for r in m.contributing_run_ids or []],
+        "basis": m.basis.value if m.basis else None,
+        "batch_ids": [str(b) for b in m.batch_ids or []],
+        "concentration_series": m.concentration_series,
+        "unresolved_reason": m.unresolved_reason.value if m.unresolved_reason else None,
+        "concentrations_found": (
+            [{"value": c.value, "unit": c.unit} for c in m.concentrations_found]
+            if m.concentrations_found is not None
+            else None
+        ),
     }
-
-
-def _qc_pass(c: ResolvedCandidate) -> bool:
-    """Default QC heuristic: run must be approved + z_prime, when present, >= 0.5."""
-    if not c.run_approved:
-        return False
-    return not (c.z_prime is not None and c.z_prime < 0.5)
-
-
-def _qc_reason(c: ResolvedCandidate) -> str | None:
-    """Chemist-facing reason a candidate failed QC, or None if it passed.
-
-    Returns the first failing condition only (run-approval beats z'). Used
-    by preview cells to populate a tooltip on the destructive-by-default
-    QC badge so chemists know whether to ignore the warning or chase it.
-    """
-    if not c.run_approved:
-        return "Source run not approved"
-    if c.z_prime is not None and c.z_prime < 0.5:
-        return f"z' = {c.z_prime:.2f} (below 0.5)"
-    return None
-
-
-def _aggregate_qc_reason(candidates: list[ResolvedCandidate]) -> str | None:
-    """Aggregate per-candidate QC reasons into one short summary.
-
-    Single-candidate (LATEST_RUN): the candidate's reason directly.
-    Multi-candidate (MEAN_ACROSS_RUNS, GEOMETRIC_MEAN): summarize as
-    ``"{N}/{M} runs failed QC: {first reason}"`` so the chemist sees the
-    scope without a wall of text.
-    """
-    if not candidates:
-        return None
-    reasons = [r for c in candidates if (r := _qc_reason(c)) is not None]
-    if not reasons:
-        return None
-    if len(candidates) == 1:
-        return reasons[0]
-    return f"{len(reasons)}/{len(candidates)} runs failed QC: {reasons[0]}"

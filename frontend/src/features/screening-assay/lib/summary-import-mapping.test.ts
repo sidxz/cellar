@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SummaryHeaderSuggestionModel } from "../hooks/use-summary-import";
-import { buildMapping, suggestionsToDraft } from "./summary-import-mapping";
+import {
+  buildMapping,
+  parseReplicatesConstant,
+  suggestionsToDraft,
+} from "./summary-import-mapping";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -57,6 +61,8 @@ describe("buildMapping", () => {
       compound_ref: "Compound",
       batch_ref: null,
       structure: null,
+      replicates: null,
+      replicates_constant: null,
       readout_columns: { IC50: "def-1" },
     });
   });
@@ -98,6 +104,8 @@ describe("buildMapping", () => {
       compound_ref: null,
       batch_ref: "Batch",
       structure: null,
+      replicates: null,
+      replicates_constant: null,
       readout_columns: { IC50: "def-1" },
     });
   });
@@ -108,5 +116,37 @@ describe("buildMapping", () => {
       readoutDefByHeader: { IC50: "def-1" },
     });
     expect(mapping?.structure).toBe("SMILES");
+  });
+
+  it("sends the replicates column and the constant", () => {
+    const mapping = buildMapping({
+      roles: { Compound: "compound_ref", n: "replicates", IC50: "readout" },
+      readoutDefByHeader: { IC50: "def-1" },
+      replicatesConstant: "3",
+    });
+    expect(mapping?.replicates).toBe("n");
+    expect(mapping?.replicates_constant).toBe(3);
+  });
+
+  it.each([
+    ["", null],
+    ["1e2", 100],
+    ["3.5", "invalid"],
+    ["0", "invalid"],
+    ["-1", "invalid"],
+  ])("reads the typed replicate count %j as %j", (raw, expected) => {
+    expect(parseReplicatesConstant(raw)).toBe(expected);
+    const mapping = buildMapping({
+      roles: { Compound: "compound_ref", IC50: "readout" },
+      readoutDefByHeader: { IC50: "def-1" },
+      replicatesConstant: raw,
+    });
+    // An invalid count blocks the mapping (and so Continue); empty is unset.
+    expect(mapping?.replicates_constant).toBe(expected === "invalid" ? undefined : expected);
+  });
+
+  it("seeds the replicates role from the backend suggestion", () => {
+    const draft = suggestionsToDraft([suggestion({ header: "n", role: "replicates" })]);
+    expect(draft.roles).toEqual({ n: "replicates" });
   });
 });

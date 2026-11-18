@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type {
@@ -10,6 +10,38 @@ import type {
   StageCountsResponse,
 } from "../../types";
 import { StagesSection } from "./stages-section";
+
+const { removeRun } = vi.hoisted(() => ({ removeRun: vi.fn() }));
+vi.mock("../../hooks/use-campaigns", async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useRemoveRunFromStage: () => ({ mutate: removeRun, isPending: false }),
+}));
+
+vi.mock("@/shared/lib/api/runs/runs", () => ({
+  getListRunsByProtocolApiV1ProtocolsProtocolIdRunsGetQueryOptions: (id: string) => ({
+    queryKey: ["runs", id],
+    queryFn: async () => [
+      {
+        id: "run-1",
+        protocol_id: "proto-1",
+        run_date: "2026-11-12",
+        created_at: "2026-11-12T09:05:00",
+        conditions: { "Test concentration": "10 µM" },
+        molecule_count: 20,
+      },
+      { id: "run-2", protocol_id: "proto-1", run_date: "2026-11-14" },
+      // A rerun on the same day as run-1.
+      {
+        id: "3f2a9c1b-7d4e-4a10-9c2b-5e6f7a8b9c0d",
+        protocol_id: "proto-1",
+        run_date: "2026-11-12",
+        created_at: "2026-11-12T15:40:00",
+        conditions: { "Test concentration": "50 µM" },
+        molecule_count: 1,
+      },
+    ],
+  }),
+}));
 
 vi.mock("@/features/screening-assay/hooks/use-protocols", () => ({
   useProtocolSummaries: () => ({
@@ -114,6 +146,11 @@ const manualCampaign = {
 
 const campaign = {
   id: "c1",
+  project_id: "p1",
+  seed_runs: [
+    { run_id: "run-1", protocol_id: "proto-1", stage_ids: ["stage-screen"] },
+    { run_id: "run-2", protocol_id: "proto-1", stage_ids: ["stage-confirmed"] },
+  ],
   channels: [makeChannel({ id: "ch-1", label: "% Inhibition", protocol_id: "proto-1" })],
   stages: [screeningStage, confirmedStage],
   results: [
@@ -157,7 +194,9 @@ describe("StagesSection", () => {
     ).toBeInTheDocument();
     // Child population is its parent's hits (r3 is gated out as not_in_stage).
     expect(
-      screen.getByRole("button", { name: /^↳ after Screening Hits Confirmed Hits 1 of 2 50%$/ }),
+      screen.getByRole("button", {
+        name: /^↳ after Screening Hits Confirmed Hits 1 of 2 50% No criteria yet$/,
+      }),
     ).toBeInTheDocument();
   });
 
@@ -208,7 +247,7 @@ describe("StagesSection", () => {
       />,
       { wrapper },
     );
-    expect(screen.queryByText(/passes its whole population/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/the rest stay untested/)).not.toBeInTheDocument();
 
     rerender(
       <StagesSection
@@ -218,7 +257,12 @@ describe("StagesSection", () => {
         readOnly={false}
       />,
     );
-    expect(screen.getByText(/No criteria yet/)).toBeInTheDocument();
+    // A criteria stage with none passes what it measured, and nothing else.
+    expect(
+      screen.getByText(
+        "No criteria yet — compounds measured at this stage pass; the rest stay untested.",
+      ),
+    ).toBeInTheDocument();
     expect(screen.getByText("after Screening Hits")).toBeInTheDocument();
 
     rerender(
@@ -296,5 +340,124 @@ describe("StagesSection", () => {
       { wrapper },
     );
     expect(screen.queryByRole("button", { name: "Stage" })).not.toBeInTheDocument();
+  });
+});
+
+describe("StagesSection runs", () => {
+  it("lists the selected stage's runs by protocol and date, and removes one after confirming", async () => {
+    removeRun.mockClear();
+    render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+
+    const row = (await screen.findByText("Run on Nov 12, 2026")).closest("li") as HTMLElement;
+    expect(row).toHaveTextContent("Kinase Panel");
+    // The dose and size a chemist tells runs apart by, then the created detail.
+    expect(row).toHaveTextContent(
+      "Kinase Panel · Run on Nov 12, 2026 · 10 µM · 20 compoundscreated 09:05 · run-1",
+    );
+    // run-2 belongs to the child stage only.
+    expect(screen.queryByText("Run on Nov 14, 2026")).not.toBeInTheDocument();
+
+    fireEvent.click(within(row).getByRole("button", { name: "Remove from stage" }));
+    expect(removeRun).not.toHaveBeenCalled();
+    const confirm = screen.getByRole("alertdialog");
+    expect(confirm).toHaveTextContent("Remove this run from Screening Hits?");
+    fireEvent.click(within(confirm).getByRole("button", { name: "Remove from stage" }));
+    expect(removeRun).toHaveBeenCalledWith({ stageId: "stage-screen", runId: "run-1" });
+  });
+
+  it("offers to add runs to the stage, and shows the list without actions when read-only", async () => {
+    const { unmount } = render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByRole("button", { name: "Add runs to Screening Hits" })).toBeInTheDocument();
+    unmount();
+
+    render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly
+      />,
+      { wrapper },
+    );
+    expect(await screen.findByText("Run on Nov 12, 2026")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Remove from stage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Add runs to/ })).not.toBeInTheDocument();
+  });
+
+  it("tells same-day runs apart by time created and a short id, in the list and the confirm", async () => {
+    const sameDay = {
+      ...campaign,
+      seed_runs: [
+        ...(campaign.seed_runs ?? []),
+        {
+          run_id: "3f2a9c1b-7d4e-4a10-9c2b-5e6f7a8b9c0d",
+          protocol_id: "proto-1",
+          stage_ids: ["stage-screen"],
+        },
+      ],
+    } as unknown as CampaignResponse;
+    render(
+      <StagesSection
+        campaign={sameDay}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+
+    expect(await screen.findByText("created 09:05 · run-1")).toBeInTheDocument();
+    const rerun = screen.getByText("created 15:40 · 3f2a9c1b").closest("li") as HTMLElement;
+    expect(rerun).toHaveTextContent("Run on Nov 12, 2026");
+
+    fireEvent.click(within(rerun).getByRole("button", { name: "Remove from stage" }));
+    expect(screen.getByRole("alertdialog")).toHaveTextContent(
+      "Kinase Panel · Run on Nov 12, 2026 · 50 µM · 1 compound · created 15:40 · 3f2a9c1b stays in the campaign",
+    );
+  });
+
+  it("says when a stage has no runs yet", () => {
+    render(
+      <StagesSection
+        campaign={{ ...campaign, seed_runs: [] } as unknown as CampaignResponse}
+        selectedStageId="stage-screen"
+        onSelectStage={vi.fn()}
+        readOnly={false}
+      />,
+      { wrapper },
+    );
+    expect(screen.getByText(/No runs at this stage yet/)).toBeInTheDocument();
+  });
+});
+
+describe("StagesSection run facts", () => {
+  it("leaves out a concentration or count the run doesn't record", async () => {
+    render(
+      <StagesSection
+        campaign={campaign}
+        selectedStageId="stage-confirmed"
+        onSelectStage={vi.fn()}
+        readOnly
+      />,
+      { wrapper },
+    );
+    const row = (await screen.findByText("Run on Nov 14, 2026")).closest("li") as HTMLElement;
+    expect(row).toHaveTextContent(/^Kinase Panel · Run on Nov 14, 2026run-2$/);
   });
 });

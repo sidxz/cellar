@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from cellar.domain.shared.aggregation_types import ValueQualifier
-from cellar.infrastructure.persistence.sqlalchemy.research_organization.channel_resolution_query import (  # noqa: E501
+from cellar.infrastructure.persistence.sqlalchemy.research_organization.column_candidate_query import (  # noqa: E501
     _readout_candidate,
 )
 

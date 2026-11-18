@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import uuid
-from collections.abc import Callable
 from unittest.mock import AsyncMock
 
 import pytest
@@ -34,7 +33,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -131,40 +130,6 @@ def _build_campaign(
     return campaign, channels, results
 
 
-def _fresh_measurement_factory(unit: str = "uM") -> Callable:
-    """Returns a resolver factory that produces fresh measurements (value=99.0)."""
-
-    def _factory(channel, result_id, molecule_id) -> CampaignMeasurement:
-        return CampaignMeasurement(
-            result_id=result_id,
-            channel_id=channel.id,
-            value=99.0,
-            value_qualifier=ValueQualifier.EQ,
-            unit=unit,
-            protocol_name_snapshot="Proto",
-            protocol_version_snapshot=1,
-        )
-
-    return _factory
-
-
-def _nd_measurement_factory() -> Callable:
-    """Returns a resolver factory that produces ND measurements with placeholder unit '-'."""
-
-    def _factory(channel, result_id, molecule_id) -> CampaignMeasurement:
-        return CampaignMeasurement(
-            result_id=result_id,
-            channel_id=channel.id,
-            value=None,
-            value_qualifier=ValueQualifier.ND,
-            unit="-",
-            protocol_name_snapshot="Proto",
-            protocol_version_snapshot=1,
-        )
-
-    return _factory
-
-
 def _make_protocol_repo(protocols: list | None = None) -> AsyncMock:
     """Return an AsyncMock protocol repository returning given protocols."""
     repo = AsyncMock()
@@ -218,10 +183,12 @@ def _make_use_case(
     protocol_id: uuid.UUID | None = None,
     readout_definition_id: uuid.UUID | None = None,
     readout_unit: str | None = "uM",
-    resolver_unit: str = "uM",
-    resolver_factory: Callable | None = None,
-) -> tuple[CloseCampaign, AsyncMock, AsyncMock, FakeResolver]:
-    """Build a CloseCampaign use case with fakes; return (uc, campaign_repo, protocol_repo, resolver).
+    value: float | None = 99.0,
+) -> tuple[CloseCampaign, AsyncMock, AsyncMock, FakeColumnQuery]:
+    """Build a CloseCampaign use case with fakes; return (uc, campaign_repo, protocol_repo, query).
+
+    ``value=None``: the query finds nothing, so every cell resolves ND with the
+    placeholder unit "-".
 
     No ``collection_repo`` — soft close publishes nothing (spec §4/§5).
     """
@@ -230,14 +197,11 @@ def _make_use_case(
 
     protocols = []
     if protocol_id is not None and readout_definition_id is not None:
-        protocols = [
-            _make_fake_protocol(protocol_id, readout_definition_id, unit=readout_unit)
-        ]
+        protocols = [_make_fake_protocol(protocol_id, readout_definition_id, unit=readout_unit)]
 
     protocol_repo = _make_protocol_repo(protocols)
 
-    factory = resolver_factory or _fresh_measurement_factory(resolver_unit)
-    resolver = FakeResolver(factory=factory)
+    query = FakeColumnQuery(value, unit="uM")
 
     dispatcher = AsyncMock()
     dispatcher.dispatch_all = AsyncMock()
@@ -246,10 +210,10 @@ def _make_use_case(
         uow=FakeUnitOfWork(),
         campaign_repo=campaign_repo,
         protocol_repo=protocol_repo,
-        resolver=resolver,
+        query=query,
         dispatcher=dispatcher,
     )
-    return uc, campaign_repo, protocol_repo, resolver
+    return uc, campaign_repo, protocol_repo, query
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +247,7 @@ class TestCloseCampaign:
             r.add_measurement(_make_measurement(r.id, ch.id))
             campaign.add_result(r)
 
-        uc, campaign_repo, protocol_repo, resolver = _make_use_case(
+        uc, campaign_repo, protocol_repo, query = _make_use_case(
             campaign, protocol_id=pid, readout_definition_id=rdid
         )
         cmd = _make_command(auth.workspace_id, campaign.id, note="Confirmed by wet lab")
@@ -343,15 +307,13 @@ class TestCloseCampaign:
             override_indices={(0, 0)},
         )
 
-        uc, _, _, resolver = _make_use_case(
-            campaign, protocol_id=pid, readout_definition_id=rdid
-        )
+        uc, _, _, query = _make_use_case(campaign, protocol_id=pid, readout_definition_id=rdid)
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        # 1 result × 1 channel = 1 cell, and it's an override → resolver NOT called
-        assert len(resolver.calls) == 0
+        # 1 result × 1 channel = 1 cell, and it's an override → nothing fetched
+        assert len(query.calls) == 0
         # The override measurement value is still 10.0
         m = campaign.results[0].find_measurement(channels[0].id)
         assert m is not None
@@ -380,13 +342,13 @@ class TestCloseCampaign:
         r.add_measurement(_make_measurement(r.id, ch.id))
         campaign.add_result(r)
 
-        # Resolver returns ND with placeholder unit "-"
-        uc, _, _, resolver = _make_use_case(
+        # Nothing found: the cell resolves ND with placeholder unit "-"
+        uc, _, _, query = _make_use_case(
             campaign,
             protocol_id=pid,
             readout_definition_id=rdid,
             readout_unit="uM",
-            resolver_factory=_nd_measurement_factory(),
+            value=None,
         )
         # Capture the existing measurement's id before the use-case call so we
         # can assert the rebuild path preserved it (avoiding a DELETE+INSERT that
@@ -425,12 +387,12 @@ class TestCloseCampaign:
         campaign.add_result(r)
 
         # readout_unit=None → no repair
-        uc, _, _, resolver = _make_use_case(
+        uc, _, _, query = _make_use_case(
             campaign,
             protocol_id=pid,
             readout_definition_id=rdid,
             readout_unit=None,
-            resolver_factory=_nd_measurement_factory(),
+            value=None,
         )
         cmd = _make_command(auth.workspace_id, campaign.id)
         out = await uc(cmd, auth=auth)
@@ -500,13 +462,13 @@ class TestCloseCampaign:
         campaign_repo = make_campaign_repo(find_in_ws=None)
         protocol_repo = _make_protocol_repo()
         dispatcher = AsyncMock()
-        resolver = FakeResolver(factory=_fresh_measurement_factory())
+        query = FakeColumnQuery(99.0, unit="uM")
 
         uc = CloseCampaign(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             protocol_repo=protocol_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = _make_command(auth.workspace_id, uuid.uuid4())
@@ -584,7 +546,7 @@ class TestCloseCampaign:
             _make_fake_protocol(shared_pid, rdid2, unit="nM").readout_definitions[0],
         ]
         protocol_repo = _make_protocol_repo([fake_proto])
-        resolver = FakeResolver(factory=_fresh_measurement_factory())
+        query = FakeColumnQuery(99.0, unit="uM")
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -592,7 +554,7 @@ class TestCloseCampaign:
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
             protocol_repo=protocol_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = _make_command(auth.workspace_id, campaign.id)
@@ -612,12 +574,12 @@ class TestCloseCampaign:
         auth = fake_auth()
         campaign, channels, results = _build_campaign(auth.workspace_id)
         run_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, channels[0].protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, channels[0].protocol_id)], None)
 
-        uc, _, _, resolver = _make_use_case(campaign)
+        uc, _, _, query = _make_use_case(campaign)
         out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
         assert isinstance(out, Success)
-        assert resolver.run_ids_seen == [[run_id]]
+        assert query.run_ids_seen == [[run_id]]
 
     @pytest.mark.asyncio
     async def test_run_refs_alone_do_not_scope_resolution(self) -> None:
@@ -628,19 +590,19 @@ class TestCloseCampaign:
         campaign, channels, results = _build_campaign(auth.workspace_id)
         results[0].added_from = RunRef(run_id=uuid.uuid4())
 
-        uc, _, _, resolver = _make_use_case(campaign)
+        uc, _, _, query = _make_use_case(campaign)
         out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
         assert isinstance(out, Success)
-        assert resolver.run_ids_seen == [None]
+        assert query.run_ids_seen == [None]
 
     @pytest.mark.asyncio
     async def test_close_opt_out_channel_resolves_unrestricted(self) -> None:
         auth = fake_auth()
         campaign, channels, results = _build_campaign(auth.workspace_id)
-        campaign.record_seed_runs([SeedRun(uuid.uuid4(), channels[0].protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(uuid.uuid4(), channels[0].protocol_id)], None)
         channels[0].resolve_from_all_runs = True
 
-        uc, _, _, resolver = _make_use_case(campaign)
+        uc, _, _, query = _make_use_case(campaign)
         out = await uc(_make_command(auth.workspace_id, campaign.id), auth=auth)
         assert isinstance(out, Success)
-        assert resolver.run_ids_seen == [None]
+        assert query.run_ids_seen == [None]

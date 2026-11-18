@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.research_organization.campaign import Campaign
@@ -17,12 +18,15 @@ from cellar.domain.research_organization.campaign_stage import CampaignStage, St
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
+    MeasurementBasis,
     QualifierHandling,
     SelectionRule,
     StageKind,
     StageOutcome,
+    UnresolvedReason,
     ValueQualifier,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.source_ref import SeedRun
 from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.research_organization.campaign_repository import (
@@ -38,7 +42,9 @@ def _build_campaign(
     add_channel: bool = True,
     add_result: bool = True,
     add_measurement: bool = True,
+    stage_name: str | None = None,
 ) -> Campaign:
+    """``stage_name`` makes the column a stage column with an ``IC50 < 5`` criterion."""
     workspace_id = workspace_id or uuid.uuid4()
     project_id = project_id or uuid.uuid4()
     c = Campaign.create(
@@ -49,6 +55,10 @@ def _build_campaign(
         created_by=uuid.uuid4(),
     )
     c.collect_events()  # discard CampaignCreated for test cleanliness
+    stage = None
+    if stage_name is not None:
+        stage = CampaignStage(campaign_id=c.id, name=stage_name, display_order=0)
+        c.add_stage(stage)
     if add_channel:
         ch = CampaignChannel(
             campaign_id=c.id,
@@ -59,8 +69,14 @@ def _build_campaign(
             selection_rule=SelectionRule.LATEST_RUN,
             qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
             display_order=0,
+            stage_id=stage.id if stage else None,
         )
         c.add_channel(ch)
+        if stage is not None:
+            c.update_stage(
+                stage.id,
+                criteria=[StageCriterion(channel_id=ch.id, operator="lt", value=5.0)],
+            )
         if add_result:
             r = CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4())
             c.add_result(r)
@@ -390,15 +406,9 @@ async def test_add_and_remove_channel_persists(
 async def test_stage_round_trip(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    c = _build_campaign()
+    c = _build_campaign(stage_name="Primary hits")
     channel_id = c.channels[0].id
-    stage = CampaignStage(
-        campaign_id=c.id,
-        name="Primary hits",
-        display_order=0,
-        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
-    )
-    c.add_stage(stage)
+    stage = c.stages[0]
     async with AsyncUnitOfWork(session_factory) as uow:
         repo = SQLAlchemyCampaignRepository(uow)
         await repo.save(c)
@@ -463,15 +473,9 @@ async def test_manual_stage_round_trips_kind(
 async def test_stage_rename_and_criteria_replace_reconciles(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    c = _build_campaign()
+    c = _build_campaign(stage_name="Primary hits")
     channel_id = c.channels[0].id
-    stage = CampaignStage(
-        campaign_id=c.id,
-        name="Primary hits",
-        display_order=0,
-        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
-    )
-    c.add_stage(stage)
+    stage = c.stages[0]
     async with AsyncUnitOfWork(session_factory) as uow:
         repo = SQLAlchemyCampaignRepository(uow)
         await repo.save(c)
@@ -504,15 +508,8 @@ async def test_stage_rename_and_criteria_replace_reconciles(
 async def test_stage_override_round_trip(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    c = _build_campaign()
-    channel_id = c.channels[0].id
-    stage = CampaignStage(
-        campaign_id=c.id,
-        name="Primary hits",
-        display_order=0,
-        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
-    )
-    c.add_stage(stage)
+    c = _build_campaign(stage_name="Primary hits")
+    stage = c.stages[0]
     result = c.results[0]
     overridden_by = uuid.uuid4()
     result.set_stage_override(
@@ -543,15 +540,8 @@ async def test_stage_override_round_trip(
 async def test_stage_override_removal_reconciles(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
-    c = _build_campaign()
-    channel_id = c.channels[0].id
-    stage = CampaignStage(
-        campaign_id=c.id,
-        name="Primary hits",
-        display_order=0,
-        criteria=[StageCriterion(channel_id=channel_id, operator="lt", value=5.0)],
-    )
-    c.add_stage(stage)
+    c = _build_campaign(stage_name="Primary hits")
+    stage = c.stages[0]
     result = c.results[0]
     result.set_stage_override(
         stage_id=stage.id,
@@ -632,7 +622,7 @@ async def test_seed_runs_round_trip_in_recorded_order(
     c = _build_campaign(add_result=False, add_measurement=False)
     p1, p2 = uuid.uuid4(), uuid.uuid4()
     r1, r2, r3 = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    c.record_seed_runs([SeedRun(r2, p1), SeedRun(r1, p2)])
+    c.add_runs_to_stage([SeedRun(r2, p1), SeedRun(r1, p2)], None)
     async with AsyncUnitOfWork(session_factory) as uow:
         repo = SQLAlchemyCampaignRepository(uow)
         await repo.save(c)
@@ -643,7 +633,7 @@ async def test_seed_runs_round_trip_in_recorded_order(
         loaded = await repo.find_by_id(c.id)
         assert loaded is not None
         assert loaded.seed_runs == [SeedRun(r2, p1), SeedRun(r1, p2)]
-        loaded.record_seed_runs([SeedRun(r3, p1), SeedRun(r2, p1)])  # r2 already there
+        loaded.add_runs_to_stage([SeedRun(r3, p1), SeedRun(r2, p1)], None)  # r2 already there
         await repo.save(loaded)
         await uow.commit()
 
@@ -652,4 +642,172 @@ async def test_seed_runs_round_trip_in_recorded_order(
         again = await repo.find_by_id(c.id)
     assert again is not None
     assert again.seed_runs == [SeedRun(r2, p1), SeedRun(r1, p2), SeedRun(r3, p1)]
-    assert again.seed_run_ids_for(p1) == [r2, r3]
+    assert again.campaign_run_ids(p1) == [r2, r3]
+
+
+async def test_stage_owned_fields_round_trip(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Migration 104: a column's stage and test concentration, a run's stages and a
+    cell's facts survive insert, reload, and update."""
+    c = _build_campaign(stage_name="Primary hits")
+    stage = c.stages[0]
+    ch = c.channels[0]
+    ch.test_concentration = Concentration(10.0, "µM")
+    run, protocol = uuid.uuid4(), ch.protocol_id
+    c.add_runs_to_stage([SeedRun(run, protocol)], stage.id)
+    batch = uuid.uuid4()
+    m = c.results[0].measurements[0]
+    m.batch_ids = [batch]
+    m.basis = MeasurementBasis.MIXED
+    m.concentration_series = True
+    m.unresolved_reason = UnresolvedReason.SEVERAL_CONCENTRATIONS
+    m.concentrations_found = [Concentration(1.0, "µM"), Concentration(10.0, "µg/mL")]
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        assert loaded.channels[0].stage_id == stage.id
+        assert loaded.channels[0].test_concentration == Concentration(10.0, "µM")
+        assert loaded.seed_runs == [SeedRun(run, protocol, (stage.id,))]
+        lm = loaded.results[0].measurements[0]
+        assert lm.batch_ids == [batch]
+        assert lm.basis == MeasurementBasis.MIXED
+        assert lm.concentration_series is True
+        assert lm.unresolved_reason == UnresolvedReason.SEVERAL_CONCENTRATIONS
+        assert lm.concentrations_found == [
+            Concentration(1.0, "µM"),
+            Concentration(10.0, "µg/mL"),
+        ]
+        # ... and the reconcile path (existing rows) writes them too
+        loaded.channels[0].test_concentration = None
+        loaded.remove_run_from_stage(stage.id, run)
+        lm.batch_ids = None
+        lm.basis = MeasurementBasis.REPORTED
+        lm.concentration_series = False
+        lm.unresolved_reason = None
+        lm.concentrations_found = None
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        again = await SQLAlchemyCampaignRepository(uow).find_by_id(c.id)
+    assert again is not None
+    assert again.channels[0].stage_id == stage.id
+    assert again.channels[0].test_concentration is None
+    assert again.seed_runs == [SeedRun(run, protocol, ())]
+    am = again.results[0].measurements[0]
+    assert (am.batch_ids, am.basis, am.concentration_series) == (
+        None,
+        MeasurementBasis.REPORTED,
+        False,
+    )
+    assert (am.unresolved_reason, am.concentrations_found) == (None, None)
+    async with session_factory() as s:
+        sql_nulls = (
+            await s.execute(
+                text(
+                    "SELECT (SELECT test_concentration IS NULL"
+                    "          FROM campaign_channel WHERE id = :ch),"
+                    "       (SELECT concentrations_found IS NULL"
+                    "          FROM campaign_measurement WHERE id = :m)"
+                ),
+                {"ch": ch.id, "m": m.id},
+            )
+        ).one()
+    assert tuple(sql_nulls) == (True, True)  # SQL NULL, not JSON 'null'
+
+
+async def test_a_campaign_column_has_no_stage_and_a_fresh_cell_no_facts(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    c = _build_campaign()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+    async with AsyncUnitOfWork(session_factory) as uow:
+        loaded = await SQLAlchemyCampaignRepository(uow).find_by_id(c.id)
+    assert loaded is not None
+    assert loaded.channels[0].stage_id is None
+    assert loaded.channels[0].test_concentration is None
+    m = loaded.results[0].measurements[0]
+    assert (m.batch_ids, m.basis, m.concentration_series) == (None, None, False)
+    assert (m.unresolved_reason, m.concentrations_found) == (None, None)
+
+
+async def test_removing_a_stage_that_owns_columns_persists(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    """Spec §9: removing a stage removes its columns, their cells and its overrides,
+    and its id from every run's stages, in one save; the run and the campaign's
+    other columns stay."""
+    c = _build_campaign(stage_name="Primary")
+    stage, owned = c.stages[0], c.channels[0]
+    other = CampaignChannel(
+        campaign_id=c.id,
+        label="Counter-screen",
+        protocol_id=uuid.uuid4(),
+        readout_definition_id=uuid.uuid4(),
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=SelectionRule.LATEST_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=1,
+    )
+    c.add_channel(other)
+    result = c.results[0]
+    result.add_measurement(
+        CampaignMeasurement(
+            result_id=result.id,
+            channel_id=other.id,
+            value=7.0,
+            value_qualifier=ValueQualifier.EQ,
+            unit="%",
+            protocol_name_snapshot="Counter",
+            protocol_version_snapshot=1,
+        )
+    )
+    result.set_stage_override(
+        stage_id=stage.id,
+        forced_outcome=StageOutcome.HIT,
+        reason="kept by hand",
+        overridden_by=uuid.uuid4(),
+    )
+    run = uuid.uuid4()
+    c.add_runs_to_stage([SeedRun(run, owned.protocol_id)], stage.id)
+    async with AsyncUnitOfWork(session_factory) as uow:
+        await SQLAlchemyCampaignRepository(uow).save(c)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        repo = SQLAlchemyCampaignRepository(uow)
+        loaded = await repo.find_by_id(c.id)
+        assert loaded is not None
+        loaded.remove_stage(stage.id)
+        await repo.save(loaded)
+        await uow.commit()
+
+    async with AsyncUnitOfWork(session_factory) as uow:
+        again = await SQLAlchemyCampaignRepository(uow).find_by_id(c.id)
+    assert again is not None
+    assert again.stages == []
+    assert [ch.id for ch in again.channels] == [other.id]
+    assert again.seed_runs == [SeedRun(run, owned.protocol_id, ())]
+    [row] = again.results
+    assert [m.channel_id for m in row.measurements] == [other.id]
+    assert row.stage_overrides == {}
+    async with session_factory() as s:
+        left = (
+            await s.execute(
+                text(
+                    "SELECT (SELECT count(*) FROM campaign_channel WHERE id = :ch),"
+                    "       (SELECT count(*) FROM campaign_measurement WHERE channel_id = :ch),"
+                    "       (SELECT count(*) FROM campaign_stage WHERE id = :stage)"
+                ),
+                {"ch": owned.id, "stage": stage.id},
+            )
+        ).one()
+    assert tuple(left) == (0, 0, 0)

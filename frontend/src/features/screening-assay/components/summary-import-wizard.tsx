@@ -14,6 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/shared/components/ui/dialog";
+import { Input } from "@/shared/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -29,7 +30,7 @@ import type {
   SummaryRole,
 } from "../hooks/use-summary-import";
 import { useSummaryImportWizard } from "../hooks/use-summary-import-wizard";
-import type { SummaryMappingDraft } from "../lib/summary-import-mapping";
+import { type SummaryMappingDraft, parseReplicatesConstant } from "../lib/summary-import-mapping";
 import { RowErrorsCard, StatCard, UnmatchedRefsCard } from "./import-outcome-cards";
 
 // Summary import recognizes only these roles — no Well / Plate / Concentration
@@ -40,6 +41,7 @@ const ROLE_OPTIONS: Array<{ value: SummaryRole; label: string }> = [
   { value: "compound_ref", label: "Compound Ref" },
   { value: "batch_ref", label: "Batch Ref" },
   { value: "structure", label: "Structure (SMILES)" },
+  { value: "replicates", label: "Replicates (n)" },
   { value: "readout", label: "Readout" },
   { value: "ignore", label: "Ignore" },
 ];
@@ -92,6 +94,7 @@ export function SummaryImportWizard({
     handleFile,
     setRole,
     setReadoutDef,
+    setReplicatesConstant,
     handleContinueToPreview,
     handleImport,
   } = useSummaryImportWizard({ runId, protocolId, open, onOpenChange });
@@ -133,6 +136,7 @@ export function SummaryImportWizard({
             readoutDefOptions={readoutDefOptions}
             onSetRole={setRole}
             onSetReadoutDef={setReadoutDef}
+            onSetReplicatesConstant={setReplicatesConstant}
           />
         )}
 
@@ -183,14 +187,17 @@ function MappingStep({
   readoutDefOptions,
   onSetRole,
   onSetReadoutDef,
+  onSetReplicatesConstant,
 }: {
   preview: SummaryPreviewResponse;
   draft: SummaryMappingDraft;
   readoutDefOptions: { id: string; name: string }[];
   onSetRole: (header: string, role: SummaryRole) => void;
   onSetReadoutDef: (header: string, defId: string) => void;
+  onSetReplicatesConstant: (raw: string) => void;
 }) {
   const sampleRows = preview.sample_rows.slice(0, 5);
+  const replicatesInvalid = parseReplicatesConstant(draft.replicatesConstant) === "invalid";
   return (
     <div className="space-y-4 py-2">
       <div className="overflow-x-auto rounded-md border">
@@ -258,6 +265,29 @@ function MappingStep({
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="space-y-1">
+        <label className="flex items-center gap-2 text-sm">
+          Every value is the mean of
+          {/* Text, not number: the check below sees exactly what was typed. */}
+          <Input
+            inputMode="numeric"
+            aria-label="Replicates in every value"
+            aria-invalid={replicatesInvalid}
+            aria-describedby={replicatesInvalid ? "replicates-error" : undefined}
+            className="h-8 w-20"
+            value={draft.replicatesConstant ?? ""}
+            onChange={(e) => onSetReplicatesConstant(e.target.value)}
+          />
+          replicates
+          <span className="text-xs text-muted-foreground">(optional)</span>
+        </label>
+        {replicatesInvalid && (
+          <p id="replicates-error" className="text-xs text-destructive">
+            Enter a whole number of 1 or more, or leave it empty.
+          </p>
+        )}
       </div>
 
       {sampleRows.length > 0 && (

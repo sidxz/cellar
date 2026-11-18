@@ -634,6 +634,7 @@ class SQLAlchemyReadoutDataRepository:
                 if model.normalization_applied
                 else None
             ),
+            replicate_count=model.replicate_count,
             created_at=model.created_at,
             updated_at=model.updated_at,
         )
@@ -658,6 +659,7 @@ class SQLAlchemyReadoutDataRepository:
                 if entity.normalization_applied is not None
                 else None
             ),
+            replicate_count=entity.replicate_count,
         )
 
     @staticmethod
@@ -672,6 +674,7 @@ class SQLAlchemyReadoutDataRepository:
         model.value_text = entity.value_text
         model.is_outlier = entity.is_outlier
         model.is_computed = entity.is_computed
+        model.replicate_count = entity.replicate_count
         model.normalization_applied = (
             entity.normalization_applied.value
             if entity.normalization_applied is not None

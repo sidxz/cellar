@@ -1,28 +1,18 @@
-"""AddResultsFromRuns — multi-run import with channel reuse + hit-criteria filter (B6).
+"""AddResultsFromRuns — add runs to a stage (or the campaign) and their compounds as rows (B6).
 
-Replaces the single-run ``AddResultsFromRun`` use case. The same pipeline now
-accepts a list of run_ids plus per-readout ``ChannelImportConfig`` entries.
-Either reuses an existing campaign channel (when ``(protocol_id, readout_def_id)``
-already matches one) or creates a new one. Cells are computed by the same
-threshold-evaluation + selection-rule path that powers PreviewRunImport, so
-the values committed match what the user saw in the preview. The threshold
-is import-time filtering only (``ChannelImportConfig.hit_threshold``) — it is
-never persisted onto the channel; hit/miss criteria live on ``CampaignStage``.
+The import itself is ``preview_run_import.apply_run_import``, shared with the preview
+so the committed cells are exactly the previewed ones. This use case loads, guards
+and saves:
 
-Behavioral notes:
-- DRAFT-only (campaign lock guard).
-- ``scope='hits_only'`` filters molecules out at commit time per ``filter_mode``.
-- ``refresh_existing_cells`` updates non-override cells for molecules already in
-  the campaign; override cells are preserved (matches RefreshFromSources).
-- Reusing a channel **applies the user's updated selection rule** to the
-  channel record. Existing cells against that channel are NOT auto-refreshed
-  (the screener can hit "Refresh from sources" if they want to).
-- Snapshot fields populated on every new/updated measurement:
-  ``replicate_count``, ``qc_pass``, ``contributing_run_ids``.
-- ``stage_name`` (optional) creates — or reuses, by case-insensitive name —
-  a CampaignStage from every config that opts into import-time filtering
-  (``use_for_filter`` + ``hit_threshold``); no qualifying config means no
-  stage (not an error). ``parent_stage_id`` attaches it under a parent.
+- DRAFT only (campaign lock guard).
+- The runs join ``stage_id``, else the ``stage_name`` stage (created or reused, by
+  case-insensitive name, under ``parent_stage_id``), else they are campaign runs.
+- Every target column is recomputed for every row over all of the stage's runs, so a
+  mean across runs means every run added so far, not the latest request's
+  (spec §6.3). Manual overrides are never rewritten.
+- ``scope='hits_only'`` adds the compounds whose recomputed values pass the request's
+  thresholds (``filter_mode`` any/all). The thresholds replace the stage's criteria
+  only when some config carries one.
 """
 
 from __future__ import annotations
@@ -38,31 +28,16 @@ from cellar.application.auth import AuthContext, require_editor, require_same_wo
 from cellar.application.research_organization.add_results_from_collection import (
     AddResultsOutcome,
 )
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolutionQuery,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
 from cellar.application.research_organization.preview_run_import import (
     ChannelImportConfig,
-    _apply_selection_rule,
-    _cfg_norm,
-    fetch_run_candidates,
+    apply_run_import,
 )
-from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
-from cellar.domain.research_organization.campaign_channel import CampaignChannel
-from cellar.domain.research_organization.campaign_measurement import (
-    CampaignMeasurement,
-)
-from cellar.domain.research_organization.campaign_result import CampaignResult
-from cellar.domain.research_organization.campaign_stage import StageCriterion
-from cellar.domain.research_organization.enums import (
-    CampaignStatus,
-    QualifierHandling,
-)
+from cellar.domain.research_organization.enums import CampaignStatus
 from cellar.domain.research_organization.repository import CampaignRepository
-from cellar.domain.research_organization.source_ref import RunRef, SeedRun
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -80,12 +55,11 @@ class AddResultsFromRunsCommand(Command):
     filter_mode: Literal["any", "all"] = "all"
     scope: Literal["hits_only", "all"] = "hits_only"
     description: str | None = None
-    refresh_existing_cells: bool = False
-    #: When set, creates (or reuses, by case-insensitive name) a CampaignStage
-    #: named ``stage_name`` from every config's import-time filter
-    #: (``use_for_filter`` + a ``hit_threshold``), one StageCriterion per such
-    #: config bound to its resolved channel. No qualifying config -> no stage
-    #: (not an error).
+    #: The stage the runs join; its columns take the configs. None with no
+    #: ``stage_name`` adds campaign runs feeding campaign columns.
+    stage_id: uuid.UUID | None = None
+    #: When no ``stage_id``: creates (or reuses, by case-insensitive name) this stage
+    #: and puts the runs and columns on it.
     stage_name: str | None = None
     #: Parent for the stage ``stage_name`` creates, making it a child in the
     #: funnel. On reuse of an existing stage, ``None`` leaves the current
@@ -103,32 +77,7 @@ class AddFromRunsOutcome(AddResultsOutcome):
 
 
 class AddResultsFromRuns:
-    """Multi-run import: creates/reuses channels and adds filtered hits.
-
-    Pipeline (inside one UoW):
-      1. ``require_editor`` auth guard.
-      2. Load campaign (workspace-scoped); NotFoundError if missing.
-      3. Inline DRAFT check.
-      4. Resolve channels:
-         - For each config, look up existing channel by
-           ``(protocol_id, readout_definition_id)``.
-         - If exists: apply the updated selection_rule.
-         - If new: ``campaign.add_channel(...)``.
-      5. For each (channel, run set): fetch per-molecule candidate lists.
-      6. Apply selection_rule to pick a value per molecule; evaluate the
-         config's hit_threshold against it (import-time filter only).
-      7. Aggregate per-molecule cells; decide is_hit per filter_mode +
-         active filter set (channels with ``use_for_filter=True`` AND a
-         hit_threshold).
-      8. ``scope == 'hits_only'`` drops non-hits.
-      9. For new molecules: create CampaignResult with RunRef attribution;
-         ``campaign.add_results`` (idempotent).
-     10. For each result × channel: persist a CampaignMeasurement carrying
-         all snapshot fields.
-     11. ``refresh_existing_cells=True`` updates non-override cells for
-         already-in-campaign molecules.
-     12. Save + commit + dispatch.
-    """
+    """Adds runs to a stage, ensures its columns, recomputes them and adds the rows."""
 
     def __init__(
         self,
@@ -136,13 +85,13 @@ class AddResultsFromRuns:
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
         run_repo: RunRepository,
-        channel_query: ChannelResolutionQuery,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
         self._run_repo = run_repo
-        self._query = channel_query
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -159,349 +108,45 @@ class AddResultsFromRuns:
             )
             if campaign is None:
                 return Failure(NotFoundError("Campaign", str(input.campaign_id)))
-
             if campaign.status != CampaignStatus.DRAFT:
                 return Failure(
                     ValidationError(f"Cannot add results: campaign is {campaign.status.value}")
                 )
-
             if not input.run_ids:
                 return Failure(ValidationError("At least one run_id is required"))
             if not input.channel_configs:
                 return Failure(ValidationError("At least one channel_config is required"))
 
-            # Spec D4 — the campaign remembers every run it was seeded from,
-            # whether or not that run's values win a pick (a mean over three
-            # runs attributes its row to one), and on every call — including
-            # refresh-existing-cells and a hits-only import that adds no row —
-            # so later refresh / close resolve against the same runs.
             runs = await self._run_repo.find_by_ids(input.workspace_id, input.run_ids)
-            campaign.record_seed_runs(
-                SeedRun(run_id=rid, protocol_id=runs[rid].protocol_id)
-                for rid in input.run_ids
-                if rid in runs
-            )
-
-            # Step 1 — channel resolution: reuse or create.
-            # Reuse key is (protocol, readout, normalization, intercept_key)
-            # so a single readout can expose multiple distinct channels for
-            # different intercepts (e.g. Resazurin EC50 + Resazurin EC90).
-            # After Option A, the intercept_key lives on the channel /
-            # config directly, not under hit_threshold — so a display-only
-            # channel (no threshold) still keeps its intercept identity
-            # and doesn't collide with the threshold-bearing primary.
-            channels_created = 0
-            channels_reused = 0
-            # The intercept-key fourth element uses the frozen InterceptKey VO
-            # directly (hashable by `@dataclass(frozen=True)`); None means
-            # the channel targets the primary intercept.
-            ChannelKey = tuple[uuid.UUID, uuid.UUID, str | None, object]
-
-            channel_by_config: dict[ChannelKey, CampaignChannel] = {}
-            existing_by_key: dict[ChannelKey, CampaignChannel] = {
-                (
-                    ch.protocol_id,
-                    ch.readout_definition_id,
-                    ch.normalization_applied,
-                    ch.intercept_key,
-                ): ch
-                for ch in campaign.channels
-            }
-            next_display_order = (
-                max((ch.display_order for ch in campaign.channels), default=-1) + 1
-            )
-
-            for cfg in input.channel_configs:
-                norm = _cfg_norm(cfg)
-                key: ChannelKey = (
-                    cfg.protocol_id,
-                    cfg.readout_definition_id,
-                    norm,
-                    cfg.intercept_key,
-                )
-                existing = existing_by_key.get(key)
-                if existing:
-                    # Reuse — apply the updated selection rule. Intercept
-                    # identity is locked at creation; the chemist changing
-                    # config fields doesn't move the channel to a different
-                    # intercept.
-                    existing.selection_rule = cfg.selection_rule
-                    channel_by_config[key] = existing
-                    channels_reused += 1
-                else:
-                    new_ch = CampaignChannel(
-                        campaign_id=campaign.id,
-                        label=cfg.label,
-                        protocol_id=cfg.protocol_id,
-                        readout_definition_id=cfg.readout_definition_id,
-                        source_kind=cfg.source_kind,
-                        selection_rule=cfg.selection_rule,
-                        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
-                        display_order=next_display_order,
-                        normalization_applied=norm,
-                        intercept_key=cfg.intercept_key,
-                    )
-                    next_display_order += 1
-                    try:
-                        campaign.add_channel(new_ch)
-                    except ValidationError as e:
-                        return Failure(e)
-                    channel_by_config[key] = new_ch
-                    channels_created += 1
-
-            # Step 1b — optional hit stage from import-time filter criteria.
-            # Purely config-driven (doesn't need any resolved cell value):
-            # one StageCriterion per config that opts into filtering, bound
-            # to that config's resolved channel. Numeric-only, like the
-            # mirror path: a config using the string-based ``in`` operator
-            # contributes nothing (StageCriterion doesn't accept it).
-            # A stage of that name already on the campaign is reused and its
-            # criteria replaced (see ``upsert_stage_by_name``).
-            stage_created = False
-            if input.stage_name:
-                stage_criteria: list[StageCriterion] = []
-                try:
-                    for cfg in input.channel_configs:
-                        if not (cfg.use_for_filter and cfg.hit_threshold is not None):
-                            continue
-                        if cfg.hit_threshold.operator == "in":
-                            continue
-                        norm = _cfg_norm(cfg)
-                        channel = channel_by_config[
-                            (cfg.protocol_id, cfg.readout_definition_id, norm, cfg.intercept_key)
-                        ]
-                        stage_criteria.append(
-                            StageCriterion(
-                                channel_id=channel.id,
-                                operator=cfg.hit_threshold.operator,
-                                value=cfg.hit_threshold.value,
-                            )
-                        )
-                    if stage_criteria:
-                        _, stage_created = upsert_stage_by_name(
-                            campaign,
-                            name=input.stage_name,
-                            criteria=stage_criteria,
-                            parent_stage_id=input.parent_stage_id,
-                        )
-                except ValidationError as e:
-                    return Failure(e)
-
-            # Step 2 — fetch candidates per channel
-            cells_by_mol_channel: dict[
-                tuple[uuid.UUID, uuid.UUID], _CellData
-            ] = {}  # (molecule_id, channel_id) -> cell data
-            active_channel_ids: set[uuid.UUID] = set()
-
-            for cfg in input.channel_configs:
-                norm = _cfg_norm(cfg)
-                key = (
-                    cfg.protocol_id,
-                    cfg.readout_definition_id,
-                    norm,
-                    cfg.intercept_key,
-                )
-                channel = channel_by_config[key]
-                if cfg.use_for_filter and cfg.hit_threshold is not None:
-                    active_channel_ids.add(channel.id)
-                # D1 + the curve-class filter live in the shared helper so the
-                # preview and this commit resolve identical candidate sets.
-                candidates_by_mol = await fetch_run_candidates(
-                    self._query,
-                    workspace_id=input.workspace_id,
-                    run_ids=input.run_ids,
-                    cfg=cfg,
-                )
-                for mol_id, candidates in candidates_by_mol.items():
-                    picked = _apply_selection_rule(
-                        candidates, cfg.selection_rule, cfg.intercept_key
-                    )
-                    if picked is None:
-                        continue  # Skip ND cells — don't add a measurement
-                    # picked.value IS the channel's intercept value (primary
-                    # if intercept_key=None, intercept-specific otherwise);
-                    # threshold compares directly against it. picked.value
-                    # can still be None (e.g. an aggregate rule with no
-                    # positive contributors) even though picked is not None.
-                    is_hit = (
-                        cfg.hit_threshold.is_met(picked.value, picked.qualifier)
-                        if cfg.hit_threshold and picked.value is not None
-                        else None
-                    )
-                    qc_pass_all = all(_qc_pass(c) for c in candidates)
-                    cells_by_mol_channel[(mol_id, channel.id)] = _CellData(
-                        picked=picked,
-                        is_hit=is_hit,
-                        qc_pass=qc_pass_all,
-                    )
-
-            # Step 3 — group cells by molecule, decide is_hit
-            cells_by_mol: dict[uuid.UUID, dict[uuid.UUID, _CellData]] = {}
-            for (mol_id, ch_id), cell in cells_by_mol_channel.items():
-                cells_by_mol.setdefault(mol_id, {})[ch_id] = cell
-
-            mol_is_hit: dict[uuid.UUID, bool] = {}
-            for mol_id, ch_cells in cells_by_mol.items():
-                active_hits = [
-                    bool(ch_cells[ch_id].is_hit)
-                    for ch_id in ch_cells
-                    if ch_id in active_channel_ids
-                ]
-                if not active_hits:
-                    mol_is_hit[mol_id] = False
-                else:
-                    mol_is_hit[mol_id] = (
-                        any(active_hits) if input.filter_mode == "any" else all(active_hits)
-                    )
-
-            # Step 4 — scope filter
-            if input.scope == "hits_only":
-                mols_to_add = {mid for mid, hit in mol_is_hit.items() if hit}
-            else:
-                mols_to_add = set(cells_by_mol.keys())
-
-            # Step 5 — separate new vs already-in-campaign
-            existing_mol_ids = {r.molecule_id for r in campaign.results}
-            new_mols = mols_to_add - existing_mol_ids
-            existing_mols_in_scope = mols_to_add & existing_mol_ids
-
-            # Step 6 — build new CampaignResults
-            source_ref_by_mol: dict[uuid.UUID, RunRef] = {}
-            for mol_id in new_mols:
-                # Pick the "first contributing run" — earliest by run_date
-                # across all this molecule's cells.
-                first_run_id: uuid.UUID | None = None
-                earliest_date = None
-                for _ch_id, cell in cells_by_mol[mol_id].items():
-                    if cell.picked.source_run_id is None:
-                        continue
-                    if (
-                        earliest_date is None
-                        or (cell.picked.run_date or datetime.max.date()) < earliest_date
-                    ):
-                        earliest_date = cell.picked.run_date
-                        first_run_id = cell.picked.source_run_id
-                if first_run_id is None and input.run_ids:
-                    first_run_id = input.run_ids[0]
-                source_ref_by_mol[mol_id] = RunRef(
-                    run_id=first_run_id or input.run_ids[0],
-                    description=input.description,
-                )
-
-            new_results = [
-                CampaignResult(
-                    campaign_id=campaign.id,
-                    molecule_id=mol_id,
-                    added_from=source_ref_by_mol[mol_id],
-                )
-                for mol_id in new_mols
-            ]
-
             try:
-                added, _skipped = campaign.add_results(new_results)
-            except ValidationError as e:
+                imp = await apply_run_import(
+                    campaign,
+                    query=self._query,
+                    runs=runs,
+                    run_ids=input.run_ids,
+                    configs=input.channel_configs,
+                    filter_mode=input.filter_mode,
+                    scope=input.scope,
+                    description=input.description,
+                    stage_id=input.stage_id,
+                    stage_name=input.stage_name,
+                    parent_stage_id=input.parent_stage_id,
+                )
+            except (NotFoundError, ValidationError) as e:
                 return Failure(e)
-
-            # Step 7 — persist measurements for newly added results
-            mol_to_result_id: dict[uuid.UUID, uuid.UUID] = {
-                r.molecule_id: r.id for r in campaign.results
-            }
-
-            for mol_id in new_mols:
-                result_id = mol_to_result_id[mol_id]
-                result = next(r for r in campaign.results if r.id == result_id)
-                for ch_id, cell in cells_by_mol[mol_id].items():
-                    m = _build_measurement(
-                        result_id=result_id,
-                        channel_id=ch_id,
-                        cell=cell,
-                    )
-                    result.add_measurement(m)
-
-            # Step 8 — optionally refresh non-override cells for existing molecules
-            refreshed_existing = 0
-            if input.refresh_existing_cells:
-                for mol_id in existing_mols_in_scope:
-                    result_id = mol_to_result_id[mol_id]
-                    result = next(r for r in campaign.results if r.id == result_id)
-                    for ch_id, cell in cells_by_mol[mol_id].items():
-                        old = result.find_measurement(ch_id)
-                        if old is not None and old.is_manual_override:
-                            continue  # preserve override
-                        new_m = _build_measurement(
-                            result_id=result_id,
-                            channel_id=ch_id,
-                            cell=cell,
-                            preserve_id=old.id if old else None,
-                        )
-                        if old is not None:
-                            result.remove_measurement_for_channel(ch_id)
-                        result.add_measurement(new_m)
-                        refreshed_existing += 1
 
             campaign.updated_at = datetime.now(UTC)
             await self._campaign_repo.save(campaign)
             events = await self._uow.commit()
 
         await self._dispatcher.dispatch_all(events)
-        outcome = AddFromRunsOutcome(
-            campaign=campaign,
-            added=added,
-            skipped=len(mols_to_add) - added,
-            channels_created=channels_created,
-            channels_reused=channels_reused,
-            stage_created=stage_created,
+        return Success(
+            AddFromRunsOutcome(
+                campaign=campaign,
+                added=imp.added,
+                skipped=imp.skipped,
+                channels_created=imp.reused.count(False),
+                channels_reused=imp.reused.count(True),
+                stage_created=imp.stage_created,
+            )
         )
-        return Success(outcome)
-
-
-@dataclass(frozen=True)
-class _CellData:
-    """Internal carrier — bundles a selection-rule pick with is_hit and qc_pass."""
-
-    picked: object  # _Picked from preview_run_import
-    is_hit: bool | None
-    qc_pass: bool
-
-
-def _build_measurement(
-    *,
-    result_id: uuid.UUID,
-    channel_id: uuid.UUID,
-    cell: _CellData,
-    preserve_id: uuid.UUID | None = None,
-) -> CampaignMeasurement:
-    """Construct a CampaignMeasurement carrying every snapshot field."""
-    picked = cell.picked
-
-    kwargs = dict(
-        result_id=result_id,
-        channel_id=channel_id,
-        # Persisted value IS the channel's intercept value (primary if
-        # no intercept_key, intercept-specific otherwise). Matches the
-        # chemist's mental model: a channel "is for" EC90 → its
-        # measurement value IS the EC90.
-        value=picked.value,
-        value_qualifier=picked.qualifier,
-        unit=picked.unit,
-        protocol_name_snapshot=picked.protocol_name,
-        protocol_version_snapshot=picked.protocol_version,
-        source_run_id=picked.source_run_id,
-        source_curve_id=picked.source_curve_id,
-        source_readout_id=picked.source_readout_id,
-        run_date_snapshot=picked.run_date,
-        replicate_count=picked.replicate_count,
-        qc_pass=cell.qc_pass,
-        contributing_run_ids=picked.contributing_run_ids,
-        curve_snapshot=picked.curve_snapshot,
-    )
-    if preserve_id is not None:
-        kwargs["id"] = preserve_id
-    return CampaignMeasurement(**kwargs)
-
-
-def _qc_pass(c) -> bool:
-    """Default QC heuristic: run must be approved + z_prime, when present, >= 0.5."""
-    if not c.run_approved:
-        return False
-    return not (c.z_prime is not None and c.z_prime < 0.5)

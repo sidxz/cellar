@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -306,6 +307,20 @@ class CampaignChannelModel(Base, EntityModelMixin):
     resolve_from_all_runs: Mapped[bool] = mapped_column(
         Boolean, nullable=False, server_default=text("false")
     )
+    # Migration 104 — the stage owning this column; NULL for a campaign column.
+    stage_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("campaign_stage.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # Never read. It only tells the unit of work to insert a stage before the
+    # columns it owns (and delete them before it) when both change in one flush.
+    stage: Mapped[CampaignStageModel | None] = relationship(lazy="raise")
+    # Migration 104 — {"value": float, "unit": str} the column is pinned to, or NULL.
+    test_concentration: Mapped[dict[str, Any] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
 
 
 class CampaignResultModel(Base, EntityModelMixin):
@@ -408,6 +423,19 @@ class CampaignMeasurementModel(Base, EntityModelMixin):
     )
     # Migration 031 — frozen copy of the upstream dose-response curve.
     curve_snapshot: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # Migration 104 — per-value facts (spec §6.2).
+    batch_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
+        PG_ARRAY(PG_UUID(as_uuid=True)), nullable=True
+    )
+    basis: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    concentration_series: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    unresolved_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # [{"value": float, "unit": str}, ...]
+    concentrations_found: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB(none_as_null=True), nullable=True
+    )
 
     __table_args__ = (
         Index(

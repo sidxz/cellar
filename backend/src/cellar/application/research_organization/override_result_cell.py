@@ -128,6 +128,14 @@ class OverrideResultCell:
                     replicate_count=existing.replicate_count,
                     qc_pass=existing.qc_pass,
                     contributing_run_ids=existing.contributing_run_ids,
+                    batch_ids=existing.batch_ids,
+                    basis=existing.basis,
+                    concentration_series=existing.concentration_series,
+                    # A typed value is a value: the cell is no longer untested.
+                    unresolved_reason=(
+                        None if input.value is not None else existing.unresolved_reason
+                    ),
+                    concentrations_found=existing.concentrations_found,
                 )
             except ValidationError as e:
                 return Failure(e)

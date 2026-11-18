@@ -13,7 +13,7 @@ No event registration.
 from __future__ import annotations
 
 import uuid
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Any
 
 from returns.result import Failure, Result, Success
@@ -23,6 +23,7 @@ from cellar.application.auth import (
     require_same_workspace,
     require_workspace_role,
 )
+from cellar.application.research_organization.column_descriptions import describe_channels
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.repository import (
@@ -30,6 +31,10 @@ from cellar.domain.chemical_registration.repository import (
 )
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.research_organization.enums import CampaignStatus
+from cellar.domain.research_organization.measurement_facts import (
+    ColumnDescription,
+    Concentration,
+)
 from cellar.domain.research_organization.repository import (
     CampaignRepository,
     ProjectRepository,
@@ -199,6 +204,8 @@ class GetPublishedCampaign:
         # every read from the live campaign, results, and stages.
         stage_outcomes = evaluate_stages(campaign)
         stage_counts = tally_stage_counts(campaign, stage_outcomes)
+        # Column descriptions (spec §6.6) over every result, not just this page.
+        descriptions = describe_channels(campaign, readout_lookup)
 
         # Step 10 — serialize.
         doc: dict[str, Any] = {
@@ -209,7 +216,8 @@ class GetPublishedCampaign:
             # channels resolved within, per protocol.
             "seed_runs": [s.to_dict() for s in campaign.seed_runs],
             "channels": [
-                _serialize_channel(ch, protocol_lookup, readout_lookup) for ch in campaign.channels
+                _serialize_channel(ch, protocol_lookup, readout_lookup, descriptions[ch.id])
+                for ch in campaign.channels
             ],
             "stages": [_serialize_stage(s, stage_counts[s.id]) for s in campaign.stages],
             "results": [
@@ -302,10 +310,15 @@ def _derive_compound_sources(results: list[Any]) -> list[dict[str, Any]]:
     return list(groups.values())
 
 
+def _concentration(c: Concentration) -> dict[str, Any]:
+    return {"value": c.value, "unit": c.unit}
+
+
 def _serialize_channel(
     channel: Any,
     protocol_lookup: dict[uuid.UUID, Any],
     readout_lookup: dict[uuid.UUID, Any],
+    description: ColumnDescription,
 ) -> dict[str, Any]:
     proto = protocol_lookup.get(channel.protocol_id)
     if proto is not None:
@@ -354,6 +367,13 @@ def _serialize_channel(
         "selection_rule": channel.selection_rule.value,
         "qc_filter": qc_filter,
         "resolve_from_all_runs": channel.resolve_from_all_runs,
+        "stage_id": str(channel.stage_id) if channel.stage_id is not None else None,
+        "test_concentration": (
+            _concentration(channel.test_concentration)
+            if channel.test_concentration is not None
+            else None
+        ),
+        "description": asdict(description),
     }
 
 
@@ -466,5 +486,14 @@ def _serialize_measurement(m: Any) -> dict[str, Any]:
         "source": source,
         "contributing_run_ids": (
             [str(rid) for rid in m.contributing_run_ids] if m.contributing_run_ids else None
+        ),
+        "batch_ids": [str(b) for b in m.batch_ids] if m.batch_ids is not None else None,
+        "basis": m.basis.value if m.basis is not None else None,
+        "concentration_series": m.concentration_series,
+        "unresolved_reason": m.unresolved_reason.value if m.unresolved_reason else None,
+        "concentrations_found": (
+            [_concentration(c) for c in m.concentrations_found]
+            if m.concentrations_found is not None
+            else None
         ),
     }

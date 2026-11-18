@@ -28,6 +28,8 @@ interface AddCompoundsPillsProps {
    *  "Import from Runs" link) trigger the same dialogs. */
   open: AddCompoundsKind | null;
   onOpenChange: (kind: AddCompoundsKind | null) => void;
+  /** The stage selected in Hit stages: the run dialog starts on it. */
+  selectedStageId?: string | null;
 }
 
 const PILL_CLASS =
@@ -39,6 +41,7 @@ export function AddCompoundsPills({
   disabled,
   open,
   onOpenChange,
+  selectedStageId,
 }: AddCompoundsPillsProps) {
   const setOpen = onOpenChange;
 
@@ -87,6 +90,7 @@ export function AddCompoundsPills({
         campaignId={campaign.id}
         projectId={projectId}
         stages={campaign.stages}
+        initialStageId={selectedStageId}
         open={open === "run"}
         onOpenChange={(v) => !v && setOpen(null)}
       />

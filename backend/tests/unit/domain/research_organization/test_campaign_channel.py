@@ -11,7 +11,6 @@ from cellar.domain.research_organization.enums import (
 from cellar.domain.shared.errors import ValidationError
 
 
-
 def test_channel_label_required():
     with pytest.raises(ValidationError):
         CampaignChannel(
@@ -54,7 +53,6 @@ def test_channel_negative_display_order_rejected():
         )
 
 
-
 def test_channel_qc_filter_jsonable():
     ch = CampaignChannel(
         campaign_id=uuid.uuid4(),
@@ -88,3 +86,17 @@ def test_channel_resolve_from_all_runs_defaults_false_and_round_trips():
 
     assert _channel().resolve_from_all_runs is False
     assert _channel(resolve_from_all_runs=True).resolve_from_all_runs is True
+
+
+def test_channel_stage_fields_default():
+    ch = CampaignChannel(
+        campaign_id=uuid.uuid4(),
+        label="x",
+        protocol_id=uuid.uuid4(),
+        readout_definition_id=uuid.uuid4(),
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        selection_rule=SelectionRule.LATEST_RUN,
+        qualifier_handling=QualifierHandling.INCLUDE_QUALIFIED,
+        display_order=0,
+    )
+    assert ch.stage_id is None and ch.test_concentration is None

@@ -8,12 +8,18 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.research_organization.column_descriptions import (
+    describe_channels,
+    load_readouts,
+)
 from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.enums import CampaignStatus
+from cellar.domain.research_organization.measurement_facts import ColumnDescription
 from cellar.domain.research_organization.repository import CampaignRepository
+from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError
 from cellar.domain.shared.target_ref import TargetRef
 
@@ -37,12 +43,21 @@ class ListCampaignsResult:
     #: Read-time projection of each listed campaign's distinct targets,
     #: unioned from the runs its measurements reference (empty entries omitted).
     targets_by_campaign: dict[uuid.UUID, list[TargetRef]]
+    #: Every listed column's description (spec §6.6), by channel id — computed on read.
+    descriptions: dict[uuid.UUID, ColumnDescription]
 
 
 class ListCampaigns:
-    def __init__(self, *, uow: UnitOfWork, campaign_repo: CampaignRepository) -> None:
+    def __init__(
+        self,
+        *,
+        uow: UnitOfWork,
+        campaign_repo: CampaignRepository,
+        protocol_repo: ProtocolRepository,
+    ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
+        self._protocol_repo = protocol_repo
 
     async def __call__(
         self, input: ListCampaignsQuery, auth: AuthContext | None = None
@@ -85,9 +100,15 @@ class ListCampaigns:
             targets_by_campaign = await self._campaign_repo.project_targets(
                 input.workspace_id, campaigns
             )
+            readouts = await load_readouts(self._protocol_repo, input.workspace_id, campaigns)
             return Success(
                 ListCampaignsResult(
                     page=PageResult(items=campaigns, next_cursor=next_cursor),
                     targets_by_campaign=targets_by_campaign,
+                    descriptions={
+                        channel_id: d
+                        for c in campaigns
+                        for channel_id, d in describe_channels(c, readouts).items()
+                    },
                 )
             )

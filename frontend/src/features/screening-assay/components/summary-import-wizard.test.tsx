@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { UseSummaryImportWizardResult } from "../hooks/use-summary-import-wizard";
@@ -57,6 +57,7 @@ function baseHook(
     handleFile: vi.fn(),
     setRole: vi.fn(),
     setReadoutDef: vi.fn(),
+    setReplicatesConstant: vi.fn(),
     handleContinueToPreview: vi.fn(),
     handleImport: vi.fn(),
     ...overrides,
@@ -186,5 +187,72 @@ describe("SummaryImportWizard", () => {
     expect(
       screen.getByText(/file attachment failed: attachment failed: disk full/i),
     ).toBeInTheDocument();
+  });
+
+  it("step 2 offers the replicates constant and reports it", () => {
+    const setReplicatesConstant = vi.fn();
+    hookState.value = baseHook({
+      step: 2,
+      setReplicatesConstant,
+      preview: {
+        headers: ["Compound", "n"],
+        suggestions: [
+          { header: "Compound", role: "compound_ref", confidence: "high" },
+          { header: "n", role: "replicates", confidence: "high" },
+        ],
+        sample_rows: [],
+        total_rows: 2,
+      },
+      draft: { roles: { Compound: "compound_ref", n: "replicates" }, readoutDefByHeader: {} },
+    });
+    renderWizard();
+    expect(screen.getByText("Replicates (n)")).toBeInTheDocument();
+    const input = screen.getByLabelText(/replicates in every value/i);
+    // The raw text goes to the draft, never a silently changed number.
+    fireEvent.change(input, { target: { value: "3.5" } });
+    expect(setReplicatesConstant).toHaveBeenLastCalledWith("3.5");
+    expect(screen.queryByText(/whole number of 1 or more/)).not.toBeInTheDocument();
+  });
+
+  it.each(["3.5", "0", "-1"])("step 2 flags a replicate count of %s and blocks Continue", (raw) => {
+    hookState.value = baseHook({
+      step: 2,
+      // The hook derives this from buildMapping, which rejects the count.
+      canContinueMapping: false,
+      preview: { headers: ["Compound"], suggestions: [], sample_rows: [], total_rows: 1 },
+      draft: { roles: {}, readoutDefByHeader: {}, replicatesConstant: raw },
+    });
+    renderWizard();
+    expect(screen.getByLabelText(/replicates in every value/i)).toHaveValue(raw);
+    expect(screen.getByText(/whole number of 1 or more/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
+  });
+
+  it.each(["", "1e2"])("step 2 accepts a replicate count of %j", (raw) => {
+    hookState.value = baseHook({
+      step: 2,
+      preview: { headers: ["Compound"], suggestions: [], sample_rows: [], total_rows: 1 },
+      draft: { roles: {}, readoutDefByHeader: {}, replicatesConstant: raw },
+    });
+    renderWizard();
+    expect(screen.queryByText(/whole number of 1 or more/)).not.toBeInTheDocument();
+  });
+
+  it("step 3 shows a replicate row error", () => {
+    hookState.value = baseHook({
+      step: 3,
+      resolvePreview: {
+        total_rows: 1,
+        matched_compound_count: 1,
+        unmatched_compound_refs: [],
+        unmatched_batch_refs: [],
+        values_to_insert: 0,
+        values_to_update: 0,
+        rows_skipped: 1,
+        errors: [{ row: "2", error: "Replicates must be a whole number of at least 1" }],
+      },
+    });
+    renderWizard();
+    expect(screen.getByText(/whole number of at least 1/i)).toBeInTheDocument();
   });
 });

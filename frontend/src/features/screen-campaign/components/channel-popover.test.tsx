@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { CampaignChannelResponse } from "../types";
+import type { CampaignChannelResponse, CampaignStageResponse } from "../types";
 import { ChannelPopoverForm } from "./channel-popover";
 
 const { addMutate, updateMutate } = vi.hoisted(() => ({
@@ -162,5 +162,35 @@ describe("ChannelPopoverForm selection rule", () => {
         "Newest run that passes this channel's QC filter.",
       ),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ChannelPopoverForm stage", () => {
+  const stages = [
+    { id: "st-1", name: "Primary", display_order: 0, kind: "criteria", criteria: [] },
+  ] as unknown as CampaignStageResponse[];
+
+  it("needs a stage once the campaign has stages, and sends it", async () => {
+    render(
+      <ChannelPopoverForm campaignId="c1" projectId="p1" stages={stages} onClose={vi.fn()} />,
+      {
+        wrapper,
+      },
+    );
+    fireEvent.change(screen.getByPlaceholderText("e.g. Primary IC50"), {
+      target: { value: "% Inhibition" },
+    });
+    fireEvent.click(screen.getByRole("combobox", { name: "Protocol" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Kinase Panel"));
+    fireEvent.click(screen.getByRole("combobox", { name: "Readout" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("% Inhibition"));
+    expect(screen.getByRole("button", { name: "Add Readout" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Stage" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Primary"));
+    fireEvent.click(screen.getByRole("button", { name: "Add Readout" }));
+
+    await waitFor(() => expect(addMutate).toHaveBeenCalledTimes(1));
+    expect(addMutate.mock.calls[0][0].data).toMatchObject({ stage_id: "st-1" });
   });
 });

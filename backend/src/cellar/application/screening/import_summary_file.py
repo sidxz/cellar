@@ -254,6 +254,7 @@ class ImportSummaryFile:
                 value_numeric=item.value_numeric,
                 value_qualifier=item.value_qualifier,
                 value_text=item.value_text,
+                replicate_count=item.replicate_count,
             )
             for item in plan.items
         ]

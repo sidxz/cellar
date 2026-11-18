@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import asdict
+from typing import Any
 
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -21,12 +23,15 @@ from cellar.domain.research_organization.campaign_stage import (
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
     ChannelSourceKind,
+    MeasurementBasis,
     QualifierHandling,
     SelectionRule,
     StageKind,
     StageOutcome,
+    UnresolvedReason,
     ValueQualifier,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.repository import CampaignCollectionLinkResult
 from cellar.domain.research_organization.source_ref import SeedRun, SourceRef
 from cellar.domain.shared.hit_criterion import InterceptKey
@@ -59,6 +64,10 @@ from cellar.infrastructure.persistence.sqlalchemy.tagging.models import (
 from cellar.infrastructure.persistence.sqlalchemy.tagging.tag_filter import (
     tag_filter_subquery,
 )
+
+
+def _concentration_dicts(found: list[Concentration] | None) -> list[dict[str, Any]] | None:
+    return [asdict(c) for c in found] if found is not None else None
 
 
 class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]):
@@ -195,6 +204,10 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
                 InterceptKey.from_dict(model.intercept_key) if model.intercept_key else None
             ),
             resolve_from_all_runs=model.resolve_from_all_runs,
+            stage_id=model.stage_id,
+            test_concentration=(
+                Concentration(**model.test_concentration) if model.test_concentration else None
+            ),
         )
 
     @staticmethod
@@ -213,6 +226,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             normalization_applied=ch.normalization_applied,
             intercept_key=ch.intercept_key.to_dict() if ch.intercept_key else None,
             resolve_from_all_runs=ch.resolve_from_all_runs,
+            stage_id=ch.stage_id,
+            test_concentration=asdict(ch.test_concentration) if ch.test_concentration else None,
         )
 
     @staticmethod
@@ -228,6 +243,8 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.normalization_applied = ch.normalization_applied
         model.intercept_key = ch.intercept_key.to_dict() if ch.intercept_key else None
         model.resolve_from_all_runs = ch.resolve_from_all_runs
+        model.stage_id = ch.stage_id
+        model.test_concentration = asdict(ch.test_concentration) if ch.test_concentration else None
 
     # ------------------------------------------------------------------
     # Stage mapping
@@ -393,6 +410,17 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             qc_pass=model.qc_pass,
             contributing_run_ids=model.contributing_run_ids,
             curve_snapshot=model.curve_snapshot,
+            batch_ids=model.batch_ids,
+            basis=MeasurementBasis(model.basis) if model.basis else None,
+            concentration_series=model.concentration_series,
+            unresolved_reason=(
+                UnresolvedReason(model.unresolved_reason) if model.unresolved_reason else None
+            ),
+            concentrations_found=(
+                [Concentration(**c) for c in model.concentrations_found]
+                if model.concentrations_found is not None
+                else None
+            ),
         )
 
     @staticmethod
@@ -418,6 +446,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
             qc_pass=m.qc_pass,
             contributing_run_ids=m.contributing_run_ids,
             curve_snapshot=m.curve_snapshot,
+            batch_ids=m.batch_ids,
+            basis=m.basis.value if m.basis else None,
+            concentration_series=m.concentration_series,
+            unresolved_reason=m.unresolved_reason.value if m.unresolved_reason else None,
+            concentrations_found=_concentration_dicts(m.concentrations_found),
         )
 
     @staticmethod
@@ -442,6 +475,11 @@ class SQLAlchemyCampaignRepository(SQLAlchemyRepository[Campaign, CampaignModel]
         model.qc_pass = m.qc_pass
         model.contributing_run_ids = m.contributing_run_ids
         model.curve_snapshot = m.curve_snapshot
+        model.batch_ids = m.batch_ids
+        model.basis = m.basis.value if m.basis else None
+        model.concentration_series = m.concentration_series
+        model.unresolved_reason = m.unresolved_reason.value if m.unresolved_reason else None
+        model.concentrations_found = _concentration_dicts(m.concentrations_found)
 
     # ------------------------------------------------------------------
     # Protocol-required reads

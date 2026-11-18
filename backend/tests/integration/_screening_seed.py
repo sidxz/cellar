@@ -156,13 +156,14 @@ async def readout(
     well_id: uuid.UUID | None = None,
     batch_id: uuid.UUID | None = None,
     text: str | None = None,
+    replicate_count: int | None = None,
 ) -> None:
     await s.execute(
         sa.text(
             "INSERT INTO readout_data (id, workspace_id, run_id, well_id, molecule_id, batch_id, "
             "readout_definition_id, value_numeric, value_qualifier, value_text, is_outlier, "
-            "normalization_applied) "
-            "VALUES (:id, :ws, :run, :well, :m, :b, :rd, :v, :q, :t, :o, :n)"
+            "normalization_applied, replicate_count) "
+            "VALUES (:id, :ws, :run, :well, :m, :b, :rd, :v, :q, :t, :o, :n, :rc)"
         ),
         {
             "id": uuid.uuid4(),
@@ -177,6 +178,7 @@ async def readout(
             "q": qualifier,
             "o": outlier,
             "n": normalization,
+            "rc": replicate_count,
         },
     )
 

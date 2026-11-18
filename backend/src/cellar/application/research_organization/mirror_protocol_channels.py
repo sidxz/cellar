@@ -12,22 +12,26 @@ one transaction. For each readout:
   readout's primary normalization layer if any (matches the
   channel-popover's auto-pick).
 
-Idempotent: channels with the same ``(protocol_id, readout_definition_id,
-normalization_applied, intercept_key)`` are silently skipped, so the
-chemist can re-trigger after editing the protocol's intercepts without
+Idempotent: channels with the same ``(stage_id, protocol_id,
+readout_definition_id, normalization_applied, intercept_key)`` are silently
+skipped, so the chemist (or daikon, on every sync) can re-trigger without
 duplicates.
 
 The single-channel ``AddCampaignChannel`` use case stays the authoritative
 path for one-at-a-time creation; this just iterates the same shape inside
 one UoW for atomicity.
 
-An optional ``stage_name`` additionally creates (or reuses, by
-case-insensitive name — re-mirroring after a threshold tweak rewrites the
-stage rather than failing) one CampaignStage, mapping
-the protocol's ``recommended_hit_criteria`` onto the channels this mirror
-touched (created or already present) via ``_match_recommended_threshold``.
-Numeric-only — a recommendation using the string-based ``in`` operator is
-skipped. No recommendation maps -> no stage (not an error).
+The columns go on a stage (spec §10):
+
+- ``stage_id``: on that stage. Its criteria are never touched.
+- ``stage_name`` (with ``parent_stage_id``): the stage is always created or reused
+  (by case-insensitive name) and the columns go on it, even when no recommendation
+  maps, so no stray campaign column is left. The protocol's
+  ``recommended_hit_criteria`` replace the stage's criteria only when some map onto
+  the columns this mirror touched (created or already present), via
+  ``_match_recommended_threshold``. Numeric only: a recommendation using the
+  string-based ``in`` operator is skipped.
+- Neither: campaign columns.
 """
 
 from __future__ import annotations
@@ -38,11 +42,12 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
+from cellar.application.research_organization.stage_upsert import (
+    get_or_create_stage,
+    set_stage_criteria,
 )
-from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -72,11 +77,11 @@ class MirrorProtocolChannelsCommand(Command):
     workspace_id: uuid.UUID
     campaign_id: uuid.UUID
     protocol_id: uuid.UUID
-    #: When set, creates — or reuses, by case-insensitive name — a
-    #: CampaignStage named ``stage_name`` from the protocol's
-    #: ``recommended_hit_criteria``, mapped onto the mirrored (created or
-    #: already-present) channels via ``_match_recommended_threshold``.
-    #: No recommendation maps -> no stage (not an error).
+    #: The stage the columns go on; its criteria are never touched.
+    stage_id: uuid.UUID | None = None
+    #: When no ``stage_id``: creates — or reuses, by case-insensitive name — this
+    #: stage and puts the columns on it; the protocol's recommended criteria that
+    #: map onto them replace its criteria.
     stage_name: str | None = None
     #: Parent for the stage ``stage_name`` creates, making it a child in the
     #: funnel. On reuse of an existing stage, ``None`` leaves the current
@@ -173,13 +178,13 @@ class MirrorProtocolChannels:
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
         protocol_repo: ProtocolRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
         self._protocol_repo = protocol_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -207,8 +212,27 @@ class MirrorProtocolChannels:
             if protocol is None:
                 return Failure(NotFoundError("Protocol", str(input.protocol_id)))
 
+            # The stage comes before its columns: a column's stage must exist.
+            stage = None
+            stage_created = False
+            stage_touched = False  # the stage_name path created or rewrote it: persist
+            if input.stage_id is not None:
+                stage = campaign.find_stage(input.stage_id)
+                if stage is None:
+                    return Failure(NotFoundError("CampaignStage", str(input.stage_id)))
+            elif input.stage_name:
+                try:
+                    stage, stage_created = get_or_create_stage(
+                        campaign, name=input.stage_name, parent_stage_id=input.parent_stage_id
+                    )
+                except ValidationError as e:
+                    return Failure(e)
+                stage_touched = True
+            stage_id = stage.id if stage else None
+
             existing_channels = {
                 (
+                    ch.stage_id,
                     ch.protocol_id,
                     ch.readout_definition_id,
                     ch.normalization_applied,
@@ -259,7 +283,7 @@ class MirrorProtocolChannels:
 
                 primary_spec = specs[0] if specs else None
                 for intercept_key, spec in items:
-                    key = (protocol.id, rd.id, normalization, intercept_key)
+                    key = (stage_id, protocol.id, rd.id, normalization, intercept_key)
                     existing = existing_channels.get(key)
                     if existing is not None:
                         channels_skipped += 1
@@ -280,6 +304,7 @@ class MirrorProtocolChannels:
                             display_order=next_order,
                             normalization_applied=normalization,
                             intercept_key=intercept_key,
+                            stage_id=stage_id,
                         )
                         campaign.add_channel(channel)
                     except ValidationError as e:
@@ -290,15 +315,12 @@ class MirrorProtocolChannels:
                     channel_targets.append((rd.name, intercept_key, channel))
                     new_channels.append(channel)
 
-            # Optional hit stage — maps the protocol's recommended criteria
-            # onto the channels this mirror just touched (created or already
-            # present). Numeric-only; a recommendation with no match, or
-            # using the string-based ``in`` operator, contributes nothing.
-            # A stage of that name already on the campaign is reused and its
-            # criteria replaced (see ``upsert_stage_by_name``).
-            stage_created = False
-            stage_touched = False  # created OR reused-and-rewritten: must persist
-            if input.stage_name:
+            # stage_name only: the protocol's recommended criteria, mapped onto the
+            # channels this mirror touched (created or already present), replace
+            # the stage's criteria when some map. Numeric-only; a recommendation
+            # with no match, or using the string-based ``in`` operator, contributes
+            # nothing. A stage_id mirror never touches criteria.
+            if stage_touched and stage is not None:
                 recommended = protocol.recommended_hit_criteria or []
                 stage_criteria: list[StageCriterion] = []
                 for readout_name, intercept_key, channel in channel_targets:
@@ -316,29 +338,13 @@ class MirrorProtocolChannels:
                     )
                 if stage_criteria:
                     try:
-                        _, stage_created = upsert_stage_by_name(
-                            campaign,
-                            name=input.stage_name,
-                            criteria=stage_criteria,
-                            parent_stage_id=input.parent_stage_id,
-                        )
+                        set_stage_criteria(campaign, stage, stage_criteria)
                     except ValidationError as e:
                         return Failure(e)
-                    stage_touched = True
 
             # Resolve cells for the newly created channels — last, so the
             # cheap validation above can bail out first.
-            for channel in new_channels:
-                run_ids = resolution_run_ids(campaign, channel)
-                for result in campaign.results:
-                    measurement = await self._resolver.resolve(
-                        workspace_id=input.workspace_id,
-                        channel=channel,
-                        result_id=result.id,
-                        molecule_id=result.molecule_id,
-                        run_ids=run_ids,
-                    )
-                    result.add_measurement(measurement)
+            await recompute_columns(query=self._query, campaign=campaign, channels=new_channels)
 
             if channels_created > 0 or stage_touched:
                 await self._campaign_repo.save(campaign)

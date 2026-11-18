@@ -32,7 +32,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -71,19 +71,6 @@ def _make_measurement(
     if is_manual_override:
         m.mark_manual_override()
     return m
-
-
-def _new_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
-    """Factory used by FakeResolver to return a distinguishable fresh measurement."""
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=99.0,  # distinguishable from original 10.0
-        value_qualifier=ValueQualifier.EQ,
-        unit="nM",
-        protocol_name_snapshot="Proto",
-        protocol_version_snapshot=1,
-    )
 
 
 def _build_pre_populated_campaign(
@@ -154,7 +141,7 @@ class TestRefreshFromSources:
             assert m is not None
             override_measurements_before[(ri, ci)] = (id(m), m.value, m.is_manual_override)
 
-        resolver = FakeResolver(factory=_new_measurement)  # returns value=99.0
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
@@ -162,7 +149,7 @@ class TestRefreshFromSources:
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = RefreshFromSourcesCommand(
@@ -172,8 +159,12 @@ class TestRefreshFromSources:
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        # Total cells = 3 results × 2 channels = 6; 2 are overrides → resolver called 4 times
-        assert len(resolver.calls) == 4
+        # One fetch per channel, each without its override's row (6 cells - 2 overrides)
+        mols = [r.molecule_id for r in results]
+        assert query.calls == [
+            (channels[0].id, None, [mols[0], mols[1]]),
+            (channels[1].id, None, [mols[1], mols[2]]),
+        ]
 
         # All non-override cells now have value=99.0
         for ri, result in enumerate(results):
@@ -191,7 +182,7 @@ class TestRefreshFromSources:
 
     @pytest.mark.asyncio
     async def test_all_cells_are_manual_overrides_resolver_not_called(self) -> None:
-        """When every cell is an override, resolver is skipped but campaign is still saved."""
+        """When every cell is an override, query is skipped but campaign is still saved."""
         auth = fake_auth()
         n_channels, n_results = 2, 2
         override_indices = {(ri, ci) for ri in range(n_results) for ci in range(n_channels)}
@@ -202,7 +193,7 @@ class TestRefreshFromSources:
             override_indices=override_indices,
         )
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
@@ -210,7 +201,7 @@ class TestRefreshFromSources:
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = RefreshFromSourcesCommand(
@@ -220,7 +211,7 @@ class TestRefreshFromSources:
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        assert resolver.calls == []
+        assert query.calls == []
         campaign_repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
 
@@ -243,11 +234,11 @@ class TestRefreshFromSources:
         campaign.add_result(result)
         assert result.find_measurement(ch.id) is None
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RefreshFromSourcesCommand(
@@ -257,7 +248,7 @@ class TestRefreshFromSources:
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        assert len(resolver.calls) == 1
+        assert len(query.calls) == 1
         m = campaign.results[0].find_measurement(ch.id)
         assert m is not None
         assert m.value == 99.0
@@ -266,11 +257,11 @@ class TestRefreshFromSources:
     async def test_campaign_not_found_returns_not_found_failure(self) -> None:
         auth = fake_auth()
         campaign_repo = make_campaign_repo(find_in_ws=None)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RefreshFromSourcesCommand(
@@ -282,7 +273,7 @@ class TestRefreshFromSources:
         assert isinstance(out, Failure)
         assert isinstance(out.failure(), NotFoundError)
         campaign_repo.save.assert_not_awaited()
-        assert resolver.calls == []
+        assert query.calls == []
 
     @pytest.mark.asyncio
     async def test_campaign_not_draft_returns_validation_failure(self) -> None:
@@ -291,11 +282,11 @@ class TestRefreshFromSources:
         campaign.status = CampaignStatus.CLOSED  # type: ignore[misc]
 
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RefreshFromSourcesCommand(
@@ -314,7 +305,7 @@ class TestRefreshFromSources:
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=None),
-            resolver=FakeResolver(factory=_new_measurement),
+            query=FakeColumnQuery(99.0),
             dispatcher=AsyncMock(),
         )
         cmd = RefreshFromSourcesCommand(
@@ -323,6 +314,7 @@ class TestRefreshFromSources:
         )
         with pytest.raises(AuthorizationError):
             await uc(cmd, auth=auth)
+
     @pytest.mark.asyncio
     async def test_re_resolve_preserves_measurement_id(self) -> None:
         """Re-resolved measurement inherits the old measurement's id to avoid DELETE+INSERT."""
@@ -336,11 +328,11 @@ class TestRefreshFromSources:
         assert original_m is not None
         original_id = original_m.id
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            resolver=resolver,
+            query=query,
             dispatcher=AsyncMock(),
         )
         cmd = RefreshFromSourcesCommand(
@@ -357,7 +349,7 @@ class TestRefreshFromSources:
 
     @pytest.mark.asyncio
     async def test_zero_channels_no_resolver_calls_campaign_still_saved(self) -> None:
-        """Campaign with no channels: resolver never called, campaign saved and dispatched."""
+        """Campaign with no channels: query never called, campaign saved and dispatched."""
         auth = fake_auth()
         campaign = Campaign.create(
             workspace_id=auth.workspace_id,
@@ -370,7 +362,7 @@ class TestRefreshFromSources:
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         campaign.add_result(result)
 
-        resolver = FakeResolver(factory=_new_measurement)
+        query = FakeColumnQuery(99.0)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
@@ -378,7 +370,7 @@ class TestRefreshFromSources:
         uc = RefreshFromSources(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = RefreshFromSourcesCommand(
@@ -388,7 +380,7 @@ class TestRefreshFromSources:
         out = await uc(cmd, auth=auth)
 
         assert isinstance(out, Success)
-        assert resolver.calls == []
+        assert query.calls == []
         campaign_repo.save.assert_awaited_once()
         dispatcher.dispatch_all.assert_awaited_once()
 
@@ -402,24 +394,22 @@ class TestRefreshFromSources:
         )
         run_a, run_b = uuid.uuid4(), uuid.uuid4()
         proto = channels[0].protocol_id
-        campaign.record_seed_runs([SeedRun(run_a, proto), SeedRun(run_b, proto)])
+        campaign.add_runs_to_stage([SeedRun(run_a, proto), SeedRun(run_b, proto)], None)
 
-        def _uc(resolver):
+        def _uc(query):
             return RefreshFromSources(
                 uow=FakeUnitOfWork(),
                 campaign_repo=make_campaign_repo(find_in_ws=campaign),
-                resolver=resolver,
+                query=query,
                 dispatcher=AsyncMock(),
             )
 
-        cmd = RefreshFromSourcesCommand(
-            workspace_id=auth.workspace_id, campaign_id=campaign.id
-        )
-        resolver = FakeResolver(factory=_new_measurement)
-        assert isinstance(await _uc(resolver)(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [[run_a, run_b]] * 2
+        cmd = RefreshFromSourcesCommand(workspace_id=auth.workspace_id, campaign_id=campaign.id)
+        query = FakeColumnQuery(99.0)
+        assert isinstance(await _uc(query)(cmd, auth=auth), Success)
+        assert query.run_ids_seen == [[run_a, run_b]]
 
         channels[0].resolve_from_all_runs = True
-        opted_out = FakeResolver(factory=_new_measurement)
+        opted_out = FakeColumnQuery(99.0)
         assert isinstance(await _uc(opted_out)(cmd, auth=auth), Success)
-        assert opted_out.run_ids_seen == [None] * 2
+        assert opted_out.run_ids_seen == [None]

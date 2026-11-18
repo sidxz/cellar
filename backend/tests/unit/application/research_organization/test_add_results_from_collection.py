@@ -32,7 +32,7 @@ from cellar.domain.shared.errors import (
     ValidationError,
 )
 from tests.unit.application.research_organization._helpers import (
-    FakeResolver,
+    FakeColumnQuery,
     FakeUnitOfWork,
     fake_auth,
     make_campaign_repo,
@@ -63,18 +63,6 @@ def _make_channel(campaign: Campaign) -> CampaignChannel:
     )
 
 
-def _fake_measurement(channel, result_id, molecule_id) -> CampaignMeasurement:
-    return CampaignMeasurement(
-        result_id=result_id,
-        channel_id=channel.id,
-        value=None,
-        value_qualifier=ValueQualifier.ND,
-        unit="-",
-        protocol_name_snapshot="x",
-        protocol_version_snapshot=1,
-    )
-
-
 class TestAddResultsFromCollection:
     @pytest.mark.asyncio
     async def test_happy_path_adds_all_molecules(self) -> None:
@@ -84,7 +72,7 @@ class TestAddResultsFromCollection:
 
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         collection_repo = make_collection_repo(in_ws=True, molecule_ids=mols)
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -92,7 +80,7 @@ class TestAddResultsFromCollection:
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         coll_id = uuid.uuid4()
@@ -127,7 +115,7 @@ class TestAddResultsFromCollection:
 
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         collection_repo = make_collection_repo(in_ws=True, molecule_ids=[mol_a, mol_b, mol_c])
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         dispatcher = AsyncMock()
         dispatcher.dispatch_all = AsyncMock()
 
@@ -135,7 +123,7 @@ class TestAddResultsFromCollection:
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = AddResultsFromCollectionCommand(
@@ -157,14 +145,14 @@ class TestAddResultsFromCollection:
         campaign = _make_campaign(auth)
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         collection_repo = make_collection_repo(in_ws=False)
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         dispatcher = AsyncMock()
 
         uc = AddResultsFromCollection(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = AddResultsFromCollectionCommand(
@@ -182,14 +170,14 @@ class TestAddResultsFromCollection:
         auth = fake_auth()
         campaign_repo = make_campaign_repo(find_in_ws=None)
         collection_repo = make_collection_repo(in_ws=True)
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         dispatcher = AsyncMock()
 
         uc = AddResultsFromCollection(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = AddResultsFromCollectionCommand(
@@ -213,14 +201,14 @@ class TestAddResultsFromCollection:
 
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         collection_repo = make_collection_repo(in_ws=True, molecule_ids=[uuid.uuid4()])
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         dispatcher = AsyncMock()
 
         uc = AddResultsFromCollection(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = AddResultsFromCollectionCommand(
@@ -239,14 +227,14 @@ class TestAddResultsFromCollection:
         campaign = _make_campaign(auth)
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         collection_repo = make_collection_repo(in_ws=True)
-        resolver = FakeResolver(_fake_measurement)
+        query = FakeColumnQuery(None)
         dispatcher = AsyncMock()
 
         uc = AddResultsFromCollection(
             uow=FakeUnitOfWork(),
             campaign_repo=campaign_repo,
             collection_repo=collection_repo,
-            resolver=resolver,
+            query=query,
             dispatcher=dispatcher,
         )
         cmd = AddResultsFromCollectionCommand(
@@ -266,14 +254,14 @@ class TestAddResultsFromCollection:
         channel = _make_channel(campaign)
         campaign.add_channel(channel)
         run_id = uuid.uuid4()
-        campaign.record_seed_runs([SeedRun(run_id, channel.protocol_id)])
+        campaign.add_runs_to_stage([SeedRun(run_id, channel.protocol_id)], None)
 
-        def _uc(resolver, mols):
+        def _uc(query, mols):
             return AddResultsFromCollection(
                 uow=FakeUnitOfWork(),
                 campaign_repo=make_campaign_repo(find_in_ws=campaign),
                 collection_repo=make_collection_repo(in_ws=True, molecule_ids=mols),
-                resolver=resolver,
+                query=query,
                 dispatcher=AsyncMock(),
             )
 
@@ -282,11 +270,51 @@ class TestAddResultsFromCollection:
             campaign_id=campaign.id,
             collection_id=uuid.uuid4(),
         )
-        resolver = FakeResolver(_fake_measurement)
-        assert isinstance(await _uc(resolver, [uuid.uuid4()])(cmd, auth=auth), Success)
-        assert resolver.run_ids_seen == [[run_id]]
+        query = FakeColumnQuery(None)
+        assert isinstance(await _uc(query, [uuid.uuid4()])(cmd, auth=auth), Success)
+        assert query.run_ids_seen == [[run_id]]
 
         channel.resolve_from_all_runs = True
-        opted_out = FakeResolver(_fake_measurement)
+        opted_out = FakeColumnQuery(None)
         assert isinstance(await _uc(opted_out, [uuid.uuid4()])(cmd, auth=auth), Success)
         assert opted_out.run_ids_seen == [None]
+
+    @pytest.mark.asyncio
+    async def test_new_rows_resolve_in_one_fetch_and_existing_rows_stay(self) -> None:
+        """Only the rows just added are resolved, all in one fetch per column; a
+        molecule already in the campaign keeps its cell."""
+        auth = fake_auth()
+        campaign = _make_campaign(auth)
+        channel = _make_channel(campaign)
+        campaign.add_channel(channel)
+        existing = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        kept = CampaignMeasurement(
+            result_id=existing.id,
+            channel_id=channel.id,
+            value=10.0,
+            value_qualifier=ValueQualifier.EQ,
+            unit="uM",
+            protocol_name_snapshot="P",
+            protocol_version_snapshot=1,
+        )
+        existing.add_measurement(kept)
+        campaign.add_result(existing)
+        new_a, new_b = uuid.uuid4(), uuid.uuid4()
+        query = FakeColumnQuery(99.0)
+        uc = AddResultsFromCollection(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            collection_repo=make_collection_repo(
+                in_ws=True, molecule_ids=[existing.molecule_id, new_a, new_b]
+            ),
+            query=query,
+            dispatcher=AsyncMock(),
+        )
+        cmd = AddResultsFromCollectionCommand(
+            workspace_id=auth.workspace_id, campaign_id=campaign.id, collection_id=uuid.uuid4()
+        )
+
+        assert isinstance(await uc(cmd, auth=auth), Success)
+        assert query.calls == [(channel.id, None, [new_a, new_b])]
+        assert existing.find_measurement(channel.id) is kept
+        assert [r.find_measurement(channel.id).value for r in campaign.results[1:]] == [99.0, 99.0]

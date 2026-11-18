@@ -107,6 +107,11 @@ def _make_stage(campaign: Campaign, **overrides) -> CampaignStage:
     )
     defaults.update(overrides)
     stage = CampaignStage(**defaults)
+    # A criterion's column belongs to its stage.
+    for criterion in stage.criteria:
+        for channel in campaign.channels:
+            if channel.id == criterion.channel_id:
+                channel.stage_id = stage.id
     campaign.add_stage(stage)
     return stage
 
@@ -427,16 +432,18 @@ def test_parent_listed_after_child_still_evaluated_first():
         c, name="Parent", criteria=[StageCriterion(channel_id=ch.id, operator="gte", value=50.0)]
     )
     child = _make_stage(c, name="Child", parent_stage_id=parent.id, display_order=1)
+    child_col = _make_channel(c, stage_id=child.id)
     # Reverse campaign.stages so the child is listed before its parent.
     c.stages = [child, parent]
 
     r = _make_result(c)
     _add_measurement(r, ch, value=60.0)  # parent hits
+    _add_measurement(r, child_col, value=1.0)  # measured at the child stage
 
     outcomes = evaluate_stages(c)
 
     assert outcomes[r.id][parent.id].outcome == StageOutcome.HIT
-    # zero-criteria child, evaluated on a hit parent -> hit.
+    # no-criteria child, measured in its own column, on a hit parent -> hit.
     assert outcomes[r.id][child.id].outcome == StageOutcome.HIT
 
 
@@ -506,17 +513,77 @@ def test_override_on_not_in_stage_row():
 # ---------- zero-criteria stage ----------
 
 
-def test_zero_criteria_stage_is_hit_for_whole_population():
+def _no_criteria_stage_with_column(c):
+    stage = _make_stage(c, name="Retest", criteria=[])
+    col = _make_channel(c, stage_id=stage.id)
+    return stage, col
+
+
+def test_no_criteria_stage_untested_until_measured():
     c = _make_campaign()
-    stage = _make_stage(c, name="Empty", criteria=[])
-    r1 = _make_result(c)
-    r2 = _make_result(c)
+    stage, _col = _no_criteria_stage_with_column(c)
+    r = _make_result(c)
+
+    outcome = evaluate_stages(c)[r.id][stage.id]
+
+    assert outcome.outcome == StageOutcome.UNTESTED
+    assert outcome.checks == ()
+
+
+def test_no_criteria_stage_passes_measured_compound():
+    c = _make_campaign()
+    stage, col = _no_criteria_stage_with_column(c)
+    measured = _make_result(c)
+    _add_measurement(measured, col, value=3.0)
+    unmeasured = _make_result(c)
 
     outcomes = evaluate_stages(c)
 
-    assert outcomes[r1.id][stage.id].outcome == StageOutcome.HIT
-    assert outcomes[r2.id][stage.id].outcome == StageOutcome.HIT
-    assert outcomes[r1.id][stage.id].checks == ()
+    assert outcomes[measured.id][stage.id].outcome == StageOutcome.HIT
+    assert outcomes[unmeasured.id][stage.id].outcome == StageOutcome.UNTESTED
+
+
+def test_no_criteria_stage_counts_tested_nd_as_measured():
+    c = _make_campaign()
+    stage, col = _no_criteria_stage_with_column(c)
+    off_curve = _make_result(c)
+    _add_measurement(
+        off_curve, col, value=None, qualifier=ValueQualifier.ND, source_curve_id=uuid.uuid4()
+    )
+    no_curve = _make_result(c)
+    _add_measurement(no_curve, col, value=None, qualifier=ValueQualifier.ND)
+
+    outcomes = evaluate_stages(c)
+
+    assert outcomes[off_curve.id][stage.id].outcome == StageOutcome.HIT
+    assert outcomes[no_curve.id][stage.id].outcome == StageOutcome.UNTESTED
+
+
+def test_no_criteria_stage_without_columns_all_untested():
+    c = _make_campaign()
+    stage = _make_stage(c, name="Empty", criteria=[])
+    other = _make_channel(c)  # a column the stage does not own
+    r = _make_result(c)
+    _add_measurement(r, other, value=1.0)
+
+    assert evaluate_stages(c)[r.id][stage.id].outcome == StageOutcome.UNTESTED
+
+
+def test_no_criteria_stage_override_still_wins():
+    c = _make_campaign()
+    stage, _col = _no_criteria_stage_with_column(c)
+    r = _make_result(c)
+    r.set_stage_override(
+        stage_id=stage.id,
+        forced_outcome=StageOutcome.HIT,
+        reason="by hand",
+        overridden_by=uuid.uuid4(),
+    )
+
+    outcome = evaluate_stages(c)[r.id][stage.id]
+
+    assert outcome.outcome == StageOutcome.HIT
+    assert outcome.overridden is True
 
 
 # ---------- worked example (spec §3.6): 68 -> 12 -> 7/3/2/56 ----------
@@ -624,8 +691,10 @@ def test_cycle_guard_terminates_instead_of_recursing_forever():
     b = CampaignStage(campaign_id=c.id, name="B", display_order=1, parent_stage_id=a.id)
     a.parent_stage_id = b.id  # close the cycle: a -> b -> a
     c.stages = [a, b]
+    b_col = _make_channel(c, stage_id=b.id)
     r = _make_result(c)
     _add_measurement(r, ch, value=60.0)
+    _add_measurement(r, b_col, value=1.0)
 
     outcomes = evaluate_stages(c)
 

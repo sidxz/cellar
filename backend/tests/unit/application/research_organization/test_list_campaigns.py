@@ -33,7 +33,7 @@ class TestListCampaignsStatusFilter:
     async def test_status_forwarded_to_find_by_workspace(self) -> None:
         auth = fake_auth(role="viewer")
         repo = _make_repo()
-        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo)
+        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo, protocol_repo=AsyncMock())
 
         out = await uc(
             ListCampaignsQuery(workspace_id=auth.workspace_id, status=CampaignStatus.CLOSED),
@@ -49,7 +49,7 @@ class TestListCampaignsStatusFilter:
         auth = fake_auth()
         repo = _make_repo()
         project_id = uuid.uuid4()
-        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo)
+        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo, protocol_repo=AsyncMock())
 
         await uc(
             ListCampaignsQuery(
@@ -66,7 +66,7 @@ class TestListCampaignsStatusFilter:
     async def test_status_defaults_to_none(self) -> None:
         auth = fake_auth()
         repo = _make_repo()
-        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo)
+        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo, protocol_repo=AsyncMock())
 
         await uc(ListCampaignsQuery(workspace_id=auth.workspace_id), auth=auth)
 
@@ -76,7 +76,9 @@ class TestListCampaignsStatusFilter:
     async def test_no_workspace_role_is_rejected(self) -> None:
         auth = fake_auth(role="viewer")
         auth.has_role = lambda _minimum_role: False
-        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=_make_repo())
+        uc = ListCampaigns(
+            uow=FakeUnitOfWork(), campaign_repo=_make_repo(), protocol_repo=AsyncMock()
+        )
 
         with pytest.raises(AuthorizationError):
             await uc(ListCampaignsQuery(workspace_id=auth.workspace_id), auth=auth)

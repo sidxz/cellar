@@ -3,21 +3,21 @@
 /**
  * ChannelsSection — Task 2.5
  *
- * Uppercase-header section block that lists campaign channels, grouped by
- * their source protocol (a sub-heading per protocol — two protocols can
- * each define a readout named "IC50", so the group disambiguates which is
- * which, matching the grid's protocol-grouped columns). Each protocol is one
- * wrapping line of chips — one chip per channel. Dose-response chips carry a
- * "DR" mark; the selection rule is shown only when it differs from the
- * default (latest run), the full description lives in the chip's
- * title. Non-read-only mode shows a "+ Readout" pill (add) and makes each
- * chip a button (edit) — both open ChannelPopoverForm in a Popover.
+ * Uppercase-header section block that lists campaign channels under the stage
+ * that owns them (funnel order, campaign columns last under "Other columns"),
+ * matching the grid's column groups. Within a stage each protocol is one run
+ * of chips, led by its coloured name — two protocols can each define a readout
+ * named "IC50". Dose-response chips carry a "DR" mark; the selection rule is
+ * shown only when it differs from the default (latest run), the full
+ * description lives in the chip's title. A column measured at several
+ * concentrations offers the choice inline under its stage. Non-read-only mode
+ * shows a "+ Readout" pill (add) and makes each chip a button (edit) — both
+ * open ChannelPopoverForm in a Popover.
  */
 
 import { ProtocolOptionLabel } from "@/features/screening-assay";
 import { useProtocol, useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
 import { Button } from "@/shared/components/ui/button";
-import { Checkbox } from "@/shared/components/ui/checkbox";
 import { Input } from "@/shared/components/ui/input";
 import { Label } from "@/shared/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
@@ -37,12 +37,21 @@ import { showError, showSuccess } from "@/shared/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Copy, Plus } from "lucide-react";
 import { Fragment, useMemo, useState } from "react";
-import { campaignKeys } from "../../hooks/use-campaigns";
+import { useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
+import { campaignKeys, useSetColumnConcentration } from "../../hooks/use-campaigns";
+import {
+  compoundsText,
+  concentrationText,
+  listText,
+  setAsideText,
+} from "../../lib/column-description";
 import { protocolColorById } from "../../lib/protocol-colors";
+import { groupColumnsByStage } from "../../lib/stage-column-groups";
 import { stageNameNotice } from "../../lib/stage-name-notice";
 import type { CampaignChannelResponse, CampaignResponse, CampaignStageResponse } from "../../types";
 import { ChannelPopoverForm } from "../channel-popover";
 import { ROOT_SENTINEL } from "../stage-popover";
+import { NEW_STAGE, StageTargetSelect, stageIdOf } from "../stage-target-select";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
@@ -79,15 +88,16 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
     () => new Map((protocolSummaries ?? []).map((p) => [p.id, p.name] as const)),
     [protocolSummaries],
   );
-  const groupedChannels = groupBy(channels, (ch) => ch.protocol_id);
+  const stageGroups = groupColumnsByStage(channels, campaign.stages ?? []);
   const colorByProtocol = useMemo(() => protocolColorById(channels), [channels]);
 
   const qc = useQueryClient();
   const reorderMutation = useUpdateCampaignChannelApiV1CampaignsCampaignIdChannelsChannelIdPatch();
 
   /**
-   * Swap a readout's `display_order` with its neighbour in the same protocol
-   * row — the order the grid's columns and the criteria pickers follow.
+   * Swap a readout's `display_order` with its neighbour in the same
+   * (stage, protocol) row — the order the grid's columns and the criteria
+   * pickers follow.
    *
    * The two PATCHes are sequential, not concurrent: both load-modify-save the
    * same optimistic-concurrency Campaign aggregate, so firing them together
@@ -142,6 +152,7 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
                 <ChannelPopoverForm
                   campaignId={campaign.id}
                   projectId={projectId}
+                  stages={campaign.stages ?? []}
                   onClose={() => setAddOpen(false)}
                 />
               </PopoverContent>
@@ -168,30 +179,43 @@ export function ChannelsSection({ campaign, projectId, readOnly }: ChannelsSecti
           </p>
         )
       ) : (
-        <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-2">
-          {[...groupedChannels].map(([protocolId, protocolChannels]) => (
-            <Fragment key={protocolId}>
-              <h3
-                className="text-xs font-medium whitespace-nowrap"
-                style={{ color: colorByProtocol.get(protocolId) }}
-              >
-                {protocolNameById.get(protocolId) ?? "Protocol"}
-              </h3>
-              <ul className="flex flex-wrap gap-1.5">
-                {protocolChannels.map((c, i) => (
-                  <ChannelChip
-                    key={c.id}
-                    channel={c}
-                    campaign={campaign}
-                    projectId={projectId}
-                    readOnly={readOnly}
-                    canMoveEarlier={i > 0}
-                    canMoveLater={i < protocolChannels.length - 1}
-                    reorderPending={reorderMutation.isPending}
-                    onMove={(delta) => void swapWithNeighbour(protocolChannels, i, delta)}
-                  />
-                ))}
-              </ul>
+        <div className="grid grid-cols-[max-content_1fr] items-baseline gap-x-5 gap-y-3">
+          {stageGroups.map((group) => (
+            <Fragment key={group.stageId ?? "other"}>
+              <h3 className="text-xs font-semibold whitespace-nowrap">{group.title}</h3>
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                  {[...groupBy(group.channels, (ch) => ch.protocol_id)].map(([protocolId, row]) => (
+                    <div key={protocolId} className="flex flex-wrap items-center gap-1.5">
+                      <span
+                        className="text-xs font-medium whitespace-nowrap"
+                        style={{ color: colorByProtocol.get(protocolId) }}
+                      >
+                        {protocolNameById.get(protocolId) ?? "Protocol"}
+                      </span>
+                      <ul className="flex flex-wrap gap-1.5">
+                        {row.map((c, i) => (
+                          <ChannelChip
+                            key={c.id}
+                            channel={c}
+                            campaign={campaign}
+                            projectId={projectId}
+                            readOnly={readOnly}
+                            canMoveEarlier={i > 0}
+                            canMoveLater={i < row.length - 1}
+                            reorderPending={reorderMutation.isPending}
+                            onMove={(delta) => void swapWithNeighbour(row, i, delta)}
+                          />
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+                {!readOnly &&
+                  group.channels
+                    .filter(hasConcentrationChoice)
+                    .map((c) => <ConcentrationChoice key={c.id} campaign={campaign} channel={c} />)}
+              </div>
             </Fragment>
           ))}
         </div>
@@ -207,7 +231,7 @@ const CHIP =
 const CHIP_EDITABLE =
   "cursor-pointer transition-colors hover:border-primary/40 hover:bg-primary/10 focus-visible:outline-2 focus-visible:outline-primary";
 
-const DEFAULT_RULE = "latest_run";
+const DEFAULT_RULE = "latest run";
 
 function ChannelChip({
   channel,
@@ -232,7 +256,9 @@ function ChannelChip({
   const [editOpen, setEditOpen] = useState(false);
 
   const isDR = channel.source_kind === "dose_response_curve";
-  const rule = channel.selection_rule.replace(/_/g, " ");
+  // The rule the column computes (the description's), not the one configured:
+  // a geometric mean of % reads as a mean.
+  const rule = channel.description?.rule ?? channel.selection_rule.replace(/_/g, " ");
   const title = `${isDR ? "Dose-response curve" : "Readout data"} · ${rule}`;
 
   const content = (
@@ -243,15 +269,15 @@ function ChannelChip({
           DR
         </span>
       )}
-      {channel.selection_rule !== DEFAULT_RULE && (
+      {rule !== DEFAULT_RULE && (
         <span className="text-xs font-normal text-muted-foreground">· {rule}</span>
       )}
-      {/* Opted out of the campaign's run scope — resolves from every run of
-          its protocol, not only the ones the campaign was seeded from. */}
+      {/* Opted out of its run scope — reads every run of its protocol, not
+          only the runs added to its stage (or, for other columns, the campaign). */}
       {channel.resolve_from_all_runs && (
         <span
           className="text-[10px] font-normal italic text-muted-foreground"
-          title="Resolves from all runs of the protocol. Off: only the runs this campaign was seeded from."
+          title="Reads every run of the protocol, not only the runs added to its stage or campaign."
         >
           all runs
         </span>
@@ -330,6 +356,123 @@ function ReorderButton({
   );
 }
 
+// ── ConcentrationChoice ───────────────────────────────────────────────────────
+
+/** Whether a column shows the concentration control: it has a chosen dose, or
+ *  its runs hold it at several and it needs one. */
+const hasConcentrationChoice = (c: CampaignChannelResponse) =>
+  !!c.test_concentration || !!c.description?.needs_concentration;
+
+/**
+ * The concentration a column uses. Once chosen: "Uses the 10 µM values", the
+ * runs it reads that were recorded at another dose ("1 run at 50 µM set
+ * aside"), and Change (the other doses found, or Clear choice). Until then: the
+ * doses found with their compound counts and one "Use 10 µM" button each.
+ * Every click saves at once and recomputes the column, which the buttons'
+ * tooltip says. Compounds with no recorded concentration are a count, never a
+ * choice.
+ */
+function ConcentrationChoice({
+  campaign,
+  channel,
+}: {
+  campaign: CampaignResponse;
+  channel: CampaignChannelResponse;
+}) {
+  const setConcentration = useSetColumnConcentration(campaign.id);
+  const runLabel = useCampaignRunLabels(campaign);
+  const [changing, setChanging] = useState(false);
+  const d = channel.description;
+  const chosen = channel.test_concentration;
+
+  const name = d?.readout_label ?? channel.label;
+  const recomputes = channel.stage_id
+    ? "The stage's hits recompute"
+    : "The column's values recompute";
+  const choose = (testConcentration: { value: number; unit: string } | null) => {
+    setChanging(false);
+    setConcentration.mutate({ channelId: channel.id, testConcentration });
+  };
+  const concentrations = d?.concentrations ?? [];
+  const found = concentrations.filter(
+    (c): c is { value: number; unit: string; count: number } => c.value != null && !!c.unit,
+  );
+  const notRecorded = concentrations.find((c) => c.value == null)?.count ?? 0;
+  const choiceButton = (c: { value: number; unit: string }) => (
+    <Button
+      key={`${c.value}${c.unit}`}
+      size="xs"
+      variant="outline"
+      title={`${recomputes} from these values`}
+      disabled={setConcentration.isPending}
+      onClick={() => choose({ value: c.value, unit: c.unit })}
+    >
+      Use {concentrationText(c)}
+    </Button>
+  );
+  const label = <span className="font-medium text-foreground">{name}:</span>;
+
+  if (chosen) {
+    // The runs this column reads: its stage's (or, for a campaign column, the
+    // campaign's) runs of its protocol. All-runs columns read beyond them.
+    const runIds = channel.resolve_from_all_runs
+      ? []
+      : (campaign.seed_runs ?? [])
+          .filter(
+            (r) =>
+              r.protocol_id === channel.protocol_id &&
+              (!channel.stage_id || r.stage_ids.includes(channel.stage_id)),
+          )
+          .map((r) => r.run_id);
+    const setAside = setAsideText(
+      runIds.map((id) => runLabel(id).concentration),
+      chosen,
+    );
+    const others = found.filter((c) => !(c.value === chosen.value && c.unit === chosen.unit));
+    return (
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-muted-foreground">
+        {label}
+        <span>
+          Uses the {concentrationText(chosen)} values{setAside && ` · ${setAside}`}
+        </span>
+        <Popover open={changing} onOpenChange={setChanging}>
+          <PopoverTrigger asChild>
+            <Button size="xs" variant="outline" disabled={setConcentration.isPending}>
+              Change
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="flex w-auto flex-col items-stretch gap-1 p-2">
+            {others.map(choiceButton)}
+            <Button
+              size="xs"
+              variant="ghost"
+              title={`${recomputes} with no concentration chosen`}
+              disabled={setConcentration.isPending}
+              onClick={() => choose(null)}
+            >
+              Clear choice
+            </Button>
+          </PopoverContent>
+        </Popover>
+      </div>
+    );
+  }
+
+  const measuredAt = listText(
+    found.map((c, i) => `${concentrationText(c)} (${i === 0 ? compoundsText(c.count) : c.count})`),
+  );
+  return (
+    <div className="space-y-0.5 text-xs text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        {label}
+        <span>Measured at {measuredAt} — choose the one this column uses:</span>
+        {found.map(choiceButton)}
+      </div>
+      {notRecorded > 0 && <p>{compoundsText(notRecorded)}: concentration not recorded</p>}
+    </div>
+  );
+}
+
 // ── MirrorProtocolPopover ─────────────────────────────────────────────────────
 
 /**
@@ -340,10 +483,11 @@ function ReorderButton({
  * #14's add-from-runs split). Idempotent: existing matching channels are
  * skipped, so re-mirror after a protocol edit doesn't duplicate columns.
  *
- * When the chosen protocol declares `recommended_hit_criteria`, offers to
- * also create a CampaignStage from them in the same request (`stage_name`)
- * — the funnel's first stage usually mirrors the protocol's own SOP cutoff —
- * optionally hung under an existing stage (`parent_stage_id`).
+ * The columns go to a stage, picked by name (`stage_id`, which never touches
+ * its criteria), to a new stage (`stage_name`, optionally under
+ * `parent_stage_id`, taking the protocol's recommended hit criteria when some
+ * map), or to "Other columns". A campaign with stages must pick; one with none
+ * starts its first stage by default.
  */
 function MirrorProtocolPopover({
   campaignId,
@@ -354,8 +498,8 @@ function MirrorProtocolPopover({
 }: {
   campaignId: string;
   projectId: string;
-  /** This campaign's stages: they fill the parent picker and drive the
-   *  reuse advisory under the stage name (a colliding name reuses that
+  /** This campaign's stages: they fill the stage and parent pickers and drive
+   *  the reuse advisory under a new stage's name (a colliding name reuses that
    *  stage, except a manual one, which the backend refuses). */
   stages: CampaignStageResponse[];
   open: boolean;
@@ -364,9 +508,8 @@ function MirrorProtocolPopover({
   const qc = useQueryClient();
   const setOpen = onOpenChange;
   const [protocolId, setProtocolId] = useState<string>("");
-  // Inert until a protocol is chosen (handleProtocolChange derives the real
-  // default below) — the checkbox isn't shown before then.
-  const [createStage, setCreateStage] = useState(false);
+  const [pickedTarget, setPickedTarget] = useState<string | null>(null);
+  const target = pickedTarget ?? (stages.length > 0 ? "" : NEW_STAGE);
   const [stageName, setStageName] = useState("");
   // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
   const [parentStageId, setParentStageId] = useState<string>(ROOT_SENTINEL);
@@ -379,6 +522,13 @@ function MirrorProtocolPopover({
     enabled: !!protocolId,
   } as Parameters<typeof useProtocol>[1]);
   const hasRecommendedCriteria = (chosenProtocol?.recommended_hit_criteria?.length ?? 0) > 0;
+
+  function reset() {
+    setProtocolId("");
+    setPickedTarget(null);
+    setStageName("");
+    setParentStageId(ROOT_SENTINEL);
+  }
 
   const mutation = useMirrorProtocolChannelsApiV1CampaignsCampaignIdChannelsMirrorProtocolPost({
     mutation: {
@@ -399,10 +549,7 @@ function MirrorProtocolPopover({
         }
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
         setOpen(false);
-        setProtocolId("");
-        setCreateStage(false);
-        setStageName("");
-        setParentStageId(ROOT_SENTINEL);
+        reset();
       },
       onError: (err: unknown) => {
         const msg =
@@ -417,34 +564,24 @@ function MirrorProtocolPopover({
   function handleProtocolChange(id: string) {
     setProtocolId(id);
     const proto = protocols?.find((p) => p.id === id);
-    const defaultName = proto ? `${proto.name} hits` : "";
-    setStageName(defaultName);
-    // Re-mirroring the same protocol reuses its stage, so a collision is
-    // fine — only a manual stage of that name (which the backend refuses)
-    // defaults the checkbox off.
-    setCreateStage(defaultName !== "" && stageNameNotice(stages, defaultName)?.blocking !== true);
+    setStageName(proto ? `${proto.name} hits` : "");
   }
 
+  const isNew = target === NEW_STAGE;
+  const trimmedStageName = stageName.trim();
+  const nameNotice = isNew ? stageNameNotice(stages, stageName) : null;
   const handleMirror = () => {
     if (!protocolId) return;
     mutation.mutate({
       campaignId,
       data: {
         protocol_id: protocolId,
-        stage_name:
-          hasRecommendedCriteria && createStage && stageName.trim() ? stageName.trim() : undefined,
-        parent_stage_id:
-          hasRecommendedCriteria && createStage && parentStageId !== ROOT_SENTINEL
-            ? parentStageId
-            : undefined,
+        stage_id: stageIdOf(target),
+        stage_name: isNew ? trimmedStageName : null,
+        parent_stage_id: isNew && parentStageId !== ROOT_SENTINEL ? parentStageId : null,
       },
     });
   };
-
-  const trimmedStageName = stageName.trim();
-  const stageNameMissing = hasRecommendedCriteria && createStage && !trimmedStageName;
-  const nameNotice =
-    hasRecommendedCriteria && createStage ? stageNameNotice(stages, stageName) : null;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -465,7 +602,7 @@ function MirrorProtocolPopover({
         <div className="space-y-1">
           <Label className="text-xs">Protocol</Label>
           <Select value={protocolId} onValueChange={handleProtocolChange}>
-            <SelectTrigger>
+            <SelectTrigger aria-label="Protocol">
               <SelectValue placeholder="Select protocol..." />
             </SelectTrigger>
             <SelectContent>
@@ -478,53 +615,55 @@ function MirrorProtocolPopover({
           </Select>
         </div>
 
-        {hasRecommendedCriteria && (
-          <div className="space-y-2 border-t pt-2">
-            <div className="flex items-center gap-2">
-              <Checkbox
-                id="mirror-create-stage"
-                checked={createStage}
-                onCheckedChange={(v) => setCreateStage(v === true)}
+        <div className="space-y-1">
+          <Label className="text-xs">Stage</Label>
+          <StageTargetSelect
+            stages={stages}
+            value={target}
+            onChange={setPickedTarget}
+            allowNewStage
+          />
+        </div>
+
+        {isNew && (
+          <div className="space-y-2">
+            <div className="space-y-1">
+              <Label className="text-xs">Stage name</Label>
+              <Input
+                value={stageName}
+                onChange={(e) => setStageName(e.target.value)}
+                placeholder="e.g. Screening Hits"
               />
-              <Label htmlFor="mirror-create-stage" className="text-xs cursor-pointer">
-                Also create a stage from the protocol's hit criteria
-              </Label>
+              {nameNotice ? (
+                <p
+                  className={`text-xs ${nameNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                >
+                  {nameNotice.text}
+                </p>
+              ) : (
+                hasRecommendedCriteria && (
+                  <p className="text-xs text-muted-foreground">
+                    Its criteria come from the protocol's recommended hit criteria.
+                  </p>
+                )
+              )}
             </div>
-            {createStage && (
-              <>
-                <div className="space-y-1">
-                  <Label className="text-xs">Stage name</Label>
-                  <Input
-                    value={stageName}
-                    onChange={(e) => setStageName(e.target.value)}
-                    placeholder="e.g. Screening Hits"
-                  />
-                  {nameNotice && (
-                    <p
-                      className={`text-xs ${nameNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
-                    >
-                      {nameNotice.text}
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">Parent stage</Label>
-                  <Select value={parentStageId} onValueChange={setParentStageId}>
-                    <SelectTrigger aria-label="Parent stage">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
-                      {parentOptions.map((st) => (
-                        <SelectItem key={st.id} value={st.id}>
-                          {st.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </>
-            )}
+            <div className="space-y-1">
+              <Label className="text-xs">Parent stage</Label>
+              <Select value={parentStageId} onValueChange={setParentStageId}>
+                <SelectTrigger aria-label="Parent stage">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
+                  {parentOptions.map((st) => (
+                    <SelectItem key={st.id} value={st.id}>
+                      {st.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
 
@@ -536,7 +675,13 @@ function MirrorProtocolPopover({
             type="button"
             size="sm"
             onClick={handleMirror}
-            disabled={!protocolId || stageNameMissing || nameNotice?.blocking || mutation.isPending}
+            disabled={
+              !protocolId ||
+              !target ||
+              (isNew && !trimmedStageName) ||
+              nameNotice?.blocking ||
+              mutation.isPending
+            }
           >
             {mutation.isPending ? "Mirroring…" : "Mirror"}
           </Button>

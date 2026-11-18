@@ -2,7 +2,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { campaignKeys, useCampaignSummary, useCampaigns } from "./use-campaigns";
+import {
+  campaignKeys,
+  useCampaignSummary,
+  useCampaigns,
+  useRemoveRunFromStage,
+  useSetColumnConcentration,
+} from "./use-campaigns";
 
 const customInstance = vi.fn(async (_args: unknown) => ({ items: [], next_cursor: null }));
 vi.mock("@/shared/lib/api/custom-instance", () => ({
@@ -64,5 +70,31 @@ describe("useCampaignSummary", () => {
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(qc.getQueryData(campaignKeys.summary("c1"))).toEqual({ id: "c1", result_count: 7 });
     expect(qc.getQueryData(campaignKeys.detail("c1"))).toBeUndefined();
+  });
+});
+
+describe("stage-owned run + column mutations", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("removes a run from a stage with DELETE", async () => {
+    const { result } = renderHook(() => useRemoveRunFromStage("c1"), { wrapper });
+    await result.current.mutateAsync({ stageId: "s1", runId: "r1" });
+    expect(customInstance).toHaveBeenCalledWith({
+      url: "/api/v1/campaigns/c1/stages/s1/runs/r1",
+      method: "DELETE",
+    });
+  });
+
+  it("sets a column concentration with PATCH", async () => {
+    const { result } = renderHook(() => useSetColumnConcentration("c1"), { wrapper });
+    await result.current.mutateAsync({
+      channelId: "ch1",
+      testConcentration: { value: 10, unit: "µM" },
+    });
+    expect(customInstance).toHaveBeenCalledWith({
+      url: "/api/v1/campaigns/c1/channels/ch1",
+      method: "PATCH",
+      data: { test_concentration: { value: 10, unit: "µM" } },
+    });
   });
 });

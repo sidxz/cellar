@@ -20,8 +20,11 @@ from cellar.domain.research_organization.campaign_measurement import (
 from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     CampaignStatus,
+    MeasurementBasis,
+    UnresolvedReason,
     ValueQualifier,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.shared.errors import (
     AuthorizationError,
     NotFoundError,
@@ -158,9 +161,7 @@ class TestOverrideResultCell:
     @pytest.mark.asyncio
     async def test_override_to_nd_stores_none_value_with_override_flag(self) -> None:
         auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(
-            auth.workspace_id
-        )
+        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
         uc = OverrideResultCell(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
@@ -188,9 +189,7 @@ class TestOverrideResultCell:
     async def test_eq_with_none_value_returns_validation_failure(self) -> None:
         """EQ qualifier requires a numeric value — __post_init__ must reject this."""
         auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(
-            auth.workspace_id
-        )
+        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         uc = OverrideResultCell(
             uow=FakeUnitOfWork(),
@@ -215,9 +214,7 @@ class TestOverrideResultCell:
     @pytest.mark.asyncio
     async def test_empty_unit_returns_validation_failure(self) -> None:
         auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(
-            auth.workspace_id
-        )
+        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         uc = OverrideResultCell(
             uow=FakeUnitOfWork(),
@@ -267,9 +264,7 @@ class TestOverrideResultCell:
     @pytest.mark.asyncio
     async def test_measurement_not_on_result_returns_not_found_failure(self) -> None:
         auth = fake_auth()
-        campaign, result, _, _channel_id = _make_campaign_with_measurement(
-            auth.workspace_id
-        )
+        campaign, result, _, _channel_id = _make_campaign_with_measurement(auth.workspace_id)
         different_channel_id = uuid.uuid4()
         campaign_repo = make_campaign_repo(find_in_ws=campaign)
         uc = OverrideResultCell(
@@ -372,9 +367,7 @@ class TestOverrideResultCell:
     async def test_override_with_reason_persists_reason(self) -> None:
         """B8: override stores the reason on the new measurement."""
         auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(
-            auth.workspace_id
-        )
+        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
         uc = OverrideResultCell(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
@@ -401,9 +394,7 @@ class TestOverrideResultCell:
     async def test_override_without_reason_leaves_reason_none(self) -> None:
         """B8: reason is optional; new measurement has override_reason=None."""
         auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(
-            auth.workspace_id
-        )
+        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
         uc = OverrideResultCell(
             uow=FakeUnitOfWork(),
             campaign_repo=make_campaign_repo(find_in_ws=campaign),
@@ -428,12 +419,14 @@ class TestOverrideResultCell:
     @pytest.mark.asyncio
     async def test_override_carries_forward_snapshot_fields(self) -> None:
         """B6: override preserves test_concentration, replicate_count, qc_pass,
-        contributing_run_ids from the existing measurement."""
+        contributing_run_ids and the per-value facts (batches, basis, series,
+        unresolved reason) from the existing measurement."""
         auth = fake_auth()
         campaign = _make_draft_campaign(auth.workspace_id)
         channel_id = uuid.uuid4()
         result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
         run_ids = [uuid.uuid4(), uuid.uuid4()]
+        batch_ids = [uuid.uuid4()]
         existing = CampaignMeasurement(
             result_id=result.id,
             channel_id=channel_id,
@@ -447,6 +440,10 @@ class TestOverrideResultCell:
             replicate_count=3,
             qc_pass=True,
             contributing_run_ids=run_ids,
+            batch_ids=batch_ids,
+            basis=MeasurementBasis.MIXED,
+            concentration_series=True,
+            unresolved_reason=UnresolvedReason.SEVERAL_CONCENTRATIONS,
         )
         result.add_measurement(existing)
         campaign.add_result(result)
@@ -475,4 +472,61 @@ class TestOverrideResultCell:
         assert new_m.replicate_count == 3
         assert new_m.qc_pass is True
         assert new_m.contributing_run_ids == run_ids
+        assert new_m.batch_ids == batch_ids
+        assert new_m.basis is MeasurementBasis.MIXED
+        assert new_m.concentration_series is True
         assert new_m.override_reason == "reviewer corrected value"
+
+    @pytest.mark.asyncio
+    async def test_value_override_clears_unresolved_reason_and_keeps_concentrations(
+        self,
+    ) -> None:
+        """A value typed into a "measured at several concentrations" cell is no longer
+        untested, and the column still knows the doses the compound had."""
+        auth = fake_auth()
+        campaign = _make_draft_campaign(auth.workspace_id)
+        channel_id = uuid.uuid4()
+        result = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+        found = [Concentration(10.0, "µM"), Concentration(20.0, "µM")]
+        result.add_measurement(
+            CampaignMeasurement(
+                result_id=result.id,
+                channel_id=channel_id,
+                value=None,
+                value_qualifier=ValueQualifier.ND,
+                unit="-",
+                protocol_name_snapshot="-",
+                protocol_version_snapshot=0,
+                unresolved_reason=UnresolvedReason.SEVERAL_CONCENTRATIONS,
+                concentrations_found=found,
+            )
+        )
+        campaign.add_result(result)
+        uc = OverrideResultCell(
+            uow=FakeUnitOfWork(),
+            campaign_repo=make_campaign_repo(find_in_ws=campaign),
+            dispatcher=AsyncMock(),
+        )
+
+        async def override(value, qualifier):
+            out = await uc(
+                OverrideResultCellCommand(
+                    workspace_id=auth.workspace_id,
+                    campaign_id=campaign.id,
+                    result_id=result.id,
+                    channel_id=channel_id,
+                    value=value,
+                    value_qualifier=qualifier,
+                    unit="%",
+                ),
+                auth=auth,
+            )
+            assert isinstance(out, Success)
+            return out.unwrap().results[0].find_measurement(channel_id)
+
+        nd = await override(None, ValueQualifier.ND)
+        assert nd.unresolved_reason is UnresolvedReason.SEVERAL_CONCENTRATIONS
+        assert nd.concentrations_found == found
+        typed = await override(4.2, ValueQualifier.EQ)
+        assert typed.unresolved_reason is None
+        assert typed.concentrations_found == found

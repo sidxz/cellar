@@ -11,10 +11,16 @@ from cellar.application.auth import AuthContext, require_same_workspace, require
 from cellar.application.research_organization.campaign_scientist_reader import (
     CampaignScientistReader,
 )
+from cellar.application.research_organization.column_descriptions import (
+    describe_channels,
+    load_readouts,
+)
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.research_organization.campaign import Campaign
+from cellar.domain.research_organization.measurement_facts import ColumnDescription
 from cellar.domain.research_organization.repository import CampaignRepository
+from cellar.domain.screening_assay.repository import ProtocolRepository
 from cellar.domain.shared.errors import DomainError, NotFoundError
 from cellar.domain.shared.target_ref import TargetRef
 
@@ -32,6 +38,8 @@ class GetCampaignResult:
     #: Distinct targets unioned from the runs this campaign's measurements
     #: reference — a read-time projection (never stored), for the detail header.
     targets: list[TargetRef]
+    #: Each column's description (spec §6.6), by channel id — computed on read.
+    descriptions: dict[uuid.UUID, ColumnDescription]
 
 
 class GetCampaign:
@@ -41,10 +49,12 @@ class GetCampaign:
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
         scientist_reader: CampaignScientistReader,
+        protocol_repo: ProtocolRepository,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
         self._scientist_reader = scientist_reader
+        self._protocol_repo = protocol_repo
 
     async def __call__(
         self, input: GetCampaignQuery, auth: AuthContext | None = None
@@ -72,11 +82,13 @@ class GetCampaign:
                 input.workspace_id, [campaign]
             )
             targets = targets_by_campaign.get(campaign.id, [])
+            readouts = await load_readouts(self._protocol_repo, input.workspace_id, [campaign])
 
         return Success(
             GetCampaignResult(
                 campaign=campaign,
                 scientist_by_run_id=scientist_by_run_id,
                 targets=targets,
+                descriptions=describe_channels(campaign, readouts),
             )
         )

@@ -1,12 +1,13 @@
-"""UpdateCampaignChannel — mutate label, display order, selection rule, or qc_filter.
+"""UpdateCampaignChannel — mutate label, display order, selection rule, qc_filter,
+or the column's test concentration.
 
 Uses the UNSET sentinel to distinguish "don't touch this field" from
 ``None`` (which is a meaningful value for ``qc_filter`` — it clears it).
 
-When a gating field (selection_rule, qc_filter, resolve_from_all_runs)
-actually changes value,
+When a gating field (selection_rule, qc_filter, resolve_from_all_runs,
+test_concentration) actually changes value,
 every non-manual-override measurement for this channel across all results
-is re-resolved via ``ChannelResolver``.
+is re-resolved via ``recompute_columns``.
 """
 
 from __future__ import annotations
@@ -18,10 +19,8 @@ from datetime import UTC, datetime
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -30,6 +29,7 @@ from cellar.domain.research_organization.enums import (
     CampaignStatus,
     SelectionRule,
 )
+from cellar.domain.research_organization.measurement_facts import Concentration
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.shared.errors import (
     DomainError,
@@ -67,6 +67,8 @@ class UpdateCampaignChannelCommand(Command):
     display_order: int | object = UNSET
     #: Opt out of the campaign's run scope — gating, like selection_rule.
     resolve_from_all_runs: bool | object = UNSET
+    #: The one concentration the column reads (spec §6.4); None clears it — gating.
+    test_concentration: Concentration | object | None = UNSET
 
 
 class UpdateCampaignChannel:
@@ -78,8 +80,8 @@ class UpdateCampaignChannel:
       3. Locate the channel by id.
       4. Detect which fields are changing (sentinel-aware).
       5. Mutate label / display_order in-place when supplied.
-      6. If any gating field (selection_rule, qc_filter, resolve_from_all_runs)
-         changed, re-resolve
+      6. If any gating field (selection_rule, qc_filter, resolve_from_all_runs,
+         test_concentration) changed, re-resolve
          every non-manual-override measurement for this channel.
       7. Bump ``campaign.updated_at``.
       8. Save + commit; dispatch events; return ``Success(campaign)``.
@@ -90,12 +92,12 @@ class UpdateCampaignChannel:
         *,
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -140,6 +142,14 @@ class UpdateCampaignChannel:
                     gating_changed = True
                 channel.resolve_from_all_runs = bool(input.resolve_from_all_runs)
 
+            if not isinstance(input.test_concentration, _Unset):
+                if input.test_concentration != channel.test_concentration:
+                    gating_changed = True
+                try:
+                    channel.pin_concentration(input.test_concentration)  # type: ignore[arg-type]
+                except ValidationError as exc:
+                    return Failure(exc)
+
             if not isinstance(input.label, _Unset):
                 label = input.label
                 if not isinstance(label, str) or not label.strip():
@@ -154,23 +164,7 @@ class UpdateCampaignChannel:
 
             # Re-resolve non-override measurements when gating fields changed
             if gating_changed:
-                run_ids = resolution_run_ids(campaign, channel)
-                for result in campaign.results:
-                    measurement = result.find_measurement(channel.id)
-                    if measurement is None:
-                        continue
-                    if measurement.is_manual_override:
-                        continue
-                    new_measurement = await self._resolver.resolve(
-                        workspace_id=input.workspace_id,
-                        channel=channel,
-                        result_id=result.id,
-                        molecule_id=result.molecule_id,
-                        run_ids=run_ids,
-                    )
-                    new_measurement.id = measurement.id  # preserve id → UPDATE not DELETE+INSERT
-                    result.remove_measurement_for_channel(channel.id)
-                    result.add_measurement(new_measurement)
+                await recompute_columns(query=self._query, campaign=campaign, channels=[channel])
 
             campaign.updated_at = datetime.now(UTC)
             await self._campaign_repo.save(campaign)

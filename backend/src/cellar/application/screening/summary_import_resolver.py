@@ -65,6 +65,15 @@ from cellar.domain.screening_assay.enums import ReadoutDataType
 _NUMERIC_RE = re.compile(r"^\s*(<=|>=|<|>|=)?\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)\s*$")
 
 
+def _parse_replicates(raw: str) -> int | None:
+    """A whole number >= 1 ("3" or "3.0"), else None."""
+    try:
+        n = float(raw)
+    except ValueError:
+        return None
+    return int(n) if n.is_integer() and n >= 1 else None
+
+
 # ---------------------------------------------------------------------------
 # Protocols (structural typing for the planner's def lookup)
 # ---------------------------------------------------------------------------
@@ -188,6 +197,7 @@ class SummaryPlanItem:
     value_qualifier: str | None
     value_text: str | None
     source_row: int
+    replicate_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +313,20 @@ def plan_summary_rows(
         batch_id = resolved.batch_id
         matched_compounds.add(molecule_id)
 
+        replicate_count = mapping.replicates_constant
+        if mapping.replicates:
+            raw_n = (row.get(mapping.replicates) or "").strip()
+            if raw_n:
+                replicate_count = _parse_replicates(raw_n)
+                if replicate_count is None:
+                    errors.append(
+                        {
+                            "row": str(source_row),
+                            "error": f"'{raw_n}' is not a whole number of replicates (1 or more)",
+                        }
+                    )
+                    continue
+
         for header, rdef_id in mapping.readout_columns.items():
             raw = (row.get(header) or "").strip()
             if not raw:
@@ -338,6 +362,7 @@ def plan_summary_rows(
                 value_qualifier=value_qualifier,
                 value_text=value_text,
                 source_row=source_row,
+                replicate_count=replicate_count,
             )
 
     return SummaryPlan(

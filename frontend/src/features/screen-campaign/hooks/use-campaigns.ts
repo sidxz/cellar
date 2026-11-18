@@ -7,7 +7,7 @@
  *
  * Mutation wrappers are intentionally deferred to Phase 8.
  */
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { UseQueryOptions } from "@tanstack/react-query";
 
 import {
@@ -18,6 +18,7 @@ import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
 import type {
   CampaignResponse,
   CampaignSummaryResponse,
+  ConcentrationDTO,
   ListCampaignsApiV1CampaignsGetParams,
   PaginatedResponseCampaignSummaryResponse,
 } from "@/shared/lib/api/model";
@@ -140,5 +141,42 @@ export function useCampaignSummary(
     queryFn: () => getCampaignSummaryApiV1CampaignsCampaignIdSummaryGet(campaignId),
     enabled: !!campaignId,
     ...options,
+  });
+}
+
+// ─── Mutations ───────────────────────────────────────────────────────────────
+
+/** Take a run off a stage; its columns recompute over the runs left.
+ *  DELETE /campaigns/{id}/stages/{stageId}/runs/{runId} (204, idempotent). */
+export function useRemoveRunFromStage(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ stageId, runId }: { stageId: string; runId: string }) =>
+      customInstance<void>({
+        url: `${API_V1}/campaigns/${campaignId}/stages/${stageId}/runs/${runId}`,
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) }),
+  });
+}
+
+/** Set (or clear with null) the concentration a column's values are read at.
+ *  PATCH /campaigns/{id}/channels/{channelId} { test_concentration }. */
+export function useSetColumnConcentration(campaignId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      channelId,
+      testConcentration,
+    }: {
+      channelId: string;
+      testConcentration: ConcentrationDTO | null;
+    }) =>
+      customInstance<unknown>({
+        url: `${API_V1}/campaigns/${campaignId}/channels/${channelId}`,
+        method: "PATCH",
+        data: { test_concentration: testConcentration },
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) }),
   });
 }

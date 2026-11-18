@@ -11,6 +11,19 @@ export interface SummaryMappingDraft {
   roles: Record<string, SummaryRole>;
   // header → readout_definition_id, only for headers with role=readout
   readoutDefByHeader: Record<string, string>;
+  /** "Every value is the mean of N replicates", as typed; empty = unset. */
+  replicatesConstant?: string;
+}
+
+/**
+ * The typed replicate count: null when empty, "invalid" unless it is an
+ * integer of at least 1 (`Number`, so "1e2" is 100 and "3.5" is invalid).
+ */
+export function parseReplicatesConstant(raw: string | undefined): number | null | "invalid" {
+  const text = (raw ?? "").trim();
+  if (text === "") return null;
+  const n = Number(text);
+  return Number.isInteger(n) && n >= 1 ? n : "invalid";
 }
 
 // ─── Seed from backend suggestions ───────────────────────────────────────────
@@ -33,7 +46,7 @@ export function suggestionsToDraft(
       readoutDefByHeader[s.header] = s.readout_definition_id;
     }
   }
-  return { roles, readoutDefByHeader };
+  return { roles, readoutDefByHeader, replicatesConstant: "" };
 }
 
 // ─── Build request mapping ────────────────────────────────────────────────────
@@ -43,12 +56,16 @@ export function suggestionsToDraft(
  * invalid:
  *  - a header with role=readout has no bound readout_definition_id, OR
  *  - neither a compound_ref nor a batch_ref column is assigned, OR
- *  - there are zero readout columns.
+ *  - there are zero readout columns, OR
+ *  - the replicate count is typed but not an integer of at least 1.
  */
 export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping | null {
+  const replicatesConstant = parseReplicatesConstant(draft.replicatesConstant);
+  if (replicatesConstant === "invalid") return null;
   let compoundRef: string | null = null;
   let batchRef: string | null = null;
   let structure: string | null = null;
+  let replicates: string | null = null;
   const readoutColumns: Record<string, string> = {};
 
   for (const [header, role] of Object.entries(draft.roles)) {
@@ -58,6 +75,8 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
       if (batchRef === null) batchRef = header;
     } else if (role === "structure") {
       if (structure === null) structure = header;
+    } else if (role === "replicates") {
+      if (replicates === null) replicates = header;
     } else if (role === "readout") {
       const defId = draft.readoutDefByHeader[header];
       if (!defId) return null;
@@ -72,6 +91,8 @@ export function buildMapping(draft: SummaryMappingDraft): SummaryColumnMapping |
     compound_ref: compoundRef,
     batch_ref: batchRef,
     structure,
+    replicates,
+    replicates_constant: replicatesConstant,
     readout_columns: readoutColumns,
   };
 }

@@ -34,6 +34,8 @@ interface SourcesSectionProps {
   campaign: CampaignResponse;
   projectId: string;
   readOnly: boolean;
+  /** The stage selected in Hit stages: "+ Run" adds runs to it by default. */
+  selectedStageId?: string | null;
   /** Not wired to any backend operation today — pass `undefined`. The × button
    *  stays hidden when this prop is absent. */
   onRemoveSource?: (source: SourceEntry) => void;
@@ -149,6 +151,7 @@ export function SourcesSection({
   campaign,
   projectId,
   readOnly,
+  selectedStageId,
   onRemoveSource,
 }: SourcesSectionProps) {
   const sources = (campaign.compound_sources ?? []) as SourceEntry[];
@@ -190,6 +193,7 @@ export function SourcesSection({
             projectId={projectId}
             open={addOpen}
             onOpenChange={setAddOpen}
+            selectedStageId={selectedStageId}
           />
         )}
       </div>

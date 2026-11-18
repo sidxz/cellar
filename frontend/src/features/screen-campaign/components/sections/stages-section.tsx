@@ -16,17 +16,33 @@
  *
  * The panel below the tabs shows the *selected* stage's criteria (read-only
  * rows) plus its parent and, when editable, a MoreHorizontal menu opening
- * the same StagePopoverForm used for "+ Stage". Selecting "All" shows
- * nothing below the tabs.
+ * the same StagePopoverForm used for "+ Stage". Under the criteria it lists
+ * the runs the stage owns (`seed_runs` whose `stage_ids` hold it), each with
+ * a confirmed "Remove from stage", and "Add runs to <stage>". Selecting "All"
+ * shows nothing below the tabs.
  */
 
 import { useProtocolSummaries } from "@/features/screening-assay/hooks/use-protocols";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/shared/components/ui/alert-dialog";
 import { Button } from "@/shared/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { MoreHorizontal, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { type RunLabel, useCampaignRunLabels } from "../../hooks/use-campaign-run-labels";
+import { useRemoveRunFromStage } from "../../hooks/use-campaigns";
+import { compoundsText } from "../../lib/column-description";
 import { protocolColorById } from "../../lib/protocol-colors";
-import type { CampaignResponse, StageCriterionDTO } from "../../types";
+import type { CampaignResponse, CampaignStageResponse, StageCriterionDTO } from "../../types";
+import { AddFromRunsDialog } from "../add-from-runs-dialog";
 import { MANUAL_STAGE_HELP, StagePopoverForm } from "../stage-popover";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -165,7 +181,12 @@ export function StagesSection({
           const hit = stage.counts?.hit ?? 0;
           const population = stage.counts?.population ?? 0;
           const isManual = stage.kind === "manual";
-          const summary = stage.criteria.map(criterionText).join(" · ");
+          // A criteria stage with none yet passes what it measured; say so
+          // where its criteria would sit.
+          const summary =
+            !isManual && stage.criteria.length === 0
+              ? "No criteria yet"
+              : stage.criteria.map(criterionText).join(" · ");
           return (
             <button
               key={stage.id}
@@ -239,7 +260,7 @@ export function StagesSection({
             <p className="text-sm text-muted-foreground">{MANUAL_STAGE_HELP}</p>
           ) : selectedStage.criteria.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              No criteria yet — this stage passes its whole population.
+              No criteria yet — compounds measured at this stage pass; the rest stay untested.
             </p>
           ) : (
             <ul className="space-y-1">
@@ -276,8 +297,128 @@ export function StagesSection({
               })}
             </ul>
           )}
+
+          <StageRuns campaign={campaign} stage={selectedStage} readOnly={readOnly} />
         </div>
       )}
     </section>
+  );
+}
+
+// ── StageRuns ─────────────────────────────────────────────────────────────────
+
+/** What tells a stage's runs apart for the chemist: "10 µM", "20 compounds". */
+const runFacts = (l: RunLabel): string[] =>
+  [l.concentration, l.compoundCount != null ? compoundsText(l.compoundCount) : undefined].filter(
+    (f): f is string => !!f,
+  );
+
+/** The runs a stage owns, each removable from it (confirmed: its columns
+ *  recompute without the run, which stays in the campaign). */
+function StageRuns({
+  campaign,
+  stage,
+  readOnly,
+}: {
+  campaign: CampaignResponse;
+  stage: CampaignStageResponse;
+  readOnly: boolean;
+}) {
+  const runLabel = useCampaignRunLabels(campaign);
+  const removeRun = useRemoveRunFromStage(campaign.id);
+  const [removing, setRemoving] = useState<string | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const runIds = (campaign.seed_runs ?? [])
+    .filter((r) => r.stage_ids.includes(stage.id))
+    .map((r) => r.run_id);
+  const removingLabel = removing ? runLabel(removing) : null;
+  const fullName = (l: RunLabel) =>
+    [l.protocolName, l.text, ...runFacts(l), l.detail].filter(Boolean).join(" · ");
+
+  return (
+    <div className="mt-3 space-y-1.5">
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <span className="text-xs text-muted-foreground">
+          Runs <span className="tabular-nums">{runIds.length}</span>
+        </span>
+        {!readOnly && (
+          <Button variant="ghost" size="xs" onClick={() => setAddOpen(true)}>
+            <Plus /> Add runs to {stage.name}
+          </Button>
+        )}
+      </div>
+      {runIds.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No runs at this stage yet — its columns stay untested.
+        </p>
+      ) : (
+        <ul className="space-y-1">
+          {runIds.map((id) => {
+            const label = runLabel(id);
+            return (
+              <li
+                key={id}
+                className="flex items-center justify-between gap-2 rounded-md border bg-background px-3 py-1 text-sm"
+              >
+                <span className="min-w-0 truncate" title={fullName(label)}>
+                  <span style={{ color: label.color }}>{label.protocolName}</span> ·{" "}
+                  <span>{label.text}</span>
+                  {runFacts(label).map((fact) => (
+                    <span key={fact}> · {fact}</span>
+                  ))}
+                  {label.detail && (
+                    <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                      {label.detail}
+                    </span>
+                  )}
+                </span>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="shrink-0 text-muted-foreground hover:text-destructive"
+                    onClick={() => setRemoving(id)}
+                  >
+                    Remove from stage
+                  </Button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+
+      <AlertDialog open={removing !== null} onOpenChange={(o) => !o && setRemoving(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this run from {stage.name}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {removingLabel && fullName(removingLabel)} stays in the campaign. {stage.name}'s
+              columns are worked out again from its other runs; a compound measured only in this run
+              becomes untested at {stage.name}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => removing && removeRun.mutate({ stageId: stage.id, runId: removing })}
+            >
+              Remove from stage
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {addOpen && (
+        <AddFromRunsDialog
+          campaignId={campaign.id}
+          projectId={campaign.project_id}
+          stages={campaign.stages}
+          initialStageId={stage.id}
+          open
+          onOpenChange={(o) => !o && setAddOpen(false)}
+        />
+      )}
+    </div>
   );
 }

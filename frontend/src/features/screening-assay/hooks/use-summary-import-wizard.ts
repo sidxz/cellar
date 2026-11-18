@@ -58,6 +58,7 @@ export interface UseSummaryImportWizardResult {
   handleFile: (f: File) => void;
   setRole: (header: string, role: SummaryRole) => void;
   setReadoutDef: (header: string, defId: string) => void;
+  setReplicatesConstant: (raw: string) => void;
   handleContinueToPreview: () => void;
   handleImport: () => void;
 }
@@ -159,7 +160,7 @@ export function useSummaryImportWizard({
       if (role !== "readout" && nextBindings[header]) {
         delete nextBindings[header];
       }
-      return { roles: nextRoles, readoutDefByHeader: nextBindings };
+      return { ...d, roles: nextRoles, readoutDefByHeader: nextBindings };
     });
   }, []);
 
@@ -168,6 +169,10 @@ export function useSummaryImportWizard({
       ...d,
       readoutDefByHeader: { ...d.readoutDefByHeader, [header]: defId },
     }));
+  }, []);
+
+  const setReplicatesConstant = useCallback((raw: string) => {
+    setDraft((d) => ({ ...d, replicatesConstant: raw }));
   }, []);
 
   const canContinueMapping = useMemo(() => buildMapping(draft) !== null, [draft]);
@@ -243,6 +248,7 @@ export function useSummaryImportWizard({
     handleFile,
     setRole,
     setReadoutDef,
+    setReplicatesConstant,
     handleContinueToPreview,
     handleImport,
   };

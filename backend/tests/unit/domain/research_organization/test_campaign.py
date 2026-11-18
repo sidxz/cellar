@@ -74,7 +74,13 @@ def _make_stage(campaign: Campaign, **overrides) -> CampaignStage:
         display_order=0,
     )
     defaults.update(overrides)
-    return CampaignStage(**defaults)
+    stage = CampaignStage(**defaults)
+    # A criterion's column belongs to its stage.
+    for criterion in stage.criteria:
+        for channel in campaign.channels:
+            if channel.id == criterion.channel_id:
+                channel.stage_id = stage.id
+    return stage
 
 
 # ---------- creation ----------
@@ -447,18 +453,10 @@ def test_remove_channel_strips_stage_criteria_referencing_it():
         ],
     )
     c.add_stage(mixed_stage)
-    other_stage = _make_stage(
-        c,
-        name="Other",
-        display_order=1,
-        criteria=[StageCriterion(channel_id=ch2.id, operator="gte", value=1.0)],
-    )
-    c.add_stage(other_stage)
 
     c.remove_channel(ch1.id)
 
     assert [crit.channel_id for crit in mixed_stage.criteria] == [ch2.id]
-    assert [crit.channel_id for crit in other_stage.criteria] == [ch2.id]
 
 
 # ---------- close ----------
@@ -607,38 +605,40 @@ def test_supersede_transitions_and_emits_event():
 # ---------------------------------------------------------------------------
 
 
-def test_record_seed_runs_appends_in_order_and_ignores_repeats():
+def test_add_campaign_runs_appends_in_order_and_ignores_repeats():
     c = _make_campaign()
     p1, p2 = uuid.uuid4(), uuid.uuid4()
     run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_a, p1)])
-    c.record_seed_runs([SeedRun(run_a, p1), SeedRun(run_c, p2), SeedRun(run_b, p1)])
+    c.add_runs_to_stage([SeedRun(run_b, p1), SeedRun(run_a, p1)], None)
+    c.add_runs_to_stage([SeedRun(run_a, p1), SeedRun(run_c, p2), SeedRun(run_b, p1)], None)
     assert c.seed_runs == [SeedRun(run_b, p1), SeedRun(run_a, p1), SeedRun(run_c, p2)]
 
 
-def test_seed_run_ids_for_filters_by_protocol_in_insertion_order():
+def test_campaign_run_ids_filters_by_protocol_in_insertion_order():
     c = _make_campaign()
     p1, p2 = uuid.uuid4(), uuid.uuid4()
     run_a, run_b, run_c = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    c.record_seed_runs([SeedRun(run_b, p1), SeedRun(run_c, p2), SeedRun(run_a, p1)])
-    assert c.seed_run_ids_for(p1) == [run_b, run_a]
-    assert c.seed_run_ids_for(p2) == [run_c]
-    assert c.seed_run_ids_for(uuid.uuid4()) == []
+    c.add_runs_to_stage([SeedRun(run_b, p1), SeedRun(run_c, p2), SeedRun(run_a, p1)], None)
+    assert c.campaign_run_ids(p1) == [run_b, run_a]
+    assert c.campaign_run_ids(p2) == [run_c]
+    assert c.campaign_run_ids(uuid.uuid4()) == []
 
 
 def test_seed_runs_are_not_derived_from_run_refs():
     """A RunRef names only the run that won a pick, so rows alone never widen
-    the scope — only record_seed_runs does."""
+    the scope — only add_runs_to_stage does."""
     c = _make_campaign()
     c.add_result(
-        CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=uuid.uuid4()))
+        CampaignResult(
+            campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=RunRef(run_id=uuid.uuid4())
+        )
     )
     assert c.seed_runs == []
 
 
-def test_record_seed_runs_is_draft_only():
+def test_add_runs_to_stage_is_draft_only():
     c = _make_campaign()
     c.status = CampaignStatus.CLOSED
-    with pytest.raises(ValidationError, match="record seed runs"):
-        c.record_seed_runs([SeedRun(uuid.uuid4(), uuid.uuid4())])
+    with pytest.raises(ValidationError, match="add runs to stage"):
+        c.add_runs_to_stage([SeedRun(uuid.uuid4(), uuid.uuid4())], None)
     assert c.seed_runs == []

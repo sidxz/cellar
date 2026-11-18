@@ -13,10 +13,8 @@ from dataclasses import dataclass
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
-from cellar.application.research_organization.channel_resolution import (
-    ChannelResolver,
-    resolution_run_ids,
-)
+from cellar.application.research_organization.column_resolution import ColumnCandidateQuery
+from cellar.application.research_organization.recompute_columns import recompute_columns
 from cellar.application.shared.command import Command
 from cellar.application.shared.event_dispatcher import EventDispatcherProtocol
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -69,13 +67,13 @@ class AddResultsFromCollection:
         uow: UnitOfWork,
         campaign_repo: CampaignRepository,
         collection_repo: CollectionRepository,
-        resolver: ChannelResolver,
+        query: ColumnCandidateQuery,
         dispatcher: EventDispatcherProtocol,
     ) -> None:
         self._uow = uow
         self._campaign_repo = campaign_repo
         self._collection_repo = collection_repo
-        self._resolver = resolver
+        self._query = query
         self._dispatcher = dispatcher
 
     async def __call__(
@@ -119,6 +117,7 @@ class AddResultsFromCollection:
                 for mid in molecule_ids
             ]
 
+            known = {r.molecule_id for r in campaign.results}
             try:
                 added, skipped = campaign.add_results(new_results)
             except ValidationError as e:
@@ -126,20 +125,15 @@ class AddResultsFromCollection:
 
             # Resolve measurements for the newly added results only.
             if added > 0:
-                added_molecule_ids = {r.molecule_id for r in new_results}
-                scope = {ch.id: resolution_run_ids(campaign, ch) for ch in campaign.channels}
-                for result in campaign.results:
-                    if result.molecule_id not in added_molecule_ids:
-                        continue
-                    for channel in campaign.channels:
-                        measurement = await self._resolver.resolve(
-                            workspace_id=input.workspace_id,
-                            channel=channel,
-                            result_id=result.id,
-                            molecule_id=result.molecule_id,
-                            run_ids=scope[channel.id],
-                        )
-                        result.add_measurement(measurement)
+                await recompute_columns(
+                    query=self._query,
+                    campaign=campaign,
+                    channels=campaign.channels,
+                    # The rows just added; existing rows are not touched.
+                    molecule_ids=[
+                        r.molecule_id for r in new_results if r.molecule_id not in known
+                    ],
+                )
 
             await self._campaign_repo.save(campaign)
             events = await self._uow.commit()

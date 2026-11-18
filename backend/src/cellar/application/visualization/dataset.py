@@ -28,7 +28,7 @@ ColumnKind = Literal["number", "category", "text", "structure", "user"]
 
 RAW_LAYER = "raw"
 NUMERIC_DATA_TYPES = {"numeric", "dose_response"}
-_LAYER_LABELS = {
+LAYER_LABELS = {
     "percent_inhibition": "% Inhibition",
     "percent_activation": "% Activation",
     "percent_control": "% Control",
@@ -164,7 +164,7 @@ def readout_label(
     if layer == RAW_LAYER:
         named = not unit or rd.name.lower().endswith(unit.lower())  # "raw AU" + "AU"
         return (rd.name if named else f"{rd.name} ({unit})") + cs
-    return f"{rd.name}{cs} · {_LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
+    return f"{rd.name}{cs} · {LAYER_LABELS.get(layer, layer.replace('_', ' '))}"
 
 
 def _finite_z(entry: Any) -> float | None:

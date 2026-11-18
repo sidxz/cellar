@@ -1,4 +1,4 @@
-"""Unit tests for ``upsert_stage_by_name`` — the get-or-create shared by the
+"""Unit tests for ``get_or_create_stage`` + ``set_stage_criteria`` — shared by the
 ``stage_name`` import paths (add-from-runs, mirror-protocol)."""
 
 from __future__ import annotations
@@ -7,7 +7,10 @@ import uuid
 
 import pytest
 
-from cellar.application.research_organization.stage_upsert import upsert_stage_by_name
+from cellar.application.research_organization.stage_upsert import (
+    get_or_create_stage,
+    set_stage_criteria,
+)
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.campaign_stage import (
@@ -21,6 +24,16 @@ from cellar.domain.research_organization.enums import (
     StageKind,
 )
 from cellar.domain.shared.errors import ValidationError
+
+
+def upsert_stage_by_name(campaign, *, name, criteria, parent_stage_id):
+    """Get-or-create, put the criteria's columns on the stage, replace criteria."""
+    stage, created = get_or_create_stage(campaign, name=name, parent_stage_id=parent_stage_id)
+    for c in campaign.channels:
+        if c.id in {k.channel_id for k in criteria}:
+            c.stage_id = stage.id
+    set_stage_criteria(campaign, stage, criteria)
+    return stage, created
 
 
 def _campaign_with_channel() -> tuple[Campaign, CampaignChannel]:

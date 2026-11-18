@@ -81,6 +81,7 @@ import { campaignKeys } from "../hooks/use-campaigns";
 import { stageNameNotice } from "../lib/stage-name-notice";
 import type { CampaignStageResponse } from "../types";
 import { ROOT_SENTINEL } from "./stage-popover";
+import { NEW_STAGE, StageTargetSelect, stageIdOf } from "./stage-target-select";
 
 // ── Local types ───────────────────────────────────────────────────────────────
 
@@ -141,10 +142,12 @@ function channelConfigKey(readoutDefId: string, interceptKey: InterceptKey | nul
 interface AddFromRunsDialogProps {
   campaignId: string;
   projectId: string;
-  /** This campaign's stages — they fill the parent picker and drive the
-   *  reuse advisory under the stage name (a colliding name reuses that
-   *  stage, except a manual one, which the backend refuses). */
+  /** This campaign's stages: the runs go to one of them (or to "Other
+   *  columns"). They also fill the new stage's parent picker and drive the
+   *  reuse advisory under its name. */
   stages: CampaignStageResponse[];
+  /** The stage the dialog was opened from, picked up front. */
+  initialStageId?: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }
@@ -155,6 +158,7 @@ export function AddFromRunsDialog({
   campaignId,
   projectId,
   stages,
+  initialStageId,
   open,
   onOpenChange,
 }: AddFromRunsDialogProps) {
@@ -178,14 +182,12 @@ export function AddFromRunsDialog({
   // — Global toggles —
   const [filterMode, setFilterMode] = useState<"any" | "all">("all");
   const [scope, setScope] = useState<"hits_only" | "all">("hits_only");
-  const [refreshExisting, setRefreshExisting] = useState(false);
   const [approvedOnly, setApprovedOnly] = useState(true);
-  // "Save these criteria as a hit stage" — shown once any channel config has
-  // a threshold. Name + default checked-state derive per-protocol (see
-  // onProtocolChange below, which also guards against colliding with an
-  // existing stage name); inert here since the checkbox isn't shown until a
-  // protocol is chosen.
-  const [saveStage, setSaveStage] = useState(false);
+  // Where the runs go: a stage id, NEW_STAGE or OTHER_COLUMNS_TARGET. Required
+  // once the campaign has stages; with none, the first import starts one.
+  const [pickedTarget, setPickedTarget] = useState<string | null>(null);
+  const target = pickedTarget ?? initialStageId ?? (stages.length > 0 ? "" : NEW_STAGE);
+  // The new stage's name; defaults per protocol (see onProtocolChange below).
   const [stageName, setStageName] = useState("Imported hits");
   // ROOT_SENTINEL = "no parent" (Radix Select forbids an empty item value).
   const [stageParentId, setStageParentId] = useState<string>(ROOT_SENTINEL);
@@ -310,10 +312,8 @@ export function AddFromRunsDialog({
     mutation: {
       onSuccess: (data) => {
         void qc.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
-        // Built from the backend's actual outcome, not from the checkbox
-        // intent — the backend only creates a stage when >=1 config both
-        // opts into filtering and has a threshold (see stage_name payload
-        // gating below), so intent alone can overclaim.
+        // From the backend's outcome: a "new" stage whose name matches an
+        // existing one reuses it.
         const stageNote = data.stage_created ? ` and created stage "${stageName.trim()}"` : "";
         showSuccess(`Added ${data.added} compound${data.added === 1 ? "" : "s"}${stageNote}`);
         handleClose();
@@ -415,53 +415,71 @@ export function AddFromRunsDialog({
     setUserEditedConfigs(new Map());
     setFilterMode("all");
     setScope("hits_only");
-    setRefreshExisting(false);
     setApprovedOnly(true);
-    setSaveStage(false);
+    setPickedTarget(null);
     setStageName("Imported hits");
     setStageParentId(ROOT_SENTINEL);
     onOpenChange(false);
   }
 
-  const canGoToPreview = selectedRunIds.size > 0 && channelConfigs.length > 0;
-  // Gates both the "Save as hit stage" checkbox/name-input visibility and
-  // whether stage_name is sent at all (see buildPayload's caller below) —
-  // the backend only creates a stage from configs that both opt into
-  // filtering and carry a threshold.
-  const hasThreshold = channelConfigs.some((c) => c.hit_operator !== "");
   const trimmedStageName = stageName.trim();
-  const nameNotice = hasThreshold && saveStage ? stageNameNotice(stages, stageName) : null;
+  const pickedStage = stages.find((s) => s.id === stageIdOf(target));
+  const isNewStage = target === NEW_STAGE;
+  // The preview and the commit send the same body (the commit adds `scope`),
+  // so a new stage previews exactly what committing it writes.
+  const requestBody = {
+    ...buildPayload(),
+    stage_id: stageIdOf(target),
+    stage_name: isNewStage ? trimmedStageName : null,
+    parent_stage_id: isNewStage && stageParentId !== ROOT_SENTINEL ? stageParentId : null,
+  };
+  const requestKey = JSON.stringify(requestBody);
+  // The backend turns these into the target stage's criteria (replacing them).
+  const becomesCriteria = requestBody.channel_configs.some(
+    (c) => c.use_for_filter && c.hit_threshold,
+  );
+  const stageNotice =
+    target === NEW_STAGE
+      ? stageNameNotice(stages, stageName)
+      : pickedStage && becomesCriteria
+        ? pickedStage.kind === "manual"
+          ? {
+              text: `${pickedStage.name} is hand-picked: untick Use for filter on the readouts with a threshold.`,
+              blocking: true,
+            }
+          : {
+              text: `The thresholds below replace ${pickedStage.name}'s criteria.`,
+              blocking: false,
+            }
+        : null;
+  const targetReady = target !== "" && !(target === NEW_STAGE && !trimmedStageName);
+  const canGoToPreview =
+    selectedRunIds.size > 0 && channelConfigs.length > 0 && targetReady && !stageNotice?.blocking;
+  const targetName = target === NEW_STAGE ? trimmedStageName : pickedStage?.name;
 
   // — Debounced preview refresh —
-  const [previewData, setPreviewData] = useState<{
-    summary: {
-      runs: number;
-      channels_new: number;
-      channels_reused: number;
-      molecules_total: number;
-      hits: number;
-      non_hits: number;
-      molecules_already_in_campaign: number;
-    };
-    rows: PreviewRow[];
-    channels: { channel_key: string; label: string }[];
-  } | null>(null);
+  // A preview belongs to the body it was computed for (`data: null` = it
+  // failed). Only a successful preview of the current body enables commit.
+  const [preview, setPreview] = useState<{ key: string; data: PreviewData | null } | null>(null);
+  const currentPreview = preview?.key === requestKey ? preview : null;
+  const previewData = currentPreview?.data ?? null;
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: buildPayload/previewMutation are derived from the listed state; keying on the underlying state (step/channelConfigs/selectedRunIds/filterMode) is what should re-trigger the debounced preview.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: requestBody/previewMutation are derived from the listed state; requestKey is the body itself, so a change to it is what should re-trigger the debounced preview.
   useEffect(() => {
     if (step !== "preview") return;
-    const payload = buildPayload();
-    if (payload.run_ids.length === 0 || payload.channel_configs.length === 0) return;
+    if (requestBody.run_ids.length === 0 || requestBody.channel_configs.length === 0) return;
+    const key = requestKey;
     const t = setTimeout(() => {
       previewMutation.mutate(
-        { campaignId, data: payload },
+        { campaignId, data: requestBody },
         {
-          onSuccess: (data) => setPreviewData(data as never),
+          onSuccess: (data) => setPreview({ key, data: data as never }),
+          onError: () => setPreview({ key, data: null }),
         },
       );
     }, 300);
     return () => clearTimeout(t);
-  }, [step, channelConfigs, selectedRunIds, filterMode]);
+  }, [step, requestKey]);
 
   // — Render —
   const filteredRuns = (runs ?? []).filter((r) => (approvedOnly ? r.status === "approved" : true));
@@ -476,75 +494,106 @@ export function AddFromRunsDialog({
                 variant="ghost"
                 size="icon"
                 className="h-7 w-7"
+                aria-label="Back"
                 onClick={() => setStep("configure")}
               >
                 <ChevronLeft className="h-4 w-4" />
               </Button>
             )}
-            Add compounds from protocol run(s)
+            Add runs
           </DialogTitle>
           <DialogDescription>
             {step === "configure"
-              ? "Pick runs and tune the hit criteria. Preview the would-be-added compounds before committing."
+              ? "Values at a stage come only from the runs added to it."
               : "Verify the compounds and cells that will be added. Go back to tweak criteria."}
           </DialogDescription>
         </DialogHeader>
 
         {step === "configure" ? (
-          <ConfigureStep
-            protocols={protocols}
-            protocolId={protocolId}
-            onProtocolChange={(id) => {
-              setProtocolId(id);
-              runSelection.clear();
-              setUserEditedConfigs(new Map());
-              const proto = protocols.find((pr) => pr.id === id);
-              const defaultName = proto ? `${proto.name} hits` : "Imported hits";
-              setStageName(defaultName);
-              // A repeat import of the same protocol reuses that stage
-              // (criteria replaced), so a collision is fine — only a manual
-              // stage of that name, which the backend refuses, defaults the
-              // checkbox off.
-              setSaveStage(stageNameNotice(stages, defaultName)?.blocking !== true);
-            }}
-            runs={filteredRuns}
-            selectedRunIds={selectedRunIds}
-            onToggleRun={runSelection.toggle}
-            approvedOnly={approvedOnly}
-            onApprovedOnlyChange={setApprovedOnly}
-            channelConfigs={channelConfigs}
-            protocolDetail={protocolDetail}
-            onChannelConfigChange={(idx, patch) => {
-              const cfg = channelConfigs[idx];
-              if (!cfg) return;
-              setUserEditedConfigs((prev) => {
-                const next = new Map(prev);
-                const updated = { ...cfg, ...patch };
-                next.set(
-                  channelConfigKey(updated.readout_definition_id, updated.intercept_key),
-                  updated,
-                );
-                return next;
-              });
-            }}
-            filterMode={filterMode}
-            onFilterModeChange={setFilterMode}
-            scope={scope}
-            onScopeChange={setScope}
-            refreshExisting={refreshExisting}
-            onRefreshExistingChange={setRefreshExisting}
-            hasThreshold={hasThreshold}
-            saveStage={saveStage}
-            onSaveStageChange={setSaveStage}
-            stageNotice={nameNotice}
-            stageName={stageName}
-            onStageNameChange={setStageName}
-            parentOptions={parentOptions}
-            stageParentId={stageParentId}
-            onStageParentChange={setStageParentId}
-          />
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label>Stage</Label>
+              <StageTargetSelect
+                stages={stages}
+                value={target}
+                onChange={setPickedTarget}
+                allowNewStage
+              />
+              {target === NEW_STAGE && (
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Stage name</Label>
+                    <Input
+                      value={stageName}
+                      onChange={(e) => setStageName(e.target.value)}
+                      placeholder="e.g. Screening hits"
+                      className="h-8 text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Parent stage</Label>
+                    <Select value={stageParentId} onValueChange={setStageParentId}>
+                      <SelectTrigger className="h-8 text-sm" aria-label="Parent stage">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
+                        {parentOptions.map((st) => (
+                          <SelectItem key={st.id} value={st.id}>
+                            {st.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {stageNotice && (
+                <p
+                  className={`text-xs ${stageNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
+                >
+                  {stageNotice.text}
+                </p>
+              )}
+            </div>
+            <ConfigureStep
+              protocols={protocols}
+              protocolId={protocolId}
+              onProtocolChange={(id) => {
+                setProtocolId(id);
+                runSelection.clear();
+                setUserEditedConfigs(new Map());
+                const proto = protocols.find((pr) => pr.id === id);
+                setStageName(proto ? `${proto.name} hits` : "Imported hits");
+              }}
+              runs={filteredRuns}
+              selectedRunIds={selectedRunIds}
+              onToggleRun={runSelection.toggle}
+              approvedOnly={approvedOnly}
+              onApprovedOnlyChange={setApprovedOnly}
+              channelConfigs={channelConfigs}
+              protocolDetail={protocolDetail}
+              onChannelConfigChange={(idx, patch) => {
+                const cfg = channelConfigs[idx];
+                if (!cfg) return;
+                setUserEditedConfigs((prev) => {
+                  const next = new Map(prev);
+                  const updated = { ...cfg, ...patch };
+                  next.set(
+                    channelConfigKey(updated.readout_definition_id, updated.intercept_key),
+                    updated,
+                  );
+                  return next;
+                });
+              }}
+              filterMode={filterMode}
+              onFilterModeChange={setFilterMode}
+              scope={scope}
+              onScopeChange={setScope}
+            />
+          </div>
         ) : (
-          <PreviewStep data={previewData} isLoading={previewMutation.isPending && !previewData} />
+          <PreviewStep data={previewData} failed={currentPreview?.data === null} />
         )}
 
         <DialogFooter className="gap-2">
@@ -557,35 +606,29 @@ export function AddFromRunsDialog({
             </Button>
           ) : (
             <Button
-              disabled={!previewData || addMutation.isPending || nameNotice?.blocking}
-              onClick={() => {
-                const payload = buildPayload();
-                addMutation.mutate({
-                  campaignId,
-                  data: {
-                    ...payload,
-                    scope,
-                    refresh_existing_cells: refreshExisting,
-                    stage_name: hasThreshold && saveStage ? trimmedStageName : null,
-                    parent_stage_id:
-                      hasThreshold && saveStage && stageParentId !== ROOT_SENTINEL
-                        ? stageParentId
-                        : null,
-                  } as never,
-                });
-              }}
+              disabled={!previewData || addMutation.isPending || !canGoToPreview}
+              onClick={() => addMutation.mutate({ campaignId, data: { ...requestBody, scope } })}
             >
               {addMutation.isPending
                 ? "Adding…"
-                : scope === "hits_only"
-                  ? `Add ${previewData?.summary.hits ?? 0} hits`
-                  : `Add ${previewData?.summary.molecules_total ?? 0} compounds`}
+                : addLabel(scope, previewData?.summary, targetName)}
             </Button>
           )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** The commit button: "Add 12 hits to Primary". */
+function addLabel(
+  scope: "hits_only" | "all",
+  summary: { hits: number; molecules_total: number } | undefined,
+  targetName: string | undefined,
+): string {
+  const n = (scope === "hits_only" ? summary?.hits : summary?.molecules_total) ?? 0;
+  const noun = scope === "hits_only" ? "hit" : "compound";
+  return `Add ${n} ${noun}${n === 1 ? "" : "s"}${targetName ? ` to ${targetName}` : ""}`;
 }
 
 // ── Step 1 — Configure ───────────────────────────────────────────────────────
@@ -624,23 +667,6 @@ interface ConfigureStepProps {
   onFilterModeChange: (v: "any" | "all") => void;
   scope: "hits_only" | "all";
   onScopeChange: (v: "hits_only" | "all") => void;
-  refreshExisting: boolean;
-  onRefreshExistingChange: (v: boolean) => void;
-  /** Whether at least one channel config has a threshold — gates the
-   *  "Save as hit stage" checkbox below. */
-  hasThreshold: boolean;
-  saveStage: boolean;
-  onSaveStageChange: (v: boolean) => void;
-  /** Set when the typed stage name matches an existing stage: an advisory
-   *  that its criteria will be replaced, or — for a manual stage — a
-   *  blocking error. */
-  stageNotice: { text: string; blocking: boolean } | null;
-  stageName: string;
-  onStageNameChange: (v: string) => void;
-  /** Stages the new one can hang under, in display order. */
-  parentOptions: CampaignStageResponse[];
-  stageParentId: string;
-  onStageParentChange: (v: string) => void;
 }
 
 function ConfigureStep(p: ConfigureStepProps) {
@@ -650,7 +676,7 @@ function ConfigureStep(p: ConfigureStepProps) {
       <div className="space-y-1">
         <Label>Protocol</Label>
         <Select value={p.protocolId ?? ""} onValueChange={p.onProtocolChange}>
-          <SelectTrigger>
+          <SelectTrigger aria-label="Protocol">
             <SelectValue placeholder="Choose protocol…" />
           </SelectTrigger>
           <SelectContent>
@@ -970,62 +996,6 @@ function ConfigureStep(p: ConfigureStepProps) {
                 </label>
               </RadioGroup>
             </div>
-
-            <label className="flex items-center gap-2 text-xs cursor-pointer">
-              <Switch checked={p.refreshExisting} onCheckedChange={p.onRefreshExistingChange} />
-              Refresh non-override cells for molecules already in this campaign
-            </label>
-
-            {p.hasThreshold && (
-              <div className="space-y-2 border-t pt-2">
-                <div className="flex items-center gap-2">
-                  <Checkbox
-                    id="save-stage"
-                    checked={p.saveStage}
-                    onCheckedChange={(v) => p.onSaveStageChange(v === true)}
-                  />
-                  <Label htmlFor="save-stage" className="text-xs cursor-pointer">
-                    Save these criteria as a hit stage
-                  </Label>
-                </div>
-                {p.saveStage && (
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Stage name</Label>
-                      <Input
-                        value={p.stageName}
-                        onChange={(e) => p.onStageNameChange(e.target.value)}
-                        placeholder="e.g. Screening hits"
-                        className="h-8 text-sm"
-                      />
-                      {p.stageNotice && (
-                        <p
-                          className={`text-xs ${p.stageNotice.blocking ? "text-destructive" : "text-muted-foreground"}`}
-                        >
-                          {p.stageNotice.text}
-                        </p>
-                      )}
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Parent stage</Label>
-                      <Select value={p.stageParentId} onValueChange={p.onStageParentChange}>
-                        <SelectTrigger className="h-8 text-sm" aria-label="Parent stage">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value={ROOT_SENTINEL}>None (root)</SelectItem>
-                          {p.parentOptions.map((st) => (
-                            <SelectItem key={st.id} value={st.id}>
-                              {st.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
         </>
       )}
@@ -1044,9 +1014,6 @@ interface PreviewCell {
   test_concentration_unit: string | null;
   replicate_count: number | null;
   qc_pass: boolean | null;
-  /** Chemist-facing explanation for `qc_pass === false`. Backend formats
-   *  ("Source run not approved" / "z' = 0.42 (below 0.5)" / aggregate). */
-  qc_reason: string | null;
   hit_call: string | null;
 }
 
@@ -1062,25 +1029,29 @@ interface PreviewRow {
   cells: PreviewCell[];
 }
 
-interface PreviewStepProps {
-  data: {
-    summary: {
-      runs: number;
-      channels_new: number;
-      channels_reused: number;
-      molecules_total: number;
-      hits: number;
-      non_hits: number;
-      molecules_already_in_campaign: number;
-    };
-    rows: PreviewRow[];
-    channels: { channel_key: string; label: string }[];
-  } | null;
-  isLoading: boolean;
+interface PreviewData {
+  summary: {
+    runs: number;
+    channels_new: number;
+    channels_reused: number;
+    molecules_total: number;
+    hits: number;
+    non_hits: number;
+    molecules_already_in_campaign: number;
+  };
+  rows: PreviewRow[];
+  channels: { channel_key: string; label: string }[];
 }
 
-function PreviewStep({ data, isLoading }: PreviewStepProps) {
-  if (isLoading || !data) {
+function PreviewStep({ data, failed }: { data: PreviewData | null; failed: boolean }) {
+  if (failed) {
+    return (
+      <p className="flex items-center justify-center h-40 text-sm text-muted-foreground">
+        The preview failed. Go back, check the runs and readouts, and preview again.
+      </p>
+    );
+  }
+  if (!data) {
     return (
       <div className="flex items-center justify-center h-40">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -1191,7 +1162,8 @@ function PreviewStep({ data, isLoading }: PreviewStepProps) {
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent>
-                                {cell.qc_reason ?? "QC heuristic failed"}
+                                One or more runs behind this value are not approved, or their Z′ is
+                                below 0.5.
                               </TooltipContent>
                             </Tooltip>
                           )}

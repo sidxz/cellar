@@ -55,10 +55,10 @@ from datetime import date
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from cellar.application.research_organization.channel_resolution import (
-    ResolvedCandidate,
-    _build_curve_snapshot,
+from cellar.application.screening.curve_snapshot import (
+    build_curve_snapshot as _build_curve_snapshot,
 )
+from cellar.application.screening.run_aggregation import ResolvedRun
 from cellar.domain.research_organization.enums import ValueQualifier
 from cellar.infrastructure.persistence.settings import DatabaseSettings
 
@@ -184,7 +184,7 @@ async def _rebuild_one(
         except ValueError:
             pass
 
-    candidate = ResolvedCandidate(
+    candidate = ResolvedRun(
         # `value` here is just the scalar used for `fitted_value` in the
         # snapshot — must mirror what the live import wrote, which for a
         # LATEST_APPROVED_RUN channel is the curve's own fitted_value.
@@ -220,9 +220,7 @@ async def _rebuild_one(
         return True
 
     update = text(
-        "UPDATE campaign_measurement "
-        "SET curve_snapshot = CAST(:snap AS jsonb) "
-        "WHERE id = :mid"
+        "UPDATE campaign_measurement SET curve_snapshot = CAST(:snap AS jsonb) WHERE id = :mid"
     )
     import json as _json
 
@@ -250,9 +248,7 @@ async def _main(args: argparse.Namespace) -> None:
         cmp_id = uuid.UUID(args.campaign_id) if args.campaign_id else None
 
         ids = await _discover_curve_measurements(session_factory, ws_id, cmp_id)
-        aggregate_count = await _count_aggregate_measurements(
-            session_factory, ws_id, cmp_id
-        )
+        aggregate_count = await _count_aggregate_measurements(session_factory, ws_id, cmp_id)
 
         if not ids:
             print("No campaign_measurement rows with source_curve_id found.")
