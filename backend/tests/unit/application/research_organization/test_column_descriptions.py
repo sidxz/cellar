@@ -1,11 +1,20 @@
 import uuid
+from types import SimpleNamespace
 
-from cellar.application.research_organization.column_descriptions import readout_label
+from cellar.application.research_organization.column_descriptions import (
+    describe_channels,
+    readout_label,
+)
+from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
+from cellar.domain.research_organization.campaign_measurement import CampaignMeasurement
+from cellar.domain.research_organization.campaign_result import CampaignResult
 from cellar.domain.research_organization.enums import (
     ChannelSourceKind,
+    MeasurementBasis,
     QualifierHandling,
     SelectionRule,
+    ValueQualifier,
 )
 from cellar.domain.shared.hit_criterion import InterceptKey
 
@@ -42,3 +51,56 @@ def test_readout_column_carries_its_normalization_layer():
         source_kind=ChannelSourceKind.READOUT_DATA, normalization_applied="percent_inhibition"
     )
     assert readout_label(ch, "Signal") == "Signal (% Inhibition)"
+
+
+def _described(channel: CampaignChannel, unit: str, readout_unit: str | None) -> str:
+    """The rule part of ``channel``'s description, with one value cell in ``unit``."""
+    campaign = Campaign.create(
+        workspace_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        name="C",
+        description=None,
+        created_by=uuid.uuid4(),
+    )
+    channel.campaign_id = campaign.id
+    campaign.add_channel(channel)
+    row = CampaignResult(campaign_id=campaign.id, molecule_id=uuid.uuid4())
+    row.add_measurement(
+        CampaignMeasurement(
+            result_id=row.id,
+            channel_id=channel.id,
+            value=40.0,
+            value_qualifier=ValueQualifier.EQ,
+            unit=unit,
+            protocol_name_snapshot="P",
+            protocol_version_snapshot=1,
+            contributing_run_ids=[uuid.uuid4(), uuid.uuid4()],
+            basis=MeasurementBasis.MEASURED,
+            concentration_series=channel.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE,
+        )
+    )
+    campaign.add_result(row)
+    readouts = {channel.readout_definition_id: SimpleNamespace(name="Signal", unit=readout_unit)}
+    d = describe_channels(campaign, readouts)[channel.id]
+    assert d.short_label.endswith(f" · {d.rule}")
+    return d.rule
+
+
+def test_rule_part_is_the_rule_a_readout_column_computes():
+    """A single-point column computes a geometric mean of % values as a mean, and a
+    best fit as the latest run; the description says what it computes."""
+    gmean = _channel(
+        source_kind=ChannelSourceKind.READOUT_DATA,
+        normalization_applied="percent_inhibition",
+        selection_rule=SelectionRule.GEOMETRIC_MEAN,
+    )
+    assert _described(gmean, "%", "RFU") == "mean across runs"
+    best = _channel(
+        source_kind=ChannelSourceKind.READOUT_DATA, selection_rule=SelectionRule.BEST_R_SQUARED
+    )
+    assert _described(best, "µM", "µM") == "latest run"
+
+
+def test_rule_part_of_a_dose_response_column_is_as_configured():
+    gmean = _channel(selection_rule=SelectionRule.GEOMETRIC_MEAN)
+    assert _described(gmean, "µM", "µM") == "geometric mean"

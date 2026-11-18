@@ -205,9 +205,7 @@ class GetPublishedCampaign:
         stage_outcomes = evaluate_stages(campaign)
         stage_counts = tally_stage_counts(campaign, stage_outcomes)
         # Column descriptions (spec §6.6) over every result, not just this page.
-        descriptions = describe_channels(
-            campaign, {rid: rd.name for rid, rd in readout_lookup.items()}
-        )
+        descriptions = describe_channels(campaign, readout_lookup)
 
         # Step 10 — serialize.
         doc: dict[str, Any] = {

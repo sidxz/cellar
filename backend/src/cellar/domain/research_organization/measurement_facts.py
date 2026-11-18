@@ -220,10 +220,13 @@ def describe_column(
     stage_name: str | None,
     readout_label: str,
     profile: ColumnProfile,
+    rule: SelectionRule,
 ) -> ColumnDescription:
+    """``rule`` is the rule the column computes (its effective rule, which the
+    caller decides), not necessarily the one configured on it."""
     design, known = _design(profile)
-    if channel.test_concentration is not None and design in (MIXED, NOT_RECORDED):
-        # the chosen dose: every value in the column is at it
+    if channel.test_concentration is not None:
+        # the chosen dose: every value in the column is at it, whatever else was found
         design, chosen = SINGLE, [channel.test_concentration]
     else:
         chosen = known
@@ -234,15 +237,18 @@ def describe_column(
         REPORTED: "reported value",
         NOT_RECORDED: "concentration not recorded",
     }[design]
-    rule = RULE_NAMES[channel.selection_rule]
+    rule_text = RULE_NAMES[rule]
     runs = f"{profile.run_count} run" + ("" if profile.run_count == 1 else "s")
+    scope = "all runs of the protocol" if channel.resolve_from_all_runs else ""
     parts = [design_text]
     if design != SERIES:
         parts.append(_replicates_text(profile))
-    parts += [runs, rule]
-    short_label = " · ".join(p for p in parts if p)
+    parts += [runs, scope, rule_text]
     if not (profile.designs or profile.several_concentrations or profile.run_count):
-        short_label = "no values yet"
+        # nothing measured yet; what the column is set to read still holds
+        pinned = design_text if channel.test_concentration is not None else ""
+        parts = [pinned, scope, "no values yet"]
+    short_label = " · ".join(p for p in parts if p)
     return ColumnDescription(
         stage_name=stage_name,
         readout_label=readout_label,
@@ -259,7 +265,7 @@ def describe_column(
             "not_recorded": profile.replicate_not_recorded,
         },
         run_count=profile.run_count,
-        rule=rule,
+        rule=rule_text,
         basis=sorted(b.value for b in profile.basis),
         needs_concentration=channel.test_concentration is None
         and (len(known) > 1 or profile.several_concentrations > 0),

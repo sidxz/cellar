@@ -13,7 +13,7 @@ from cellar.application.research_organization.campaign_scientist_reader import (
 )
 from cellar.application.research_organization.column_descriptions import (
     describe_channels,
-    load_readout_names,
+    load_readouts,
 )
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
@@ -82,15 +82,13 @@ class GetCampaign:
                 input.workspace_id, [campaign]
             )
             targets = targets_by_campaign.get(campaign.id, [])
-            readout_names = await load_readout_names(
-                self._protocol_repo, input.workspace_id, [campaign]
-            )
+            readouts = await load_readouts(self._protocol_repo, input.workspace_id, [campaign])
 
         return Success(
             GetCampaignResult(
                 campaign=campaign,
                 scientist_by_run_id=scientist_by_run_id,
                 targets=targets,
-                descriptions=describe_channels(campaign, readout_names),
+                descriptions=describe_channels(campaign, readouts),
             )
         )

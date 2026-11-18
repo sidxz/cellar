@@ -92,7 +92,11 @@ def _m(
 
 def _label(ch, ms, stage="Primary", readout="% inhibition"):
     return describe_column(
-        channel=ch, stage_name=stage, readout_label=readout, profile=build_column_profile(ch, ms)
+        channel=ch,
+        rule=ch.selection_rule,
+        stage_name=stage,
+        readout_label=readout,
+        profile=build_column_profile(ch, ms),
     ).label
 
 
@@ -100,6 +104,7 @@ def test_empty_column_reads_no_values_yet():
     ch = _channel()
     d = describe_column(
         channel=ch,
+        rule=ch.selection_rule,
         stage_name="Primary",
         readout_label="% inhibition",
         profile=build_column_profile(ch, []),
@@ -150,6 +155,7 @@ def test_short_label_drops_stage_and_readout():
     ms = [_m(conc=10, reps=3, runs=3)]
     d = describe_column(
         channel=ch,
+        rule=ch.selection_rule,
         stage_name="Retest",
         readout_label="% inhibition",
         profile=build_column_profile(ch, ms),
@@ -161,6 +167,7 @@ def test_short_label_drops_stage_and_readout():
     dr = _channel(SelectionRule.GEOMETRIC_MEAN)
     d = describe_column(
         channel=dr,
+        rule=dr.selection_rule,
         stage_name=None,
         readout_label="IC50",
         profile=build_column_profile(dr, [_m(series=True, runs=2)]),
@@ -173,6 +180,7 @@ def test_needs_concentration_true_when_two_concentrations():
     ch = _channel()
     d = describe_column(
         channel=ch,
+        rule=ch.selection_rule,
         stage_name=None,
         readout_label="r",
         profile=build_column_profile(ch, [_m(conc=10), _m(conc=5)]),
@@ -186,7 +194,7 @@ def test_needs_concentration_true_for_several_concentrations_cell():
     p = build_column_profile(ch, ms)
     assert p.several_concentrations == 1
     assert describe_column(
-        channel=ch, stage_name=None, readout_label="r", profile=p
+        channel=ch, rule=ch.selection_rule, stage_name=None, readout_label="r", profile=p
     ).needs_concentration
 
 
@@ -194,6 +202,7 @@ def test_needs_concentration_false_once_chosen():
     ch = _channel(conc=Concentration(10, "µM"))
     d = describe_column(
         channel=ch,
+        rule=ch.selection_rule,
         stage_name=None,
         readout_label="r",
         profile=build_column_profile(ch, [_m(conc=10), _m(conc=5)]),
@@ -205,6 +214,7 @@ def test_chosen_concentration_reads_as_single_concentration():
     ch = _channel(conc=Concentration(10, "µM"))
     d = describe_column(
         channel=ch,
+        rule=ch.selection_rule,
         stage_name=None,
         readout_label="r",
         profile=build_column_profile(ch, [_m(conc=10), _m(conc=5)]),
@@ -254,3 +264,45 @@ def test_mass_concentration_label_text():
     m = _m(reps=1)
     m.test_concentration_value, m.test_concentration_unit = 10, "ug/mL"
     assert "single concentration 10 µg/mL" in _label(ch, [m])
+
+
+def test_all_runs_column_says_so():
+    ch = _channel()
+    ch.resolve_from_all_runs = True
+    d = describe_column(
+        channel=ch,
+        rule=ch.selection_rule,
+        stage_name="Primary",
+        readout_label="% inhibition",
+        profile=build_column_profile(ch, [_m(conc=10, reps=1, runs=4)]),
+    )
+    assert d.short_label == (
+        "single concentration 10 µM · 1 replicate · 4 runs · all runs of the protocol · latest run"
+    )
+    assert d.label == f"Primary · % inhibition · {d.short_label}"
+
+
+def test_pinned_concentration_is_named_when_no_value_is_at_it():
+    """Pinned to 10 µM, but the only dose left at the stage is 20 µM: every cell is
+    untested, and the description names the pinned dose, not the one found."""
+    ch = _channel(conc=Concentration(10, "µM"))
+    untested = CampaignMeasurement(
+        result_id=uuid.uuid4(),
+        channel_id=ch.id,
+        value=None,
+        value_qualifier=ValueQualifier.ND,
+        unit="-",
+        protocol_name_snapshot="-",
+        protocol_version_snapshot=0,
+        concentrations_found=[Concentration(20, "µM")],
+    )
+    d = describe_column(
+        channel=ch,
+        rule=ch.selection_rule,
+        stage_name=None,
+        readout_label="r",
+        profile=build_column_profile(ch, [untested]),
+    )
+    assert d.design == "single_concentration"
+    assert d.short_label == "single concentration 10 µM · no values yet"
+    assert d.concentrations == [{"value": 20.0, "unit": "µM", "count": 1}]

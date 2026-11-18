@@ -282,6 +282,7 @@ def test_case_m_all_compounds_two_concentrations_lists_both():
     assert all(m.concentrations_found == [UM10, UM50] for m in out.values())
     d = describe_column(
         channel=ch,
+        rule=ch.selection_rule,
         stage_name=None,
         readout_label="r",
         profile=build_column_profile(ch, out.values()),
@@ -311,6 +312,7 @@ def test_clearing_choice_restores_list_and_flag():
         out = _resolve_all(ch, readings, mols)
         return describe_column(
             channel=ch,
+            rule=ch.selection_rule,
             stage_name=None,
             readout_label="r",
             profile=build_column_profile(ch, out.values()),
@@ -551,3 +553,25 @@ def test_qc_pass_every_contributor_approved_with_z_prime_at_least_half():
     # Latest run: the older, failing run does not contribute.
     assert _resolve(_channel(), [with_run(old, z_prime=0.1), new]).qc_pass is True
     assert _resolve(_channel(), []).qc_pass is None
+
+
+def test_exclude_qualified_split_and_list_read_the_same_doses():
+    """Under EXCLUDE_QUALIFIED a dose with only censored readings is not read: it
+    neither splits the compound into "several concentrations" nor is listed."""
+    ch = _channel()
+    ch.qualifier_handling = QualifierHandling.EXCLUDE_QUALIFIED
+    um20 = Concentration(20.0, "µM")
+
+    def censored(run_id: uuid.UUID, dose: Concentration) -> Candidate:
+        c = _reading(80.0, run_id, D2, dose=dose)
+        return replace(c, run=replace(c.run, qualifier=ValueQualifier.GT))
+
+    exact, other = uuid.uuid4(), uuid.uuid4()
+    m = _resolve(ch, [_reading(40.0, exact, D1), censored(other, um20)])
+    assert (m.value, m.unresolved_reason) == (40.0, None)
+    assert m.concentrations_found == [UM10]
+
+    nothing_read = _resolve(ch, [censored(exact, UM10), censored(other, um20)])
+    _assert_bare(nothing_read)
+    assert nothing_read.unresolved_reason is None
+    assert nothing_read.concentrations_found == []

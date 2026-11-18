@@ -207,8 +207,8 @@ def _resolve(
         values = [_Value(c.run, (c,)) for c in chosen]
         return _measure(channel, channel.selection_rule, result_id, values, series=True)
 
-    recorded = _single_point_groups(passed)
-    found = _concentrations_found(recorded, channel.qualifier_handling)
+    recorded = _readable(_single_point_groups(passed), channel.qualifier_handling)
+    found = _concentrations_found(recorded)
     groups = _at_one_concentration(recorded, channel.test_concentration)
     if groups is None:
         m = _nd_measurement(result_id=result_id, channel_id=channel.id, unit=_ND_UNIT_PLACEHOLDER)
@@ -245,21 +245,22 @@ def _single_point_groups(
     return {k: g for k, g in groups.items() if recorded_per_run[k[0]] < 2}
 
 
-def _concentrations_found(
-    groups: dict[tuple[uuid.UUID, Concentration | None], list[Candidate]],
-    handling: QualifierHandling,
-) -> list[Concentration]:
-    """Distinct known doses of the groups the column could read, by magnitude. Taken
+_Groups = dict[tuple[uuid.UUID, Concentration | None], list[Candidate]]
+
+
+def _readable(groups: _Groups, handling: QualifierHandling) -> _Groups:
+    """The groups the column reads. Under EXCLUDE_QUALIFIED a group of only censored
+    readings is never read, so its dose is neither listed nor counted as a second
+    concentration."""
+    if handling != QualifierHandling.EXCLUDE_QUALIFIED:
+        return groups
+    return {k: g for k, g in groups.items() if _combine(g).run.qualifier not in _CENSORED}
+
+
+def _concentrations_found(groups: _Groups) -> list[Concentration]:
+    """Distinct known doses of the groups the column reads, by magnitude. Taken
     before the column's ``test_concentration`` so a chosen dose still sees the others."""
-    doses = [
-        d
-        for (_, d), g in groups.items()
-        if d is not None
-        and not (
-            handling == QualifierHandling.EXCLUDE_QUALIFIED
-            and _combine(g).run.qualifier in _CENSORED
-        )
-    ]
+    doses = [d for _, d in groups if d is not None]
     out: list[Concentration] = []
     for d in sorted(doses, key=lambda d: comparable_magnitude(d.value, d.unit)):
         if not any(o.same_as(d) for o in out):
@@ -268,8 +269,7 @@ def _concentrations_found(
 
 
 def _at_one_concentration(
-    groups: dict[tuple[uuid.UUID, Concentration | None], list[Candidate]],
-    test_concentration: Concentration | None,
+    groups: _Groups, test_concentration: Concentration | None
 ) -> list[list[Candidate]] | None:
     """The groups at one concentration: the column's, else the only one there is.
     ``None`` when several remain and the column names none."""

@@ -10,7 +10,7 @@ from returns.result import Result, Success
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
 from cellar.application.research_organization.column_descriptions import (
     describe_channels,
-    load_readout_names,
+    load_readouts,
 )
 from cellar.application.shared.pagination import PageResult
 from cellar.application.shared.query import Query
@@ -100,9 +100,7 @@ class ListCampaigns:
             targets_by_campaign = await self._campaign_repo.project_targets(
                 input.workspace_id, campaigns
             )
-            readout_names = await load_readout_names(
-                self._protocol_repo, input.workspace_id, campaigns
-            )
+            readouts = await load_readouts(self._protocol_repo, input.workspace_id, campaigns)
             return Success(
                 ListCampaignsResult(
                     page=PageResult(items=campaigns, next_cursor=next_cursor),
@@ -110,7 +108,7 @@ class ListCampaigns:
                     descriptions={
                         channel_id: d
                         for c in campaigns
-                        for channel_id, d in describe_channels(c, readout_names).items()
+                        for channel_id, d in describe_channels(c, readouts).items()
                     },
                 )
             )
