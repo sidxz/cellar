@@ -28,17 +28,14 @@ from cellar.application.screening._dose_response_config_serde import (
     deserialize_dose_response_config,
     serialize_dose_response_config,
 )
+from cellar.application.screening._response_scale import fitted_layer, response_scale_for
 from cellar.application.screening.fit_dose_response import _build_excluded_from_fitter
 from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     CurveFittingService,
 )
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from cellar.domain.screening_assay.enums import (
-    ReadoutDataType,
-    WellType,
-    primary_normalization,
-)
+from cellar.domain.screening_assay.enums import ReadoutDataType, WellType
 from cellar.domain.screening_assay.excluded_point_detail import (
     ExcludedPointDetail,
     ExclusionSource,
@@ -110,11 +107,7 @@ class RefitCurvesKeepingEdits:
             y_rd = rd_by_name.get(config.y_readout_name)
             if y_rd is None or y_rd.is_calculated:
                 continue  # formula values are per compound: never a curve on wells
-            layer = (
-                str(config.y_normalization or primary_normalization(y_rd.normalizations))
-                if y_rd.normalizations
-                else None
-            )
+            layer = fitted_layer(config, y_rd)
             on_wells, new = _series(run, y_rd, layer, after)
             if not on_wells:
                 continue  # rows on no well of the run: their curves cannot be rebuilt
@@ -134,7 +127,9 @@ class RefitCurvesKeepingEdits:
                         await self._curve_repo.delete(run.workspace_id, curve.id)
                         out.removed += 1
                     continue
-                await self._refit_one(out, run, dr_def, key, curve, old.get(key, {}), points)
+                await self._refit_one(
+                    out, run, dr_def, key, curve, old.get(key, {}), points, layer
+                )
         return out
 
     async def _refit_one(
@@ -146,6 +141,7 @@ class RefitCurvesKeepingEdits:
         curve: DoseResponseCurve | None,
         old: dict[uuid.UUID, tuple[float, float, bool]],
         new: dict[uuid.UUID, tuple[float, float, bool]],
+        layer: str | None,
     ) -> None:
         kept = _kept_exclusions(curve, old) if curve is not None else {}
         if curve is not None:
@@ -172,7 +168,7 @@ class RefitCurvesKeepingEdits:
             if curve is not None and curve.dose_response_config_snapshot
             else dr_def.dose_response_config
         )
-        fit = self._curve_fitter.fit(points, config)
+        fit = self._curve_fitter.fit(points, config, response_scale_for(layer))
         if isinstance(fit, Failure):
             if curve is not None:
                 await self._curve_repo.delete(run.workspace_id, curve.id)

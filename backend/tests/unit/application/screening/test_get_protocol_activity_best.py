@@ -14,6 +14,8 @@ from cellar.application.screening.get_protocol_activity import (
     GetProtocolActivitySummary,
 )
 from cellar.application.screening.protocol_activity_reader import (
+    BestParamsRow,
+    DRAggRow,
     MoleculeBaseRow,
     NumericReadoutRow,
     ProtocolActivityData,
@@ -96,3 +98,73 @@ async def test_shift_best_is_the_largest_in_either_direction_and_plain_stays_hig
         "Lowest shifting conc.": "low",
         "Signal": "high",
     }
+
+
+def _dr_def():
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        name="Potency",
+        data_type="dose_response",
+        unit="uM",
+        dose_response_config={"intercepts": [{"kind": "ec", "level": 50.0}]},
+        melt_config=None,
+    )
+
+
+def _iv(level: float, value: float | None, qualifier: str | None = None) -> dict:
+    iv = {
+        "spec": {"kind": "ec", "level": level, "basis": "relative_percent", "label": None},
+        "value": value,
+        "ci_low": None,
+        "ci_high": None,
+        "at_bound": False,
+    }
+    return iv if qualifier is None else {**iv, "qualifier": qualifier}
+
+
+def _best_curve(rd_id: uuid.UUID, curve_class: str, intercepts: list[dict]) -> BestParamsRow:
+    return BestParamsRow(
+        molecule_id=MOL,
+        readout_definition_id=rd_id,
+        curve_class=curve_class,
+        hill_slope=1.0,
+        top=95.0,
+        bottom=88.0,
+        fitted_value=0.5,
+        r_squared=0.4,
+        raw_data=[{"concentration": d, "response": 92.0} for d in (0.0002, 0.02, 2.0)],
+        batch_number=None,
+        intercept_values=intercepts,
+    )
+
+
+async def _summary(rd, dr_row: DRAggRow, best: BestParamsRow):
+    data = ProtocolActivityData(
+        protocol=ProtocolRow(id=uuid.uuid4(), readout_definitions=[rd]),
+        molecule_rows=[MoleculeBaseRow(MOL, "x", "CC-1", None, 1, date(2026, 11, 19))],
+        dr_agg_rows=[dr_row],
+        best_params_rows=[best],
+    )
+    result = await GetProtocolActivitySummary(_Reader(data))(
+        GetProtocolActivityQuery(workspace_id=WS, protocol_id=uuid.uuid4()),
+        auth=FakeAuth(role="viewer", workspace_id=WS),
+    )
+    assert isinstance(result, Success)
+    return result.unwrap()
+
+
+@pytest.mark.asyncio
+async def test_the_best_curves_intercepts_carry_their_qualifiers_and_nd_has_no_value():
+    rd = _dr_def()
+    ivs = [_iv(50.0, 0.5, "="), _iv(90.0, None, "nd"), _iv(10.0, 0.1)]
+    best = _best_curve(rd.id, "partial", ivs)
+    dr_row = DRAggRow(MOL, rd.id, best=0.5, geo_mean=0.5, n_tested=1, n_used=1)
+
+    out = await _summary(rd, dr_row, best)
+
+    ivs = out.items[0].readouts["Potency"].curve_params.intercept_values
+    assert [(iv.spec.level, iv.value, iv.qualifier) for iv in ivs] == [
+        (50.0, 0.5, "="),
+        (90.0, None, "nd"),
+        (10.0, 0.1, None),  # fitted before qualifiers
+    ]

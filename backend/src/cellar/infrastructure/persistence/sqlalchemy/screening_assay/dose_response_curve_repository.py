@@ -5,6 +5,7 @@ DoseResponseCurve is not an AggregateRoot — standalone repo with manual CRUD.
 
 from __future__ import annotations
 
+import math
 import uuid
 
 from sqlalchemy import delete, func, select
@@ -22,6 +23,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.excluded_point_detail import ExcludedPointDetail
 from cellar.domain.screening_assay.run_scope import RunScope
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
@@ -42,7 +44,8 @@ def _serialize_intercept_values(
     """Serialize a list of InterceptValue VOs to JSONB-friendly dicts.
 
     Returns ``None`` when empty so the column stays NULL on legacy curves
-    that haven't been refit since the multi-intercept feature shipped.
+    that haven't been refit since the multi-intercept feature shipped. An ``nd``
+    intercept's value (NaN) is stored as null: JSONB has no NaN.
     """
     if not values:
         return None
@@ -54,10 +57,11 @@ def _serialize_intercept_values(
                 "basis": v.spec.basis.value,
                 "label": v.spec.label,
             },
-            "value": v.value,
+            "value": v.value if math.isfinite(v.value) else None,
             "ci_low": v.confidence_interval_low,
             "ci_high": v.confidence_interval_high,
             "at_bound": v.at_bound,
+            "qualifier": v.qualifier.value if v.qualifier is not None else None,
         }
         for v in values
     ]
@@ -73,7 +77,8 @@ def _hydrate_intercept_values(
 ) -> list[InterceptValue]:
     """Hydrate the JSONB list. When NULL, synthesize a single-element list
     from the legacy ``(curve_type, fitted_value, ci_low, ci_high)`` so old
-    curves render as one-intercept curves without a data backfill."""
+    curves render as one-intercept curves without a data backfill. A null value
+    (``nd``) reads as NaN; an entry stored before qualifiers has none (``None``)."""
     if raw is None:
         kind = InterceptKind.IC if fallback_curve_type == CurveType.IC50 else InterceptKind.EC
         return [
@@ -93,10 +98,11 @@ def _hydrate_intercept_values(
                 basis=InterceptBasis(d["spec"]["basis"]),
                 label=d["spec"].get("label"),
             ),
-            value=float(d["value"]),
+            value=float(d["value"]) if d.get("value") is not None else math.nan,
             confidence_interval_low=d.get("ci_low"),
             confidence_interval_high=d.get("ci_high"),
             at_bound=bool(d.get("at_bound", False)),
+            qualifier=ValueQualifier(d["qualifier"]) if d.get("qualifier") else None,
         )
         for d in raw
     ]

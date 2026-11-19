@@ -13,6 +13,7 @@ from cellar.application.screening._dose_response_config_serde import (
     serialize_dose_response_config,
 )
 from cellar.application.screening._dr_point_reconstruction import with_captured_positions
+from cellar.application.screening._response_scale import fitted_layer, response_scale_for
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
     MoleculeDisplayInfo,
@@ -30,7 +31,6 @@ from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
     WellType,
-    primary_normalization,
 )
 from cellar.domain.screening_assay.excluded_point_detail import (
     ExcludedPointDetail,
@@ -310,8 +310,8 @@ class FitDoseResponseCurves:
             target_formula: ReadoutNormalization | None
             # A readout that calculates no layer is fitted on its raw rows, whatever layer
             # a stored curve still names.
-            primary = primary_normalization(y_rd.normalizations)
-            layer = (config.y_normalization or primary) if primary is not None else None
+            layer = fitted_layer(config, y_rd)
+            scale = response_scale_for(layer)
             if y_rd.is_calculated:
                 target_formula = None  # filtered by is_computed below
                 use_computed = True
@@ -376,7 +376,7 @@ class FitDoseResponseCurves:
 
                 # Dose order: the captured set's order, so raw_data positions match it.
                 points.sort(key=lambda p: p.concentration)
-                fit_result = self._curve_fitter.fit(points, config)
+                fit_result = self._curve_fitter.fit(points, config, scale)
                 if isinstance(fit_result, Failure):
                     failed.append((molecule_id, dr_def.name, fit_result.failure()))
                     continue

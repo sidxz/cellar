@@ -13,6 +13,7 @@ in-scope run of the (compound, readout-def) cell.
 
 from __future__ import annotations
 
+import math
 import uuid
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -96,10 +97,12 @@ def _serialize_intercept_values(
                 "basis": iv.spec.basis.value,
                 "label": iv.spec.label,
             },
-            "value": iv.value,
+            # An "nd" intercept's NaN is no value.
+            "value": iv.value if math.isfinite(iv.value) else None,
             "confidence_interval_low": iv.confidence_interval_low,
             "confidence_interval_high": iv.confidence_interval_high,
             "at_bound": iv.at_bound,
+            "qualifier": iv.qualifier.value if iv.qualifier is not None else None,
         }
         for iv in values
     ]

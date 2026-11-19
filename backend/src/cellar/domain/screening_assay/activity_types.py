@@ -154,7 +154,8 @@ class ActivityValue:
     # ``CurveDetail.intercept_values`` so the search grid can render one
     # column per protocol intercept (EC50, EC90, IC10, ...). Each entry is a
     # plain dict with keys ``spec`` (kind/level/basis/label), ``value``,
-    # ``confidence_interval_low``, ``confidence_interval_high``, ``at_bound``.
+    # ``confidence_interval_low``, ``confidence_interval_high``, ``at_bound``,
+    # ``qualifier`` (``None`` when fitted before qualifiers; ``value`` None for "nd").
     intercept_values: list[dict[str, Any]] | None = None
     # ---- NEW: multi-run aggregation context ----
     run_count: int = 1

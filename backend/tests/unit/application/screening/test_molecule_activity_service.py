@@ -9,6 +9,7 @@ between the aggregator + the SQL repos is covered by
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import date
 from typing import Self
@@ -25,7 +26,7 @@ from cellar.domain.screening_assay.activity_types import (
     RunHeader,
     RunReadoutStats,
 )
-from cellar.domain.screening_assay.aggregation_types import SelectionRule
+from cellar.domain.screening_assay.aggregation_types import SelectionRule, ValueQualifier
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_config import (
     InterceptBasis,
@@ -450,6 +451,44 @@ class TestEnrichMoleculesInterceptValues:
         ec90_agg = av.intercept_aggregates[1]
         assert ec90_agg.selected_value is None  # no raw_data → ND
         assert ec90_agg.selected_qualifier == "nd"
+
+    @pytest.mark.asyncio
+    async def test_intercept_values_carry_their_qualifiers_and_nd_has_no_value(self) -> None:
+        """Each intercept goes out with its qualifier (None when fitted before
+        qualifiers); an nd one's NaN goes out as None, never as a number."""
+
+        def iv(level: float, value: float, qualifier: ValueQualifier | None) -> InterceptValue:
+            return InterceptValue(
+                spec=InterceptSpec(kind=InterceptKind.EC, level=level),
+                value=value,
+                confidence_interval_low=None,
+                confidence_interval_high=None,
+                qualifier=qualifier,
+            )
+
+        run_id = uuid.uuid4()
+        curve = _make_curve(
+            intercept_values=[
+                iv(50.0, 0.0002, ValueQualifier.LT),
+                iv(90.0, math.nan, ValueQualifier.ND),
+                iv(10.0, 0.0002, None),
+            ],
+            run_id=run_id,
+        )
+        service = _make_service(
+            curve_repo=_curve_repo_for([curve]),
+            run_repo=_run_repo_for({run_id: _make_run(run_id=run_id, run_date=date(2026, 4, 1))}),
+        )
+
+        av = (await service.enrich_molecules(WS, [MOL_ID], [f"drc:{RD_ID}"]))[MOL_ID][
+            f"drc:{RD_ID}"
+        ]
+
+        assert [(i["spec"]["level"], i["value"], i["qualifier"]) for i in av.intercept_values] == [
+            (50.0, 0.0002, "<"),
+            (90.0, None, "nd"),
+            (10.0, 0.0002, None),
+        ]
 
     @pytest.mark.asyncio
     async def test_intercept_values_none_when_curve_has_none(self) -> None:

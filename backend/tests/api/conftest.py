@@ -222,6 +222,9 @@ def _create_test_app(
     app.include_router(sar_analysis_router)
     app.include_router(umap_cluster_router)
     app.include_router(mcs_router)
+    from cellar.interface.routes.molecule_activity import router as molecule_activity_router
+
+    app.include_router(molecule_activity_router)  # after mcs, as in create_app
     app.include_router(audit_router)
     app.include_router(admin_delete_router)
     app.include_router(campaign_router)

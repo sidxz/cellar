@@ -27,6 +27,7 @@ from cellar.application.auth import AuthContext, require_editor, require_same_wo
 from cellar.application.screening._dr_point_reconstruction import (
     build_points_with_exclusions,
 )
+from cellar.application.screening._response_scale import curve_response_scale
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.curve_fitting import (
@@ -37,6 +38,7 @@ from cellar.domain.screening_assay.curve_fitting import (
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.enums import CurveType, ReadoutDataType
+from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
@@ -112,24 +114,27 @@ class RefitDoseResponseCurvePreview:
             # drift on index→dose semantics.
             points = build_points_with_exclusions(curve, input.excluded_point_indices)
 
-            config = await self._build_preview_config(curve)
+            protocol = await self._protocol_repo.find_by_id_in_workspace(
+                curve.workspace_id, curve.protocol_id
+            )
+            config = self._build_preview_config(curve, protocol)
+            scale = curve_response_scale(protocol, curve.readout_definition_id)
 
-        fit_result = self._curve_fitter.fit(points, config)
+        fit_result = self._curve_fitter.fit(points, config, scale)
         if isinstance(fit_result, Failure):
             return fit_result
 
         fitted = fit_result.unwrap()
         return Success(_to_preview_result(fitted, points))
 
-    async def _build_preview_config(self, curve: DoseResponseCurve) -> DoseResponseConfig:
+    def _build_preview_config(
+        self, curve: DoseResponseCurve, protocol: Protocol | None
+    ) -> DoseResponseConfig:
         """Resolve protocol's DoseResponseConfig but force ``outlier_sigma=None``.
 
         Preview NEVER runs the fitter's auto-3σ outlier pass — the chemist is
         in control of the exclusion set during point editing.
         """
-        protocol = await self._protocol_repo.find_by_id_in_workspace(
-            curve.workspace_id, curve.protocol_id
-        )
         base_config: DoseResponseConfig | None = None
         if protocol:
             for rd in protocol.readout_definitions:

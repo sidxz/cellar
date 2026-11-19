@@ -26,6 +26,7 @@ from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     CurveFittingService,
     FittedCurveResult,
+    ResponseScale,
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
@@ -75,9 +76,11 @@ class _RecordingFitter:
 
     def __init__(self) -> None:
         self.calls: list[list[ConcentrationResponsePoint]] = []
+        self.scales: list[ResponseScale | None] = []
 
-    def fit(self, points, config):
+    def fit(self, points, config, scale=None):
         self.calls.append(list(points))
+        self.scales.append(scale)
         return Success(
             FittedCurveResult(
                 fitted_value=1.0,
@@ -329,6 +332,40 @@ async def test_a_y_readout_declaring_only_none_fits_raw_rows():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("layer", "scale"),
+    [
+        (ReadoutNormalization.PERCENT_INHIBITION, ResponseScale(zero=0.0, full=100.0)),
+        (ReadoutNormalization.PERCENT_ACTIVATION, ResponseScale(zero=0.0, full=100.0)),
+        # Falls or rises with the control convention: no scale in this branch.
+        (ReadoutNormalization.PERCENT_CONTROL, None),
+        (ReadoutNormalization.Z_SCORE, None),
+        (ReadoutNormalization.NONE, None),  # the raw layer
+    ],
+)
+async def test_a_curve_is_fitted_on_its_layers_response_scale(layer, scale):
+    """A % inhibition / activation layer is read on 0-100 %, so a flat curve can be judged
+    against it; raw signal, Z-score and % of control have no scale to pass."""
+    protocol, y_def, _ = _make_protocol_with_y(y_normalization=layer)
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0, 100.0]
+    )
+    calculated = layer != ReadoutNormalization.NONE
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=v,
+            is_computed=calculated, normalization_applied=layer if calculated else None)
+        for w, v in zip(wells, [5.0, 30.0, 70.0, 95.0], strict=True)
+    ]
+
+    fitter = _RecordingFitter()
+    result = await _make_use_case(fitter).fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+    assert isinstance(result, Success)
+    assert fitter.scales == [scale]
+
+
+@pytest.mark.asyncio
 async def test_a_stale_layer_on_a_y_readout_with_no_layers_fits_raw_rows():
     """A stored curve whose layer its Y readout no longer calculates (and that calculates
     none) fits the raw rows, as the calculation engine does, instead of nothing."""
@@ -353,6 +390,7 @@ async def test_a_stale_layer_on_a_y_readout_with_no_layers_fits_raw_rows():
     )
     assert isinstance(result, Success)
     assert sorted(p.response for p in fitter.calls[0]) == sorted(raw_y_values)
+    assert fitter.scales == [None]  # the raw layer it fits has no % scale
 
 
 @pytest.mark.asyncio
@@ -557,7 +595,7 @@ class _FailingFitter:
         self._fail_for = fail_for_response
         self.calls: int = 0
 
-    def fit(self, points, config):
+    def fit(self, points, config, scale=None):
         self.calls += 1
         from cellar.domain.shared.errors import ValidationError
         # Trigger failure when the points contain the sentinel response.
@@ -693,7 +731,7 @@ class _FitterWithOneSuggestion:
         )
         self.calls: list[list[ConcentrationResponsePoint]] = []
 
-    def fit(self, points, config):
+    def fit(self, points, config, scale=None):
         self.calls.append(list(points))
         return Success(
             FittedCurveResult(

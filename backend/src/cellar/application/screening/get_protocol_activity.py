@@ -45,8 +45,9 @@ def _hydrate_intercept_payloads(
     """Hydrate JSONB-serialized intercept_values into payload dataclasses.
 
     The persistence layer stores intercept_values as a JSONB array of
-    ``{spec: {kind, level, basis, label}, value, ci_low, ci_high, at_bound}``
-    (see ``dose_response_curve_repository._serialize_intercept_values``).
+    ``{spec: {kind, level, basis, label}, value, ci_low, ci_high, at_bound, qualifier}``
+    (see ``dose_response_curve_repository._serialize_intercept_values``): an ``nd``
+    value is null, and an entry stored before qualifiers has no ``qualifier``.
     """
     if not raw:
         return []
@@ -63,10 +64,11 @@ def _hydrate_intercept_payloads(
                     basis=str(spec.get("basis", "relative_percent")),
                     label=spec.get("label"),
                 ),
-                value=float(d.get("value", 0)),
+                value=float(d["value"]) if d.get("value") is not None else None,
                 confidence_interval_low=d.get("ci_low"),
                 confidence_interval_high=d.get("ci_high"),
                 at_bound=bool(d.get("at_bound", False)),
+                qualifier=d.get("qualifier"),
             )
         )
     return out
@@ -89,10 +91,11 @@ class InterceptSpecPayload:
 @dataclass(frozen=True)
 class InterceptValuePayload:
     spec: InterceptSpecPayload
-    value: float
+    value: float | None  # None when the qualifier is "nd"
     confidence_interval_low: float | None = None
     confidence_interval_high: float | None = None
     at_bound: bool = False
+    qualifier: str | None = None  # None: fitted before qualifiers existed
 
 
 @dataclass(frozen=True)

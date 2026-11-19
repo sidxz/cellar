@@ -9,12 +9,14 @@ from datetime import UTC, date, datetime
 import pytest
 
 from cellar.application.screening.refit_curves_keeping_edits import RefitCurvesKeepingEdits
+from cellar.domain.screening_assay.curve_fitting import ResponseScale
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
     CurveType,
     PlateFormat,
     ProtocolType,
     ReadoutDataType,
+    ReadoutNormalization,
     WellType,
 )
 from cellar.domain.screening_assay.excluded_point_detail import (
@@ -50,9 +52,12 @@ class _Curves:
 
 
 class _Run:
-    def __init__(self) -> None:
+    def __init__(self, layer: ReadoutNormalization | None = None) -> None:
         self.signal = ReadoutDefinition(
-            protocol_id=uuid.UUID(int=0), name="Signal", data_type=ReadoutDataType.NUMERIC
+            protocol_id=uuid.UUID(int=0),
+            name="Signal",
+            data_type=ReadoutDataType.NUMERIC,
+            normalizations=frozenset({layer}) if layer else None,
         )
         potency = ReadoutDefinition(
             protocol_id=uuid.UUID(int=0),
@@ -96,6 +101,8 @@ class _Run:
                         batch_id=batch,
                         readout_definition_id=self.signal.id,
                         value=QualifiedValue(value=value),
+                        is_computed=layer is not None,
+                        normalization_applied=layer,
                     )
                 )
 
@@ -191,3 +198,29 @@ async def test_a_series_left_with_fewer_than_four_doses_loses_its_curve_and_says
         after=r.rows,
     )
     assert (back.created, len(curves.by_id)) == (1, 2)  # unflagged: the curve comes back
+
+
+class _ScaleSpy(LmfitCurveFitter):
+    def __init__(self) -> None:
+        self.scales: list[ResponseScale | None] = []
+
+    def fit(self, points, config, scale=None):
+        self.scales.append(scale)
+        return super().fit(points, config, scale)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("layer", "scale"),
+    [(ReadoutNormalization.PERCENT_INHIBITION, ResponseScale()), (None, None)],
+)
+async def test_a_refit_reads_the_layer_on_its_response_scale(layer, scale) -> None:
+    """A series on a % inhibition layer is refitted on 0-100 %; a raw one on no scale."""
+    r = _Run(layer)
+    fitter = _ScaleSpy()
+    uc = RefitCurvesKeepingEdits(curve_repo=_Curves(), curve_fitter=fitter)
+
+    out = await uc.refit(run=r.run, protocol=r.protocol, before=[], after=r.rows)
+
+    assert out.created == 2
+    assert fitter.scales == [scale, scale]

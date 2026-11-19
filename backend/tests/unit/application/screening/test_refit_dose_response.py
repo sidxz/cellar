@@ -21,6 +21,7 @@ from cellar.domain.screening_assay.curve_fitting import (
     DOSE_ZERO_LEFT_OUT,
     ConcentrationResponsePoint,
     FittedCurveResult,
+    ResponseScale,
 )
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
@@ -29,6 +30,7 @@ from cellar.domain.screening_assay.enums import (
     CurveType,
     ProtocolType,
     ReadoutDataType,
+    ReadoutNormalization,
 )
 from cellar.domain.screening_assay.excluded_point_detail import (
     ExclusionReason,
@@ -76,7 +78,8 @@ class _RecordingFitter:
         self.last_points: list[ConcentrationResponsePoint] = []
         self.last_config: DoseResponseConfig | None = None
 
-    def fit(self, points, config):
+    def fit(self, points, config, scale=None):
+        self.last_scale = scale
         self.last_points = list(points)
         self.last_config = config
         return Success(
@@ -156,7 +159,7 @@ def _make_curve_with_points(points: list[tuple[float, float]]) -> DoseResponseCu
     )
 
 
-def _make_protocol() -> Protocol:
+def _make_protocol(layer: ReadoutNormalization | None = None) -> Protocol:
     rd = ReadoutDefinition(
         protocol_id=uuid.uuid4(),
         name="IC50",
@@ -174,7 +177,10 @@ def _make_protocol() -> Protocol:
         created_by=USER,
         readout_definitions=[
             ReadoutDefinition(
-                protocol_id=rd.protocol_id, name="response", data_type=ReadoutDataType.NUMERIC
+                protocol_id=rd.protocol_id,
+                name="response",
+                data_type=ReadoutDataType.NUMERIC,
+                normalizations=frozenset({layer}) if layer else None,
             ),
             rd,
         ],
@@ -697,3 +703,26 @@ async def test_a_constraint_refit_keeps_an_outlier_well_point_out_and_recorded()
     [saved] = curve_repo.save.await_args.args
     [kept] = saved.excluded_points
     assert (kept.source, kept.idx, kept.concentration) == (ExclusionSource.WELL_FLAG, 1, 0.1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("layer", "scale"),
+    [(ReadoutNormalization.PERCENT_INHIBITION, ResponseScale()), (None, None)],
+)
+async def test_the_curve_is_refitted_on_its_layers_response_scale(layer, scale):
+    """The curve's own readout reads a % inhibition layer: refitted on 0-100 %; a raw one
+    on no scale."""
+    protocol = _make_protocol(layer)
+    dr_def = next(rd for rd in protocol.readout_definitions if rd.name == "IC50")
+    curve = _make_curve_with_points([(1.0, 5.0), (10.0, 20.0), (100.0, 50.0), (1000.0, 80.0)])
+    curve.readout_definition_id = dr_def.id
+    fitter = _RecordingFitter()
+    use_case, _ = _make_use_case(curve, fitter=fitter)
+    use_case._protocol_repo.find_by_id_in_workspace = AsyncMock(return_value=protocol)
+    cmd = RefitDoseResponseCurveCommand(workspace_id=WS, curve_id=curve.id)
+
+    result = await use_case(cmd, auth=_make_auth())
+
+    assert isinstance(result, Success)
+    assert fitter.last_scale == scale

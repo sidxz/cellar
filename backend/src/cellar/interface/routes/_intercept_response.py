@@ -14,6 +14,7 @@ All three routes now import from here.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 from pydantic import BaseModel
@@ -28,10 +29,14 @@ class InterceptSpecResponse(BaseModel):
 
 class InterceptValueResponse(BaseModel):
     spec: InterceptSpecResponse
-    value: float
+    # null when the qualifier is "nd" (no value can be read from the curve).
+    value: float | None
     confidence_interval_low: float | None = None
     confidence_interval_high: float | None = None
     at_bound: bool = False
+    # "=" | "<" | ">" | "nd"; null on an intercept fitted before qualifiers existed,
+    # which reads by the old rules (``at_bound`` and the value against the tested doses).
+    qualifier: str | None = None
 
     @classmethod
     def from_domain(cls, iv: Any) -> InterceptValueResponse:
@@ -50,10 +55,11 @@ class InterceptValueResponse(BaseModel):
                 basis=_enum_str(spec.basis),
                 label=spec.label,
             ),
-            value=iv.value,
+            value=iv.value if iv.value is not None and math.isfinite(iv.value) else None,
             confidence_interval_low=iv.confidence_interval_low,
             confidence_interval_high=iv.confidence_interval_high,
             at_bound=iv.at_bound,
+            qualifier=_enum_str(iv.qualifier) if iv.qualifier is not None else None,
         )
 
 

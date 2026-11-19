@@ -60,10 +60,11 @@ class InterceptValuePayload:
     """Wire form of InterceptValue for the activity-detail response."""
 
     spec: InterceptSpecPayload
-    value: float
+    value: float  # NaN when the qualifier is "nd"
     confidence_interval_low: float | None
     confidence_interval_high: float | None
     at_bound: bool
+    qualifier: str | None  # None: fitted before qualifiers existed
 
 
 @dataclass(frozen=True)
@@ -149,6 +150,7 @@ class CurveDetail:
                     confidence_interval_low=iv.confidence_interval_low,
                     confidence_interval_high=iv.confidence_interval_high,
                     at_bound=iv.at_bound,
+                    qualifier=iv.qualifier.value if iv.qualifier is not None else None,
                 )
                 for iv in (curve.intercept_values or [])
             ],

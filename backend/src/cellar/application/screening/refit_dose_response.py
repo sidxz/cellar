@@ -21,6 +21,7 @@ from cellar.application.screening._dr_point_reconstruction import (
     is_well_flag,
     with_captured_positions,
 )
+from cellar.application.screening._response_scale import curve_response_scale
 from cellar.application.shared.command import Command
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.audit_compliance.enums import AuditAction, OperationType
@@ -35,6 +36,7 @@ from cellar.domain.screening_assay.excluded_point_detail import (
     ExclusionReason,
     ExclusionSource,
 )
+from cellar.domain.screening_assay.protocol import Protocol
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
     ProtocolRepository,
@@ -237,9 +239,13 @@ class RefitDoseResponseCurve:
             # The run's outlier wells stay out of the fit and on the curve, whatever is sent.
             well_flags = [e for _, _, e in captured if e is not None and is_well_flag(e)]
 
-            config = await self._resolve_config(input, curve)
+            protocol = await self._protocol_repo.find_by_id_in_workspace(
+                input.workspace_id, curve.protocol_id
+            )
+            config = self._resolve_config(input, curve, protocol)
+            scale = curve_response_scale(protocol, curve.readout_definition_id)
 
-            fit_result = self._curve_fitter.fit(points, config)
+            fit_result = self._curve_fitter.fit(points, config, scale)
             if isinstance(fit_result, Failure):
                 return fit_result
 
@@ -329,13 +335,13 @@ class RefitDoseResponseCurve:
             await self._uow.commit()
             return Success(curve)
 
-    async def _resolve_config(
-        self, input: RefitDoseResponseCurveCommand, curve: DoseResponseCurve
+    def _resolve_config(
+        self,
+        input: RefitDoseResponseCurveCommand,
+        curve: DoseResponseCurve,
+        protocol: Protocol | None,
     ) -> DoseResponseConfig:
         """Get protocol's DoseResponseConfig and merge user overrides."""
-        protocol = await self._protocol_repo.find_by_id_in_workspace(
-            input.workspace_id, curve.protocol_id
-        )
         base_config = None
         if protocol:
             for rd in protocol.readout_definitions:
