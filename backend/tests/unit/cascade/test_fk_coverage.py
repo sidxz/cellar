@@ -560,6 +560,7 @@ LEFT_ALONE: dict[str, str] = {
     "campaign_channel.qc_filter": _NO_IDS,
     "cdd_molecule_imports.filter_criteria": _NO_IDS,
     "cdd_molecule_imports.report": _NO_IDS,
+    "cdd_molecule_imports.run_settings": _NO_IDS,
     "collection_import_templates.column_mapping": _NO_IDS,
     "condition_definitions.pick_list_values": _NO_IDS,
     "custom_field_definitions.default_value": _NO_IDS,
