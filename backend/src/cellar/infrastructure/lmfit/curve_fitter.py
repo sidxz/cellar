@@ -531,14 +531,16 @@ def _starting_points(
         (params["top"].value, params["bottom"].value),
         (float(np.max(responses)), float(np.min(responses))),
     )
+    span = _response_span(responses)
     seen: set[tuple[float, ...]] = set()
     starts: list[lmfit.Parameters] = []
     for top, bottom in plateaus:
         for log_ec50 in log_ec50s:
             start = params.copy()
             for name, value in (("top", top), ("bottom", bottom), ("log_ec50", log_ec50)):
-                if start[name].vary:
-                    start[name].set(value=_clamp(value, start[name].min, start[name].max))
+                p = start[name]
+                if p.vary:
+                    p.set(value=_start_inside(value, p.min, p.max, open_width=span))
             key = tuple(start[name].value for name in ("top", "bottom", "log_ec50"))
             if key not in seen:
                 seen.add(key)
@@ -615,7 +617,9 @@ def _build_params(
         # against the enum already happened in DoseResponseConfig.
         h_min = config.hill_slope_min if config.hill_slope_min is not None else -20.0
         h_max = config.hill_slope_max if config.hill_slope_max is not None else 20.0
-        params["hill"].set(value=_clamp(hill_init, h_min, h_max), min=h_min, max=h_max)
+        params["hill"].set(
+            value=_start_inside(hill_init, h_min, h_max, open_width=1.0), min=h_min, max=h_max
+        )
     elif constraint == HillSlopeConstraint.POSITIVE_ONLY:
         params["hill"].set(value=max(hill_init, 0.5), min=0.01, max=20.0)
     elif constraint == HillSlopeConstraint.NEGATIVE_ONLY:
@@ -629,7 +633,11 @@ def _build_params(
     elif config.top_constraint_min is not None or config.top_constraint_max is not None:
         t_min = config.top_constraint_min if config.top_constraint_min is not None else -np.inf
         t_max = config.top_constraint_max if config.top_constraint_max is not None else np.inf
-        params["top"].set(value=_clamp(top_init, t_min, t_max), min=t_min, max=t_max)
+        params["top"].set(
+            value=_start_inside(top_init, t_min, t_max, open_width=_response_span(responses)),
+            min=t_min,
+            max=t_max,
+        )
 
     # Bottom: lock > range > free.
     if config.bottom_constraint is not None:
@@ -641,18 +649,28 @@ def _build_params(
         b_max = (
             config.bottom_constraint_max if config.bottom_constraint_max is not None else np.inf
         )
-        params["bottom"].set(value=_clamp(bottom_init, b_min, b_max), min=b_min, max=b_max)
+        params["bottom"].set(
+            value=_start_inside(bottom_init, b_min, b_max, open_width=_response_span(responses)),
+            min=b_min,
+            max=b_max,
+        )
 
     return params, log_ec50_min, log_ec50_max
 
 
-def _clamp(value: float, lo: float, hi: float) -> float:
-    """Clamp ``value`` into ``[lo, hi]``. Either bound may be ±inf."""
-    if value < lo:
-        return lo
-    if value > hi:
-        return hi
-    return value
+def _start_inside(value: float, lo: float, hi: float, *, open_width: float) -> float:
+    """A start for a parameter bounded by ``[lo, hi]`` (either may be ±inf): ``value`` kept 1 %
+    of the range's width off each bound, or 1 % of ``open_width`` when the range is half-open.
+
+    lmfit maps a bounded parameter through a transform whose slope is zero at the bound, so
+    from a start exactly on one leastsq sees no gradient and stops where it began.
+    """
+    margin = 0.01 * (hi - lo if np.isfinite(hi - lo) else open_width)
+    return min(max(value, lo + margin), hi - margin)
+
+
+def _response_span(responses: np.ndarray) -> float:
+    return float(np.ptp(responses)) or 1.0
 
 
 def _r_squared(observed: np.ndarray, predicted: np.ndarray) -> float:

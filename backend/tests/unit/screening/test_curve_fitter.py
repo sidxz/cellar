@@ -1043,7 +1043,15 @@ _RIFAMPICIN = [
     ids=["MSD-549135706", "rifampicin"],
 )
 def test_plate_regressions_bounded(series, crossing, top, hill):
-    cfg = DoseResponseConfig(
+    points = [ConcentrationResponsePoint(concentration=c, response=r) for c, r in series]
+    fitted = LmfitCurveFitter().fit(points, _plate_config(top, hill)).unwrap()
+    assert fitted.curve_class != CurveClass.INACTIVE
+    # The EC50 sits between the two doses the responses cross 50 % at.
+    assert crossing[0] < fitted.fitted_value < crossing[1]
+
+
+def _plate_config(top, hill) -> DoseResponseConfig:
+    return DoseResponseConfig(
         curve_type=CurveType.EC50,
         y_readout_name="% Inhibition",
         bottom_constraint_min=-10.0,
@@ -1053,11 +1061,24 @@ def test_plate_regressions_bounded(series, crossing, top, hill):
         hill_slope_min=hill[0] if hill else None,
         hill_slope_max=hill[1] if hill else None,
     )
-    points = [ConcentrationResponsePoint(concentration=c, response=r) for c, r in series]
-    fitted = LmfitCurveFitter().fit(points, cfg).unwrap()
-    assert fitted.curve_class != CurveClass.INACTIVE
-    # The EC50 sits between the two doses the responses cross 50 % at.
-    assert crossing[0] < fitted.fitted_value < crossing[1]
+
+
+@pytest.mark.parametrize(
+    ("series", "crossing", "top", "hill"),
+    [
+        (_MSD_549135706, (0.0015, 0.003), (90.0, 100.0), None),
+        (_MSD_549135706, (0.0015, 0.003), (90.0, 110.0), (0.9, 1.1)),
+        (_RIFAMPICIN, (0.0025, 0.005), (95.0, 105.0), (0.9, 1.1)),
+    ],
+    ids=["MSD-549135706-top90-100", "MSD-549135706-top90-110-hill", "rifampicin-top95-105-hill"],
+)
+def test_one_start_moves_off_a_plateau_start_clamped_into_its_range(series, crossing, top, hill):
+    """The plate cases whose quarter-mean bottom start (above 10) used to be clamped onto the
+    bound itself, where lmfit's bound transform has no slope: the fit sat at its start."""
+    log_c = np.log10([c for c, _ in series])
+    y = np.array([r for _, r in series])
+    fit = _fit_single_start(log_c, y, _plate_config(top, hill)).unwrap()
+    assert crossing[0] < 10 ** fit.params["log_ec50"].value < crossing[1]
 
 
 @pytest.mark.parametrize("bounded", [False, True], ids=["free", "bounds-around-truth"])
