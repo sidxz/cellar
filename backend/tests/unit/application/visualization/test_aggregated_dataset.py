@@ -751,6 +751,27 @@ def test_runs_level_carries_the_4pl_midpoint(primary, fitted, midpoint):
     assert (col.hidden, col.unit, col.provenance.stat) == (True, "µM", "midpoint")
 
 
+@pytest.mark.parametrize(
+    ("primary", "midpoint"),
+    [
+        # The fitter reads a falling curve's IC90 90 % of the way down from its upper
+        # plateau: top 100, bottom 0, Hill -1, midpoint 1 cross 10 at dose 9.
+        ({"spec": IC90, "value": 9.0, "at_bound": False, "qualifier": "="}, 1.0),
+        # Fitted before qualifiers, by the old rule (90 % of the way up from bottom).
+        ({"spec": IC90, "value": 9.0, "at_bound": False}, 81.0),
+    ],
+    ids=["qualified", "legacy"],
+)
+def test_a_falling_curves_midpoint_follows_the_rule_its_intercept_was_read_by(primary, midpoint):
+    run = _run()
+    curve = _curve(
+        run, uuid.uuid4(), uuid.uuid4(), fitted_value=9.0, hill_slope=-1.0, top=100.0,
+        bottom=0.0, intercept_values=[primary],
+    )  # fmt: skip
+    ds = _build("runs", curves=[curve], runs=[run])
+    assert ds.values[f"{DRK}:midpoint"] == [pytest.approx(midpoint)]
+
+
 @pytest.mark.parametrize("level", ["runs", "batches", "compounds"])
 def test_the_plan_counts_the_rows_and_a_floor_of_the_columns(level):
     run_a, run_b = _run(12, conditions={"NADP": "+"}), _run(13, conditions={"NADP": "-"})

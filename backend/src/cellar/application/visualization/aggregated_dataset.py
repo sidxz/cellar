@@ -204,17 +204,22 @@ def _midpoint(r: CurveRow) -> float | None:
     intercept's value, so it is the midpoint only for a 50 % relative intercept — or one
     read as a bound or n.d. (at the bound, or qualified other than "="), where the fitter
     stores the midpoint itself. Otherwise the fit's 4PL is solved back from the
-    intercept (the inverse of the fitter's Hill inverse)."""
+    intercept (the inverse of the fitter's Hill inverse), at the level the fitter read
+    it: a relative level is the share of the way from the low-dose plateau (``bottom``
+    with a positive Hill, ``top`` with a negative one). An intercept stored before
+    qualifiers was read by the old rule, from ``bottom`` whatever the direction."""
     ivs = r.intercept_values if isinstance(r.intercept_values, list) else []
     primary = ivs[0] if ivs and isinstance(ivs[0], dict) else {}
     spec = primary.get("spec")
-    exact = primary.get("qualifier") in (None, "=") and primary.get("at_bound") is not True
+    qualifier = primary.get("qualifier")
+    exact = qualifier in (None, "=") and primary.get("at_bound") is not True
     if not isinstance(spec, dict) or not exact:
         return finite(r.fitted_value)
     x, top, bottom, hill, level = r.fitted_value, r.top, r.bottom, r.hill_slope, spec.get("level")
     if x is None or top is None or bottom is None or not hill or level is None or x <= 0:
         return None
-    target = level if spec.get("basis") == "absolute" else bottom + level / 100 * (top - bottom)
+    start, end = (top, bottom) if qualifier is not None and hill < 0 else (bottom, top)
+    target = level if spec.get("basis") == "absolute" else start + level / 100 * (end - start)
     if target == bottom:
         return None
     ratio = (top - bottom) / (target - bottom) - 1
