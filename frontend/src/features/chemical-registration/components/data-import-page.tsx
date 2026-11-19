@@ -30,7 +30,7 @@ import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MOLECULES_KEY } from "../hooks/query-keys";
 import { useCddImportPreview } from "../hooks/use-cdd-import-preview";
 import {
@@ -107,9 +107,18 @@ export function DataImportPage() {
   const lastFinished = history?.find((imp) => isTerminalImportStatus(imp.status));
   const fromHistory = !report && !workflowId && !activeImport ? lastFinished : undefined;
 
+  // The run whose end this page has shown. The history refetch lands after the status
+  // poll does; until then it still lists that run as running, and polling it again
+  // would show its end again, and again (a render loop that also floods the history).
+  const finishedWorkflowId = useRef<string | null>(null);
+
   // Auto-resume polling for active imports
   useEffect(() => {
-    if (activeImport?.workflow_id && !workflowId) {
+    if (
+      activeImport?.workflow_id &&
+      !workflowId &&
+      activeImport.workflow_id !== finishedWorkflowId.current
+    ) {
       setWorkflowId(activeImport.workflow_id);
     }
   }, [activeImport, workflowId]);
@@ -119,6 +128,7 @@ export function DataImportPage() {
   // When complete, clear polling and show result message
   useEffect(() => {
     if (liveStatus && isTerminalImportStatus(liveStatus.status)) {
+      finishedWorkflowId.current = workflowId;
       setWorkflowId(null);
       setReport(liveStatus.report);
       qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
@@ -136,7 +146,7 @@ export function DataImportPage() {
         setCompletionMessage("Import failed. Check the History tab for details.");
       }
     }
-  }, [liveStatus, qc]);
+  }, [liveStatus, qc, workflowId]);
 
   const resumeImport = async (importId: string) => {
     setCompletionMessage(null);

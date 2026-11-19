@@ -673,6 +673,32 @@ describe("DataImportPage: Resume a failed import", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(refused);
   });
 
+  it("shows a run that finished while the history still lists it as running, once", async () => {
+    // The history refetch has not landed yet: it still says the resumed run is running.
+    h.history = [{ ...failed, status: "processing", workflow_id: "wf-2", resumable: false }];
+    h.status = {
+      import_id: "m9",
+      status: "completed",
+      total_count: 489425,
+      registered_count: 49465,
+      duplicate_count: 936,
+      error_count: 359,
+      skipped_count: 0,
+      current_offset: 489425,
+      pages_processed: 1958,
+      report: failed.report,
+    };
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      renderAs(false);
+      expect(await screen.findByText(/Import completed successfully/)).toBeInTheDocument();
+      expect(errors.mock.calls.flat().join(" ")).not.toMatch(/Maximum update depth/);
+    } finally {
+      errors.mockRestore();
+      h.status = undefined;
+    }
+  });
+
   it("offers no Resume on a run that can't resume", () => {
     h.history = [{ ...failed, resumable: false }];
     renderAs(false);
