@@ -25,7 +25,7 @@ from cellar.domain.inventory.batch_identifier import BatchIdentifier
 from cellar.domain.inventory.enums import BatchSource
 from cellar.domain.inventory.repository import BatchRepository
 from cellar.domain.shared.enums import AmountUnit, ConcentrationUnit
-from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError
+from cellar.domain.shared.errors import ConflictError, DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import Amount, Concentration
 from cellar.domain.workspace_config.enums import FieldTarget
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
@@ -112,6 +112,13 @@ class CreateBatch:
     ) -> Result[CreateBatchResult, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+        for value, choices, what in (
+            (input.amount_unit, AmountUnit, "amount unit"),
+            (input.source, BatchSource, "batch source"),
+            (input.concentration_unit, ConcentrationUnit, "concentration unit"),
+        ):
+            if value is not None and value not in choices:
+                return Failure(ValidationError(f"Unknown {what} '{value}'"))
 
         async with self._uow:
             # Validate molecule exists, belongs to workspace, and is not tombstoned

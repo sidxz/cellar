@@ -639,3 +639,10 @@ class TestRegistrationNumberConfig:
 
         assert isinstance(result, Success)
         repo.next_registration_number.assert_awaited_once_with(WS_ID, prefix="MTB-", width=7)
+
+
+async def test_unknown_molecule_type_is_a_validation_failure() -> None:
+    from dataclasses import replace
+
+    result = await _make_use_case()(replace(_make_command(), molecule_type="drug"))
+    assert isinstance(result, Failure) and isinstance(result.failure(), ValidationError)

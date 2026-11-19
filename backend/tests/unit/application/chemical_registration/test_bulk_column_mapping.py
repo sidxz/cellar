@@ -274,3 +274,42 @@ def test_extract_row_list_values_and_none() -> None:
     row = extract_row({"Name": "X", "B": ["b1", "b2"]}.get, mapping)
     assert row is not None and [b["identifier"] for b in row.batch_ids] == ["b1", "b2"]
     assert extract_row({"B": "b1"}.get, mapping) is None
+
+
+def test_extract_row_listed_values_match_loosely() -> None:
+    mapping = _mapping(
+        ("Name", T.NAME),
+        ("Type", T.MOLECULE_TYPE),
+        ("Unit", T.AMOUNT_UNIT),
+        ("Origin", T.BATCH_SOURCE),
+    )
+    row = extract_row(
+        {"Name": "X", "Type": "Small Molecule", "Unit": "ML", "Origin": "Natural extract"}.get,
+        mapping,
+    )
+    assert row is not None and row.warnings == []
+    assert (row.molecule_type, row.amount_unit, row.batch_source) == (
+        "small_molecule",
+        "mL",
+        "natural_extract",
+    )
+
+
+def test_extract_row_unknown_listed_values_are_not_stored() -> None:
+    mapping = _mapping(
+        ("Name", T.NAME),
+        ("Type", T.MOLECULE_TYPE),
+        ("Amount", T.AMOUNT_VALUE),
+        ("Unit", T.AMOUNT_UNIT),
+        ("Origin", T.BATCH_SOURCE),
+    )
+    row = extract_row(
+        {"Name": "X", "Type": "drug", "Amount": "5", "Unit": "µg", "Origin": "Enamine"}.get,
+        mapping,
+    )
+    assert row is not None
+    # 5 µg must never be stored as 5 mg
+    assert row.amount_value is None and row.amount_unit == "mg"
+    assert (row.molecule_type, row.batch_source) == ("small_molecule", "synthesized")
+    assert [w.split(":")[0] for w in row.warnings] == ["Type", "Unit", "Origin"]
+    assert "the amount is not stored" in row.warnings[1]

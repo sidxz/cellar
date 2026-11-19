@@ -15,6 +15,9 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Any
 
+from cellar.domain.chemical_registration.enums import MoleculeType
+from cellar.domain.inventory.enums import BatchSource
+from cellar.domain.shared.enums import AmountUnit
 from cellar.domain.shared.errors import ValidationError
 
 SDF_TITLE_HEADER = "Title line"
@@ -278,6 +281,24 @@ def _int(s: str | None) -> int | None:
     return int(f) if f is not None else None
 
 
+# Targets that take one of a fixed list; what is stored when the row has none.
+_CHOICES: dict[ColumnTarget, tuple[type[StrEnum], str]] = {
+    ColumnTarget.MOLECULE_TYPE: (MoleculeType, "registered as small_molecule"),
+    ColumnTarget.AMOUNT_UNIT: (AmountUnit, "the amount is not stored"),
+    ColumnTarget.BATCH_SOURCE: (BatchSource, "recorded as synthesized"),
+}
+
+
+def _choice(choices: type[StrEnum], value: str) -> str | None:
+    """The listed value ``value`` means, ignoring case, spaces, ``_`` and ``-`` only
+    (``_norm`` would read "µg" as "g")."""
+
+    def n(s: str) -> str:
+        return re.sub(r"[\s_-]+", "", s.lower())
+
+    return next((m.value for m in choices if n(m.value) == n(value)), None)
+
+
 def extract_row(
     get: Callable[[str], str | list[str] | None],
     mapping: ColumnMapping,
@@ -291,6 +312,7 @@ def extract_row(
     external_ids: list[dict[str, str]] = []
     batch_ids: list[dict[str, str]] = []
     warnings: list[str] = []
+    amount_unknown = False  # an amount in a unit ChemCellar doesn't know is not stored
 
     def fits(v: str, header: str) -> bool:
         if len(v) <= MAX_ID_LENGTH:
@@ -332,6 +354,19 @@ def extract_row(
                 external_ids.append(eid)
         elif values:
             single[col.target] = values[0]
+            if col.target in _CHOICES:
+                choices, fallback = _CHOICES[col.target]
+                known = _choice(choices, values[0])
+                if known is None:
+                    del single[col.target]
+                    listed = ", ".join(m.value for m in choices)
+                    warnings.append(
+                        f"{col.header}: '{values[0]}' is not one of {listed}; {fallback}"
+                    )
+                    if col.target == ColumnTarget.AMOUNT_UNIT:
+                        amount_unknown = True
+                else:
+                    single[col.target] = known
 
     name = single.get(ColumnTarget.NAME)
     smiles = structure or single.get(ColumnTarget.SMILES)
@@ -345,7 +380,7 @@ def extract_row(
         external_ids=external_ids,
         batch_ids=batch_ids,
         warnings=warnings,
-        amount_value=_float(single.get(ColumnTarget.AMOUNT_VALUE)),
+        amount_value=None if amount_unknown else _float(single.get(ColumnTarget.AMOUNT_VALUE)),
         amount_unit=single.get(ColumnTarget.AMOUNT_UNIT) or "mg",
         salt_code=single.get(ColumnTarget.SALT_CODE),
         salt_stoichiometry=stoich if stoich is not None else 1,

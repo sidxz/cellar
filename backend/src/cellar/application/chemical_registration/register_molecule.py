@@ -168,6 +168,8 @@ class RegisterMolecule:
     ) -> Result[RegistrationOutcome, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+        if input.molecule_type not in MoleculeType:
+            return Failure(ValidationError(f"Unknown molecule type '{input.molecule_type}'"))
         if input.project_ids and self._project_access is not None and auth is not None:
             # Read-only: enter and leave the UoW without committing.
             async with self._uow:
