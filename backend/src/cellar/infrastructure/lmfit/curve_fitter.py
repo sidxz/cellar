@@ -564,7 +564,8 @@ def _fit_multi_start(
     clamped onto its bound can leave the optimizer where it began.
 
     The first start (``_build_params``'s) is fitted in full, so the result is never worse
-    than it, a tie keeps it, and when nothing converges its failure is the one reported. So is
+    than it, a tie keeps it, and when nothing converges its failure is the one reported. When
+    its fit leaves no room for a better one (``_settled``), it is the result. Otherwise so is
     the start the fitter used before multi-start, with plateaus clamped onto their bounds
     (``inset=0``), so the result is never worse than that fitter's either. The others are
     screened on a tenth of lmfit's evaluation budget: each that converges in it stays a
@@ -577,6 +578,8 @@ def _fit_multi_start(
     model = lmfit.Model(_hill_equation)
     first, *others = _starting_points(params, log_c, responses)
     fits = [_converged(_leastsq(model, first, log_c, responses))]
+    if isinstance(fits[0], Success) and _settled(fits[0].unwrap(), responses):
+        return fits[0]
     clamped, _, _ = _build_params(log_c, responses, config, inset=0.0)
     if [p.value for p in clamped.values()] != [p.value for p in first.values()]:
         fits.append(_converged(_leastsq(model, clamped, log_c, responses)))
@@ -598,6 +601,24 @@ def _fit_multi_start(
     if not converged:
         return fits[0]
     return Success(min(converged, key=lambda result: result.chisqr))
+
+
+def _settled(result: ModelResult, responses: np.ndarray) -> bool:
+    """Whether a converged fit leaves no room for a better one from another start: no free
+    parameter ends within 2 % of a bound (of its range's width, or of the response span when
+    the range is half-open), and no free plateau lies past the observed responses. Other
+    minima live there: on a bound the optimizer may have been stopped short, and an
+    extrapolated plateau is barely pinned by the points."""
+    span = _response_span(responses)
+    for name, p in result.params.items():
+        if not p.vary:
+            continue
+        width = p.max - p.min if np.isfinite(p.max - p.min) else span
+        if min(p.value - p.min, p.max - p.value) <= 0.02 * width:
+            return False
+        if name in ("top", "bottom") and not np.min(responses) <= p.value <= np.max(responses):
+            return False
+    return True
 
 
 def _starting_points(

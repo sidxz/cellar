@@ -26,6 +26,7 @@ from cellar.infrastructure.lmfit.curve_fitter import (
     LmfitCurveFitter,
     _fit_multi_start,
     _fit_single_start,
+    _settled,
 )
 from tests.unit.screening.dr_synthetic import GRID, Case
 
@@ -1142,6 +1143,42 @@ def test_a_bounded_fit_whose_plateau_ends_on_its_bound_is_kept():
     assert ec50.qualifier == ValueQualifier.EQ
     assert 3.125 < ec50.value < 6.25
 
+
+
+def _first_fit(series, config):
+    log_c = np.log10([c for c, _ in series])
+    y = np.array([r for _, r in series])
+    return _fit_single_start(log_c, y, config).unwrap(), y
+
+
+@pytest.mark.parametrize(
+    ("series", "config", "settled"),
+    [
+        # Both plateaus seen, with points either side of each; nothing near a bound.
+        (
+            [(0.001, -3.0), (0.001, 3.0), (0.01, 1.0), (0.1, 9.0), (1.0, 50.0), (10.0, 91.0),
+             (100.0, 99.0), (1000.0, 103.0), (1000.0, 97.0)],
+            _make_config(),
+            True,
+        ),
+        # The same curve rising to 109.8 under a top range of [90, 110]: the top ends near
+        # its bound.
+        (
+            [(c, 109.8 / (1.0 + 1.0 / c)) for c in np.logspace(-3, 3, 13)],
+            _config_with_ranges(top_constraint_min=90.0, top_constraint_max=110.0),
+            False,
+        ),
+        # Sampled below its top (NadD-shaped, 0.001-100 µM around an IC50 of 70): the free top
+        # is extrapolated past every response. So is rifampicin's bottom: its lowest dose
+        # already responds 1.8 %.
+        ([(c, 110.0 / (1.0 + 70.0 / c)) for c in np.logspace(-3, 2, 11)], _make_config(), False),
+        (_RIFAMPICIN, _make_config(), False),
+    ],
+    ids=["both-plateaus-seen", "top-near-its-bound", "top-not-reached", "rifampicin"],
+)
+def test_other_starts_run_only_when_the_first_fit_leaves_room(series, config, settled):
+    fit, y = _first_fit(series, config)
+    assert _settled(fit, y) is settled
 
 # PRT-00216 CC-061262: rising 38 -> ~100 % (R² 0.97). Free plateaus: the optimizer may return
 # the curve with its plateaus named the other way round (top 15, bottom 99, Hill -1.49).
