@@ -86,6 +86,20 @@ _RETRY = RetryPolicy(
 _CHUNKS_PER_EXECUTION = 50
 
 
+# The options a run starts with, saved on the import so a resume can restart it as it was.
+RUN_SETTINGS_KEYS = (
+    "registration_mapping",
+    "entity_mappings",
+    "create_batch_on_duplicate",
+    "max_molecules",
+    "secret_ref",
+)
+
+
+def _run_settings(input: CddVaultImportWorkflowInput) -> dict:
+    return {key: getattr(input, key) for key in RUN_SETTINGS_KEYS}
+
+
 def _export_input(
     input: CddVaultImportWorkflowInput, modified_after: str | None
 ) -> CddStartExportInput:
@@ -181,6 +195,7 @@ class CddVaultImportWorkflow:
                     submitted_by=input.submitted_by,
                     workflow_id=workflow.info().workflow_id,
                     filter_criteria=input.filter_criteria,
+                    run_settings=_run_settings(input),
                 ),
                 start_to_close_timeout=timedelta(seconds=30),
                 retry_policy=_RETRY,
@@ -358,6 +373,7 @@ class CddVaultImportWorkflow:
                 workspace_id=input.workspace_id,
                 import_id=import_id,
                 total_count=export_result.total_count,
+                export_id=export_result.export_id,
             ),
             start_to_close_timeout=timedelta(seconds=30),
         )

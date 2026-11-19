@@ -228,6 +228,7 @@ class BulkTrackingActivities:
                 submitted_by=uuid.UUID(input.submitted_by),
                 workflow_id=input.workflow_id,
                 filter_criteria=input.filter_criteria,
+                run_settings=input.run_settings,
             )
             imp.start_discovery()
             await repo.save(imp)
@@ -244,7 +245,7 @@ class BulkTrackingActivities:
             imp = await repo.find_by_id_in_workspace(ws_id, uuid.UUID(input.import_id))
             if imp is None:
                 raise ValueError(f"CddMoleculeImport {input.import_id} not found")
-            imp.complete_discovery(input.total_count)
+            imp.complete_discovery(input.total_count, export_id=input.export_id)
             await repo.save(imp)
             events = await uow.commit()
             await dispatcher.dispatch_all(events)

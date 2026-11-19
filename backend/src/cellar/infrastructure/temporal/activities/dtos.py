@@ -178,6 +178,7 @@ class CreateCddImportInput:
     submitted_by: str
     workflow_id: str | None = None
     filter_criteria: dict | None = None
+    run_settings: dict | None = None  # what a resume restarts the run with
 
 
 @dataclass
@@ -187,6 +188,7 @@ class CompleteDiscoveryInput:
     workspace_id: str
     import_id: str
     total_count: int
+    export_id: int | None = None  # the CDD export the run reads from disk
 
 
 @dataclass

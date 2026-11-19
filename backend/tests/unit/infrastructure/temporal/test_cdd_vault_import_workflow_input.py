@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from cellar.infrastructure.temporal.activities.dtos import ChunkItemResult
 from cellar.infrastructure.temporal.workflows.cdd_vault_import import (
+    RUN_SETTINGS_KEYS,
     CddVaultImportProgress,
     CddVaultImportWorkflowInput,
     _continue_input,
     _export_input,
+    _run_settings,
     _sync_pairs,
 )
 
@@ -104,3 +106,20 @@ def test_a_whole_vault_import_records_what_it_registered_for_the_next_sync() -> 
 
 def test_a_filtered_import_leaves_the_sync_watermark_alone() -> None:
     assert _sync_pairs("filtered", RESULTS) == []
+
+
+def test_run_settings_are_what_a_resumed_run_needs() -> None:
+    first = _input(max_molecules=900)
+
+    settings = _run_settings(first)
+
+    assert settings == {
+        "registration_mapping": [{"header": "name", "target": "name"}],
+        "entity_mappings": [{"entity_type": "molecule"}],
+        "create_batch_on_duplicate": True,
+        "max_molecules": 900,
+        "secret_ref": "ws:cdd_vault",
+    }
+    assert set(settings) == set(RUN_SETTINGS_KEYS)
+    restarted = CddVaultImportWorkflowInput(**{**_input().__dict__, **settings})
+    assert _run_settings(restarted) == settings
