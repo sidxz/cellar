@@ -37,6 +37,11 @@ from cellar.application.inventory.salt_matcher import SaltMatcher, compute_formu
 from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
 from cellar.application.shared.actor_context import set_current_actor
 from cellar.domain.chemical_registration.enums import RegistrationAction
+from cellar.domain.shared.errors import (
+    ConcurrencyConflictError,
+    DomainError,
+    ServiceUnavailableError,
+)
 from cellar.domain.workspace_config.repository import WorkspaceSettingsRepository
 from cellar.infrastructure.messaging.event_dispatcher import EventDispatcher
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.disclosure_request_repository import (  # noqa: E501
@@ -66,6 +71,10 @@ from cellar.infrastructure.temporal.activities.dtos import (
 )
 
 logger = structlog.get_logger(__name__)
+
+# A row the domain refuses is that row's error and the chunk goes on. These pass,
+# so they fail the chunk and Temporal retries it (done rows then match, not double).
+_PASSING = (ServiceUnavailableError, ConcurrencyConflictError)
 
 
 class RegistrationActivities:
@@ -179,7 +188,15 @@ class RegistrationActivities:
                 project_ids=[uuid.UUID(p) for p in input.project_ids],
             )
 
-            result = await register_uc(cmd)
+            try:
+                result = await register_uc(cmd)
+            except _PASSING:
+                raise
+            except DomainError as exc:  # raised, not returned: e.g. a constraint at commit
+                logger.warning(
+                    "registration.row_refused", row_index=item.row_index, error=str(exc)
+                )
+                result = Failure(exc)
 
             if isinstance(result, Failure):
                 output.error += 1
@@ -227,37 +244,45 @@ class RegistrationActivities:
                     override=None,
                     workspace_default=effective_policy_default,
                 )
-                if item.batch_problem:
-                    batch_problem = item.batch_problem
-                elif item.batch_ids:
-                    (
-                        batch_id,
-                        batch_number,
-                        salt_matched,
-                        batch_problem,
-                        batch_warnings,
-                        batch_action,
-                        ids_added,
-                    ) = await _apply_row_batch(
-                        item=item,
-                        reg_outcome=outcome,
-                        workspace_id=ws_id,
-                        submitted_by=submitted_by,
-                        session_factory=session_factory,
-                        dispatcher=dispatcher,
+                try:
+                    if item.batch_problem:
+                        batch_problem = item.batch_problem
+                    elif item.batch_ids:
+                        (
+                            batch_id,
+                            batch_number,
+                            salt_matched,
+                            batch_problem,
+                            batch_warnings,
+                            batch_action,
+                            ids_added,
+                        ) = await _apply_row_batch(
+                            item=item,
+                            reg_outcome=outcome,
+                            workspace_id=ws_id,
+                            submitted_by=submitted_by,
+                            session_factory=session_factory,
+                            dispatcher=dispatcher,
+                        )
+                    elif create_batch_now:
+                        batch_id, batch_number, salt_matched = await _create_batch(
+                            item=item,
+                            reg_outcome=outcome,
+                            workspace_id=ws_id,
+                            submitted_by=submitted_by,
+                            session_factory=session_factory,
+                            dispatcher=dispatcher,
+                        )
+                        batch_action = "created" if batch_id else None
+                    else:
+                        batch_skipped = True
+                except _PASSING:
+                    raise
+                except DomainError as exc:  # the compound stays registered
+                    logger.warning(
+                        "registration.batch_refused", row_index=item.row_index, error=str(exc)
                     )
-                elif create_batch_now:
-                    batch_id, batch_number, salt_matched = await _create_batch(
-                        item=item,
-                        reg_outcome=outcome,
-                        workspace_id=ws_id,
-                        submitted_by=submitted_by,
-                        session_factory=session_factory,
-                        dispatcher=dispatcher,
-                    )
-                    batch_action = "created" if batch_id else None
-                else:
-                    batch_skipped = True
+                    batch_problem = str(exc)
 
             output.results.append(
                 ChunkItemResult(

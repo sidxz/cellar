@@ -26,8 +26,11 @@ from cellar.application.chemical_registration.bulk_registration_service import (
 from cellar.application.chemical_registration.merge_side_effect_registry import (
     MergeSideEffectRegistry,
 )
+from cellar.application.chemical_registration.register_molecule import RegisterMolecule
+from cellar.application.chemical_registration.row_batch import ApplyRowBatch
 from cellar.application.inventory.salt_matcher import SaltMatcher
 from cellar.application.inventory.sync_batch_identifier_mirrors import SyncBatchIdentifierMirrors
+from cellar.domain.shared.errors import ConflictError, ServiceUnavailableError
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.bulk_registration_repository import (  # noqa: E501
     SQLAlchemyBulkRegistrationRepository,
 )
@@ -628,3 +631,98 @@ async def test_compound_id_too_long_for_an_automatic_alias_does_not_break_the_ba
     assert out.error is None and out.batch_id is not None
     (batch,) = (await _batches(session_factory, ws)).values()
     assert all(len(a) <= 255 for a in batch.auto)
+
+
+# --- A padded ID, and a row the domain refuses -------------------------------
+# A full-vault import of 489k molecules died at offset 50,750: SACC-0050977's synonym
+# ends in a non-breaking space, the compound stores it stripped, and the next batch row
+# did not see it as already there, so it stored it again (uq_ws_identifier), which
+# failed the chunk on every retry.
+
+PADDED = "DL-BUTATHIONINE-(S,R)-SULFOXIMINE\xa0"
+
+
+@pytest.mark.parametrize("decides", [True, False])
+async def test_padded_compound_id_on_two_batch_rows_is_stored_once(
+    run_rows: Run, session_factory, decides: bool
+) -> None:
+    rows = [row(SACC, SACC_SMILES, batch=[(f"{SACC}-00{n}", "CDD batch ID")]) for n in (1, 2)]
+    for r in rows:
+        r["external_ids"] = [
+            {"identifier": PADDED, "identifier_type": "custom", "source": "Synonyms"}
+            | {"decides": decides}
+        ]
+
+    first, second = await run_rows(rows)
+
+    assert [first.error, second.error] == [None, None]
+    assert first.molecule_id == second.molecule_id
+    ids = await _compound_ids(session_factory, first.molecule_id)  # type: ignore[arg-type]
+    assert [i for i, _, _ in ids if i.startswith("DL-")] == [PADDED.strip()]
+
+
+async def test_padded_name_registered_twice_is_one_compound(
+    run_rows: Run, session_factory, ws: Ws
+) -> None:
+    first, second = await run_rows(
+        [row(f"{SACC}\xa0", SACC_SMILES), row(f"{SACC}\xa0", SACC_SMILES)]
+    )
+
+    assert [first.error, second.error] == [None, None]
+    assert first.molecule_id == second.molecule_id
+    assert [name for _, name, _ in await _molecules(session_factory, ws)] == [SACC]
+
+
+def _refuse(monkeypatch, cls: type, exc: Exception, when: Callable[[object], bool]) -> None:  # type: ignore[no-untyped-def]
+    """``cls`` raises ``exc`` for a command ``when`` picks and runs as usual for the rest."""
+    real = cls.__call__
+
+    async def call(self, cmd, *args, **kwargs):  # type: ignore[no-untyped-def]
+        if when(cmd):
+            raise exc
+        return await real(self, cmd, *args, **kwargs)
+
+    monkeypatch.setattr(cls, "__call__", call)
+
+
+async def test_worker_records_a_refused_row_and_registers_the_rest(
+    session_factory, ws: Ws, monkeypatch
+) -> None:
+    _refuse(
+        monkeypatch,
+        RegisterMolecule,
+        ConflictError("constraint violated"),
+        lambda cmd: cmd.name == "REFUSED",
+    )
+
+    refused, after = await _run_worker(
+        session_factory, ws, [row("REFUSED", "CCCCCCO"), row("AFTER", "CCCCCCCCCO")], None
+    )
+
+    assert (refused.molecule_id, refused.error) == (None, "constraint violated")
+    assert after.error is None and after.molecule_id is not None
+    assert [name for _, name, _ in await _molecules(session_factory, ws)] == ["AFTER"]
+
+
+async def test_worker_keeps_the_compound_when_its_batch_is_refused(
+    session_factory, ws: Ws, monkeypatch
+) -> None:
+    _refuse(monkeypatch, ApplyRowBatch, ConflictError("constraint violated"), lambda _: True)
+
+    (out,) = await _run_worker(
+        session_factory, ws, [row("BATCH-REFUSED", "CCCCCCO", batch=[("BR-001", "Batch")])], None
+    )
+
+    assert out.molecule_id is not None and out.batch_id is None
+    assert out.error == PROBLEM + "constraint violated"
+
+
+async def test_worker_still_fails_the_chunk_on_a_passing_outage(
+    session_factory, ws: Ws, monkeypatch
+) -> None:
+    """A row the domain refuses is that row's error; an outage is retried, not recorded."""
+    outage = ServiceUnavailableError("database restarting")
+    _refuse(monkeypatch, RegisterMolecule, outage, lambda _: True)
+
+    with pytest.raises(ServiceUnavailableError):
+        await _run_worker(session_factory, ws, [row("ROW", "CCCCCCO")], None)

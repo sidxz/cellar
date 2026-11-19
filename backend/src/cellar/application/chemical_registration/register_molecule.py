@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date
 from typing import TYPE_CHECKING, Any
 
@@ -35,7 +35,10 @@ from cellar.application.workspace_config.custom_field_validator import CustomFie
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
 from cellar.domain.chemical_registration.enums import MoleculeType, RegistrationAction
 from cellar.domain.chemical_registration.molecule import Molecule
-from cellar.domain.chemical_registration.molecule_identifier import MoleculeIdentifier
+from cellar.domain.chemical_registration.molecule_identifier import (
+    MoleculeIdentifier,
+    normalize_identifier,
+)
 from cellar.domain.chemical_registration.repository import (
     DisclosureRequestRepository,
     MoleculeRepository,
@@ -168,6 +171,16 @@ class RegisterMolecule:
     ) -> Result[RegistrationOutcome, DomainError]:
         require_editor(auth)
         require_same_workspace(auth, input.workspace_id)
+        # Every check below compares this text with what a compound has stored; raw
+        # text with a trailing non-breaking space matched nothing and was stored twice.
+        input = replace(
+            input,
+            name=normalize_identifier(input.name),
+            external_ids=[
+                replace(e, identifier=normalize_identifier(e.identifier))
+                for e in input.external_ids
+            ],
+        )
         if input.molecule_type not in MoleculeType:
             return Failure(ValidationError(f"Unknown molecule type '{input.molecule_type}'"))
         if input.project_ids and self._project_access is not None and auth is not None:

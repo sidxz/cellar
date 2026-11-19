@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from cellar.domain.chemical_registration.enums import RegistrationAction, StructureStatus
 from cellar.domain.chemical_registration.molecule import Molecule
+from cellar.domain.chemical_registration.molecule_identifier import normalize_identifier
 from cellar.domain.chemical_registration.repository import MoleculeRepository
 
 
@@ -40,9 +41,9 @@ def collect_identifiers(
     POST /molecules promotes the name to a custom identifier by default, so a
     name-only payload still dedups or conflicts on that name.
     """
-    ids = set(external_ids)
+    ids = {normalize_identifier(i) for i in external_ids}
     if name and promote_name:
-        ids.add(name)
+        ids.add(normalize_identifier(name))
     return ids
 
 

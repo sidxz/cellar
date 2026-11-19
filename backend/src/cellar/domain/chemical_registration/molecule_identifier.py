@@ -9,6 +9,12 @@ from cellar.domain.shared.entity import Entity
 from cellar.domain.shared.errors import ValidationError
 
 
+def normalize_identifier(text: str) -> str:
+    """The text a compound stores for an identifier: surrounding whitespace dropped,
+    a vault's trailing non-breaking space included. Compare with this, not the raw text."""
+    return text.strip()
+
+
 class MoleculeIdentifier(Entity):
     """An external/vendor identifier mapped to a molecule.
 
@@ -27,11 +33,11 @@ class MoleculeIdentifier(Entity):
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
     ) -> None:
-        if not identifier or not identifier.strip():
+        if not identifier or not normalize_identifier(identifier):
             raise ValidationError("Identifier must not be empty")
         super().__init__(id=id, created_at=created_at, updated_at=updated_at)
         self.molecule_id = molecule_id
-        self.identifier = identifier.strip()
+        self.identifier = normalize_identifier(identifier)
         self.identifier_type = identifier_type
         self.source = source
         self.registered_by = registered_by
