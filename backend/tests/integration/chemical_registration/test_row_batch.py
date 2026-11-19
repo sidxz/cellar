@@ -439,6 +439,26 @@ async def test_id_on_another_compounds_batch_registers_compound_without_batch(
     assert [b.molecule_id for b in batches.values()] == [owner.molecule_id]
 
 
+async def test_same_text_under_another_type_is_not_that_batch(
+    run_rows: Run, session_factory, ws: Ws
+) -> None:
+    """A file's lot '4521' is not the vault's batch 4521: the CDD row gets its own
+    batch, and the vault id, whose text is taken, is skipped with a warning."""
+    (owner,) = await run_rows([row("LOT-A", "CCCCCCCO", batch=[("4521", "Lot")])])
+    vault_row = row("VAULT-B", "CCCCCCCN", batch=[("VAULT-B-001", "CDD batch ID")])
+    vault_row["batch_ids"].append(
+        {"identifier": "4521", "source": "CDD import", "identifier_type": "cdd_batch_id"}
+    )
+
+    (b,) = await run_rows([vault_row])
+
+    assert b.error is None and b.batch_id is not None and b.batch_id != owner.batch_id
+    assert f"'4521' is already an ID of batch {owner.batch_number}" in " ".join(b.warnings)
+    batches = await _batches(session_factory, ws)
+    assert batches[b.batch_id].real == {"VAULT-B-001": ("custom", "CDD batch ID")}
+    assert batches[owner.batch_id].real == {"4521": ("custom", "Lot")}
+
+
 async def test_ids_on_two_different_batches_is_a_problem(
     run_rows: Run, session_factory, ws: Ws
 ) -> None:

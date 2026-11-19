@@ -9,6 +9,10 @@ in-process fallback (spec 2026-11-18 column mapper §4):
 * R2 — the file's ID wins. An automatic alias holding a row's batch ID on
   another batch is removed, and the ID goes on the row's batch.
 
+A deciding ID matches a real ID only with the same type: the same text under another
+type (a file's lot number, the vault's batch id) is not that batch, and as the text is
+taken it is skipped with a warning, like a stored-only ID held elsewhere.
+
 Only deciding IDs take part in R1/R2. A stored-only ID (``decides`` False, CDD
 mapper spec 2026-11-18 §3a) is stored on the row's batch when no other batch
 holds it, otherwise skipped with a warning; it never matches and is never a problem.
@@ -96,6 +100,7 @@ async def classify_row_batch(
     deciding = [b for b in batch_ids if b.decides]
     real: dict[uuid.UUID, tuple[Batch, str]] = {}
     aliases: list[tuple[Batch, BatchIdentifier]] = []
+    other_type: list[tuple[str, Batch]] = []  # held as a real ID of another type
     for bid in deciding:
         owner = await repo.find_by_external_identifier(workspace_id, bid.identifier)
         if owner is None:
@@ -103,10 +108,13 @@ async def classify_row_batch(
         ident = next((i for i in owner.identifiers if i.identifier == bid.identifier), None)
         if ident is None:
             continue
-        if ident.derived_from_molecule_identifier_id is None:
+        if ident.derived_from_molecule_identifier_id is not None:
+            aliases.append((owner, ident))
+        elif ident.identifier_type == bid.identifier_type:
             real.setdefault(owner.id, (owner, bid.identifier))
         else:
-            aliases.append((owner, ident))
+            other_type.append((bid.identifier, owner))
+    taken = {text for text, _ in other_type}
 
     if len(real) > 1:
         (_, a), (_, b) = list(real.values())[:2]
@@ -123,16 +131,30 @@ async def classify_row_batch(
         return RowBatchMatch(
             "existing",
             batch=owner,
-            missing=(*(b for b in deciding if b.identifier not in on_it), *free),
+            missing=(
+                *(b for b in deciding if b.identifier not in on_it | taken),
+                *free,
+            ),
             evict=tuple((o.id, i.id, i.identifier) for o, i in aliases if o.id != owner.id),
-            held=held,
+            held=(*_numbers(other_type, owner), *held),
         )
     free, held = await _stored_only(repo, workspace_id, batch_ids, None, set())
     return RowBatchMatch(
         "new",
-        missing=(*deciding, *free),
+        missing=(*(b for b in deciding if b.identifier not in taken), *free),
         evict=tuple((o.id, i.id, i.identifier) for o, i in aliases),
-        held=held,
+        held=(*_numbers(other_type, None), *held),
+    )
+
+
+def _numbers(
+    found: Sequence[tuple[str, Batch]], row_batch: Batch | None
+) -> tuple[tuple[str, str], ...]:
+    """(text, holder's batch number) for texts another batch holds."""
+    return tuple(
+        (text, b.batch_number.value)
+        for text, b in found
+        if row_batch is None or b.id != row_batch.id
     )
 
 

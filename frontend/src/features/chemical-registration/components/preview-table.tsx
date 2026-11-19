@@ -35,7 +35,10 @@ function toForecastItem(item: PreviewItem) {
         identifier_type: e.identifier_type,
         ...(e.vault_id && { vault_id: true }),
       })),
-    batch_ids: (item.batch_ids ?? []).filter((b) => b.decides !== false).map((b) => b.identifier),
+    // A batch ID matches only one held with the same type (the vault's batch id is its own).
+    batch_ids: (item.batch_ids ?? [])
+      .filter((b) => b.decides !== false)
+      .map((b) => ({ identifier: b.identifier, identifier_type: b.identifier_type ?? "custom" })),
     // sent only when there are some, so a file's request is unchanged
     ...(storedOnly.length > 0 && { stored_only_ids: storedOnly }),
     ...(storedOnlyBatch.length > 0 && { stored_only_batch_ids: storedOnlyBatch }),

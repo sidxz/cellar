@@ -442,6 +442,13 @@ class RegisterMoleculeBody(BaseModel):
     project_ids: list[uuid.UUID] = []
 
 
+class PreviewBatchIdBody(BaseModel):
+    identifier: str
+    # A batch ID matches only one held with the same type; "cdd_batch_id" for a CDD
+    # vault batch id.
+    identifier_type: str = "custom"
+
+
 class PreviewRegistrationItemBody(BaseModel):
     """Mirrors RegisterMoleculeBody so a caller can preview the exact payload it will
     POST; keys the forecast does not use (originating_org_id, batch, …) are ignored."""
@@ -451,7 +458,7 @@ class PreviewRegistrationItemBody(BaseModel):
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
     # The row's batch IDs (bulk registration); when given, the batch is forecast too.
-    batch_ids: list[str] = []
+    batch_ids: list[PreviewBatchIdBody] = []
     # IDs that are only stored, never matched: one another compound / batch already
     # holds comes back in `warnings` instead of a conflict or a batch problem.
     stored_only_ids: list[str] = []
@@ -662,7 +669,7 @@ async def preview_registration(
                 name=item.name,
                 smiles=item.smiles,
                 external_ids=[e.identifier for e in item.external_ids],
-                batch_ids=item.batch_ids,
+                batch_ids=[(b.identifier, b.identifier_type) for b in item.batch_ids],
                 stored_only_ids=item.stored_only_ids,
                 stored_only_batch_ids=item.stored_only_batch_ids,
                 vault_ids=[

@@ -335,20 +335,32 @@ async def test_preview_registration_forecasts_batches(client: AsyncClient) -> No
         "/api/v1/molecules/preview-registration",
         json={
             "items": [
-                {"name": "API-0001", "smiles": SMILES, "batch_ids": ["LG-0001-001K001"]},
-                {"name": "API-0001", "smiles": SMILES, "batch_ids": ["API-0001-003"]},
-                {"name": "API-NEW", "smiles": SMILES + "C", "batch_ids": ["API-0001-002"]},
                 {
                     "name": "API-0001",
                     "smiles": SMILES,
-                    "batch_ids": ["API-0001-001", "API-0001-002"],
+                    "batch_ids": [{"identifier": "LG-0001-001K001"}],
+                },
+                {
+                    "name": "API-0001",
+                    "smiles": SMILES,
+                    "batch_ids": [{"identifier": "API-0001-003"}],
+                },
+                {
+                    "name": "API-NEW",
+                    "smiles": SMILES + "C",
+                    "batch_ids": [{"identifier": "API-0001-002"}],
+                },
+                {
+                    "name": "API-0001",
+                    "smiles": SMILES,
+                    "batch_ids": [{"identifier": "API-0001-001"}, {"identifier": "API-0001-002"}],
                 },
                 {"name": "API-0001", "smiles": SMILES},  # today's body
                 {
                     "name": "UNDISC-1",
                     "smiles": None,
                     "external_ids": [{"identifier": "JX-9", "identifier_type": "custom"}],
-                    "batch_ids": ["U-1"],
+                    "batch_ids": [{"identifier": "U-1"}],
                 },
             ]
         },
@@ -442,10 +454,14 @@ async def test_preview_registration_stored_only_ids_held_elsewhere_warn_not_conf
                 {
                     "name": "SO-0001",
                     "smiles": smiles,
-                    "batch_ids": ["SO-0001-001"],
+                    "batch_ids": [{"identifier": "SO-0001-001"}],
                     "stored_only_batch_ids": ["SO-LG-2"],
                 },
-                {"name": "SO-0001", "smiles": smiles, "batch_ids": ["SO-0001-001", "SO-LG-2"]},
+                {
+                    "name": "SO-0001",
+                    "smiles": smiles,
+                    "batch_ids": [{"identifier": "SO-0001-001"}, {"identifier": "SO-LG-2"}],
+                },
             ]
         },
     )

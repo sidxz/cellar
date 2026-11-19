@@ -139,7 +139,7 @@ describe("StepPreview", () => {
       smiles: "CCCCC",
       molecule_type: undefined,
       external_ids: [{ identifier: "JSF-1", identifier_type: "custom" }],
-      batch_ids: ["SACC-1-001"],
+      batch_ids: [{ identifier: "SACC-1-001", identifier_type: "custom" }],
     });
 
     expect(await screen.findByText("New")).toBeInTheDocument();

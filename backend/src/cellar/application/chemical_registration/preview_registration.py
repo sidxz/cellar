@@ -52,8 +52,9 @@ class PreviewRegistrationItem:
     name: str | None
     smiles: str | None  # None = the caller intends an undisclosed registration
     external_ids: list[str] = field(default_factory=list)
-    # The row's batch IDs; when given, the forecast also says what happens to its batch.
-    batch_ids: list[str] = field(default_factory=list)
+    # The row's batch IDs, (text, identifier_type); when given, the forecast also says
+    # what happens to its batch.
+    batch_ids: list[tuple[str, str]] = field(default_factory=list)
     # Stored-only IDs (CDD mapper spec §3a): never match or conflict; one another
     # compound / batch holds becomes a warning.
     stored_only_ids: list[str] = field(default_factory=list)
@@ -221,7 +222,7 @@ class PreviewRegistration:
             workspace_id,
             molecule_id,
             row_batch_ids(
-                [{"identifier": b, "source": ""} for b in item.batch_ids]
+                [{"identifier": b, "source": "", "identifier_type": t} for b, t in item.batch_ids]
                 + [
                     {"identifier": b, "source": "", "decides": False}
                     for b in item.stored_only_batch_ids

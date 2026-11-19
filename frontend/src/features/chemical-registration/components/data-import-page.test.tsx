@@ -574,7 +574,7 @@ describe("DataImportPage: Preview", () => {
       { identifier: "11", identifier_type: "cdd_molecule_id", vault_id: true },
     ]);
     expect(sent.stored_only_ids).toEqual(["JSF-1"]);
-    expect(sent.batch_ids).toEqual(["SACC-1-001"]);
+    expect(sent.batch_ids).toEqual([{ identifier: "SACC-1-001", identifier_type: "custom" }]);
     expect(sent.stored_only_batch_ids).toBeUndefined();
     expect(h.request.mock.calls[0][0].data).toEqual({ names: null });
   });

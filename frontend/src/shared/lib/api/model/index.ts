@@ -580,6 +580,7 @@ export * from './positionSuggestionModel';
 export * from './positionValuesModel';
 export * from './preferencesResponse';
 export * from './previewBatchId';
+export * from './previewBatchIdBody';
 export * from './previewBulkRegistrationResponse';
 export * from './previewCddImportBody';
 export * from './previewCompoundId';
