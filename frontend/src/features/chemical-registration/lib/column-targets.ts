@@ -1,4 +1,5 @@
 import type { ColumnMappingBody, ColumnTarget } from "@/shared/lib/api/model";
+import { headerMatchScore, normHeader as norm } from "@/shared/lib/header-match";
 
 export const TARGET_LABELS: Record<ColumnTarget, string> = {
   name: "Compound name",
@@ -90,13 +91,12 @@ export function mappingProblem(
   return null;
 }
 
-const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
-
 /** Share of a saved mapping's headers present in the file (normalised). */
 export function scoreSavedMapping(saved: ColumnMappingBody, headers: string[]): number {
-  const file = new Set(headers.map(norm));
-  if (saved.columns.length === 0) return 0;
-  return saved.columns.filter((c) => file.has(norm(c.header))).length / saved.columns.length;
+  return headerMatchScore(
+    saved.columns.map((c) => c.header),
+    headers,
+  );
 }
 
 export const SAVED_MAPPING_MIN_SCORE = 0.7;

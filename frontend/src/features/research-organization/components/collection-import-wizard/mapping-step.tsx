@@ -15,6 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/shared/components/ui/table";
+import { headerMatchScore, normHeader } from "@/shared/lib/header-match";
 
 type Role =
   | "registration_number"
@@ -69,12 +70,8 @@ const SYNONYMS: Record<Exclude<Role, "ignore">, string[]> = {
   notes: ["notes", "note", "comment", "comments", "description", "remark"],
 };
 
-function norm(s: string): string {
-  return s.toLowerCase().replace(/[^a-z0-9]+/g, "");
-}
-
 function suggestRole(header: string): Role {
-  const n = norm(header);
+  const n = normHeader(header);
   for (const r of Object.keys(SYNONYMS) as Array<Exclude<Role, "ignore">>) {
     if (SYNONYMS[r].includes(n)) return r;
   }
@@ -91,11 +88,7 @@ interface TemplateLite {
 
 // Mirrors backend/src/cellar/application/research_organization/collection_import_templates.py::score_template_against_headers
 function scoreTemplate(template: TemplateLite, headers: string[]): number {
-  const normHeaders = new Set(headers.map(norm));
-  const refs = Object.values(template.column_mapping).filter(Boolean);
-  if (refs.length === 0) return 0;
-  const matched = refs.filter((r) => normHeaders.has(norm(r))).length;
-  return matched / refs.length;
+  return headerMatchScore(Object.values(template.column_mapping).filter(Boolean), headers);
 }
 
 type TemplateTier = "used_here" | "mine" | "workspace";
