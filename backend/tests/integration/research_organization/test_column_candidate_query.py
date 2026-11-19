@@ -690,3 +690,24 @@ async def test_a_refreshed_curve_snapshot_names_the_layer_the_curve_fits(
     assert candidate.run.curve_fitted_layer == fitted
     snapshot = build_curve_snapshot(candidate.run)
     assert snapshot is not None and snapshot["fitted_layer"] == fitted
+
+
+@pytest.mark.asyncio
+async def test_the_layer_lookup_reads_only_the_workspaces_protocol(uow, session_factory):
+    """A channel naming another workspace's protocol learns nothing of its readouts."""
+    from cellar.infrastructure.persistence.sqlalchemy.research_organization.column_candidate_query import (  # noqa: E501
+        _fitted_layer,
+    )
+
+    ours, theirs = uuid.uuid4(), uuid.uuid4()
+    async with uow:
+        s = uow.session
+        p = await seed.protocol(s, theirs)
+        await seed.readout_def(s, p, name="Signal", normalizations=["percent_inhibition"])
+        ic50 = await seed.readout_def(s, p, name="IC50", data_type="dose_response")
+        await uow.commit()
+    channel = _channel(p, ic50, ChannelSourceKind.DOSE_RESPONSE_CURVE)
+
+    async with session_factory() as session:
+        assert await _fitted_layer(session, channel, workspace_id=theirs) == "percent_inhibition"
+        assert await _fitted_layer(session, channel, workspace_id=ours) is None

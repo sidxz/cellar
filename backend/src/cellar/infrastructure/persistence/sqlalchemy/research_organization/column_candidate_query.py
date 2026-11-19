@@ -225,7 +225,7 @@ class SQLAlchemyColumnCandidateQuery:
         out: dict[uuid.UUID, list[Candidate]] = defaultdict(list)
         async with self._sf() as session:
             if dr:
-                layer = await _fitted_layer(session, channel)
+                layer = await _fitted_layer(session, channel, workspace_id=workspace_id)
                 curves = self._curve_stmt(workspace_id, channel, run_ids, molecule_ids)
                 for row in (await session.execute(curves)).all():
                     out[row.molecule_id].append(_curve_candidate(row, layer))
@@ -337,8 +337,11 @@ class SQLAlchemyColumnCandidateQuery:
         )
 
 
-async def _fitted_layer(session: AsyncSession, channel: CampaignChannel) -> str | None:
-    """The layer the channel's dose-response readout is fitted on, from its protocol."""
+async def _fitted_layer(
+    session: AsyncSession, channel: CampaignChannel, *, workspace_id: uuid.UUID
+) -> str | None:
+    """The layer the channel's dose-response readout is fitted on, from its protocol
+    (read only when the protocol is the workspace's)."""
     rds = (
         await session.execute(
             select(
@@ -347,7 +350,12 @@ async def _fitted_layer(session: AsyncSession, channel: CampaignChannel) -> str 
                 ReadoutDefinitionModel.normalizations,
                 ReadoutDefinitionModel.is_calculated,
                 ReadoutDefinitionModel.dose_response_config,
-            ).where(ReadoutDefinitionModel.protocol_id == channel.protocol_id)
+            )
+            .join(ProtocolModel, ReadoutDefinitionModel.protocol_id == ProtocolModel.id)
+            .where(
+                ReadoutDefinitionModel.protocol_id == channel.protocol_id,
+                ProtocolModel.workspace_id == workspace_id,
+            )
         )
     ).all()
     dr_id = channel.readout_definition_id
