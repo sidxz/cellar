@@ -250,6 +250,10 @@ class LmfitCurveFitter:
         fitted_log_ec50 = float(best["log_ec50"].value)
         fitted_hill = float(best["hill"].value)
         log_ec50_stderr = best["log_ec50"].stderr
+        if fitted_top < fitted_bottom:
+            # The same 4PL with its plateaus named the other way round: (bottom, top, -Hill).
+            # Classes and relative levels read ``top`` as the upper plateau.
+            fitted_top, fitted_bottom, fitted_hill = fitted_bottom, fitted_top, -fitted_hill
 
         predicted = _hill_equation(
             log_concentrations, fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill

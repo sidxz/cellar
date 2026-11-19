@@ -1143,6 +1143,49 @@ def test_a_bounded_fit_whose_plateau_ends_on_its_bound_is_kept():
     assert 3.125 < ec50.value < 6.25
 
 
+# PRT-00216 CC-061262: rising 38 -> ~100 % (R² 0.97). Free plateaus: the optimizer may return
+# the curve with its plateaus named the other way round (top 15, bottom 99, Hill -1.49).
+_CC_061262 = [
+    (0.005080526342529086, 38.14), (0.015241579027587259, 71.73), (0.04572473708276177, 87.44),
+    (0.13717421124828533, 105.79), (0.411522633744856, 99.59), (1.2345679012345678, 97.65),
+    (3.7037037037037037, 100.34), (11.11111111111111, 96.02), (33.333333333333336, 99.97),
+    (100.0, 96.24),
+]  # fmt: skip
+# CDD 26279 (yeast cytotoxicity, % of control), row 157278680: noise around 100 % that the fit
+# reads as a slight fall; the optimizer returns it with its plateaus named the other way round.
+_CDD_26279_157278680 = [
+    (0.012207031, 85.94), (0.024414063, 103.19), (0.048828125, 106.94), (0.09765625, 104.68),
+    (0.1953125, 114.28), (0.390625, 113.42), (0.78125, 92.18), (1.5625, 86.56), (3.125, 100.31),
+    (6.25, 86.05), (12.5, 107.68), (25.0, 116.33), (50.0, 100.88), (100.0, 85.18),
+]  # fmt: skip
+
+
+def test_a_curve_is_read_with_top_as_its_upper_plateau():
+    """(top, bottom, Hill) and (bottom, top, -Hill) are the same 4PL; the fitter returns the
+    one whose top is the upper plateau, so the class reads it as such."""
+    config = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="% Inhibition")
+    fitted = LmfitCurveFitter().fit(_points(_CC_061262), config).unwrap()
+    assert fitted.top > fitted.bottom
+    assert fitted.hill_slope > 0
+    assert fitted.curve_class == CurveClass.FULL
+    assert 0.005 < fitted.fitted_value < 0.016
+
+
+def test_a_falling_curve_is_read_with_top_as_its_upper_plateau():
+    config = DoseResponseConfig(
+        curve_type=CurveType.IC50,
+        y_readout_name="% Control",
+        intercepts=(InterceptSpec(InterceptKind.IC, 50), InterceptSpec(InterceptKind.IC, 90)),
+    )
+    fitted = LmfitCurveFitter().fit(_points(_CDD_26279_157278680), config).unwrap()
+    assert fitted.top > fitted.bottom
+    assert fitted.hill_slope < 0
+    # Relative levels are measured from the bottom plateau (today's rule), so on this falling
+    # curve IC90 lies at a lower dose than IC50.
+    ic50, ic90 = fitted.intercept_values
+    assert ic90.value < ic50.value
+
+
 @pytest.mark.parametrize("series", [_CC_000975, _CC_000980], ids=["CC-000975", "CC-000980"])
 def test_a_flat_bounded_curve_whose_plateau_ends_on_its_bound_reads_inactive(series):
     """Inactive reads "> highest dose" whatever its intercepts store (the class wins)."""
@@ -1192,6 +1235,7 @@ def test_intercepts_and_class_follow_the_generating_curve_on_grid(case):
     fitted = LmfitCurveFitter().fit(case.points(), _EC50_EC90, scale).unwrap()
     lo, hi = case.doses[0], case.doses[-1]
 
+    assert fitted.top >= fitted.bottom
     assert fitted.curve_class in case.expected_class
     ec50, ec90 = fitted.intercept_values
     for iv, expected, offset in (
