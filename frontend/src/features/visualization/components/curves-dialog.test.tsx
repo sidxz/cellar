@@ -1,5 +1,7 @@
 import type { DoseResponseCurve } from "@/features/screening-assay/types";
-import { render, screen, within } from "@testing-library/react";
+import { customInstance } from "@/shared/lib/api/custom-instance";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { compoundCurve } from "../lib/traces/test-fixtures";
 import type { Dataset, DatasetColumn } from "../types";
@@ -25,18 +27,22 @@ vi.mock("@structflo/components/dose-response", () => ({
     curves,
     yRange,
   }: {
-    curves: { label?: string }[];
+    curves: { label?: string; intercept_values?: { qualifier?: string | null }[] }[];
     yRange?: [number, number];
   }) => (
     <ul aria-label="Chart" data-y-range={JSON.stringify(yRange ?? null)}>
       {curves.map((c) => (
-        <li key={c.label}>{c.label}</li>
+        <li key={c.label} data-qualifiers={c.intercept_values?.map((iv) => iv.qualifier).join()}>
+          {c.label}
+        </li>
       ))}
     </ul>
   ),
 }));
-vi.mock("@/features/screening-assay/hooks/use-compound-curves", () => ({
-  useCompoundCurves: () => ({ data: state.curves, isLoading: false }),
+// The real hook, answered at the HTTP edge with the endpoint's payload.
+vi.mock("@/shared/lib/api/custom-instance", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/shared/lib/api/custom-instance")>()),
+  customInstance: vi.fn(async () => state.curves),
 }));
 vi.mock("@/features/screening-assay/hooks/use-runs", () => ({
   useRunsByProtocol: () => ({
@@ -68,6 +74,16 @@ const curve = (
     batch_number,
   });
 
+/** Opens the dialog and waits for the curves to load. */
+async function openDialog(props: { runIds: string[]; batchId?: string | null }) {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <CurvesDialog {...target} {...props} open onOpenChange={() => {}} />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(screen.queryByText("Loading curves…")).not.toBeInTheDocument());
+}
+
 const target = {
   protocolId: P1,
   readoutDefinitionId: RD,
@@ -78,29 +94,44 @@ const target = {
 };
 
 describe("CurvesDialog", () => {
-  it("frames % curves on the 0-100 % scale", () => {
+  it("reads the endpoint's intercepts and layer: an n.d. curve is not a number, % frames 0-100", async () => {
+    // What GET .../compounds/{molecule}/dose-response sends (tests/api/test_compound_dose_response):
+    // the layer the curve fits, and its intercepts with their stored qualifiers.
+    const spec = { kind: "ic", level: 50, basis: "relative_percent", label: null };
     state.curves = [
       {
         ...curve("c1", R1, 0.25),
+        curve_class: "partial",
         fitted_layer: "percent_inhibition",
         raw_data: [
-          { concentration: 0.01, response: 88 },
-          { concentration: 10, response: 95 },
+          { concentration: 0.01, response: 40 },
+          { concentration: 10, response: 55 },
+        ],
+        intercept_values: [
+          { spec, value: null, at_bound: false, qualifier: "nd" },
+          { spec: { ...spec, level: 90 }, value: 10, at_bound: true, qualifier: ">" },
         ],
       },
     ];
-    render(<CurvesDialog {...target} runIds={[R1]} open onOpenChange={() => {}} />);
+    await openDialog({ runIds: [R1] });
+    expect(vi.mocked(customInstance)).toHaveBeenCalledWith(
+      expect.objectContaining({ url: `/api/v1/protocols/${P1}/compounds/${M1}/dose-response` }),
+    );
     expect(screen.getByLabelText("Chart").getAttribute("data-y-range")).toBe("[-10,110]");
+    expect(screen.getByRole("listitem").getAttribute("data-qualifiers")).toBe("nd,>");
+    // The midpoint (0.25) is not the EC50: the table reads it as not determined.
+    expect(screen.getByRole("cell", { name: "ND" })).toBeInTheDocument();
+    expect(screen.queryByRole("cell", { name: "0.25 uM" })).not.toBeInTheDocument();
   });
 
-  it("shows the compound's curves in the chosen runs, runs named by date and operator", () => {
+  it("shows the compound's curves in the chosen runs, runs named by date and operator", async () => {
     state.curves = [
       curve("c1", R1, 0.25),
       curve("c2", R2, 0.5),
       curve("c3", R3, 1),
       curve("c4", R1, 9, { readout: OTHER_RD }),
     ];
-    render(<CurvesDialog {...target} runIds={[R1, R2]} open onOpenChange={() => {}} />);
+    await openDialog({ runIds: [R1, R2] });
     const dialog = screen.getByRole("dialog", { name: "CEL-1 · Enzyme · IC50" });
     expect(
       within(screen.getByRole("list", { name: "Chart" })).getAllByRole("listitem"),
@@ -112,33 +143,31 @@ describe("CurvesDialog", () => {
     expect(document.body.textContent).not.toMatch(UUID);
   });
 
-  it("sets the chart in a plain block, never straight in the dialog's grid", () => {
+  it("sets the chart in a plain block, never straight in the dialog's grid", async () => {
     // A grid item stretched to its row gives the chart's full-height plot box a definite
     // height to fill: a blank gap under the plot, the cards pushed onto the run table.
     state.curves = [curve("c1", R1, 0.25)];
-    render(<CurvesDialog {...target} runIds={[R1]} open onOpenChange={() => {}} />);
+    await openDialog({ runIds: [R1] });
     const chart = screen.getByRole("list", { name: "Chart" });
     expect(chart.parentElement).not.toBe(screen.getByRole("dialog"));
     expect(chart.parentElement).toContainElement(screen.getByRole("table"));
   });
 
-  it("keeps to the row's batch", () => {
+  it("keeps to the row's batch", async () => {
     state.curves = [curve("c1", R1, 0.25), curve("c2", R2, 0.5, { batch_id: "other" })];
-    render(
-      <CurvesDialog {...target} batchId={B1} runIds={[R1, R2]} open onOpenChange={() => {}} />,
-    );
+    await openDialog({ batchId: B1, runIds: [R1, R2] });
     expect(
       within(screen.getByRole("list", { name: "Chart" })).getAllByRole("listitem"),
     ).toHaveLength(1);
   });
 
-  it("names each curve's batch when the run tested several", () => {
+  it("names each curve's batch when the run tested several", async () => {
     state.curves = [
       curve("c1", R1, 0.25),
       curve("c2", R1, 0.5, { batch_id: "b2", batch_number: "CEL-000001-02" }),
       curve("c3", R2, 1, { batch_id: "b3", batch_number: null }),
     ];
-    render(<CurvesDialog {...target} runIds={[R1, R2]} open onOpenChange={() => {}} />);
+    await openDialog({ runIds: [R1, R2] });
     expect(
       within(screen.getByRole("list", { name: "Chart" }))
         .getAllByRole("listitem")
@@ -151,20 +180,20 @@ describe("CurvesDialog", () => {
     expect(screen.getByRole("cell", { name: "CEL-000001-02" })).toBeInTheDocument();
   });
 
-  it("reads an inactive curve's value as above its top dose", () => {
+  it("reads an inactive curve's value as above its top dose", async () => {
     const doses = [0.5, 5, 50, 500].map((concentration) => ({ concentration, response: 5 }));
     state.curves = [
       { ...curve("c1", R1, 1172.1), curve_class: "inactive", raw_data: doses },
       { ...curve("c2", R2, 12.5), raw_data: doses },
     ];
-    render(<CurvesDialog {...target} runIds={[R1, R2]} open onOpenChange={() => {}} />);
+    await openDialog({ runIds: [R1, R2] });
     expect(screen.getByRole("cell", { name: "> 500 uM" })).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "12.5 uM" })).toBeInTheDocument();
   });
 
-  it("says when the chosen runs have no curves for the compound", () => {
+  it("says when the chosen runs have no curves for the compound", async () => {
     state.curves = [curve("c3", R3, 1)];
-    render(<CurvesDialog {...target} runIds={[R1]} open onOpenChange={() => {}} />);
+    await openDialog({ runIds: [R1] });
     expect(screen.getByText("No curves for CEL-1 in the chosen runs.")).toBeInTheDocument();
   });
 });
