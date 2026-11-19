@@ -525,5 +525,50 @@ class TestCurvesThatCanFit:
         assert MappingWarning(
             field_name="IC50",
             source_type="dose response calculation",
-            reason="'IC50' was not imported: it plots 'Response', which is not imported",
+            reason=(
+                "Not imported: 'IC50' fits 'Response', which is not a numeric readout of "
+                "this protocol"
+            ),
+        ) in result.warnings
+
+    def test_a_curve_with_no_layer_over_two_layers_is_left_out(self) -> None:
+        # CDD fits the raw RLU while RLU also calculates % inhibition and z-score: the
+        # import cannot ask which layer, so the curve is left out instead of blocking.
+        proto = {
+            "id": 7,
+            "name": "Luciferase",
+            "readout_definitions": [
+                {"id": 1, "name": "Concentration", "data_type": "Number"},
+                {"id": 2, "name": "RLU", "data_type": "Number"},
+                {"id": 3, "name": "% inhibition", "data_type": "Number"},
+                {"id": 4, "name": "Z", "data_type": "Number"},
+                {"id": 5, "name": "IC50", "data_type": "Number", "unit_label": "uM"},
+            ],
+            "calculations": [
+                {
+                    "class": "percent inhibition calculation",
+                    "inputs": {"input_readout_definition": 2},
+                    "outputs": {"output_readout_definition": 3},
+                },
+                {
+                    "class": "z score calculation",
+                    "inputs": {"input_readout_definition": 2},
+                    "outputs": {"output_readout_definition": 4},
+                },
+                {
+                    "class": "dose response calculation",
+                    "inputs": {"response_readout_definition": 2, "dose_readout_definition": 1},
+                    "outputs": {"intercept_readout_definitions": [[5]]},
+                },
+            ],
+        }
+        result = map_cdd_protocol(proto)
+        assert [r.name for r in result.readouts] == ["RLU"]
+        assert MappingWarning(
+            field_name="IC50",
+            source_type="dose response calculation",
+            reason=(
+                "Not imported: 'IC50' must say which layer of 'RLU' it fits "
+                "(percent_inhibition, z_score)"
+            ),
         ) in result.warnings

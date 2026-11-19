@@ -10,6 +10,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
+from typing import Protocol as TypingProtocol
 
 from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
@@ -484,25 +485,41 @@ def _clean_fixed_value(
 # ---------------------------------------------------------------------------
 
 
-def _layers(rd: ReadoutDefinition) -> list[str]:
+def _layers(rd: CurveReadout) -> list[str]:
     """The calculated layers a readout emits, sorted (``none`` is not a layer)."""
     return sorted(str(n) for n in rd.normalizations if n != ReadoutNormalization.NONE)
 
 
-def _curve_problems(readouts: Sequence[ReadoutDefinition]) -> set[str]:
-    """Why each dose-response curve among ``readouts`` cannot fit as intended (one line per
-    curve, built from names only so two snapshots of a protocol compare)."""
+class CurveReadout(TypingProtocol):
+    """What the curve rules read of a readout: a protocol's ReadoutDefinition, or a readout
+    an import is about to create."""
+
+    @property
+    def name(self) -> str: ...
+    @property
+    def data_type(self) -> ReadoutDataType: ...
+    @property
+    def normalizations(self) -> frozenset[ReadoutNormalization]: ...
+    @property
+    def dose_response_config(self) -> DoseResponseConfig | None: ...
+
+
+def curve_problems_by_curve(readouts: Sequence[CurveReadout]) -> dict[str, list[str]]:
+    """Why each dose-response curve among ``readouts`` cannot fit as intended, by curve name
+    (curves with no problem are left out). The messages are built from names only, so two
+    snapshots of a protocol compare."""
     by_name = {rd.name: rd for rd in readouts}
-    problems: set[str] = set()
+    found: dict[str, list[str]] = {}
     for rd in readouts:
         if rd.data_type != ReadoutDataType.DOSE_RESPONSE:
             continue
         cfg = rd.dose_response_config
         if cfg is None:  # ReadoutDefinition refuses this; nothing to fit against
             continue
+        problems: list[str] = []
         y = by_name.get(cfg.y_readout_name)
         if y is None or y.data_type != ReadoutDataType.NUMERIC:
-            problems.add(
+            problems.append(
                 f"'{rd.name}' fits '{cfg.y_readout_name}', which is not a numeric readout "
                 "of this protocol"
             )
@@ -510,23 +527,28 @@ def _curve_problems(readouts: Sequence[ReadoutDefinition]) -> set[str]:
         # ("concentration") says exactly that.
         x = cfg.x_readout_name
         if x is not None and x not in by_name and not is_reserved_readout_name(x):
-            problems.add(
+            problems.append(
                 f"'{rd.name}' uses '{cfg.x_readout_name}' for concentration, which is not a "
                 "readout of this protocol"
             )
-        if y is None:
-            continue
-        layers = _layers(y)
-        if cfg.y_normalization is not None and str(cfg.y_normalization) not in layers:
-            problems.add(
-                f"'{rd.name}' fits the {cfg.y_normalization} layer, which '{y.name}' does "
-                "not calculate"
-            )
-        elif cfg.y_normalization is None and len(layers) > 1:
-            problems.add(
-                f"'{rd.name}' must say which layer of '{y.name}' it fits ({', '.join(layers)})"
-            )
-    return problems
+        if y is not None:
+            layers = _layers(y)
+            if cfg.y_normalization is not None and str(cfg.y_normalization) not in layers:
+                problems.append(
+                    f"'{rd.name}' fits the {cfg.y_normalization} layer, which '{y.name}' does "
+                    "not calculate"
+                )
+            elif cfg.y_normalization is None and len(layers) > 1:
+                problems.append(
+                    f"'{rd.name}' must say which layer of '{y.name}' it fits ({', '.join(layers)})"
+                )
+        if problems:
+            found[rd.name] = problems
+    return found
+
+
+def _curve_problems(readouts: Sequence[CurveReadout]) -> set[str]:
+    return {p for problems in curve_problems_by_curve(readouts).values() for p in problems}
 
 
 def _refuse_curve_problems(

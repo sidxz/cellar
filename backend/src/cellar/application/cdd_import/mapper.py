@@ -18,7 +18,10 @@ from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
 )
-from cellar.domain.screening_assay.protocol import is_reserved_readout_name
+from cellar.domain.screening_assay.protocol import (
+    curve_problems_by_curve,
+    is_reserved_readout_name,
+)
 
 __all__ = [
     "CddProtocolMappingResult",
@@ -392,26 +395,18 @@ def _build_dose_response_readouts(
 def _drop_curves_that_cannot_fit(
     readouts: list[MappedReadout], warnings: list[MappingWarning]
 ) -> list[MappedReadout]:
-    """Leave out a curve whose Y is not an imported numeric readout, with a warning, so one
+    """Leave out, with a warning, a curve the protocol's own curve rules would refuse, so one
     calculation the import doesn't understand never blocks the whole protocol."""
-    numeric = {r.name for r in readouts if r.data_type == ReadoutDataType.NUMERIC}
-    kept: list[MappedReadout] = []
-    for r in readouts:
-        cfg = r.dose_response_config
-        if cfg is not None and cfg.y_readout_name not in numeric:
-            warnings.append(
-                MappingWarning(
-                    field_name=r.name,
-                    source_type="dose response calculation",
-                    reason=(
-                        f"'{r.name}' was not imported: it plots '{cfg.y_readout_name}', "
-                        "which is not imported"
-                    ),
-                )
+    problems = curve_problems_by_curve(readouts)
+    for name, reasons in problems.items():
+        warnings.append(
+            MappingWarning(
+                field_name=name,
+                source_type="dose response calculation",
+                reason=f"Not imported: {'; '.join(reasons)}",
             )
-            continue
-        kept.append(r)
-    return kept
+        )
+    return [r for r in readouts if r.name not in problems]
 
 
 def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
