@@ -365,19 +365,24 @@ class LmfitCurveFitter:
             )
             for spec in config.intercepts
         ]
-        # "Active at all doses" needs the % scale to show the effect at the lowest dose: the
-        # primary reads "<" and the fitted curve there is past the primary's level on the scale.
-        # Without a scale, a "<" only says where the fitted window's level falls.
+        # "Active at all doses" needs the % scale to show the effect at every tested dose: the
+        # primary reads "<" and the fitted curve is past the primary's level on the scale at
+        # both ends of the doses (a 4PL only rises or falls, so the ends decide every dose in
+        # between). Without a scale, a "<" only says where the fitted window's level falls.
         primary = intercept_values[0]
-        f_lo = float(
-            _hill_equation(
-                np.log10(doses[0]), fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill
+
+        def _fitted_at(dose: float) -> float:
+            return float(
+                _hill_equation(
+                    np.log10(dose), fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill
+                )
             )
-        )
+
         active_all_doses = (
             primary.qualifier == ValueQualifier.LT
             and scale is not None
-            and _past_on_scale(f_lo, primary.spec, scale)
+            and _past_on_scale(_fitted_at(doses[0]), primary.spec, scale)
+            and _past_on_scale(_fitted_at(doses[-1]), primary.spec, scale)
         )
 
         curve_class = _classify_curve(

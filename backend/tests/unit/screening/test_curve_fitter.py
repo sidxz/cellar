@@ -1311,13 +1311,16 @@ def test_intercepts_and_class_follow_the_generating_curve_on_grid(case):
             assert math.log10(iv.value) == pytest.approx(case.log_ec50 + offset, abs=0.05)
 
     # "Active at all doses" exactly when the primary reads "<" and the % scale shows the effect
-    # at the lowest dose: the fitted curve is past the primary's level on the scale there.
+    # at every tested dose: the fitted curve is past the primary's level at both ends.
     evidence = False
     if scale is not None and ec50.qualifier == ValueQualifier.LT:
         log_ec50 = math.log10(fitted.fitted_value)  # the fitted midpoint: ec50 is not exact
-        f_lo = _4pl(math.log10(lo), fitted.top, fitted.bottom, log_ec50, fitted.hill_slope)
         level = scale.zero + 0.5 * (scale.full - scale.zero)
-        evidence = f_lo >= level if scale.full > scale.zero else f_lo <= level
+        ends = [
+            _4pl(math.log10(d), fitted.top, fitted.bottom, log_ec50, fitted.hill_slope)
+            for d in (lo, hi)
+        ]
+        evidence = all(f >= level if scale.full > scale.zero else f <= level for f in ends)
     assert (fitted.curve_class == CurveClass.ACTIVE_ALL_DOSES) == evidence
 
     # fitted_value keeps its meaning: the primary's value when exact, else the fitted midpoint
@@ -1486,3 +1489,35 @@ def test_a_response_scale_needs_a_direction():
 
     with pytest.raises(VE, match="full must differ from zero"):
         ResponseScale(zero=50.0, full=50.0)
+
+
+# PRT-00001 CC-000013: % inhibition 55 % at the lowest dose, falling to about -9 % by the
+# highest. Past 50 % at the lowest dose, but the effect is gone at higher doses.
+_CC_000013 = [
+    (0.5, 55.04), (1.5, 18.67), (4.6, 4.62), (13.7, 0.38), (41.0, -2.46), (123.0, 0.37),
+    (370.0, -9.95), (1111.0, -0.85), (3333.0, -5.84), (10000.0, -8.93),
+]  # fmt: skip
+
+
+def test_a_curve_that_loses_its_effect_at_higher_doses_is_not_active_at_all_doses():
+    """"Active at all doses" says what it says: on the % scale the curve is past the level at
+    every tested dose. A 4PL only rises or falls, so both ends decide it."""
+    config = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="% Inhibition")
+    fitted = LmfitCurveFitter().fit(_points(_CC_000013), config, ResponseScale()).unwrap()
+    assert fitted.curve_class != CurveClass.ACTIVE_ALL_DOSES
+
+
+@pytest.mark.parametrize(
+    "series",
+    [
+        # Flat at ~85-100 % across every dose (the WCA flat compounds' shape).
+        [(10.0**e, 88.0 + 4 * ((i * 7) % 3)) for i, e in enumerate(range(-4, 3))],
+        # Transition left of the doses: already 60 % at the lowest, rising to ~100 %.
+        [(10.0**e, 100.0 - 40.0 / (1 + 10 ** (e + 3.5))) for e in range(-3, 3)],
+    ],
+    ids=["flat-high", "transition-left-of-range"],
+)
+def test_a_curve_past_the_level_at_every_dose_stays_active_at_all_doses(series):
+    config = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="% Inhibition")
+    fitted = LmfitCurveFitter().fit(_points(series), config, ResponseScale()).unwrap()
+    assert fitted.curve_class == CurveClass.ACTIVE_ALL_DOSES
