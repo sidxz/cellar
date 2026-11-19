@@ -83,6 +83,50 @@ interface ConditionRow {
   _source?: ProtocolFormConditionTemplate;
 }
 
+export type CurveTemplate = {
+  name: string;
+  data_type: string;
+  normalization?: string | null;
+  dose_response_config?: Record<string, unknown> | null;
+};
+
+/** The templates to save, with every curve kept on the readouts it plots: a renamed readout
+ *  takes its curves along (matched by the name it was loaded with, so typing a new name one
+ *  keystroke at a time cannot pull a curve onto another readout), and a curve that names its
+ *  layer follows its readout's normalization, the only layer a form template calculates.
+ *  A curve whose readout was deleted is left as it is; saving it is refused with the reason. */
+export function curvesFollowReadouts<T extends CurveTemplate>(
+  rows: ReadonlyArray<{ source?: CurveTemplate; template: T }>,
+): T[] {
+  const renamed = new Map(
+    rows.filter((r) => r.source).map((r) => [r.source?.name ?? "", r.template.name]),
+  );
+  const layerOf = new Map(
+    rows
+      .filter((r) => r.template.data_type === "numeric")
+      .map((r) => [r.template.name, r.template.normalization ?? "none"]),
+  );
+  return rows.map(({ template }) => {
+    const cfg = template.dose_response_config;
+    if (template.data_type !== "dose_response" || !cfg) return template;
+    const moved: Record<string, unknown> = {};
+    const y = String(cfg.y_readout_name ?? "");
+    const newY = renamed.get(y) ?? y;
+    if (newY !== y) moved.y_readout_name = newY;
+    const x = cfg.x_readout_name;
+    if (typeof x === "string" && renamed.has(x) && renamed.get(x) !== x)
+      moved.x_readout_name = renamed.get(x);
+    const yLayer = layerOf.get(newY);
+    if (cfg.y_normalization && yLayer !== undefined) {
+      const layer = yLayer === "none" ? null : yLayer;
+      if (layer !== cfg.y_normalization) moved.y_normalization = layer;
+    }
+    return Object.keys(moved).length === 0
+      ? template
+      : { ...template, dose_response_config: { ...cfg, ...moved } };
+  });
+}
+
 const ANY_CATEGORY = "__any__";
 const ANY_CATEGORY_LABEL = "Any category";
 
@@ -190,14 +234,19 @@ function FormDialog({ open, onOpenChange, editing, categories }: FormDialogProps
     const validReadouts = readoutRows.filter((r) => r.name.trim());
     if (validReadouts.length === 0) return;
 
-    const readout_templates = validReadouts.map((r) => ({
-      ...r._source,
-      name: r.name.trim(),
-      data_type: r.data_type,
-      unit: r.unit || null,
-      aggregation: r.aggregation,
-      normalization: r.normalization,
-    }));
+    const readout_templates = curvesFollowReadouts(
+      validReadouts.map((r) => ({
+        source: r._source,
+        template: {
+          ...r._source,
+          name: r.name.trim(),
+          data_type: r.data_type,
+          unit: r.unit || null,
+          aggregation: r.aggregation,
+          normalization: r.normalization,
+        },
+      })),
+    );
 
     const validConditions = conditionRows.filter((c) => c.name.trim());
     const condition_templates =

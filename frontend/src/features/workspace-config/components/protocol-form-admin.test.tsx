@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { ProtocolFormAdmin } from "./protocol-form-admin";
+import { type CurveTemplate, ProtocolFormAdmin, curvesFollowReadouts } from "./protocol-form-admin";
 
 const update = vi.fn();
 const seed = vi.fn();
@@ -116,6 +116,19 @@ describe("ProtocolFormAdmin", () => {
     ]);
   });
 
+  it("moves the curve with its readout when the readout is renamed", async () => {
+    render(<ProtocolFormAdmin />);
+    fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+    fireEvent.change(screen.getByDisplayValue("Signal"), { target: { value: "THF slope" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    const sent = update.mock.calls[0][0];
+    expect(sent.readout_templates[1].dose_response_config).toEqual({
+      curve_type: "ic50",
+      y_readout_name: "THF slope",
+    });
+  });
+
   it("groups forms under their category", () => {
     render(<ProtocolFormAdmin />);
     expect(screen.getByText("Enzyme inhibition")).toBeInTheDocument();
@@ -125,5 +138,49 @@ describe("ProtocolFormAdmin", () => {
     render(<ProtocolFormAdmin />);
     fireEvent.click(screen.getByRole("button", { name: /add default forms/i }));
     expect(seed).toHaveBeenCalled();
+  });
+});
+
+describe("curvesFollowReadouts", () => {
+  const signal: CurveTemplate = {
+    name: "Signal",
+    data_type: "numeric",
+    normalization: "percent_inhibition",
+  };
+  const ic50 = (cfg: Record<string, unknown>): CurveTemplate => ({
+    name: "IC50",
+    data_type: "dose_response",
+    normalization: "none",
+    dose_response_config: { curve_type: "ic50", y_readout_name: "Signal", ...cfg },
+  });
+
+  it("keeps a pinned layer in step with its readout's normalization", () => {
+    const [, curve] = curvesFollowReadouts([
+      { source: signal, template: { ...signal, normalization: "z_score" } },
+      {
+        source: ic50({ y_normalization: "percent_inhibition" }),
+        template: ic50({ y_normalization: "percent_inhibition" }),
+      },
+    ]);
+    expect(curve.dose_response_config).toMatchObject({ y_normalization: "z_score" });
+  });
+
+  it("drops the pinned layer when the readout no longer calculates one", () => {
+    const [, curve] = curvesFollowReadouts([
+      { source: signal, template: { ...signal, normalization: "none" } },
+      {
+        source: ic50({ y_normalization: "percent_inhibition" }),
+        template: ic50({ y_normalization: "percent_inhibition" }),
+      },
+    ]);
+    expect(curve.dose_response_config).toMatchObject({ y_normalization: null });
+  });
+
+  it("leaves a curve alone when nothing it plots changed", () => {
+    const rows = [
+      { source: signal, template: signal },
+      { source: ic50({}), template: ic50({}) },
+    ];
+    expect(curvesFollowReadouts(rows)[1]).toBe(rows[1].template);
   });
 });
