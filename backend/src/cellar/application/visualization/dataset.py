@@ -47,6 +47,8 @@ class ColumnProvenance:
     stat: str | None = None  # what a sibling column holds ("qualifier", "n", "sd" …)
     # On aggregated value (and p) columns: the source runs of the column's condition set.
     run_ids: tuple[uuid.UUID, ...] | None = None
+    # On a dose-response readout's columns: the layer its curves fit; None for raw values.
+    fitted_layer: str | None = None
 
 
 @dataclass(frozen=True)

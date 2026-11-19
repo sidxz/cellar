@@ -71,6 +71,9 @@ class ResolvedRun:
     curve_confidence_interval_low: float | None = None
     curve_confidence_interval_high: float | None = None
     curve_fit_quality_warnings: list[str] | None = None
+    # The layer the curve's readout is fitted on (``_response_scale.fitted_layer``);
+    # None for raw values. Frozen into the curve snapshot.
+    curve_fitted_layer: str | None = None
 
 
 @dataclass(frozen=True)

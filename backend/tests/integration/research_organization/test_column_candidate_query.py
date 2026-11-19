@@ -655,3 +655,38 @@ async def test_run_scope_excludes_other_runs_on_both_branches(session_factory):
     assert [c.readout_id for c in scoped] == [row_a_id]
     unscoped = await _runs(query, ws_id, readout_channel, molecule_id)
     assert sorted(c.readout_id for c in unscoped) == sorted([row_a_id, row_b_id])
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("layers", "fitted"), [(["percent_inhibition"], "percent_inhibition"), ([], None)]
+)
+async def test_a_refreshed_curve_snapshot_names_the_layer_the_curve_fits(
+    uow, session_factory, workspace_id, layers, fitted
+):
+    """Resolved from the channel's protocol by the fit's rule (the seed's DR config fits
+    Signal's percent_inhibition), so a curve stored before the key existed has it too."""
+    from cellar.application.screening.curve_snapshot import build_curve_snapshot
+
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        await seed.readout_def(s, p, name="Signal", normalizations=layers)
+        ic50 = await seed.readout_def(s, p, name="IC50", data_type="dose_response")
+        run = await seed.run(s, ws, p, date(2026, 11, 19))
+        await seed.curve(s, ws, p, run, mol, ic50)
+        await uow.commit()
+
+    out = await SQLAlchemyColumnCandidateQuery(session_factory).fetch(
+        workspace_id=ws,
+        channel=_channel(p, ic50, ChannelSourceKind.DOSE_RESPONSE_CURVE),
+        run_ids=None,
+        molecule_ids=None,
+    )
+
+    [candidate] = out[mol]
+    assert candidate.run.curve_fitted_layer == fitted
+    snapshot = build_curve_snapshot(candidate.run)
+    assert snapshot is not None and snapshot["fitted_layer"] == fitted

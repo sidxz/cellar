@@ -18,6 +18,7 @@ from sqlalchemy import ColumnElement, Select, and_, func, join, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.application.research_organization.column_resolution import Candidate
+from cellar.application.screening._response_scale import fitted_layer
 from cellar.application.screening.run_aggregation import ResolvedRun
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
 from cellar.domain.research_organization.enums import ChannelSourceKind, ValueQualifier
@@ -224,9 +225,10 @@ class SQLAlchemyColumnCandidateQuery:
         out: dict[uuid.UUID, list[Candidate]] = defaultdict(list)
         async with self._sf() as session:
             if dr:
+                layer = await _fitted_layer(session, channel)
                 curves = self._curve_stmt(workspace_id, channel, run_ids, molecule_ids)
                 for row in (await session.execute(curves)).all():
-                    out[row.molecule_id].append(_curve_candidate(row))
+                    out[row.molecule_id].append(_curve_candidate(row, layer))
             # A dose-response column's readout rows are its reported endpoints:
             # well-less by construction, so per-well responses never average in.
             readings = self._readout_stmt(workspace_id, channel, run_ids, molecule_ids, dr)
@@ -335,7 +337,26 @@ class SQLAlchemyColumnCandidateQuery:
         )
 
 
-def _curve_candidate(row: Any) -> Candidate:
+async def _fitted_layer(session: AsyncSession, channel: CampaignChannel) -> str | None:
+    """The layer the channel's dose-response readout is fitted on, from its protocol."""
+    rds = (
+        await session.execute(
+            select(
+                ReadoutDefinitionModel.id,
+                ReadoutDefinitionModel.name,
+                ReadoutDefinitionModel.normalizations,
+                ReadoutDefinitionModel.is_calculated,
+                ReadoutDefinitionModel.dose_response_config,
+            ).where(ReadoutDefinitionModel.protocol_id == channel.protocol_id)
+        )
+    ).all()
+    dr_id = channel.readout_definition_id
+    config = next((r.dose_response_config for r in rds if r.id == dr_id), None)
+    y_rd = next((r for r in rds if config and r.name == config.get("y_readout_name")), None)
+    return fitted_layer(config.get("y_normalization"), y_rd) if config and y_rd else None
+
+
+def _curve_candidate(row: Any, layer: str | None) -> Candidate:
     return Candidate(
         run=ResolvedRun(
             value=row.fitted_value,
@@ -361,6 +382,7 @@ def _curve_candidate(row: Any) -> Candidate:
             curve_confidence_interval_low=row.confidence_interval_low,
             curve_confidence_interval_high=row.confidence_interval_high,
             curve_fit_quality_warnings=row.fit_quality_warnings,
+            curve_fitted_layer=layer,
         ),
         molecule_id=row.molecule_id,
         batch_id=row.batch_id,

@@ -24,6 +24,10 @@ from cellar.application.screening.get_curve_edit_history import (
     GetCurveEditHistoryQuery,
     GetCurveEditHistoryResult,
 )
+from cellar.application.screening.get_curve_fitted_layers import (
+    GetCurveFittedLayers,
+    GetCurveFittedLayersQuery,
+)
 from cellar.application.screening.list_dose_response_enriched import (
     ListDoseResponseEnrichedQuery,
 )
@@ -40,6 +44,7 @@ from cellar.interface.dependencies import (
     CreateDoseResponseCurveDep,
     CreateReadoutDataDep,
     GetCurveEditHistoryDep,
+    GetCurveFittedLayersDep,
     ListDoseResponseEnrichedDep,
     ListReadoutDataEnrichedDep,
     ReadoutCalculationEngineDep,
@@ -148,12 +153,16 @@ class DoseResponseCurveResponse(BaseModel):
     # Per-spec intercepts derived from the same Hill fit. The first entry's
     # ``value`` mirrors ``fitted_value`` for back-compat.
     intercept_values: list[InterceptValueModel] = []
+    # The readout layer the curve fits ("percent_inhibition", "z_score", ...); null for
+    # raw values. Resolved from the protocol by the rule the fit uses.
+    fitted_layer: str | None = None
 
     @classmethod
     def from_domain(
         cls,
         c: DoseResponseCurve,
         *,
+        fitted_layer: str | None,
         registration_number: str | None = None,
         molecule_name: str | None = None,
         synonyms: list[str] | None = None,
@@ -196,7 +205,29 @@ class DoseResponseCurveResponse(BaseModel):
                 InterceptValueModel.from_domain(iv)
                 for iv in (getattr(c, "intercept_values", []) or [])
             ],
+            fitted_layer=fitted_layer,
         )
+
+
+async def curve_responses(
+    curves: list[DoseResponseCurve], auth: Any, layers_uc: GetCurveFittedLayers
+) -> list[DoseResponseCurveResponse]:
+    """The curves on the wire, each with the layer its readout is fitted on."""
+    layers = result_to_response(
+        await layers_uc(
+            GetCurveFittedLayersQuery(
+                workspace_id=auth.workspace_id,
+                readouts=frozenset((c.protocol_id, c.readout_definition_id) for c in curves),
+            ),
+            auth=auth,
+        )
+    )
+    return [
+        DoseResponseCurveResponse.from_domain(
+            c, fitted_layer=layers.get((c.protocol_id, c.readout_definition_id))
+        )
+        for c in curves
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -506,6 +537,7 @@ async def create_dose_response_curve(
     auth: AuthDep,
     body: CreateDoseResponseCurveRequest,
     uc: CreateDoseResponseCurveDep,
+    layers_uc: GetCurveFittedLayersDep,
 ) -> DoseResponseCurveResponse:
     cmd = CreateDoseResponseCurveCommand(
         workspace_id=auth.workspace_id,
@@ -528,7 +560,8 @@ async def create_dose_response_curve(
         excluded_points=body.excluded_points,
     )
     result = await uc(cmd, auth=auth)
-    return DoseResponseCurveResponse.from_domain(result_to_response(result))
+    (curve,) = await curve_responses([result_to_response(result)], auth, layers_uc)
+    return curve
 
 
 @router.get("/dose-response-curves", response_model=list[DoseResponseCurveResponse])
@@ -543,6 +576,7 @@ async def list_dose_response_curves(
     return [
         DoseResponseCurveResponse.from_domain(
             item.curve,
+            fitted_layer=item.fitted_layer,
             registration_number=item.registration_number,
             molecule_name=item.molecule_name,
             synonyms=item.synonyms,
@@ -560,6 +594,7 @@ async def refit_dose_response_curve(
     body: RefitDoseResponseCurveRequest,
     auth: AuthDep,
     uc: RefitDoseResponseCurveDep,
+    layers_uc: GetCurveFittedLayersDep,
 ) -> DoseResponseCurveResponse:
     from cellar.application.screening.refit_dose_response import (
         ExclusionPayloadEntry,
@@ -610,7 +645,8 @@ async def refit_dose_response_curve(
         ),
         auth=auth,
     )
-    return DoseResponseCurveResponse.from_domain(result_to_response(result))
+    (curve,) = await curve_responses([result_to_response(result)], auth, layers_uc)
+    return curve
 
 
 @router.post(
@@ -665,6 +701,7 @@ async def classify_dose_response_curve(
     body: ClassifyDoseResponseCurveRequest,
     auth: AuthDep,
     uc: ClassifyDoseResponseCurveDep,
+    layers_uc: GetCurveFittedLayersDep,
 ) -> DoseResponseCurveResponse:
     from cellar.application.screening.classify_dose_response import (
         ClassifyDoseResponseCurveCommand,
@@ -678,7 +715,8 @@ async def classify_dose_response_curve(
         ),
         auth=auth,
     )
-    return DoseResponseCurveResponse.from_domain(result_to_response(result))
+    (curve,) = await curve_responses([result_to_response(result)], auth, layers_uc)
+    return curve
 
 
 @router.get(

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace
+from cellar.application.screening._response_scale import curve_fitted_layer
 from cellar.application.screening.dose_response_enriched_reader import (
     DoseResponseEnrichedReader,
 )
@@ -38,6 +39,8 @@ class EnrichedDoseResponseCurve:
     synonyms: list[str]
     # The owning protocol's dose_unit. Used to label IC50 in callers.
     dose_unit: str
+    # The layer the curve's readout is fitted on (``_response_scale.curve_fitted_layer``).
+    fitted_layer: str | None = None
 
 
 class ListDoseResponseEnriched:
@@ -76,13 +79,14 @@ class ListDoseResponseEnriched:
             batch_numbers = await self._reader.resolve_batch_numbers(input.workspace_id, batch_ids)
 
             run = await self._run_repo.find_by_id_in_workspace(input.workspace_id, input.run_id)
-            dose_unit = "uM"
-            if run is not None:
-                protocol = await self._protocol_repo.find_by_id_in_workspace(
+            protocol = (
+                await self._protocol_repo.find_by_id_in_workspace(
                     input.workspace_id, run.protocol_id
                 )
-                if protocol is not None:
-                    dose_unit = protocol.dose_unit.value
+                if run is not None
+                else None
+            )
+            dose_unit = protocol.dose_unit.value if protocol is not None else "uM"
 
             return Success(
                 [
@@ -104,6 +108,7 @@ class ListDoseResponseEnriched:
                             mol_info[c.molecule_id].synonyms if c.molecule_id in mol_info else []
                         ),
                         dose_unit=dose_unit,
+                        fitted_layer=curve_fitted_layer(protocol, c.readout_definition_id),
                     )
                     for c in curves
                 ]

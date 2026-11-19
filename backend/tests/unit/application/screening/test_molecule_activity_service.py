@@ -1387,3 +1387,71 @@ class TestProtocolHitReadsCurvesAsReported:
     def test_a_curve_fitted_before_qualifiers_reads_by_todays_rules(self) -> None:
         assert self._hit(1.0, self._curve(CurveClass.FULL, 0.5)) is True
         assert self._hit(1.0, self._curve(CurveClass.FULL, 50.0)) is False  # "> 10"
+
+
+class TestEnrichMoleculesFittedLayer:
+    DOSES = (0.01, 0.1, 1.0, 10.0, 100.0)
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("layers", "fitted"), [({"percent_inhibition"}, "percent_inhibition"), (set(), None)]
+    )
+    async def test_a_dose_response_cell_names_the_layer_its_curves_fit(self, layers, fitted):
+        """Resolved from the protocol by the fit's rule; a curve stored before the field
+        existed resolves too. The cell's curve snapshots carry it as well."""
+        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+        from cellar.domain.screening_assay.enums import (
+            ProtocolType,
+            ReadoutDataType,
+            ReadoutNormalization,
+        )
+        from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
+
+        protocol = Protocol.create(
+            workspace_id=WS,
+            name="DR",
+            protocol_type=ProtocolType.BIOCHEMICAL,
+            created_by=uuid.uuid4(),
+            readout_definitions=[
+                ReadoutDefinition(
+                    protocol_id=PROTO_ID,
+                    name="Signal",
+                    data_type=ReadoutDataType.NUMERIC,
+                    normalizations=frozenset(ReadoutNormalization(n) for n in layers),
+                ),
+                ReadoutDefinition(
+                    protocol_id=PROTO_ID,
+                    name="IC50",
+                    data_type=ReadoutDataType.DOSE_RESPONSE,
+                    dose_response_config=DoseResponseConfig(
+                        curve_type=CurveType.IC50, y_readout_name="Signal"
+                    ),
+                ),
+            ],
+        )
+        protocol.id = PROTO_ID
+        dr = next(rd for rd in protocol.readout_definitions if rd.name == "IC50")
+        dr.id = RD_ID
+        runs = [uuid.uuid4(), uuid.uuid4()]
+        curves = [
+            _make_curve(
+                run_id=r, raw_data=[{"concentration": d, "response": 50.0} for d in self.DOSES]
+            )
+            for r in runs
+        ]
+        service = _make_service(
+            curve_repo=_curve_repo_for(curves),
+            run_repo=_run_repo_for(
+                {r: _make_run(run_id=r, run_date=date(2026, 4, i + 1)) for i, r in enumerate(runs)}
+            ),
+        )
+        service._protocol_repo.find_by_ids = AsyncMock(return_value=[protocol])
+
+        av = (
+            await service.enrich_molecules(
+                WS, [MOL_ID], [f"drc:{RD_ID}"], selection_rule=SelectionRule.GEOMETRIC_MEAN
+            )
+        )[MOL_ID][f"drc:{RD_ID}"]
+
+        assert av.fitted_layer == fitted
+        assert [c["fitted_layer"] for c in av.additional_curves or []] == [fitted]

@@ -57,6 +57,7 @@ from cellar.application.screening.get_collection_gap import (
 )
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
+from cellar.application.screening.get_curve_fitted_layers import GetCurveFittedLayers
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
 from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatch,
@@ -885,6 +886,12 @@ def register_screening(container: Container) -> None:
         )
 
     container.define(ClassifyDoseResponseCurve, _classify_dose_response_curve)
+
+    def _get_curve_fitted_layers(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return GetCurveFittedLayers(uow=uow, protocol_repo=SQLAlchemyProtocolRepository(uow))
+
+    container.define(GetCurveFittedLayers, _get_curve_fitted_layers)
 
     def _get_curve_edit_history(c: Container):
         return GetCurveEditHistory(audit_repository=c[AuditRepository])

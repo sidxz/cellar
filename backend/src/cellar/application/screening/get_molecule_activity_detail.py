@@ -17,6 +17,7 @@ from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace
 from cellar.application.screening import _condense_raw_data
+from cellar.application.screening._response_scale import curve_fitted_layer
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
@@ -99,6 +100,9 @@ class CurveDetail:
     excluded_points: list[dict[str, Any]] | None
     fit_quality_warnings: list[str]
     intercept_values: list[InterceptValuePayload]
+    # The layer the curve's readout is fitted on (``_response_scale.curve_fitted_layer``);
+    # None for raw values.
+    fitted_layer: str | None
 
     @classmethod
     def from_domain(
@@ -107,6 +111,7 @@ class CurveDetail:
         *,
         dose_unit: str,
         run_date: date | None,
+        fitted_layer: str | None,
     ) -> CurveDetail:
         return cls(
             curve_id=curve.id,
@@ -154,6 +159,7 @@ class CurveDetail:
                 )
                 for iv in (curve.intercept_values or [])
             ],
+            fitted_layer=fitted_layer,
         )
 
 
@@ -247,6 +253,7 @@ class GetMoleculeActivityDetail:
                                 c,
                                 dose_unit=dose_unit,
                                 run_date=run_date_by_id.get(c.run_id),
+                                fitted_layer=curve_fitted_layer(proto, c.readout_definition_id),
                             )
                             for c in sorted_curves
                         ],

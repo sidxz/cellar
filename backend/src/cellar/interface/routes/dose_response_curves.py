@@ -15,9 +15,13 @@ from pydantic import BaseModel, Field
 from cellar.application.screening.get_dose_response_curves_batch import (
     GetDoseResponseCurvesBatchQuery,
 )
-from cellar.interface.dependencies import AuthDep, GetDoseResponseCurvesBatchDep
+from cellar.interface.dependencies import (
+    AuthDep,
+    GetCurveFittedLayersDep,
+    GetDoseResponseCurvesBatchDep,
+)
 from cellar.interface.error_handlers import result_to_response
-from cellar.interface.routes.readout_data import DoseResponseCurveResponse
+from cellar.interface.routes.readout_data import DoseResponseCurveResponse, curve_responses
 
 router = APIRouter(prefix="/api/v1/dose-response", tags=["dose-response"])
 
@@ -35,6 +39,7 @@ async def get_curves_batch(
     body: BatchCurvesRequest,
     auth: AuthDep,
     uc: GetDoseResponseCurvesBatchDep,
+    layers_uc: GetCurveFittedLayersDep,
 ) -> BatchCurvesResponse:
     """Look up dose-response curves by id, scoped to the caller's workspace.
 
@@ -53,4 +58,4 @@ async def get_curves_batch(
         workspace_id=auth.workspace_id, curve_ids=body.curve_ids
     )
     curves = result_to_response(await uc(query, auth=auth))
-    return BatchCurvesResponse(curves=[DoseResponseCurveResponse.from_domain(c) for c in curves])
+    return BatchCurvesResponse(curves=await curve_responses(curves, auth, layers_uc))

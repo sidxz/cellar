@@ -9,6 +9,7 @@ from typing import Any
 from sqlalchemy import Text, and_, cast, func, join, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from cellar.application.screening._response_scale import fitted_layer
 from cellar.application.screening.compound_curves_reader import CurveRow
 from cellar.application.visualization.dataset_reader import (
     CompoundInfo,
@@ -114,6 +115,7 @@ class SQLAlchemyVisualizationDatasetReader:
     ) -> list[ReadoutDefInfo]:
         if not protocol_ids:
             return []
+        dr_config = ReadoutDefinitionModel.dose_response_config
         async with self._session_factory() as session:
             rows = (
                 await session.execute(
@@ -129,6 +131,12 @@ class SQLAlchemyVisualizationDatasetReader:
                         ReadoutDefinitionModel.melt_config["measure"].astext,
                         ReadoutDefinitionModel.aggregation,
                         ReadoutDefinitionModel.dose_response_config["intercepts"][0],
+                        # What fitted_layer reads: the config's Y readout and layer, and
+                        # each readout's layers.
+                        dr_config["y_readout_name"].astext.label("y_readout_name"),
+                        dr_config["y_normalization"].astext.label("y_normalization"),
+                        ReadoutDefinitionModel.normalizations,
+                        ReadoutDefinitionModel.is_calculated,
                     )
                     .join(ProtocolModel, ProtocolModel.id == ReadoutDefinitionModel.protocol_id)
                     .where(
@@ -138,7 +146,16 @@ class SQLAlchemyVisualizationDatasetReader:
                     .order_by(ReadoutDefinitionModel.display_order, ReadoutDefinitionModel.name)
                 )
             ).all()
-            return [ReadoutDefInfo(*r) for r in rows]  # selected in field order
+        by_name = {(r.protocol_id, r.name): r for r in rows}
+
+        def layer(r: Any) -> str | None:
+            y_rd = by_name.get((r.protocol_id, r.y_readout_name))
+            if r.data_type != "dose_response" or y_rd is None:
+                return None
+            return fitted_layer(r.y_normalization, y_rd)
+
+        n = len(fields(ReadoutDefInfo)) - 1  # the fields selected in order; then the layer
+        return [ReadoutDefInfo(*r[:n], fitted_layer=layer(r)) for r in rows]
 
     async def count_wells_rows(
         self, workspace_id: uuid.UUID, run_ids: list[uuid.UUID]

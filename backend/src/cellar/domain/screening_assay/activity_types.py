@@ -179,6 +179,9 @@ class ActivityValue:
     # first — so the detail drawer never re-derives the selection itself.
     representative_curve_id: uuid.UUID | None = None
     run_ids: list[uuid.UUID] | None = None
+    # Dose-response cells: the layer the curves fit ("percent_inhibition", ...); None for
+    # raw values and other sources.
+    fitted_layer: str | None = None
 
 
 @dataclass(frozen=True)

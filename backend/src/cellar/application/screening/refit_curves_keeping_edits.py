@@ -107,7 +107,7 @@ class RefitCurvesKeepingEdits:
             y_rd = rd_by_name.get(config.y_readout_name)
             if y_rd is None or y_rd.is_calculated:
                 continue  # formula values are per compound: never a curve on wells
-            layer = fitted_layer(config, y_rd)
+            layer = fitted_layer(config.y_normalization, y_rd)
             on_wells, new = _series(run, y_rd, layer, after)
             if not on_wells:
                 continue  # rows on no well of the run: their curves cannot be rebuilt

@@ -102,6 +102,9 @@ class ReadoutDefInfoResponse(BaseModel):
     intercepts: list[InterceptSpecResponse] = []
     # A thermal-shift readout's temperature window; null for other readouts.
     melt_config: MeltConfigModel | None = None
+    # For DR readouts, the layer their curves fit ("percent_inhibition", ...); null for
+    # raw values and for other readouts.
+    fitted_layer: str | None = None
 
 
 class CompoundActivityResponse(BaseModel):
@@ -302,6 +305,7 @@ async def get_protocol_activity_summary(
                     )
                     for spec in rd.intercepts
                 ],
+                fitted_layer=rd.fitted_layer,
             )
             for rd in summary.readout_definitions
         ],

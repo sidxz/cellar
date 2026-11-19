@@ -71,6 +71,9 @@ def build_curve_snapshot(c: ResolvedRun) -> dict | None:
         "r_squared": c.curve_r_squared,
         "curve_class": c.curve_class,
         "raw_data": condense_curve_points(c.curve_raw_data) or [],
+        # The layer the curve fits; null for raw values (a snapshot frozen before this
+        # key existed has none).
+        "fitted_layer": c.curve_fitted_layer,
     }
     excluded = condense_curve_points(c.curve_excluded_points)
     if excluded:

@@ -64,6 +64,9 @@ class ColumnProvenanceResponse(BaseModel):
     stat: str | None = None
     # Aggregated value and p columns: the source runs of the column's condition set.
     run_ids: list[uuid.UUID] | None = None
+    # A dose-response readout's columns: the layer its curves fit ("percent_inhibition",
+    # ...); null for raw values and for other columns.
+    fitted_layer: str | None = None
 
 
 class DatasetColumnResponse(BaseModel):
@@ -91,6 +94,7 @@ class DatasetColumnResponse(BaseModel):
                 aggregation=c.provenance.aggregation,
                 stat=c.provenance.stat,
                 run_ids=list(c.provenance.run_ids) if c.provenance.run_ids is not None else None,
+                fitted_layer=c.provenance.fitted_layer,
             ),
             hidden=c.hidden,
         )

@@ -26,6 +26,7 @@ from cellar.application.screening.get_collection_gap import (
 )
 from cellar.application.screening.get_compound_curves import GetCompoundCurves
 from cellar.application.screening.get_curve_edit_history import GetCurveEditHistory
+from cellar.application.screening.get_curve_fitted_layers import GetCurveFittedLayers
 from cellar.application.screening.get_dose_response import ListDoseResponseByRun
 from cellar.application.screening.get_measured_curves_batch import GetMeasuredCurvesBatch
 from cellar.application.screening.get_molecule_activity_detail import GetMoleculeActivityDetail
@@ -184,6 +185,7 @@ __all__ = [
     "FitDoseResponseCurvesDep",
     "GetCompoundCurvesDep",
     "GetCurveEditHistoryDep",
+    "GetCurveFittedLayersDep",
     "GetMeasuredCurvesBatchDep",
     "GetMoleculeActivityDetailDep",
     "GetMoleculeTestCountsDep",
@@ -417,6 +419,9 @@ RefitDoseResponseCurvePreviewDep = Annotated[
 ]
 ClassifyDoseResponseCurveDep = Annotated[
     ClassifyDoseResponseCurve, Depends(_get_use_case(ClassifyDoseResponseCurve))
+]
+GetCurveFittedLayersDep = Annotated[
+    GetCurveFittedLayers, Depends(_get_use_case(GetCurveFittedLayers))
 ]
 GetCurveEditHistoryDep = Annotated[
     GetCurveEditHistory, Depends(_get_use_case(GetCurveEditHistory))

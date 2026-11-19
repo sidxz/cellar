@@ -19,6 +19,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from cellar.application.screening import _condense_raw_data
+from cellar.application.screening._response_scale import curve_fitted_layer
 from cellar.application.screening.curve_snapshot import build_aggregate_curve_snapshot
 from cellar.application.screening.run_aggregation import (
     AggregateResult,
@@ -599,6 +600,12 @@ class MoleculeActivityService:
             for rd in p.readout_definitions
             if rd.dose_response_config and rd.dose_response_config.intercepts
         }
+        layer_of = {
+            rd.id: curve_fitted_layer(p, rd.id)
+            for p in dr_protos
+            for rd in p.readout_definitions
+            if rd.dose_response_config
+        }
 
         any_block = (
             await self._any_column(
@@ -630,6 +637,7 @@ class MoleculeActivityService:
                             headers=headers,
                             unit=dose_unit.get(col.protocol_id, "uM"),
                             intercept_spec=primary_spec.get(rd_id),
+                            fitted_layer=layer_of.get(rd_id),
                             selection_rule=selection_rule,
                             qualifier_handling=qualifier_handling,
                             lean=lean,
@@ -661,6 +669,7 @@ class MoleculeActivityService:
         headers: dict[uuid.UUID, RunHeader],
         unit: str,
         intercept_spec: dict[str, Any] | None,
+        fitted_layer: str | None,
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
         lean: bool,
@@ -669,7 +678,7 @@ class MoleculeActivityService:
         group has none — the campaign channel resolver's rule D1. An endpoint
         cell carries its readout's primary intercept (``intercept_spec``) so
         the grid, sorting and export read it like a fitted cell."""
-        resolved = self._build_resolved_runs(curves, headers)
+        resolved = self._build_resolved_runs(curves, headers, fitted_layer)
         if resolved:
             return self._build_dr_activity(
                 resolved_runs=resolved,
@@ -768,7 +777,9 @@ class MoleculeActivityService:
 
     @staticmethod
     def _build_resolved_runs(
-        curves: list[DoseResponseCurve], runs_by_id: dict[uuid.UUID, RunHeader]
+        curves: list[DoseResponseCurve],
+        runs_by_id: dict[uuid.UUID, RunHeader],
+        fitted_layer: str | None,
     ) -> list[ResolvedRun]:
         """Adapt persisted curves + their owning runs to the aggregator's input.
 
@@ -811,6 +822,7 @@ class MoleculeActivityService:
                     curve_confidence_interval_low=c.confidence_interval_low,
                     curve_confidence_interval_high=c.confidence_interval_high,
                     curve_fit_quality_warnings=list(c.fit_quality_warnings or []),
+                    curve_fitted_layer=fitted_layer,
                 )
             )
         return out
@@ -957,6 +969,7 @@ class MoleculeActivityService:
             aggregate=aggregate_marker,
             representative_curve_id=rep.curve_id,
             run_ids=[r.run_id for r in runs_sorted],
+            fitted_layer=rep.curve_fitted_layer,
         )
 
     def _build_any_activity(
@@ -978,10 +991,12 @@ class MoleculeActivityService:
         ordering (readout entries have no µM equivalent and sort last)."""
         entries: list[AnyProtocolEntry] = []
         for rd_id, curves in by_rd.items():
-            resolved = self._build_resolved_runs(curves, runs_by_id)
+            proto = protos.get(curves[0].protocol_id)
+            resolved = self._build_resolved_runs(
+                curves, runs_by_id, curve_fitted_layer(proto, rd_id)
+            )
             if not resolved:
                 continue
-            proto = protos.get(curves[0].protocol_id)
             unit = proto.dose_unit.value if proto is not None else "uM"
             av = self._build_dr_activity(
                 resolved_runs=resolved,

@@ -19,6 +19,7 @@ from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext
 from cellar.application.screening import _condense_raw_data
+from cellar.application.screening._response_scale import fitted_layer
 from cellar.application.screening.protocol_activity_reader import (
     ProtocolActivityReader,
 )
@@ -137,6 +138,9 @@ class ReadoutDefInfo:
     # channel_key, low, high, threshold, concentration); None otherwise.
     # Lets the grid group a window's readouts under one header.
     melt_config: dict[str, Any] | None = None
+    # For ``dose_response`` readouts, the layer their curves are fitted on
+    # (``_response_scale.fitted_layer``); None for raw values and other readouts.
+    fitted_layer: str | None = None
 
 
 @dataclass(frozen=True)
@@ -202,6 +206,7 @@ class GetProtocolActivitySummary:
         # of its rows exist, else raw (None). Keyed by readout name, like the rows.
         layers_with_data = {(r.readout_name, r.layer) for r in data.numeric_rows}
         layer_of: dict[str, str | None] = {}
+        rd_by_name = {rd.name: rd for rd in data.protocol.readout_definitions}
 
         for rd in data.protocol.readout_definitions:
             if rd.data_type not in _AGGREGATABLE_DATA_TYPES:
@@ -212,6 +217,7 @@ class GetProtocolActivitySummary:
                 rd.data_type, melt.get("measure") if isinstance(melt, dict) else None
             )
             intercept_specs: list[InterceptSpecPayload] = []
+            fitted: str | None = None
             unit = rd.unit
             if rd.data_type == "numeric":
                 # Unit-test fakes of the read model carry no ``normalizations``.
@@ -228,6 +234,9 @@ class GetProtocolActivitySummary:
                 raw_intercepts = (
                     (cfg_dict or {}).get("intercepts") if isinstance(cfg_dict, dict) else None
                 )
+                y_rd = rd_by_name.get((cfg_dict or {}).get("y_readout_name"))
+                if y_rd is not None:
+                    fitted = fitted_layer((cfg_dict or {}).get("y_normalization"), y_rd)
                 if isinstance(raw_intercepts, list):
                     for spec in raw_intercepts:
                         if not isinstance(spec, dict):
@@ -250,6 +259,7 @@ class GetProtocolActivitySummary:
                     best_direction=direction.value,
                     melt_config=melt if isinstance(melt, dict) else None,
                     intercepts=intercept_specs,
+                    fitted_layer=fitted,
                 )
             )
 

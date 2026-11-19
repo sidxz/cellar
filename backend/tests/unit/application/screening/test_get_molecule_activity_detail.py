@@ -80,6 +80,7 @@ class _FakeProtocol:
         self.protocol_type = protocol_type
         self.target_id = target_id
         self.dose_unit = dose_unit
+        self.readout_definitions: list = []
 
 
 def _make_curve(

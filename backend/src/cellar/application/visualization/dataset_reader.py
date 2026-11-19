@@ -40,6 +40,8 @@ class ReadoutDefInfo:
     melt_measure: str | None = None  # melt_config.measure
     aggregation: str | None = None  # how replicate values combine (ReadoutAggregation)
     primary_intercept: dict[str, Any] | None = None  # dose_response_config.intercepts[0]
+    # A dose-response readout's fitted layer (``_response_scale.fitted_layer``); keep last.
+    fitted_layer: str | None = None
 
 
 @dataclass(frozen=True)

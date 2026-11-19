@@ -542,6 +542,7 @@ def build_aggregated_dataset(
             layer=s.layer,
             condition_set=cs_label,
             aggregation=aggregation,
+            fitted_layer=rd.fitted_layer if s.layer is None else None,
         )
         p_prov = replace(prov, aggregation="p")
         run_ids = tuple(set_runs.get(s.condition_set if labels else "{}", ()))

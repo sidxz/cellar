@@ -62,6 +62,8 @@ class CurveDetailResponse(BaseModel):
     excluded_points: list[dict[str, Any]] | None = None
     fit_quality_warnings: list[str] = []
     intercept_values: list[InterceptValueResponse] = []
+    # The readout layer the curve fits ("percent_inhibition", ...); null for raw values.
+    fitted_layer: str | None = None
 
 
 class ProtocolCurveGroupResponse(BaseModel):
@@ -110,6 +112,7 @@ class MoleculeActivityDetailResponse(BaseModel):
                             intercept_values=[
                                 InterceptValueResponse.from_domain(iv) for iv in c.intercept_values
                             ],
+                            fitted_layer=c.fitted_layer,
                         )
                         for c in g.curves
                     ],

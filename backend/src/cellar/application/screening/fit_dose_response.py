@@ -310,7 +310,7 @@ class FitDoseResponseCurves:
             target_formula: ReadoutNormalization | None
             # A readout that calculates no layer is fitted on its raw rows, whatever layer
             # a stored curve still names.
-            layer = fitted_layer(config, y_rd)
+            layer = fitted_layer(config.y_normalization, y_rd)
             scale = response_scale_for(layer)
             if y_rd.is_calculated:
                 target_formula = None  # filtered by is_computed below
