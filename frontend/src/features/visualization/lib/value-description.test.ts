@@ -252,6 +252,29 @@ describe("describeValue", () => {
     ]);
   });
 
+  it("gives no CI beside a bound or n.d. value, nor for an inactive or active-at-all-doses curve", () => {
+    const at = (value: number | null, q: string | null, curveClass = "partial") =>
+      describeValue(
+        {
+          ...runs,
+          values: {
+            ...runs.values,
+            "dr:e": [value, 0.8],
+            "dr:e:q": [q, null],
+            "dr:e:curve_class": [curveClass, "active"],
+          },
+        },
+        "dr:e",
+        0,
+      )?.lines.some((l) => l.startsWith("95% CI"));
+    expect(at(100, ">")).toBe(false);
+    expect(at(0.01, "<")).toBe(false);
+    expect(at(null, null)).toBe(false);
+    expect(at(100, ">", "inactive")).toBe(false);
+    expect(at(0.01, "<", "active_all_doses")).toBe(false);
+    expect(at(0.3, null)).toBe(true);
+  });
+
   it("has nothing to say about a Wells value or a cell without data", () => {
     const wells: Dataset = {
       ...runs,

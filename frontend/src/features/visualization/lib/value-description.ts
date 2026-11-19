@@ -73,9 +73,17 @@ export function describeValue(
         .filter(Boolean)
         .join(" · "),
     );
+    // A CI belongs to an exact value only: not to a bound, n.d., or a class that reads as one.
+    const q = siblingAt(ds, key, "q", i);
+    const exact =
+      value !== null &&
+      q !== "<" &&
+      q !== ">" &&
+      curveClass !== "inactive" &&
+      curveClass !== "active_all_doses";
     const lo = at("ci_low");
     const hi = at("ci_high");
-    if (lo !== null && hi !== null) {
+    if (exact && lo !== null && hi !== null) {
       lines.push(`95% CI ${sig4(lo)}–${sig4(hi)}${c.unit ? ` ${c.unit}` : ""}`);
     }
   } else if (!c.provenance.layer) {
