@@ -368,6 +368,7 @@ function CurveTable({
                   value: iv?.value ?? (i === 0 ? curve.fitted_value : null),
                   at_bound: iv?.at_bound,
                   qualifier: iv?.qualifier,
+                  primary: i === 0,
                   curve_class: curve.curve_class,
                   ...doseRange(curve.data_points),
                 });

@@ -173,6 +173,7 @@ function interceptColumn(
       value,
       at_bound: iv?.at_bound,
       qualifier: useMean ? null : iv?.qualifier,
+      primary: c.primary,
       curve_class: rv?.curve_class,
       // The best curve's doses censor its own value, not a mean over several curves.
       ...doseRange(useMean ? null : rv?.data_points),

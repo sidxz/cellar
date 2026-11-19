@@ -239,6 +239,7 @@ export function ReadoutDataTable({
                   value,
                   at_bound: iv?.at_bound,
                   qualifier: iv?.qualifier,
+                  primary: isPrimary,
                   curve_class: curve.curve_class,
                   ...doseRange(curve.raw_data),
                 }).sortValue;
@@ -254,6 +255,7 @@ export function ReadoutDataTable({
                   value,
                   at_bound: iv?.at_bound,
                   qualifier: iv?.qualifier,
+                  primary: isPrimary,
                   curve_class: curve.curve_class,
                   ...doseRange(curve.raw_data),
                 });

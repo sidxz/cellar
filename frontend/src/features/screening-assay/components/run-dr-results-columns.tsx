@@ -214,6 +214,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
           value,
           at_bound: iv?.at_bound,
           qualifier: iv?.qualifier,
+          primary: idx === 0,
           curve_class: params.data.curve_class,
           ...doseRange(params.data.data_points),
         }).sortValue;
@@ -226,6 +227,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
           value,
           at_bound: iv?.at_bound,
           qualifier: iv?.qualifier,
+          primary: idx === 0,
           curve_class: params.data.curve_class,
           ...doseRange(params.data.data_points),
         });

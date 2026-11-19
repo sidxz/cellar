@@ -445,6 +445,34 @@ describe("formatInterceptDisplay — stored qualifier", () => {
     }
   });
 
+  it("reads a secondary intercept of an Active-at-all-doses curve by its own qualifier", () => {
+    // The class speaks for the primary only: EC90 past the top dose stays "> top".
+    expect(
+      show({ curve_class: "active_all_doses", primary: false, qualifier: ">", value: 100 }).text,
+    ).toBe("> 100");
+    const nd = show({
+      curve_class: "active_all_doses",
+      primary: false,
+      qualifier: "nd",
+      value: null,
+    });
+    expect(nd.kind).toBe("nd");
+    expect(nd.text).toBe("ND");
+    expect(
+      show({ curve_class: "active_all_doses", primary: false, qualifier: "=", value: 3.87 }).text,
+    ).toBe("3.870");
+    // A legacy secondary (no qualifier) keeps today's value-vs-range rules.
+    expect(show({ curve_class: "active_all_doses", primary: false, value: 3.87 }).text).toBe(
+      "3.870",
+    );
+  });
+
+  it("keeps the inactive rule on a secondary intercept", () => {
+    expect(show({ curve_class: "inactive", primary: false, qualifier: "=", value: 3 }).text).toBe(
+      "> 100",
+    );
+  });
+
   it("keeps an inactive curve above the top dose even when it stored an exact value", () => {
     expect(show({ curve_class: "inactive", qualifier: "=", value: 3 }).text).toBe("> 100");
   });

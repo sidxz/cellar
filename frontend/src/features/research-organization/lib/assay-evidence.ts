@@ -25,6 +25,7 @@ export function activityEndpoint(
     // One curve's stored outcome reads against its own doses. `av.qualifier` is the backend's
     // reported qualifier for the cell, applied below, not the stored one.
     qualifier: oneCurve ? iv?.qualifier : null,
+    primary: isPrimary,
     curve_class: aggregate ? null : av.curve_params?.curve_class,
     // The tested doses censor one curve's value. An aggregate can summarize several runs
     // (raw_data is the representative's alone): it keeps the qualifier the backend resolved.

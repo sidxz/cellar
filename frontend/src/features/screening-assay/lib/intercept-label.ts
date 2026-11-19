@@ -249,6 +249,9 @@ export function formatInterceptDisplay(args: {
   /** The stored outcome of this intercept: "=" exact, "<" / ">" outside the tested doses,
    *  "nd" not determinable. Absent on curves fitted before it existed: today's rules apply. */
   qualifier?: string | null;
+  /** Whether this is the curve's primary intercept (default true). "Active at all doses"
+   *  speaks for the primary only; a secondary reads its own stored qualifier. */
+  primary?: boolean;
   // ---- NEW: multi-run aggregation context (all optional, defaults
   // preserve current single-run behavior) ----
   runCount?: number;
@@ -301,11 +304,12 @@ export function formatInterceptDisplay(args: {
   // A censored value stores the edge dose itself; the tested range wins when known.
   const lowEdge = minDose ?? positive(args.value);
 
-  // The class wins at both ends (a scientist's hand class too), then the stored qualifier,
-  // then — for curves fitted before qualifiers — today's value-vs-range rules.
+  // The class wins at both ends (a scientist's hand class too; "active at all doses" on the
+  // primary only), then the stored qualifier, then — for curves fitted before qualifiers —
+  // today's value-vs-range rules.
   if (args.curve_class === "inactive") {
     base = maxDose != null ? above(TOOLTIP_INACTIVE, false) : nd(TOOLTIP_INACTIVE_NO_RANGE);
-  } else if (args.curve_class === "active_all_doses") {
+  } else if (args.curve_class === "active_all_doses" && args.primary !== false) {
     base =
       minDose != null
         ? below(minDose, TOOLTIP_ACTIVE_ALL_DOSES, false)
