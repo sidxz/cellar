@@ -153,6 +153,10 @@ export function DataImportPage() {
     setReport(null);
     try {
       const result = await resumeMutation.mutateAsync(importId);
+      // A resume from the same stop reuses its workflow id. What this page knows of
+      // that id is the end of the last attempt; this run is a new one.
+      qc.removeQueries({ queryKey: ["cdd-molecule-import", "status", result.workflow_id] });
+      finishedWorkflowId.current = null;
       setWorkflowId(result.workflow_id);
     } catch {
       // The reason shows in the history, beside the button (resumeMutation.error).

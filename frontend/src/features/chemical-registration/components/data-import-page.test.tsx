@@ -15,6 +15,8 @@ const h = vi.hoisted(() => ({
   resume: { mutateAsync: vi.fn(), isPending: false },
   // The molecule history, when a test needs other rows than the one running import.
   history: undefined as Record<string, unknown>[] | undefined,
+  // The real status hook (and its query cache) instead of the h.status stand-in.
+  realStatus: false,
   // What the status poll answers once an import has started; undefined is "no answer yet".
   status: undefined as Record<string, unknown> | undefined,
   molecule: {
@@ -59,19 +61,21 @@ vi.mock("@/shared/lib/api/custom-instance", () => ({
   API_V1: "/api/v1",
   customInstance: h.request,
 }));
-vi.mock("../hooks/use-cdd-molecule-import", async (importOriginal) => ({
-  useStartCddMoleculeImport: (
-    await importOriginal<typeof import("../hooks/use-cdd-molecule-import")>()
-  ).useStartCddMoleculeImport,
-  useImportHistory: () => ({ data: h.history ?? [h.molecule], refetch: () => {} }),
-  useResumeCddMoleculeImport: () => h.resume,
-  useCheckCddMoleculeIdentifiers: () => h.check,
-  useForceFailImport: () => h.idle,
-  useCancelCddMoleculeImport: () => h.idle,
-  useCddMoleculeImportStatus: (workflowId: string | null) => ({
-    data: workflowId ? h.status : undefined,
-  }),
-}));
+vi.mock("../hooks/use-cdd-molecule-import", async (importOriginal) => {
+  const real = await importOriginal<typeof import("../hooks/use-cdd-molecule-import")>();
+  return {
+    useStartCddMoleculeImport: real.useStartCddMoleculeImport,
+    useImportHistory: () => ({ data: h.history ?? [h.molecule], refetch: () => {} }),
+    useResumeCddMoleculeImport: () => h.resume,
+    useCheckCddMoleculeIdentifiers: () => h.check,
+    useForceFailImport: () => h.idle,
+    useCancelCddMoleculeImport: () => h.idle,
+    useCddMoleculeImportStatus: (workflowId: string | null) =>
+      h.realStatus
+        ? real.useCddMoleculeImportStatus(workflowId)
+        : { data: workflowId ? h.status : undefined },
+  };
+});
 // The page's one select (the organization) as a native control jsdom can drive.
 vi.mock("@/shared/components/ui/select", () => ({
   Select: ({
@@ -107,10 +111,10 @@ vi.mock("../hooks/use-cdd-plate-import", () => ({
   useCddPlateImportStatus: () => ({ data: undefined }),
 }));
 
-function renderAs(admin: boolean) {
+function renderAs(admin: boolean, client = new QueryClient()) {
   h.admin = admin;
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <DataImportPage />
     </QueryClientProvider>,
   );
@@ -696,6 +700,38 @@ describe("DataImportPage: Resume a failed import", () => {
     } finally {
       errors.mockRestore();
       h.status = undefined;
+    }
+  });
+
+  it("follows a second resume from the same stop, not the cached end of the first", async () => {
+    // The first resume failed again at the same chunk; this page saw it end.
+    h.history = [{ ...failed, workflow_id: "wf-2" }];
+    const client = new QueryClient();
+    const status = { ...failed.report, import_id: "m9", total_count: 489425 };
+    const counts = { registered_count: 0, duplicate_count: 0, error_count: 0, skipped_count: 0 };
+    const run = { ...counts, current_offset: 50750, pages_processed: 203, report: failed.report };
+    client.setQueryData(["cdd-molecule-import", "status", "wf-2"], {
+      ...status,
+      ...run,
+      status: "failed",
+    });
+    h.realStatus = true;
+    h.request.mockImplementation(async ({ url }: { url: string }) =>
+      url.endsWith("/wf-2/status") ? { ...status, ...run, status: "processing" } : [],
+    );
+    h.resume.mutateAsync = vi.fn().mockResolvedValue({ workflow_id: "wf-2" });
+    try {
+      renderAs(false, client);
+      openTab("History");
+      fireEvent.click(screen.getByRole("button", { name: "Resume from 50,750" }));
+      await waitFor(() => expect(h.resume.mutateAsync).toHaveBeenCalled());
+      openTab("New Import");
+
+      expect(await screen.findByRole("button", { name: "Stop Import" })).toBeInTheDocument();
+      expect(screen.queryByText(/Import failed/)).toBeNull();
+    } finally {
+      h.realStatus = false;
+      h.request.mockReset();
     }
   });
 
