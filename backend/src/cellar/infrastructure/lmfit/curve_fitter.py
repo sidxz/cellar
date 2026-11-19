@@ -349,17 +349,24 @@ class LmfitCurveFitter:
         # Each intercept, read against the tested doses. ``config.intercepts`` is non-empty
         # by construction (DoseResponseConfig.__post_init__ defaults to a single 50%
         # intercept derived from curve_type when none are set).
+        doses = (float(np.min(concentrations)), float(np.max(concentrations)))
         intercept_values = [
             _read_intercept(
                 spec,
                 curve=(fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill),
-                doses=(float(np.min(concentrations)), float(np.max(concentrations))),
+                doses=doses,
                 transition_threshold=config.inactive_threshold,
                 scale=scale,
                 ci_half_width=ci_half_width,
             )
             for spec in config.intercepts
         ]
+        # A flat curve with no scale has nothing to show it active at the lowest dose: its "<"
+        # only says where its own crossing falls, so it never makes the curve active at all doses.
+        f_lo, f_hi = _hill_equation(
+            np.log10(doses), fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill
+        )
+        judged = scale is not None or abs(float(f_hi - f_lo)) >= config.inactive_threshold
 
         curve_class = _classify_curve(
             responses=responses,
@@ -368,7 +375,7 @@ class LmfitCurveFitter:
             r_squared=r_squared,
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,
-            primary=intercept_values[0].qualifier,
+            primary=intercept_values[0].qualifier if judged else None,
             config=config,
         )
 
@@ -425,7 +432,8 @@ def _read_intercept(
     or, when flat, the level lies inside a band whose shape is noise ("nd").
 
     A flat curve with no scale (raw signal, Z-score) has nothing to judge it by and keeps
-    its own crossing, wherever that falls.
+    its own crossing, read against the doses as any value is: "=" inside them, "<" the lowest
+    dose below them, ">" the highest above them (or when it has no crossing).
     """
     top, bottom, log_ec50, hill = curve
     lo, hi = doses
@@ -439,8 +447,10 @@ def _read_intercept(
             hill=hill,
             y_target=_response_target(spec, top, bottom),
         )
-        if log_x is None:
+        if log_x is None or 10.0**log_x > hi:
             return _censored(spec, ValueQualifier.GT, hi)
+        if 10.0**log_x < lo:
+            return _censored(spec, ValueQualifier.LT, lo)
         return _exact(spec, log_x, ci_half_width)
 
     if flat and scale is not None:

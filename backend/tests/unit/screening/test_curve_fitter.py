@@ -1250,7 +1250,7 @@ def test_intercepts_and_class_follow_the_generating_curve_on_grid(case):
             assert iv.value == hi
         elif iv.qualifier == ValueQualifier.ND:
             assert math.isnan(iv.value)
-        elif scale is not None:
+        else:
             assert lo <= iv.value <= hi
         if case.noise_sd == 0 and expected == {ValueQualifier.EQ} and case.position == "inside":
             # Exact data: the crossing is the generating curve's own.
@@ -1305,6 +1305,60 @@ def test_a_flat_curve_without_a_scale_keeps_todays_intercepts(series):
     assert fitted.curve_class in (CurveClass.INACTIVE, CurveClass.PARTIAL)
     assert [iv.qualifier for iv in fitted.intercept_values] == [ValueQualifier.EQ] * 2
     assert fitted.fitted_value == fitted.intercept_values[0].value
+
+
+# CDD 26147 (% of control, no scale), rows 163798427 and 163799571: four doses, no transition
+# across them. The fit's own crossing falls below the lowest dose (CDD: "< 1.25") and above
+# the highest (CDD: "> 10").
+_CDD_26147_163798427 = [(1.25, 38.27), (2.5, 42.2), (5.0, 42.87), (10.0, 46.31)]
+_CDD_26147_163799571 = [(1.25, 79.37), (2.5, 62.53), (5.0, 69.3), (10.0, 43.55)]
+
+
+@pytest.mark.parametrize(
+    ("series", "expected"),
+    [
+        (_CDD_26147_163798427, (ValueQualifier.LT, 1.25, False)),
+        (_CDD_26147_163799571, (ValueQualifier.GT, 10.0, True)),
+    ],
+    ids=["163798427", "163799571"],
+)
+def test_a_flat_curve_without_a_scale_censors_a_crossing_outside_the_doses(series, expected):
+    """With no scale, a flat curve keeps its own crossing, but only as a value inside the tested
+    doses; past them it reads "<" lowest / "> highest" dose. It is not "active at all doses":
+    nothing says the compound is active at the lowest dose."""
+    config = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="% Control")
+    fitted = LmfitCurveFitter().fit(_points(series), config).unwrap()
+    ec50 = fitted.intercept_values[0]
+    assert (ec50.qualifier, ec50.value, ec50.at_bound) == expected
+    assert ec50.confidence_interval_low is None
+    assert fitted.curve_class != CurveClass.ACTIVE_ALL_DOSES
+
+
+_REAL_SERIES = {
+    "MSD-549135706": _MSD_549135706,
+    "rifampicin": _RIFAMPICIN,
+    "SACC-0428730": _SACC_0428730,
+    "SACC-0519396": _SACC_0519396,
+    "CDD-76918-1153888750": _CDD_76918_1153888750,
+    "CC-000975": _CC_000975,
+    "CC-000980": _CC_000980,
+    "CC-061262": _CC_061262,
+    "CDD-26279-157278680": _CDD_26279_157278680,
+    "CDD-26147-163798427": _CDD_26147_163798427,
+    "CDD-26147-163799571": _CDD_26147_163799571,
+}
+
+
+@pytest.mark.parametrize("config", [_EC50_EC90, _BOUNDED_EC50_EC90], ids=["free", "bounded"])
+@pytest.mark.parametrize("scale", [None, ResponseScale()], ids=["no-scale", "percent"])
+@pytest.mark.parametrize("name", list(_REAL_SERIES))
+def test_an_exact_intercept_lies_inside_the_tested_doses(name, scale, config):
+    series = _REAL_SERIES[name]
+    doses = [c for c, _ in series]
+    fitted = LmfitCurveFitter().fit(_points(series), config, scale).unwrap()
+    for iv in fitted.intercept_values:
+        if iv.qualifier == ValueQualifier.EQ:
+            assert min(doses) <= iv.value <= max(doses)
 
 
 @pytest.mark.parametrize("scale", [None, ResponseScale()], ids=["no-scale", "percent"])

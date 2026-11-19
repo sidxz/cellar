@@ -108,7 +108,8 @@ class Case:
 def _intercept_outcomes(
     *, top, bottom, log_ec50, hill, log_lo, log_hi, noise_sd, scale, level
 ) -> set[tuple[str, ValueQualifier]]:
-    """``(branch, qualifier)`` pairs the rules can give; branch is "transition" or "flat"."""
+    """``(branch, qualifier)`` pairs the rules can give; branch is "transition", "flat" (no
+    transition, read on the scale) or "raw" (no transition, no scale)."""
     f_lo, f_hi = (_4pl(x, top, bottom, log_ec50, hill) for x in (log_lo, log_hi))
     span, amplitude = abs(f_hi - f_lo), abs(top - bottom)
     band = NOISE_BAND * noise_sd
@@ -134,10 +135,10 @@ def _intercept_outcomes(
         if lo_x <= log_hi and hi_x > log_lo:
             out.add(("transition", ValueQualifier.EQ))
 
-    # Without one and without a scale: today's rule, the fit's own crossing reported as is,
-    # or ">" when it has none (exactly flat data: top == bottom).
+    # Without one and without a scale ("raw"): the fit's own crossing, wherever its noise puts
+    # it, read against the doses ("<", "=", ">"); ">" too when it has none (top == bottom).
     if span - band < DEFAULT_INACTIVE_THRESHOLD and scale is None:
-        out |= {("flat", ValueQualifier.EQ), ("flat", ValueQualifier.GT)}
+        out |= {("raw", q) for q in (ValueQualifier.LT, ValueQualifier.EQ, ValueQualifier.GT)}
     # Without one, on a scale: y* sits at ``level`` % of the scale, the direction is the scale's.
     elif span - band < DEFAULT_INACTIVE_THRESHOLD:
         zero, full = scale
@@ -203,9 +204,9 @@ def _case(name, *, top, bottom, log_ec50, hill, doses, noise_sd, seed, position,
         )
         classes = set()
         for branch, q in ec50:
-            if q == ValueQualifier.LT:
+            if q == ValueQualifier.LT and branch != "raw":
                 classes.add(ACTIVE_ALL_DOSES)
-            elif branch == "flat":
+            elif branch in ("flat", "raw"):
                 # R²-based classes of a flat fit: unchanged by the spec (non-goal).
                 classes |= {INACTIVE, PARTIAL}
             else:
