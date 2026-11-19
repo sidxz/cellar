@@ -353,6 +353,35 @@ class TestPreviewRunImport:
         assert doc["summary"]["molecules_total"] == 2
 
     @pytest.mark.asyncio
+    async def test_allowing_full_curves_allows_curves_active_at_all_doses(self) -> None:
+        """Active at all doses is a stronger result than full (its potency lies below the
+        doses), and a filter saved before the class existed named such curves full."""
+        auth = fake_auth()
+        readout, run_id = uuid.uuid4(), uuid.uuid4()
+        flat, partial = uuid.uuid4(), uuid.uuid4()
+        data = FakeRunData()
+        data.add(
+            readout,
+            reading(flat, 0.01, run_id, unit="nM", curve_class="active_all_doses"),
+            reading(partial, 60.0, run_id, unit="nM", curve_class="partial"),
+        )
+        doc = (
+            await _preview(
+                _campaign(auth.workspace_id),
+                data,
+                [run_id],
+                _config(
+                    readout,
+                    kind=ChannelSourceKind.DOSE_RESPONSE_CURVE,
+                    allowed_curve_classes=["full"],
+                ),
+                mols=[flat],
+                auth=auth,
+            )
+        ).unwrap()
+        assert {r["molecule"]["id"] for r in doc["rows"]} == {str(flat)}
+
+    @pytest.mark.asyncio
     async def test_multi_intercept_channels_disambiguate_cells_and_hits(self) -> None:
         """EC50 and EC90 columns on one readout each read their own intercept and
         make their own hit call."""

@@ -948,6 +948,27 @@ class TestActivityCurveClassFilter:
         # doesn't accidentally match molecules screened on protocol B).
         assert "protocol_id" in sql
 
+    def test_curve_class_filter_allowing_full_allows_active_at_all_doses(self) -> None:
+        """Active at all doses is a stronger result than full (its potency lies below the
+        doses), and a search saved before the class existed named such curves full."""
+
+        def classes_in(picked: list[str]) -> set[str]:
+            clause = _compose({
+                "criteria": [
+                    {
+                        "type": "activity",
+                        "protocol_id": str(uuid.uuid4()),
+                        "where": [{"source": "curve_class", "curve_classes": picked}],
+                    }
+                ],
+                "logic": "and",
+            })
+            params = clause.compile().params.values()
+            return {v for p in params if isinstance(p, list) for v in p}
+
+        assert classes_in(["full"]) == {"full", "active_all_doses"}
+        assert classes_in(["partial"]) == {"partial"}
+
     def test_curve_class_filter_empty_list_raises(self) -> None:
         proto = str(uuid.uuid4())
         with pytest.raises(ValueError, match="curve_classes"):

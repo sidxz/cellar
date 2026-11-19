@@ -15,6 +15,7 @@ from sqlalchemy import column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
+from cellar.domain.screening_assay.enums import allowed_curve_classes
 from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.units import canonical_unit
@@ -160,7 +161,7 @@ def _activity_where_clause(
             raise ValueError(msg)
         base_filters: list[ColumnElement] = [
             DoseResponseCurveModel.workspace_id == workspace_id,
-            DoseResponseCurveModel.curve_class.in_(classes),
+            DoseResponseCurveModel.curve_class.in_(sorted(allowed_curve_classes(classes))),
             not_in_rejected_run(DoseResponseCurveModel.run_id, workspace_id),
         ]
         if protocol_id is not None:

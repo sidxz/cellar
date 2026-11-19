@@ -60,7 +60,11 @@ from cellar.domain.screening_assay.aggregation_types import (
 )
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from cellar.domain.screening_assay.enums import ReadoutDataType, RunStatus
+from cellar.domain.screening_assay.enums import (
+    ReadoutDataType,
+    RunStatus,
+    allowed_curve_classes,
+)
 from cellar.domain.screening_assay.intercept_report import report_intercept
 from cellar.domain.screening_assay.readout_best import best_direction, pick_best
 from cellar.domain.screening_assay.repository import (
@@ -190,7 +194,12 @@ def _protocol_hit(
     for rule in rules:
         if rule.readout_name == "Curve Class":
             classes = {c.curve_class.value for c in curves if c.curve_class is not None}
-            met = isinstance(rule.value, list) and bool(classes & set(rule.value))
+            allowed = (
+                allowed_curve_classes(map(str, rule.value))
+                if isinstance(rule.value, list)
+                else set()
+            )
+            met = bool(classes & allowed)
         elif (p := plain_by_name.get(rule.readout_name)) is not None:
             met = bool(rule.is_met(p.value, _VALUE_QUALIFIER.get(p.qualifier, ValueQualifier.EQ)))
         else:

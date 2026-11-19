@@ -250,6 +250,18 @@ class CurveClass(StrEnum):
     ACTIVE_ALL_DOSES = "active_all_doses"
 
 
+def allowed_curve_classes(classes: Iterable[str]) -> set[str]:
+    """The curve classes a saved class list (a campaign's row filter, a "Curve Class" hit
+    rule, a search's class filter) lets through. Allowing ``full`` allows
+    ``active_all_doses``: a curve active at every tested dose is a stronger result than a
+    full one (its potency lies below the doses), and a list saved before the class existed
+    named such curves full."""
+    allowed = {str(c) for c in classes}
+    if CurveClass.FULL in allowed:
+        allowed.add(CurveClass.ACTIVE_ALL_DOSES.value)
+    return allowed
+
+
 class PosControlSignal(StrEnum):
     """What raw signal the POSITIVE_CONTROL wells produce.
 

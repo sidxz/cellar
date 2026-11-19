@@ -1427,6 +1427,24 @@ class TestProtocolHitReadsCurvesAsReported:
         assert self._hit(1.0, self._curve(CurveClass.FULL, 0.5)) is True
         assert self._hit(1.0, self._curve(CurveClass.FULL, 50.0)) is False  # "> 10"
 
+    def test_a_curve_class_rule_allowing_full_allows_active_at_all_doses(self) -> None:
+        """Active at all doses is a stronger result than full (its potency lies below the
+        doses), and a rule saved before the class existed named such curves full."""
+        from types import SimpleNamespace
+
+        from cellar.application.screening.molecule_activity_service import _protocol_hit
+        from cellar.domain.shared.hit_criterion import HitCriterion
+
+        flat = self._curve(CurveClass.ACTIVE_ALL_DOSES, 5.0, ValueQualifier.LT, 0.01)
+        proto = SimpleNamespace(readout_definitions=[])
+
+        def hit(classes: list[str]) -> bool:
+            rule = HitCriterion(readout_name="Curve Class", operator="in", value=classes)
+            return _protocol_hit([rule], proto, [], [flat])
+
+        assert hit(["full"]) is True
+        assert hit(["partial"]) is False
+
 
 class TestEnrichMoleculesFittedLayer:
     DOSES = (0.01, 0.1, 1.0, 10.0, 100.0)

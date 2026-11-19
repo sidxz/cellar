@@ -51,6 +51,7 @@ from cellar.domain.research_organization.enums import (
 )
 from cellar.domain.research_organization.repository import CampaignRepository
 from cellar.domain.research_organization.source_ref import RunRef, SeedRun
+from cellar.domain.screening_assay.enums import allowed_curve_classes
 from cellar.domain.screening_assay.repository import RunRepository
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import (
@@ -243,7 +244,7 @@ async def apply_run_import(
         found = await query.fetch(
             workspace_id=campaign.workspace_id, channel=column, run_ids=run_ids, molecule_ids=None
         )
-        allowed = set(cfg.allowed_curve_classes or ())
+        allowed = allowed_curve_classes(cfg.allowed_curve_classes or ())
         for mid, candidates in found.items():
             classes = {c.run.curve_class for c in candidates if c.run.curve_id is not None}
             if allowed and classes and not classes & allowed:
