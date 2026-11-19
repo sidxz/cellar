@@ -187,3 +187,81 @@ async def test_the_history_carries_each_import_s_report():
     assert row["report"]["ids_added"] == 18
     assert row["report"]["problem_lines"] == ["SACC-1: 'X' is on 2 compounds"]
     assert row["report"]["compounds_added"] == 0
+
+
+async def test_resume_returns_the_new_workflow():
+    from cellar.application.cdd_import.resume_cdd_molecule_import import ResumeCddMoleculeImport
+    from cellar.application.cdd_import.start_cdd_molecule_import import (
+        StartCddMoleculeImportResult,
+    )
+
+    resume = AsyncMock(
+        spec=ResumeCddMoleculeImport,
+        return_value=Success(StartCddMoleculeImportResult(workflow_id="wf-2")),
+    )
+    app = _App("editor")
+    app.app.state.container[ResumeCddMoleculeImport] = resume
+    import_id = uuid.uuid4()
+
+    response = await app.client.post(f"{START}/{import_id}/resume")
+
+    assert response.status_code == 202, response.text
+    assert response.json() == {
+        "import_id": str(import_id),
+        "workflow_id": "wf-2",
+        "status": "processing",
+    }
+    cmd = resume.call_args.args[0]
+    assert (cmd.import_id, cmd.resumed_by, cmd.workspace_id) == (
+        import_id,
+        app.auth.user_id,
+        app.auth.workspace_id,
+    )
+
+
+async def test_viewer_may_not_resume():
+    from cellar.application.cdd_import.resume_cdd_molecule_import import ResumeCddMoleculeImport
+
+    app = _App("viewer")
+    orchestrator = AsyncMock()
+    app.app.state.container[ResumeCddMoleculeImport] = ResumeCddMoleculeImport(
+        uow=AsyncMock(), repo=AsyncMock(), orchestrator=orchestrator, dispatcher=AsyncMock()
+    )
+
+    response = await app.client.post(f"{START}/{uuid.uuid4()}/resume")
+
+    assert response.status_code == 403
+    orchestrator.resume.assert_not_called()
+
+
+async def test_history_says_which_imports_can_resume():
+    from cellar.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
+    from cellar.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
+    from cellar.domain.chemical_registration.enums import CddImportMode, CddMoleculeImportStatus
+
+    def failed(**saved) -> CddMoleculeImport:  # type: ignore[no-untyped-def]
+        return CddMoleculeImport(
+            workspace_id=uuid.uuid4(),
+            cdd_vault_id="4443",
+            import_mode=CddImportMode.FULL_VAULT,
+            originating_org_id=uuid.uuid4(),
+            submitted_by=uuid.uuid4(),
+            status=CddMoleculeImportStatus.FAILED,
+            last_processed_offset=50750,
+            **saved,
+        )
+
+    saved = failed(cdd_export_id=82939461, run_settings={"max_molecules": None})
+    before_resume_existed = failed()
+    listing = AsyncMock(
+        spec=ListCddMoleculeImports, return_value=Success([saved, before_resume_existed])
+    )
+    app = _App("editor")
+    app.app.state.container[ListCddMoleculeImports] = listing
+
+    response = await app.client.get(START)
+
+    assert response.status_code == 200, response.text
+    first, second = response.json()
+    assert (first["resumable"], first["last_processed_offset"]) == (True, 50750)
+    assert second["resumable"] is False

@@ -6,18 +6,22 @@ import uuid
 
 import structlog
 from temporalio.client import Client, WorkflowExecutionStatus
+from temporalio.exceptions import WorkflowAlreadyStartedError
 from temporalio.service import RPCError, RPCStatusCode
 
 from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     CddMoleculeImportProgress,
+    ResumeCddMoleculeImportRequest,
     StartCddMoleculeImportRequest,
 )
 from cellar.application.orchestration.workflow_status import (
     WorkflowOrchestratorUnavailable,
 )
-from cellar.domain.shared.errors import NotFoundError
-from cellar.infrastructure.temporal.task_queues import MAIN_TASK_QUEUE
+from cellar.domain.shared.errors import ConflictError, NotFoundError, ValidationError
+from cellar.infrastructure.temporal.activities.cdd_fetch import cdd_export_dir, export_on_disk
+from cellar.infrastructure.temporal.task_queues import CHUNK_SIZE, MAIN_TASK_QUEUE
 from cellar.infrastructure.temporal.workflows.cdd_vault_import import (
+    RUN_SETTINGS_KEYS,
     CddVaultImportWorkflow,
     CddVaultImportWorkflowInput,
 )
@@ -58,6 +62,29 @@ class TemporalCddMoleculeImportOrchestrator:
             id=workflow_id,
             task_queue=MAIN_TASK_QUEUE,
         )
+        return workflow_id
+
+    async def resume(self, request: ResumeCddMoleculeImportRequest) -> str:
+        export_dir = cdd_export_dir(request.cdd_export_id)
+        if not export_on_disk(export_dir):
+            raise ValidationError(
+                "The export for this run is no longer on disk. Start a new import."
+            )
+        # One id per import and offset: a second resume of the same stop while the first
+        # runs is refused by Temporal, not started twice.
+        workflow_id = (
+            f"cdd-mol-import-{request.workspace_id}-{request.import_id}"
+            f"-from-{request.resume_offset}"
+        )
+        try:
+            await self._client.start_workflow(
+                CddVaultImportWorkflow.run,
+                _resume_input(request, str(export_dir)),
+                id=workflow_id,
+                task_queue=MAIN_TASK_QUEUE,
+            )
+        except WorkflowAlreadyStartedError as exc:
+            raise ConflictError("This import is already resuming") from exc
         return workflow_id
 
     async def get_progress(self, workflow_id: str) -> CddMoleculeImportProgress:
@@ -108,6 +135,31 @@ class TemporalCddMoleculeImportOrchestrator:
             raise
 
 
+def _resume_input(
+    request: ResumeCddMoleculeImportRequest, storage_path: str
+) -> CddVaultImportWorkflowInput:
+    """The run as it started, plus where it stopped: ``import_id`` skips the export."""
+    settings = {key: request.run_settings.get(key) for key in RUN_SETTINGS_KEYS}
+    return CddVaultImportWorkflowInput(
+        workspace_id=str(request.workspace_id),
+        cdd_vault_id=request.cdd_vault_id,
+        import_mode=request.import_mode,
+        submitted_by=str(request.submitted_by),
+        originating_org_id=str(request.originating_org_id),
+        filter_criteria=request.filter_criteria,
+        **settings,
+        import_id=str(request.import_id),
+        storage_path=storage_path,
+        resume_offset=request.resume_offset,
+        resume_chunk_index=request.resume_offset // CHUNK_SIZE,
+        total_count=request.total_count,
+        cumulative_registered=request.registered_count,
+        cumulative_duplicate=request.duplicate_count,
+        cumulative_error=request.error_count,
+        cumulative_skipped=request.skipped_count,
+    )
+
+
 class NullCddMoleculeImportOrchestrator:
     """Stand-in used when the Temporal client is unavailable.
 
@@ -118,6 +170,11 @@ class NullCddMoleculeImportOrchestrator:
     async def start(self, request: StartCddMoleculeImportRequest) -> str:
         raise WorkflowOrchestratorUnavailable(
             "Temporal is not available. Bulk CDD import requires Temporal."
+        )
+
+    async def resume(self, request: ResumeCddMoleculeImportRequest) -> str:
+        raise WorkflowOrchestratorUnavailable(
+            "Temporal is not available. Resuming a CDD import requires Temporal."
         )
 
     async def get_progress(self, workflow_id: str) -> CddMoleculeImportProgress:

@@ -62,6 +62,7 @@ logger = structlog.get_logger(__name__)
 _HEARTBEAT_EVERY = 10.0
 
 _LABELS = "labels.json"
+_MANIFEST = "manifest.json"
 _NAMES = "names.json"
 
 
@@ -76,6 +77,16 @@ async def _while_heartbeating[T](work: Awaitable[T], details: str) -> T:
                 return task.result()
     finally:
         task.cancel()
+
+
+def cdd_export_dir(export_id: int) -> Path:
+    """Where one CDD export is kept on disk: the raw download, its manifest, its chunks."""
+    return StorageSettings().subdir("cdd-exports") / str(export_id)
+
+
+def export_on_disk(export_dir: Path) -> bool:
+    """The export was split into chunks (the manifest is written with them)."""
+    return (export_dir / _MANIFEST).exists()
 
 
 def _split_export(
@@ -102,7 +113,7 @@ def _split_export(
     count = data.get("count", len(objects))
 
     # Write manifest
-    (export_dir / "manifest.json").write_text(json.dumps({"count": len(objects)}))
+    (export_dir / _MANIFEST).write_text(json.dumps({"count": len(objects)}))
     if mapping is not None:
         (export_dir / _LABELS).write_text(json.dumps(compute_labels(objects, mapping)))
         if id_mapping is not None:
@@ -219,7 +230,7 @@ class CddFetchActivities:
             )
 
         # Export finished — set up storage directory
-        export_dir = StorageSettings().subdir("cdd-exports") / str(input.export_id)
+        export_dir = cdd_export_dir(input.export_id)
         export_dir.mkdir(parents=True, exist_ok=True)
 
         raw_path = export_dir / "raw_export.json"
@@ -309,7 +320,7 @@ class CddFetchActivities:
         if not export_dir.exists():
             raise FileNotFoundError(f"Export directory not found: {storage_path}")
 
-        manifest = json.loads((export_dir / "manifest.json").read_text())
+        manifest = json.loads((export_dir / _MANIFEST).read_text())
         total_objects = manifest["count"]
 
         effective_total = min(total_objects, max_items) if max_items else total_objects

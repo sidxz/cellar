@@ -16,6 +16,9 @@ from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
 from cellar.application.cdd_import.get_cdd_molecule_import_runtime_status import (
     GetCddMoleculeImportRuntimeStatusQuery,
 )
+from cellar.application.cdd_import.resume_cdd_molecule_import import (
+    ResumeCddMoleculeImportCommand,
+)
 from cellar.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImportCommand,
 )
@@ -26,6 +29,7 @@ from cellar.interface.dependencies import (
     ForceFailCddMoleculeImportDep,
     GetCddMoleculeImportRuntimeStatusDep,
     ListCddMoleculeImportsDep,
+    ResumeCddMoleculeImportDep,
     StartCddMoleculeImportDep,
 )
 from cellar.interface.error_handlers import result_to_response
@@ -105,6 +109,9 @@ class CddMoleculeImportSummary(BaseModel):
     submitted_at: str
     completed_at: str | None
     report: CddMoleculeImportReport
+    # A failed run that saved its export picks up here (molecules already done).
+    resumable: bool
+    last_processed_offset: int
 
 
 # ---------------------------------------------------------------------------
@@ -142,6 +149,8 @@ async def list_cdd_molecule_imports(
             submitted_at=imp.submitted_at.isoformat(),
             completed_at=imp.completed_at.isoformat() if imp.completed_at else None,
             report=CddMoleculeImportReport(**imp.report),
+            resumable=imp.resumable,
+            last_processed_offset=imp.last_processed_offset,
         )
         for imp in imports
     ]
@@ -236,6 +245,27 @@ async def cancel_cdd_molecule_import(
         auth=auth,
     )
     result_to_response(result)
+
+
+@router.post(
+    "/{import_id}/resume", response_model=CddMoleculeImportAcceptedResponse, status_code=202
+)
+async def resume_cdd_molecule_import(
+    auth: AuthDep,
+    use_case: ResumeCddMoleculeImportDep,
+    import_id: uuid.UUID,
+) -> CddMoleculeImportAcceptedResponse:
+    """Start a failed import again from where it stopped, on the export it saved."""
+    result = await use_case(
+        ResumeCddMoleculeImportCommand(
+            workspace_id=auth.workspace_id, import_id=import_id, resumed_by=auth.user_id
+        ),
+        auth=auth,
+    )
+    outcome = result_to_response(result)
+    return CddMoleculeImportAcceptedResponse(
+        import_id=str(import_id), workflow_id=outcome.workflow_id, status="processing"
+    )
 
 
 @router.post("/{import_id}/force-fail", status_code=204)

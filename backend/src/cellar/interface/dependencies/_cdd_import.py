@@ -36,6 +36,7 @@ from cellar.application.cdd_import.list_cdd_protocols import ListCddProtocols
 from cellar.application.cdd_import.list_vault_fields import ListVaultFields
 from cellar.application.cdd_import.preview_cdd_import import PreviewCddImport
 from cellar.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
+from cellar.application.cdd_import.resume_cdd_molecule_import import ResumeCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
 
@@ -58,6 +59,7 @@ __all__ = [
     "ListVaultFieldsDep",
     "PreviewCddImportDep",
     "PreviewCddProtocolImportDep",
+    "ResumeCddMoleculeImportDep",
     "StartCddMoleculeImportDep",
     "StartCddPlateImportDep",
     "SyncFailedCddMoleculeImportDep",
@@ -79,6 +81,9 @@ CheckCddMoleculeIdentifiersDep = Annotated[
 ]
 ListCddMoleculeImportsDep = Annotated[
     ListCddMoleculeImports, Depends(_get_use_case(ListCddMoleculeImports))
+]
+ResumeCddMoleculeImportDep = Annotated[
+    ResumeCddMoleculeImport, Depends(_get_use_case(ResumeCddMoleculeImport))
 ]
 ForceFailCddMoleculeImportDep = Annotated[
     ForceFailCddMoleculeImport, Depends(_get_use_case(ForceFailCddMoleculeImport))

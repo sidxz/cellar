@@ -44,6 +44,7 @@ from cellar.application.cdd_import.list_cdd_protocols import ListCddProtocols
 from cellar.application.cdd_import.list_vault_fields import ListVaultFields
 from cellar.application.cdd_import.preview_cdd_import import PreviewCddImport
 from cellar.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
+from cellar.application.cdd_import.resume_cdd_molecule_import import ResumeCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
 from cellar.application.workspace_config.get_data_source_for_import import (
@@ -158,6 +159,17 @@ def register_cdd_import(container: Container) -> None:
     container.define(PreviewCddImport, _cdd_query(PreviewCddImport))
     container.define(ListCddMoleculeImports, _list_cdd_mol_imports)
     container.define(ForceFailCddMoleculeImport, _force_fail_cdd_mol_import)
+
+    def _resume_cdd_mol_import(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ResumeCddMoleculeImport(
+            uow=uow,
+            repo=SQLAlchemyCddMoleculeImportRepository(uow),
+            orchestrator=c[CddMoleculeImportOrchestrator],
+            dispatcher=c[EventDispatcher],
+        )
+
+    container.define(ResumeCddMoleculeImport, _resume_cdd_mol_import)
 
     def _get_cdd_mol_import_status_from_db(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
