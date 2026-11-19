@@ -53,6 +53,8 @@ _TRANSITIONS: dict[CddMoleculeImportStatus, set[CddMoleculeImportStatus]] = {
     CddMoleculeImportStatus.COMPLETED_WITH_ERRORS: set(),
     CddMoleculeImportStatus.FAILED: set(),
 }
+# Statuses an import never leaves (the run has finished).
+TERMINAL_STATUSES = frozenset(s.value for s, after in _TRANSITIONS.items() if not after)
 
 
 class CddMoleculeImport(AggregateRoot):

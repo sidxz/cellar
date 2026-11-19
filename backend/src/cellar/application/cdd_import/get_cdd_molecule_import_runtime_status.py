@@ -30,7 +30,10 @@ from cellar.application.orchestration.workflow_status import (
     WorkflowOrchestratorUnavailable,
 )
 from cellar.application.shared.query import Query
-from cellar.domain.chemical_registration.cdd_molecule_import import empty_report
+from cellar.domain.chemical_registration.cdd_molecule_import import (
+    TERMINAL_STATUSES,
+    empty_report,
+)
 from cellar.domain.shared.errors import DomainError, NotFoundError
 
 logger = structlog.get_logger(__name__)
@@ -99,14 +102,18 @@ class GetCddMoleculeImportRuntimeStatus:
             await self._sync_failed.run(input.workspace_id, progress.import_id)
 
         # The report lives in the DB (it can hold hundreds of lines); the
-        # workflow's progress carries only the counters.
-        stored = await self._db_status(
-            GetCddMoleculeImportStatusQuery(
-                workspace_id=input.workspace_id, workflow_id=input.workflow_id
-            ),
-            auth=auth,
-        )
-        report = stored.unwrap().report if isinstance(stored, Success) else empty_report()
+        # workflow's progress carries only the counters. It is read once the run
+        # has finished, which is when the page shows it, not on every poll.
+        report = empty_report()
+        if progress.status in TERMINAL_STATUSES:
+            stored = await self._db_status(
+                GetCddMoleculeImportStatusQuery(
+                    workspace_id=input.workspace_id, workflow_id=input.workflow_id
+                ),
+                auth=auth,
+            )
+            if isinstance(stored, Success):
+                report = stored.unwrap().report
 
         return Success(
             CddMoleculeImportStatusView(

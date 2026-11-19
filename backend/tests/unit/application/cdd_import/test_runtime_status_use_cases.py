@@ -137,7 +137,8 @@ class TestGetCddMoleculeImportRuntimeStatus:
         )
         assert isinstance(result, Success)
         assert result.unwrap().status == "processing"
-        assert result.unwrap().report["problem_lines"] == ["a: x"]  # the report comes from the DB
+        # A running import's report isn't read: the page shows it once the run ends.
+        assert result.unwrap().report["problem_lines"] == []
         assert sync_failed.calls == []
 
     @pytest.mark.asyncio
@@ -157,6 +158,7 @@ class TestGetCddMoleculeImportRuntimeStatus:
         )
         assert isinstance(result, Success)
         assert result.unwrap().status == "failed"
+        assert result.unwrap().report["problem_lines"] == ["a: x"]  # the report comes from the DB
         assert sync_failed.calls == [(WORKSPACE_ID, "imp-7")]
 
     @pytest.mark.asyncio
