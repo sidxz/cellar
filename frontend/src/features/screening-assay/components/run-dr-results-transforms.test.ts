@@ -169,6 +169,84 @@ describe("applyHitFilter", () => {
   });
 });
 
+describe("applyHitFilter — the reported value", () => {
+  // Tested from 0.0002 to 100 µM, as on the WCA plate.
+  const doses = [
+    { x: 0.0002, y: 60 },
+    { x: 1, y: 70 },
+    { x: 100, y: 80 },
+  ];
+  const primary = (qualifier: string, value: number | null) => ({
+    spec: { kind: "ec" as const, level: 50, basis: "relative_percent" as const, label: null },
+    value,
+    confidence_interval_low: null,
+    confidence_interval_high: null,
+    at_bound: qualifier === ">",
+    qualifier,
+  });
+  const ec90 = (qualifier: string, value: number | null) => ({
+    ...primary(qualifier, value),
+    spec: { kind: "ec" as const, level: 90, basis: "relative_percent" as const, label: null },
+  });
+  const ids = (rows: CompoundCurveRow[], rule: HitCriterion) =>
+    applyHitFilter(rows, [rule], DR).map((r) => r.molecule_id);
+
+  it("a flat curve active at every dose meets a potency cut-off, whatever its midpoint", () => {
+    // SACC-0519396-like: fitted midpoint ~6 µM is noise; the value reads "< 0.0002".
+    const flat = makeRow({
+      molecule_id: "flat",
+      fitted_value: 6.2,
+      curve_class: "active_all_doses",
+      data_points: doses,
+      intercept_values: [primary("<", 0.0002)],
+    });
+    expect(ids([flat], { readout_name: "IC50", operator: "lt", value: 1 })).toEqual(["flat"]);
+    // "< 0.0002" can be anything below it: it never proves "> 0.001".
+    expect(ids([flat], { readout_name: "IC50", operator: "gt", value: 0.001 })).toEqual([]);
+  });
+
+  it("a value above the doses never meets an upper cut-off at or above it", () => {
+    const above = makeRow({
+      molecule_id: "above",
+      fitted_value: 100,
+      curve_class: "partial",
+      data_points: doses,
+      intercept_values: [primary(">", 100), ec90(">", 100)],
+    });
+    expect(ids([above], { readout_name: "IC50", operator: "lte", value: 100 })).toEqual([]);
+    expect(
+      ids([above], {
+        readout_name: "IC50",
+        operator: "lt",
+        value: 200,
+        intercept_key: { kind: "ec", level: 90 },
+      }),
+    ).toEqual([]);
+    expect(ids([above], { readout_name: "IC50", operator: "gt", value: 50 })).toEqual(["above"]);
+  });
+
+  it("a value the curve cannot give never meets, though its midpoint would", () => {
+    const nd = makeRow({
+      molecule_id: "nd",
+      fitted_value: 1,
+      curve_class: "partial",
+      data_points: doses,
+      intercept_values: [primary("nd", null)],
+    });
+    expect(ids([nd], { readout_name: "IC50", operator: "lt", value: 10 })).toEqual([]);
+  });
+
+  it("an exact value compares as a number", () => {
+    const exact = makeRow({
+      molecule_id: "exact",
+      fitted_value: 3,
+      data_points: doses,
+      intercept_values: [primary("=", 3)],
+    });
+    expect(ids([exact], { readout_name: "IC50", operator: "lt", value: 10 })).toEqual(["exact"]);
+  });
+});
+
 describe("buildCompoundRows — best curve", () => {
   const curve = (id: string, curve_class: string, fitted_value: number) =>
     ({
@@ -186,5 +264,31 @@ describe("buildCompoundRows — best curve", () => {
       curve("flat", "active_all_doses", 6.8),
     ]);
     expect(row.curve_class).toBe("active_all_doses");
+  });
+
+  const stored = (id: string, qualifier: string, fitted_value: number) =>
+    ({
+      id,
+      molecule_id: "mol-1",
+      curve_class: qualifier === "nd" ? "partial" : "full",
+      fitted_value,
+      raw_data: [],
+      intercept_values: [{ spec: { kind: "ec", level: 50 }, value: null, qualifier }],
+    }) as unknown as DoseResponseCurve;
+
+  it("ranks an exact fit ahead of an n.d. one, though the n.d. midpoint is lower", () => {
+    const [row] = buildCompoundRows([stored("nd", "nd", 1), stored("exact", "=", 3)]);
+    expect(row.fitted_value).toBe(3);
+  });
+
+  it("ranks a stored below-the-doses value first and an above-the-doses one last", () => {
+    const [row] = buildCompoundRows([
+      stored("above", ">", 0.1),
+      stored("exact", "=", 3),
+      stored("below", "<", 50),
+    ]);
+    expect(row.fitted_value).toBe(50);
+    const [rest] = buildCompoundRows([stored("above", ">", 0.1), stored("exact", "=", 3)]);
+    expect(rest.fitted_value).toBe(3);
   });
 });

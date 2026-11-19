@@ -23,9 +23,28 @@ const bounds = (v: HitCriterion["value"]): [number, number] | null =>
     ? [v[0] as number, v[1] as number]
     : null;
 
-/** gt/lt/gte/lte, and "outside" strictly outside [low, high]. */
-export function meetsRule(value: number, rule: HitCriterion): boolean {
+/** gt/lt/gte/lte, and "outside" strictly outside [low, high].
+ *
+ *  A censored `qualifier` ("<" / ">") meets only when every value it could stand for does, as
+ *  the backend's `compare`: "> 50" meets "> 10" but not "< 60", "< 5" meets "< 10" but not
+ *  "> 1"; "outside" holds for "> x" at or above high and "< x" at or below low. */
+export function meetsRule(
+  value: number,
+  rule: HitCriterion,
+  qualifier: "=" | "<" | ">" = "=",
+): boolean {
   const t = typeof rule.value === "number" ? rule.value : null;
+  if (qualifier !== "=") {
+    const above = qualifier === ">";
+    if (rule.operator === "not_between") {
+      const b = bounds(rule.value);
+      return b != null && (above ? value >= b[1] : value <= b[0]);
+    }
+    const sameSide = above
+      ? rule.operator === "gt" || rule.operator === "gte"
+      : rule.operator === "lt" || rule.operator === "lte";
+    return t != null && sameSide && (above ? value >= t : value <= t);
+  }
   switch (rule.operator) {
     case "gt":
       return t != null && value > t;

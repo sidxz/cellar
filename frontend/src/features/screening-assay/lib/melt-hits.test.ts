@@ -94,6 +94,23 @@ describe("meetsRule", () => {
   ])("%j on %d → %s", (r, v, expected) => {
     expect(meetsRule(v, r)).toBe(expected);
   });
+
+  // Mirrors the backend's compare: a bound meets only when every value it stands for does.
+  it.each([
+    [rule("x", "gt", 10), ">", 50, true],
+    [rule("x", "lt", 60), ">", 50, false],
+    [rule("x", "lte", 50), ">", 50, false],
+    [rule("x", "gte", 50), ">", 50, true],
+    [rule("x", "lt", 10), "<", 5, true],
+    [rule("x", "lte", 5), "<", 5, true],
+    [rule("x", "gt", 1), "<", 5, false],
+    [outside("x"), ">", 2, true],
+    [outside("x"), ">", 1, false],
+    [outside("x"), "<", -2, true],
+    [outside("x"), "<", 0, false],
+  ] as const)("%j on %s %d → %s", (r, q, v, expected) => {
+    expect(meetsRule(v, r, q)).toBe(expected);
+  });
 });
 
 describe("isSeriesReadout", () => {

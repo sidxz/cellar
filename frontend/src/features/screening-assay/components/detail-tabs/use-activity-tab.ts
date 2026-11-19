@@ -3,7 +3,13 @@ import { useCallback, useMemo, useState } from "react";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { useCompoundFlags, useCreateFlag, useDeleteFlag } from "../../hooks/use-compound-flags";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
-import { interceptLabel } from "../../lib/intercept-label";
+import {
+  curvePotency,
+  doseRange,
+  findInterceptValue,
+  formatInterceptDisplay,
+  interceptLabel,
+} from "../../lib/intercept-label";
 import { meetsRule } from "../../lib/melt-hits";
 import type {
   CompoundActivity,
@@ -42,21 +48,34 @@ export function ruleOutcome(item: CompoundActivity, rule: HitCriterion): boolean
   }
   const readout = item.readouts[rule.readout_name];
   if (!readout) return null;
-  // Intercept-keyed criteria read from the curve's per-spec intercepts;
-  // legacy (unkeyed) criteria stay on the headline best/primary value.
-  let measured: number | null;
+  const curve = readout.curve_params;
+  if (!curve) return readout.best == null ? null : meetsRule(readout.best, rule);
+  // A dose-response readout tests its best curve's primary (unkeyed) or named intercept as
+  // the cell reports it: the class, the stored qualifier, the tested doses. An n.d. value
+  // does not meet; an intercept the curve has no row for has no data.
+  let display: ReturnType<typeof formatInterceptDisplay>;
   if (rule.intercept_key) {
-    const ivs = readout.curve_params?.intercept_values;
-    const match = ivs?.find(
-      (iv) =>
-        iv.spec.kind === rule.intercept_key?.kind && iv.spec.level === rule.intercept_key?.level,
-    );
-    measured = match?.value ?? null;
+    const ivs = curve.intercept_values;
+    const match = findInterceptValue(ivs, { ...rule.intercept_key, basis: "relative_percent" });
+    if (!match) return null;
+    display = formatInterceptDisplay({
+      value: match.value,
+      at_bound: match.at_bound,
+      qualifier: match.qualifier,
+      primary: match === ivs?.[0],
+      curve_class: readout.curve_class,
+      ...doseRange(readout.data_points),
+    });
   } else {
-    measured = readout.best;
+    display = curvePotency({
+      ...curve,
+      curve_class: readout.curve_class,
+      raw_data: readout.data_points,
+    });
   }
-  if (measured == null) return null;
-  return meetsRule(measured, rule);
+  const { value, qualifier } = display.reported;
+  if (display.kind === "missing") return null;
+  return value != null && qualifier !== "nd" && meetsRule(value, rule, qualifier);
 }
 
 export type HitStatus = "meets" | "fails" | "no_data";

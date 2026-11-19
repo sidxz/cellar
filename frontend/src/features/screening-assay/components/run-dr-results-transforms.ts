@@ -1,6 +1,12 @@
 import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
-import { findInterceptValue } from "../lib/intercept-label";
+import {
+  type InterceptDisplay,
+  curvePotency,
+  doseRange,
+  findInterceptValue,
+  formatInterceptDisplay,
+} from "../lib/intercept-label";
 import { meetsRule } from "../lib/melt-hits";
 import {
   type CurveClass,
@@ -55,12 +61,14 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
 
   const rows: CompoundCurveRow[] = [];
   for (const [, molCurves] of byMolecule) {
-    // Best curve = most potent, excluding inactive. Active at every dose beats any exact
-    // value: its fitted midpoint is noise, not a potency.
-    const potency = (c: DoseResponseCurve) =>
-      c.curve_class === "active_all_doses" ? Number.NEGATIVE_INFINITY : c.fitted_value;
+    // Best curve = most potent, excluding inactive, ranked as the backend's protocol summary
+    // ranks it: below the doses (active at every dose, or a primary stored "<") first, then
+    // exact fits, then "> top dose" and n.d. ones (whose fitted value is a midpoint, not a
+    // potency); by fitted value within a rank.
     const active = molCurves.filter((c) => c.curve_class !== "inactive");
-    const sorted = (active.length > 0 ? active : molCurves).sort((a, b) => potency(a) - potency(b));
+    const sorted = (active.length > 0 ? active : molCurves).sort(
+      (a, b) => potencyRank(a) - potencyRank(b) || a.fitted_value - b.fitted_value,
+    );
     const best = sorted[0];
 
     // Condense raw_data to [{x, y}]
@@ -131,19 +139,36 @@ export function applyHitFilter(
         }
         return true;
       }
-      const measured = rowValueForRule(row, rule);
-      return measured !== null && meetsRule(measured, rule);
+      const reported = rowValueForRule(row, rule)?.reported;
+      if (!reported || reported.value == null || reported.qualifier === "nd") return false;
+      return meetsRule(reported.value, rule, reported.qualifier);
     }),
   );
 }
 
-function rowValueForRule(row: CompoundCurveRow, rule: HitCriterion): number | null {
-  if (!rule.intercept_key) return row.fitted_value;
+/** The value the rule tests, as the row's cell reports it (class, stored qualifier, doses). */
+function rowValueForRule(row: CompoundCurveRow, rule: HitCriterion): InterceptDisplay | null {
+  const raw_data = row.data_points;
+  if (!rule.intercept_key) return curvePotency({ ...row, raw_data });
   const match = findInterceptValue(row.intercept_values, {
     kind: rule.intercept_key.kind,
     level: rule.intercept_key.level,
     basis: "relative_percent",
     label: null,
   });
-  return match ? match.value : null;
+  if (!match) return null;
+  return formatInterceptDisplay({
+    value: match.value,
+    at_bound: match.at_bound,
+    qualifier: match.qualifier,
+    primary: match === row.intercept_values?.[0],
+    curve_class: row.curve_class,
+    ...doseRange(raw_data),
+  });
+}
+
+function potencyRank(c: DoseResponseCurve): number {
+  const stored = (c.intercept_values?.[0] as { qualifier?: string | null } | undefined)?.qualifier;
+  if (c.curve_class === "active_all_doses" || stored === "<") return 0;
+  return stored === ">" || stored === "nd" ? 2 : 1;
 }

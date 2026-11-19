@@ -134,6 +134,8 @@ export function narrowInterceptKey(
  */
 export type InterceptDisplayKind = "scalar" | "qualifier" | "nd" | "missing";
 
+export type ReportedQualifier = "=" | "<" | ">" | "nd";
+
 export interface InterceptDisplay {
   kind: InterceptDisplayKind;
   text: string;
@@ -155,6 +157,9 @@ export interface InterceptDisplay {
    * even when the curve doesn't represent real activity.
    */
   sortValue: number | null;
+  /** The (value, qualifier) the cell reports, as backend `report_intercept` gives it: a bound
+   *  at the tested dose for "<" / ">", null for ND and missing. Hit rules compare on this. */
+  reported: { value: number | null; qualifier: ReportedQualifier };
   // ---- NEW: multi-run decoration ----
   /** Alias for `text`. Prefer this name in new code; `text` kept for
    *  back-compat with the 3 existing callers (run-dr-results-columns,
@@ -278,6 +283,7 @@ export function formatInterceptDisplay(args: {
     // Weaker than the tested range — sorts after every finite scalar in
     // ascending order but ahead of nulls.
     sortValue: Number.POSITIVE_INFINITY,
+    reported: { value: maxDose, qualifier: ">" as const },
   });
   const below = (bound: number, tooltip: string, warning: boolean) => ({
     kind: "qualifier" as const,
@@ -286,6 +292,7 @@ export function formatInterceptDisplay(args: {
     warning,
     // More potent than the tested range — ahead of every finite scalar.
     sortValue: Number.NEGATIVE_INFINITY,
+    reported: { value: bound, qualifier: "<" as const },
   });
   const nd = (tooltip: string) => ({
     kind: "nd" as const,
@@ -293,6 +300,7 @@ export function formatInterceptDisplay(args: {
     tooltip,
     warning: false,
     sortValue: null,
+    reported: { value: null, qualifier: "nd" as const },
   });
   const scalar = (value: number) => ({
     kind: "scalar" as const,
@@ -300,6 +308,7 @@ export function formatInterceptDisplay(args: {
     tooltip: "",
     warning: false,
     sortValue: value,
+    reported: { value, qualifier: "=" as const },
   });
   // A censored value stores the edge dose itself; the tested range wins when known.
   const lowEdge = minDose ?? positive(args.value);
@@ -330,6 +339,7 @@ export function formatInterceptDisplay(args: {
       tooltip: TOOLTIP_MISSING,
       warning: false,
       sortValue: null,
+      reported: { value: null, qualifier: "nd" },
     };
   } else if (args.at_bound) {
     base = maxDose != null ? above(TOOLTIP_QUALIFIER, true) : nd(TOOLTIP_AT_BOUND_NO_RANGE);
