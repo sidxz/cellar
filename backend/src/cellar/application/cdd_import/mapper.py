@@ -217,7 +217,8 @@ def _collect_calculated_readout_ids(calculations: list[dict[str, Any]]) -> set[i
 _NORMALIZATION_CALC_CLASSES: dict[str, ReadoutNormalization] = {
     "percent inhibition calculation": ReadoutNormalization.PERCENT_INHIBITION,
     "percent activation calculation": ReadoutNormalization.PERCENT_ACTIVATION,
-    "percent control calculation": ReadoutNormalization.PERCENT_CONTROL,
+    # CDD's class name ("percent control calculation" never occurs in a vault).
+    "percent of control calculation": ReadoutNormalization.PERCENT_CONTROL,
     "z score calculation": ReadoutNormalization.Z_SCORE,
 }
 
@@ -388,6 +389,31 @@ def _build_dose_response_readouts(
     return dr_readouts
 
 
+def _drop_curves_that_cannot_fit(
+    readouts: list[MappedReadout], warnings: list[MappingWarning]
+) -> list[MappedReadout]:
+    """Leave out a curve whose Y is not an imported numeric readout, with a warning, so one
+    calculation the import doesn't understand never blocks the whole protocol."""
+    numeric = {r.name for r in readouts if r.data_type == ReadoutDataType.NUMERIC}
+    kept: list[MappedReadout] = []
+    for r in readouts:
+        cfg = r.dose_response_config
+        if cfg is not None and cfg.y_readout_name not in numeric:
+            warnings.append(
+                MappingWarning(
+                    field_name=r.name,
+                    source_type="dose response calculation",
+                    reason=(
+                        f"'{r.name}' was not imported: it plots '{cfg.y_readout_name}', "
+                        "which is not imported"
+                    ),
+                )
+            )
+            continue
+        kept.append(r)
+    return kept
+
+
 def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
     """Map a single CDD protocol dict to a full mapping result with warnings."""
     warnings: list[MappingWarning] = []
@@ -545,6 +571,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
     # Synthesize DOSE_RESPONSE readouts from dose-response calculations
     dr_readouts = _build_dose_response_readouts(calculations, rd_by_id, readout_idx)
     readouts.extend(dr_readouts)
+    readouts = _drop_curves_that_cannot_fit(readouts, warnings)
 
     # Description and category stored in protocol_fields
     pf = protocol_data.get("protocol_fields") or {}

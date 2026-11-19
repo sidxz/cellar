@@ -80,10 +80,24 @@ class TestMapCddProtocol:
         assert result.readouts[0].pick_list_values == ["Active", "Inactive"]
 
     def test_plot_becomes_dose_response(self):
+        proto = _protocol_json(
+            readouts=[
+                _readout("Signal", "Number"),
+                _readout("DR Curve", "Plot", y_readout_name="Signal"),
+            ]
+        )
+        result = map_cdd_protocol(proto)
+        curve = next(r for r in result.readouts if r.name == "DR Curve")
+        assert curve.data_type == ReadoutDataType.DOSE_RESPONSE
+        assert curve.dose_response_config is not None
+        assert curve.dose_response_config.y_readout_name == "Signal"
+
+    def test_a_plot_with_nothing_to_plot_is_left_out_with_a_warning(self):
+        # Without a response readout the curve would plot itself and never fit.
         proto = _protocol_json(readouts=[_readout("DR Curve", "Plot")])
         result = map_cdd_protocol(proto)
-        assert result.readouts[0].data_type == ReadoutDataType.DOSE_RESPONSE
-        assert result.readouts[0].dose_response_config is not None
+        assert result.readouts == []
+        assert any(w.field_name == "DR Curve" for w in result.warnings)
 
     def test_batch_link_dropped_with_warning(self):
         # CDD "Batch Link" doesn't fit cellar's model — well.batch_id
@@ -460,3 +474,56 @@ class TestMapCddProtocol:
         result = map_cdd_protocol(proto)
         assert result.category == "In vivo"
         assert result.description == "A test protocol"
+
+
+def _percent_of_control_curve_protocol(response_id: int) -> dict:
+    """Shape of vault protocol 34535: RLU -> '% negative control' (a percent of control
+    calculation) -> dose response calculation over the % column."""
+    return {
+        "id": 34535,
+        "name": "Luciferase",
+        "readout_definitions": [
+            {"id": 370945, "name": "Concentration", "data_type": "Number", "unit_label": "uM"},
+            {"id": 370946, "name": "RLU", "data_type": "Number"},
+            {"id": 370947, "name": "% negative control", "data_type": "Number"},
+            {"id": 370948, "name": "IC50", "data_type": "Number", "unit_label": "uM"},
+        ],
+        "calculations": [
+            {
+                "class": "percent of control calculation",
+                "inputs": {"input_readout_definition": 370946},
+                "outputs": {"output_readout_definition": 370947},
+            },
+            {
+                "class": "dose response calculation",
+                "inputs": {
+                    "response_readout_definition": response_id,
+                    "dose_readout_definition": 370945,
+                },
+                "outputs": {"intercept_readout_definitions": [[370948]]},
+            },
+        ],
+    }
+
+
+class TestCurvesThatCanFit:
+    def test_percent_of_control_is_a_layer_of_its_input(self) -> None:
+        result = map_cdd_protocol(_percent_of_control_curve_protocol(370947))
+        rlu = next(r for r in result.readouts if r.name == "RLU")
+        assert rlu.normalizations == frozenset({ReadoutNormalization.PERCENT_CONTROL})
+
+        ic50 = next(r for r in result.readouts if r.name == "IC50")
+        assert ic50.dose_response_config is not None
+        assert ic50.dose_response_config.y_readout_name == "RLU"
+        assert ic50.dose_response_config.y_normalization == ReadoutNormalization.PERCENT_CONTROL
+
+    def test_a_curve_plotting_a_readout_that_is_not_imported_is_left_out(self) -> None:
+        # The response points at a readout CDD lists but the import does not keep.
+        result = map_cdd_protocol(_percent_of_control_curve_protocol(999999))
+        assert "IC50" not in [r.name for r in result.readouts]
+        assert "RLU" in [r.name for r in result.readouts]
+        assert MappingWarning(
+            field_name="IC50",
+            source_type="dose response calculation",
+            reason="'IC50' was not imported: it plots 'Response', which is not imported",
+        ) in result.warnings
