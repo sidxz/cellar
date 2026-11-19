@@ -393,6 +393,8 @@ class LmfitCurveFitter:
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,
             active_all_doses=active_all_doses,
+            # Only a scale reads "n.d." (the level inside a flat band).
+            primary_nd=primary.qualifier == ValueQualifier.ND,
             config=config,
         )
 
@@ -836,6 +838,7 @@ def _classify_curve(
     fitted_top: float,
     fitted_bottom: float,
     active_all_doses: bool,
+    primary_nd: bool,
     config: DoseResponseConfig,
 ) -> CurveClass:
     """Classify a fitted curve using thresholds from ``config``.
@@ -845,7 +848,10 @@ def _classify_curve(
     on the protocol's ``DoseResponseConfig`` to classify correctly.
 
     A curve the % scale shows past its primary intercept's level at the lowest dose
-    (``active_all_doses``) is active at all doses, whatever its R².
+    (``active_all_doses``) is active at all doses, whatever its R². One whose primary the
+    scale cannot read (``primary_nd``: the level lies inside its flat band) responds, so it
+    is partial whatever its R² (inactive would read "> highest dose", which its points
+    contradict).
     """
     max_response = float(np.max(responses))
     if max_response < config.inactive_threshold:
@@ -870,7 +876,7 @@ def _classify_curve(
     ):
         return CurveClass.FULL
 
-    if r_squared >= config.partial_r2_min:
+    if r_squared >= config.partial_r2_min or primary_nd:
         return CurveClass.PARTIAL
 
     return CurveClass.INACTIVE

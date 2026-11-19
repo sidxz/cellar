@@ -1521,3 +1521,27 @@ def test_a_curve_past_the_level_at_every_dose_stays_active_at_all_doses(series):
     config = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="% Inhibition")
     fitted = LmfitCurveFitter().fit(_points(series), config, ResponseScale()).unwrap()
     assert fitted.curve_class == CurveClass.ACTIVE_ALL_DOSES
+
+
+# A noisy % curve flat around 50 % (R² 0.34): the 50 % level lies inside its flat band.
+_FLAT_AT_50 = [
+    (0.01, 51.1), (0.02, 46.9), (0.04, 47.5), (0.08, 35.4), (0.16, 60.8), (0.32, 56.9),
+    (0.64, 48.0), (1.28, 54.6), (2.56, 51.7), (5.12, 46.7),
+]  # fmt: skip
+
+
+def test_a_flat_curve_whose_primary_is_not_readable_is_partial_not_inactive():
+    """On the % scale the compound holds ~50 % at every dose: active, its EC50 not readable
+    ("n.d."). Inactive would read "> highest dose", which the points contradict, so a low R²
+    no longer makes it inactive; it is partial."""
+    fitted = LmfitCurveFitter().fit(_points(_FLAT_AT_50), _EC50_EC90, ResponseScale()).unwrap()
+    assert fitted.r_squared < _EC50_EC90.partial_r2_min
+    assert fitted.intercept_values[0].qualifier == ValueQualifier.ND
+    assert fitted.curve_class == CurveClass.PARTIAL
+
+
+def test_a_flat_curve_without_a_scale_keeps_its_r2_class():
+    """No scale, no "n.d.": the fit's own crossing reads, and the R² rules are today's."""
+    fitted = LmfitCurveFitter().fit(_points(_FLAT_AT_50), _EC50_EC90).unwrap()
+    assert fitted.intercept_values[0].qualifier == ValueQualifier.EQ
+    assert fitted.curve_class == CurveClass.INACTIVE
