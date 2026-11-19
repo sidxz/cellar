@@ -409,6 +409,7 @@ function CurveTable({
                     }}
                     dataPoints={curve.data_points}
                     curveClass={curve.curve_class as CurveClass | null}
+                    interceptValues={curve.intercept_values}
                     xRange={frame.xRange}
                     yRange={frame.yRange}
                   />

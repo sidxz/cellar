@@ -163,6 +163,12 @@ export function curveSnapshotAt(ds: Dataset, key: string, i: number): CurveSnaps
   const hill = at("hill_slope");
   if (top === null || bottom === null || hill === null) return null;
   const curveClass = siblingAt(ds, key, "curve_class", i);
+  // The dataset carries the headline's reported value and qualifier ("<" / ">" bounds; no
+  // value is n.d.), not the curve's intercepts: enough for the renderer to draw no line at a
+  // censored or n.d. headline.
+  const value = numberAt(ds, key, i);
+  const q = siblingAt(ds, key, "q", i);
+  const qualifier = q === "<" || q === ">" ? q : value === null ? "nd" : "=";
   return {
     // The renderer centres the 4PL on fitted_value: the midpoint, which the headline value
     // (a primary intercept at 90 %, say) is not. An inactive curve has none; the renderer draws its points
@@ -178,5 +184,6 @@ export function curveSnapshotAt(ds: Dataset, key: string, i: number): CurveSnaps
     confidence_interval_low: at("ci_low"),
     confidence_interval_high: at("ci_high"),
     raw_data: points,
+    intercept_values: [{ spec: { kind: "primary", level: 0 }, value, qualifier }],
   };
 }

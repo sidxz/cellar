@@ -14,6 +14,7 @@ const row = (y: number) =>
     r_squared: 0.9,
     curve_class: "full",
     data_points: [{ x: 1, y }],
+    intercept_values: [{ spec: { kind: "ec", level: 50 }, value: null, qualifier: "nd" }],
   }) as unknown as CompoundCurveRow;
 
 describe("run dose-response curve column", () => {
@@ -27,6 +28,10 @@ describe("run dose-response curve column", () => {
     for (const data of [row(20), row(95)]) {
       const thumbnail = render({ data } as ICellRendererParams<CompoundCurveRow>);
       expect(thumbnail.props).toMatchObject({ xRange: [0.1, 1000], yRange: [-10, 110] });
+      // The qualifier reaches the renderer, so no line is drawn at an n.d. headline.
+      expect((thumbnail.props as Record<string, unknown>).interceptValues).toBe(
+        data.intercept_values,
+      );
     }
   });
 });

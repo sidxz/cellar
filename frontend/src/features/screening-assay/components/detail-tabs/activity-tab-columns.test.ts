@@ -125,11 +125,18 @@ describe("activity curve column", () => {
     const rowWith = (y: number) =>
       ({
         molecule_id: `m${y}`,
-        readouts: { IC50: { curve_params: { fitted_value: 1 }, data_points: [{ x: 1, y }] } },
+        readouts: {
+          IC50: {
+            curve_params: { fitted_value: 1, intercept_values: [{ value: null, qualifier: "nd" }] },
+            data_points: [{ x: 1, y }],
+          },
+        },
       }) as unknown as CompoundActivity;
 
     for (const data of [rowWith(10), rowWith(95)]) {
-      expect(render({ data }).props).toMatchObject({ xRange: [0.1, 1000], yRange: [-10, 110] });
+      const props = render({ data }).props as Record<string, unknown>;
+      expect(props).toMatchObject({ xRange: [0.1, 1000], yRange: [-10, 110] });
+      expect(props.interceptValues).toBe(data.readouts.IC50.curve_params?.intercept_values);
     }
   });
 });

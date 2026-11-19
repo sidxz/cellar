@@ -134,6 +134,7 @@ export function buildColumnDefs(
             }}
             dataPoints={params.data.data_points}
             curveClass={params.data.curve_class}
+            interceptValues={params.data.intercept_values}
             xRange={frame?.xRange}
             yRange={frame?.yRange}
           />

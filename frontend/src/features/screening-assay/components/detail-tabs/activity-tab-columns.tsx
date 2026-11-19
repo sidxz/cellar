@@ -240,6 +240,7 @@ function curveColumn(c: CatalogColumn, o: ActivityColumnOptions): ColDef<Compoun
           params={rv.curve_params}
           dataPoints={rv.data_points}
           curveClass={rv.curve_class}
+          interceptValues={rv.curve_params.intercept_values}
           xRange={o.frames?.get(c.readout)?.xRange}
           yRange={o.frames?.get(c.readout)?.yRange}
         />

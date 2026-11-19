@@ -285,7 +285,19 @@ describe("curveSnapshotAt", () => {
       confidence_interval_low: 0.2,
       confidence_interval_high: 0.5,
       raw_data: POINTS,
+      intercept_values: [{ spec: { kind: "primary", level: 0 }, value: 0.3, qualifier: "=" }],
     });
+  });
+
+  it("carries the headline's reported qualifier, so no line goes at a bound or n.d.", () => {
+    const qualified = (value: number | null, q: string | null): Dataset => ({
+      ...runs,
+      values: { ...runs.values, "dr:e": [value, 0.8], "dr:e:q": [q, null] },
+    });
+    const headline = (d: Dataset) => curveSnapshotAt(d, "dr:e", 0)?.intercept_values?.[0];
+    expect(headline(qualified(100, ">"))).toMatchObject({ value: 100, qualifier: ">" });
+    expect(headline(qualified(0.01, "<"))).toMatchObject({ value: 0.01, qualifier: "<" });
+    expect(headline(qualified(null, null))).toMatchObject({ value: null, qualifier: "nd" });
   });
 
   it("is null without points", () => {

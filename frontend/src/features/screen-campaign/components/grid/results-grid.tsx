@@ -813,6 +813,7 @@ export function ResultsGridV2({
                       (snapshot.raw_data as Array<{ x: number; y: number }> | null) ?? null
                     }
                     curveClass={(snapshot.curve_class as CurveClass | null) ?? null}
+                    interceptValues={snapshot.intercept_values}
                     width={220}
                     height={140}
                     additionalCurves={snapshot.additional_curves ?? null}

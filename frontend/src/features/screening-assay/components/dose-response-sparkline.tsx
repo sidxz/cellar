@@ -25,6 +25,9 @@ interface DoseResponseSparklineProps {
   params: CurveParams;
   dataPoints?: Array<{ x: number; y: number }> | null;
   curveClass?: CurveClass | null;
+  /** The curve's intercepts with their stored qualifier: no line goes at a censored or n.d.
+   *  headline. Typed rows or a snapshot's JSONB-loose ones. */
+  interceptValues?: readonly unknown[] | null;
   width?: number;
   height?: number;
   /** Optional aggregate-mode overlay — additional contributing curves
@@ -45,6 +48,7 @@ export function DoseResponseSparkline({
   params,
   dataPoints,
   curveClass,
+  interceptValues,
   width,
   height,
   additionalCurves,
@@ -59,6 +63,7 @@ export function DoseResponseSparkline({
     hill_slope: params.hill_slope,
     r_squared: params.r_squared,
     curve_class: curveClass ?? null,
+    intercept_values: interceptValues ?? null,
     raw_data: dataPoints ?? null,
     additional_curves: additionalCurves ?? null,
     aggregate: aggregate ?? null,

@@ -290,6 +290,7 @@ describe("ActivityTab curve table", () => {
     for (const p of sparklines) {
       expect(p.yRange).toEqual([-10, 110]);
       expect(p.xRange).toEqual(sparklines[0].xRange);
+      expect(p.interceptValues).toMatchObject([{ qualifier: "<" }]);
     }
   });
 });
