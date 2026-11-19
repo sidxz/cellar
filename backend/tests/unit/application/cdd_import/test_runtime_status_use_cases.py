@@ -77,10 +77,10 @@ class _FakeDbStatus:
 
 class _FakeSyncFailed:
     def __init__(self) -> None:
-        self.calls: list[tuple[uuid.UUID, str]] = []
+        self.calls: list[tuple[uuid.UUID, str, str]] = []
 
-    async def run(self, workspace_id: uuid.UUID, import_id: str) -> None:
-        self.calls.append((workspace_id, import_id))
+    async def run(self, workspace_id: uuid.UUID, import_id: str, workflow_id: str) -> None:
+        self.calls.append((workspace_id, import_id, workflow_id))
 
 
 def _progress(status: str = "processing", import_id: str = "import-1") -> CddMoleculeImportProgress:
@@ -159,7 +159,7 @@ class TestGetCddMoleculeImportRuntimeStatus:
         assert isinstance(result, Success)
         assert result.unwrap().status == "failed"
         assert result.unwrap().report["problem_lines"] == ["a: x"]  # the report comes from the DB
-        assert sync_failed.calls == [(WORKSPACE_ID, "imp-7")]
+        assert sync_failed.calls == [(WORKSPACE_ID, "imp-7", "cdd-mol-import-x")]
 
     @pytest.mark.asyncio
     async def test_runtime_not_found_falls_back_to_db(self):

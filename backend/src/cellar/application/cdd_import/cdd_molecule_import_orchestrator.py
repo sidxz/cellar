@@ -29,6 +29,27 @@ class StartCddMoleculeImportRequest:
 
 
 @dataclass(frozen=True, kw_only=True)
+class ResumeCddMoleculeImportRequest:
+    """Start a failed import again from where it stopped, on the export it saved."""
+
+    workspace_id: uuid.UUID
+    import_id: uuid.UUID
+    cdd_vault_id: str
+    import_mode: str
+    submitted_by: uuid.UUID  # who resumed it: the actor of what the run registers now
+    originating_org_id: uuid.UUID
+    filter_criteria: dict | None
+    run_settings: dict  # the options the run started with
+    cdd_export_id: int
+    resume_offset: int
+    total_count: int
+    registered_count: int
+    duplicate_count: int
+    error_count: int
+    skipped_count: int
+
+
+@dataclass(frozen=True, kw_only=True)
 class CddMoleculeImportProgress:
     """Engine-agnostic progress snapshot of a CDD molecule import workflow.
 
@@ -57,6 +78,15 @@ class CddMoleculeImportOrchestrator(Protocol):
         """Start a workflow; return its workflow_id.
 
         Raises ``WorkflowOrchestratorUnavailable`` if the engine is down.
+        """
+        ...
+
+    async def resume(self, request: ResumeCddMoleculeImportRequest) -> str:
+        """Start the import's run again from ``resume_offset``; return the new workflow_id.
+
+        Raises ``ValidationError`` if the export is no longer on disk, ``ConflictError``
+        if this resume is already running, ``WorkflowOrchestratorUnavailable`` if the
+        engine is down.
         """
         ...
 

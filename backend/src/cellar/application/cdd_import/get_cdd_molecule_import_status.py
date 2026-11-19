@@ -93,6 +93,7 @@ class SyncFailedCddMoleculeImport:
         self,
         workspace_id: uuid.UUID,
         import_id: str,
+        workflow_id: str,
     ) -> None:
         if not import_id:
             return
@@ -103,6 +104,8 @@ class SyncFailedCddMoleculeImport:
                     return
                 if imp.status.value in ("completed", "completed_with_errors", "failed"):
                     return  # Already terminal
+                if imp.workflow_id != workflow_id:
+                    return  # a run the import has left behind (it was resumed since)
                 imp.fail("Workflow crashed (detected by status poll)")
                 await self._repo.save(imp)
                 await self._uow.commit()
