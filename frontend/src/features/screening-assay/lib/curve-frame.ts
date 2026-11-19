@@ -25,34 +25,39 @@ export function curveFrame(
   pointSets: ReadonlyArray<Points>,
   opts: { percent: boolean },
 ): CurveFrame {
-  const xs: number[] = [];
-  const ys: number[] = [];
+  // Min / max in the loop: spreading a large table into Math.min overflows the call stack.
+  let [xLo, xHi, yLo, yHi] = [
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+    Number.POSITIVE_INFINITY,
+    Number.NEGATIVE_INFINITY,
+  ];
   for (const points of pointSets) {
     for (const p of points ?? []) {
       const x = p.x ?? p.concentration;
       const y = p.y ?? p.response;
       if (typeof x !== "number" || typeof y !== "number") continue;
       if (!Number.isFinite(x) || x <= 0 || !Number.isFinite(y)) continue;
-      xs.push(x);
-      ys.push(y);
+      xLo = Math.min(xLo, x);
+      xHi = Math.max(xHi, x);
+      yLo = Math.min(yLo, y);
+      yHi = Math.max(yHi, y);
     }
   }
-  if (xs.length === 0) return { xRange: undefined, yRange: undefined };
+  if (xHi === Number.NEGATIVE_INFINITY) return { xRange: undefined, yRange: undefined };
 
-  const xRange: [number, number] = [Math.min(...xs) / HALF_DECADE, Math.max(...xs) * HALF_DECADE];
-  return { xRange, yRange: opts.percent ? percentRange(ys) : dataRange(ys) };
+  const xRange: [number, number] = [xLo / HALF_DECADE, xHi * HALF_DECADE];
+  return { xRange, yRange: opts.percent ? percentRange(yLo, yHi) : dataRange(yLo, yHi) };
 }
 
-function percentRange(ys: number[]): [number, number] {
-  const lo = Math.min(0, ...ys);
-  const hi = Math.max(100, ...ys);
+function percentRange(yLo: number, yHi: number): [number, number] {
+  const lo = Math.min(0, yLo);
+  const hi = Math.max(100, yHi);
   const pad = (hi - lo) / 10;
   return [lo - pad, hi + pad];
 }
 
-function dataRange(ys: number[]): [number, number] {
-  const lo = Math.min(...ys);
-  const hi = Math.max(...ys);
+function dataRange(lo: number, hi: number): [number, number] {
   const pad = hi > lo ? (hi - lo) / 20 : Math.abs(lo) / 20 || 1;
   return [lo - pad, hi + pad];
 }

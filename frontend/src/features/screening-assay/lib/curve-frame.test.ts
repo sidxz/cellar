@@ -88,6 +88,15 @@ describe("curveFrame", () => {
     expect(frame.yRange).toEqual([-15, 165]);
   });
 
+  it("frames a table of any size (200k points)", () => {
+    const points = Array.from({ length: 200_000 }, (_, i) => ({ x: 1 + i, y: i % 150 }));
+    const frame = curveFrame([points], { percent: true });
+    expect(frame.xRange?.[0]).toBeCloseTo(1 / Math.sqrt(10));
+    expect(frame.xRange?.[1]).toBeCloseTo(200_000 * Math.sqrt(10));
+    expect(frame.yRange).toEqual([-14.9, 163.9]);
+    expect(curveFrame([points], { percent: false }).yRange).toEqual([-7.45, 156.45]);
+  });
+
   it("leaves both axes to the chart when there are no usable points", () => {
     expect(curveFrame([null, undefined, []], { percent: true })).toEqual({
       xRange: undefined,
