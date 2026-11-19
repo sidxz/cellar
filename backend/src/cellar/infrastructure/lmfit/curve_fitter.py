@@ -365,12 +365,20 @@ class LmfitCurveFitter:
             )
             for spec in config.intercepts
         ]
-        # A flat curve with no scale has nothing to show it active at the lowest dose: its "<"
-        # only says where its own crossing falls, so it never makes the curve active at all doses.
-        f_lo, f_hi = _hill_equation(
-            np.log10(doses), fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill
+        # "Active at all doses" needs the % scale to show the effect at the lowest dose: the
+        # primary reads "<" and the fitted curve there is past the primary's level on the scale.
+        # Without a scale, a "<" only says where the fitted window's level falls.
+        primary = intercept_values[0]
+        f_lo = float(
+            _hill_equation(
+                np.log10(doses[0]), fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill
+            )
         )
-        judged = scale is not None or abs(float(f_hi - f_lo)) >= config.inactive_threshold
+        active_all_doses = (
+            primary.qualifier == ValueQualifier.LT
+            and scale is not None
+            and _past_on_scale(f_lo, primary.spec, scale)
+        )
 
         curve_class = _classify_curve(
             responses=responses,
@@ -379,14 +387,13 @@ class LmfitCurveFitter:
             r_squared=r_squared,
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,
-            primary=intercept_values[0].qualifier if judged else None,
+            active_all_doses=active_all_doses,
             config=config,
         )
 
         # Headline ``fitted_value``: the primary intercept's value when it is exact, else
         # the fitted midpoint. Charts draw the sigmoid from it, so it is never a bound dose;
         # displayed values come from the intercepts' qualifiers.
-        primary = intercept_values[0]
         primary_value = primary.value if primary.qualifier == ValueQualifier.EQ else fitted_ec50
 
         return Success(
@@ -458,18 +465,12 @@ def _read_intercept(
             return _censored(spec, ValueQualifier.LT, lo)
         return _exact(spec, log_x, ci_half_width)
 
-    if flat and scale is not None:
-        target = (
-            float(spec.level)
-            if spec.basis == InterceptBasis.ABSOLUTE
-            else scale.zero + spec.level / 100.0 * (scale.full - scale.zero)
-        )
-        rising = scale.full > scale.zero
-    else:
-        target = _response_target(spec, top, bottom, hill)
-        rising = bool(f_hi > f_lo)
+    target = _response_target(spec, top, bottom, hill)
+    rising = bool(f_hi > f_lo)
 
     def reached(response: float) -> bool:
+        if flat and scale is not None:
+            return _past_on_scale(response, spec, scale)
         return response >= target if rising else response <= target
 
     if reached(f_lo):
@@ -490,6 +491,17 @@ def _read_intercept(
     # Short of the level at ``lo`` and at it at ``hi``: the crossing is in (lo, hi], and
     # only exactly at a saturated ``hi`` can the inverse miss it.
     return _exact(spec, math.log10(hi) if log_x is None else log_x, ci_half_width)
+
+
+def _past_on_scale(response: float, spec: InterceptSpec, scale: ResponseScale) -> bool:
+    """Whether ``response`` is at or past ``spec``'s level on ``scale`` (a relative level at
+    its % of the scale), in the scale's direction."""
+    level = (
+        float(spec.level)
+        if spec.basis == InterceptBasis.ABSOLUTE
+        else scale.zero + spec.level / 100.0 * (scale.full - scale.zero)
+    )
+    return response >= level if scale.full > scale.zero else response <= level
 
 
 def _exact(spec: InterceptSpec, log_x: float, ci_half_width: float | None) -> InterceptValue:
@@ -818,7 +830,7 @@ def _classify_curve(
     r_squared: float,
     fitted_top: float,
     fitted_bottom: float,
-    primary: ValueQualifier | None,
+    active_all_doses: bool,
     config: DoseResponseConfig,
 ) -> CurveClass:
     """Classify a fitted curve using thresholds from ``config``.
@@ -827,8 +839,8 @@ def _classify_curve(
     must override ``inactive_threshold``/``full_top_min``/``full_bottom_max``
     on the protocol's ``DoseResponseConfig`` to classify correctly.
 
-    A curve past its primary intercept's level at the lowest dose (``primary`` "<") is
-    active at all doses, whatever its R².
+    A curve the % scale shows past its primary intercept's level at the lowest dose
+    (``active_all_doses``) is active at all doses, whatever its R².
     """
     max_response = float(np.max(responses))
     if max_response < config.inactive_threshold:
@@ -843,7 +855,7 @@ def _classify_curve(
         if not is_monotonic:
             return CurveClass.BELL_SHAPED
 
-    if primary == ValueQualifier.LT:
+    if active_all_doses:
         return CurveClass.ACTIVE_ALL_DOSES
 
     if (

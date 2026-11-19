@@ -159,6 +159,15 @@ def _intercept_outcomes(
     return out
 
 
+def _shown_at_lowest(*, top, bottom, log_ec50, hill, log_lo, noise_sd, scale) -> set[bool]:
+    """Whether the fitted curve at the lowest dose can be past the 50 % level of the scale."""
+    zero, full = scale
+    y = zero + 0.5 * (full - zero)
+    f_lo = _4pl(log_lo, top, bottom, log_ec50, hill)
+    band = NOISE_BAND * noise_sd
+    return {(v >= y) if full > zero else (v <= y) for v in (f_lo - band, f_lo + band)}
+
+
 def _transition_classes(*, top, bottom, log_ec50, hill, log_doses, noise_sd) -> set[str]:
     """Today's R²/plateau rules on a curve with a visible transition."""
     full = top >= DEFAULT_FULL_TOP_MIN and bottom <= DEFAULT_FULL_BOTTOM_MAX
@@ -205,9 +214,18 @@ def _case(name, *, top, bottom, log_ec50, hill, doses, noise_sd, seed, position,
         )
         classes = set()
         for branch, q in ec50:
-            if q == ValueQualifier.LT and branch != "raw":
+            # "Active at all doses" needs a "<" and the scale to show the effect at the lowest
+            # dose; a flat "<" read on the scale shows it by construction.
+            if q == ValueQualifier.LT and branch == "flat":
                 classes.add(ACTIVE_ALL_DOSES)
-            elif branch in ("flat", "raw"):
+                continue
+            if q == ValueQualifier.LT and scale is not None:
+                shown = _shown_at_lowest(**params, log_lo=log_lo, noise_sd=noise_sd, scale=scale)
+                if True in shown:
+                    classes.add(ACTIVE_ALL_DOSES)
+                if False not in shown:
+                    continue
+            if branch in ("flat", "raw"):
                 # R²-based classes of a flat fit: unchanged by the spec (non-goal).
                 classes |= {INACTIVE, PARTIAL}
             else:

@@ -28,7 +28,7 @@ from cellar.infrastructure.lmfit.curve_fitter import (
     _fit_single_start,
     _settled,
 )
-from tests.unit.screening.dr_synthetic import GRID, Case
+from tests.unit.screening.dr_synthetic import GRID, Case, _4pl
 
 
 def _generate_hill_data(
@@ -1257,14 +1257,15 @@ _EC50_EC90 = DoseResponseConfig(
 )
 
 
-# Known misreadings, kept visible: on 6-10 points at noise SD 8 the free fit puts a plateau far
-# past the data (bottom -367 from points at 10; plateaus at ±4000; top 197 from points at 109),
-# so the 50 % level of that window lies outside every response and reads "< lowest dose",
-# active at all doses. Today they show equally wrong exact EC50s far below the doses.
+# Known misreadings, kept visible: on 6 points at noise SD 8 the free fit puts a plateau far
+# past the data (bottom -367 from points at 10; plateaus at ±4600), so the 50 % level of that
+# window lies outside every response and the EC50 reads "< lowest dose" where the crossing is
+# inside. Their class is today's (full): the scale does not show the effect at the lowest dose,
+# or there is no scale. Before multi-start they showed equally wrong exact EC50s far below the
+# doses.
 _EXTRAPOLATED_PLATEAUS = {
     "rise-full-inside-h0.5-3dec6-sd8",
     "fall-partial-inside-h1-3dec6-sd8",
-    "fall-partial-inside-h0.5-4dec10-sd8",
 }
 
 
@@ -1276,7 +1277,7 @@ _EXTRAPOLATED_PLATEAUS = {
             id=c.name,
             marks=pytest.mark.xfail(
                 c.name in _EXTRAPOLATED_PLATEAUS,
-                reason="relative target on plateaus extrapolated past the data",
+                reason="EC50 reads < on plateaus extrapolated past the data",
                 strict=True,
             ),
         )
@@ -1308,6 +1309,16 @@ def test_intercepts_and_class_follow_the_generating_curve_on_grid(case):
         if case.noise_sd == 0 and expected == {ValueQualifier.EQ} and case.position == "inside":
             # Exact data: the crossing is the generating curve's own.
             assert math.log10(iv.value) == pytest.approx(case.log_ec50 + offset, abs=0.05)
+
+    # "Active at all doses" exactly when the primary reads "<" and the % scale shows the effect
+    # at the lowest dose: the fitted curve is past the primary's level on the scale there.
+    evidence = False
+    if scale is not None and ec50.qualifier == ValueQualifier.LT:
+        log_ec50 = math.log10(fitted.fitted_value)  # the fitted midpoint: ec50 is not exact
+        f_lo = _4pl(math.log10(lo), fitted.top, fitted.bottom, log_ec50, fitted.hill_slope)
+        level = scale.zero + 0.5 * (scale.full - scale.zero)
+        evidence = f_lo >= level if scale.full > scale.zero else f_lo <= level
+    assert (fitted.curve_class == CurveClass.ACTIVE_ALL_DOSES) == evidence
 
     # fitted_value keeps its meaning: the primary's value when exact, else the fitted midpoint
     # (0.0 on the inactive fast path); never a bound dose.
@@ -1412,6 +1423,33 @@ def test_an_exact_intercept_lies_inside_the_tested_doses(name, scale, config):
     for iv in fitted.intercept_values:
         if iv.qualifier == ValueQualifier.EQ:
             assert min(doses) <= iv.value <= max(doses)
+
+
+# Rising curves on raw layers holding uploaded % inhibition (PRT-00216 CC-061263, PRT-00217
+# CC-061259): 27 % and 39 % at the lowest dose. The free fit puts the bottom far below the
+# points, so the primary's relative level is already passed at the lowest dose.
+_CC_061263 = [
+    (0.005080526342529086, 27.34), (0.015241579027587259, 59.37), (0.04572473708276177, 72.37),
+    (0.13717421124828533, 87.45), (0.411522633744856, 87.04), (1.2345679012345678, 91.87),
+    (3.7037037037037037, 93.17), (11.11111111111111, 91.94), (33.333333333333336, 94.26),
+    (100.0, 91.43),
+]  # fmt: skip
+_CC_061259 = [
+    (0.005080526342529086, 38.65), (0.015241579027587259, 61.64), (0.04572473708276177, 72.9),
+    (0.13717421124828533, 82.16), (0.411522633744856, 89.25), (1.2345679012345678, 90.25),
+    (3.7037037037037037, 91.99), (11.11111111111111, 101.46), (33.333333333333336, 90.39),
+    (100.0, 92.46),
+]  # fmt: skip
+
+
+@pytest.mark.parametrize("scale", [None, ResponseScale()], ids=["no-scale", "percent"])
+@pytest.mark.parametrize("series", [_CC_061263, _CC_061259], ids=["CC-061263", "CC-061259"])
+def test_active_at_all_doses_needs_the_scale_to_show_the_effect_at_the_lowest_dose(series, scale):
+    """Without a scale nothing shows the effect at the lowest dose; on a % scale the fitted
+    curve there (27 %, 39 %) is short of 50 %. Either way the class is today's."""
+    config = DoseResponseConfig(curve_type=CurveType.IC50, y_readout_name="% Inhibition")
+    fitted = LmfitCurveFitter().fit(_points(series), config, scale).unwrap()
+    assert fitted.curve_class == CurveClass.FULL
 
 
 @pytest.mark.parametrize("scale", [None, ResponseScale()], ids=["no-scale", "percent"])
