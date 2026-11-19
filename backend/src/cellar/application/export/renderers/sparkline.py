@@ -21,6 +21,9 @@ import io
 import math
 from typing import TYPE_CHECKING, Literal
 
+from cellar.domain.screening_assay.intercept_report import report_intercept
+from cellar.domain.shared.aggregation_types import ValueQualifier
+
 if TYPE_CHECKING:
     from cellar.application.export.row_streams.base import ColumnSpec
 
@@ -147,9 +150,27 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
     if ec50 is not None:
         fit["ec50"] = ec50
 
+    # The midpoint marks a potency only when the curve's primary reads exactly (the
+    # rule every grid reports it by).
+    ivs = av.get("intercept_values") or []
+    primary = ivs[0] if ivs and isinstance(ivs[0], dict) else {}
+    doses = [
+        p["dose"] for p in data_points if isinstance(p["dose"], int | float) and p["dose"] > 0
+    ]
+    _, reads = report_intercept(
+        curve_params.get("curve_class"),
+        primary.get("qualifier"),
+        ec50,
+        min(doses, default=None),
+        max(doses, default=None),
+        at_bound=primary.get("at_bound") is True,
+        primary=True,
+    )
+
     return {
         "data_points": data_points,
         "fit": fit,
+        "potency_exact": reads == ValueQualifier.EQ,
         "curve_class": curve_params.get("curve_class"),
         "additional_curves": av.get("additional_curves") or [],
         "aggregate": av.get("aggregate"),
@@ -337,13 +358,14 @@ def _draw_curve(ax, curve_snapshot: dict, *, color: str | None = None) -> None:
     #   - Aggregate mode: solid amber at aggregate.marker_x (suppresses
     #     the per-curve dash — per-run fitted_values don't equal the
     #     aggregated cell value).
-    #   - Active single-curve: dotted amber at fitted_value.
-    #   - Inactive: no reference line.
+    #   - Single curve whose primary reads exactly: dotted amber at fitted_value.
+    #   - A primary read as a bound or n.d. (inactive and active at all doses
+    #     included): no reference line, the midpoint is no potency.
     if aggregate and isinstance(aggregate.get("marker_x"), (int, float)):
         mx = float(aggregate["marker_x"])
         if mx > 0:
             ax.axvline(mx, color=color or _AGGREGATE_LINE, linewidth=1.4, alpha=0.95, zorder=2)
-    elif not inactive and has_fit:
+    elif has_fit and curve_snapshot.get("potency_exact"):
         fv = float(fit["ec50"])
         if fv > 0:
             ax.axvline(
