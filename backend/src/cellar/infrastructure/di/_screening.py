@@ -883,6 +883,7 @@ def register_screening(container: Container) -> None:
         return ClassifyDoseResponseCurve(
             uow=uow,
             curve_repo=SQLAlchemyDoseResponseCurveRepository(uow),
+            audit=c[AuditRecordingService],
         )
 
     container.define(ClassifyDoseResponseCurve, _classify_dose_response_curve)
