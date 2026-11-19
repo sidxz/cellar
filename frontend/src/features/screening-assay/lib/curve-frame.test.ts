@@ -147,6 +147,15 @@ describe("percentYRange", () => {
     expect(percentYRange([pct(90, 130)])).toEqual([-13, 143]);
   });
 
+  it("spans the points of every contributing run", () => {
+    const curve = {
+      fitted_layer: "percent_inhibition",
+      raw_data: [{ x: 1, y: 50 }],
+      additional_curves: [{ raw_data: [{ x: 1, y: 140 }] }],
+    };
+    expect(percentYRange([curve])).toEqual([-14, 154]);
+  });
+
   it("leaves a chart with any non-% curve, or no curve, to frame itself", () => {
     expect(
       percentYRange([pct(90), { fitted_layer: null, raw_data: [{ x: 1, y: 900 }] }]),

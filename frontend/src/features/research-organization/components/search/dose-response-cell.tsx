@@ -4,7 +4,11 @@ import {
   DoseResponseFigure,
   type FigureSize,
 } from "@/features/screening-assay/components/dose-response-figure";
-import { type CurveFrame, curveFrame } from "@/features/screening-assay/lib/curve-frame";
+import {
+  type CurveFrame,
+  curveFrame,
+  drawnPoints,
+} from "@/features/screening-assay/lib/curve-frame";
 import { createContext, memo, useContext, useMemo } from "react";
 import { activityValueToCurveSnapshot } from "../../lib/activity-curve-snapshot";
 import type { ActivityValue } from "../../types";
@@ -26,7 +30,7 @@ export function useCurveFramesFor(
       let frame = cache.get(id);
       if (!frame) {
         frame = curveFrame(
-          rows.map((r) => r.activity?.[key]?.raw_data),
+          rows.flatMap((r) => drawnPoints(r.activity?.[key])),
           { percent },
         );
         cache.set(id, frame);

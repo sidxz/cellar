@@ -17,7 +17,22 @@ export interface CurveFrame {
 }
 
 /** A curve's points as `{x, y}` or as stored on a curve, `{concentration, response}`. */
-type Points = ReadonlyArray<Record<string, unknown>> | null | undefined;
+type Points = ReadonlyArray<object> | null | undefined;
+
+interface DrawnCurve {
+  raw_data?: Points;
+  excluded_points?: Points;
+  additional_curves?: ReadonlyArray<{ raw_data?: Points }> | null;
+}
+
+/** What a thumbnail draws for one curve: its points, its excluded points, and each
+ *  aggregate contributor's points (its sigmoid spans them). A shared frame takes them all,
+ *  or a contributor drawn past the representative's doses is clipped. */
+export function drawnPoints(curve: DrawnCurve | null | undefined): Points[] {
+  if (!curve) return [];
+  const contributors = (curve.additional_curves ?? []).map((ac) => ac.raw_data);
+  return [curve.raw_data, curve.excluded_points, ...contributors];
+}
 
 const HALF_DECADE = Math.sqrt(10);
 
@@ -33,7 +48,7 @@ export function curveFrame(
     Number.NEGATIVE_INFINITY,
   ];
   for (const points of pointSets) {
-    for (const p of points ?? []) {
+    for (const p of (points ?? []) as ReadonlyArray<Record<string, unknown>>) {
       const x = p.x ?? p.concentration;
       const y = p.y ?? p.response;
       if (typeof x !== "number" || typeof y !== "number") continue;
@@ -82,20 +97,13 @@ export function curveLayer(readouts: readonly CurveReadout[], curveName?: string
 }
 
 /** The y range for curves drawn together in one chart when every one fits a % layer: their
- *  points (excluded ones too) with the 0 % and 100 % anchors. Otherwise undefined, and the
- *  chart frames itself. */
+ *  points (excluded ones and contributing runs' too) with the 0 % and 100 % anchors.
+ *  Otherwise undefined, and the chart frames itself. */
 export function percentYRange(
-  curves: ReadonlyArray<{
-    fitted_layer?: string | null;
-    raw_data?: Points;
-    excluded_points?: Points;
-  }>,
+  curves: ReadonlyArray<DrawnCurve & { fitted_layer?: string | null }>,
 ): [number, number] | undefined {
   if (curves.length === 0 || !curves.every((c) => isPercentNormalization(c.fitted_layer))) {
     return undefined;
   }
-  return curveFrame(
-    curves.flatMap((c) => [c.raw_data, c.excluded_points]),
-    { percent: true },
-  ).yRange;
+  return curveFrame(curves.flatMap(drawnPoints), { percent: true }).yRange;
 }

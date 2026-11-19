@@ -568,6 +568,43 @@ describe("curveFramesByChannel", () => {
     expect(frames.get("c1")?.xRange?.[1]).toBeCloseTo(10 * Math.sqrt(10), 9);
   });
 
+  it("spans every contributing curve and every drawn excluded point", () => {
+    const aggregate = {
+      channel_id: "c1",
+      curve_snapshot: {
+        ...snapshot(50),
+        raw_data: [
+          { x: 1, y: 50 },
+          { x: 10, y: 60 },
+        ],
+        excluded_points: [{ x: 5, y: 150 }],
+        additional_curves: [
+          {
+            fitted_value: 1,
+            top: 140,
+            bottom: -20,
+            hill_slope: 1,
+            run_date: "2026-01-01",
+            raw_data: [
+              { x: 0.00001, y: -20 },
+              { x: 1000, y: 140 },
+            ],
+          },
+        ],
+      },
+    } as unknown as CampaignMeasurementResponse;
+    const frames = curveFramesByChannel(
+      [channel("c1", "ic50")],
+      [{ measurements: [aggregate] }] as unknown as CampaignResponse["results"] & object,
+      new Map(),
+      protocols,
+    );
+    const [x0, x1] = frames.get("c1")?.xRange ?? [];
+    expect(x0).toBeCloseTo(0.00001 / Math.sqrt(10), 12);
+    expect(x1).toBeCloseTo(1000 * Math.sqrt(10), 6);
+    expect(frames.get("c1")?.yRange).toEqual([-37, 167]);
+  });
+
   it("fits a raw-signal curve column to its data", () => {
     const frames = curveFramesByChannel(
       [channel("c2", "rawfit")],

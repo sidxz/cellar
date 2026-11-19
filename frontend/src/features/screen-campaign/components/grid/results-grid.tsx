@@ -60,6 +60,7 @@ import {
   type CurveFrame,
   curveFrame,
   curveLayer,
+  drawnPoints,
 } from "@/features/screening-assay/lib/curve-frame";
 import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import type { CurveClass } from "@/features/screening-assay/types";
@@ -116,16 +117,14 @@ export function curveFramesByChannel(
     const readouts = protocolsById.get(ch.protocol_id)?.readout_definitions ?? [];
     const curveName = readouts.find((r) => r.id === ch.readout_definition_id)?.name;
     const percent = curveName ? isPercentNormalization(curveLayer(readouts, curveName)) : false;
-    const points = results.map((r) => {
+    const points = results.flatMap((r) => {
       const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
-      return m ? (curveSnapshotFromMeasurement(m, liveById)?.raw_data as FramePoints) : null;
+      return m ? drawnPoints(curveSnapshotFromMeasurement(m, liveById)) : [];
     });
     frames.set(ch.id, curveFrame(points, { percent }));
   }
   return frames;
 }
-
-type FramePoints = Parameters<typeof curveFrame>[0][number];
 
 /**
  * Resolve a CurveSnapshot for a measurement. Prefers the frozen

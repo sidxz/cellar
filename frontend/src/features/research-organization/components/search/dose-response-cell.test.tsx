@@ -175,6 +175,43 @@ describe("search curve cell frame", () => {
     }
   });
 
+  it("spans every contributing curve of an aggregate cell, so none is clipped", () => {
+    reset();
+    const aggregate: ActivityValue = {
+      ...activity(50),
+      additional_curves: [
+        {
+          fitted_value: 1,
+          top: 140,
+          bottom: -20,
+          hill_slope: 1,
+          run_date: "2026-01-01",
+          raw_data: [
+            { x: 0.00001, y: -20 },
+            { x: 1000, y: 140 },
+          ],
+        },
+      ],
+    };
+    const agg = [{ id: "a", activity: { "drc:ic50": aggregate } }];
+    function AggFrames({ children }: { children: ReactNode }) {
+      return (
+        <CurveFramesContext.Provider value={useCurveFramesFor(agg)}>
+          {children}
+        </CurveFramesContext.Provider>
+      );
+    }
+    render(
+      <AggFrames>
+        <DoseResponseCell value={aggregate} frameKey="drc:ic50" percent />
+      </AggFrames>,
+    );
+    const [x0, x1] = figureCalls[0].xRange as [number, number];
+    expect(x0).toBeCloseTo(0.00001 / Math.sqrt(10), 12);
+    expect(x1).toBeCloseTo(1000 * Math.sqrt(10), 6);
+    expect(figureCalls[0].yRange).toEqual([-36, 156]);
+  });
+
   it("frames itself outside a grid", () => {
     reset();
     render(<DoseResponseCell value={activity(85)} />);
