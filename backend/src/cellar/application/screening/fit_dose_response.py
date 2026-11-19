@@ -30,6 +30,7 @@ from cellar.domain.screening_assay.enums import (
     ReadoutDataType,
     ReadoutNormalization,
     WellType,
+    primary_normalization,
 )
 from cellar.domain.screening_assay.excluded_point_detail import (
     ExcludedPointDetail,
@@ -303,20 +304,16 @@ class FitDoseResponseCurves:
             #   * If the def is calculated, fit the computed (formula-output) layer.
             #   * Else if the def emits any normalization formulas, the fit consumes
             #     the formula named by ``config.y_normalization``. When that field
-            #     is None, default to the def's first formula (back-compat with the
-            #     pre-multi-emit single-value world).
+            #     is None, default to the def's primary formula — the same layer
+            #     the calculation engine and the API treat as primary.
             #   * Else (no normalizations on the def), fit the raw layer.
             target_formula: ReadoutNormalization | None
+            layer = config.y_normalization or primary_normalization(y_rd.normalizations)
             if y_rd.is_calculated:
                 target_formula = None  # filtered by is_computed below
                 use_computed = True
-            elif y_rd.normalizations:
-                if config.y_normalization is not None:
-                    target_formula = config.y_normalization
-                else:
-                    # Pre-multi-emit protocols set normalizations={X} and no
-                    # y_normalization. Pick the (only) formula in the set.
-                    target_formula = next(iter(y_rd.normalizations))
+            elif layer is not None:
+                target_formula = ReadoutNormalization(layer)
                 use_computed = True
             else:
                 target_formula = None
