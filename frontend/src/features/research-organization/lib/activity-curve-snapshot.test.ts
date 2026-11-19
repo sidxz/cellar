@@ -48,6 +48,37 @@ describe("activityValueToCurveSnapshot", () => {
     });
   });
 
+  it("draws the sigmoid at the fit's midpoint, not at the reported bound", () => {
+    // A partial curve fitted at 1000 whose IC50 reads "> 100".
+    const censored = {
+      ...DR,
+      value: 100,
+      qualifier: ">",
+      curve_params: { ...(DR?.curve_params ?? {}), curve_class: "partial", fitted_value: 1000 },
+      intercept_values: [{ spec: { kind: "ic", level: 50 }, value: 100, qualifier: ">" }],
+    } as never;
+    const snap = activityValueToCurveSnapshot(censored);
+    expect(snap?.fitted_value).toBe(1000);
+    // The qualifier reaches the renderer, so no line goes at the midpoint.
+    expect(snap?.intercept_values).toEqual([
+      { spec: { kind: "ic", level: 50 }, value: 100, qualifier: ">" },
+    ]);
+    // Colored by the primary itself: no second marker at its bound.
+    expect(
+      activityValueToCurveSnapshot(censored, { value: 100, label: "IC50" })?.selected_intercept,
+    ).toBeNull();
+  });
+
+  it("still draws an n.d. cell's points and fit", () => {
+    const nd = {
+      ...DR,
+      value: null,
+      qualifier: "nd",
+      curve_params: { ...(DR?.curve_params ?? {}), curve_class: "partial", fitted_value: 1 },
+    } as never;
+    expect(activityValueToCurveSnapshot(nd)).toMatchObject({ fitted_value: 1 });
+  });
+
   it("marks the selected intercept when it differs from the primary fitted_value", () => {
     // Colored by IC90 (5.0) while the primary is 1.5 → a distinct marker at 5.0.
     const snap = activityValueToCurveSnapshot(DR, { value: 5.0, label: "IC90" });

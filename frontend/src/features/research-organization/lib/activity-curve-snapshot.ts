@@ -26,19 +26,21 @@ export function activityValueToCurveSnapshot(
   ) {
     return null;
   }
-  // An inactive curve reports ND (value null), yet its flat points are what
-  // the chemist checks to trust the call. The figure draws inactive curves as
-  // markers only (no sigmoid, no intercept line); the fit's own scalar just
-  // satisfies the snapshot shape.
+  // The sigmoid sits at the fit's own midpoint (`curve_params.fitted_value`): the cell's value
+  // is the reported one, a bound ("> 100") or none (n.d.). A snapshot stored before the field
+  // existed falls back to the reported value; an inactive curve's ND to its first intercept,
+  // since its flat points are what the chemist checks to trust the call.
   const fittedValue =
+    av.curve_params.fitted_value ??
     av.value ??
     (av.curve_params.curve_class === "inactive" ||
     av.curve_params.curve_class === "active_all_doses"
       ? av.intercept_values?.[0]?.value
       : null);
   if (fittedValue == null) return null;
+  // Colored by the primary itself (its reported value): no second marker.
   const selectedIntercept =
-    selected?.value != null && Number.isFinite(selected.value) && selected.value !== fittedValue
+    selected?.value != null && Number.isFinite(selected.value) && selected.value !== av.value
       ? { value: selected.value, label: selected.label }
       : null;
   return {
@@ -49,6 +51,8 @@ export function activityValueToCurveSnapshot(
     r_squared: av.r_squared,
     curve_class: av.curve_params.curve_class ?? null,
     raw_data: av.raw_data,
+    // With their stored qualifiers: no line goes at a censored or n.d. headline.
+    intercept_values: av.intercept_values ?? null,
     additional_curves: av.additional_curves ?? null,
     aggregate: av.aggregate ?? null,
     selected_intercept: selectedIntercept,

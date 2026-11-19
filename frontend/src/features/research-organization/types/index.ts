@@ -637,6 +637,9 @@ export interface CurveParams {
   curve_class: string | null;
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
+  /** The curve's fitted 4PL midpoint, where a chart draws the sigmoid (the primary's value
+   *  when exact); never the reported bound. Absent from snapshots stored before it existed. */
+  fitted_value?: number | null;
   /** Fit-quality warning codes (e.g. "ec50_at_bound") for compact renderers. */
   fit_quality_warnings?: string[] | null;
 }
