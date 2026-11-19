@@ -102,7 +102,7 @@ interface ChannelConfigUI {
   hit_value_low: string;
   hit_value_high: string;
   use_for_filter: boolean;
-  /** Multi-select of curve classes ("full", "partial", "bell_shaped", "inactive").
+  /** Multi-select of curve classes ("full", "partial", "bell_shaped", "inactive", "active_all_doses").
    *  Empty array means "no class filter — all classes pass". DR-curve channels only. */
   allowed_curve_classes: string[];
   /** For readout_data channels with normalizations: picks which formula layer
@@ -118,7 +118,13 @@ interface ChannelConfigUI {
   intercept_key: InterceptKey | null;
 }
 
-const ALL_CURVE_CLASSES = ["full", "partial", "bell_shaped", "inactive"] as const;
+const ALL_CURVE_CLASSES = [
+  "full",
+  "partial",
+  "bell_shaped",
+  "inactive",
+  "active_all_doses",
+] as const;
 
 /**
  * Stable key for `userEditedConfigs`, disambiguating per intercept.

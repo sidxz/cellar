@@ -209,13 +209,14 @@ export const CURVE_TYPE_LABELS: Record<CurveType, string> = {
   td50: "TD50",
 };
 
-export type CurveClass = "full" | "partial" | "bell_shaped" | "inactive";
+export type CurveClass = "full" | "partial" | "bell_shaped" | "inactive" | "active_all_doses";
 
 export const CURVE_CLASS_LABELS: Record<CurveClass, string> = {
   full: "Full",
   partial: "Partial",
   bell_shaped: "Bell-Shaped",
   inactive: "Inactive",
+  active_all_doses: "Active at all doses",
 };
 
 export type HillSlopeConstraint =

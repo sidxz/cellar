@@ -55,11 +55,12 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
 
   const rows: CompoundCurveRow[] = [];
   for (const [, molCurves] of byMolecule) {
-    // Best curve = lowest fitted_value (most potent), excluding inactive
+    // Best curve = most potent, excluding inactive. Active at every dose beats any exact
+    // value: its fitted midpoint is noise, not a potency.
+    const potency = (c: DoseResponseCurve) =>
+      c.curve_class === "active_all_doses" ? Number.NEGATIVE_INFINITY : c.fitted_value;
     const active = molCurves.filter((c) => c.curve_class !== "inactive");
-    const sorted = (active.length > 0 ? active : molCurves).sort(
-      (a, b) => a.fitted_value - b.fitted_value,
-    );
+    const sorted = (active.length > 0 ? active : molCurves).sort((a, b) => potency(a) - potency(b));
     const best = sorted[0];
 
     // Condense raw_data to [{x, y}]

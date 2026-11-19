@@ -24,19 +24,21 @@ import { Badge } from "@/shared/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 import { CURVE_CLASS_LABELS, type CurveClass } from "../types";
 
-const FULL_STYLES: Record<string, string> = {
+const FULL_STYLES: Record<CurveClass, string> = {
   full: "border-success/40 bg-success/10 text-success",
   partial: "border-yellow-500/40 bg-yellow-500/10 text-yellow-400",
   bell_shaped: "border-primary/40 bg-primary/10 text-primary",
   inactive:
     "border-slate-300 bg-transparent text-slate-700 dark:border-slate-600 dark:text-slate-300",
+  active_all_doses: "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300",
 };
 
-const COMPACT_STYLES: Record<string, string> = {
+const COMPACT_STYLES: Record<CurveClass, string> = {
   full: "bg-success/15 text-success",
   partial: "bg-yellow-500/15 text-yellow-400",
   bell_shaped: "bg-primary/15 text-primary",
   inactive: "bg-slate-200/60 text-slate-700 dark:bg-slate-800/40 dark:text-slate-300",
+  active_all_doses: "bg-violet-500/15 text-violet-700 dark:text-violet-300",
 };
 
 interface CurveClassBadgeProps {
@@ -67,14 +69,14 @@ export function CurveClassBadge({
 
   const key = String(curveClass).toLowerCase();
   if (compact) {
-    const cls = COMPACT_STYLES[key] ?? COMPACT_STYLES.inactive;
+    const cls = (COMPACT_STYLES as Record<string, string>)[key] ?? COMPACT_STYLES.inactive;
     const letter = key.charAt(0).toUpperCase();
     return (
       <Badge className={cn("ml-1.5 text-xs px-1 py-0 border-0", cls, className)}>{letter}</Badge>
     );
   }
 
-  const cls = FULL_STYLES[key] ?? FULL_STYLES.inactive;
+  const cls = (FULL_STYLES as Record<string, string>)[key] ?? FULL_STYLES.inactive;
   const label = (CURVE_CLASS_LABELS as Record<string, string>)[curveClass] ?? curveClass;
   return (
     <Badge variant="outline" className={cn(cls, className)}>

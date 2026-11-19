@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { HitCriterion } from "../types";
-import { applyHitFilter } from "./run-dr-results-transforms";
+import type { DoseResponseCurve, HitCriterion } from "../types";
+import { applyHitFilter, buildCompoundRows } from "./run-dr-results-transforms";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
 
 // ---------------------------------------------------------------------------
@@ -166,5 +166,25 @@ describe("applyHitFilter", () => {
       { readout_name: "IC50", operator: "not_between", value: [1, 10] },
     ];
     expect(applyHitFilter(rows, criteria, DR).map((r) => r.molecule_id)).toEqual(["mol-1"]);
+  });
+});
+
+describe("buildCompoundRows — best curve", () => {
+  const curve = (id: string, curve_class: string, fitted_value: number) =>
+    ({
+      id,
+      molecule_id: "mol-1",
+      curve_class,
+      fitted_value,
+      raw_data: [],
+    }) as unknown as DoseResponseCurve;
+
+  it("ranks a curve active at every dose ahead of an exact one, whatever its fitted midpoint", () => {
+    // A flat curve's midpoint is noise (6.8 here); it is still the most potent result.
+    const [row] = buildCompoundRows([
+      curve("exact", "full", 0.5),
+      curve("flat", "active_all_doses", 6.8),
+    ]);
+    expect(row.curve_class).toBe("active_all_doses");
   });
 });

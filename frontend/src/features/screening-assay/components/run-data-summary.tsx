@@ -118,7 +118,9 @@ export function RunDataSummary({ run, protocol }: { run: Run; protocol: Protocol
             ? `${fmt(f.value)}${doseUnit}`
             : f.curve_class === "inactive"
               ? "inactive"
-              : "—",
+              : f.curve_class === "active_all_doses"
+                ? "active at all doses"
+                : "—",
         );
       return values.length > 0 ? values.join(", ") : "—";
     }),

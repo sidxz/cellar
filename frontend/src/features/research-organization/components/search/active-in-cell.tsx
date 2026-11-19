@@ -6,9 +6,11 @@ import type { AnyProtocolActivity, AnyProtocolEntry } from "../../types";
 
 const MAX_ROWS = 3;
 
-/** Curve-class dot: trustworthy → green, partial → amber, everything else grey. */
+/** Curve-class dot: trustworthy → green (active at every dose is a trustworthy call), partial →
+ *  amber, everything else grey. */
 const DOT: Record<CurveClass, string> = {
   full: "bg-emerald-500",
+  active_all_doses: "bg-emerald-500",
   partial: "bg-amber-500",
   bell_shaped: "bg-muted-foreground/50",
   inactive: "bg-muted-foreground/50",

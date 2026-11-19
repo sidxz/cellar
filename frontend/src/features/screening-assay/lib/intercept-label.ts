@@ -177,6 +177,12 @@ const TOOLTIP_ABOVE_RANGE =
   "The fit puts this value above the tested doses; it is reported as a bound, not the extrapolated number.";
 const TOOLTIP_BELOW_RANGE =
   "The fit puts this value below the tested doses; it is reported as a bound, not the extrapolated number.";
+export const TOOLTIP_ACTIVE_ALL_DOSES =
+  "Active at all doses: the response is already past this level at the lowest tested dose, so the value lies below it.";
+const TOOLTIP_ACTIVE_NO_RANGE =
+  "ND = Not Determined. Curve was classified active at all doses, and no tested concentration is available to report as a bound.";
+const TOOLTIP_NOT_DETERMINABLE =
+  "ND = Not Determined. The curve has no transition within the tested doses, so this level cannot be read from it.";
 const TOOLTIP_MISSING = "No value for this intercept. Recompute the curve to refresh.";
 const TOOLTIP_QUALIFIER =
   "Response did not reach this intercept within the tested concentration range. Reported as an upper-bound qualifier.";
@@ -240,6 +246,9 @@ export function formatInterceptDisplay(args: {
   max_dose: number | null;
   /** The lowest tested dose; without it nothing is censored below the range. */
   min_dose?: number | null;
+  /** The stored outcome of this intercept: "=" exact, "<" / ">" outside the tested doses,
+   *  "nd" not determinable. Absent on curves fitted before it existed: today's rules apply. */
+  qualifier?: string | null;
   // ---- NEW: multi-run aggregation context (all optional, defaults
   // preserve current single-run behavior) ----
   runCount?: number;
@@ -267,6 +276,14 @@ export function formatInterceptDisplay(args: {
     // ascending order but ahead of nulls.
     sortValue: Number.POSITIVE_INFINITY,
   });
+  const below = (bound: number, tooltip: string, warning: boolean) => ({
+    kind: "qualifier" as const,
+    text: `< ${boundText(bound)}`,
+    tooltip,
+    warning,
+    // More potent than the tested range — ahead of every finite scalar.
+    sortValue: Number.NEGATIVE_INFINITY,
+  });
   const nd = (tooltip: string) => ({
     kind: "nd" as const,
     text: "ND",
@@ -274,9 +291,34 @@ export function formatInterceptDisplay(args: {
     warning: false,
     sortValue: null,
   });
+  const scalar = (value: number) => ({
+    kind: "scalar" as const,
+    text: value.toPrecision(4),
+    tooltip: "",
+    warning: false,
+    sortValue: value,
+  });
+  // A censored value stores the edge dose itself; the tested range wins when known.
+  const lowEdge = minDose ?? positive(args.value);
 
+  // The class wins at both ends (a scientist's hand class too), then the stored qualifier,
+  // then — for curves fitted before qualifiers — today's value-vs-range rules.
   if (args.curve_class === "inactive") {
     base = maxDose != null ? above(TOOLTIP_INACTIVE, false) : nd(TOOLTIP_INACTIVE_NO_RANGE);
+  } else if (args.curve_class === "active_all_doses") {
+    base =
+      minDose != null
+        ? below(minDose, TOOLTIP_ACTIVE_ALL_DOSES, false)
+        : nd(TOOLTIP_ACTIVE_NO_RANGE);
+  } else if (args.qualifier === "nd") {
+    base = nd(TOOLTIP_NOT_DETERMINABLE);
+  } else if (args.qualifier === "<") {
+    base =
+      lowEdge != null ? below(lowEdge, TOOLTIP_BELOW_RANGE, true) : nd(TOOLTIP_NOT_DETERMINABLE);
+  } else if (args.qualifier === ">") {
+    base = maxDose != null ? above(TOOLTIP_QUALIFIER, true) : nd(TOOLTIP_AT_BOUND_NO_RANGE);
+  } else if (args.qualifier === "=" && args.value != null) {
+    base = scalar(args.value);
   } else if (args.value == null) {
     base = {
       kind: "missing",
@@ -290,22 +332,9 @@ export function formatInterceptDisplay(args: {
   } else if (maxDose != null && args.value > maxDose) {
     base = above(TOOLTIP_ABOVE_RANGE, true);
   } else if (minDose != null && args.value < minDose) {
-    base = {
-      kind: "qualifier",
-      text: `< ${boundText(minDose)}`,
-      tooltip: TOOLTIP_BELOW_RANGE,
-      warning: true,
-      // More potent than the tested range — ahead of every finite scalar.
-      sortValue: Number.NEGATIVE_INFINITY,
-    };
+    base = below(minDose, TOOLTIP_BELOW_RANGE, true);
   } else {
-    base = {
-      kind: "scalar",
-      text: args.value.toPrecision(4),
-      tooltip: "",
-      warning: false,
-      sortValue: args.value,
-    };
+    base = scalar(args.value);
   }
 
   // Multi-run decoration: subscript run-count (when ≥2 runs) + mode-

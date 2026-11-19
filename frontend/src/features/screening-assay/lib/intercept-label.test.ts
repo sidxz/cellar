@@ -430,3 +430,44 @@ describe("formatInterceptDisplay multi-run extension", () => {
     expect(out.decoration?.runCountSubscript).toBe("₁₂");
   });
 });
+
+describe("formatInterceptDisplay — stored qualifier", () => {
+  const range = { max_dose: 100, min_dose: 0.0002 };
+  const show = (over: Partial<Parameters<typeof formatInterceptDisplay>[0]>) =>
+    formatInterceptDisplay({ value: 1, at_bound: false, curve_class: "full", ...range, ...over });
+
+  it("reads an Active-at-all-doses curve as below the lowest dose, whatever it stored", () => {
+    for (const qualifier of ["<", "=", ">", "nd", null] as const) {
+      const out = show({ curve_class: "active_all_doses", qualifier, value: 0.0002 });
+      expect(out.text).toBe("< 0.0002");
+      expect(out.sortValue).toBe(Number.NEGATIVE_INFINITY);
+    }
+  });
+
+  it("keeps an inactive curve above the top dose even when it stored an exact value", () => {
+    expect(show({ curve_class: "inactive", qualifier: "=", value: 3 }).text).toBe("> 100");
+  });
+
+  it("reports a censored value at the edge of the tested doses as a bound", () => {
+    expect(show({ qualifier: "<", value: 0.0002 }).text).toBe("< 0.0002");
+    expect(show({ qualifier: ">", value: 100 }).text).toBe("> 100");
+  });
+
+  it("says a value the flat curve cannot give is not determined, not missing", () => {
+    const out = show({ qualifier: "nd", value: null });
+    expect(out.kind).toBe("nd");
+    expect(out.text).toBe("ND");
+  });
+
+  it("shows an exact value as a number", () => {
+    const out = show({ qualifier: "=", value: 3.87 });
+    expect(out.kind).toBe("scalar");
+    expect(out.text).toBe("3.870");
+  });
+
+  it("keeps today's display for a curve stored before qualifiers", () => {
+    expect(show({ value: 0.00001 }).text).toBe("< 0.0002");
+    expect(show({ value: null }).kind).toBe("missing");
+    expect(show({ value: 3.87 }).text).toBe("3.870");
+  });
+});

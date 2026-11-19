@@ -1,5 +1,8 @@
 import type { CurveSnapshot } from "@/features/screening-assay/components/dose-response-figure";
-import { TOOLTIP_INACTIVE } from "@/features/screening-assay/lib/intercept-label";
+import {
+  TOOLTIP_ACTIVE_ALL_DOSES,
+  TOOLTIP_INACTIVE,
+} from "@/features/screening-assay/lib/intercept-label";
 import { formatCount, formatMeasurementValue } from "@/shared/lib/format-number";
 import type { Dataset } from "../types";
 import { protocolName, selectivityKeys } from "./cross-protocol";
@@ -62,6 +65,7 @@ export function describeValue(
     const curveClass = siblingAt(ds, key, "curve_class", i);
     if (value === null && curveClass == null) return null;
     if (curveClass === "inactive") lines.push(TOOLTIP_INACTIVE);
+    if (curveClass === "active_all_doses") lines.push(TOOLTIP_ACTIVE_ALL_DOSES);
     const r2 = at("r_squared");
     const hill = at("hill_slope");
     lines.push(

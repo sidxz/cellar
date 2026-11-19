@@ -32,7 +32,10 @@ export function activityValueToCurveSnapshot(
   // satisfies the snapshot shape.
   const fittedValue =
     av.value ??
-    (av.curve_params.curve_class === "inactive" ? av.intercept_values?.[0]?.value : null);
+    (av.curve_params.curve_class === "inactive" ||
+    av.curve_params.curve_class === "active_all_doses"
+      ? av.intercept_values?.[0]?.value
+      : null);
   if (fittedValue == null) return null;
   const selectedIntercept =
     selected?.value != null && Number.isFinite(selected.value) && selected.value !== fittedValue
