@@ -24,13 +24,7 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import 
 from tests.fixtures.dose_response_curves import seed_curve
 from tests.fixtures.intercept_report_cases import CASES, Case
 
-_SPEC = {"kind": "ec", "level": 50.0, "basis": "relative_percent", "label": None}
 _MIDPOINT = 3.0  # a censored or n.d. primary's fitted_value: the fitted 4PL midpoint
-
-
-def _intercept(case: Case) -> dict:
-    iv = {"spec": _SPEC, "value": case.value, "at_bound": case.at_bound}
-    return iv if case.qualifier is None else {**iv, "qualifier": case.qualifier}
 
 
 async def _store(uow, workspace_id, case: Case, fitted_value: float) -> uuid.UUID:
@@ -49,7 +43,7 @@ async def _store(uow, workspace_id, case: Case, fitted_value: float) -> uuid.UUI
             "cls": case.curve_class,
             "fv": fitted_value,
             "raw": json.dumps(raw),
-            "iv": json.dumps([_intercept(case)]),
+            "iv": json.dumps(case.intercept_values()),
         },
     )
     return curve.id
@@ -57,7 +51,7 @@ async def _store(uow, workspace_id, case: Case, fitted_value: float) -> uuid.UUI
 
 async def _reported(uow, ids: dict[str, uuid.UUID], intercept_key) -> dict[str, tuple]:
     value, qualifier = reported_curve_value(
-        DoseResponseCurveModel, *_curve_intercept(intercept_key)
+        DoseResponseCurveModel, _curve_intercept(intercept_key)
     )
     rows = (
         await uow.session.execute(
@@ -76,19 +70,23 @@ async def _reported(uow, ids: dict[str, uuid.UUID], intercept_key) -> dict[str, 
 
 @pytest.mark.asyncio
 async def test_the_sql_reported_value_follows_the_precedence_table(uow, workspace_id):
-    keyed: dict[str, uuid.UUID] = {}
+    keyed: dict[tuple[str, float], dict[str, uuid.UUID]] = {}
     primary: dict[str, uuid.UUID] = {}
     async with uow:
         for case in CASES:
-            keyed[case.id] = await _store(uow, workspace_id, case, _MIDPOINT)
+            keyed.setdefault(case.key, {})[case.id] = await _store(
+                uow, workspace_id, case, _MIDPOINT
+            )
             # The primary is read off fitted_value (NOT NULL), which is the primary
             # intercept's value when it has one.
-            if case.value is not None:
+            if case.primary and case.value is not None:
                 primary[case.id] = await _store(uow, workspace_id, case, case.value)
         await uow.commit()
 
     async with uow:
-        by_key = await _reported(uow, keyed, {"kind": "ec", "level": 50.0})
+        by_key: dict[str, tuple] = {}
+        for (kind, level), ids in keyed.items():
+            by_key |= await _reported(uow, ids, {"kind": kind, "level": level})
         by_primary = await _reported(uow, primary, None)
 
     expected = {c.id: c.expected for c in CASES}

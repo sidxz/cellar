@@ -23,6 +23,7 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
     COMPOUND_RESULT,
+    CurveIntercept,
     primary_intercept,
     reported_curve_value,
 )
@@ -193,7 +194,7 @@ def _activity_where_clause(
         # by (kind, level) per the spec at
         # docs/superpowers/specs/2026-05-13-dynamic-intercept-columns-design.md.
         data_col, qualifier_col = reported_curve_value(
-            DoseResponseCurveModel, *_curve_intercept(cond.get("intercept_key"))
+            DoseResponseCurveModel, _curve_intercept(cond.get("intercept_key"))
         )
         molecule_col = DoseResponseCurveModel.molecule_id
         run_id_col = DoseResponseCurveModel.run_id
@@ -251,11 +252,11 @@ def _activity_where_clause(
     return MoleculeModel.id.in_(sa.select(molecule_col).where(*base_filters, value_filter))
 
 
-def _curve_intercept(ik: Any) -> tuple[ColumnElement, ColumnElement, ColumnElement]:
-    """(value, at_bound, qualifier) of the intercept a condition names: the primary
-    ``fitted_value`` (indexed, fast) with intercept_values[0]'s flag and qualifier, or
-    the (kind, level) entry of the ``intercept_values`` JSONB — secondary intercepts
-    (EC90 on an EC50-primary fit, etc.) live only there."""
+def _curve_intercept(ik: Any) -> CurveIntercept:
+    """The intercept a condition names: the primary ``fitted_value`` (indexed, fast) with
+    intercept_values[0]'s flag and qualifier, or the (kind, level) entry of the
+    ``intercept_values`` JSONB — secondary intercepts (EC90 on an EC50-primary fit, etc.)
+    live only there. The entry is the primary when it is intercept_values[0]."""
     c = DoseResponseCurveModel
     if ik is None:
         return primary_intercept(c)
@@ -264,13 +265,22 @@ def _curve_intercept(ik: Any) -> tuple[ColumnElement, ColumnElement, ColumnEleme
     if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
         msg = f"Invalid intercept_key on activity where: {ik!r}"
         raise ValueError(msg)
-    return (
-        _jsonb_intercept(kind, float(level), lambda v: sa.cast(v["value"].astext, sa.Float)),
-        sa.func.coalesce(
+    first = c.intercept_values[0]["spec"]
+    return CurveIntercept(
+        value=_jsonb_intercept(kind, float(level), lambda v: sa.cast(v["value"].astext, sa.Float)),
+        at_bound=sa.func.coalesce(
             _jsonb_intercept(kind, float(level), lambda v: v["at_bound"] == _JSON_TRUE),
             sa.false(),
         ),
-        _jsonb_intercept(kind, float(level), lambda v: v["qualifier"].astext),
+        qualifier=_jsonb_intercept(kind, float(level), lambda v: v["qualifier"].astext),
+        primary=sa.func.coalesce(
+            sa.and_(
+                first["kind"].astext == kind,
+                sa.cast(first["level"].astext, sa.Float) == float(level),
+            ),
+            sa.false(),
+        ),
+        stored=_jsonb_intercept(kind, float(level), lambda v: sa.true()).is_not(None),
     )
 
 
@@ -360,7 +370,7 @@ def _qualified_value_filter(value_col: Any, qualifier_col: Any, cond: dict[str, 
 def exact_curve_potency(curve: Any) -> ColumnElement:
     """The curve's primary potency when the grid reports it exactly (inside the
     tested doses), else NULL: a ratio of bounds is no ratio."""
-    value, qualifier = reported_curve_value(curve, *primary_intercept(curve))
+    value, qualifier = reported_curve_value(curve, primary_intercept(curve))
     return sa.case((qualifier.is_(None), value))
 
 
@@ -401,7 +411,7 @@ def _potency_any_protocol_clause(cond: dict[str, Any], workspace_id: uuid.UUID) 
     used — the legacy shape from the first any-protocol release.
     """
     value, qualifier = reported_curve_value(
-        DoseResponseCurveModel, *_curve_intercept(cond.get("intercept_key"))
+        DoseResponseCurveModel, _curve_intercept(cond.get("intercept_key"))
     )
     sub = (
         sa.select(DoseResponseCurveModel.molecule_id)

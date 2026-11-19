@@ -228,14 +228,13 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
     """
     c = DoseResponseCurveModel
     active = and_(c.curve_class != "inactive", c.fitted_value > 0)
-    fitted, at_bound, stored = primary_intercept(c)
+    primary = primary_intercept(c)
+    stored = primary.qualifier
     censored: list[ColumnElement[Any]] = []
     doses = None
     if scope.exclude_censored:
         doses = _doses()
-        value, qualifier = reported_curve_value(
-            c, fitted, at_bound, stored, lo=doses.c.lo, hi=doses.c.hi
-        )
+        value, qualifier = reported_curve_value(c, primary, lo=doses.c.lo, hi=doses.c.hi)
         active = and_(active, qualifier.is_(None), value.is_not(None))
         gt = case((qualifier == ">", value))
         lt = case((qualifier == "<", value))
@@ -282,7 +281,7 @@ def _potency_rank() -> ColumnElement[int]:
     "<"), then exact fits by fitted value, then "> top dose" and n.d. ones, whose fitted
     value is a midpoint, not a potency. Fits stored before qualifiers rank as exact."""
     c = DoseResponseCurveModel
-    _, _, stored = primary_intercept(c)
+    stored = primary_intercept(c).qualifier
     return case(
         (or_(c.curve_class == CurveClass.ACTIVE_ALL_DOSES.value, stored == "<"), 0),
         (stored.in_((">", "nd")), 2),

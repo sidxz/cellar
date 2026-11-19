@@ -227,6 +227,7 @@ def _reported_potency(
         if iv is None:
             return None, ValueQualifier.ND
         value = iv.value
+    primary = iv is None or iv is ivs[0]
     low, high = _dose_range_from_raw(curve.raw_data)
     return report_intercept(
         curve.curve_class,
@@ -235,6 +236,7 @@ def _reported_potency(
         low,
         high,
         at_bound=iv.at_bound if iv else False,
+        primary=primary,
     )
 
 

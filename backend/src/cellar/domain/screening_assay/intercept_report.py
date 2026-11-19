@@ -20,20 +20,23 @@ def report_intercept(
     high_dose: float | None,
     *,
     at_bound: bool = False,
+    primary: bool,
 ) -> tuple[float | None, ValueQualifier]:
     """(value, qualifier) of one intercept of a curve tested from ``low_dose`` to
-    ``high_dose``.
+    ``high_dose``; ``primary`` when it is the curve's first intercept.
 
     The class wins at both ends, set by the fitter or by a scientist: ``inactive`` reads
-    "> highest dose", ``active_all_doses`` "< lowest dose". Any other class reads the
-    stored qualifier: ``>`` / ``<`` the bound dose, ``nd`` no value, ``=`` the value. An
-    intercept stored before qualifiers (``qualifier`` None) reads by the old rules: at the
-    bound or above the doses "> highest", below them "< lowest", else the value. A bound
-    with no dose to quote it at, or no value, is ``nd``.
+    "> highest dose" on every intercept, ``active_all_doses`` "< lowest dose" on the
+    primary, the intercept the class was read from (a secondary EC90 can still be out of
+    reach, or not readable). Otherwise the stored qualifier decides: ``>`` / ``<`` the
+    bound dose, ``nd`` no value, ``=`` the value. An intercept stored before qualifiers
+    (``qualifier`` None) reads by the old rules: at the bound or above the doses
+    "> highest", below them "< lowest", else the value. A bound with no dose to quote it
+    at, or no value, is ``nd``.
     """
     if curve_class == CurveClass.INACTIVE:
         return _bound(high_dose, ValueQualifier.GT)
-    if curve_class == CurveClass.ACTIVE_ALL_DOSES:
+    if primary and curve_class == CurveClass.ACTIVE_ALL_DOSES:
         return _bound(low_dose, ValueQualifier.LT)
     if qualifier == ValueQualifier.GT:
         return _bound(high_dose, ValueQualifier.GT)

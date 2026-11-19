@@ -10,7 +10,7 @@ and chemistry-honest variance statistics live in one place.
 
 The intercept-resolution rule reports a potency the way the run tab and the
 external platform do: an inactive curve reads "> top dose", one active at all
-doses "< lowest dose"; otherwise the intercept's stored qualifier decides, and
+doses "< lowest dose" on its primary; otherwise the intercept's stored qualifier decides, and
 an intercept stored before qualifiers reads by today's rules. See
 ``resolve_intercept`` and ``domain.screening_assay.intercept_report``.
 """
@@ -122,11 +122,11 @@ def resolve_intercept(
     """Resolve one run's intercept to a (value, qualifier) cell.
 
     ``report_intercept``'s rule: an inactive curve reads (top dose, GT) and one active
-    at all doses (lowest dose, LT); otherwise the intercept's stored qualifier
-    decides, and one stored before qualifiers reads by today's rules (at the bound or
-    above the doses GT, below them LT, else EQ). ND when there is no dose to quote,
-    no value or no such intercept — the frontend's ``formatInterceptDisplay`` applies
-    the same rule to one curve.
+    at all doses (lowest dose, LT) on its primary (intercept_values[0]); otherwise the
+    intercept's stored qualifier decides, and one stored before qualifiers reads by
+    today's rules (at the bound or above the doses GT, below them LT, else EQ). ND when
+    there is no dose to quote, no value or no such intercept — the frontend's
+    ``formatInterceptDisplay`` applies the same rule to one curve.
     """
     # A readout row has no curve, so there is no intercept to resolve — its
     # value IS the reported endpoint, qualifier and all (a CRO's ">50"). It
@@ -144,15 +144,17 @@ def resolve_intercept(
     if intercept_key is None:
         # The primary intercept: ``run.value`` (the curve's fitted_value), with
         # the at-bound flag of intercept_values[0] when the curve carries one.
-        return _report(run, ivs[0] if ivs else {}, run.value)
-    for iv in ivs:
+        return _report(run, ivs[0] if ivs else {}, run.value, primary=True)
+    for i, iv in enumerate(ivs):
         spec = iv.get("spec") or {}
         if (spec.get("kind"), spec.get("level")) == (intercept_key.kind, intercept_key.level):
-            return _report(run, iv, iv.get("value"))
+            return _report(run, iv, iv.get("value"), primary=i == 0)
     return None, ValueQualifier.ND
 
 
-def _report(run: ResolvedRun, iv: dict, value: object) -> tuple[float | None, ValueQualifier]:
+def _report(
+    run: ResolvedRun, iv: dict, value: object, *, primary: bool
+) -> tuple[float | None, ValueQualifier]:
     """One curve intercept censored at the curve's tested doses (``report_intercept``)."""
     low, top = _dose_range_from_raw(run.curve_raw_data)
     return report_intercept(
@@ -162,6 +164,7 @@ def _report(run: ResolvedRun, iv: dict, value: object) -> tuple[float | None, Va
         low,
         top,
         at_bound=iv.get("at_bound") is True,
+        primary=primary,
     )
 
 
@@ -173,8 +176,8 @@ def reported_intercept_values(run: ResolvedRun) -> list[dict]:
     if run.curve_id is None:
         return ivs
     out = []
-    for iv in ivs:
-        value, qualifier = _report(run, iv, iv.get("value"))
+    for i, iv in enumerate(ivs):
+        value, qualifier = _report(run, iv, iv.get("value"), primary=i == 0)
         out.append({**iv, "value": value, "qualifier": qualifier.value})
     return out
 

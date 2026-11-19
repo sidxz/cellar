@@ -623,6 +623,7 @@ class ReadoutCalculationEngine:
                     min(doses, default=None),
                     max(doses, default=None),
                     at_bound=primary.at_bound if primary else False,
+                    primary=True,
                 )
                 entry = (
                     plates.setdefault(str(plate_id), {})

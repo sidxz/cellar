@@ -62,9 +62,7 @@ def _run(
             [{"x": 0.001, "y": 0}, {"x": 100.0, "y": 100}] if raw_data is None else raw_data
         ),
         intercept_values=intercept_values
-        or [
-            {"spec": {"kind": "ic", "level": 50.0}, "value": value, "at_bound": False}
-        ],
+        or [{"spec": {"kind": "ic", "level": 50.0}, "value": value, "at_bound": False}],
     )
 
 
@@ -131,9 +129,7 @@ def test_resolve_intercept_value_on_a_tested_dose_is_exact():
 
 def test_resolve_intercept_at_bound_returns_gt_max_dose():
     run = _run(
-        intercept_values=[
-            {"spec": {"kind": "ic", "level": 50.0}, "value": 99.0, "at_bound": True}
-        ]
+        intercept_values=[{"spec": {"kind": "ic", "level": 50.0}, "value": 99.0, "at_bound": True}]
     )
     value, q = resolve_intercept(run, None)
     assert value == 100.0  # max dose from raw_data
@@ -353,9 +349,9 @@ def test_best_r_squared_picks_highest_r2_curve():
 def test_best_r_squared_handles_zero_r2_distinct_from_none():
     """r²=0.0 is a legal value (flat trace); must not tie with r²=None."""
     runs = [
-        _run(value=0.10, r_squared=0.0),     # legal but bad fit
-        _run(value=0.20, r_squared=None),    # not yet fit / unknown
-        _run(value=0.30, r_squared=0.85),    # winner
+        _run(value=0.10, r_squared=0.0),  # legal but bad fit
+        _run(value=0.20, r_squared=None),  # not yet fit / unknown
+        _run(value=0.30, r_squared=0.85),  # winner
     ]
     out = apply_selection_rule(
         runs, SelectionRule.BEST_R_SQUARED, QualifierHandling.EXCLUDE_QUALIFIED, None
@@ -446,15 +442,11 @@ def test_no_disagreement_with_single_run():
 
 
 def _case_run(case: Case, *, fitted_value: float | None) -> ResolvedRun:
-    iv: dict = {"spec": {"kind": "ec", "level": 50.0}, "value": case.value}
-    iv["at_bound"] = case.at_bound
-    if case.qualifier is not None:
-        iv["qualifier"] = case.qualifier
     doses = [{"concentration": d, "response": 50.0} for d in case.doses or ()]
     return _run(
         value=fitted_value,
         curve_class=case.curve_class,
-        intercept_values=[iv],
+        intercept_values=case.intercept_values(),
         raw_data=[*doses, {"concentration": 0.0, "response": 1.0}],  # dose 0 never counts
     )
 
@@ -462,11 +454,17 @@ def _case_run(case: Case, *, fitted_value: float | None) -> ResolvedRun:
 @pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
 def test_resolve_intercept_follows_the_precedence_table(case: Case):
     expected = (case.expected[0], ValueQualifier(case.expected[1]))
+    kind, level = case.key
     keyed = _case_run(case, fitted_value=3.0)  # the primary's fitted midpoint
-    assert resolve_intercept(keyed, InterceptKey(kind="ec", level=50.0)) == expected
-    # The primary reads fitted_value, the primary intercept's value.
-    primary = _case_run(case, fitted_value=case.value)
-    assert resolve_intercept(primary, None) == expected
+    assert resolve_intercept(keyed, InterceptKey(kind=kind, level=level)) == expected
+    if case.primary:
+        # The primary reads fitted_value, the primary intercept's value.
+        primary = _case_run(case, fitted_value=case.value)
+        assert resolve_intercept(primary, None) == expected
+    if case.stored:
+        # A run-history row reads each intercept as the cell does.
+        row = reported_intercept_values(keyed)[-1]
+        assert (row["value"], row["qualifier"]) == case.expected
 
 
 def test_reported_intercept_values_never_show_an_nd_or_flat_active_intercept_as_a_value():
@@ -479,5 +477,5 @@ def test_reported_intercept_values_never_show_an_nd_or_flat_active_intercept_as_
     )
     assert [(iv["value"], iv["qualifier"]) for iv in reported_intercept_values(run)] == [
         (0.001, "<"),
-        (0.001, "<"),  # the class wins over the stored nd
+        (None, "nd"),  # the class speaks for the primary only
     ]
