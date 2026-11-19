@@ -112,8 +112,8 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
     """Build a sparkline-renderer-compatible snapshot dict from an ActivityValue dict.
 
     ``ActivityValue`` (via ``dataclasses.asdict``) carries raw_data,
-    curve_params, value (the fitted primary intercept), curve_class via
-    curve_params, plus aggregate-mode extras (``additional_curves`` +
+    curve_params (the fit, its midpoint ``fitted_value`` and curve_class), plus
+    aggregate-mode extras (``additional_curves`` +
     ``aggregate``).  This helper maps those fields onto the snapshot
     shape consumed by :func:`render_sparkline`.
 
@@ -140,7 +140,9 @@ def av_to_sparkline_snapshot(av: dict) -> dict | None:
         if isinstance(pt, dict) and "x" in pt and "y" in pt
     ]
 
-    ec50 = av.get("value")
+    # The sigmoid sits at the fit's midpoint, never at the reported value, which may be
+    # a bound ("> top dose") or none (n.d.).
+    ec50 = curve_params.get("fitted_value")
     fit: dict = {"bottom": bottom, "top": top, "hill_slope": hill_slope}
     if ec50 is not None:
         fit["ec50"] = ec50

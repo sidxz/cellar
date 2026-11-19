@@ -326,6 +326,46 @@ class TestEnrichMoleculesWithCurveParams:
         assert av.disagreement_flag is False
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("qualifier", "stored", "reported"),
+        [(ValueQualifier.GT, 10.0, (10.0, ">")), (ValueQualifier.ND, math.nan, (None, "nd"))],
+        ids=["above-the-doses", "nd"],
+    )
+    async def test_curve_params_carry_the_fitted_midpoint_beside_the_reported_value(
+        self, qualifier, stored, reported
+    ) -> None:
+        """A thumbnail draws the sigmoid at the fit, not at the reported bound: a partial
+        curve fitted at 1000 reads "> 10" (or n.d.), and its curve still sits at 1000."""
+        run_id = uuid.uuid4()
+        doses = [{"concentration": d, "response": 30.0} for d in (0.01, 0.1, 1.0, 10.0)]
+        primary = InterceptValue(
+            spec=InterceptSpec(kind=InterceptKind.IC, level=50.0),
+            value=stored,
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            at_bound=qualifier == ValueQualifier.GT,
+            qualifier=qualifier,
+        )
+        curve = _make_curve(
+            fitted_value=1000.0,
+            curve_class=CurveClass.PARTIAL,
+            raw_data=doses,
+            intercept_values=[primary],
+            run_id=run_id,
+        )
+        service = _make_service(
+            curve_repo=_curve_repo_for([curve]),
+            run_repo=_run_repo_for({run_id: _make_run(run_id=run_id, run_date=date(2026, 4, 1))}),
+        )
+        col_spec = f"drc:{RD_ID}"
+
+        av = (await service.enrich_molecules(WS, [MOL_ID], [col_spec]))[MOL_ID][col_spec]
+
+        assert (av.value, av.qualifier) == reported
+        assert av.curve_params is not None
+        assert av.curve_params.fitted_value == 1000.0
+
+    @pytest.mark.asyncio
     async def test_curve_without_raw_data(self) -> None:
         """When raw_data is empty/None, raw_data on ActivityValue is None."""
         run_id = uuid.uuid4()

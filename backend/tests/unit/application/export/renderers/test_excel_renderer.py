@@ -50,11 +50,11 @@ def test_av_to_sparkline_snapshot_maps_fields():
     """_av_to_sparkline_snapshot must convert ActivityValue wire dict to the
     snapshot shape the sparkline renderer expects:
       - data_points with dose/response keys (remapped from x/y in raw_data)
-      - fit with bottom/top/hill_slope/ec50 (ec50 comes from av['value'])
+      - fit with bottom/top/hill_slope/ec50 (ec50 is curve_params' fitted_value)
       - curve_class from curve_params
     """
     av = {
-        "value": 1.5,  # the fitted EC50 — maps to fit["ec50"]
+        "value": 1.5,
         "qualifier": None,
         "unit": "uM",
         "source": "dose_response",
@@ -71,6 +71,7 @@ def test_av_to_sparkline_snapshot_maps_fields():
             "curve_class": "active",
             "confidence_interval_low": None,
             "confidence_interval_high": None,
+            "fitted_value": 1.5,  # the fitted EC50 — maps to fit["ec50"]
             "fit_quality_warnings": None,
         },
     }
@@ -85,6 +86,31 @@ def test_av_to_sparkline_snapshot_maps_fields():
     assert snap["data_points"][0]["dose"] == 0.1
     assert snap["data_points"][0]["response"] == 5.0
     assert snap["data_points"][0]["is_excluded"] is False
+
+
+@pytest.mark.parametrize(
+    ("value", "qualifier"), [(10.0, ">"), (None, "nd")], ids=["above-the-doses", "nd"]
+)
+def test_av_to_sparkline_snapshot_draws_the_sigmoid_at_the_fit_not_the_reported_value(
+    value, qualifier
+):
+    """A partial curve fitted at 1000 reads "> 10" (or n.d.): the sparkline's curve still
+    sits at 1000, where the fit put it."""
+    av = {
+        "value": value,
+        "qualifier": qualifier,
+        "raw_data": [{"x": x, "y": 30.0} for x in (0.01, 0.1, 1.0, 10.0)],
+        "curve_params": {
+            "top": 100.0,
+            "bottom": 0.0,
+            "hill_slope": 1.0,
+            "curve_class": "partial",
+            "fitted_value": 1000.0,
+        },
+    }
+    snap = _av_to_sparkline_snapshot(av)
+    assert snap is not None
+    assert snap["fit"]["ec50"] == 1000.0
 
 
 def test_av_to_sparkline_snapshot_returns_none_without_fit():
@@ -125,6 +151,7 @@ async def test_excel_sparkline_uses_per_column_activity_lookup(tmp_path: Path):
             "curve_class": "active",
             "confidence_interval_low": None,
             "confidence_interval_high": None,
+            "fitted_value": 2.0,
             "fit_quality_warnings": None,
         },
     }

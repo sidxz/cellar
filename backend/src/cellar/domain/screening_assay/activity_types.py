@@ -97,6 +97,10 @@ class CurveParams:
     curve_class: str | None
     confidence_interval_low: float | None
     confidence_interval_high: float | None
+    # The curve's ``fitted_value``: the 4PL midpoint a chart draws the sigmoid at (the
+    # primary's value when exact). Never the reported value, which may be a bound
+    # ("> top dose") or none (n.d.). None for a reported endpoint with no curve.
+    fitted_value: float | None
     # Fit-quality warning codes (e.g. "ec50_at_bound") so compact renderers
     # can flag extrapolated fits without re-querying the curve aggregate.
     fit_quality_warnings: list[str] | None = None

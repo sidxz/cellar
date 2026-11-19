@@ -15,7 +15,7 @@ PNG = b"\x89PNG"
 def _av(ic50: float) -> dict:
     return {
         "value": ic50,
-        "curve_params": {"top": 100.0, "bottom": 0.0, "hill_slope": 1.0},
+        "curve_params": {"top": 100.0, "bottom": 0.0, "hill_slope": 1.0, "fitted_value": ic50},
         "raw_data": [{"x": x, "y": 100 * x / (x + ic50)} for x in (0.01, 0.1, 1.0, 10.0, 100.0)],
     }
 

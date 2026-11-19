@@ -970,6 +970,8 @@ class MoleculeActivityService:
                 curve_class=rep.curve_class,
                 confidence_interval_low=rep.curve_confidence_interval_low,
                 confidence_interval_high=rep.curve_confidence_interval_high,
+                # rep.value is the curve's fitted_value (a readout row's is its endpoint).
+                fitted_value=rep.value if rep.curve_id is not None else None,
                 fit_quality_warnings=list(rep.curve_fit_quality_warnings or []) or None,
             ),
             intercept_values=intercepts_payload or None,
