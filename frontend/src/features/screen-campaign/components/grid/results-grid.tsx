@@ -797,6 +797,7 @@ export function ResultsGridV2({
                       unit: m.unit ?? null,
                       moleculeLabel,
                       channelLabel: ch.label,
+                      yRange: curveFrames.get(ch.id)?.yRange,
                     })
                   }
                 >

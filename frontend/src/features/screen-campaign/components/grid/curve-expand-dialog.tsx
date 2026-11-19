@@ -28,6 +28,8 @@ export interface ExpandedCurve extends CurveSnapshot {
   /** Header context — molecule registration number and channel label. */
   moleculeLabel: string;
   channelLabel: string;
+  /** The column's y frame, so the enlarged curve reads on the thumbnail's scale. */
+  yRange?: [number, number];
 }
 
 interface Props {
@@ -38,9 +40,10 @@ interface Props {
 export function CurveExpandDialog({ data, onOpenChange }: Props) {
   const curves = useMemo<CurveLike[]>(() => {
     if (!data) return [];
+    const { yRange: _frame, ...snapshot } = data;
     // The snapshot is already a CurveLike; it only lacks the display label and
     // the unit, which the campaign holds on the measurement.
-    return [{ ...data, label: data.moleculeLabel, fitted_unit: data.unit ?? "" }];
+    return [{ ...snapshot, label: data.moleculeLabel, fitted_unit: data.unit ?? "" }];
   }, [data]);
 
   if (!data) return null;
@@ -57,7 +60,7 @@ export function CurveExpandDialog({ data, onOpenChange }: Props) {
             <span className="text-muted-foreground font-normal">{data.channelLabel}</span>
           </DialogTitle>
         </DialogHeader>
-        <DoseResponseChartView curves={curves} />
+        <DoseResponseChartView curves={curves} yRange={data.yRange} />
       </DialogContent>
     </Dialog>
   );
