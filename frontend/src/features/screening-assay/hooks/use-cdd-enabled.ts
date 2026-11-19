@@ -5,9 +5,9 @@ import { useDataSources } from "@/features/workspace-config/hooks/use-data-sourc
 export function useCddEnabled() {
   const { data: sources, isLoading } = useDataSources();
 
-  if (isLoading) return { enabled: false, loading: true };
+  if (isLoading) return { enabled: false, loading: true, source: undefined };
 
-  const hasActiveCdd = sources?.some((ds) => ds.source_type === "cdd_vault" && ds.is_active);
+  const source = sources?.find((ds) => ds.source_type === "cdd_vault" && ds.is_active);
 
-  return { enabled: !!hasActiveCdd, loading: false };
+  return { enabled: !!source, loading: false, source };
 }

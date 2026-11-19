@@ -35,12 +35,9 @@ import { Separator } from "@/shared/components/ui/separator";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
 import { saveText } from "@/shared/lib/api/download";
-import { formatFileSize } from "@/shared/lib/format-number";
 import {
   CloudDownload,
   Download,
-  FileSpreadsheet,
-  FileText,
   FlaskConical,
   Info,
   Pencil,
@@ -49,12 +46,13 @@ import {
   Upload,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useMolecule } from "../../hooks/use-molecules";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { MOLECULE_TYPE_LABELS } from "../../types";
 import type { BulkInput } from "../../types/registration-wizard";
 import type { ExternalIdentifierInput } from "../../types/registration-wizard";
+import { BulkUploadSummary } from "./bulk-upload-summary";
 
 // ─── CSV template ───────────────────────────────────────────────────────────
 
@@ -592,7 +590,7 @@ function SingleInputForm() {
 function detectFileFormat(filename: string): BulkInput["fileFormat"] | null {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".csv")) return "csv";
-  if (lower.endsWith(".xlsx") || lower.endsWith(".xls")) return "xlsx";
+  if (lower.endsWith(".xlsx")) return "xlsx";
   if (lower.endsWith(".sdf") || lower.endsWith(".sd")) return "sdf";
   return null;
 }
@@ -601,166 +599,189 @@ function BulkInputForm() {
   const bulkInput = useRegistrationWizard((s) => s.bulkInput);
   const updateBulkInput = useRegistrationWizard((s) => s.updateBulkInput);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
-
-  const { data: orgs } = useOrganizations();
+  const {
+    data: orgs,
+    isLoading: organizationsLoading,
+    isError: organizationsError,
+    refetch: retryOrganizations,
+  } = useOrganizations();
   const { data: settings } = useWorkspaceSettings();
   const [error, setError] = useState<string | null>(null);
-
-  // Hydrate createBatchOnDuplicate from workspace default on first load (before any file is selected)
-  // biome-ignore lint/correctness/useExhaustiveDependencies: hydrate the duplicate-batch default only when workspace settings arrive; `bulkInput.file`/`updateBulkInput` are omitted so a later file selection doesn't re-hydrate.
+  const defaultApplied = useRef(false);
   useEffect(() => {
-    if (settings && !bulkInput.file) {
-      // Backend types `registration_rules` as an opaque dict; read it as the
-      // FE's structured view (same convention as workspace-settings-form).
-      const rules = (settings.registration_rules ?? {}) as RegistrationRules;
-      updateBulkInput({
-        createBatchOnDuplicate: rules.create_batch_on_duplicate ?? false,
-      });
-    }
-  }, [settings]);
+    if (!settings || defaultApplied.current || bulkInput.file) return;
+    defaultApplied.current = true;
+    const rules = (settings.registration_rules ?? {}) as RegistrationRules;
+    updateBulkInput({ createBatchOnDuplicate: rules.create_batch_on_duplicate ?? false });
+  }, [settings, bulkInput.file, updateBulkInput]);
 
   const handleFile = useCallback(
     (file: File) => {
-      const fmt = detectFileFormat(file.name);
-      if (!fmt) {
-        setError(`Unsupported file type. Use .csv, .xlsx, .sdf or .sd — got "${file.name}".`);
+      const format = detectFileFormat(file.name);
+      if (!format) {
+        setError("Choose a CSV, XLSX, SDF, or SD file.");
+        return;
+      }
+      if (file.size === 0) {
+        setError("This file is empty. Choose a file containing compound records.");
         return;
       }
       setError(null);
-      updateBulkInput({ file, fileFormat: fmt });
+      updateBulkInput({ file, fileFormat: format });
     },
     [updateBulkInput],
   );
-
-  const handleNext = () => {
-    setError(null);
-
-    if (!bulkInput.file) {
-      setError("Please select a file to upload");
-      return;
-    }
-    if (!bulkInput.originatingOrgId) {
-      setError("Originating organization is required");
-      return;
-    }
-    nextStep();
-  };
-
-  const isSdf = bulkInput.fileFormat === "sdf";
+  const prerequisite = !bulkInput.file
+    ? "Choose a file to continue."
+    : !bulkInput.originatingOrgId
+      ? "Choose an originating organization to continue."
+      : null;
 
   return (
-    <div className="max-w-2xl space-y-6">
-      {/* Template download (CSV / XLSX share the same column layout). Also shown
-          when no file is selected yet so users can grab the template up-front. */}
-      {!isSdf && (
-        <Button variant="outline" size="sm" onClick={downloadCsvTemplate}>
-          <Download className="mr-2 h-3.5 w-3.5" />
-          Download CSV Template
-        </Button>
-      )}
-
-      {/* Organization selector */}
-      <div className="grid gap-2">
-        <Label htmlFor="bulk-org">
-          Originating Organization <span className="text-destructive">*</span>
-        </Label>
-        <Select
-          value={bulkInput.originatingOrgId ?? ""}
-          onValueChange={(v) => updateBulkInput({ originatingOrgId: v })}
-        >
-          <SelectTrigger id="bulk-org">
-            <SelectValue placeholder="Select organization" />
-          </SelectTrigger>
-          <SelectContent>
-            {orgs?.map((org) => (
-              <SelectItem key={org.id} value={org.id}>
-                {org.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <p className="text-xs text-muted-foreground">Applied to all compounds in the file.</p>
-      </div>
-
-      {/* Projects — optional, one choice for the whole file */}
-      <div className="grid gap-2">
-        <Label>
-          Projects <span className="text-xs text-muted-foreground">(optional)</span>
-        </Label>
-        <ProjectFilter
-          selectedIds={bulkInput.projectIds}
-          onChange={(ids) => updateBulkInput({ projectIds: ids })}
-        />
-        <p className="text-xs text-muted-foreground">
-          Every compound in the file — new or already registered — is added to these projects.
-        </p>
-      </div>
-
-      {/* Batch-on-duplicate checkbox */}
-      <div className="flex items-start gap-3 rounded-md border bg-muted/40 p-3">
-        <Checkbox
-          id="bulk-cbod"
-          checked={bulkInput.createBatchOnDuplicate}
-          onCheckedChange={(c) => updateBulkInput({ createBatchOnDuplicate: !!c })}
-          className="mt-0.5"
-        />
-        <div className="space-y-1">
-          <Label htmlFor="bulk-cbod" className="text-sm font-medium">
-            Create batch even for compounds that already exist
-          </Label>
-          <p className="text-xs text-muted-foreground">
-            {bulkInput.createBatchOnDuplicate
-              ? "A new batch will be created for every row, even when the compound already has one."
-              : "Rows whose compound already exists will only merge new identifiers — no new batch."}
-          </p>
+    <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <section
+        className="min-w-0 rounded-lg border bg-background"
+        aria-labelledby="bulk-upload-title"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
+          <div>
+            <h2 id="bulk-upload-title" className="font-semibold">
+              Upload file
+            </h2>
+            <p className="mt-1 text-sm text-foreground/70">
+              Choose your file, then set the defaults for its compounds.
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={downloadCsvTemplate}>
+            <Download className="size-4" />
+            Download CSV template
+          </Button>
         </div>
-      </div>
-
-      {/* Drop zone. The "Selected file info" card below is owned by this parent
-          (CsvDropzone shows only the name); the format-detection + unsupported-type
-          error lives in handleFile. */}
-      <CsvDropzone
-        file={bulkInput.file}
-        onFile={handleFile}
-        accept={{
-          "text/csv": [".csv"],
-          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
-          "chemical/x-mdl-sdfile": [".sdf", ".sd"],
-        }}
-        prompt="Drag & drop a file here, or click to browse"
-        hint="Accepts .csv, .xlsx, .sdf, .sd — format detected automatically"
-      />
-
-      {/* Selected file info */}
-      {bulkInput.file && (
-        <div className="flex items-center justify-between rounded-lg border p-3">
-          <div className="flex items-center gap-2">
-            {isSdf ? (
-              <FileText className="h-5 w-5 text-muted-foreground" />
-            ) : (
-              <FileSpreadsheet className="h-5 w-5 text-muted-foreground" />
-            )}
-            <div>
-              <p className="text-sm font-medium">{bulkInput.file.name}</p>
-              <p className="text-xs text-muted-foreground">
-                {formatFileSize(bulkInput.file.size)}
-                <span className="ml-2 uppercase">{bulkInput.fileFormat}</span>
+        <div className="space-y-5 p-5">
+          <CsvDropzone
+            file={bulkInput.file}
+            onFile={handleFile}
+            compactSelected
+            onRemove={() => {
+              updateBulkInput({ file: null });
+              setError(null);
+            }}
+            onRejected={setError}
+            accept={{
+              "text/csv": [".csv"],
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+              "chemical/x-mdl-sdfile": [".sdf", ".sd"],
+            }}
+            prompt="Drop a file here, or click to browse"
+            hint="CSV, XLSX, SDF, or SD"
+          />
+          {error && (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive"
+            >
+              {error}
+            </p>
+          )}
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid content-start gap-2">
+              <Label htmlFor="bulk-org">
+                Originating organization{" "}
+                <span className="font-normal text-foreground/70">(required)</span>
+              </Label>
+              <Select
+                value={bulkInput.originatingOrgId ?? ""}
+                onValueChange={(value) => updateBulkInput({ originatingOrgId: value })}
+                disabled={organizationsLoading}
+              >
+                <SelectTrigger id="bulk-org" className="w-full" aria-describedby="bulk-org-help">
+                  <SelectValue
+                    placeholder={
+                      organizationsLoading ? "Loading organizations…" : "Choose an organization"
+                    }
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {orgs?.map((org) => (
+                    <SelectItem key={org.id} value={org.id}>
+                      {org.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p id="bulk-org-help" className="text-sm text-foreground/70">
+                The source organization for newly registered compounds.
+              </p>
+              {organizationsError && (
+                <p role="alert" className="text-sm text-destructive">
+                  Could not load organizations.{" "}
+                  <Button variant="link" size="sm" onClick={() => retryOrganizations()}>
+                    Try again
+                  </Button>
+                </p>
+              )}
+              {!organizationsLoading && orgs?.length === 0 && (
+                <p className="text-sm text-destructive">
+                  Ask an administrator to add an organization before registering compounds.
+                </p>
+              )}
+            </div>
+            <div className="grid content-start gap-2">
+              <Label>
+                Projects <span className="font-normal text-foreground/70">(optional)</span>
+              </Label>
+              <div className="min-h-9 rounded-md border p-2">
+                <ProjectFilter
+                  selectedIds={bulkInput.projectIds}
+                  onChange={(ids) => updateBulkInput({ projectIds: ids })}
+                  emptyLabel="No projects selected"
+                  showScopeStats={false}
+                />
+              </div>
+              <p className="text-sm text-foreground/70">
+                New and matched compounds are added to the projects you select.
               </p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => updateBulkInput({ file: null })}>
-            <Trash2 className="h-4 w-4" />
+          <details className="rounded-lg border p-4">
+            <summary className="cursor-pointer text-sm font-medium">Batch options</summary>
+            <div className="mt-3 flex items-start gap-3">
+              <Checkbox
+                id="bulk-cbod"
+                checked={bulkInput.createBatchOnDuplicate}
+                onCheckedChange={(checked) => {
+                  defaultApplied.current = true;
+                  updateBulkInput({ createBatchOnDuplicate: checked === true });
+                }}
+                className="mt-1"
+                aria-describedby="bulk-batch-help"
+              />
+              <div className="space-y-2">
+                <Label htmlFor="bulk-cbod" className="leading-relaxed">
+                  Create batches for existing compounds when no batch ID is supplied
+                </Label>
+                <p id="bulk-batch-help" className="text-sm text-foreground/70">
+                  Batch IDs in the file always create or match their specified batches. This option
+                  only affects existing compounds on rows without batch IDs.
+                </p>
+              </div>
+            </div>
+          </details>
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t px-5 py-4">
+          <p id="bulk-upload-prerequisite" className="text-sm text-foreground/70">
+            {prerequisite ?? "Next, match your file’s columns to ChemCellar fields."}
+          </p>
+          <Button
+            onClick={nextStep}
+            disabled={!!prerequisite}
+            aria-describedby="bulk-upload-prerequisite"
+          >
+            Match columns
           </Button>
         </div>
-      )}
-
-      {/* Error */}
-      {error && <p className="text-sm text-destructive">{error}</p>}
-
-      {/* Next button */}
-      <div className="flex justify-end pt-4">
-        <Button onClick={handleNext}>Next</Button>
-      </div>
+      </section>
+      <BulkUploadSummary />
     </div>
   );
 }

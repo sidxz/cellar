@@ -266,7 +266,7 @@ function BulkProcessing() {
   // Kick off the bulk job on mount
   // biome-ignore lint/correctness/useExhaustiveDependencies: kick off the bulk job once on mount (guarded by hasStarted ref); the captured bulkInput/startMutation must not re-trigger the job.
   useEffect(() => {
-    if (hasStarted.current || !bulkInput.file || !bulkInput.originatingOrgId) return;
+    if (workflowId || hasStarted.current || !bulkInput.file || !bulkInput.originatingOrgId) return;
     hasStarted.current = true;
 
     startMutation
@@ -318,6 +318,27 @@ function BulkProcessing() {
   }, [progress]);
 
   // Error states
+  if (statusQuery.isError) {
+    return (
+      <Card>
+        <CardContent className="space-y-3 py-8">
+          <h2 className="font-medium">Could not refresh registration</h2>
+          <p role="alert" className="text-sm text-destructive">
+            {statusQuery.error?.message ??
+              "The registration could not be loaded. It may still be running."}
+          </p>
+          <Button variant="outline" onClick={() => statusQuery.refetch()}>
+            Try again
+          </Button>
+          <p className="text-sm text-foreground/70">
+            This page’s address lets you return to the registration without uploading the file
+            again.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
   if (startError || progress?.status === "failed") {
     return (
       <Card>
@@ -330,9 +351,12 @@ function BulkProcessing() {
                 {startError ?? "The bulk registration job encountered an error."}
               </p>
             </div>
-            <Button variant="outline" onClick={prevStep}>
+            <Button
+              variant="outline"
+              onClick={() => (workflowId ? setCurrentStep(bulkStepIndex("Summary")) : prevStep())}
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
+              {workflowId ? "View recorded results" : "Edit registration"}
             </Button>
           </div>
         </CardContent>
@@ -341,40 +365,57 @@ function BulkProcessing() {
   }
 
   // Progress display
-  const chunksProcessed = progress?.chunks_processed ?? 0;
-  const chunksTotal = progress?.chunks_total ?? 0;
-  const progressPercent = chunksTotal > 0 ? Math.round((chunksProcessed / chunksTotal) * 100) : 0;
+  const processed = progress
+    ? progress.registered_count +
+      progress.duplicate_count +
+      progress.disclosed_count +
+      progress.merge_candidate_count +
+      progress.conflict_count +
+      progress.error_count
+    : 0;
+  const total = progress?.total_count ?? 0;
+  const progressPercent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">Processing Compounds</CardTitle>
+        <CardTitle className="text-base" aria-live="polite">
+          Registering compounds
+        </CardTitle>
+        <p className="text-sm text-foreground/70">
+          Registration continues in the background. This page’s address lets you return after
+          navigating away or reloading.
+        </p>
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Progress bar */}
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              Chunk {chunksProcessed} of {chunksTotal || "..."}
+              {total > 0
+                ? `${processed.toLocaleString()} of ${total.toLocaleString()} rows processed`
+                : "Preparing registration…"}
             </span>
             <span>{progressPercent}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+          {total > 0 && (
+            <progress
+              value={progressPercent}
+              max={100}
+              aria-label="Registration progress"
+              className="h-2 w-full appearance-none overflow-hidden rounded-full bg-muted [&::-webkit-progress-bar]:bg-muted [&::-webkit-progress-value]:bg-primary [&::-moz-progress-bar]:bg-primary"
             />
-          </div>
+          )}
         </div>
 
         {/* Running counts */}
         {progress && (
           <div className="flex flex-wrap gap-3 text-sm">
             <CountBadge label="Registered" count={progress.registered_count} />
-            <CountBadge label="Deduplicated" count={progress.duplicate_count} />
-            <CountBadge label="Disclosed" count={progress.disclosed_count} />
+            <CountBadge label="Matched existing" count={progress.duplicate_count} />
+            <CountBadge label="Structures added" count={progress.disclosed_count} />
             <CountBadge
-              label="Merge Candidates"
+              label="Merge candidates"
               count={progress.merge_candidate_count}
               variant="warning"
             />
@@ -386,7 +427,7 @@ function BulkProcessing() {
         {!progress && (
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
-            Starting job...
+            Starting registration…
           </div>
         )}
       </CardContent>

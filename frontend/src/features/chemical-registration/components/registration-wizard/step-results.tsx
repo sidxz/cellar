@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/shared/components/ui/tabs";
 import { AlertTriangle, Check, Copy, ExternalLink, Eye, GitMerge, Loader2 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 import { useConfirmMerges } from "../../hooks/use-registration-wizard-api";
 import type { MergeDecision } from "../../types/registration-wizard";
@@ -174,18 +175,32 @@ function BulkResults() {
   const rejectAllMerges = useRegistrationWizard((s) => s.rejectAllMerges);
   const workflowId = useRegistrationWizard((s) => s.workflowId);
   const nextStep = useRegistrationWizard((s) => s.nextStep);
+  const outcomes = useRegistrationWizard((s) => s.mergeOutcomes);
+  const setMergeOutcomes = useRegistrationWizard((s) => s.setMergeOutcomes);
+  const [mergeError, setMergeError] = useState<string | null>(null);
+  const resolved = new Set(
+    outcomes?.results.filter((result) => result.success).map((result) => result.disclosure_id),
+  );
 
   const confirmMergesMutation = useConfirmMerges(workflowId);
 
   const handleConfirmSelected = async () => {
-    const decisions: MergeDecision[] = Object.entries(mergeDecisions).map(
-      ([disclosureId, action]) => ({
+    const decisions: MergeDecision[] = Object.entries(mergeDecisions)
+      .map(([disclosureId, action]) => ({
         disclosure_id: disclosureId,
         action,
-      }),
-    );
-    await confirmMergesMutation.mutateAsync({ decisions });
-    nextStep();
+      }))
+      .filter((decision) => !resolved.has(decision.disclosure_id));
+    setMergeError(null);
+    try {
+      const response = await confirmMergesMutation.mutateAsync({ decisions });
+      setMergeOutcomes(response);
+      if (response.error_count === 0) nextStep();
+    } catch (error) {
+      setMergeError(
+        error instanceof Error ? error.message : "Could not apply merge decisions. Try again.",
+      );
+    }
   };
 
   if (!progress) {
@@ -198,11 +213,37 @@ function BulkResults() {
     );
   }
 
-  const mergeCount = mergeCandidates.length;
+  const mergeCount = mergeCandidates.filter(
+    (candidate) => !resolved.has(candidate.disclosure_id),
+  ).length;
   const conflictCount = progress.conflict_count;
 
   return (
     <div className="space-y-6">
+      <div>
+        <h2 className="text-lg font-semibold">Review merge decisions</h2>
+        <p className="mt-1 text-sm text-foreground/70">
+          Checked candidates will be merged. Unchecked candidates will be rejected.
+        </p>
+      </div>
+      {(mergeError || (outcomes?.error_count ?? 0) > 0) && (
+        <div
+          role="alert"
+          className="space-y-2 rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-sm"
+        >
+          <p>
+            {mergeError ??
+              "Some merge decisions could not be applied. Successful decisions have been kept; retry the remaining candidates."}
+          </p>
+          {outcomes?.results
+            .filter((result) => !result.success)
+            .map((result) => (
+              <p key={result.disclosure_id} className="text-destructive">
+                {result.error ?? "The merge decision could not be applied."}
+              </p>
+            ))}
+        </div>
+      )}
       {/* Summary badges row */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <SummaryBadge
@@ -214,19 +255,19 @@ function BulkResults() {
         <SummaryBadge
           icon={<Copy className="h-4 w-4" />}
           count={progress.duplicate_count}
-          label="Deduplicated"
+          label="Matched existing"
           color="text-blue-500 border-blue-500/30 bg-blue-500/5"
         />
         <SummaryBadge
           icon={<Eye className="h-4 w-4" />}
           count={progress.disclosed_count}
-          label="Disclosed"
+          label="Structures added"
           color="text-violet-500 border-violet-500/30 bg-violet-500/5"
         />
         <SummaryBadge
           icon={<AlertTriangle className="h-4 w-4" />}
           count={mergeCount}
-          label="Merge Candidates"
+          label="Merge decisions remaining"
           color={
             mergeCount > 0
               ? "text-yellow-500 border-yellow-500/30 bg-yellow-500/5"
@@ -258,7 +299,7 @@ function BulkResults() {
           {mergeCount === 0 ? (
             <Card>
               <CardContent className="py-6 text-center text-sm text-muted-foreground">
-                No merge candidates. All compounds were processed cleanly.
+                No merge candidates need review. Check the results for any conflicts or row errors.
               </CardContent>
             </Card>
           ) : (
@@ -275,15 +316,17 @@ function BulkResults() {
 
               {/* Candidate list */}
               <div className="space-y-3">
-                {mergeCandidates.map((candidate) => (
-                  <MergeCandidateCard
-                    key={candidate.disclosure_id}
-                    candidate={candidate}
-                    decision={mergeDecisions[candidate.disclosure_id] ?? "confirm"}
-                    onDecisionChange={(d) => setMergeDecision(candidate.disclosure_id, d)}
-                    disabled={confirmMergesMutation.isPending}
-                  />
-                ))}
+                {mergeCandidates
+                  .filter((candidate) => !resolved.has(candidate.disclosure_id))
+                  .map((candidate) => (
+                    <MergeCandidateCard
+                      key={candidate.disclosure_id}
+                      candidate={candidate}
+                      decision={mergeDecisions[candidate.disclosure_id] ?? "confirm"}
+                      onDecisionChange={(d) => setMergeDecision(candidate.disclosure_id, d)}
+                      disabled={confirmMergesMutation.isPending}
+                    />
+                  ))}
               </div>
 
               {/* Submit button */}
@@ -295,7 +338,7 @@ function BulkResults() {
                       Processing...
                     </>
                   ) : (
-                    "Confirm Selected & Continue"
+                    "Apply merge decisions"
                   )}
                 </Button>
               </div>
@@ -338,7 +381,7 @@ function BulkResults() {
       {/* Continue when no merge candidates to review */}
       {mergeCount === 0 && (
         <div className="flex justify-end border-t pt-4">
-          <Button onClick={nextStep}>Continue to Summary</Button>
+          <Button onClick={nextStep}>View registration results</Button>
         </div>
       )}
     </div>

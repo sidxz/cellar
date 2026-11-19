@@ -31,11 +31,18 @@ function formatScope(stats: {
 interface ProjectFilterProps {
   selectedIds: string[];
   onChange: (ids: string[]) => void;
+  emptyLabel?: string;
+  showScopeStats?: boolean;
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
+export function ProjectFilter({
+  selectedIds,
+  onChange,
+  emptyLabel = "All projects",
+  showScopeStats = true,
+}: ProjectFilterProps) {
   const { data: projects } = useProjects();
   const { data: stats } = useProjectScopeStats(selectedIds);
   const [open, setOpen] = React.useState(false);
@@ -66,9 +73,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {selectedIds.length === 0 && (
-        <span className="text-sm text-muted-foreground">All projects</span>
-      )}
+      {selectedIds.length === 0 && <span className="text-sm text-foreground/70">{emptyLabel}</span>}
       {/* Selected project chips */}
       {selectedProjects.map((project) => {
         const projectStats = stats?.[project.id];
@@ -78,7 +83,7 @@ export function ProjectFilter({ selectedIds, onChange }: ProjectFilterProps) {
             className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-0.5 text-sm text-primary"
           >
             <span>{project.name}</span>
-            {projectStats && (
+            {showScopeStats && projectStats && (
               <span className="text-xs text-primary/70">· {formatScope(projectStats)}</span>
             )}
             <button

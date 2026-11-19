@@ -18,7 +18,7 @@ export const TARGET_LABELS: Record<ColumnTarget, string> = {
   purity: "Purity (%)",
   batch_source: "Synthesized or purchased",
   appearance: "Appearance",
-  ignore: "Don't import",
+  ignore: "Skip column",
 };
 
 export const TARGET_GROUPS: { label: string; targets: ColumnTarget[] }[] = [

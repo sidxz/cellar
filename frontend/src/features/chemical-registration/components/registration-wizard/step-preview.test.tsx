@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -72,7 +72,7 @@ const mapping: ColumnMappingBody = {
 
 /** The number shown on the tile with this label, or null when the tile isn't shown. */
 function tileValue(label: string): string | null {
-  const badge = screen.queryAllByText(label).find((el) => el.getAttribute("data-slot") === "badge");
+  const badge = screen.queryAllByText(label).find((el) => el.closest('[data-slot="card-content"]'));
   const content = badge?.closest('[data-slot="card-content"]');
   return content?.querySelector(".tabular-nums")?.textContent ?? null;
 }
@@ -157,11 +157,11 @@ describe("StepPreview", () => {
   it("says the forecast is unavailable when the request fails, never zeros", async () => {
     forecastMock.mockRejectedValue(new Error("boom"));
     render(<StepPreview />);
-    expect(await screen.findByText(/forecast unavailable/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Estimated results are unavailable/i)).toBeInTheDocument();
     // Tiles that only the forecast can fill must not read as zeros.
     expect(tileValue("New compounds")).not.toBe("0");
     expect(tileValue("New batches")).not.toBe("0");
-    expect(tileValue("Already in ChemCellar")).not.toBe("0");
+    expect(tileValue("Existing batches")).not.toBe("0");
     expect(screen.queryByText(/new compounds? ·/)).not.toBeInTheDocument();
   });
 
@@ -171,11 +171,54 @@ describe("StepPreview", () => {
     expect(tileValue("Rows")).toBe("5");
     expect(tileValue("New compounds")).toBe("1");
     expect(tileValue("New batches")).toBe("2");
-    expect(tileValue("Already in ChemCellar")).toBe("1");
-    expect(tileValue("Problems")).toBe("2");
+    expect(tileValue("Existing batches")).toBe("1");
+    expect(tileValue("Import issues")).toBe("2");
     // The count sits next to the Register button, not inside it.
     expect(screen.getByText("1 new compound · 2 new batches")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Register" })).toBeEnabled();
-    expect(screen.getByText(/forecast only/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Start registration" })).toBeEnabled();
+    expect(screen.getByText(/These results are estimates/i)).toBeInTheDocument();
+  });
+});
+
+describe("registration preview decisions", () => {
+  it("filters blocking issues without hiding valid rows from registration", async () => {
+    render(<StepPreview />);
+    await screen.findByText("Same as row 2");
+    fireEvent.click(screen.getByRole("button", { name: "Blocking issues (2)" }));
+    expect(screen.queryByText("Same as row 2")).toBeNull();
+    expect(screen.getByText("Row 4: no name and no structure")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Start registration" })).toBeEnabled();
+    fireEvent.click(screen.getByRole("button", { name: "All rows (5)" }));
+    expect(screen.getByText("Same as row 2")).toBeVisible();
+  });
+
+  it("waits for the estimate before enabling registration", async () => {
+    let finish!: (value: unknown) => void;
+    forecastMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    render(<StepPreview />);
+    expect(screen.getByRole("button", { name: "Start registration" })).toBeDisabled();
+    await waitFor(() => expect(finish).toBeTypeOf("function"));
+    finish({ items: [{ index: 0, action: "registered", compound_key: "one" }] });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Start registration" })).toBeEnabled(),
+    );
+  });
+
+  it("does not allow a file consisting entirely of blocked rows to start", async () => {
+    forecastMock.mockResolvedValue({
+      items: [0, 1, 2, 3].map((index) => ({
+        index,
+        action: "conflict",
+        conflict_reason: "Identifier conflict",
+      })),
+    });
+    render(<StepPreview />);
+    await screen.findByText("Blocking issues (5)");
+    expect(screen.getByRole("button", { name: "Start registration" })).toBeDisabled();
   });
 });

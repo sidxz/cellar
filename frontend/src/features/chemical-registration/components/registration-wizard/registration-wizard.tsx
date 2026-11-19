@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { useCollectionImportHandoff } from "../../hooks/use-collection-import-handoff";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
-import { BULK_STEPS, type WizardMode, bulkStepIndex } from "../../types/registration-wizard";
+import { type WizardMode, bulkStepIndex } from "../../types/registration-wizard";
 import { StepBatch } from "./step-batch";
 import { StepInput } from "./step-input";
 import { StepMapping } from "./step-mapping";
@@ -23,7 +23,7 @@ const SINGLE_STEPS = ["Input", "Processing", "Results", "Batch", "Summary"];
 
 function getSteps(mode: WizardMode | null): string[] {
   if (mode === "single") return SINGLE_STEPS;
-  if (mode === "bulk") return [...BULK_STEPS];
+  if (mode === "bulk") return ["Upload", "Match columns", "Review & register", "Results"];
   return [];
 }
 
@@ -39,6 +39,7 @@ export function RegistrationWizard() {
   const prevStep = useRegistrationWizard((s) => s.prevStep);
   const updateSingleInput = useRegistrationWizard((s) => s.updateSingleInput);
   const reset = useRegistrationWizard((s) => s.reset);
+  const workflowId = useRegistrationWizard((s) => s.workflowId);
 
   const steps = useMemo(() => getSteps(mode), [mode]);
 
@@ -51,8 +52,19 @@ export function RegistrationWizard() {
   // ─── URL param initialization ───────────────────────────────────────────
   // biome-ignore lint/correctness/useExhaustiveDependencies: read the initial mode/disclose URL params once on mount; later searchParams changes should not re-seed the wizard.
   useEffect(() => {
+    const workflow = searchParams.get("workflow_id");
+    if (workflow && /^[A-Za-z0-9_-]{1,255}$/.test(workflow)) {
+      const store = useRegistrationWizard.getState();
+      if (store.workflowId !== workflow) {
+        reset();
+        setMode("bulk");
+        store.setWorkflowId(workflow);
+        store.setCurrentStep(bulkStepIndex("Processing"));
+      }
+      return;
+    }
     const modeParam = searchParams.get("mode");
-    if (modeParam === "bulk") {
+    if (modeParam === "bulk" && !useRegistrationWizard.getState().workflowId) {
       setMode("bulk");
     }
 
@@ -66,23 +78,34 @@ export function RegistrationWizard() {
     }
   }, []);
 
+  // A server-side registration can be revisited without keeping the File in memory.
+  useEffect(() => {
+    if (mode !== "bulk" || !workflowId) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("mode", "bulk");
+    url.searchParams.set("workflow_id", workflowId);
+    window.history.replaceState(null, "", url);
+  }, [mode, workflowId]);
+
   // ─── Unsaved changes warning ────────────────────────────────────────────
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       // Warn if user has selected a mode (i.e. started the wizard)
-      if (mode !== null) {
+      if (mode !== null && !workflowId) {
         e.preventDefault();
       }
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [mode]);
+  }, [mode, workflowId]);
 
-  // ─── Cleanup on unmount ─────────────────────────────────────────────────
-  // biome-ignore lint/correctness/useExhaustiveDependencies: run the wizard reset only on unmount; `reset` is a stable store action and must not re-run the cleanup mid-session.
+  // Preserve bulk drafts and active job references across in-app navigation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cleanup reads the current store on unmount; reset is stable.
   useEffect(() => {
     return () => {
+      const state = useRegistrationWizard.getState();
+      if (state.mode === "bulk") return;
       reset();
     };
   }, []);
@@ -119,12 +142,17 @@ export function RegistrationWizard() {
   // Processing step disables back. Step indices differ by mode.
   const processingStepIndex = mode === "bulk" ? bulkStepIndex("Processing") : 1;
   const isProcessingStep = mode !== null && currentStep === processingStepIndex;
-  const canGoBack = mode !== null && currentStep > 0 && !isProcessingStep;
+  const canGoBack =
+    mode !== null &&
+    currentStep > 0 &&
+    !isProcessingStep &&
+    (mode !== "bulk" || currentStep < bulkStepIndex("Processing"));
+  const visibleStep = mode === "bulk" ? Math.min(currentStep + 1, 4) : currentStep + 1;
 
   return (
-    <div className="space-y-6">
+    <div className="mx-auto w-full max-w-7xl space-y-5">
       {/* Header */}
-      <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4">
         <Button
           variant="ghost"
           size="icon"
@@ -135,7 +163,7 @@ export function RegistrationWizard() {
               router.push("/compounds");
             }
           }}
-          aria-label="Go back"
+          aria-label={canGoBack ? "Previous step" : "Back to compounds"}
         >
           <ArrowLeft className="h-4 w-4" />
         </Button>
@@ -144,21 +172,43 @@ export function RegistrationWizard() {
             {mode === null
               ? "Register Compounds"
               : mode === "bulk"
-                ? "Bulk Registration"
+                ? "Register compounds from a file"
                 : "Register Compound"}
           </h1>
           {mode !== null && (
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="mt-1 text-sm text-foreground/70">
               {mode === "single"
                 ? "Register a single chemical compound"
-                : "Upload multiple compounds from a file"}
+                : "Upload your file, match its columns, and review the expected changes."}
             </p>
           )}
         </div>
+        {mode === "bulk" && !workflowId && (
+          <Button
+            className="ml-auto"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              reset();
+              const url = new URL(window.location.href);
+              url.searchParams.delete("mode");
+              url.searchParams.delete("from_collection_import");
+              window.history.replaceState(null, "", url);
+            }}
+          >
+            Change method
+          </Button>
+        )}
       </div>
 
       {/* Step indicator */}
-      {mode !== null && <WizardStepIndicator steps={steps} current={currentStep + 1} />}
+      {mode !== null && (
+        <WizardStepIndicator
+          steps={steps}
+          current={visibleStep}
+          className="flex-wrap gap-y-3 rounded-lg border bg-muted/20 p-4"
+        />
+      )}
 
       {/* Step content */}
       {renderStep()}

@@ -128,6 +128,8 @@ function BulkSummary() {
   const workflowId = useRegistrationWizard((s) => s.workflowId);
   const projectIds = useRegistrationWizard((s) => s.bulkInput.projectIds);
   const reset = useRegistrationWizard((s) => s.reset);
+  const setMode = useRegistrationWizard((s) => s.setMode);
+  const mergeOutcomes = useRegistrationWizard((s) => s.mergeOutcomes);
 
   if (!progress) {
     return (
@@ -149,22 +151,51 @@ function BulkSummary() {
   } = progress;
 
   const hasConflicts = conflict_count > 0;
+  const failed = progress.status === "failed";
+  const needsAttention =
+    failed ||
+    hasConflicts ||
+    error_count > 0 ||
+    (mergeOutcomes?.error_count ?? 0) > 0 ||
+    (!mergeOutcomes && merge_candidate_count > 0);
 
   function handleViewList() {
+    reset();
     router.push("/compounds");
   }
 
   function handleRegisterMore() {
     reset();
+    setMode("bulk");
+    router.replace("/compounds/register?mode=bulk");
   }
 
   return (
     <div className="space-y-5">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-            <CheckCircle2 className="h-5 w-5" />
-            Bulk registration complete
+          <CardTitle
+            className={cn(
+              "flex items-center gap-2",
+              failed
+                ? "text-destructive"
+                : needsAttention
+                  ? "text-amber-700 dark:text-amber-400"
+                  : "text-emerald-600 dark:text-emerald-400",
+            )}
+          >
+            {failed ? (
+              <XCircle className="h-5 w-5" />
+            ) : needsAttention ? (
+              <AlertTriangle className="h-5 w-5" />
+            ) : (
+              <CheckCircle2 className="h-5 w-5" />
+            )}
+            {failed
+              ? "Registration failed"
+              : needsAttention
+                ? "Registration finished with issues"
+                : "Registration complete"}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -177,27 +208,32 @@ function BulkSummary() {
                 className="text-emerald-600 bg-emerald-500/10"
               />
             </SummaryRow>
-            <SummaryRow label="Deduplicated">
+            <SummaryRow label="Matched existing compounds">
               <CountBadge
                 count={duplicate_count}
                 icon={<Copy className="h-3.5 w-3.5" />}
                 className="text-blue-600 bg-blue-500/10"
               />
             </SummaryRow>
-            <SummaryRow label="Disclosed">
+            <SummaryRow label="Structures added">
               <CountBadge
                 count={disclosed_count}
                 icon={<Eye className="h-3.5 w-3.5" />}
                 className="text-violet-600 bg-violet-500/10"
               />
             </SummaryRow>
-            <SummaryRow label="Merged">
+            <SummaryRow label={mergeOutcomes ? "Merges confirmed" : "Merge candidates"}>
               <CountBadge
-                count={merge_candidate_count}
+                count={mergeOutcomes?.confirmed_count ?? merge_candidate_count}
                 icon={<GitMerge className="h-3.5 w-3.5" />}
                 className="text-yellow-600 bg-yellow-500/10"
               />
             </SummaryRow>
+            {mergeOutcomes && (
+              <SummaryRow label="Merges rejected">
+                <span className="tabular-nums">{mergeOutcomes.rejected_count}</span>
+              </SummaryRow>
+            )}
             <SummaryRow label="Conflicts">
               <CountBadge
                 count={conflict_count}
@@ -250,11 +286,11 @@ function BulkSummary() {
           <div className="flex flex-wrap items-center gap-3 border-t pt-4">
             <Button onClick={handleViewList}>
               <ExternalLink className="mr-2 h-4 w-4" />
-              View Compound List
+              View compounds
             </Button>
             <Button variant="outline" onClick={handleRegisterMore}>
               <RotateCcw className="mr-2 h-4 w-4" />
-              Register More
+              Register another file
             </Button>
           </div>
         </CardContent>
@@ -292,8 +328,8 @@ type ResultsFilter = "all" | BulkRegItemAction;
 const RESULTS_TABS: { value: ResultsFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "registered", label: "Registered" },
-  { value: "deduplicated", label: "Deduplicated" },
-  { value: "disclosed", label: "Disclosed" },
+  { value: "deduplicated", label: "Matched existing" },
+  { value: "disclosed", label: "Structures added" },
   { value: "merge_candidate", label: "Merge candidates" },
   { value: "conflict", label: "Conflicts" },
   { value: "error", label: "Errors" },
@@ -357,7 +393,7 @@ function BulkResultsTable({
                         <th className="px-3 py-2 text-left font-medium w-12">#</th>
                         <th className="px-3 py-2 text-left font-medium">Action</th>
                         <th className="px-3 py-2 text-left font-medium">Compound</th>
-                        <th className="px-3 py-2 text-left font-medium">Reg #</th>
+                        <th className="px-3 py-2 text-left font-medium">Registration number</th>
                         <th className="px-3 py-2 text-left font-medium">Batch</th>
                         <th className="px-3 py-2 text-left font-medium">Error</th>
                       </tr>
@@ -453,11 +489,11 @@ function ActionPill({ action }: { action: string }) {
       className: "text-emerald-600 bg-emerald-500/10 border-emerald-500/30",
     },
     deduplicated: {
-      label: "Deduplicated",
+      label: "Matched existing",
       className: "text-blue-600 bg-blue-500/10 border-blue-500/30",
     },
     disclosed: {
-      label: "Disclosed",
+      label: "Structure added",
       className: "text-violet-600 bg-violet-500/10 border-violet-500/30",
     },
     merge_candidate: {

@@ -130,16 +130,17 @@ describe("StepMapping", () => {
     expect(api.suggest).toHaveBeenCalledWith(HEADERS);
     expect(await goesTo("SMILES")).toHaveTextContent("Structure (SMILES)");
     expect(await goesTo("Synonyms")).toHaveTextContent("Compound ID");
-    expect(await goesTo("Batch Name")).toHaveTextContent("Don't import");
-    expect(screen.getByText("SACC-0519397, SACC-0519396")).toBeInTheDocument();
-    expect(screen.getByText("(empty in this file)")).toBeInTheDocument();
+    expect(await goesTo("Batch Name")).toHaveTextContent("Skip column");
+    expect(screen.getByText("SACC-0519397", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("SACC-0519396", { selector: "span" })).toBeVisible();
+    expect(screen.getByText("No sample values")).toBeInTheDocument();
     expect(useRegistrationWizard.getState().bulkMapping).toEqual(SUGGESTED);
   });
 
-  it("offers 'Several values, separated by ;' for Compound ID and Batch ID only, and sets separator", async () => {
+  it("offers 'Split values on semicolons' for Compound ID and Batch ID only, and sets separator", async () => {
     renderStep();
     const box = await screen.findByRole("checkbox", {
-      name: "Several values, separated by ; (Synonyms)",
+      name: "Split values on semicolons (Synonyms)",
     });
     expect(screen.getAllByRole("checkbox")).toHaveLength(1); // not for name, smiles, ignore
     fireEvent.click(box);
@@ -158,7 +159,7 @@ describe("StepMapping", () => {
     );
     await choose("LGCY Batch Name", "Batch ID");
     expect(
-      screen.getByRole("checkbox", { name: "Several values, separated by ; (LGCY Batch Name)" }),
+      screen.getByRole("checkbox", { name: "Split values on semicolons (LGCY Batch Name)" }),
     ).toBeInTheDocument();
   });
 
@@ -207,11 +208,11 @@ describe("StepMapping", () => {
     renderStep();
     const sentence = "Pick the column with the compound name or the structure.";
     expect(await screen.findByText(sentence)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Review registration" })).toBeDisabled();
 
     await choose("Molecule Name", "Compound name");
     expect(screen.queryByText(sentence)).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Review registration" }));
     expect(useRegistrationWizard.getState().currentStep).toBe(bulkStepIndex("Preview"));
   });
 
@@ -252,7 +253,7 @@ describe("StepMapping", () => {
     ]);
     renderStep();
     expect(await screen.findByRole("combobox", { name: "Saved mapping" })).toHaveTextContent(
-      "None",
+      "Suggested mapping",
     );
     await waitFor(() => expect(useRegistrationWizard.getState().bulkMapping).toEqual(SUGGESTED));
   });

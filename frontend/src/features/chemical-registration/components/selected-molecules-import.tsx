@@ -50,19 +50,20 @@ export function SelectedMoleculesImport({
   return (
     <div className="space-y-4">
       <div className="grid gap-2">
-        <Label htmlFor="molecule-identifiers">Identifiers</Label>
+        <Label htmlFor="molecule-identifiers">CDD molecule names or synonyms</Label>
         <Textarea
           id="molecule-identifiers"
           rows={5}
           className="max-h-64 font-mono"
           placeholder={"CMPD-0001\nCMPD-0002"}
           value={text}
+          aria-describedby="molecule-names-help"
           // Locked while a check is out, so its answer is always for the list shown.
           disabled={check.isPending}
           onChange={(e) => onTextChange(e.target.value)}
         />
-        <p className="text-xs text-muted-foreground">
-          One per line, or separated by commas. Repeats are ignored.
+        <p id="molecule-names-help" className="text-sm text-foreground/70">
+          Enter one name per line or separate names with commas. Duplicate entries are ignored.
         </p>
       </div>
 
@@ -72,25 +73,33 @@ export function SelectedMoleculesImport({
         disabled={text.trim() === "" || check.isPending}
       >
         {check.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-        Check identifiers
+        {check.isPending ? "Checking names…" : "Check names in CDD Vault"}
       </Button>
 
       {error && (
-        <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
+        <div role="alert" className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+          {error}
+        </div>
       )}
 
       {checked && (
-        <div className="space-y-3 rounded-md border p-4 text-sm">
+        // biome-ignore lint/a11y/useSemanticElements: this live region includes a list of unmatched names, rather than a form output.
+        <div role="status" className="space-y-3 rounded-md border p-4 text-sm">
           <p>
             {checked.found.length.toLocaleString()} of{" "}
-            {plural(checked.found.length + checked.not_found.length, "identifier")} found in CDD
-            Vault.
+            {plural(checked.found.length + checked.not_found.length, "name")} found in CDD Vault.
           </p>
 
           <NotFoundIdentifiers
             title={`Not found (${checked.not_found.length.toLocaleString()})`}
             identifiers={checked.not_found}
           />
+          {checked.not_found.length > 0 && (
+            <p className="text-foreground/70">
+              Names not found will be excluded from the import. Review their spelling or use a CDD
+              synonym.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -109,7 +118,7 @@ export function NotFoundIdentifiers({
   return (
     <div className="space-y-1 text-sm">
       <p className="font-medium">{title}</p>
-      <ul className="max-h-40 overflow-y-auto font-mono text-xs text-muted-foreground">
+      <ul className="max-h-40 overflow-y-auto font-mono text-xs text-foreground/70">
         {identifiers.map((identifier) => (
           <li key={identifier}>{identifier}</li>
         ))}

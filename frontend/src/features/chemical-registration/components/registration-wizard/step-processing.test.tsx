@@ -5,10 +5,11 @@ import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
 
 const idle = { mutateAsync: vi.fn(), isPending: false, isError: false, error: null };
 const registerMutate = vi.fn();
+const h = vi.hoisted(() => ({ bulkStatus: undefined as Record<string, unknown> | undefined }));
 vi.mock("../../hooks/use-registration-wizard-api", () => ({
   useSubmitRegistration: () => ({ ...idle, mutateAsync: registerMutate }),
   useStartBulkRegistration: () => idle,
-  useBulkRegistrationStatus: () => ({ data: undefined }),
+  useBulkRegistrationStatus: () => ({ data: h.bulkStatus }),
 }));
 vi.mock("../../hooks/use-disclosures", () => ({ useSubmitDisclosure: () => idle }));
 vi.mock("../../hooks/use-molecules", () => ({ useMolecule: () => ({ data: undefined }) }));
@@ -43,5 +44,36 @@ describe("StepProcessing (single confirm)", () => {
     fireEvent.click(screen.getByRole("button", { name: /confirm & register/i }));
     await waitFor(() => expect(registerMutate).toHaveBeenCalledTimes(1));
     expect(registerMutate.mock.calls[0][0].project_ids).toEqual(["p-1"]);
+  });
+});
+
+describe("Bulk registration recovery", () => {
+  it("polls an existing registration without submitting its file again", () => {
+    useRegistrationWizard.getState().reset();
+    useRegistrationWizard.setState({
+      mode: "bulk",
+      currentStep: 3,
+      workflowId: "bulk-reg-existing",
+    });
+    idle.mutateAsync.mockClear();
+    h.bulkStatus = {
+      status: "processing",
+      total_count: 10,
+      registered_count: 2,
+      duplicate_count: 0,
+      disclosed_count: 0,
+      merge_candidate_count: 0,
+      conflict_count: 0,
+      error_count: 0,
+      merge_candidates: [],
+    };
+    render(<StepProcessing />);
+    expect(idle.mutateAsync).not.toHaveBeenCalled();
+    expect(screen.getByRole("progressbar", { name: "Registration progress" })).toHaveAttribute(
+      "value",
+      "20",
+    );
+    expect(screen.getByText("2 of 10 rows processed")).toBeVisible();
+    h.bulkStatus = undefined;
   });
 });

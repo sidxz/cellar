@@ -35,9 +35,11 @@ describe("SelectedMoleculesImport: the list and its check", () => {
   }
 
   const paste = (text: string) =>
-    fireEvent.change(screen.getByLabelText("Identifiers"), { target: { value: text } });
+    fireEvent.change(screen.getByLabelText("CDD molecule names or synonyms"), {
+      target: { value: text },
+    });
   const button = (name: string) => screen.getByRole("button", { name });
-  const check = () => fireEvent.click(button("Check identifiers"));
+  const check = () => fireEvent.click(button("Check names in CDD Vault"));
 
   beforeEach(() => {
     onChecked.mockReset();
@@ -50,21 +52,23 @@ describe("SelectedMoleculesImport: the list and its check", () => {
 
   it("offers nothing to check until something is pasted", () => {
     render(<Harness />);
-    expect(button("Check identifiers")).toBeDisabled();
+    expect(button("Check names in CDD Vault")).toBeDisabled();
     paste("  \n ");
-    expect(button("Check identifiers")).toBeDisabled();
+    expect(button("Check names in CDD Vault")).toBeDisabled();
   });
 
   it("shows the list the page already holds", () => {
     render(<Harness initialText="SACC-0001" />);
-    expect(screen.getByLabelText("Identifiers")).toHaveValue("SACC-0001");
-    expect(button("Check identifiers")).toBeEnabled();
+    expect(screen.getByLabelText("CDD molecule names or synonyms")).toHaveValue("SACC-0001");
+    expect(button("Check names in CDD Vault")).toBeEnabled();
   });
 
   it("says how to separate identifiers", () => {
     render(<Harness />);
     expect(
-      screen.getByText("One per line, or separated by commas. Repeats are ignored."),
+      screen.getByText(
+        "Enter one name per line or separate names with commas. Duplicate entries are ignored.",
+      ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/spaces/)).toBeNull();
   });
@@ -72,7 +76,7 @@ describe("SelectedMoleculesImport: the list and its check", () => {
   it("asks nothing until Check is pressed", () => {
     render(<Harness />);
     paste("SACC-0001, SACC-0002\nSACC-0099");
-    expect(button("Check identifiers")).toBeEnabled();
+    expect(button("Check names in CDD Vault")).toBeEnabled();
     expect(h.check.mutateAsync).not.toHaveBeenCalled();
     expect(onChecked).not.toHaveBeenCalled();
   });
@@ -83,7 +87,7 @@ describe("SelectedMoleculesImport: the list and its check", () => {
     paste("16:0 CoA\nPalmitoyl CoA");
     check();
 
-    expect(await screen.findByText("1 of 2 identifiers found in CDD Vault.")).toBeInTheDocument();
+    expect(await screen.findByText("1 of 2 names found in CDD Vault.")).toBeInTheDocument();
     expect(h.check.mutateAsync).toHaveBeenCalledExactlyOnceWith("16:0 CoA\nPalmitoyl CoA");
     expect(screen.getByText("Palmitoyl CoA")).toBeInTheDocument();
   });
@@ -93,7 +97,7 @@ describe("SelectedMoleculesImport: the list and its check", () => {
     paste("SACC-0001, SACC-0002\nSACC-0099");
     check();
 
-    expect(await screen.findByText("2 of 3 identifiers found in CDD Vault.")).toBeInTheDocument();
+    expect(await screen.findByText("2 of 3 names found in CDD Vault.")).toBeInTheDocument();
     expect(h.check.mutateAsync).toHaveBeenCalledWith("SACC-0001, SACC-0002\nSACC-0099");
     expect(screen.getByText("Not found (1)")).toBeInTheDocument();
     expect(screen.getByText("SACC-0099")).toBeInTheDocument();

@@ -88,9 +88,10 @@ export function StepPreview() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">Preview</h2>
-          <p className="text-sm text-muted-foreground">
-            What each row will do. Nothing is saved until you register.
+          <h2 className="text-lg font-semibold">Review registration</h2>
+          <p className="text-sm text-foreground/70">
+            Review the expected changes. Registration starts only when you select “Start
+            registration”.
           </p>
           {bulkInput.projectIds.length > 0 && (
             <p className="text-sm text-muted-foreground">
@@ -103,21 +104,26 @@ export function StepPreview() {
       <PreviewTable
         items={bulkPreview.items}
         createBatchOnDuplicate={bulkInput.createBatchOnDuplicate}
-        footer={({ counts, answered, importable }) => (
-          <div className="flex items-center justify-between border-t pt-4">
+        footer={({ counts, answered, importable, blockingRows }) => (
+          <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t bg-background/95 py-4 backdrop-blur">
             <Button variant="outline" onClick={prevStep}>
               <ArrowLeft className="mr-2 h-4 w-4" />
-              Back
+              Edit column mapping
             </Button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               {answered && (
                 <span className="text-sm text-muted-foreground tabular-nums">
                   {counts.newCompounds} new compound{counts.newCompounds === 1 ? "" : "s"} ·{" "}
                   {counts.newBatches} new batch{counts.newBatches === 1 ? "" : "es"}
                 </span>
               )}
+              {blockingRows > 0 && (
+                <span className="text-sm text-foreground/70">
+                  Rows with errors do not prevent valid compounds from registering.
+                </span>
+              )}
               <Button onClick={nextStep} disabled={!importable}>
-                Register
+                Start registration
               </Button>
             </div>
           </div>

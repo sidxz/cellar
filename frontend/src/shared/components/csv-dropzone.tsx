@@ -1,9 +1,11 @@
 "use client";
 
-import { Upload } from "lucide-react";
+import { FileText, Upload, X } from "lucide-react";
 import { useCallback, useEffect } from "react";
 import { type Accept, useDropzone } from "react-dropzone";
 
+import { Button } from "@/shared/components/ui/button";
+import { formatFileSize } from "@/shared/lib/format-number";
 import { cn } from "@/shared/lib/utils";
 
 /**
@@ -46,6 +48,10 @@ interface CsvDropzoneProps {
   prompt?: string;
   /** Optional secondary line listing accepted formats. */
   hint?: string;
+  /** Replace the selected dropzone with one file card and explicit actions. */
+  compactSelected?: boolean;
+  onRemove?: () => void;
+  onRejected?: (message: string) => void;
 }
 
 export function CsvDropzone({
@@ -56,6 +62,9 @@ export function CsvDropzone({
   accept = CSV_XLSX_ACCEPT,
   prompt = "Drop a CSV or XLSX here, or click to browse",
   hint,
+  compactSelected = false,
+  onRemove,
+  onRejected,
 }: CsvDropzoneProps) {
   const onDrop = useCallback(
     (accepted: File[]) => {
@@ -71,11 +80,49 @@ export function CsvDropzone({
     maxFiles: 1,
     multiple: false,
     disabled: isPending,
+    onDropRejected: (rejected) => {
+      const formats = Object.values(accept).flat().join(", ");
+      onRejected?.(
+        rejected.some((file) => file.errors.some((error) => error.code === "too-many-files"))
+          ? "Choose one file at a time."
+          : `This file type is not supported. Choose ${formats}.`,
+      );
+    },
   });
 
   useEffect(() => {
     onOpenReady?.(open);
   }, [open, onOpenReady]);
+
+  if (compactSelected && file) {
+    return (
+      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-primary/25 bg-primary/5 p-4">
+        <input {...getInputProps()} />
+        <FileText className="size-6 shrink-0 text-primary" aria-hidden="true" />
+        <div className="min-w-0 flex-1">
+          <p className="break-all text-sm font-medium">{file.name}</p>
+          <p className="mt-1 text-sm text-foreground/70">
+            {formatFileSize(file.size)} · {file.name.split(".").pop()?.toUpperCase()}
+          </p>
+        </div>
+        <Button type="button" variant="outline" size="sm" onClick={open} disabled={isPending}>
+          Replace file
+        </Button>
+        {onRemove && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            disabled={isPending}
+            aria-label="Remove file"
+          >
+            <X className="size-4" />
+          </Button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="py-2">

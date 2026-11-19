@@ -92,7 +92,7 @@ describe("MatchFields", () => {
     fireEvent.keyDown(await goesTo("LGCY Batch Name"), { key: "Enter" });
     fireEvent.click(screen.getByRole("option", { name: "Batch ID" }));
     const box = await screen.findByRole("checkbox", {
-      name: "Several values, separated by ; (LGCY Batch Name)",
+      name: "Split values on semicolons (LGCY Batch Name)",
     });
     fireEvent.click(box);
     fireEvent.click(screen.getByRole("button", { name: "Save field matching" }));

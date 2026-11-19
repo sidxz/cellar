@@ -123,6 +123,7 @@ export function MatchFields({ dataSourceId, saved }: Props) {
           onChange={setMapping}
           rowHeading="Vault field"
           groupTitles={GROUP_TITLES}
+          ignoreLabel="Don't import"
         />
       </div>
       <Button

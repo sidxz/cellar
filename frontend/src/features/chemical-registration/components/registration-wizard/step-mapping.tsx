@@ -29,6 +29,7 @@ import { useSuggestColumnMapping } from "../../hooks/use-registration-wizard-api
 import {
   SAVED_MAPPING_MIN_SCORE,
   applySavedMapping,
+  isLabelled,
   mappingProblem,
   scoreSavedMapping,
 } from "../../lib/column-targets";
@@ -55,6 +56,8 @@ export function StepMapping() {
   const [appliedId, setAppliedId] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [saveName, setSaveName] = useState("");
+  const [mappingEdited, setMappingEdited] = useState(false);
+  const [suggestionFailed, setSuggestionFailed] = useState(false);
   const suggestedFor = useRef<object | null>(null);
   const isSdf = bulkInput.fileFormat === "sdf";
   const savedMappings = saved.data ?? [];
@@ -100,6 +103,7 @@ export function StepMapping() {
         setBulkMapping(best ? applySavedMapping(best, m) : m);
       })
       .catch(() => {
+        setSuggestionFailed(true);
         // Toast comes from the hook; fall back to "Don't import" everywhere.
         setBulkMapping({
           columns: bulkColumns.headers.map((header) => ({ header, target: "ignore" })),
@@ -144,10 +148,15 @@ export function StepMapping() {
 
   const mapping = bulkMapping;
   const problem = mappingProblem(mapping, isSdf);
+  const imported = mapping.columns.filter((column) => column.target !== "ignore");
+  const incomplete = imported.filter(
+    (column) => isLabelled(column.target) && !column.source?.trim(),
+  );
   const onSaved = (id: string) => {
     const sm = savedMappings.find((m) => m.id === id);
     if (!sm) return;
     setAppliedId(id);
+    setMappingEdited(false);
     setBulkMapping(applySavedMapping(sm, mapping));
   };
 
@@ -176,8 +185,8 @@ export function StepMapping() {
         <div>
           <h2 className="text-lg font-semibold">Match columns</h2>
           <p className="text-sm text-muted-foreground">
-            Each column in your file goes to one place in ChemCellar. Several columns can go to the
-            same place.
+            Review the suggested destination for each column. Columns marked “Skip column” are not
+            imported.
           </p>
         </div>
         {savedMappings.length > 0 && (
@@ -187,7 +196,7 @@ export function StepMapping() {
             </Label>
             <Select value={appliedId ?? ""} onValueChange={onSaved}>
               <SelectTrigger id="saved-mapping" className="h-8 w-56">
-                <SelectValue placeholder="None" />
+                <SelectValue placeholder="Suggested mapping" />
               </SelectTrigger>
               <SelectContent>
                 {savedMappings.map((m) => (
@@ -201,9 +210,29 @@ export function StepMapping() {
         )}
       </div>
 
+      <div
+        className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm"
+        role="note"
+      >
+        <span className="font-medium">
+          {suggestionFailed
+            ? "Suggestions unavailable. Choose destination fields manually."
+            : applied
+              ? `Using ${applied.name}${mappingEdited ? " with your changes" : ""}`
+              : mappingEdited
+                ? "Suggested mapping with your changes"
+                : "Mapping suggested from column names"}
+        </span>
+        <span>{imported.length} mapped</span>
+        <span>{mapping.columns.length - imported.length} skipped</span>
+        <span className={incomplete.length ? "text-destructive" : "text-foreground/70"}>
+          {incomplete.length} incomplete
+        </span>
+      </div>
+
       <Card>
         <CardContent className="px-0 py-0">
-          <div className="max-h-[520px] overflow-auto">
+          <div className="max-h-[55dvh] overflow-auto">
             <ColumnMappingTable
               rows={mapping.columns.map((c) => ({
                 key: c.header,
@@ -211,14 +240,17 @@ export function StepMapping() {
                 samples: bulkColumns.samples[c.header] ?? [],
               }))}
               mapping={mapping}
-              onChange={setBulkMapping}
+              onChange={(next) => {
+                setMappingEdited(true);
+                setBulkMapping(next);
+              }}
               hideSmiles={isSdf}
             />
           </div>
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between border-t pt-4">
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t bg-background/95 py-4 backdrop-blur">
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={prevStep}>
             <ArrowLeft className="mr-2 h-4 w-4" />
@@ -236,9 +268,17 @@ export function StepMapping() {
           </Button>
         </div>
         <div className="flex items-center gap-3">
-          {problem && <p className="text-sm text-muted-foreground">{problem}</p>}
-          <Button onClick={nextStep} disabled={!!problem}>
-            Preview
+          {problem && (
+            <p id="mapping-problem" role="alert" className="text-sm text-destructive">
+              {problem}
+            </p>
+          )}
+          <Button
+            onClick={nextStep}
+            disabled={!!problem}
+            aria-describedby={problem ? "mapping-problem" : undefined}
+          >
+            Review registration
           </Button>
         </div>
       </div>

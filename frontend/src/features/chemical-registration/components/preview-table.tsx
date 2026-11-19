@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge } from "@/shared/components/ui/badge";
+import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
 import { cn } from "@/shared/lib/utils";
 import { AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
@@ -51,6 +52,8 @@ export interface PreviewTableFooterInfo {
   answered: boolean;
   /** At least one row has no parse error. */
   importable: boolean;
+  blockingRows: number;
+  batchIssues: number;
 }
 
 /**
@@ -70,6 +73,7 @@ export function PreviewTable({
   const forecastMutation = usePreviewRegistration();
   // null = waiting, "failed" = could not ask (never rendered as zeros), Map = answer.
   const [forecast, setForecast] = useState<Forecast | "failed" | null>(null);
+  const [filter, setFilter] = useState<"all" | "attention" | "blocked">("all");
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-run only when the parse preview changes; mutateAsync is stable and the cancel flag handles overlap (StrictMode double-run included).
   useEffect(() => {
@@ -81,6 +85,8 @@ export function PreviewTable({
       for (let start = 0; start < rows.length; start += FORECAST_CHUNK) {
         const chunk = rows.slice(start, start + FORECAST_CHUNK);
         const res = await forecastMutation.mutateAsync({ items: chunk.map(toForecastItem) });
+        if (res.items.length !== chunk.length)
+          throw new Error("The registration estimate is incomplete.");
         for (const it of res.items) byRow.set(chunk[it.index].row_index, it);
       }
       if (!cancelled) setForecast(byRow);
@@ -95,12 +101,24 @@ export function PreviewTable({
 
   const answered = forecast instanceof Map ? forecast : null;
   const { rows, counts } = buildPreviewRows(items, answered, createBatchOnDuplicate);
-  const importable = rows.some((r) => !r.item.error);
+  const isBlocked = (row: (typeof rows)[number]) =>
+    !!row.item.error || (!!row.problem && !row.compound);
+  const blockingRows = rows.filter(isBlocked).length;
+  const batchIssues = rows.filter((row) => !!row.problem && !!row.compound).length;
+  const attentionRows = rows.filter((row) => row.problem || row.warnings.length > 0).length;
+  const warningRows = rows.filter((row) => row.warnings.length > 0).length;
+  const shownRows =
+    filter === "blocked"
+      ? rows.filter(isBlocked)
+      : filter === "attention"
+        ? rows.filter((row) => row.problem || row.warnings.length > 0)
+        : rows;
+  const importable = forecast !== null && rows.some((row) => !isBlocked(row));
 
   return (
     <>
       {/* Counters */}
-      <div className="grid grid-cols-5 gap-3 max-w-4xl">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <SummaryStat label="Rows" value={counts.rows} tone="default" />
         <SummaryStat
           label="New compounds"
@@ -114,22 +132,54 @@ export function PreviewTable({
           tone="success"
         />
         <SummaryStat
-          label="Already in ChemCellar"
+          label="Existing batches"
           value={answered ? counts.existingBatches : "\u2014"}
           tone="default"
         />
         <SummaryStat
-          label="Problems"
+          label="Import issues"
           value={counts.problems}
           tone={counts.problems > 0 ? "destructive" : "default"}
           icon={counts.problems > 0 ? <AlertTriangle className="h-3.5 w-3.5" /> : null}
         />
       </div>
 
+      {attentionRows > 0 && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-4 text-sm">
+          <p className="font-medium">{attentionRows.toLocaleString()} rows need attention</p>
+          <p className="mt-1 text-foreground/70">
+            {blockingRows.toLocaleString()} rows have blocking issues in this preview;{" "}
+            {batchIssues.toLocaleString()} have batch issues. {warningRows.toLocaleString()} rows
+            have additional warnings. A batch issue can still allow its compound to be registered.
+            Review the affected rows or go back to adjust the column mapping.
+          </p>
+        </div>
+      )}
+
       {/* Per-row table */}
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm">Rows</CardTitle>
+          <CardTitle className="text-sm">Preview rows</CardTitle>
+          <fieldset aria-label="Filter preview rows" className="mt-2 flex flex-wrap gap-2">
+            {(
+              [
+                ["all", `All rows (${rows.length.toLocaleString()})`],
+                ["attention", `Needs attention (${attentionRows.toLocaleString()})`],
+                ["blocked", `Blocking issues (${blockingRows.toLocaleString()})`],
+              ] as const
+            ).map(([value, label]) => (
+              <Button
+                type="button"
+                key={value}
+                size="sm"
+                variant={filter === value ? "secondary" : "ghost"}
+                aria-pressed={filter === value}
+                onClick={() => setFilter(value)}
+              >
+                {label}
+              </Button>
+            ))}
+          </fieldset>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <div className="max-h-[480px] overflow-auto">
@@ -141,11 +191,11 @@ export function PreviewTable({
                   <th className="px-3 py-2 text-left font-medium">Structure</th>
                   <th className="px-3 py-2 text-left font-medium">Compound</th>
                   <th className="px-3 py-2 text-left font-medium">Batch</th>
-                  <th className="px-3 py-2 text-left font-medium">IDs to store</th>
+                  <th className="px-3 py-2 text-left font-medium">Identifiers to save</th>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {shownRows.map((r) => (
                   <tr
                     key={r.item.row_index}
                     className={cn(
@@ -159,7 +209,7 @@ export function PreviewTable({
                       {r.item.smiles ? (
                         truncate(r.item.smiles, 32)
                       ) : (
-                        <span className="font-sans text-muted-foreground">no structure</span>
+                        <span className="font-sans text-muted-foreground">No structure</span>
                       )}
                     </td>
                     <td className="px-3 py-1.5">
@@ -182,6 +232,13 @@ export function PreviewTable({
                     </td>
                   </tr>
                 ))}
+                {shownRows.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-8 text-center text-sm text-foreground/70">
+                      No rows match this filter.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -190,18 +247,18 @@ export function PreviewTable({
 
       {forecast === "failed" && (
         <p className="text-xs text-muted-foreground">
-          Forecast unavailable — outcomes will be decided when the job runs.
+          Estimated results are unavailable. Records will be checked when the import runs.
         </p>
       )}
 
       {answered && (
         <p className="text-xs text-muted-foreground">
-          Forecast only — outcomes are decided when the job runs, and a registration landing in
-          between can change them. A row with a batch problem still registers its compound.
+          These results are estimates. Records added before the import starts may change the
+          outcome. A batch error does not prevent its compound from being imported.
         </p>
       )}
 
-      {footer?.({ counts, answered: answered !== null, importable })}
+      {footer?.({ counts, answered: answered !== null, importable, blockingRows, batchIssues })}
     </>
   );
 }
@@ -278,14 +335,12 @@ function SummaryStat({
         : "text-foreground border-border bg-muted/30";
   return (
     <Card className={`border ${toneClass}`}>
-      <CardContent className="flex flex-col items-center gap-1 py-3 px-2">
+      <CardContent className="flex flex-col items-start gap-1 py-3 px-3">
         <div className="flex items-center gap-1.5">
           {icon}
           <span className="text-xl font-semibold tabular-nums">{value}</span>
         </div>
-        <Badge variant="outline" className="text-[10px] font-normal">
-          {label}
-        </Badge>
+        <span className="text-sm font-normal">{label}</span>
       </CardContent>
     </Card>
   );

@@ -8,6 +8,7 @@ import { DataImportPage } from "./data-import-page";
 const h = vi.hoisted(() => ({
   admin: false,
   idle: { mutate: () => {}, isPending: false },
+  cancel: { mutateAsync: vi.fn(), isPending: false },
   // The HTTP call behind Start Import. The start hook is the real one, so the tests read the
   // request as it is sent.
   request: vi.fn(),
@@ -41,6 +42,7 @@ const h = vi.hoisted(() => ({
     plates_error: 0,
     wells_mapped: 0,
     total_count: 4,
+    wells_unresolved: 0,
   },
 }));
 
@@ -69,7 +71,7 @@ vi.mock("../hooks/use-cdd-molecule-import", async (importOriginal) => {
     useResumeCddMoleculeImport: () => h.resume,
     useCheckCddMoleculeIdentifiers: () => h.check,
     useForceFailImport: () => h.idle,
-    useCancelCddMoleculeImport: () => h.idle,
+    useCancelCddMoleculeImport: () => h.cancel,
     useCddMoleculeImportStatus: (workflowId: string | null) =>
       h.realStatus
         ? real.useCddMoleculeImportStatus(workflowId)
@@ -124,13 +126,22 @@ const openTab = (name: string) =>
   fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 
 /** Force Stop buttons in the molecule history, then the plate history. */
+function openReport(index = 0) {
+  fireEvent.click(screen.getAllByRole("button", { name: "View report" })[index]);
+}
+
 function forceStopsPerHistory() {
-  openTab("History");
-  const molecules = screen.queryAllByRole("button", { name: "Force Stop" }).length;
-  openTab("Plates");
-  openTab("History");
-  const plates = screen.queryAllByRole("button", { name: "Force Stop" }).length;
-  return [molecules, plates];
+  const counts = [];
+  for (const plate of [false, true]) {
+    if (plate) openTab("Plates");
+    openTab("Import history");
+    openReport();
+    const recovery = screen.queryByText("Admin recovery");
+    if (recovery) fireEvent.click(recovery);
+    counts.push(screen.queryAllByRole("button", { name: "Mark as failed" }).length);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+  }
+  return counts;
 }
 
 describe("DataImportPage: Force Stop is admin-only, like its backend call", () => {
@@ -145,18 +156,22 @@ describe("DataImportPage: Force Stop is admin-only, like its backend call", () =
   });
 });
 
-const SPECIFIC = "Specific molecules";
-const HINT = "One per line, or separated by commas. Repeats are ignored.";
+const SPECIFIC = "Selected molecules";
+const HINT =
+  "Enter one name per line or separate names with commas. Duplicate entries are ignored.";
 const PASTED = "SACC-0001, SACC-0002\nSACC-0099";
 
 const chooseOrg = (id: string) =>
   fireEvent.change(screen.getByLabelText("Originating Organization"), { target: { value: id } });
 const chooseMode = (name: string) => fireEvent.click(screen.getByRole("radio", { name }));
 const paste = (text: string) =>
-  fireEvent.change(screen.getByLabelText("Identifiers"), { target: { value: text } });
-const pressCheck = () => fireEvent.click(screen.getByRole("button", { name: "Check identifiers" }));
-const startButton = () => screen.getByRole("button", { name: "Start Import" });
-const CHECK_RESULT = "2 of 3 identifiers found in CDD Vault.";
+  fireEvent.change(screen.getByLabelText("CDD molecule names or synonyms"), {
+    target: { value: text },
+  });
+const pressCheck = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Check names in CDD Vault" }));
+const startButton = () => screen.getByRole("button", { name: "Start import" });
+const CHECK_RESULT = "2 of 3 names found in CDD Vault.";
 
 /** The body of the one request Start Import sent. */
 async function sentBody() {
@@ -183,8 +198,8 @@ describe("DataImportPage: import modes", () => {
       "sync",
       "filtered",
     ]);
-    expect(screen.getByRole("radio", { name: "Full Vault" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Sync (new molecules only)" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "All molecules" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "New and changed molecules" })).not.toBeChecked();
     expect(screen.getByRole("radio", { name: SPECIFIC })).not.toBeChecked();
     expect(screen.queryByText("Import specific molecules")).toBeNull();
     expect(screen.getAllByRole("button", { name: /import/i })).toHaveLength(1);
@@ -194,23 +209,23 @@ describe("DataImportPage: import modes", () => {
     renderAs(false);
     const identifiersShown = () =>
       [
-        screen.queryByLabelText("Identifiers"),
+        screen.queryByLabelText("CDD molecule names or synonyms"),
         screen.queryByText(HINT),
-        screen.queryByRole("button", { name: "Check identifiers" }),
+        screen.queryByRole("button", { name: "Check names in CDD Vault" }),
       ].map(Boolean);
 
-    for (const mode of ["Full Vault", "Sync (new molecules only)"]) {
+    for (const mode of ["All molecules", "New and changed molecules"]) {
       chooseMode(mode);
-      expect(screen.getByLabelText(/Max molecules/)).toBeInTheDocument();
+      expect(screen.getByLabelText(/Molecule limit/)).toBeInTheDocument();
       expect(identifiersShown()).toEqual([false, false, false]);
     }
 
     chooseMode(SPECIFIC);
-    expect(screen.queryByLabelText(/Max molecules/)).toBeNull();
+    expect(screen.queryByLabelText(/Molecule limit/)).toBeNull();
     expect(identifiersShown()).toEqual([true, true, true]);
 
-    chooseMode("Full Vault");
-    expect(screen.getByLabelText(/Max molecules/)).toBeInTheDocument();
+    chooseMode("All molecules");
+    expect(screen.getByLabelText(/Molecule limit/)).toBeInTheDocument();
     expect(identifiersShown()).toEqual([false, false, false]);
   });
 
@@ -221,9 +236,9 @@ describe("DataImportPage: import modes", () => {
     pressCheck();
     const inOrder = [
       screen.getByRole("radio", { name: SPECIFIC }),
-      screen.getByLabelText("Identifiers"),
+      screen.getByLabelText("CDD molecule names or synonyms"),
       screen.getByText(HINT),
-      screen.getByRole("button", { name: "Check identifiers" }),
+      screen.getByRole("button", { name: "Check names in CDD Vault" }),
       await screen.findByText(CHECK_RESULT),
       screen.getByText("Not found (1)"),
       startButton(),
@@ -239,29 +254,22 @@ describe("DataImportPage: import modes", () => {
     renderAs(false);
     chooseMode(SPECIFIC);
     paste(PASTED);
-    chooseMode("Sync (new molecules only)");
+    chooseMode("New and changed molecules");
     chooseMode(SPECIFIC);
-    expect(screen.getByLabelText("Identifiers")).toHaveValue(PASTED);
+    expect(screen.getByLabelText("CDD molecule names or synonyms")).toHaveValue(PASTED);
   });
 
-  it("describes the chosen mode in the box at the top", () => {
+  it("explains each scope and clarifies the first sync", () => {
     renderAs(false);
-    expect(screen.getByText("Discover all molecules in your CDD Vault")).toBeInTheDocument();
-
+    expect(
+      screen.getByText("Read the entire vault and match existing ChemCellar records."),
+    ).toBeVisible();
     chooseMode(SPECIFIC);
-    expect(screen.queryByText("Discover all molecules in your CDD Vault")).toBeNull();
-    expect(screen.queryByText(/For large vaults/)).toBeNull();
+    expect(screen.getByLabelText("CDD molecule names or synonyms")).toBeVisible();
+    chooseMode("New and changed molecules");
     expect(
-      screen.getByText("Import only the molecules you list below, and their batches"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Match each one by the name or a synonym it has in CDD Vault"),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Touch nothing else in the vault")).toBeInTheDocument();
-
-    chooseMode("Sync (new molecules only)");
-    expect(screen.getByText("Discover all molecules in your CDD Vault")).toBeInTheDocument();
-    expect(screen.getByText(/For large vaults/)).toBeInTheDocument();
+      screen.getByText("If no sync timestamp has been saved, this reads the entire vault."),
+    ).toBeVisible();
   });
 
   describe("Full Vault and Sync, as before", () => {
@@ -270,7 +278,7 @@ describe("DataImportPage: import modes", () => {
       expect(startButton()).toBeDisabled();
       chooseOrg("org-1");
       expect(startButton()).toBeEnabled();
-      chooseMode("Sync (new molecules only)");
+      chooseMode("New and changed molecules");
       expect(startButton()).toBeEnabled();
       expect(h.request).not.toHaveBeenCalled();
       expect(h.check.mutateAsync).not.toHaveBeenCalled();
@@ -291,8 +299,8 @@ describe("DataImportPage: import modes", () => {
     it("Sync sends the sync mode, with Max molecules when one is given", async () => {
       renderAs(false);
       chooseOrg("org-2");
-      chooseMode("Sync (new molecules only)");
-      fireEvent.change(screen.getByLabelText(/Max molecules/), { target: { value: "5" } });
+      chooseMode("New and changed molecules");
+      fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: "5" } });
       fireEvent.click(startButton());
       expect(await sentBody()).toEqual({
         originating_org_id: "org-2",
@@ -309,13 +317,13 @@ describe("DataImportPage: import modes", () => {
       paste(PASTED);
       pressCheck();
       await screen.findByText(CHECK_RESULT);
-      chooseMode("Full Vault");
+      chooseMode("All molecules");
       fireEvent.click(startButton());
       expect(await sentBody()).toMatchObject({ import_mode: "full_vault", filter_criteria: null });
     });
   });
 
-  describe("Specific molecules", () => {
+  describe("Selected molecules", () => {
     it("starts only after a check that found molecules, with the count beside the button", async () => {
       renderAs(false);
       chooseOrg("org-1");
@@ -330,7 +338,7 @@ describe("DataImportPage: import modes", () => {
       // The server parses the list: it gets the text exactly as pasted.
       expect(h.check.mutateAsync).toHaveBeenCalledExactlyOnceWith(PASTED);
       expect(startButton()).toBeEnabled();
-      expect(startButton()).toHaveTextContent(/^Start Import$/);
+      expect(startButton()).toHaveTextContent(/^Start import$/);
       expect(screen.getByText("2 found").parentElement).toBe(startButton().parentElement);
       expect(h.request).not.toHaveBeenCalled();
     });
@@ -371,7 +379,7 @@ describe("DataImportPage: import modes", () => {
       pressCheck();
       await screen.findByText(CHECK_RESULT);
 
-      chooseMode("Full Vault");
+      chooseMode("All molecules");
       chooseMode(SPECIFIC);
       expect(screen.getByText(CHECK_RESULT)).toBeInTheDocument();
       expect(startButton()).toBeEnabled();
@@ -384,7 +392,7 @@ describe("DataImportPage: import modes", () => {
       chooseMode(SPECIFIC);
       paste("SACC-0099");
       pressCheck();
-      await screen.findByText("0 of 1 identifier found in CDD Vault.");
+      await screen.findByText("0 of 1 name found in CDD Vault.");
       expect(startButton()).toBeDisabled();
     });
 
@@ -396,16 +404,14 @@ describe("DataImportPage: import modes", () => {
       await screen.findByText(CHECK_RESULT);
       expect(startButton()).toBeDisabled();
       expect(
-        screen.getByText(
-          "Select the originating organization above, then check the identifiers again.",
-        ),
+        screen.getByText("Choose an originating organization to start the import."),
       ).toBeInTheDocument();
     });
 
     it("sends the filtered mode with the names the check returned, and never Max molecules", async () => {
       renderAs(false);
       chooseOrg("org-1");
-      fireEvent.change(screen.getByLabelText(/Max molecules/), { target: { value: "5" } });
+      fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: "5" } });
       chooseMode(SPECIFIC);
       paste(PASTED);
       pressCheck();
@@ -419,9 +425,7 @@ describe("DataImportPage: import modes", () => {
         max_molecules: null,
       });
       // The running import keeps saying what was left out.
-      expect(
-        await screen.findByText(/1 identifier was not found in CDD Vault/),
-      ).toBeInTheDocument();
+      expect(await screen.findByText(/1 name was not found in CDD Vault/)).toBeInTheDocument();
       expect(screen.getByText("SACC-0099")).toBeInTheDocument();
     });
 
@@ -443,21 +447,20 @@ describe("DataImportPage: import modes", () => {
       await screen.findByText(CHECK_RESULT);
       fireEvent.click(startButton());
 
-      expect(await screen.findByText(/Import completed successfully. 2 molecules/)).toBeVisible();
+      expect(await screen.findByText(/2 molecules imported;/)).toBeVisible();
       expect(screen.getByRole("radio", { name: SPECIFIC })).toBeChecked();
-      expect(screen.getByLabelText("Identifiers")).toHaveValue("");
+      expect(screen.getByLabelText("CDD molecule names or synonyms")).toHaveValue("");
       expect(startButton()).toBeDisabled();
       expect(h.request).toHaveBeenCalledOnce();
     });
   });
 
-  it("explains what Full does", () => {
+  it("keeps the detailed import explanation out of the form", () => {
     renderAs(false);
-    expect(
-      screen.getByText(/Compounds and batches already in ChemCellar get the IDs and batches/),
-    ).toBeVisible();
-    chooseMode(SPECIFIC);
-    expect(screen.queryByText(/nothing is created twice/)).toBeNull();
+    const help = screen.getByText("How importing works");
+    expect(screen.getByText(/New molecules become compounds in ChemCellar/)).not.toBeVisible();
+    fireEvent.click(help);
+    expect(screen.getByText(/New molecules become compounds in ChemCellar/)).toBeVisible();
   });
 
   it("shows the run report, with its problems, once the import has run", async () => {
@@ -484,11 +487,14 @@ describe("DataImportPage: import modes", () => {
     chooseOrg("org-1");
     fireEvent.click(startButton());
 
-    expect(
-      await screen.findByText(/2 compounds added, 5 matched; 3 batches created/),
-    ).toBeVisible();
-    expect(screen.getByText("Problems (2)")).toBeInTheDocument(); // 1 problem + 1 value skipped
-    expect(screen.getByText(/'Paracetamol' is already an ID of CMP-7/)).toBeInTheDocument();
+    await screen.findByText(/2 molecules imported;/);
+    openReport();
+    expect(screen.getByText("Compounds added").previousElementSibling).toHaveTextContent("2");
+    expect(screen.getByText("Compounds matched").previousElementSibling).toHaveTextContent("5");
+    expect(screen.getByText("Import issues (2)")).toBeInTheDocument();
+    expect(screen.getByText("Identifier is already assigned")).toBeVisible();
+    fireEvent.click(screen.getByText("Identifier is already assigned"));
+    expect(screen.getByText(/'Paracetamol' is already an ID of CMP-7/)).toBeVisible();
   });
 
   it("shows the last finished import's report on a fresh page, counting skipped values as problems", () => {
@@ -514,10 +520,12 @@ describe("DataImportPage: import modes", () => {
     } as typeof saved;
     try {
       renderAs(false);
-      expect(
-        screen.getByText(/0 compounds added, 4,760 matched; 83 batches created/),
-      ).toBeVisible();
-      expect(screen.getByText("Problems (3)")).toBeInTheDocument();
+      openReport();
+      expect(screen.getByText("Compounds matched").previousElementSibling).toHaveTextContent(
+        "4,760",
+      );
+      expect(screen.getByText("Batches added").previousElementSibling).toHaveTextContent("83");
+      expect(screen.getByText("Import issues (3)")).toBeInTheDocument();
     } finally {
       h.molecule = saved;
     }
@@ -528,8 +536,8 @@ describe("DataImportPage: import modes", () => {
     h.molecule.import_mode = "filtered";
     try {
       renderAs(false);
-      openTab("History");
-      expect(screen.getByText("Selected")).toBeInTheDocument();
+      openTab("Import history");
+      expect(screen.getByText("Selected molecules")).toBeInTheDocument();
     } finally {
       h.molecule.import_mode = mode;
     }
@@ -566,9 +574,13 @@ describe("DataImportPage: Preview", () => {
       );
     renderAs(false);
     chooseOrg("org-1");
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview sample" }));
 
-    expect(await screen.findByText("A sample of up to 20 molecules from the vault.")).toBeVisible();
+    expect(
+      await screen.findByText(
+        "A sample of up to 20 molecules from CDD Vault. Each row represents a batch, or a molecule without batches.",
+      ),
+    ).toBeVisible();
     expect(screen.getByText("SACC-1")).toBeVisible();
     expect(screen.getByText(/is on 2 compounds in the vault/)).toBeVisible();
     await waitFor(() =>
@@ -616,7 +628,7 @@ describe("DataImportPage: Preview", () => {
     );
     renderAs(false);
     chooseOrg("org-1");
-    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preview sample" }));
 
     expect(await screen.findByText(held)).toBeVisible();
     expect(screen.getByText("CDD vault molecule number · 11")).toBeVisible();
@@ -660,9 +672,10 @@ describe("DataImportPage: Resume a failed import", () => {
   it("offers Resume from the saved position on a failed run that can resume", async () => {
     h.history = [failed];
     renderAs(false);
-    openTab("History");
+    openTab("Import history");
 
-    fireEvent.click(screen.getByRole("button", { name: "Resume from 50,750" }));
+    openReport();
+    fireEvent.click(screen.getByRole("button", { name: "Resume import" }));
 
     await waitFor(() => expect(h.resume.mutateAsync).toHaveBeenCalledWith("m9"));
   });
@@ -672,7 +685,7 @@ describe("DataImportPage: Resume a failed import", () => {
     h.resume = { mutateAsync: vi.fn(), isPending: false, error: new Error(refused) } as never;
     h.history = [failed];
     renderAs(false);
-    openTab("History");
+    openTab("Import history");
 
     expect(screen.getByRole("alert")).toHaveTextContent(refused);
   });
@@ -695,7 +708,7 @@ describe("DataImportPage: Resume a failed import", () => {
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
     try {
       renderAs(false);
-      expect(await screen.findByText(/Import completed successfully/)).toBeInTheDocument();
+      expect(await screen.findByText(/49,465 molecules imported;/)).toBeInTheDocument();
       expect(errors.mock.calls.flat().join(" ")).not.toMatch(/Maximum update depth/);
     } finally {
       errors.mockRestore();
@@ -722,12 +735,13 @@ describe("DataImportPage: Resume a failed import", () => {
     h.resume.mutateAsync = vi.fn().mockResolvedValue({ workflow_id: "wf-2" });
     try {
       renderAs(false, client);
-      openTab("History");
-      fireEvent.click(screen.getByRole("button", { name: "Resume from 50,750" }));
+      openTab("Import history");
+      openReport();
+      fireEvent.click(screen.getByRole("button", { name: "Resume import" }));
       await waitFor(() => expect(h.resume.mutateAsync).toHaveBeenCalled());
-      openTab("New Import");
+      openTab("New import");
 
-      expect(await screen.findByRole("button", { name: "Stop Import" })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Stop import" })).toBeInTheDocument();
       expect(screen.queryByText(/Import failed/)).toBeNull();
     } finally {
       h.realStatus = false;
@@ -738,14 +752,113 @@ describe("DataImportPage: Resume a failed import", () => {
   it("offers no Resume on a run that can't resume", () => {
     h.history = [{ ...failed, resumable: false }];
     renderAs(false);
-    openTab("History");
-    expect(screen.queryByRole("button", { name: /^Resume from/ })).toBeNull();
+    openTab("Import history");
+    openReport();
+    expect(screen.queryByRole("button", { name: /^Resume import/ })).toBeNull();
   });
 
   it("offers no Resume while another import runs", () => {
     h.history = [h.molecule, failed];
     renderAs(false);
-    openTab("History");
-    expect(screen.queryByRole("button", { name: /^Resume from/ })).toBeNull();
+    openTab("Import history");
+    openReport(1);
+    expect(screen.queryByRole("button", { name: /^Resume import/ })).toBeNull();
+  });
+});
+
+describe("DataImportPage: outcome and preview safeguards", () => {
+  beforeEach(() => {
+    h.history = undefined;
+    h.status = undefined;
+    h.request.mockReset().mockResolvedValue({ workflow_id: "wf-1" });
+    h.cancel.mutateAsync.mockReset().mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    h.status = undefined;
+    h.history = undefined;
+  });
+
+  it.each([
+    ["completed", null, 0, "Completed", "border-emerald-500/30"],
+    ["completed", null, 3, "Finished with errors", "border-amber-500/40"],
+    ["failed", "Export unavailable", 0, "Import failed", "border-destructive/30"],
+    ["failed", "Cancelled by user", 0, "Stopped by user", "border-border"],
+  ])(
+    "renders the %s outcome honestly (%s)",
+    async (status, failure_reason, error_count, label, color) => {
+      h.status = {
+        import_id: "m1",
+        status,
+        failure_reason,
+        error_count,
+        registered_count: 2,
+        duplicate_count: 0,
+        skipped_count: 0,
+        total_count: 5,
+        pages_processed: 1,
+      };
+      renderAs(false);
+      chooseOrg("org-1");
+      fireEvent.click(startButton());
+      await screen.findByText(/2 molecules imported;/);
+      const notice = screen.getByRole("status");
+      expect(notice).toHaveTextContent(label);
+      expect(notice).toHaveClass(color);
+      openReport();
+      expect(screen.getByRole("dialog")).toHaveTextContent(label);
+    },
+  );
+
+  it("acknowledges a stop request while waiting for the worker", async () => {
+    h.history = [{ ...h.molecule, workflow_id: "wf-1", status: "processing" }];
+    h.status = {
+      import_id: "m1",
+      status: "processing",
+      registered_count: 2,
+      duplicate_count: 0,
+      error_count: 0,
+      skipped_count: 0,
+      total_count: 10,
+    };
+    renderAs(false);
+    expect(await screen.findByRole("progressbar")).toHaveAttribute("aria-valuenow", "20");
+    fireEvent.click(screen.getByRole("button", { name: "Stop import" }));
+    await waitFor(() => expect(h.cancel.mutateAsync).toHaveBeenCalledWith("wf-1"));
+    expect(await screen.findByRole("button", { name: "Stop requested" })).toBeDisabled();
+    expect(screen.getByRole("heading", { name: "Stopping import…" })).toBeInTheDocument();
+    expect(screen.queryByText("Import failed")).toBeNull();
+  });
+
+  it("rejects zero and fractional limits instead of truncating or ignoring them", () => {
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(screen.getByText("Advanced options"));
+    for (const limit of ["0", "-1", "1.5"]) {
+      fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: limit } });
+      expect(startButton()).toBeDisabled();
+    }
+    fireEvent.change(screen.getByLabelText(/Molecule limit/), { target: { value: "5" } });
+    expect(startButton()).toBeEnabled();
+    expect(h.request).not.toHaveBeenCalled();
+  });
+
+  it("clears a sample when its scope changes, including an in-flight sample", async () => {
+    let finish!: (value: unknown) => void;
+    h.request.mockImplementation(({ url }: { url: string }) =>
+      url.endsWith("/cdd-import/preview")
+        ? new Promise((resolve) => {
+            finish = resolve;
+          })
+        : Promise.resolve({ items: [] }),
+    );
+    renderAs(false);
+    fireEvent.click(screen.getByRole("button", { name: "Preview sample" }));
+    chooseMode("New and changed molecules");
+    await waitFor(() => expect(finish).toBeTypeOf("function"));
+    finish({ total_count: 0, error_count: 0, items: [] });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Preview sample" })).toBeEnabled(),
+    );
+    expect(screen.queryByRole("heading", { name: "Sample preview" })).toBeNull();
   });
 });

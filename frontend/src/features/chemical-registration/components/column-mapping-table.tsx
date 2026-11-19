@@ -13,7 +13,7 @@ import {
   SelectValue,
 } from "@/shared/components/ui/select";
 import type { ColumnMappingBody, ColumnTarget } from "@/shared/lib/api/model";
-import { Fragment } from "react";
+import { Fragment, useId } from "react";
 import {
   TARGET_GROUPS,
   TARGET_LABELS,
@@ -44,6 +44,8 @@ interface Props {
   hideSmiles?: boolean;
   /** Section titles shown when a row's group changes. */
   groupTitles?: Record<MappingGroup, string>;
+  /** The "not imported" choice, in the page's own words (a vault field is not a column). */
+  ignoreLabel?: string;
 }
 
 /** The rows of a mapping: where each goes, its Source, and the ";" choice. */
@@ -54,7 +56,9 @@ export function ColumnMappingTable({
   rowHeading = "Column in file",
   hideSmiles,
   groupTitles,
+  ignoreLabel = TARGET_LABELS.ignore,
 }: Props) {
+  const tableId = useId();
   // Single-valued targets already used, and by which row (its key: two rows may share a label).
   const takenBy = new Map<ColumnTarget, { key: string; label: string }>();
   const labelOf = new Map(rows.map((r) => [r.key, r.label]));
@@ -75,8 +79,8 @@ export function ColumnMappingTable({
         <tr className="border-b text-xs">
           <th className="px-3 py-2 text-left font-medium">{rowHeading}</th>
           {showSamples && <th className="px-3 py-2 text-left font-medium">Sample values</th>}
-          <th className="px-3 py-2 text-left font-medium">Goes to</th>
-          <th className="px-3 py-2 text-left font-medium">Source</th>
+          <th className="px-3 py-2 text-left font-medium">Destination field</th>
+          <th className="px-3 py-2 text-left font-medium">Field options</th>
         </tr>
       </thead>
       <tbody>
@@ -84,6 +88,8 @@ export function ColumnMappingTable({
           const c = mapping.columns.find((m) => m.header === r.key);
           if (!c) return null;
           const samples = r.samples ?? [];
+          const sourceId = `${tableId}-${encodeURIComponent(r.key)}-source`;
+          const splitId = `${tableId}-${encodeURIComponent(r.key)}-split`;
           const title = r.group && r.group !== lastGroup ? groupTitles?.[r.group] : undefined;
           lastGroup = r.group;
           const groups = TARGET_GROUPS.filter((g) => !r.group || g.label === r.group);
@@ -102,12 +108,36 @@ export function ColumnMappingTable({
               <tr className="border-b last:border-b-0">
                 <td className="px-3 py-2 font-medium">{r.label}</td>
                 {showSamples && (
-                  <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px] truncate">
-                    {r.samples === undefined
-                      ? ""
-                      : samples.length > 0
-                        ? samples.join(", ")
-                        : "(empty in this file)"}
+                  <td className="max-w-[280px] px-3 py-2 text-sm text-foreground/70">
+                    {r.samples === undefined ? (
+                      ""
+                    ) : samples.length > 0 ? (
+                      <div className="space-y-1">
+                        {samples.map((sample, index) =>
+                          sample.length > 64 ? (
+                            <details key={sample} className="min-w-0">
+                              <summary
+                                className="cursor-pointer truncate"
+                                title="Expand sample value"
+                              >
+                                <span className="mr-2 text-xs font-medium">Sample {index + 1}</span>
+                                {sample}
+                              </summary>
+                              <p className="mt-1 whitespace-pre-wrap break-all rounded bg-muted/40 p-2 font-mono text-xs">
+                                {sample}
+                              </p>
+                            </details>
+                          ) : (
+                            <div key={sample}>
+                              <span className="mr-2 text-xs font-medium">Sample {index + 1}</span>
+                              <span>{sample}</span>
+                            </div>
+                          ),
+                        )}
+                      </div>
+                    ) : (
+                      "No sample values"
+                    )}
                   </td>
                 )}
                 <td className="px-3 py-2">
@@ -144,27 +174,37 @@ export function ColumnMappingTable({
                         </SelectGroup>
                       ))}
                       <SelectSeparator />
-                      <SelectItem value="ignore">{TARGET_LABELS.ignore}</SelectItem>
+                      <SelectItem value="ignore">{ignoreLabel}</SelectItem>
                     </SelectContent>
                   </Select>
                 </td>
                 <td className="px-3 py-2">
                   {isLabelled(c.target) && (
-                    <Input
-                      className="h-8 w-56"
-                      value={c.source ?? ""}
-                      onChange={(e) => update(r.key, { source: e.target.value })}
-                      aria-label={`Source for ${r.label}`}
-                    />
+                    <label htmlFor={sourceId} className="grid gap-1 text-xs text-foreground/70">
+                      {c.target === "compound_id" || c.target === "batch_id"
+                        ? "Identifier source"
+                        : "Custom field name"}
+                      <Input
+                        id={sourceId}
+                        className="h-8 w-full min-w-40"
+                        value={c.source ?? ""}
+                        onChange={(e) => update(r.key, { source: e.target.value })}
+                        aria-label={`Source for ${r.label}`}
+                      />
+                    </label>
                   )}
                   {isSplittable(c.target) && (
-                    <label className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                    <label
+                      htmlFor={splitId}
+                      className="mt-2 flex items-center gap-2 text-sm text-foreground/70"
+                    >
                       <Checkbox
+                        id={splitId}
                         checked={c.separator === ";"}
                         onCheckedChange={(on) => update(r.key, { separator: on ? ";" : undefined })}
-                        aria-label={`Several values, separated by ; (${r.label})`}
+                        aria-label={`Split values on semicolons (${r.label})`}
                       />
-                      Several values, separated by ;
+                      Split values on semicolons (;)
                     </label>
                   )}
                 </td>

@@ -7,6 +7,7 @@ import type { RegistrationResponse } from "../types/index";
 import type {
   BulkInput,
   BulkProgress,
+  ConfirmMergesResponse,
   MergeCandidateRef,
   PreviewBulkRegistrationResponse,
   SingleInput,
@@ -78,6 +79,7 @@ interface RegistrationWizardState {
   singleResult: RegistrationResponse | null;
   mergeCandidates: MergeCandidateRef[];
   mergeDecisions: Record<string, "confirm" | "reject">;
+  mergeOutcomes: ConfirmMergesResponse | null;
 
   // ─── Actions ──────────────────────────────────────────────────────────────
 
@@ -101,6 +103,7 @@ interface RegistrationWizardState {
   setMergeCandidates: (candidates: MergeCandidateRef[]) => void;
   /** Set the decision for a single disclosure. */
   setMergeDecision: (disclosureId: string, decision: "confirm" | "reject") => void;
+  setMergeOutcomes: (outcome: ConfirmMergesResponse) => void;
   /** Mark every candidate as confirmed. */
   confirmAllMerges: () => void;
   /** Mark every candidate as rejected. */
@@ -128,6 +131,7 @@ export const useRegistrationWizard = create<RegistrationWizardState>()((set, _ge
   singleResult: null,
   mergeCandidates: [],
   mergeDecisions: {},
+  mergeOutcomes: null,
 
   // Navigation
   setMode: (mode) => set({ mode, currentStep: 0 }),
@@ -168,6 +172,26 @@ export const useRegistrationWizard = create<RegistrationWizardState>()((set, _ge
     set((s) => ({
       mergeDecisions: { ...s.mergeDecisions, [disclosureId]: decision },
     })),
+  setMergeOutcomes: (outcome) =>
+    set((state) => {
+      const previous = state.mergeOutcomes;
+      const results = new Map(
+        (previous?.results ?? []).map((result) => [result.disclosure_id, result]),
+      );
+      for (const result of outcome.results) results.set(result.disclosure_id, result);
+      return {
+        mergeOutcomes: {
+          results: [...results.values()],
+          confirmed_count: [...results.values()].filter(
+            (result) => result.success && result.action === "confirm",
+          ).length,
+          rejected_count: [...results.values()].filter(
+            (result) => result.success && result.action === "reject",
+          ).length,
+          error_count: [...results.values()].filter((result) => !result.success).length,
+        },
+      };
+    }),
   confirmAllMerges: () =>
     set((s) => {
       const decisions: Record<string, "confirm" | "reject"> = {};
@@ -204,5 +228,6 @@ export const useRegistrationWizard = create<RegistrationWizardState>()((set, _ge
       singleResult: null,
       mergeCandidates: [],
       mergeDecisions: {},
+      mergeOutcomes: null,
     }),
 }));
