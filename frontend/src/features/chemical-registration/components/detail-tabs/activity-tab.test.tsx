@@ -283,6 +283,11 @@ describe("ActivityTab curve table", () => {
     expect(screen.getByText("< 0.0002")).toBeInTheDocument();
   });
 
+  it("names the curve's class in words", () => {
+    renderTab({ best_curves: [flat(92)], intercepts: ec50 });
+    expect(screen.getByText("Active at all doses")).toBeInTheDocument();
+  });
+
   it("draws a protocol card's thumbnails in one % frame", () => {
     sparklines.length = 0;
     renderTab({ best_curves: [flat(85), flat(92)], intercepts: ec50 });

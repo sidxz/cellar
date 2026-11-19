@@ -515,3 +515,32 @@ describe("curvePotency — stored qualifier", () => {
     expect(out.text).toBe("< 0.0002");
   });
 });
+
+describe("formatInterceptDisplay — a secondary below the doses on an Active-at-all-doses curve", () => {
+  it("reads as calmly as its primary: the class already says why it is a bound", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0002,
+      at_bound: false,
+      qualifier: "<",
+      curve_class: "active_all_doses",
+      primary: false,
+      max_dose: 100,
+      min_dose: 0.0002,
+    });
+    expect(out.text).toBe("< 0.0002");
+    expect(out.warning).toBe(false);
+  });
+
+  it("still flags a value below the doses on any other curve", () => {
+    const out = formatInterceptDisplay({
+      value: 0.0002,
+      at_bound: false,
+      qualifier: "<",
+      curve_class: "full",
+      primary: false,
+      max_dose: 100,
+      min_dose: 0.0002,
+    });
+    expect(out.warning).toBe(true);
+  });
+});

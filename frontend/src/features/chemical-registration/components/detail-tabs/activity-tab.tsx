@@ -12,6 +12,7 @@ import {
   interceptLabel,
 } from "@/features/screening-assay/lib/intercept-label";
 import {
+  CURVE_CLASS_LABELS,
   type CurveClass,
   type HitCriterion,
   type InterceptSpec,
@@ -396,7 +397,12 @@ function CurveTable({
               <TableCell className="text-muted-foreground">{curve.fitted_unit}</TableCell>
               <TableCell className="font-mono">{curve.r_squared.toFixed(3)}</TableCell>
               <TableCell>{curve.num_points}</TableCell>
-              <TableCell className="text-muted-foreground">{curve.curve_class ?? "—"}</TableCell>
+              <TableCell className="text-muted-foreground">
+                {curve.curve_class
+                  ? ((CURVE_CLASS_LABELS as Record<string, string>)[curve.curve_class] ??
+                    curve.curve_class)
+                  : "—"}
+              </TableCell>
               <TableCell>
                 {curve.hill_slope != null ? (
                   <DoseResponseSparkline

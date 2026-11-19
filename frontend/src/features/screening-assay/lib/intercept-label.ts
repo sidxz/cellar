@@ -326,8 +326,11 @@ export function formatInterceptDisplay(args: {
   } else if (args.qualifier === "nd") {
     base = nd(TOOLTIP_NOT_DETERMINABLE);
   } else if (args.qualifier === "<") {
+    // On an Active-at-all-doses curve the class already says why a level lies below the
+    // doses, so a secondary reads as calmly as its primary.
+    const flag = args.curve_class !== "active_all_doses";
     base =
-      lowEdge != null ? below(lowEdge, TOOLTIP_BELOW_RANGE, true) : nd(TOOLTIP_NOT_DETERMINABLE);
+      lowEdge != null ? below(lowEdge, TOOLTIP_BELOW_RANGE, flag) : nd(TOOLTIP_NOT_DETERMINABLE);
   } else if (args.qualifier === ">") {
     base = maxDose != null ? above(TOOLTIP_QUALIFIER, true) : nd(TOOLTIP_AT_BOUND_NO_RANGE);
   } else if (args.qualifier === "=" && args.value != null) {
