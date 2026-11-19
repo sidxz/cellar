@@ -201,13 +201,15 @@ def _intercept_label(rd: ReadoutDefInfo) -> str:
 
 def _midpoint(r: CurveRow) -> float | None:
     """The 4PL midpoint (EC50) to draw the fit around. ``fitted_value`` is the primary
-    intercept's value, so it is the midpoint only for a 50 % relative intercept — or an
-    at-bound one, where the fitter stores the midpoint itself. Otherwise the fit's
-    4PL is solved back from the intercept (the inverse of the fitter's Hill inverse)."""
+    intercept's value, so it is the midpoint only for a 50 % relative intercept — or one
+    read as a bound or n.d. (at the bound, or qualified other than "="), where the fitter
+    stores the midpoint itself. Otherwise the fit's 4PL is solved back from the
+    intercept (the inverse of the fitter's Hill inverse)."""
     ivs = r.intercept_values if isinstance(r.intercept_values, list) else []
     primary = ivs[0] if ivs and isinstance(ivs[0], dict) else {}
     spec = primary.get("spec")
-    if not isinstance(spec, dict) or primary.get("at_bound") is True:
+    exact = primary.get("qualifier") in (None, "=") and primary.get("at_bound") is not True
+    if not isinstance(spec, dict) or not exact:
         return finite(r.fitted_value)
     x, top, bottom, hill, level = r.fitted_value, r.top, r.bottom, r.hill_slope, spec.get("level")
     if x is None or top is None or bottom is None or not hill or level is None or x <= 0:

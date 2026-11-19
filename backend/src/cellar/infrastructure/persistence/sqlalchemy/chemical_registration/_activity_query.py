@@ -15,7 +15,6 @@ from sqlalchemy import column
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.sql import ColumnElement
 
-from cellar.domain.screening_assay.enums import CurveClass
 from cellar.domain.screening_assay.readout_name import normalize_readout_name
 from cellar.domain.shared.enums import ConcentrationUnit
 from cellar.domain.shared.units import canonical_unit
@@ -24,7 +23,8 @@ from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models i
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
     COMPOUND_RESULT,
-    curve_doses,
+    primary_intercept,
+    reported_curve_value,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._run_scope_sql import (
     NOT_REJECTED,
@@ -251,15 +251,14 @@ def _activity_where_clause(
     return MoleculeModel.id.in_(sa.select(molecule_col).where(*base_filters, value_filter))
 
 
-def _curve_intercept(ik: Any) -> tuple[ColumnElement, ColumnElement]:
-    """(value, at_bound) of the intercept a condition names: the primary
-    ``fitted_value`` (indexed, fast) with intercept_values[0]'s flag, or the
-    (kind, level) entry of the ``intercept_values`` JSONB — secondary intercepts
+def _curve_intercept(ik: Any) -> tuple[ColumnElement, ColumnElement, ColumnElement]:
+    """(value, at_bound, qualifier) of the intercept a condition names: the primary
+    ``fitted_value`` (indexed, fast) with intercept_values[0]'s flag and qualifier, or
+    the (kind, level) entry of the ``intercept_values`` JSONB — secondary intercepts
     (EC90 on an EC50-primary fit, etc.) live only there."""
     c = DoseResponseCurveModel
     if ik is None:
-        flag = c.intercept_values[0]["at_bound"]
-        return c.fitted_value, sa.func.coalesce(flag == _JSON_TRUE, sa.false())
+        return primary_intercept(c)
     kind = ik.get("kind") if isinstance(ik, dict) else None
     level = ik.get("level") if isinstance(ik, dict) else None
     if kind not in ("ic", "ec") or not isinstance(level, (int, float)):
@@ -271,6 +270,7 @@ def _curve_intercept(ik: Any) -> tuple[ColumnElement, ColumnElement]:
             _jsonb_intercept(kind, float(level), lambda v: v["at_bound"] == _JSON_TRUE),
             sa.false(),
         ),
+        _jsonb_intercept(kind, float(level), lambda v: v["qualifier"].astext),
     )
 
 
@@ -357,35 +357,10 @@ def _qualified_value_filter(value_col: Any, qualifier_col: Any, cond: dict[str, 
     return sa.or_(sa.and_(exact, plain), censored)
 
 
-def _dose_bound(curve: Any, agg: Any) -> ColumnElement:
-    pt, dose = curve_doses(curve)
-    return sa.select(agg(dose)).select_from(pt).where(dose > 0).scalar_subquery()
-
-
-def reported_curve_value(
-    curve: Any, value: Any, at_bound: Any
-) -> tuple[ColumnElement, ColumnElement]:
-    """(value, qualifier) of one curve intercept as the grid reports it
-    (``run_aggregation.resolve_intercept``): an inactive curve, an at-bound intercept
-    or a value above the tested doses is ``>`` the top dose (an inactive fit's scalar
-    is an arbitrary asymptote parameter); a value below them ``<`` the lowest dose;
-    else the value, qualifier NULL. NULL value (ND) without a dose to quote."""
-    lo, hi = _dose_bound(curve, sa.func.min), _dose_bound(curve, sa.func.max)
-    above = sa.or_(curve.curve_class == CurveClass.INACTIVE.value, at_bound, value > hi)
-    below = value < lo
-    return (
-        sa.case((above, hi), (below, lo), else_=value),
-        sa.case((above, sa.literal(">")), (below, sa.literal("<"))),
-    )
-
-
 def exact_curve_potency(curve: Any) -> ColumnElement:
     """The curve's primary potency when the grid reports it exactly (inside the
     tested doses), else NULL: a ratio of bounds is no ratio."""
-    flag = curve.intercept_values[0]["at_bound"]
-    value, qualifier = reported_curve_value(
-        curve, curve.fitted_value, sa.func.coalesce(flag == _JSON_TRUE, sa.false())
-    )
+    value, qualifier = reported_curve_value(curve, *primary_intercept(curve))
     return sa.case((qualifier.is_(None), value))
 
 

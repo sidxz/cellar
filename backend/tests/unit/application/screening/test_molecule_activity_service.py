@@ -1329,3 +1329,61 @@ class TestGetActivitySummaryPlainReadouts:
             "Max ΔTm (Main)": "magnitude",
             "Lowest shifting conc. (Main, ±2 °C)": "low",
         }
+
+
+class TestProtocolHitReadsCurvesAsReported:
+    """A dose-response rule reads each curve as every grid reports it: an inactive
+    curve's placeholder is no potency; one active at every dose is below its doses."""
+
+    @staticmethod
+    def _hit(rule_value: float, *curves: DoseResponseCurve) -> bool:
+        from types import SimpleNamespace
+
+        from cellar.application.screening.molecule_activity_service import _protocol_hit
+        from cellar.domain.shared.hit_criterion import HitCriterion
+
+        proto = SimpleNamespace(readout_definitions=[SimpleNamespace(id=RD_ID, name="IC50")])
+        rule = HitCriterion(readout_name="IC50", operator="lt", value=rule_value)
+        return _protocol_hit([rule], proto, [], list(curves))
+
+    @staticmethod
+    def _curve(curve_class: CurveClass, fitted_value: float, qualifier=None, value=None):
+        doses = [{"concentration": d, "response": 50.0} for d in (0.01, 0.1, 1.0, 10.0)]
+        ivs = (
+            [
+                InterceptValue(
+                    spec=InterceptSpec(kind=InterceptKind.IC, level=50.0),
+                    value=value,
+                    confidence_interval_low=None,
+                    confidence_interval_high=None,
+                    qualifier=qualifier,
+                )
+            ]
+            if qualifier
+            else None
+        )
+        return _make_curve(
+            curve_class=curve_class, fitted_value=fitted_value, raw_data=doses,
+            intercept_values=ivs,
+        )  # fmt: skip
+
+    def test_an_inactive_curves_placeholder_value_is_no_hit(self) -> None:
+        assert self._hit(1.0, self._curve(CurveClass.INACTIVE, 0.0)) is False
+
+    def test_a_curve_active_at_every_dose_is_a_hit_below_its_lowest_dose(self) -> None:
+        flat = self._curve(CurveClass.ACTIVE_ALL_DOSES, 5.0, ValueQualifier.LT, 0.01)
+        assert self._hit(1.0, flat) is True
+
+    def test_the_most_potent_curve_decides(self) -> None:
+        exact = self._curve(CurveClass.FULL, 2.0, ValueQualifier.EQ, 2.0)
+        flat = self._curve(CurveClass.ACTIVE_ALL_DOSES, 5.0, ValueQualifier.LT, 0.01)
+        assert self._hit(1.0, exact) is False
+        assert self._hit(1.0, exact, flat) is True
+
+    def test_an_nd_curve_is_no_hit(self) -> None:
+        nd = self._curve(CurveClass.PARTIAL, 0.5, ValueQualifier.ND, math.nan)
+        assert self._hit(1.0, nd) is False
+
+    def test_a_curve_fitted_before_qualifiers_reads_by_todays_rules(self) -> None:
+        assert self._hit(1.0, self._curve(CurveClass.FULL, 0.5)) is True
+        assert self._hit(1.0, self._curve(CurveClass.FULL, 50.0)) is False  # "> 10"

@@ -732,6 +732,10 @@ def test_dose_response_labels_name_the_primary_intercept():
         ({"spec": IC90, "value": 9.0, "at_bound": False}, 9.0, 1.0),
         ({"spec": {**IC90, "level": 50.0}, "value": 1.5, "at_bound": False}, 1.5, 1.5),
         ({"spec": IC90, "value": None, "at_bound": True}, 2.0, 2.0),  # stored midpoint
+        # A bound or n.d. primary stores the fitted midpoint itself as fitted_value.
+        ({"spec": IC90, "value": 0.01, "at_bound": False, "qualifier": "<"}, 2.0, 2.0),
+        ({"spec": IC90, "value": None, "at_bound": False, "qualifier": "nd"}, 2.0, 2.0),
+        ({"spec": IC90, "value": 9.0, "at_bound": False, "qualifier": "="}, 9.0, 1.0),
         (None, 1.5, 1.5),  # fitted before intercepts were stored
     ],
 )

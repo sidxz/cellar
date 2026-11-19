@@ -14,7 +14,6 @@ from sqlalchemy import (
     case,
     column,
     distinct,
-    false,
     func,
     join,
     literal_column,
@@ -36,6 +35,7 @@ from cellar.application.screening.protocol_activity_reader import (
     ProtocolActivityData,
     ProtocolRow,
 )
+from cellar.domain.screening_assay.enums import CurveClass
 from cellar.infrastructure.persistence.sqlalchemy._sql import any_id
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
     MoleculeIdentifierModel,
@@ -47,6 +47,8 @@ from cellar.infrastructure.persistence.sqlalchemy.inventory.models import (
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay._compound_rows_sql import (
     COMPOUND_RESULT,
     curve_doses,
+    primary_intercept,
+    reported_curve_value,
 )
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
@@ -217,34 +219,34 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
     Grouped by readout-def, never curve_type (two DR readouts can share one).
     Active = not inactive and fitted value > 0 (a NULL class is not active);
     best and geo_mean read active curves only, and every curve is counted.
-    When the scope excludes censored values, a curve is censored at its doses (the
-    intercept resolver's rule): inactive, at the bound or fitted above them reads
-    "> top dose", fitted below them "< lowest dose". It is counted, kept out of
-    best/geo_mean, and its bound kept. Activity reads none of this.
+    When the scope excludes censored values, a curve's primary is read as every
+    reader reads it (``reported_curve_value``): inactive or "> top dose", active at
+    all doses or "< lowest dose", n.d., or exact. A bound is counted, kept out of
+    best/geo_mean, and kept; an n.d. curve is only tested. Activity averages every
+    fit stored before qualifiers, as before, and a newer one only when its primary
+    reads exactly ("=" on a curve not active at all doses).
     """
     c = DoseResponseCurveModel
     active = and_(c.curve_class != "inactive", c.fitted_value > 0)
+    fitted, at_bound, stored = primary_intercept(c)
     censored: list[ColumnElement[Any]] = []
     doses = None
     if scope.exclude_censored:
         doses = _doses()
-        at_bound = func.coalesce(
-            c.intercept_values[0]["at_bound"] == literal_column("'true'::jsonb"), false()
+        value, qualifier = reported_curve_value(
+            c, fitted, at_bound, stored, lo=doses.c.lo, hi=doses.c.hi
         )
-        above = or_(
-            c.curve_class.is_not_distinct_from("inactive"),
-            at_bound,
-            func.coalesce(c.fitted_value > doses.c.hi, false()),
-        )
-        below = and_(~above, func.coalesce(c.fitted_value < doses.c.lo, false()))
-        active = and_(active, ~above, ~below)
-        gt = case((above, doses.c.hi))
-        lt = case((below, doses.c.lo))
+        active = and_(active, qualifier.is_(None), value.is_not(None))
+        gt = case((qualifier == ">", value))
+        lt = case((qualifier == "<", value))
         censored = [
             (func.count(gt) + func.count(lt)).label("n_censored"),
             func.max(gt).label("censored_bound"),
             func.min(lt).label("censored_below"),
         ]
+    else:
+        exact = and_(stored == "=", c.curve_class != CurveClass.ACTIVE_ALL_DOSES.value)
+        active = and_(active, or_(stored.is_(None), exact))
     used = case((active, c.fitted_value))
     keys: dict[str, ColumnElement[Any]] = {
         "molecule_id": c.molecule_id,
@@ -273,6 +275,19 @@ def _dr_stmt(ws: uuid.UUID, pid: uuid.UUID, scope: AggregateScope) -> Select[Any
     if doses is not None:
         stmt = stmt.outerjoin(doses, true())
     return _scoped(stmt, ws, pid, scope, batch=c.batch_id, run=c.run_id)
+
+
+def _potency_rank() -> ColumnElement[int]:
+    """Best curve first: one below the doses (active at all of them, or a primary stored
+    "<"), then exact fits by fitted value, then "> top dose" and n.d. ones, whose fitted
+    value is a midpoint, not a potency. Fits stored before qualifiers rank as exact."""
+    c = DoseResponseCurveModel
+    _, _, stored = primary_intercept(c)
+    return case(
+        (or_(c.curve_class == CurveClass.ACTIVE_ALL_DOSES.value, stored == "<"), 0),
+        (stored.in_((">", "nd")), 2),
+        else_=1,
+    )
 
 
 def _inclusive(bound: float | None, strict: float | None, *, above: bool) -> bool:
@@ -498,7 +513,7 @@ class SQLAlchemyProtocolActivityReader:
                             DoseResponseCurveModel.molecule_id,
                             DoseResponseCurveModel.readout_definition_id,
                         ],
-                        order_by=DoseResponseCurveModel.fitted_value.asc(),
+                        order_by=(_potency_rank(), DoseResponseCurveModel.fitted_value.asc()),
                     )
                     .label("rn"),
                 )

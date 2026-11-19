@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import uuid
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
@@ -10,11 +11,12 @@ import pytest
 from returns.result import Success
 
 from cellar.application.screening.readout_calculation_engine import ReadoutCalculationEngine
-from cellar.domain.screening_assay.curve_fitting import FittedCurveResult
-from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.curve_fitting import FittedCurveResult, InterceptValue
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig, InterceptSpec
 from cellar.domain.screening_assay.enums import (
     CurveClass,
     CurveType,
+    InterceptKind,
     PlateFormat,
     PosControlSignal,
     ProtocolType,
@@ -29,6 +31,7 @@ from cellar.domain.screening_assay.protocol import Protocol, ReadoutDefinition
 from cellar.domain.screening_assay.readout_data import ReadoutData
 from cellar.domain.screening_assay.replicate_aggregator import ReplicateAggregator
 from cellar.domain.screening_assay.run import Plate, Run, Well
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.value_objects import QualifiedValue
 from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
 
@@ -407,3 +410,65 @@ async def test_an_inactive_control_fit_stores_no_potency() -> None:
 
     [fit] = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]["control_fits"]
     assert (fit["value"], fit["curve_class"]) == (None, "inactive")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("curve_class", "qualifier", "value"),
+    [
+        (CurveClass.ACTIVE_ALL_DOSES, ValueQualifier.LT, 0.1),  # "< lowest dose"
+        (CurveClass.PARTIAL, ValueQualifier.GT, 100.0),  # "> highest dose"
+        (CurveClass.PARTIAL, ValueQualifier.ND, math.nan),
+    ],
+)
+async def test_a_control_fit_read_as_a_bound_or_nd_stores_no_potency(
+    curve_class, qualifier, value
+) -> None:
+    """Only a potency the fit reads inside the doses is a number: the fitted midpoint of
+    a bound or n.d. control is not one."""
+    signal = ReadoutDefinition(protocol_id=_PH, name="Signal", data_type=ReadoutDataType.NUMERIC)
+    potency = ReadoutDefinition(
+        protocol_id=_PH,
+        name="Potency",
+        data_type=ReadoutDataType.DOSE_RESPONSE,
+        dose_response_config=DoseResponseConfig(
+            curve_type=CurveType.IC50, y_readout_name="Signal"
+        ),
+    )
+    protocol = _raw_only(signal, potency)
+    p = _Plate(protocol)
+    ref = uuid.uuid4()
+    for d in (0.1, 1.0, 10.0, 100.0):
+        p.add(signal, WellType.REFERENCE, 95.0, dose=d, molecule=ref)
+    p.add(signal, WellType.POSITIVE_CONTROL, 100.0)
+    p.add(signal, WellType.NEGATIVE_CONTROL, 10.0)
+    fitter = MagicMock()
+    fitter.fit.return_value = Success(
+        FittedCurveResult(
+            fitted_value=4.0,  # the fitted midpoint, inside the doses
+            hill_slope=1.0,
+            top=96.0,
+            bottom=94.0,
+            r_squared=0.3,
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            curve_class=curve_class,
+            num_points=4,
+            raw_data=[],
+            intercept_values=(
+                InterceptValue(
+                    spec=InterceptSpec(kind=InterceptKind.IC, level=50.0),
+                    value=value,
+                    confidence_interval_low=None,
+                    confidence_interval_high=None,
+                    at_bound=qualifier == ValueQualifier.GT,
+                    qualifier=qualifier,
+                ),
+            ),
+        )
+    )
+
+    run = await _compute(protocol, p, fitter)
+
+    [fit] = run.qc_metrics["plates"][str(p.plate.id)][str(signal.id)]["raw"]["control_fits"]
+    assert (fit["value"], fit["curve_class"]) == (None, curve_class.value)

@@ -23,6 +23,7 @@ from cellar.application.screening.curve_snapshot import build_aggregate_curve_sn
 from cellar.application.screening.run_aggregation import (
     AggregateResult,
     ResolvedRun,
+    _dose_range_from_raw,
     apply_selection_rule,
     combine_replicates,
     compute_aggregate_stats,
@@ -59,6 +60,7 @@ from cellar.domain.screening_assay.aggregation_types import (
 from cellar.domain.screening_assay.curve_fitting import InterceptValue
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
 from cellar.domain.screening_assay.enums import ReadoutDataType, RunStatus
+from cellar.domain.screening_assay.intercept_report import report_intercept
 from cellar.domain.screening_assay.readout_best import best_direction, pick_best
 from cellar.domain.screening_assay.repository import (
     DoseResponseCurveRepository,
@@ -177,9 +179,10 @@ def _protocol_hit(
 ) -> bool:
     """Every recommended rule met by the molecule's values (the protocol Activity tab's rule).
 
-    A plain readout uses its best value; a dose-response readout its best
-    (lowest) fit, or the named intercept; Curve Class any curve's class. A
-    rule with no value to test is not met.
+    A plain readout uses its best value; a dose-response readout its most potent
+    curve's primary or named intercept, each read as the grids report it
+    (``report_intercept``: "< lowest dose" beats any value, "> top dose" loses to
+    one); Curve Class any curve's class. A rule with no value to test is not met.
     """
     plain_by_name = {p.readout_name: p for p in plain}
     rd_by_name = {rd.name: rd for rd in getattr(proto, "readout_definitions", [])}
@@ -191,23 +194,47 @@ def _protocol_hit(
             met = bool(rule.is_met(p.value, _VALUE_QUALIFIER.get(p.qualifier, ValueQualifier.EQ)))
         else:
             rd = rd_by_name.get(rule.readout_name)
-            fits: list[float] = []
-            for c in curves:
-                if rd is None or c.readout_definition_id != rd.id:
-                    continue
-                if rule.intercept_key is None:
-                    fits.append(c.fitted_value)
-                else:
-                    fits.extend(
-                        iv.value
-                        for iv in c.intercept_values or []
-                        if iv.spec.kind.value == rule.intercept_key.kind
-                        and iv.spec.level == rule.intercept_key.level
-                    )
-            met = bool(fits) and bool(rule.is_met(min(fits)))
+            reported = [
+                r
+                for c in curves
+                if rd is not None and c.readout_definition_id == rd.id
+                for r in [_reported_potency(c, rule.intercept_key)]
+                if r[0] is not None
+            ]
+            best = min(reported, key=lambda r: (_POTENCY_ORDER[r[1]], r[0]), default=None)
+            met = best is not None and bool(rule.is_met(*best))
         if not met:
             return False
     return True
+
+
+# Most potent first: a bound below the doses, then exact values, then a bound above.
+_POTENCY_ORDER = {ValueQualifier.LT: 0, ValueQualifier.EQ: 1, ValueQualifier.GT: 2}
+
+
+def _reported_potency(
+    curve: DoseResponseCurve, key: InterceptKey | None
+) -> tuple[float | None, ValueQualifier]:
+    """The curve's primary (``key`` None: its fitted value) or keyed intercept as reported."""
+    ivs = list(curve.intercept_values or [])
+    if key is None:
+        iv, value = (ivs[0] if ivs else None), curve.fitted_value
+    else:
+        iv = next(
+            (i for i in ivs if (i.spec.kind.value, i.spec.level) == (key.kind, key.level)), None
+        )
+        if iv is None:
+            return None, ValueQualifier.ND
+        value = iv.value
+    low, high = _dose_range_from_raw(curve.raw_data)
+    return report_intercept(
+        curve.curve_class,
+        iv.qualifier if iv else None,
+        value,
+        low,
+        high,
+        at_bound=iv.at_bound if iv else False,
+    )
 
 
 class MoleculeActivityService:
@@ -764,9 +791,8 @@ class MoleculeActivityService:
                     # `EQ` path. The aggregator overrides this with the
                     # spec-resolved intercept value before display.
                     value=c.fitted_value,
-                    # Curves themselves carry no wire-level GT/LT qualifier
-                    # (that's a readout_data concept); the aggregator derives
-                    # ND from `curve_class` and GT from `at_bound`.
+                    # A curve's reported qualifier comes from its class and each
+                    # intercept's stored one (`report_intercept`), not from here.
                     qualifier=ValueQualifier.EQ,
                     unit="",  # filled in by the caller from protocol.dose_unit
                     z_prime=None,

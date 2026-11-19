@@ -18,6 +18,7 @@ from cellar.application.screening.run_aggregation import (
     apply_selection_rule,
     compute_aggregate_stats,
     detect_disagreement,
+    reported_intercept_values,
     resolve_intercept,
 )
 from cellar.domain.screening_assay.aggregation_types import (
@@ -26,6 +27,7 @@ from cellar.domain.screening_assay.aggregation_types import (
     ValueQualifier,
 )
 from cellar.domain.shared.hit_criterion import InterceptKey
+from tests.fixtures.intercept_report_cases import CASES, Case
 
 
 def _run(
@@ -438,3 +440,44 @@ def test_disagreement_when_mixed_inactive_and_active():
 
 def test_no_disagreement_with_single_run():
     assert detect_disagreement([_run(value=0.5)], None) is False
+
+
+# ---- the precedence table: class, then stored qualifier, then today's rules ----
+
+
+def _case_run(case: Case, *, fitted_value: float | None) -> ResolvedRun:
+    iv: dict = {"spec": {"kind": "ec", "level": 50.0}, "value": case.value}
+    iv["at_bound"] = case.at_bound
+    if case.qualifier is not None:
+        iv["qualifier"] = case.qualifier
+    doses = [{"concentration": d, "response": 50.0} for d in case.doses or ()]
+    return _run(
+        value=fitted_value,
+        curve_class=case.curve_class,
+        intercept_values=[iv],
+        raw_data=[*doses, {"concentration": 0.0, "response": 1.0}],  # dose 0 never counts
+    )
+
+
+@pytest.mark.parametrize("case", CASES, ids=lambda c: c.id)
+def test_resolve_intercept_follows_the_precedence_table(case: Case):
+    expected = (case.expected[0], ValueQualifier(case.expected[1]))
+    keyed = _case_run(case, fitted_value=3.0)  # the primary's fitted midpoint
+    assert resolve_intercept(keyed, InterceptKey(kind="ec", level=50.0)) == expected
+    # The primary reads fitted_value, the primary intercept's value.
+    primary = _case_run(case, fitted_value=case.value)
+    assert resolve_intercept(primary, None) == expected
+
+
+def test_reported_intercept_values_never_show_an_nd_or_flat_active_intercept_as_a_value():
+    run = _run(
+        curve_class="active_all_doses",
+        intercept_values=[
+            {"spec": {"kind": "ec", "level": 50.0}, "value": 0.001, "qualifier": "<"},
+            {"spec": {"kind": "ec", "level": 90.0}, "value": None, "qualifier": "nd"},
+        ],
+    )
+    assert [(iv["value"], iv["qualifier"]) for iv in reported_intercept_values(run)] == [
+        (0.001, "<"),
+        (0.001, "<"),  # the class wins over the stored nd
+    ]

@@ -304,8 +304,10 @@ class GetProtocolActivitySummary:
                     dr_row = dr_agg_map.get(dr_key)
                     bp_row = best_params_map.get(dr_key)
 
-                    # No active curve (all inactive) → no value, as before.
-                    if dr_row is None or dr_row.geo_mean is None:
+                    # Only inactive curves → no value, as before. A compound whose curves
+                    # read only as bounds or n.d. (active at all doses, say) has no mean
+                    # but keeps its best curve.
+                    if dr_row is None or (dr_row.geo_mean is None and bp_row is None):
                         continue
 
                     curve_params: CurveParams | None = None

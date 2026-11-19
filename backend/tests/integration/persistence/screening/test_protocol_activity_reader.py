@@ -546,3 +546,121 @@ async def test_activity_reads_sample_wells_and_wellless_rows_only(
     for grain in ("compound", "batch", "run"):
         agg = await _aggregates(session_factory, ws, p, statuses=VALID_STATUSES, grain=grain)
         assert [(r.molecule_id, r.n, r.mean) for r in agg.numeric_rows] == [(rif, 3, 60.0)], grain
+
+
+def _qualified(qualifier: str, value: float | None) -> list[dict]:
+    return [
+        {
+            "spec": {"kind": "ic", "level": 50.0, "basis": "relative_percent", "label": None},
+            "value": value,
+            "ci_low": None,
+            "ci_high": None,
+            "at_bound": qualifier == ">",
+            "qualifier": qualifier,
+        }
+    ]
+
+
+async def _qualified_world(uow, ws: uuid.UUID) -> tuple[uuid.UUID, uuid.UUID]:
+    """One compound tested 0.01-10 µM in five runs' worth of curves: an exact fit, one
+    active at all doses, one past the top dose, one n.d., and one fitted before
+    qualifiers whose stored value lies below the doses. Every censored or n.d. curve's
+    fitted_value is its fitted midpoint, which must never count as a potency."""
+    async with uow:
+        s = uow.session
+        mol = await seed.molecule(s, ws, await seed.org(s, ws), "m1")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        doses = {"min_dose": 0.01, "max_dose": 10.0}
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=1.0, intercept_values=_qualified("=", 1.0),
+            **doses,
+        )  # fmt: skip
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=2.0, curve_class="active_all_doses",
+            intercept_values=_qualified("<", 0.01), **doses,
+        )  # fmt: skip
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=4.0, curve_class="partial",
+            intercept_values=_qualified(">", 10.0), **doses,
+        )  # fmt: skip
+        await seed.curve(
+            s, ws, p, run, mol, rd, fitted_value=3.0, curve_class="partial",
+            intercept_values=_qualified("nd", None), **doses,
+        )  # fmt: skip
+        await seed.curve(s, ws, p, run, mol, rd, fitted_value=0.001, **doses)  # legacy
+        await uow.commit()
+    return p, rd
+
+
+async def test_workbench_reads_each_curve_by_its_class_then_its_stored_qualifier(
+    uow, session_factory, workspace_id
+):
+    p, _ = await _qualified_world(uow, workspace_id)
+
+    [row] = (
+        await _aggregates(session_factory, workspace_id, p, statuses=VALID_STATUSES)
+    ).dr_agg_rows
+
+    # Exact: the "=" fit only. Censored: "< 0.01" twice (active at all doses, and the
+    # legacy fit below the doses), "> 10" once. The n.d. curve is tested, nothing else.
+    assert (row.n_tested, row.n_inactive, row.n_used, row.n_censored) == (5, 0, 1, 3)
+    assert (row.best, row.geo_mean) == (1.0, pytest.approx(1.0))
+    assert (row.censored_bound, row.censored_below) == (10.0, 0.01)
+
+
+async def test_activity_averages_only_fits_read_exactly_or_stored_before_qualifiers(
+    uow, session_factory, workspace_id
+):
+    p, _ = await _qualified_world(uow, workspace_id)
+
+    [act] = (
+        await _aggregates(
+            session_factory, workspace_id, p, statuses=VALID_STATUSES, exclude_censored=False
+        )
+    ).dr_agg_rows
+
+    # The "=" fit and the legacy fit (whose stored value still counts, as before).
+    assert (act.n_used, act.best, act.geo_mean) == (2, 0.001, pytest.approx(0.0316228))
+
+
+async def test_activity_shows_a_compound_active_at_every_dose_with_that_curve_as_best(
+    uow, session_factory, workspace_id
+):
+    """A compound whose only curve is active at all doses is listed, not dropped as an
+    all-inactive one; with an exact fit beside it, the flat-active curve is still the
+    best (the most potent), whatever its fitted midpoint."""
+    ws = workspace_id
+    async with uow:
+        s = uow.session
+        org = await seed.org(s, ws)
+        flat, both = await seed.molecule(s, ws, org, "m1"), await seed.molecule(s, ws, org, "m2")
+        p = await seed.protocol(s, ws)
+        rd = await seed.readout_def(s, p, name="IC50", data_type="dose_response", unit="uM")
+        run = await seed.run(s, ws, p, date(2026, 11, 12), status="completed")
+        doses = {"min_dose": 0.01, "max_dose": 10.0}
+        for mol in (flat, both):
+            await seed.curve(
+                s, ws, p, run, mol, rd, fitted_value=2.0, curve_class="active_all_doses",
+                intercept_values=_qualified("<", 0.01), **doses,
+            )  # fmt: skip
+        await seed.curve(
+            s, ws, p, run, both, rd, fitted_value=0.5, intercept_values=_qualified("=", 0.5),
+            **doses,
+        )  # fmt: skip
+        await uow.commit()
+
+    result = await GetProtocolActivitySummary(SQLAlchemyProtocolActivityReader(session_factory))(
+        GetProtocolActivityQuery(workspace_id=ws, protocol_id=p),
+        auth=FakeAuth(role="viewer", workspace_id=ws),
+    )
+
+    readouts = {i.molecule_id: i.readouts["IC50"] for i in result.unwrap().items}
+    assert (readouts[flat].curve_class, readouts[flat].best, readouts[flat].mean) == (
+        "active_all_doses",
+        None,
+        None,
+    )
+    assert readouts[flat].curve_params.intercept_values[0].qualifier == "<"
+    assert (readouts[both].curve_class, readouts[both].best) == ("active_all_doses", 0.5)

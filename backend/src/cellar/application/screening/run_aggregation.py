@@ -9,9 +9,10 @@ call into pure functions here. Selection rules, intercept resolution,
 and chemistry-honest variance statistics live in one place.
 
 The intercept-resolution rule reports a potency the way the run tab and the
-external platform do: an inactive curve, an at-bound intercept, or a fit above
-the tested doses reads "> top dose"; a fit below them "< lowest dose"; ND only
-when there is no dose to quote (or no intercept). See ``resolve_intercept``.
+external platform do: an inactive curve reads "> top dose", one active at all
+doses "< lowest dose"; otherwise the intercept's stored qualifier decides, and
+an intercept stored before qualifiers reads by today's rules. See
+``resolve_intercept`` and ``domain.screening_assay.intercept_report``.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from cellar.domain.screening_assay.aggregation_types import (
     SelectionRule,
     ValueQualifier,
 )
+from cellar.domain.screening_assay.intercept_report import report_intercept
 from cellar.domain.shared.hit_criterion import InterceptKey
 from cellar.domain.shared.units import is_concentration_unit
 
@@ -116,11 +118,12 @@ def resolve_intercept(
 ) -> tuple[float | None, ValueQualifier]:
     """Resolve one run's intercept to a (value, qualifier) cell.
 
-    A fitted value is reported only inside the tested doses. An inactive curve,
-    an at-bound intercept, or a value above the top dose reads (top dose, GT);
-    a value below the lowest dose reads (lowest dose, LT); otherwise (value,
-    EQ). ND only when there is no dose to quote or no such intercept — the
-    frontend's ``formatInterceptDisplay`` applies the same rule to one curve.
+    ``report_intercept``'s rule: an inactive curve reads (top dose, GT) and one active
+    at all doses (lowest dose, LT); otherwise the intercept's stored qualifier
+    decides, and one stored before qualifiers reads by today's rules (at the bound or
+    above the doses GT, below them LT, else EQ). ND when there is no dose to quote,
+    no value or no such intercept — the frontend's ``formatInterceptDisplay`` applies
+    the same rule to one curve.
     """
     # A readout row has no curve, so there is no intercept to resolve — its
     # value IS the reported endpoint, qualifier and all (a CRO's ">50"). It
@@ -147,17 +150,16 @@ def resolve_intercept(
 
 
 def _report(run: ResolvedRun, iv: dict, value: object) -> tuple[float | None, ValueQualifier]:
-    """One curve intercept censored at the curve's tested doses (``resolve_intercept``)."""
+    """One curve intercept censored at the curve's tested doses (``report_intercept``)."""
     low, top = _dose_range_from_raw(run.curve_raw_data)
-    if run.curve_class == "inactive" or iv.get("at_bound") is True:
-        return (top, ValueQualifier.GT) if top is not None else (None, ValueQualifier.ND)
-    if not isinstance(value, (int, float)):
-        return None, ValueQualifier.ND
-    if top is not None and value > top:
-        return top, ValueQualifier.GT
-    if low is not None and value < low:
-        return low, ValueQualifier.LT
-    return float(value), ValueQualifier.EQ
+    return report_intercept(
+        run.curve_class,
+        iv.get("qualifier"),
+        value if isinstance(value, int | float) else None,
+        low,
+        top,
+        at_bound=iv.get("at_bound") is True,
+    )
 
 
 def reported_intercept_values(run: ResolvedRun) -> list[dict]:

@@ -14,7 +14,6 @@ Pipeline steps (in order):
 
 from __future__ import annotations
 
-import math
 import re
 import uuid
 from collections import defaultdict
@@ -38,7 +37,6 @@ from cellar.domain.screening_assay.curve_fitting import (
     CurveFittingService,
 )
 from cellar.domain.screening_assay.enums import (
-    CurveClass,
     ReadoutAggregation,
     ReadoutDataType,
     WellType,
@@ -46,6 +44,7 @@ from cellar.domain.screening_assay.enums import (
 )
 from cellar.domain.screening_assay.excluded_point_detail import ExclusionSource
 from cellar.domain.screening_assay.formula_evaluator import FormulaEvaluator
+from cellar.domain.screening_assay.intercept_report import report_intercept
 from cellar.domain.screening_assay.melt_series import series_points, series_values
 from cellar.domain.screening_assay.melt_window import (
     MeltMeasure,
@@ -67,6 +66,7 @@ from cellar.domain.screening_assay.repository import (
     RunRepository,
 )
 from cellar.domain.screening_assay.run import Run
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.errors import DomainError, NotFoundError, ValidationError
 from cellar.domain.shared.value_objects import QualifiedValue
 
@@ -612,6 +612,18 @@ class ReadoutCalculationEngine:
                 if isinstance(fit, Failure):
                     continue
                 fitted = fit.unwrap()
+                primary = fitted.intercept_values[0] if fitted.intercept_values else None
+                doses = [d for d, _ in by_well.values() if d > 0]
+                # A potency only when the fit reads it inside the doses: an inactive series,
+                # one active at every dose, a bound or n.d. has none.
+                value, qualifier = report_intercept(
+                    fitted.curve_class,
+                    primary.qualifier if primary else None,
+                    fitted.fitted_value,
+                    min(doses, default=None),
+                    max(doses, default=None),
+                    at_bound=primary.at_bound if primary else False,
+                )
                 entry = (
                     plates.setdefault(str(plate_id), {})
                     .setdefault(str(y_rd.id), {})
@@ -622,11 +634,7 @@ class ReadoutCalculationEngine:
                         "role": str(role),
                         "molecule_id": str(molecule_id),
                         "label": config.intercepts[0].display_label,
-                        # An inactive series has no potency (the fitter reports 0).
-                        "value": fitted.fitted_value
-                        if math.isfinite(fitted.fitted_value)
-                        and fitted.curve_class != CurveClass.INACTIVE
-                        else None,
+                        "value": value if qualifier == ValueQualifier.EQ else None,
                         "curve_class": str(fitted.curve_class),
                     }
                 )
