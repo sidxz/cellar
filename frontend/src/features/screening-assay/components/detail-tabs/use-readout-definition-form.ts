@@ -2,6 +2,7 @@
 
 import { showInfo } from "@/shared/lib/toast";
 import { useState } from "react";
+import { yLayers } from "../../lib/dose-response-curve-check";
 import { PERCENT_FIT_RANGES, WELL_CONC_X } from "../../lib/readout-constants";
 import type {
   CurveType,
@@ -271,7 +272,13 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
       setDrCurveType(cfg.curve_type);
       setDrXReadout(cfg.x_readout_name ?? WELL_CONC_X);
       setDrYReadout(cfg.y_readout_name);
-      setDrYNormalization(cfg.y_normalization ?? null);
+      // Keep only a layer the Y readout still calculates; the editor asks again if needed.
+      const stored = cfg.y_normalization ?? null;
+      setDrYNormalization(
+        stored && yLayers(protocol.readout_definitions, cfg.y_readout_name).includes(stored)
+          ? stored
+          : null,
+      );
       setDrHillConstraint(cfg.hill_slope_constraint);
       setDrNormalizationScope(cfg.normalization_scope);
       setDrActivityThreshold(cfg.activity_threshold != null ? String(cfg.activity_threshold) : "");
@@ -398,9 +405,8 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
   // explicit choices.
   const handleDrYReadoutChange = (newY: string, protocol: Protocol) => {
     setDrYReadout(newY);
-    // Different Y readout — its normalizations set may not include the
-    // previously-picked layer. Reset to null (raw) so the form stays
-    // consistent; the user can re-pick a layer in the picker below.
+    // Different Y readout — its layers are its own. Null fits its only layer (or its raw
+    // values when it calculates none); with two or more the editor asks which.
     setDrYNormalization(null);
     const suggested = suggestedRangesForY(newY, protocol);
     if (!suggested) return;

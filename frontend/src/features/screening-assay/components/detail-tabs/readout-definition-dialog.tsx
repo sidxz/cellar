@@ -25,6 +25,7 @@ import {
 } from "@/shared/components/ui/select";
 import { Switch } from "@/shared/components/ui/switch";
 import { Textarea } from "@/shared/components/ui/textarea";
+import { yLayers } from "../../lib/dose-response-curve-check";
 import type { ProtocolRef } from "../../lib/formula-tokens";
 import {
   PERCENT_FIT_RANGES,
@@ -99,6 +100,29 @@ interface DoseResponseFieldsProps {
   excludeId: string | null;
 }
 
+/** What the curve being edited fits: the Y readouts it can choose from, the Y readout's
+ *  calculated layers, the layer it fits (null = the only one, or raw), and why it cannot be
+ *  saved as it stands. Shared by the editor and its Save button. */
+function curveFit(
+  protocol: Protocol,
+  excludeId: string | null,
+  drYReadout: string,
+  drYNormalization: ReadoutNormalization | null,
+) {
+  const candidates = protocol.readout_definitions
+    .filter((rd) => rd.data_type === "numeric" && rd.id !== excludeId)
+    .map((rd) => rd.name);
+  const layers = yLayers(protocol.readout_definitions, drYReadout);
+  const fitted = drYNormalization && layers.includes(drYNormalization) ? drYNormalization : null;
+  let blocker: string | null = null;
+  if (!drYReadout) blocker = "Choose the readout this curve fits.";
+  else if (!candidates.includes(drYReadout))
+    blocker = `'${drYReadout}' is not a numeric readout of this protocol. Choose the readout this curve fits.`;
+  else if (layers.length > 1 && !fitted)
+    blocker = `Choose which layer of '${drYReadout}' this curve fits.`;
+  return { candidates, layers, fitted, blocker };
+}
+
 function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsProps) {
   const {
     rdDataType,
@@ -160,18 +184,12 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
 
   if (rdDataType !== "dose_response") return null;
 
-  /** Numeric readouts available as X/Y axis candidates, optionally excluding one. */
-  const candidates = protocol.readout_definitions
-    .filter((rd) => rd.data_type === "numeric" && rd.id !== excludeId)
-    .map((rd) => rd.name);
-
-  /** Normalization layers the selected Y readout emits — drives the Y Layer
-   *  picker. Empty list means only the raw layer is available (no picker shown). */
-  const yReadoutNormalizations: ReadoutNormalization[] = (() => {
-    const y = protocol.readout_definitions.find((rd) => rd.name === drYReadout);
-    if (!y) return [];
-    return (y.normalizations ?? []).filter((n) => n !== "none") as ReadoutNormalization[];
-  })();
+  const { candidates, layers, fitted, blocker } = curveFit(
+    protocol,
+    excludeId,
+    drYReadout,
+    drYNormalization,
+  );
 
   const xIsAdvanced = drXReadout !== WELL_CONC_X;
 
@@ -244,21 +262,26 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
           </Select>
         </div>
       </div>
-      {yReadoutNormalizations.length > 0 && (
+      {blocker && <p className="text-xs text-destructive">{blocker}</p>}
+      {/* A readout with calculated layers is always fitted on one of them; the raw values
+          are fitted only when it calculates none. */}
+      {layers.length === 1 && (
+        <p className="text-xs text-muted-foreground">
+          Fits the {READOUT_NORMALIZATION_LABELS[layers[0]] ?? layers[0]} layer of {drYReadout}.
+        </p>
+      )}
+      {layers.length > 1 && (
         <div className="grid gap-1 max-w-sm">
           <Label className="text-xs">Y Layer</Label>
           <Select
-            value={drYNormalization ?? "__raw__"}
-            onValueChange={(v) =>
-              setDrYNormalization(v === "__raw__" ? null : (v as ReadoutNormalization))
-            }
+            value={fitted ?? undefined}
+            onValueChange={(v) => setDrYNormalization(v as ReadoutNormalization)}
           >
-            <SelectTrigger>
-              <SelectValue />
+            <SelectTrigger aria-label={`Layer of ${drYReadout} the curve fits`}>
+              <SelectValue placeholder="Choose a layer" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="__raw__">Raw signal</SelectItem>
-              {yReadoutNormalizations.map((n) => (
+              {layers.map((n) => (
                 <SelectItem key={n} value={n}>
                   {READOUT_NORMALIZATION_LABELS[n] ?? n}
                 </SelectItem>
@@ -266,10 +289,8 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Which layer of <span className="font-medium">{drYReadout}</span> the curve fits. Pick
-            the normalized layer (e.g. % Inhibition) when the raw column is the unprocessed signal —
-            required for CDD-imported protocols where the % column is a derived layer of a raw
-            measurement.
+            Which calculated layer of <span className="font-medium">{drYReadout}</span> the curve
+            fits.
           </p>
         </div>
       )}
@@ -746,15 +767,19 @@ export function ReadoutDefinitionDialog({
   } = form;
 
   const { drFormInvalid } = validation;
-  const { drYReadout } = form;
+  const { drYReadout, drYNormalization } = form;
 
   const isAdd = mode === "add";
+  const curveBlocked =
+    rdDataType === "dose_response" &&
+    curveFit(protocol, isAdd ? null : editingReadoutId, drYReadout, drYNormalization).blocker !==
+      null;
 
   const saveDisabled =
     !rdName.trim() ||
     isReservedReadoutName(rdName) ||
     isSaving ||
-    (rdDataType === "dose_response" && !drYReadout) ||
+    curveBlocked ||
     (rdDataType === "pick_list" && rdPickListValues.filter((v) => v.label.trim()).length === 0) ||
     (rdDataType === "numeric" && rdIsCalculated && !rdCalculationFormula.trim()) ||
     drFormInvalid;
