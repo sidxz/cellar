@@ -86,6 +86,7 @@ class FileParsingActivities:
                 batch_ids=p.batch_ids,
                 error=p.error,
                 batch_problem=p.batch_problem,
+                warnings=list(p.warnings),
                 amount_value=p.amount_value,
                 amount_unit=p.amount_unit,
                 salt_code=p.salt_code,

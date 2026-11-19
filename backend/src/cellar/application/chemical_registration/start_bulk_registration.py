@@ -169,6 +169,7 @@ class StartBulkRegistration:
                 external_ids=p.external_ids,
                 batch_ids=p.batch_ids,
                 batch_problem=p.batch_problem,
+                warnings=list(p.warnings),
                 error=p.error,
                 amount_value=p.amount_value,
                 amount_unit=p.amount_unit,

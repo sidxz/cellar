@@ -66,6 +66,8 @@ class BulkRegistrationItem:
     batch_ids: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
     batch_problem: str | None = None  # compound registers, no batch
+    # Values the row had that are not stored (e.g. too long for an ID).
+    warnings: list[str] = field(default_factory=list)
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"
@@ -100,7 +102,8 @@ class BulkRegistrationItemResult:
     error: str | None = None
     batch_error: str | None = None
     batch_skipped: bool = False
-    # Stored-only IDs not stored because another compound / batch holds them.
+    # What was not stored, and why: the row's own values, stored-only IDs another
+    # compound / batch holds; and notes.
     warnings: list[str] = field(default_factory=list)
 
 
@@ -367,7 +370,12 @@ class BulkRegistrationService:
                         salt_matched=salt_matched,
                         batch_error=batch_err,
                         batch_skipped=batch_skipped,
-                        warnings=[*outcome.notes, *outcome.skipped_ids, *batch_warnings],
+                        warnings=[
+                            *item.warnings,
+                            *outcome.notes,
+                            *outcome.skipped_ids,
+                            *batch_warnings,
+                        ],
                     )
                 )
 
