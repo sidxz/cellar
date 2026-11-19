@@ -55,8 +55,8 @@ class RowBatchMatch:
     # IDs to store on the row's batch: what an existing batch lacks, or all a new
     # batch is born with.
     missing: tuple[RowBatchId, ...] = ()
-    # (batch_id, identifier_id) of automatic aliases to remove (R2)
-    evict: tuple[tuple[uuid.UUID, uuid.UUID], ...] = ()
+    # (batch_id, identifier_id, text) of automatic aliases to remove (R2)
+    evict: tuple[tuple[uuid.UUID, uuid.UUID, str], ...] = ()
     problem: str | None = None
     # Stored-only IDs another batch holds: (text, that batch's number).
     held: tuple[tuple[str, str], ...] = ()
@@ -124,14 +124,14 @@ async def classify_row_batch(
             "existing",
             batch=owner,
             missing=(*(b for b in deciding if b.identifier not in on_it), *free),
-            evict=tuple((o.id, i.id) for o, i in aliases if o.id != owner.id),
+            evict=tuple((o.id, i.id, i.identifier) for o, i in aliases if o.id != owner.id),
             held=held,
         )
     free, held = await _stored_only(repo, workspace_id, batch_ids, None, set())
     return RowBatchMatch(
         "new",
         missing=(*deciding, *free),
-        evict=tuple((o.id, i.id) for o, i in aliases),
+        evict=tuple((o.id, i.id, i.identifier) for o, i in aliases),
         held=held,
     )
 
@@ -200,75 +200,82 @@ class ApplyRowBatch:
         require_editor(auth)
         require_same_workspace(auth, cmd.workspace_id)
 
-        # 1. Classify, and drop automatic aliases that hold the row's IDs (R2).
-        #    Committed on its own: the identifier rows are replaced on save, so
-        #    moving a text between batches in one flush could trip the unique key.
         async with self._uow:
             match = await classify_row_batch(
                 self._repo, cmd.workspace_id, cmd.molecule_id, cmd.batch_ids
             )
-            if match.kind == "problem":
-                return Success(RowBatchResult("problem", problem=match.problem))
-            for owner_id, ident_id in match.evict:
-                owner = await self._repo.find_by_id_in_workspace(cmd.workspace_id, owner_id)
-                if owner is not None:
-                    owner.remove_identifier(ident_id)
-                    await self._repo.save(owner)
-            events = await self._uow.commit()
-        await self._dispatcher.dispatch_all(events)
+        if match.kind == "problem":
+            return Success(RowBatchResult("problem", problem=match.problem))
 
-        # 2a. Existing batch: add the IDs it lacks; leave its amount, purity, salt alone.
+        # R2: an ID an automatic alias holds moves to the row's batch only once that
+        # batch exists, in the transaction that removes the alias, so a failure on the
+        # way leaves every alias where it was.
+        moved = {text for _, _, text in match.evict}
         if match.kind == "existing":
+            # Existing batch: add the IDs it lacks; leave its amount, purity, salt alone.
             assert match.batch is not None
-            async with self._uow:
-                batch = await self._repo.find_by_id_in_workspace(cmd.workspace_id, match.batch.id)
-                assert batch is not None
-                for b in match.missing:
-                    batch.add_identifier(
-                        BatchIdentifier.create(
-                            batch_id=batch.id,
-                            identifier=b.identifier,
-                            identifier_type=b.identifier_type,
-                            source=b.source,
-                            registered_by=cmd.actor,
-                        )
-                    )
-                if match.missing:
-                    await self._repo.save(batch)
-                events = await self._uow.commit()
-            await self._dispatcher.dispatch_all(events)
-            number = batch.batch_number.value
-            return Success(
-                RowBatchResult(
-                    "existing",
-                    batch.id,
-                    number,
-                    ids_added=len(match.missing),
-                    skipped=skipped_batch_id_warnings(match.held, number),
-                )
-            )
-
-        # 2b. New batch, born with the row's IDs (before automatic mirrors).
-        created = await self._create_batch(
-            replace(
-                cmd.create,
-                identifiers=tuple(
-                    NewBatchIdentifier(b.identifier, b.identifier_type, b.source)
-                    for b in match.missing
+            batch_id, later = match.batch.id, match.missing
+        else:
+            # New batch, born with the row's IDs (before automatic mirrors).
+            created = await self._create_batch(
+                replace(
+                    cmd.create,
+                    identifiers=tuple(
+                        NewBatchIdentifier(b.identifier, b.identifier_type, b.source)
+                        for b in match.missing
+                        if b.identifier not in moved
+                    ),
                 ),
-            ),
-            auth=auth,
-        )
-        if isinstance(created, Failure):
-            return created
-        batch = created.unwrap().batch
-        number = batch.batch_number.value
+                auth=auth,
+            )
+            if isinstance(created, Failure):
+                return created
+            batch_id = created.unwrap().batch.id
+            later = tuple(b for b in match.missing if b.identifier in moved)
+        number = await self._store(cmd, batch_id, match.evict, later)
         return Success(
             RowBatchResult(
-                "created",
-                batch.id,
+                "existing" if match.kind == "existing" else "created",
+                batch_id,
                 number,
                 ids_added=len(match.missing),
                 skipped=skipped_batch_id_warnings(match.held, number),
             )
         )
+
+    async def _store(
+        self,
+        cmd: ApplyRowBatchCommand,
+        batch_id: uuid.UUID,
+        evict: Sequence[tuple[uuid.UUID, uuid.UUID, str]],
+        ids: Sequence[RowBatchId],
+    ) -> str:
+        """Remove the automatic aliases, then add ``ids`` to the batch, in one
+        transaction. Returns the batch's number."""
+        async with self._uow:
+            for owner_id, ident_id, _ in evict:
+                owner = await self._repo.find_by_id_in_workspace(cmd.workspace_id, owner_id)
+                if owner is not None:
+                    owner.remove_identifier(ident_id)
+                    await self._repo.save(owner)
+            if evict:
+                # Identifier rows are replaced on save: the removals reach the database
+                # before another batch takes their text, or the unique key trips.
+                await self._uow.session.flush()
+            batch = await self._repo.find_by_id_in_workspace(cmd.workspace_id, batch_id)
+            assert batch is not None
+            for b in ids:
+                batch.add_identifier(
+                    BatchIdentifier.create(
+                        batch_id=batch.id,
+                        identifier=b.identifier,
+                        identifier_type=b.identifier_type,
+                        source=b.source,
+                        registered_by=cmd.actor,
+                    )
+                )
+            if ids:
+                await self._repo.save(batch)
+            events = await self._uow.commit()
+        await self._dispatcher.dispatch_all(events)
+        return batch.batch_number.value

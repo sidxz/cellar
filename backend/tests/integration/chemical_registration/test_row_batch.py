@@ -355,6 +355,20 @@ async def test_file_id_held_by_automatic_alias_goes_to_the_rows_batch(
     assert batches[q.batch_id].real == {"ALIAS-P-001": ("custom", "Legacy lot")}
 
 
+async def test_alias_stays_when_the_rows_batch_cannot_be_created(
+    run_rows: Run, session_factory, ws: Ws
+) -> None:
+    """R2 moves the ID only once the row's batch exists: a failed create removes nothing."""
+    (p,) = await run_rows([row("ALIAS-F", "CCCCCO")])
+
+    (q,) = await run_rows(
+        [row("OTHER-F", "CCCCCN", batch=[("ALIAS-F-001", "Legacy lot")], batch_source="Enamine")]
+    )
+
+    assert q.batch_id is None and q.error is not None and "Enamine" in q.error
+    assert "ALIAS-F-001" in (await _batches(session_factory, ws))[p.batch_id].auto
+
+
 async def test_batch_matched_by_a_real_id_is_reused_and_keeps_its_fields(
     run_rows: Run, session_factory, ws: Ws
 ) -> None:
