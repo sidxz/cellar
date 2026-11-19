@@ -52,6 +52,7 @@ export function readoutsFromForm(form: ProtocolForm): ProtocolFormValues["readou
             dr_curve_type: String(dr.curve_type ?? "ic50"),
             dr_x_readout: (dr.x_readout_name as string | null) ?? WELL_CONC_X,
             dr_y_readout: String(dr.y_readout_name ?? ""),
+            dr_y_normalization: String(dr.y_normalization ?? ""),
             dr_hill_constraint: String(dr.hill_slope_constraint ?? "unconstrained"),
             dr_normalization_scope: String(dr.normalization_scope ?? "per_plate"),
             dr_activity_threshold:

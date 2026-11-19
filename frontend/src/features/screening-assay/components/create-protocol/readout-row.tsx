@@ -21,6 +21,12 @@ import { UnitPicker } from "@/shared/components/unit-picker";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { Controller, type UseFormReturn } from "react-hook-form";
 import {
+  curveAxisRenames,
+  curveProblem,
+  fittedLayer,
+  yLayers,
+} from "../../lib/dose-response-curve-check";
+import {
   VISIBLE_READOUT_DATA_TYPES,
   WELL_CONC_X,
   isReservedReadoutName,
@@ -38,6 +44,7 @@ import {
   NORMALIZATION_SCOPE_LABELS,
   READOUT_AGGREGATION_LABELS,
   READOUT_DATA_TYPE_LABELS,
+  READOUT_NORMALIZATION_LABELS,
   type ReadoutDataType,
 } from "../../types";
 import { FormulaInput } from "../formula-input";
@@ -64,10 +71,19 @@ export function ReadoutRow({
   onRemove: () => void;
 }) {
   const rd = readouts[index];
+  const curveIssue = rd ? curveProblem(rd, readouts) : null;
+  const layers = rd?.data_type === "dose_response" ? yLayers(readouts, rd.dr_y_readout) : [];
   // Open when the data type cannot work until its own settings are filled in.
   const incomplete =
-    (rd?.data_type === "pick_list" && rd.pick_list_values.length === 0) ||
-    (rd?.data_type === "dose_response" && !rd.dr_y_readout);
+    (rd?.data_type === "pick_list" && rd.pick_list_values.length === 0) || curveIssue !== null;
+  /** Rename this readout, and move the curves that plot it along with it. */
+  const rename = (next: string) => {
+    const readoutsNow = form.getValues("readouts");
+    for (const r of curveAxisRenames(readoutsNow, readoutsNow[index]?.name ?? "", next)) {
+      form.setValue(`readouts.${r.index}.${r.field}`, r.value, { shouldDirty: true });
+    }
+    form.setValue(`readouts.${index}.name`, next, { shouldDirty: true });
+  };
   const concentration = rd ? readoutTestConcentration(rd.name) : null;
   const otherNames = readouts.filter((_, i) => i !== index).map((r) => r.name);
   // Move is offered only when it can't overwrite a fixed value or repeat a readout name.
@@ -77,7 +93,7 @@ export function ReadoutRow({
   const moveConcentration = () => {
     const moved = moveTestConcentration(rd?.name ?? "", form.getValues("conditions"), otherNames);
     if (!moved) return;
-    form.setValue(`readouts.${index}.name`, moved.name, { shouldDirty: true });
+    rename(moved.name);
     form.setValue("conditions", moved.conditions as ProtocolFormValues["conditions"], {
       shouldDirty: true,
     });
@@ -99,12 +115,17 @@ export function ReadoutRow({
                 render={({ field }) => (
                   <VocabularyAutocomplete
                     value={field.value ?? ""}
-                    onChange={field.onChange}
+                    onChange={rename}
                     placeholder="e.g., % Inhibition"
                     field="readout_name"
                   />
                 )}
               />
+              {curveIssue && (
+                <p className="text-[11px] text-destructive">
+                  {rd?.name.trim() || "This curve"}: {curveIssue}
+                </p>
+              )}
               {concentration && (
                 <p className="flex items-center gap-2 text-[11px] text-muted-foreground">
                   Test concentration belongs in a condition
@@ -328,7 +349,16 @@ export function ReadoutRow({
                       control={form.control}
                       name={`readouts.${index}.dr_y_readout`}
                       render={({ field: f }) => (
-                        <Select value={f.value} onValueChange={f.onChange}>
+                        <Select
+                          value={f.value}
+                          onValueChange={(v) => {
+                            f.onChange(v);
+                            // A different readout: its layers are its own to choose from.
+                            form.setValue(`readouts.${index}.dr_y_normalization`, "", {
+                              shouldDirty: true,
+                            });
+                          }}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select..." />
                           </SelectTrigger>
@@ -344,6 +374,31 @@ export function ReadoutRow({
                     />
                   </div>
                 </div>
+
+                {layers.length > 1 && rd && (
+                  <div className="grid max-w-xs gap-1">
+                    <Label className="text-xs">Fits which layer of {rd.dr_y_readout}</Label>
+                    <Select
+                      value={fittedLayer(rd, readouts) || undefined}
+                      onValueChange={(v) =>
+                        form.setValue(`readouts.${index}.dr_y_normalization`, v, {
+                          shouldDirty: true,
+                        })
+                      }
+                    >
+                      <SelectTrigger aria-label={`Layer of ${rd.dr_y_readout} the curve fits`}>
+                        <SelectValue placeholder="Choose a layer" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {layers.map((n) => (
+                          <SelectItem key={n} value={n}>
+                            {READOUT_NORMALIZATION_LABELS[n]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
 
                 {/* Intercepts — chemist declares which intercepts the fit emits (EC50, EC90,
                     IC10, …). Empty list = single implicit 50% intercept seeded from the Curve

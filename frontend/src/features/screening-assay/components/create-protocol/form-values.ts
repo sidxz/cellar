@@ -23,6 +23,8 @@ export const readoutSchema = z.object({
   dr_curve_type: z.string(),
   dr_x_readout: z.string(),
   dr_y_readout: z.string(),
+  /** Which calculated layer of the Y readout the curve fits; "" = its only layer. */
+  dr_y_normalization: z.string(),
   dr_hill_constraint: z.string(),
   dr_normalization_scope: z.string(),
   dr_activity_threshold: z.string(),
@@ -79,6 +81,7 @@ export function defaultReadout(order: number): ProtocolFormValues["readouts"][nu
     dr_curve_type: "ic50",
     dr_x_readout: WELL_CONC_X,
     dr_y_readout: "",
+    dr_y_normalization: "",
     dr_hill_constraint: "unconstrained",
     dr_normalization_scope: "per_plate",
     dr_activity_threshold: "",

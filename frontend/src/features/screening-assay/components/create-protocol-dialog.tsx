@@ -59,6 +59,7 @@ import { useProtocolNamePreview } from "../hooks/use-protocol-name-preview";
 import { useAssignProtocolToProject } from "../hooks/use-protocol-projects";
 import { useCreateProtocol, useProtocols } from "../hooks/use-protocols";
 import { isFixedValueValid } from "../lib/conditions";
+import { curveProblem } from "../lib/dose-response-curve-check";
 import { ontologyAnnotationsPayload } from "../lib/ontology-annotations-payload";
 import {
   conditionDefinitionsPayload,
@@ -356,6 +357,8 @@ export function CreateProtocolDialog({
 
   const validReadouts = readoutValues.filter((rd) => rd.name.trim());
   const hasReservedReadoutName = validReadouts.some((rd) => isReservedReadoutName(rd.name));
+  // Each readout row says why its curve cannot fit; the server would refuse it too.
+  const hasCurveProblem = validReadouts.some((rd) => curveProblem(rd, readoutValues) !== null);
   const conditionValues = form.watch("conditions");
   // The backend refuses a pick list with no values.
   const hasEmptyPickList = conditionValues.some(
@@ -388,6 +391,7 @@ export function CreateProtocolDialog({
     !hasEmptyPickList &&
     !hasInvalidFixedValue &&
     !hasReservedReadoutName &&
+    !hasCurveProblem &&
     isPreviewSavable(preview.data) &&
     !createMutation.isPending;
 

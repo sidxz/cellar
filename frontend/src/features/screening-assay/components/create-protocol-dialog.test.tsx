@@ -161,7 +161,26 @@ vi.mock("@/features/workspace-config/hooks/use-protocol-forms", () => ({
         is_default: true,
         assay_format_from_target: true,
         version: 1,
-        readout_templates: [{ name: "IC50", data_type: "dose_response", unit: "µM" }],
+        // As shipped: the IC50 fits the Signal readout's % Inhibition layer.
+        readout_templates: [
+          {
+            name: "Signal",
+            data_type: "numeric",
+            aggregation: "none",
+            normalization: "percent_inhibition",
+            is_calculated: false,
+          },
+          {
+            name: "IC50",
+            data_type: "dose_response",
+            unit: "µM",
+            dose_response_config: {
+              curve_type: "ic50",
+              y_readout_name: "Signal",
+              y_normalization: "percent_inhibition",
+            },
+          },
+        ],
         condition_templates: [],
         ontology_defaults: [{ slot_name: "assay_format", terms: [ORGANISM_BASED] }],
       },
@@ -476,6 +495,36 @@ describe("CreateProtocolDialog", () => {
     expect(payload.form_id).toBe("f2");
     expect(payload.ontology_annotations).toEqual({});
     expect(payload.condition_definitions).toBeUndefined();
+  });
+
+  it("keeps the curve on its readout when the readout is renamed", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Enzyme inhibition");
+    fireEvent.change(screen.getByDisplayValue("Signal"), {
+      target: { value: "THF Fluorescence Slope" },
+    });
+    const payload = await submit();
+    const ic50 = payload.readout_definitions.find((r: { name: string }) => r.name === "IC50");
+    expect(ic50.dose_response_config).toMatchObject({
+      y_readout_name: "THF Fluorescence Slope",
+      y_normalization: "percent_inhibition",
+    });
+  });
+
+  it("blocks Create while a curve fits a readout that is gone, and says why", () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Enzyme inhibition");
+    const name = screen.getByDisplayValue("Signal");
+    fireEvent.change(name, { target: { value: "" } });
+    fireEvent.change(name, { target: { value: "Slope" } });
+    expect(
+      screen.getByText(
+        "IC50: 'Signal' is not a numeric readout of this protocol. Choose the readout this curve fits.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
   });
 
   it("clears what a form applied when Custom is picked", async () => {

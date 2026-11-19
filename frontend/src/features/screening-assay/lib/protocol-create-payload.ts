@@ -1,5 +1,6 @@
 import type { ProtocolFormValues } from "../components/create-protocol/form-values";
 import type { CreateConditionDefinitionInput, CreateReadoutDefinitionInput } from "../types";
+import { fittedLayer } from "./dose-response-curve-check";
 import { WELL_CONC_X } from "./readout-constants";
 
 /** The create payload's readout definitions from the create form's readout rows (unnamed rows dropped). */
@@ -33,6 +34,7 @@ export function readoutDefinitionsPayload(
           x_readout_name:
             rd.dr_x_readout === WELL_CONC_X || !rd.dr_x_readout ? null : rd.dr_x_readout,
           y_readout_name: rd.dr_y_readout,
+          y_normalization: fittedLayer(rd, readouts) || null,
           hill_slope_constraint: rd.dr_hill_constraint,
           activity_threshold: rd.dr_activity_threshold
             ? Number.parseFloat(rd.dr_activity_threshold)

@@ -40,6 +40,7 @@ export function prefillFromProtocol(p: Protocol): ProtocolPrefill {
                 dr_curve_type: dr.curve_type,
                 dr_x_readout: dr.x_readout_name ?? WELL_CONC_X,
                 dr_y_readout: dr.y_readout_name,
+                dr_y_normalization: dr.y_normalization ?? "",
                 dr_hill_constraint: dr.hill_slope_constraint,
                 dr_normalization_scope: dr.normalization_scope,
                 dr_activity_threshold:

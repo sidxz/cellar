@@ -65,3 +65,38 @@ describe("prefillFromProtocol", () => {
     expect(out.references.map((r) => r.kind)).toEqual(["doi", "pmid"]);
   });
 });
+
+describe("prefillFromProtocol with a curve", () => {
+  it("keeps the layer the source protocol's curve fits", () => {
+    const withCurve = {
+      ...source,
+      readout_definitions: [
+        {
+          name: "Signal",
+          data_type: "numeric",
+          normalizations: ["percent_inhibition", "z_score"],
+          is_calculated: false,
+          display_order: 1,
+        },
+        {
+          name: "IC50",
+          data_type: "dose_response",
+          unit: "uM",
+          is_calculated: false,
+          display_order: 2,
+          dose_response_config: {
+            curve_type: "ic50",
+            x_readout_name: null,
+            y_readout_name: "Signal",
+            y_normalization: "z_score",
+            hill_slope_constraint: "unconstrained",
+            normalization_scope: "per_plate",
+          },
+        },
+      ],
+    } as unknown as Protocol;
+    const ic50 = prefillFromProtocol(withCurve).values.readouts[1];
+    expect(ic50.dr_y_readout).toBe("Signal");
+    expect(ic50.dr_y_normalization).toBe("z_score");
+  });
+});

@@ -83,6 +83,7 @@ describe("readoutsFromForm", () => {
           dose_response_config: {
             curve_type: "ic50",
             y_readout_name: "Signal",
+            y_normalization: "percent_inhibition",
             hill_slope_constraint: "unconstrained",
             intercepts: [
               { kind: "ic", level: 50, basis: "relative_percent" },
@@ -97,6 +98,8 @@ describe("readoutsFromForm", () => {
     expect(ic50.unit).toBe("µM");
     expect(ic50.dr_curve_type).toBe("ic50");
     expect(ic50.dr_y_readout).toBe("Signal");
+    expect(ic50.dr_y_normalization).toBe("percent_inhibition");
+    expect(signal.dr_y_normalization).toBe("");
     expect(ic50.dr_intercepts).toEqual([
       { kind: "ic", level: 50, basis: "relative_percent" },
       { kind: "ic", level: 90, basis: "relative_percent", label: "IC90" },
