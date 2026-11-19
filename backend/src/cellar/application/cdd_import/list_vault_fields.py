@@ -83,7 +83,11 @@ def build_vault_fields(raw: Any) -> VaultFields:
         if names is None:
             log.warning("cdd_vault_fields_unexpected_shape", group=group)
             continue
-        out.extend(VaultField(f"{prefix}{n}", n) for n in names)
+        # "|" separates alternative fields in a path, so a name holding one can't be read.
+        unreadable = [n for n in names if "|" in n]
+        if unreadable:
+            log.warning("cdd_vault_fields_unreadable_names", group=group, names=unreadable)
+        out.extend(VaultField(f"{prefix}{n}", n) for n in names if "|" not in n)
     return VaultFields(molecule, batch)
 
 

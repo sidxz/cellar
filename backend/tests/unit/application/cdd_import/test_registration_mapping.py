@@ -93,3 +93,15 @@ def test_unknown_vault_fields_shape_falls_back_to_built_ins() -> None:
 def test_the_cdd_batch_name_reads_as_cdd_calls_it() -> None:
     labels = {x.path: x.label for x in build_vault_fields({}).batch}
     assert labels["batch.molecule_batch_identifier"] == "Molecule-Batch ID"
+
+
+def test_vault_field_names_with_dots_are_read_and_pipes_are_not_offered() -> None:
+    from cellar.application.cdd_import.molecule_mapper import _resolve_field
+
+    f = build_vault_fields({"batch": ["Cat. No.", "A|B"]})
+    paths = [x.path for x in f.batch]
+    assert "batch.batch_fields.Cat. No." in paths
+    assert not any("A|B" in p for p in paths)
+    batch = {"batch_fields": {"Cat. No.": "X-1"}, "molecule_batch_identifier": "M-1"}
+    assert _resolve_field(batch, "batch_fields.Cat. No.") == "X-1"
+    assert _resolve_field(batch, "nope|molecule_batch_identifier") == "M-1"

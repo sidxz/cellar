@@ -164,17 +164,35 @@ def compute_names(
 # ---------------------------------------------------------------------------
 
 
+# Groups keyed by the vault's own field names, which may hold dots ("Cat. No.").
+_FIELD_GROUPS = frozenset({"molecule_fields", "batch_fields"})
+
+
+def _path_parts(path: str) -> list[str]:
+    """``a.b.c`` → keys; after a field group the rest is one field name."""
+    parts: list[str] = []
+    rest = path.strip()
+    while rest:
+        head, sep, rest = rest.partition(".")
+        parts.append(head)
+        if sep and head in _FIELD_GROUPS:
+            parts.append(rest)
+            break
+    return parts
+
+
 def _resolve_field(obj: dict[str, Any], source_field: str) -> Any:
     """Resolve a potentially dotted, pipe-separated field path.
 
     ``"batch_fields.Amount|batch_fields.amount"`` tries:
       1. obj["batch_fields"]["Amount"]
       2. obj["batch_fields"]["amount"]
-    Returns the first non-None value, or None.
+    Returns the first non-None value, or None. A field name after
+    ``molecule_fields.`` / ``batch_fields.`` is read whole, dots and all.
     """
     for path in source_field.split("|"):
         val: Any = obj
-        for part in path.strip().split("."):
+        for part in _path_parts(path):
             if isinstance(val, dict):
                 val = val.get(part)
             else:
