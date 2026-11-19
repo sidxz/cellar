@@ -1,3 +1,5 @@
+import { isPercentNormalization } from "./dose-response-math";
+
 /**
  * One frame for every curve thumbnail in a table, so thumbnails compare at a glance.
  *
@@ -72,4 +74,23 @@ export function curveLayer(readouts: readonly CurveReadout[], curveName?: string
   if (cfg.y_normalization) return cfg.y_normalization;
   const y = readouts.find((r) => r.name === cfg.y_readout_name);
   return y?.normalizations?.find((n) => n !== "none") ?? null;
+}
+
+/** The y range for curves drawn together in one chart when every one fits a % layer: their
+ *  points (excluded ones too) with the 0 % and 100 % anchors. Otherwise undefined, and the
+ *  chart frames itself. */
+export function percentYRange(
+  curves: ReadonlyArray<{
+    fitted_layer?: string | null;
+    raw_data?: Points;
+    excluded_points?: Points;
+  }>,
+): [number, number] | undefined {
+  if (curves.length === 0 || !curves.every((c) => isPercentNormalization(c.fitted_layer))) {
+    return undefined;
+  }
+  return curveFrame(
+    curves.flatMap((c) => [c.raw_data, c.excluded_points]),
+    { percent: true },
+  ).yRange;
 }

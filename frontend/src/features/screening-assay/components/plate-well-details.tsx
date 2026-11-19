@@ -11,6 +11,7 @@ import {
   SheetTitle,
 } from "@/shared/components/ui/sheet";
 import Link from "next/link";
+import { percentYRange } from "../lib/curve-frame";
 import { formatPlateValue } from "../lib/plate-map-values";
 import { replicateWells } from "../lib/replicate-wells";
 import type { DoseResponseCurve, PlateData, PlateMapWell } from "../types";
@@ -197,7 +198,7 @@ export function PlateWellDetails({
           {relatedCurves.length > 0 && (
             <section className="space-y-2">
               <h3 className="text-sm font-semibold">Dose-response for this sample</h3>
-              <DoseResponseChartView curves={relatedCurves} />
+              <DoseResponseChartView curves={relatedCurves} yRange={percentYRange(relatedCurves)} />
             </section>
           )}
         </div>

@@ -919,7 +919,23 @@ def _make_dr_readout_def(readout_definition_id: uuid.UUID = RD_ID):
 
     return SimpleNamespace(
         id=readout_definition_id,
-        dose_response_config=SimpleNamespace(intercepts=[]),
+        name="IC50",
+        dose_response_config=SimpleNamespace(
+            intercepts=[], y_readout_name="Signal", y_normalization=None
+        ),
+    )
+
+
+def _make_y_readout_def(normalizations: frozenset[str]):
+    """The Y readout a dose-response readout fits ("Signal")."""
+    from types import SimpleNamespace
+
+    return SimpleNamespace(
+        id=uuid.uuid4(),
+        name="Signal",
+        dose_response_config=None,
+        normalizations=normalizations,
+        is_calculated=False,
     )
 
 
@@ -1153,6 +1169,29 @@ class TestGetActivitySummaryReportedEndpoints:
         # Curves: the results live on the run's Dose-Response tab.
         assert proto.results_tab == "dose-response"
         readout_repo.find_aggregated_by_molecules.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_a_curve_says_which_layer_it_fits(self) -> None:
+        """The compound page frames a curve's thumbnail on a % scale only when the curve
+        fits a % layer, so each curve row carries its fitted layer."""
+        service = self._service(curves=[_make_curve()], readout_repo=self._readout_repo())
+        service._protocol_repo.find_by_ids = AsyncMock(
+            return_value=[
+                _make_protocol(
+                    protocol_id=PROTO_ID,
+                    name="Alpha",
+                    dose_unit="uM",
+                    readout_defs=[
+                        _make_dr_readout_def(),
+                        _make_y_readout_def(frozenset({"percent_inhibition"})),
+                    ],
+                )
+            ]
+        )
+
+        summary = await service.get_activity_summary(WS, MOL_ID)
+
+        assert summary.protocols[0].best_curves[0]["fitted_layer"] == "percent_inhibition"
 
     @pytest.mark.asyncio
     async def test_per_well_rows_are_not_reported_endpoints(self) -> None:

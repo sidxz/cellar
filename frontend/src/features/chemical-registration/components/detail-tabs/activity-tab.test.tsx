@@ -5,8 +5,12 @@ import type { ActivitySummaryResponse } from "../../hooks/use-molecule-activity"
 
 // Plotly doesn't render under jsdom and the curve drawing isn't what's under
 // test here — the table stack inside each protocol card is.
+const sparklines = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("@/features/screening-assay/components/dose-response-sparkline", () => ({
-  DoseResponseSparkline: () => <div data-testid="sparkline" />,
+  DoseResponseSparkline: (props: Record<string, unknown>) => {
+    sparklines.push(props);
+    return <div data-testid="sparkline" />;
+  },
 }));
 
 const activity = vi.hoisted(() => ({ data: undefined as ActivitySummaryResponse | undefined }));
@@ -248,5 +252,44 @@ describe("ActivityTab runs on the same day", () => {
     });
     expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft (1)" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Nov 13, 2026 · Draft (2)" })).toBeInTheDocument();
+  });
+});
+
+describe("ActivityTab curve table", () => {
+  const flat = (y: number) => ({
+    ...curveRow(),
+    fitted_value: 3.2,
+    curve_class: "active_all_doses",
+    fitted_layer: "percent_inhibition",
+    data_points: [
+      { x: 0.0002, y },
+      { x: 100, y: y + 3 },
+    ],
+    intercept_values: [
+      {
+        spec: { kind: "ec", level: 50, basis: "relative_percent", label: null },
+        value: 0.0002,
+        confidence_interval_low: null,
+        confidence_interval_high: null,
+        at_bound: false,
+        qualifier: "<",
+      },
+    ],
+  });
+  const ec50 = [{ kind: "ec", level: 50, basis: "relative_percent", label: null }];
+
+  it("reads a compound active at every dose as below the lowest dose, not as a number", () => {
+    renderTab({ best_curves: [flat(92)], intercepts: ec50 });
+    expect(screen.getByText("< 0.0002")).toBeInTheDocument();
+  });
+
+  it("draws a protocol card's thumbnails in one % frame", () => {
+    sparklines.length = 0;
+    renderTab({ best_curves: [flat(85), flat(92)], intercepts: ec50 });
+    expect(sparklines).toHaveLength(2);
+    for (const p of sparklines) {
+      expect(p.yRange).toEqual([-10, 110]);
+      expect(p.xRange).toEqual(sparklines[0].xRange);
+    }
   });
 });

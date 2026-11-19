@@ -3,7 +3,14 @@
 import { criterionLabel } from "@/features/screening-assay/components/detail-tabs/use-activity-tab";
 import { DoseResponseSparkline } from "@/features/screening-assay/components/dose-response-sparkline";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
-import { findInterceptValue, interceptLabel } from "@/features/screening-assay/lib/intercept-label";
+import { curveFrame } from "@/features/screening-assay/lib/curve-frame";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
+import {
+  doseRange,
+  findInterceptValue,
+  formatInterceptDisplay,
+  interceptLabel,
+} from "@/features/screening-assay/lib/intercept-label";
 import {
   type CurveClass,
   type HitCriterion,
@@ -60,6 +67,8 @@ interface BestCurve {
   curve_class: string | null;
   data_points: Array<{ x: number; y: number }> | null;
   intercept_values?: InterceptValue[];
+  /** The layer the curve fits ("percent_inhibition", …); null for raw values. */
+  fitted_layer?: string | null;
 }
 
 /** Narrow an opaque generated `best_curves` JSONB record into the typed
@@ -325,6 +334,11 @@ function CurveTable({
       : // No declared intercepts: emit one synthetic primary column so
         // the table still surfaces `fitted_value` (legacy protocols).
         [{ kind: "ic", level: 50, basis: "relative_percent", label: "Fitted Value" }];
+  // One frame for the card's thumbnails; a % frame only when every curve fits a % layer.
+  const frame = curveFrame(
+    curves.map((c) => c.data_points),
+    { percent: curves.every((c) => isPercentNormalization(c.fitted_layer)) },
+  );
 
   return (
     <div className="rounded-lg border">
@@ -350,23 +364,30 @@ function CurveTable({
                 const iv = findInterceptValue(curve.intercept_values, spec);
                 // Primary column falls back to fitted_value for legacy
                 // curves that have no persisted intercept_values.
-                const value = iv?.value ?? (i === 0 ? curve.fitted_value : null);
+                const display = formatInterceptDisplay({
+                  value: iv?.value ?? (i === 0 ? curve.fitted_value : null),
+                  at_bound: iv?.at_bound,
+                  qualifier: iv?.qualifier,
+                  curve_class: curve.curve_class,
+                  ...doseRange(curve.data_points),
+                });
                 return (
                   <TableCell key={`c-${spec.kind}-${spec.level}-${i}`} className="font-mono">
-                    {value == null ? (
-                      <span
-                        className="text-muted-foreground"
-                        title="No value for this intercept. Recompute the curve to refresh."
+                    {display.warning ? (
+                      <Badge
+                        variant="outline"
+                        className="text-xs border-amber-500 text-amber-700"
+                        title={display.tooltip}
                       >
-                        —
-                      </span>
-                    ) : iv?.at_bound ? (
-                      <Badge variant="outline" className="text-xs border-amber-500 text-amber-700">
-                        {value.toFixed(3)}
-                        <span className="ml-1">⚠︎ at bound</span>
+                        {display.text}
                       </Badge>
                     ) : (
-                      value.toFixed(3)
+                      <span
+                        className={display.kind === "scalar" ? undefined : "text-muted-foreground"}
+                        title={display.tooltip || undefined}
+                      >
+                        {display.text}
+                      </span>
                     )}
                   </TableCell>
                 );
@@ -387,6 +408,8 @@ function CurveTable({
                     }}
                     dataPoints={curve.data_points}
                     curveClass={curve.curve_class as CurveClass | null}
+                    xRange={frame.xRange}
+                    yRange={frame.yRange}
                   />
                 ) : (
                   "--"

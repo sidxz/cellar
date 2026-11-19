@@ -4,6 +4,7 @@ import { CurveClassBadge } from "@/features/screening-assay/components/curve-cla
 import { DoseResponseChartView } from "@/features/screening-assay/components/dose-response-figure";
 import { useCompoundCurves } from "@/features/screening-assay/hooks/use-compound-curves";
 import { useRunsByProtocol } from "@/features/screening-assay/hooks/use-runs";
+import { percentYRange } from "@/features/screening-assay/lib/curve-frame";
 import { curvePotency, curvePotencyText } from "@/features/screening-assay/lib/intercept-label";
 import type { DoseResponseCurve } from "@/features/screening-assay/types";
 import {
@@ -125,7 +126,7 @@ export function CurvesDialog({
           // A plain block: straight in the dialog's grid, the chart would be stretched to its row
           // and its full-height plot box would fill it, leaving a gap over the table.
           <div className="min-w-0 space-y-4">
-            <DoseResponseChartView curves={curves} />
+            <DoseResponseChartView curves={curves} yRange={percentYRange(curves)} />
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b text-left text-xs text-muted-foreground">

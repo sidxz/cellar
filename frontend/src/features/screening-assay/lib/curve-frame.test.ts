@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curveFrame, curveLayer } from "./curve-frame";
+import { curveFrame, curveLayer, percentYRange } from "./curve-frame";
 
 const halfDecade = Math.sqrt(10);
 
@@ -123,5 +123,25 @@ describe("curveLayer", () => {
 
   it("takes the protocol's first curve when no name is given", () => {
     expect(curveLayer(readouts)).toBe("z_score");
+  });
+});
+
+describe("percentYRange", () => {
+  const pct = (y: number, excludedY?: number) => ({
+    fitted_layer: "percent_inhibition",
+    raw_data: [{ concentration: 1, response: y }],
+    excluded_points: excludedY == null ? null : [{ concentration: 2, response: excludedY }],
+  });
+
+  it("keeps the 0 % and 100 % anchors and every point, excluded ones too", () => {
+    expect(percentYRange([pct(90)])).toEqual([-10, 110]);
+    expect(percentYRange([pct(90, 130)])).toEqual([-13, 143]);
+  });
+
+  it("leaves a chart with any non-% curve, or no curve, to frame itself", () => {
+    expect(
+      percentYRange([pct(90), { fitted_layer: null, raw_data: [{ x: 1, y: 900 }] }]),
+    ).toBeUndefined();
+    expect(percentYRange([])).toBeUndefined();
   });
 });

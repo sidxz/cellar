@@ -377,6 +377,9 @@ class MoleculeActivityService:
                     "curve_class": curve.curve_class.value if curve.curve_class else None,
                     "data_points": data_points,
                     "intercept_values": intercept_values_payload,
+                    "fitted_layer": curve_fitted_layer(
+                        protocols_found.get(curve.protocol_id), curve.readout_definition_id
+                    ),
                 }
             )
 

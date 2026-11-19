@@ -1,6 +1,7 @@
 "use client";
 
 import { DoseResponseFigure } from "@/features/screening-assay/components/dose-response-figure";
+import type { CurveFrame } from "@/features/screening-assay/lib/curve-frame";
 import { Button } from "@/shared/components/ui/button";
 import { ChartSpline } from "lucide-react";
 import { useMemo } from "react";
@@ -10,6 +11,8 @@ import type { Dataset } from "../../types";
 
 interface CurveCellProps {
   ds: Dataset;
+  /** The column's one frame, shared by its thumbnails. */
+  frame?: CurveFrame;
   /** The dose-response value column. */
   valueKey: string;
   i: number;
@@ -24,6 +27,7 @@ export function CurveSparklineCell({
   i,
   onOpen,
   compact,
+  frame,
 }: CurveCellProps & { compact: boolean }) {
   const curve = useMemo(() => curveSnapshotAt(ds, valueKey, i), [ds, valueKey, i]);
   if (!curve) return null;
@@ -48,7 +52,14 @@ export function CurveSparklineCell({
           className="rounded-md border bg-background hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           onClick={() => onOpen(valueKey, i)}
         >
-          <DoseResponseFigure curve={curve} size="sparkline" width={140} height={92} />
+          <DoseResponseFigure
+            curve={curve}
+            size="sparkline"
+            width={140}
+            height={92}
+            xRange={frame?.xRange}
+            yRange={frame?.yRange}
+          />
         </button>
       )}
     </div>

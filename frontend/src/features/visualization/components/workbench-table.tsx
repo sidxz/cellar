@@ -1,5 +1,7 @@
 "use client";
 
+import { curveFrame } from "@/features/screening-assay/lib/curve-frame";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { cellarTheme } from "@/shared/components/data-grid/ag-grid-theme";
 import { tabThroughRows } from "@/shared/components/data-grid/tab-through-rows";
@@ -38,7 +40,7 @@ import {
 } from "react";
 import { usePassMask } from "../hooks/use-pass-mask";
 import { isComparedValue } from "../lib/cross-protocol";
-import { categoryLabel, column, numberAt } from "../lib/dataset";
+import { categoryLabel, column, numberAt, siblingAt } from "../lib/dataset";
 import { nullsLast, orderTableRows, pinnedBlock } from "../lib/table-rows";
 import { cellText, qualifierText } from "../lib/value-description";
 import { useWorkbench } from "../store/workbench-context";
@@ -343,6 +345,16 @@ function curveColumn(
   const { aggregation, layer } = c.provenance;
   const fit = aggregation === "fit";
   if (!fit && !(aggregation === "geomean" && !layer)) return null;
+  // One frame for the column's thumbnails, over every row.
+  const frame = fit
+    ? curveFrame(
+        (ds.values[c.key] ?? []).map((_, i) => {
+          const points = siblingAt(ds, c.key, "points", i);
+          return Array.isArray(points) ? (points as Record<string, unknown>[]) : null;
+        }),
+        { percent: isPercentNormalization(c.provenance.fitted_layer) },
+      )
+    : undefined;
   return {
     colId: `${OWN_PREFIX}curve:${c.key}`,
     headerName: `${fit ? "Curve" : "Curves"} · ${shortLabel(c)}`,
@@ -353,7 +365,7 @@ function curveColumn(
       if (!isData(p.data)) return null;
       const props = { ds, valueKey: c.key, i: p.data.i, onOpen };
       return fit ? (
-        <CurveSparklineCell {...props} compact={!chemistry} />
+        <CurveSparklineCell {...props} compact={!chemistry} frame={frame} />
       ) : (
         <CurvesCountCell {...props} />
       );

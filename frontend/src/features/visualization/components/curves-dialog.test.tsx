@@ -21,8 +21,14 @@ const state = vi.hoisted(() => ({ curves: [] as DoseResponseCurve[] }));
 
 vi.mock("@/shared/lib/plotly", () => ({ Plot: () => null }));
 vi.mock("@structflo/components/dose-response", () => ({
-  DoseResponseChartView: ({ curves }: { curves: { label?: string }[] }) => (
-    <ul aria-label="Chart">
+  DoseResponseChartView: ({
+    curves,
+    yRange,
+  }: {
+    curves: { label?: string }[];
+    yRange?: [number, number];
+  }) => (
+    <ul aria-label="Chart" data-y-range={JSON.stringify(yRange ?? null)}>
       {curves.map((c) => (
         <li key={c.label}>{c.label}</li>
       ))}
@@ -72,6 +78,21 @@ const target = {
 };
 
 describe("CurvesDialog", () => {
+  it("frames % curves on the 0-100 % scale", () => {
+    state.curves = [
+      {
+        ...curve("c1", R1, 0.25),
+        fitted_layer: "percent_inhibition",
+        raw_data: [
+          { concentration: 0.01, response: 88 },
+          { concentration: 10, response: 95 },
+        ],
+      },
+    ];
+    render(<CurvesDialog {...target} runIds={[R1]} open onOpenChange={() => {}} />);
+    expect(screen.getByLabelText("Chart").getAttribute("data-y-range")).toBe("[-10,110]");
+  });
+
   it("shows the compound's curves in the chosen runs, runs named by date and operator", () => {
     state.curves = [
       curve("c1", R1, 0.25),
