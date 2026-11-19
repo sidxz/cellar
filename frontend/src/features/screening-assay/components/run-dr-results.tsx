@@ -31,6 +31,8 @@ import {
 import { useCallback, useMemo, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
+import { curveFrame, curveLayer } from "../lib/curve-frame";
+import { isPercentNormalization } from "../lib/dose-response-math";
 import { runRulesOf } from "../lib/melt-hits";
 import type { DoseResponseCurve, HitCriterion, Run } from "../types";
 import { ComparisonTable } from "./comparison-table";
@@ -160,7 +162,21 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
     return drDef?.dose_response_config?.intercepts ?? [];
   }, [protocol]);
 
-  const columnDefs = useMemo(() => buildColumnDefs(protocolIntercepts), [protocolIntercepts]);
+  // The layer the curves fit, and one frame every thumbnail shares (all rows, so the
+  // frame stays put when the hit filter changes).
+  const yLayer = useMemo(() => curveLayer(protocol?.readout_definitions ?? []), [protocol]);
+  const frame = useMemo(
+    () =>
+      curveFrame(
+        allRows.map((r) => r.data_points),
+        { percent: isPercentNormalization(yLayer) },
+      ),
+    [allRows, yLayer],
+  );
+  const columnDefs = useMemo(
+    () => buildColumnDefs(protocolIntercepts, frame),
+    [protocolIntercepts, frame],
+  );
 
   // Detail panel: curves for the viewed compound
   const viewingCurves = viewing?.all_curves ?? null;
@@ -399,21 +415,13 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                     const drDef = protocol?.readout_definitions.find(
                       (rd) => rd.dose_response_config != null,
                     );
-                    const yName = drDef?.dose_response_config?.y_readout_name;
-                    const yDef = yName
-                      ? protocol?.readout_definitions.find((r) => r.name === yName)
-                      : undefined;
                     return (
                       <DoseResponseChart
                         curves={viewingCurves}
                         isInteractive
                         runIsLocked={run.is_locked}
                         protocolConfig={drDef?.dose_response_config ?? null}
-                        yReadoutNormalization={
-                          drDef?.dose_response_config?.y_normalization ??
-                          yDef?.normalizations?.find((n) => n !== "none") ??
-                          null
-                        }
+                        yReadoutNormalization={yLayer}
                       />
                     );
                   })()}

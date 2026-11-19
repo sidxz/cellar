@@ -13,8 +13,14 @@ vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
 }));
 
 import { render } from "@testing-library/react";
+import type { ReactNode } from "react";
 import type { ActivityValue } from "../../types";
-import { DoseResponseCell, DoseResponseOverlay } from "./dose-response-cell";
+import {
+  CurveFramesContext,
+  DoseResponseCell,
+  DoseResponseOverlay,
+  useCurveFramesFor,
+} from "./dose-response-cell";
 
 function reset() {
   figureCalls.length = 0;
@@ -124,5 +130,55 @@ describe("DoseResponseOverlay", () => {
     );
     expect(figureCalls).toHaveLength(0);
     expect(container.textContent).toBe("—");
+  });
+});
+
+describe("search curve cell frame", () => {
+  const activity = (y: number): ActivityValue => ({
+    ...BASE_AV,
+    raw_data: [
+      { x: 0.01, y },
+      { x: 10, y },
+    ],
+  });
+  const rows = [
+    { id: "a", activity: { "drc:ic50": activity(85) } },
+    { id: "b", activity: { "drc:ic50": activity(92) } },
+  ];
+
+  function Frames({ children }: { children: ReactNode }) {
+    return (
+      <CurveFramesContext.Provider value={useCurveFramesFor(rows)}>
+        {children}
+      </CurveFramesContext.Provider>
+    );
+  }
+
+  it("draws every row of a % column in that column's one frame, 0 % and 100 % included", () => {
+    reset();
+    render(
+      <Frames>
+        {rows.map((r) => (
+          <DoseResponseCell
+            key={r.id}
+            value={r.activity?.["drc:ic50"]}
+            frameKey="drc:ic50"
+            percent
+          />
+        ))}
+      </Frames>,
+    );
+    expect(figureCalls).toHaveLength(2);
+    for (const p of figureCalls) {
+      expect(p.yRange).toEqual([-10, 110]);
+      expect(p.xRange).toEqual(figureCalls[0].xRange);
+    }
+  });
+
+  it("frames itself outside a grid", () => {
+    reset();
+    render(<DoseResponseCell value={activity(85)} />);
+    expect(figureCalls[0].xRange).toBeUndefined();
+    expect(figureCalls[0].yRange).toBeUndefined();
   });
 });

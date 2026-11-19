@@ -22,6 +22,7 @@ import {
   ResultsGridV2,
   StageColumnHeader,
   StageGroupHeader,
+  curveFramesByChannel,
   isEmptyColumn,
   isReportedEndpoint,
 } from "./results-grid";
@@ -507,5 +508,73 @@ describe("ResultsGridV2 empty columns", () => {
       isEmptyColumn({ ...ic50, description: { ...noValues, needs_concentration: true } }),
     ).toBe(false);
     expect(isEmptyColumn({ ...ic50, description: null })).toBe(false);
+  });
+});
+
+describe("curveFramesByChannel", () => {
+  const snapshot = (y: number) => ({
+    fitted_value: 1,
+    top: 100,
+    bottom: 0,
+    hill_slope: 1,
+    raw_data: [
+      { x: 0.01, y },
+      { x: 10, y },
+    ],
+  });
+  const measure = (channel_id: string, y: number) =>
+    ({ channel_id, curve_snapshot: snapshot(y) }) as unknown as CampaignMeasurementResponse;
+  const channel = (id: string, readout_definition_id: string) =>
+    ({
+      id,
+      protocol_id: "p1",
+      readout_definition_id,
+      source_kind: "dose_response_curve",
+    }) as unknown as CampaignChannelResponse;
+  const protocols = new Map([
+    [
+      "p1",
+      {
+        readout_definitions: [
+          { id: "sig", name: "Signal", normalizations: ["percent_inhibition"] },
+          { id: "raw", name: "Raw", normalizations: [] },
+          {
+            id: "ic50",
+            name: "IC50",
+            dose_response_config: { y_readout_name: "Signal", y_normalization: null },
+          },
+          {
+            id: "rawfit",
+            name: "Raw fit",
+            dose_response_config: { y_readout_name: "Raw", y_normalization: null },
+          },
+        ],
+      },
+    ],
+  ]);
+  const results = [
+    { measurements: [measure("c1", 85), measure("c2", 1000)] },
+    { measurements: [measure("c1", 90), measure("c2", 3000)] },
+  ] as unknown as CampaignResponse["results"];
+
+  it("gives a % curve column its 0 % and 100 % anchors over every row", () => {
+    const frames = curveFramesByChannel(
+      [channel("c1", "ic50")],
+      results ?? [],
+      new Map(),
+      protocols,
+    );
+    expect(frames.get("c1")?.yRange).toEqual([-10, 110]);
+    expect(frames.get("c1")?.xRange?.[1]).toBeCloseTo(10 * Math.sqrt(10), 9);
+  });
+
+  it("fits a raw-signal curve column to its data", () => {
+    const frames = curveFramesByChannel(
+      [channel("c2", "rawfit")],
+      results ?? [],
+      new Map(),
+      protocols,
+    );
+    expect(frames.get("c2")?.yRange).toEqual([900, 3100]);
   });
 });

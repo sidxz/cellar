@@ -6,6 +6,7 @@ import { formatDate } from "@/shared/lib/format-date";
 import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
 import { Star } from "lucide-react";
 import { type CatalogColumn, compareForDirection } from "../../lib/activity-columns";
+import type { CurveFrame } from "../../lib/curve-frame";
 import { doseRange, findInterceptValue, formatInterceptDisplay } from "../../lib/intercept-label";
 import type {
   CompoundActivity,
@@ -31,6 +32,8 @@ export interface ActivityColumnOptions {
   sort: { colId: string; sort: "asc" | "desc" } | null;
   flagsByMolecule: Map<string, CompoundFlagType>;
   onToggleFlag: (moleculeId: string, existingFlagId: string | null) => void;
+  /** One frame per dose-response readout, shared by that column's thumbnails. */
+  frames?: ReadonlyMap<string, CurveFrame>;
 }
 
 type Col = ColDef<CompoundActivity> | ColGroupDef<CompoundActivity>;
@@ -235,6 +238,8 @@ function curveColumn(c: CatalogColumn, o: ActivityColumnOptions): ColDef<Compoun
           params={rv.curve_params}
           dataPoints={rv.data_points}
           curveClass={rv.curve_class}
+          xRange={o.frames?.get(c.readout)?.xRange}
+          yRange={o.frames?.get(c.readout)?.yRange}
         />
       );
     },

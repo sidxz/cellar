@@ -1,4 +1,5 @@
 import type { ColDef, ValueGetterParams } from "ag-grid-community";
+import type { ReactElement } from "react";
 import { describe, expect, it } from "vitest";
 
 import type { CompoundActivity } from "../../types";
@@ -52,5 +53,46 @@ describe("activity intercept column", () => {
   it("censors the best curve's value at its top dose, not a mean over several curves", () => {
     expect(value("best", row)).toBe(Number.POSITIVE_INFINITY);
     expect(value("mean", row)).toBe(50);
+  });
+});
+
+describe("activity curve column", () => {
+  it("hands every row's thumbnail its readout's one frame", () => {
+    const cols = buildColumnDefs({
+      catalog: [
+        {
+          colId: "ic50_curve",
+          readout: "IC50",
+          kind: "curve",
+          label: "Curve",
+          group: null,
+          defaultVisible: true,
+          empty: false,
+          primary: false,
+        },
+      ],
+      visible: new Set(["ic50_curve"]),
+      readoutDefs: [],
+      statistic: "best",
+      showStructures: false,
+      hits: null,
+      sort: null,
+      flagsByMolecule: new Map(),
+      onToggleFlag: () => {},
+      frames: new Map([["IC50", { xRange: [0.1, 1000], yRange: [-10, 110] }]]),
+    });
+    const col = cols.find(
+      (c) => "colId" in c && c.colId === "ic50_curve",
+    ) as ColDef<CompoundActivity>;
+    const render = col.cellRenderer as (p: { data: CompoundActivity }) => ReactElement;
+    const rowWith = (y: number) =>
+      ({
+        molecule_id: `m${y}`,
+        readouts: { IC50: { curve_params: { fitted_value: 1 }, data_points: [{ x: 1, y }] } },
+      }) as unknown as CompoundActivity;
+
+    for (const data of [rowWith(10), rowWith(95)]) {
+      expect(render({ data }).props).toMatchObject({ xRange: [0.1, 1000], yRange: [-10, 110] });
+    }
   });
 });

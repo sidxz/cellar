@@ -123,6 +123,7 @@ export function useProtocolSummaries(projectIds?: string[], options?: { includeA
 }
 
 export const useProtocol = protocolHooks.useGet;
+export const useProtocolsByIds = protocolHooks.useGetMany;
 export const useCreateProtocol = protocolHooks.useCreate;
 export const useUpdateProtocol = protocolHooks.useUpdate;
 export const useDeleteProtocol = protocolHooks.useDelete;

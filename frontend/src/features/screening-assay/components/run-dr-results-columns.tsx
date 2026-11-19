@@ -1,6 +1,7 @@
 import { EntityLink } from "@/shared/components/entity-link";
 import { Badge } from "@/shared/components/ui/badge";
 import type { ColDef, ICellRendererParams } from "ag-grid-community";
+import type { CurveFrame } from "../lib/curve-frame";
 import {
   doseRange,
   findInterceptValue,
@@ -32,7 +33,10 @@ function curveClassBadge(cc: CurveClass | null) {
 // protocol-level relabel after fit doesn't lose data.
 // ---------------------------------------------------------------------------
 
-export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCurveRow>[] {
+export function buildColumnDefs(
+  intercepts: InterceptSpec[],
+  frame?: CurveFrame,
+): ColDef<CompoundCurveRow>[] {
   const interceptColumns = buildInterceptColumns(intercepts);
   return [
     {
@@ -130,6 +134,8 @@ export function buildColumnDefs(intercepts: InterceptSpec[]): ColDef<CompoundCur
             }}
             dataPoints={params.data.data_points}
             curveClass={params.data.curve_class}
+            xRange={frame?.xRange}
+            yRange={frame?.yRange}
           />
         );
       },

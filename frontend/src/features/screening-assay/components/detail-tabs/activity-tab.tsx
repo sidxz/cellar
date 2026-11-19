@@ -17,7 +17,9 @@ import { shortId } from "@/shared/lib/utils";
 import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "lucide-react";
 import { useMemo, useState } from "react";
 import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
+import { type CurveFrame, curveFrame, curveLayer } from "../../lib/curve-frame";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
+import { isPercentNormalization } from "../../lib/dose-response-math";
 import { curvePotencyText } from "../../lib/intercept-label";
 import type { CompoundActivity, CurveClass, Protocol } from "../../types";
 import { ComparisonTable, buildComparisonRows } from "../comparison-table";
@@ -102,6 +104,17 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     () => defaultSortColumn(catalog, readoutDefs, savedCriteria),
     [catalog, readoutDefs, savedCriteria],
   );
+  // One frame per dose-response readout, so a column's thumbnails compare at a glance.
+  const frames = useMemo(() => {
+    const byReadout = new Map<string, CurveFrame>();
+    for (const rd of readoutDefs) {
+      if (rd.data_type !== "dose_response") continue;
+      const percent = isPercentNormalization(curveLayer(protocol.readout_definitions, rd.name));
+      const points = (items ?? []).map((row) => row.readouts?.[rd.name]?.data_points);
+      byReadout.set(rd.name, curveFrame(points, { percent }));
+    }
+    return byReadout;
+  }, [readoutDefs, items, protocol]);
   const columnDefs = useMemo(
     () =>
       buildColumnDefs({
@@ -114,6 +127,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
         sort,
         flagsByMolecule,
         onToggleFlag: handleToggleFlag,
+        frames,
       }),
     [
       catalog,
@@ -125,6 +139,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       sort,
       flagsByMolecule,
       handleToggleFlag,
+      frames,
     ],
   );
   // The row-click detail sheet shows dose-response curves; other protocols

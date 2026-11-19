@@ -14,7 +14,8 @@ export interface CurveFrame {
   yRange: [number, number] | undefined;
 }
 
-type Points = ReadonlyArray<{ x: number; y: number }> | null | undefined;
+/** A curve's points as `{x, y}` or as stored on a curve, `{concentration, response}`. */
+type Points = ReadonlyArray<Record<string, unknown>> | null | undefined;
 
 const HALF_DECADE = Math.sqrt(10);
 
@@ -26,9 +27,12 @@ export function curveFrame(
   const ys: number[] = [];
   for (const points of pointSets) {
     for (const p of points ?? []) {
-      if (!Number.isFinite(p.x) || p.x <= 0 || !Number.isFinite(p.y)) continue;
-      xs.push(p.x);
-      ys.push(p.y);
+      const x = p.x ?? p.concentration;
+      const y = p.y ?? p.response;
+      if (typeof x !== "number" || typeof y !== "number") continue;
+      if (!Number.isFinite(x) || x <= 0 || !Number.isFinite(y)) continue;
+      xs.push(x);
+      ys.push(y);
     }
   }
   if (xs.length === 0) return { xRange: undefined, yRange: undefined };
@@ -49,4 +53,23 @@ function dataRange(ys: number[]): [number, number] {
   const hi = Math.max(...ys);
   const pad = hi > lo ? (hi - lo) / 20 : Math.abs(lo) / 20 || 1;
   return [lo - pad, hi + pad];
+}
+
+interface CurveReadout {
+  name: string;
+  normalizations?: readonly string[] | null;
+  dose_response_config?: { y_readout_name: string; y_normalization?: string | null } | null;
+}
+
+/** The layer a protocol's dose-response readout fits: the one it names, else its Y readout's
+ *  first calculated layer; null on raw values. Without a name, the protocol's first curve. */
+export function curveLayer(readouts: readonly CurveReadout[], curveName?: string): string | null {
+  const curve = readouts.find((r) =>
+    curveName === undefined ? r.dose_response_config != null : r.name === curveName,
+  );
+  const cfg = curve?.dose_response_config;
+  if (!cfg) return null;
+  if (cfg.y_normalization) return cfg.y_normalization;
+  const y = readouts.find((r) => r.name === cfg.y_readout_name);
+  return y?.normalizations?.find((n) => n !== "none") ?? null;
 }

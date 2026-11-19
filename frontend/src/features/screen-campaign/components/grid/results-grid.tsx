@@ -55,6 +55,13 @@ import { shortId } from "@/shared/lib/utils";
 
 import { DoseResponseSparkline, useProtocolSummaries } from "@/features/screening-assay";
 import { ReportedEndpointBadge } from "@/features/screening-assay/components/reported-endpoint-badge";
+import { useProtocolsByIds } from "@/features/screening-assay/hooks/use-protocols";
+import {
+  type CurveFrame,
+  curveFrame,
+  curveLayer,
+} from "@/features/screening-assay/lib/curve-frame";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import type { CurveClass } from "@/features/screening-assay/types";
 
 import { showError, showSuccess } from "@/shared/lib/toast";
@@ -91,6 +98,34 @@ import type { DoseResponseCurveResponse } from "@/shared/lib/api/model";
 interface RowData {
   result: CampaignResultResponse;
 }
+
+type FrameReadouts = ReadonlyArray<Parameters<typeof curveLayer>[0][number] & { id: string }>;
+
+/** One frame per curve channel over every row, so a column's thumbnails compare at a glance.
+ *  A channel's layer comes from its protocol (the curve's own config); until that protocol
+ *  loads, the column frames its data. */
+export function curveFramesByChannel(
+  channels: readonly CampaignChannelResponse[],
+  results: readonly CampaignResultResponse[],
+  liveById: Map<string, DoseResponseCurveResponse>,
+  protocolsById: ReadonlyMap<string, { readout_definitions: FrameReadouts }>,
+): Map<string, CurveFrame> {
+  const frames = new Map<string, CurveFrame>();
+  for (const ch of channels) {
+    if (ch.source_kind !== "dose_response_curve") continue;
+    const readouts = protocolsById.get(ch.protocol_id)?.readout_definitions ?? [];
+    const curveName = readouts.find((r) => r.id === ch.readout_definition_id)?.name;
+    const percent = curveName ? isPercentNormalization(curveLayer(readouts, curveName)) : false;
+    const points = results.map((r) => {
+      const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
+      return m ? (curveSnapshotFromMeasurement(m, liveById)?.raw_data as FramePoints) : null;
+    });
+    frames.set(ch.id, curveFrame(points, { percent }));
+  }
+  return frames;
+}
+
+type FramePoints = Parameters<typeof curveFrame>[0][number];
 
 /**
  * Resolve a CurveSnapshot for a measurement. Prefers the frozen
@@ -502,6 +537,30 @@ export function ResultsGridV2({
     [protocolSummaries],
   );
 
+  // Each curve channel's protocol gives the layer its column's one frame follows.
+  const drProtocolIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          (campaign.channels ?? [])
+            .filter((ch) => ch.source_kind === "dose_response_curve")
+            .map((ch) => ch.protocol_id),
+        ),
+      ].sort(),
+    [campaign.channels],
+  );
+  const drProtocols = useProtocolsByIds(drProtocolIds);
+  const curveFrames = useMemo(
+    () =>
+      curveFramesByChannel(
+        campaign.channels ?? [],
+        campaign.results ?? [],
+        curveMap,
+        new Map(drProtocols.map((p) => [p.id, p] as const)),
+      ),
+    [campaign.channels, campaign.results, curveMap, drProtocols],
+  );
+
   // ── Row data ────────────────────────────────────────────────────────────────
 
   const rowData = useMemo<RowData[]>(
@@ -757,6 +816,8 @@ export function ResultsGridV2({
                     height={140}
                     additionalCurves={snapshot.additional_curves ?? null}
                     aggregate={snapshot.aggregate ?? null}
+                    xRange={curveFrames.get(ch.id)?.xRange}
+                    yRange={curveFrames.get(ch.id)?.yRange}
                   />
                 </button>
               );
@@ -846,6 +907,7 @@ export function ResultsGridV2({
     campaign.results,
     curveMap,
     moleculesById,
+    curveFrames,
     readOnly,
     // Every input the cell renderers read has to be here or the memoised
     // column defs keep rendering the previous stage's verdicts/chips.

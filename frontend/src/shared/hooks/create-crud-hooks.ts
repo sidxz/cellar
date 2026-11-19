@@ -7,10 +7,17 @@ import {
   type QueryClient,
   type UseQueryOptions,
   useMutation,
+  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import type { ExternalToast } from "sonner";
+
+/** The loaded entities of a `useQueries` batch, in query order. Module-level so the batch's
+ *  combined result stays referentially stable between renders. */
+function loaded<T>(results: ReadonlyArray<{ data?: T }>): T[] {
+  return results.flatMap((r) => (r.data === undefined ? [] : [r.data]));
+}
 
 export interface CrudHooksConfig {
   entityName: string;
@@ -67,6 +74,18 @@ export function createCrudHooks<
       queryFn: () => customInstance<TEntity>({ url: `${baseUrl}/${id}`, method: "GET" }),
       enabled: !!id,
       ...options,
+    });
+  }
+
+  /** Several entities by id, sharing each one's `useGet` cache entry; the loaded ones, in
+   *  id order. A stable result until one of them changes. */
+  function useGetMany(ids: readonly string[]) {
+    return useQueries({
+      queries: ids.map((id) => ({
+        queryKey: [...queryKey, id],
+        queryFn: () => customInstance<TEntity>({ url: `${baseUrl}/${id}`, method: "GET" }),
+      })),
+      combine: loaded<TEntity>,
     });
   }
 
@@ -139,5 +158,5 @@ export function createCrudHooks<
     });
   }
 
-  return { useList, useGet, useCreate, useUpdate, useDelete, useAction };
+  return { useList, useGet, useGetMany, useCreate, useUpdate, useDelete, useAction };
 }

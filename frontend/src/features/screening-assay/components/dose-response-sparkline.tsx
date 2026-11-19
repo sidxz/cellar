@@ -35,6 +35,10 @@ interface DoseResponseSparklineProps {
    *  value. When present, per-curve intercept dashes are suppressed.
    *  Pass `CampaignMeasurement.curve_snapshot.aggregate`. */
   aggregate?: AggregateMarker | null;
+  /** One frame shared by every thumbnail in a table (see lib/curve-frame). Absent: the
+   *  chart frames this curve on its own. */
+  xRange?: [number, number];
+  yRange?: [number, number];
 }
 
 export function DoseResponseSparkline({
@@ -45,6 +49,8 @@ export function DoseResponseSparkline({
   height,
   additionalCurves,
   aggregate,
+  xRange,
+  yRange,
 }: DoseResponseSparklineProps) {
   const curve: CurveSnapshot = {
     fitted_value: params.fitted_value,
@@ -58,5 +64,14 @@ export function DoseResponseSparkline({
     aggregate: aggregate ?? null,
   };
 
-  return <DoseResponseFigure curve={curve} size="sparkline" width={width} height={height} />;
+  return (
+    <DoseResponseFigure
+      curve={curve}
+      size="sparkline"
+      width={width}
+      height={height}
+      xRange={xRange}
+      yRange={yRange}
+    />
+  );
 }

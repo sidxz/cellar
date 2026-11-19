@@ -14,6 +14,8 @@ import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "reac
 
 import type { Molecule } from "@/features/chemical-registration/types";
 import { activityCatalog } from "@/features/screening-assay/lib/activity-columns";
+import { curveLayer } from "@/features/screening-assay/lib/curve-frame";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import { interceptLabel } from "@/features/screening-assay/lib/intercept-label";
 import { type Protocol, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
@@ -47,7 +49,12 @@ import {
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayEvidence } from "./assay-evidence";
-import { DoseResponseCell, DoseResponseOverlay } from "./dose-response-cell";
+import {
+  CurveFramesContext,
+  DoseResponseCell,
+  DoseResponseOverlay,
+  useCurveFramesFor,
+} from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -351,6 +358,8 @@ export function buildDrcColumns(
   const columnId = (suffix: string) => withGroup(`${token}:${suffix}`, groupKey);
   const rd = proto?.readout_definitions?.find((r) => r.id === readoutDefId);
   const allIntercepts = rd?.dose_response_config?.intercepts ?? [];
+  const percent =
+    !!rd && isPercentNormalization(curveLayer(proto?.readout_definitions ?? [], rd.name));
   const intercepts =
     visibleIntercepts && visibleIntercepts.length > 0
       ? allIntercepts.filter((spec) =>
@@ -421,7 +430,7 @@ export function buildDrcColumns(
     filter: false,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
-      return <DoseResponseCell value={av} />;
+      return <DoseResponseCell value={av} frameKey={colId} percent={percent} />;
     },
   });
 
@@ -928,6 +937,8 @@ export function ResultsGrid({
 
   // Use the aggregation committed with these rows, including while a new
   // mode is loading or after a failed request.
+  // Curve thumbnails in one column share one frame over every loaded result.
+  const curveFrames = useCurveFramesFor(results);
   const columnDefs = useMemo<(ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[]>(() => {
     const molecule = buildMoleculeColumn(
       reportConfig.imageSize,
@@ -1090,40 +1101,42 @@ export function ResultsGrid({
         </div>
       )}
       <div ref={gridHost} className={maximized ? "min-h-40 flex-1" : undefined}>
-        <DataGrid<EnrichedMolecule>
-          rowData={results}
-          // Stable ids keep ticked rows ticked when Load More appends a page
-          // (without them AG Grid treats every row as new and drops selection).
-          getRowId={(p) => p.data.id}
-          columnDefs={columnDefs}
-          onSortChanged={(event) => {
-            const sorted = event.api.getColumnState().find((c) => c.sort);
-            onSortChange?.(
-              serverSortToken(sorted?.colId) ?? undefined,
-              sorted?.sort === "desc" ? "desc" : "asc",
-            );
-          }}
-          loading={loading}
-          emptyState={
-            <p className="py-12 text-center text-sm text-muted-foreground">
-              No results to display.
-            </p>
-          }
-          height={gridHeight}
-          rowHeight={rowHeight}
-          headerHeight={36}
-          groupHeaderHeight={32}
-          enableMultiSelect
-          searchPlaceholder={false}
-          onRowClick={onRowClick}
-          onSelectionChanged={(event) => {
-            const rows = event.api.getSelectedRows();
-            onSelectionChange(new Set(rows.map((r) => r.id)));
-          }}
-          clearSelectionToken={clearSelectionToken}
-          suppressCellFocus
-          animateRows={false}
-        />
+        <CurveFramesContext.Provider value={curveFrames}>
+          <DataGrid<EnrichedMolecule>
+            rowData={results}
+            // Stable ids keep ticked rows ticked when Load More appends a page
+            // (without them AG Grid treats every row as new and drops selection).
+            getRowId={(p) => p.data.id}
+            columnDefs={columnDefs}
+            onSortChanged={(event) => {
+              const sorted = event.api.getColumnState().find((c) => c.sort);
+              onSortChange?.(
+                serverSortToken(sorted?.colId) ?? undefined,
+                sorted?.sort === "desc" ? "desc" : "asc",
+              );
+            }}
+            loading={loading}
+            emptyState={
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                No results to display.
+              </p>
+            }
+            height={gridHeight}
+            rowHeight={rowHeight}
+            headerHeight={36}
+            groupHeaderHeight={32}
+            enableMultiSelect
+            searchPlaceholder={false}
+            onRowClick={onRowClick}
+            onSelectionChanged={(event) => {
+              const rows = event.api.getSelectedRows();
+              onSelectionChange(new Set(rows.map((r) => r.id)));
+            }}
+            clearSelectionToken={clearSelectionToken}
+            suppressCellFocus
+            animateRows={false}
+          />
+        </CurveFramesContext.Provider>
       </div>
       {footer && <div className="shrink-0">{footer}</div>}
     </div>

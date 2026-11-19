@@ -785,3 +785,29 @@ describe("<DoseResponseChart /> — captured-set idx domain (post-save)", () => 
     expect(excludedTrace?.y).toEqual([99]);
   });
 });
+
+describe("<DoseResponseChart /> — y frame on a % layer", () => {
+  const flatHigh = makeCurve({
+    raw_data: [
+      { x: 0.01, y: 85 },
+      { x: 1, y: 92 },
+      { x: 10, y: 95 },
+    ],
+  });
+
+  it("shows the 0 % and 100 % anchors when the points sit inside them", () => {
+    reset();
+    renderWithQuery(
+      <DoseResponseChart curves={[flatHigh]} yReadoutNormalization="percent_inhibition" />,
+    );
+    const layout = plotCalls[0].layout as { yaxis?: { range?: number[] } };
+    expect(layout.yaxis?.range).toEqual([-10, 110]);
+  });
+
+  it("leaves a raw-signal chart to frame itself", () => {
+    reset();
+    renderWithQuery(<DoseResponseChart curves={[flatHigh]} yReadoutNormalization={null} />);
+    const layout = plotCalls[0].layout as { yaxis?: { range?: number[] } };
+    expect(layout.yaxis?.range).toBeUndefined();
+  });
+});

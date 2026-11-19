@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { curveFrame } from "./curve-frame";
+import { curveFrame, curveLayer } from "./curve-frame";
 
 const halfDecade = Math.sqrt(10);
 
@@ -82,10 +82,46 @@ describe("curveFrame", () => {
     expect(frame.yRange).toEqual([-10, 110]);
   });
 
+  it("reads curve rows stored as concentration / response", () => {
+    const frame = curveFrame([[{ concentration: 1, response: 150 }]], { percent: true });
+    expect(frame.xRange?.[0]).toBeCloseTo(1 / halfDecade, 12);
+    expect(frame.yRange).toEqual([-15, 165]);
+  });
+
   it("leaves both axes to the chart when there are no usable points", () => {
     expect(curveFrame([null, undefined, []], { percent: true })).toEqual({
       xRange: undefined,
       yRange: undefined,
     });
+  });
+});
+
+describe("curveLayer", () => {
+  const readouts = [
+    { name: "Signal", normalizations: ["none", "percent_inhibition", "z_score"] },
+    { name: "Raw", normalizations: [] },
+    {
+      name: "IC50",
+      dose_response_config: { y_readout_name: "Signal", y_normalization: "z_score" },
+    },
+    { name: "EC50", dose_response_config: { y_readout_name: "Signal", y_normalization: null } },
+    { name: "Raw fit", dose_response_config: { y_readout_name: "Raw", y_normalization: null } },
+  ];
+
+  it("is the layer the curve names", () => {
+    expect(curveLayer(readouts, "IC50")).toBe("z_score");
+  });
+
+  it("falls back to the Y readout's first calculated layer", () => {
+    expect(curveLayer(readouts, "EC50")).toBe("percent_inhibition");
+  });
+
+  it("is null for a curve on raw values or an unknown curve", () => {
+    expect(curveLayer(readouts, "Raw fit")).toBeNull();
+    expect(curveLayer(readouts, "nope")).toBeNull();
+  });
+
+  it("takes the protocol's first curve when no name is given", () => {
+    expect(curveLayer(readouts)).toBe("z_score");
   });
 });

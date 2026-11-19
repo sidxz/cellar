@@ -41,7 +41,9 @@ import {
   constraintsValid,
   defaultConstraintsFor,
 } from "../lib/curve-constraints";
+import { curveFrame } from "../lib/curve-frame";
 import { editablePoints } from "../lib/dose-response-display";
+import { isPercentNormalization } from "../lib/dose-response-math";
 import type { DoseResponseConfig, DoseResponseCurve } from "../types";
 import { CurveControls } from "./curve-controls";
 import { CurveEditHistory } from "./curve-edit-history";
@@ -98,6 +100,18 @@ export function DoseResponseChart({
   // empty string in non-authenticated test renders — the session's draft
   // toggle still works locally; only the BE rejects empty authors at save.
   const { user } = useAuthz();
+
+  // A % chart always shows its 0 % and 100 % anchors and every point, excluded ones too.
+  const yRange = useMemo(
+    () =>
+      isPercentNormalization(yReadoutNormalization)
+        ? curveFrame(
+            curves.flatMap((c) => [c.raw_data, c.excluded_points]),
+            { percent: true },
+          ).yRange
+        : undefined,
+    [curves, yReadoutNormalization],
+  );
   const authorId = user?.userId ?? "";
 
   // Edit mode toggle — prevents accidental point exclusion
@@ -412,6 +426,7 @@ export function DoseResponseChart({
     <DoseResponseChartView
       curves={curves}
       className={className}
+      yRange={yRange}
       interactive={isInteractive}
       edit={edit}
       onClassify={isInteractive ? handleClassify : undefined}
