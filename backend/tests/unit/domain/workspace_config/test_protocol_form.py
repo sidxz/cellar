@@ -32,7 +32,6 @@ def _readout(name: str = "IC50", data_type: str = "numeric") -> ProtocolFormRead
 # ---------------------------------------------------------------------------
 
 
-
 # ---------------------------------------------------------------------------
 # ProtocolForm — create
 # ---------------------------------------------------------------------------
@@ -260,3 +259,94 @@ def test_form_carries_category_and_assay_format_rule():
     assert form.category_id == cat and form.assay_format_from_target is True
     form.update(category_id=None, assay_format_from_target=False)
     assert form.category_id is None and form.assay_format_from_target is False
+
+
+# ---------------------------------------------------------------------------
+# A form's curve names a readout in the same form
+# ---------------------------------------------------------------------------
+
+
+def _signal(
+    name: str = "Signal", normalization: str = "percent_inhibition"
+) -> ProtocolFormReadout:
+    return ProtocolFormReadout(name=name, data_type="numeric", normalization=normalization)
+
+
+def _form_curve(**cfg: object) -> ProtocolFormReadout:
+    return ProtocolFormReadout(
+        name="IC50",
+        data_type="dose_response",
+        unit="µM",
+        dose_response_config={"curve_type": "ic50", **cfg},
+    )
+
+
+class TestFormCurves:
+    def test_every_shipped_form_passes(self, ws_id: uuid.UUID) -> None:
+        from cellar.domain.workspace_config.default_protocol_forms import DEFAULT_PROTOCOL_FORMS
+
+        for spec in DEFAULT_PROTOCOL_FORMS:
+            ProtocolForm.create(
+                workspace_id=ws_id, name=spec.name, readout_templates=list(spec.readouts)
+            )
+
+    def test_refuses_a_y_readout_that_is_not_in_the_form(self, ws_id: uuid.UUID) -> None:
+        with pytest.raises(
+            ValidationError,
+            match="'IC50' fits 'Signal', which is not a numeric readout of this form",
+        ):
+            ProtocolForm.create(
+                workspace_id=ws_id,
+                name="IC50 dose-response",
+                readout_templates=[
+                    _signal("THF Fluorescence Slope"),
+                    _form_curve(y_readout_name="Signal"),
+                ],
+            )
+
+    def test_refuses_an_x_readout_that_is_not_in_the_form(self, ws_id: uuid.UUID) -> None:
+        with pytest.raises(ValidationError, match="'IC50' uses 'Conc' for concentration"):
+            ProtocolForm.create(
+                workspace_id=ws_id,
+                name="IC50 dose-response",
+                readout_templates=[
+                    _signal(),
+                    _form_curve(y_readout_name="Signal", x_readout_name="Conc"),
+                ],
+            )
+
+    def test_refuses_a_layer_the_y_readout_does_not_calculate(self, ws_id: uuid.UUID) -> None:
+        with pytest.raises(ValidationError, match="'IC50' fits the z_score layer"):
+            ProtocolForm.create(
+                workspace_id=ws_id,
+                name="IC50 dose-response",
+                readout_templates=[
+                    _signal(),
+                    _form_curve(y_readout_name="Signal", y_normalization="z_score"),
+                ],
+            )
+
+    def test_update_refuses_renaming_the_plotted_readout(self, ws_id: uuid.UUID) -> None:
+        form = ProtocolForm.create(
+            workspace_id=ws_id,
+            name="IC50 dose-response",
+            readout_templates=[_signal(), _form_curve(y_readout_name="Signal")],
+        )
+        with pytest.raises(ValidationError, match="'IC50' fits 'Signal'"):
+            form.update(
+                readout_templates=[
+                    _signal("Slope"),
+                    _form_curve(y_readout_name="Signal"),
+                ]
+            )
+
+    def test_a_curve_left_to_the_scientist_is_allowed(self, ws_id: uuid.UUID) -> None:
+        form = ProtocolForm.create(
+            workspace_id=ws_id,
+            name="Curve only",
+            readout_templates=[
+                _signal(),
+                ProtocolFormReadout(name="IC50", data_type="dose_response"),
+            ],
+        )
+        assert len(form.readout_templates) == 2

@@ -75,6 +75,33 @@ class ProtocolFormOntologyDefault:
     )  # list of dicts {term_id, label, ontology_source, uri}
 
 
+def _check_curve_templates(templates: list[ProtocolFormReadout]) -> None:
+    """A form's curve names readouts of the same form, so every protocol made from it can
+    fit. A curve with no setup is allowed: the scientist completes it at create time."""
+    by_name = {t.name: t for t in templates}
+    for t in templates:
+        cfg = t.dose_response_config
+        if t.data_type != "dose_response" or not cfg:
+            continue
+        y_name = cfg.get("y_readout_name")
+        y = by_name.get(y_name) if isinstance(y_name, str) else None
+        if y is None or y.data_type != "numeric":
+            raise ValidationError(
+                f"'{t.name}' fits '{y_name}', which is not a numeric readout of this form"
+            )
+        x_name = cfg.get("x_readout_name")
+        if x_name and x_name not in by_name:
+            raise ValidationError(
+                f"'{t.name}' uses '{x_name}' for concentration, which is not a readout of "
+                "this form"
+            )
+        layer = cfg.get("y_normalization")
+        if layer and layer != y.normalization:
+            raise ValidationError(
+                f"'{t.name}' fits the {layer} layer, which '{y.name}' does not calculate"
+            )
+
+
 # ---------------------------------------------------------------------------
 # Aggregate Root
 # ---------------------------------------------------------------------------
@@ -158,6 +185,7 @@ class ProtocolForm(AggregateRoot):
         for rt in templates:
             if not rt.name or not rt.name.strip():
                 raise ValidationError("readout template name must not be empty")
+        _check_curve_templates(templates)
 
         form = cls(
             id=uuid.uuid4(),
@@ -227,6 +255,7 @@ class ProtocolForm(AggregateRoot):
             for rt in templates:
                 if not rt.name or not rt.name.strip():
                     raise ValidationError("readout template name must not be empty")
+            _check_curve_templates(templates)
             self.readout_templates = templates
 
         if condition_templates is not UNSET:
