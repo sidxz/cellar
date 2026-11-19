@@ -1,15 +1,32 @@
+# Build context = what the daemon sees. The Dockerfile copies only
+# pyproject.toml, uv.lock, src/, alembic/ and alembic.ini; everything
+# else here is kept out of the context so it can never be baked in.
+# Patterns are root-relative: use **/ to match at any depth.
+
+# Local data (real lab data, file storage) — never in an image
+data/
+
+# Envs, secrets, local tooling
+.env
+.env.*
 .venv
-__pycache__
-*.pyc
+.git
+.DS_Store
+**/.DS_Store
+
+# Caches, build & test output
+**/__pycache__
+**/*.pyc
 .pytest_cache
 .ruff_cache
 .mypy_cache
-tests
+.import_linter_cache
 htmlcov
 .coverage
-*.log
-.env
-.env.*
-.git
+**/*.log
+
+# Not needed at runtime
+tests
+openapi.json
 Dockerfile
 .dockerignore
