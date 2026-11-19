@@ -53,16 +53,24 @@ export type CurveAxisRename = {
   value: string;
 };
 
-/** The curve fields that follow a readout renamed from `oldName` to `newName`. An empty old
- *  or new name moves nothing: a cleared name is not a rename, and the curve check flags it. */
+/** The curve fields that follow the readout at `index` renamed from `oldName` to `newName`.
+ *  Nothing moves when either name is empty (a cleared name is not a rename) or when another
+ *  readout has the old or the new name: the name is typed one keystroke at a time, and a
+ *  curve on "Signal" must not follow a new "Signal bg" while it passes through "Signal".
+ *  A curve left behind is flagged by the curve check rather than moved to the wrong readout. */
 export function curveAxisRenames(
   readouts: readonly Row[],
+  index: number,
   oldName: string,
   newName: string,
 ): CurveAxisRename[] {
   const from = oldName.trim();
   const to = newName.trim();
   if (!from || !to || from === to) return [];
+  const sharedName = readouts.some(
+    (r, i) => i !== index && (r.name.trim() === from || r.name.trim() === to),
+  );
+  if (sharedName) return [];
   return readouts.flatMap((r, index) =>
     r.data_type !== "dose_response"
       ? []

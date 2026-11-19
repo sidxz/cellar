@@ -512,6 +512,23 @@ describe("CreateProtocolDialog", () => {
     });
   });
 
+  it("leaves the curve on its readout while a new readout's name is typed through it", async () => {
+    state.preview = complete;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
+    pickCategory("Enzyme inhibition");
+    fireEvent.click(screen.getByRole("button", { name: /Add readout/ }));
+    const names = screen.getAllByPlaceholderText("e.g., % Inhibition");
+    const added = names[names.length - 1];
+    let typed = "";
+    for (const ch of "Signal bg") {
+      typed += ch;
+      fireEvent.change(added, { target: { value: typed } });
+    }
+    const payload = await submit();
+    const ic50 = payload.readout_definitions.find((r: { name: string }) => r.name === "IC50");
+    expect(ic50.dose_response_config.y_readout_name).toBe("Signal");
+  });
+
   it("blocks Create while a curve fits a readout that is gone, and says why", () => {
     state.preview = complete;
     render(<CreateProtocolDialog open onOpenChange={() => {}} />);

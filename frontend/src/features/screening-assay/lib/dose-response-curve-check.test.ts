@@ -94,7 +94,7 @@ describe("fittedLayer", () => {
 describe("curveAxisRenames", () => {
   it("moves the X and Y of curves that plot the renamed readout", () => {
     const rows = [signal(), curve({ dr_x_readout: "Signal" })];
-    expect(curveAxisRenames(rows, "Signal", "THF Fluorescence Slope")).toEqual([
+    expect(curveAxisRenames(rows, 0, "Signal", "THF Fluorescence Slope")).toEqual([
       { index: 1, field: "dr_x_readout", value: "THF Fluorescence Slope" },
       { index: 1, field: "dr_y_readout", value: "THF Fluorescence Slope" },
     ]);
@@ -102,14 +102,28 @@ describe("curveAxisRenames", () => {
 
   it("compares names trimmed", () => {
     const rows = [signal(), curve()];
-    expect(curveAxisRenames(rows, " Signal ", "Slope ")).toEqual([
+    expect(curveAxisRenames(rows, 0, " Signal ", "Slope ")).toEqual([
       { index: 1, field: "dr_y_readout", value: "Slope" },
     ]);
   });
 
   it("does nothing when the old or new name is empty", () => {
     const rows = [signal(), curve({ dr_y_readout: "" })];
-    expect(curveAxisRenames(rows, "", "T")).toEqual([]);
-    expect(curveAxisRenames([signal(), curve()], "Signal", "")).toEqual([]);
+    expect(curveAxisRenames(rows, 0, "", "T")).toEqual([]);
+    expect(curveAxisRenames([signal(), curve()], 0, "Signal", "")).toEqual([]);
+  });
+
+  it("leaves a curve on its readout while a new readout's name is typed through it", () => {
+    // Typing "Signal bg" in a new row passes through "Signal", the name the IC50 fits.
+    const rows = [signal(), curve(), signal({ name: "Signal", normalizations: [] })];
+    expect(curveAxisRenames(rows, 2, "Signal", "Signal ")).toEqual([]);
+    expect(curveAxisRenames(rows, 2, "Signal ", "Signal b")).toEqual([]);
+  });
+
+  it("leaves a curve on its readout while another readout's name is backspaced through it", () => {
+    const rows = [signal(), curve(), signal({ name: "Signal b", normalizations: [] })];
+    expect(curveAxisRenames(rows, 2, "Signal b", "Signal")).toEqual([]);
+    const through = [signal(), curve(), signal({ name: "Signal", normalizations: [] })];
+    expect(curveAxisRenames(through, 2, "Signal", "Signa")).toEqual([]);
   });
 });

@@ -79,7 +79,7 @@ export function ReadoutRow({
   /** Rename this readout, and move the curves that plot it along with it. */
   const rename = (next: string) => {
     const readoutsNow = form.getValues("readouts");
-    for (const r of curveAxisRenames(readoutsNow, readoutsNow[index]?.name ?? "", next)) {
+    for (const r of curveAxisRenames(readoutsNow, index, readoutsNow[index]?.name ?? "", next)) {
       form.setValue(`readouts.${r.index}.${r.field}`, r.value, { shouldDirty: true });
     }
     form.setValue(`readouts.${index}.name`, next, { shouldDirty: true });
