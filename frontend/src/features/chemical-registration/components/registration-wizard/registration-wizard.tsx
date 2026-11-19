@@ -8,9 +8,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo } from "react";
 import { useCollectionImportHandoff } from "../../hooks/use-collection-import-handoff";
 import { useRegistrationWizard } from "../../hooks/use-registration-wizard";
-import type { WizardMode } from "../../types/registration-wizard";
+import { BULK_STEPS, type WizardMode, bulkStepIndex } from "../../types/registration-wizard";
 import { StepBatch } from "./step-batch";
 import { StepInput } from "./step-input";
+import { StepMapping } from "./step-mapping";
 import { StepPreview } from "./step-preview";
 import { StepProcessing } from "./step-processing";
 import { StepResults } from "./step-results";
@@ -19,11 +20,10 @@ import { StepSummary } from "./step-summary";
 // ─── Step definitions per mode ──────────────────────────────────────────────
 
 const SINGLE_STEPS = ["Input", "Processing", "Results", "Batch", "Summary"];
-const BULK_STEPS = ["Input", "Preview", "Processing", "Results", "Summary"];
 
 function getSteps(mode: WizardMode | null): string[] {
   if (mode === "single") return SINGLE_STEPS;
-  if (mode === "bulk") return BULK_STEPS;
+  if (mode === "bulk") return [...BULK_STEPS];
   return [];
 }
 
@@ -89,7 +89,7 @@ export function RegistrationWizard() {
 
   // ─── Render step content ────────────────────────────────────────────────
   // Single steps:  0=Input  1=Processing  2=Results  3=Batch    4=Summary
-  // Bulk steps:    0=Input  1=Preview     2=Processing 3=Results 4=Summary
+  // Bulk steps:    0=Input  1=Match columns  2=Preview  3=Processing  4=Results  5=Summary
   function renderStep() {
     // No mode selected yet — show mode selection
     if (mode === null) {
@@ -106,17 +106,18 @@ export function RegistrationWizard() {
     }
 
     if (mode === "bulk") {
-      if (currentStep === 1) return <StepPreview />;
-      if (currentStep === 2) return <StepProcessing />;
-      if (currentStep === 3) return <StepResults />;
-      if (currentStep === 4) return <StepSummary />;
+      if (currentStep === 1) return <StepMapping />;
+      if (currentStep === 2) return <StepPreview />;
+      if (currentStep === 3) return <StepProcessing />;
+      if (currentStep === 4) return <StepResults />;
+      if (currentStep === 5) return <StepSummary />;
     }
 
     return null;
   }
 
   // Processing step disables back. Step indices differ by mode.
-  const processingStepIndex = mode === "bulk" ? 2 : 1;
+  const processingStepIndex = mode === "bulk" ? bulkStepIndex("Processing") : 1;
   const isProcessingStep = mode !== null && currentStep === processingStepIndex;
   const canGoBack = mode !== null && currentStep > 0 && !isProcessingStep;
 

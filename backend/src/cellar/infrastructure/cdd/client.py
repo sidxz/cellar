@@ -100,6 +100,10 @@ class CddVaultClient:
         self._check_response(response)
         return response.json()
 
+    async def list_fields(self, vault_id: str, api_key: str) -> dict[str, Any]:
+        """Field definitions of the vault (GET /vaults/{id}/fields), grouped by entity."""
+        return await self._get(f"{BASE_URL}/vaults/{vault_id}/fields", api_key)
+
     async def list_protocols(self, vault_id: str, api_key: str) -> list[dict[str, Any]]:
         """Fetch all protocols from CDD Vault, handling pagination."""
         all_objects: list[dict[str, Any]] = []
@@ -230,6 +234,20 @@ class CddVaultClient:
                 if not page or offset >= data.get("count", 0):
                     break
         return molecules
+
+    async def sample_molecules(
+        self, vault_id: str, api_key: str, molecule_ids: list[int] | None, limit: int
+    ) -> list[dict[str, Any]]:
+        """One synchronous page of up to ``limit`` molecules with structures and batches.
+
+        ``molecule_ids`` picks the molecules; None takes the vault's first ``limit``.
+        """
+        url = f"{BASE_URL}/vaults/{vault_id}/molecules/query"
+        body: dict[str, Any] = {"page_size": limit}
+        if molecule_ids is not None:
+            body["molecules"] = ",".join(str(i) for i in molecule_ids)
+        data = await self._post_query(url, api_key, body)
+        return list(data.get("objects", []))[:limit]
 
     async def check_export_progress(self, vault_id: str, api_key: str, export_id: int) -> str:
         """Lightweight export status check via /export_progress (no data download).

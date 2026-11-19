@@ -33,7 +33,7 @@ import {
 
 const IDENTIFIER_TYPES = [
   { value: "external_lot", label: "External Lot" },
-  { value: "cdd_batch_id", label: "CDD Batch ID" },
+  { value: "cdd_batch_id", label: "CDD vault batch number" },
   { value: "vendor_lot", label: "Vendor Lot" },
   { value: "custom", label: "Custom" },
 ] as const;

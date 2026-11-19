@@ -1,7 +1,10 @@
 "use client";
 
 import { API_V1, customInstance } from "@/shared/lib/api/custom-instance";
-import type { BodyStartBulkRegistrationApiV1BulkRegistrationsPost } from "@/shared/lib/api/model";
+import type {
+  BodyStartBulkRegistrationApiV1BulkRegistrationsPost,
+  ColumnMappingBody,
+} from "@/shared/lib/api/model";
 import { JOB_POLL_SLOW_INTERVAL_MS } from "@/shared/lib/timing";
 import { showError, showSuccess } from "@/shared/lib/toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -46,9 +49,10 @@ export function useSubmitRegistration() {
 /** POST /api/v1/bulk-registrations/preview — multipart upload, returns parsed items. */
 export function usePreviewBulkRegistration() {
   return useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async ({ file, mapping }: { file: File; mapping: ColumnMappingBody | null }) => {
       const formData = new FormData();
       formData.append("file", file);
+      if (mapping) formData.append("column_mapping", JSON.stringify(mapping));
       return customInstance<PreviewBulkRegistrationResponse>({
         url: `${API_V1}/bulk-registrations/preview`,
         method: "POST",
@@ -57,6 +61,23 @@ export function usePreviewBulkRegistration() {
     },
     onError: (err: Error) => {
       showError(err.message ?? "Failed to preview file");
+    },
+  });
+}
+
+// ─── Bulk Registration: column suggestions ─────────────────────────────────
+
+/** POST /api/v1/bulk-registrations/suggest-mapping — where each header goes by its name. */
+export function useSuggestColumnMapping() {
+  return useMutation({
+    mutationFn: (headers: string[]) =>
+      customInstance<ColumnMappingBody>({
+        url: `${API_V1}/bulk-registrations/suggest-mapping`,
+        method: "POST",
+        data: { headers },
+      }),
+    onError: (err: Error) => {
+      showError(err.message ?? "Could not suggest where the columns go");
     },
   });
 }
@@ -122,6 +143,7 @@ export function useStartBulkRegistration() {
       file_format = "csv",
       create_batch_on_duplicate,
       project_ids = [],
+      column_mapping,
     }: StartBulkRegistrationInput) => {
       const formData = new FormData();
       formData.append("file", file);
@@ -133,6 +155,7 @@ export function useStartBulkRegistration() {
         formData.append("create_batch_on_duplicate", String(create_batch_on_duplicate));
       }
       for (const id of project_ids) formData.append("project_ids", id);
+      if (column_mapping) formData.append("column_mapping", column_mapping);
       return customInstance<{ workflow_id: string; status: string }>({
         url: `${API_V1}/bulk-registrations`,
         method: "POST",

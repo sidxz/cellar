@@ -40,15 +40,12 @@ def create_container(
 ) -> Container:
     """Build and return the fully-wired DI container.
 
-    ``overrides`` pre-registers ready-made instances (tests stub external
-    adapters such as ``TargetSource`` here). Registrars that provide a
-    swappable external adapter must guard with ``if X not in
-    container.defined_types`` — Lagom raises on a duplicate ``define``.
+    ``overrides`` replaces definitions with ready-made instances (tests stub
+    external adapters such as ``TargetSource`` here). They go on a child
+    container after every registrar ran, so registrars need no guard for them:
+    a parent definition resolved through the child sees the child's stubs.
     """
     container = Container()
-    for dep_type, instance in (overrides or {}).items():
-        container.define(dep_type, Singleton(_constant(instance)))
-
     register_core(container, db_settings)
     register_admin(container)
     register_audit(container)
@@ -65,7 +62,12 @@ def create_container(
     register_export(container)
     register_sar_analysis(container)
 
-    return container
+    if not overrides:
+        return container
+    child = container.clone()
+    for dep_type, instance in overrides.items():
+        child.define(dep_type, Singleton(_constant(instance)))
+    return child
 
 
 def _constant(value: object):

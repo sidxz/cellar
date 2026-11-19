@@ -41,6 +41,8 @@ from cellar.application.cdd_import.import_cdd_protocol import ImportCddProtocol
 from cellar.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
 from cellar.application.cdd_import.list_cdd_plate_imports import ListCddPlateImports
 from cellar.application.cdd_import.list_cdd_protocols import ListCddProtocols
+from cellar.application.cdd_import.list_vault_fields import ListVaultFields
+from cellar.application.cdd_import.preview_cdd_import import PreviewCddImport
 from cellar.application.cdd_import.preview_cdd_protocol_import import PreviewCddProtocolImport
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.cdd_import.start_cdd_plate_import import StartCddPlateImport
@@ -108,6 +110,17 @@ def register_cdd_import(container: Container) -> None:
         )
 
     container.define(ListCddProtocols, _cdd_query(ListCddProtocols))
+
+    def _list_vault_fields(c: Container):
+        uow = AsyncUnitOfWork(c[async_sessionmaker])
+        return ListVaultFields(
+            uow=uow,
+            repo=SQLAlchemyDataSourceRepository(uow),
+            gateway=c[CddVaultClient],
+            secret_provider=c[SecretProvider],
+        )
+
+    container.define(ListVaultFields, _list_vault_fields)
     container.define(PreviewCddProtocolImport, _cdd_query(PreviewCddProtocolImport))
     container.define(ImportCddProtocol, _cdd_import_cmd)
 
@@ -142,6 +155,7 @@ def register_cdd_import(container: Container) -> None:
 
     container.define(StartCddMoleculeImport, _start_cdd_mol_import)
     container.define(CheckCddMoleculeIdentifiers, _cdd_query(CheckCddMoleculeIdentifiers))
+    container.define(PreviewCddImport, _cdd_query(PreviewCddImport))
     container.define(ListCddMoleculeImports, _list_cdd_mol_imports)
     container.define(ForceFailCddMoleculeImport, _force_fail_cdd_mol_import)
 

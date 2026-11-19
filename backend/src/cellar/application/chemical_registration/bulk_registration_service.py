@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 from returns.result import Failure, Result, Success
@@ -17,10 +18,15 @@ from cellar.application.chemical_registration.protocols import (
     StructureProcessorProtocol,
 )
 from cellar.application.chemical_registration.register_molecule import (
-    ExternalId,
     RegisterMolecule,
     RegisterMoleculeCommand,
     RegistrationOutcome,
+    external_ids,
+)
+from cellar.application.chemical_registration.row_batch import (
+    ApplyRowBatch,
+    ApplyRowBatchCommand,
+    row_batch_ids,
 )
 from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
@@ -50,11 +56,18 @@ class BulkRegistrationItem:
     """Application-layer DTO for a single parsed molecule record."""
 
     row_index: int
+    file_row: int = 0
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "identifier_type", "source"?, "decides"?}
+    external_ids: list[dict[str, Any]] = field(default_factory=list)
+    # {"identifier", "source", "identifier_type"?, "decides"?}
+    batch_ids: list[dict[str, Any]] = field(default_factory=list)
     error: str | None = None
+    batch_problem: str | None = None  # compound registers, no batch
+    # Values the row had that are not stored (e.g. too long for an ID).
+    warnings: list[str] = field(default_factory=list)
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"
@@ -89,6 +102,9 @@ class BulkRegistrationItemResult:
     error: str | None = None
     batch_error: str | None = None
     batch_skipped: bool = False
+    # What was not stored, and why: the row's own values, stored-only IDs another
+    # compound / batch holds; and notes.
+    warnings: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -246,13 +262,7 @@ class BulkRegistrationService:
                 name=item.name or f"Compound-{item.row_index + 1}",
                 smiles=item.smiles,
                 molecule_type=item.molecule_type,
-                external_ids=[
-                    ExternalId(
-                        identifier=eid["identifier"],
-                        identifier_type=eid["identifier_type"],
-                    )
-                    for eid in item.external_ids
-                ],
+                external_ids=external_ids(item.external_ids),
                 originating_org_id=originating_org_id,
                 registered_by=submitted_by,
                 promote_name_as_identifier=has_explicit_name,
@@ -293,7 +303,28 @@ class BulkRegistrationService:
                     workspace_default=effective_policy_default,
                 )
 
-                if create_batch_now:
+                batch_warnings: tuple[str, ...] = ()
+                if item.batch_problem:
+                    batch_id, batch_number, salt_matched = None, None, False
+                    batch_err = item.batch_problem
+                    batch_skipped = False
+                elif item.batch_ids:
+                    # The row names its batch: find or create exactly that batch.
+                    (
+                        batch_id,
+                        batch_number,
+                        salt_matched,
+                        batch_err,
+                        batch_warnings,
+                    ) = await self._apply_row_batch(
+                        item=item,
+                        reg_outcome=outcome,
+                        workspace_id=workspace_id,
+                        submitted_by=submitted_by,
+                        auth=auth,
+                    )
+                    batch_skipped = False
+                elif create_batch_now:
                     (
                         batch_id,
                         batch_number,
@@ -322,6 +353,9 @@ class BulkRegistrationService:
                         else None,
                         "batch_id": batch_id,
                         "batch_number": batch_number,
+                        "error": f"Compound registered, batch not created: {batch_err}"
+                        if batch_err
+                        else None,
                     }
                 )
 
@@ -336,6 +370,12 @@ class BulkRegistrationService:
                         salt_matched=salt_matched,
                         batch_error=batch_err,
                         batch_skipped=batch_skipped,
+                        warnings=[
+                            *item.warnings,
+                            *outcome.notes,
+                            *outcome.skipped_ids,
+                            *batch_warnings,
+                        ],
                     )
                 )
 
@@ -346,6 +386,56 @@ class BulkRegistrationService:
 
         return results
 
+    def _new_create_batch(self) -> CreateBatch:
+        return CreateBatch(
+            uow=self._uow,
+            repo=self._batch_repo,
+            molecule_repo=self._mol_repo,
+            dispatcher=self._dispatcher,
+            sync=self._sync,
+        )
+
+    async def _apply_row_batch(
+        self,
+        *,
+        item: BulkRegistrationItem,
+        reg_outcome: RegistrationOutcome,
+        workspace_id: uuid.UUID,
+        submitted_by: uuid.UUID,
+        auth: AuthContext | None,
+    ) -> tuple[uuid.UUID | None, str | None, bool, str | None, tuple[str, ...]]:
+        """``_create_batch_for_item``'s shape plus the skipped-ID warnings; a row-batch
+        problem is reported as the batch error (the compound stays registered)."""
+        batch_cmd, salt_matched = await self._batch_command_for_item(
+            item=item,
+            reg_outcome=reg_outcome,
+            workspace_id=workspace_id,
+            submitted_by=submitted_by,
+        )
+        apply = ApplyRowBatch(
+            uow=self._uow,
+            batch_repo=self._batch_repo,
+            create_batch=self._new_create_batch(),
+            dispatcher=self._dispatcher,
+        )
+        result = await apply(
+            ApplyRowBatchCommand(
+                workspace_id=workspace_id,
+                molecule_id=reg_outcome.molecule.id,
+                batch_ids=row_batch_ids(item.batch_ids),
+                create=batch_cmd,
+                actor=submitted_by,
+            ),
+            auth=auth,
+        )
+        if isinstance(result, Failure):
+            return None, None, False, str(result.failure()), ()
+        r = result.unwrap()
+        if r.action == "problem":
+            return None, None, False, r.problem, ()
+        created = r.action == "created"
+        return r.batch_id, r.batch_number, salt_matched and created, None, r.skipped
+
     async def _create_batch_for_item(
         self,
         *,
@@ -355,16 +445,49 @@ class BulkRegistrationService:
         submitted_by: uuid.UUID,
         auth: AuthContext | None,
     ) -> tuple[uuid.UUID | None, str | None, bool, str | None]:
-        """Resolve salt and create a batch for a successfully registered molecule.
+        """Create a batch for a successfully registered molecule.
+
+        Returns ``(batch_id, batch_number, salt_matched, batch_error)``.
+        ``batch_error`` is ``None`` on success, otherwise a human-readable
+        message describing why the batch creation failed.
+        """
+        batch_cmd, salt_matched = await self._batch_command_for_item(
+            item=item,
+            reg_outcome=reg_outcome,
+            workspace_id=workspace_id,
+            submitted_by=submitted_by,
+        )
+        batch_result = await self._new_create_batch()(batch_cmd, auth=auth)
+
+        if isinstance(batch_result, Failure):
+            err = batch_result.failure()
+            logger.warning(
+                "bulk_registration.batch_create_failed",
+                molecule_id=str(reg_outcome.molecule.id),
+                row_index=item.row_index,
+                error=str(err),
+            )
+            return None, None, False, str(err)
+
+        batch = batch_result.unwrap().batch
+        return batch.id, batch.batch_number.value, salt_matched, None
+
+    async def _batch_command_for_item(
+        self,
+        *,
+        item: BulkRegistrationItem,
+        reg_outcome: RegistrationOutcome,
+        workspace_id: uuid.UUID,
+        submitted_by: uuid.UUID,
+    ) -> tuple[CreateBatchCommand, bool]:
+        """Resolve salt and build the batch command for a registered molecule.
 
         Salt resolution priority:
         1. Explicit salt_code from the import row -> match_by_code
         2. Auto-detected salt from structure processing -> match_by_smiles
         3. No salt
 
-        Returns ``(batch_id, batch_number, salt_matched, batch_error)``.
-        ``batch_error`` is ``None`` on success, otherwise a human-readable
-        message describing why the batch creation failed.
+        Returns ``(command, salt_matched)``.
         """
         molecule = reg_outcome.molecule
         detected_salt = reg_outcome.detected_salt
@@ -412,14 +535,6 @@ class BulkRegistrationService:
                 salt_smiles = detected_salt.salt_smiles
                 salt_stoichiometry = detected_salt.stoichiometry
 
-        create_batch = CreateBatch(
-            uow=self._uow,
-            repo=self._batch_repo,
-            molecule_repo=self._mol_repo,
-            dispatcher=self._dispatcher,
-            sync=self._sync,
-        )
-
         batch_cmd = CreateBatchCommand(
             workspace_id=workspace_id,
             molecule_id=molecule.id,
@@ -435,18 +550,4 @@ class BulkRegistrationService:
             purity=item.purity,
             appearance=item.appearance,
         )
-
-        batch_result = await create_batch(batch_cmd, auth=auth)
-
-        if isinstance(batch_result, Failure):
-            err = batch_result.failure()
-            logger.warning(
-                "bulk_registration.batch_create_failed",
-                molecule_id=str(molecule.id),
-                row_index=item.row_index,
-                error=str(err),
-            )
-            return None, None, False, str(err)
-
-        batch = batch_result.unwrap().batch
-        return batch.id, batch.batch_number.value, salt_matched, None
+        return batch_cmd, salt_matched

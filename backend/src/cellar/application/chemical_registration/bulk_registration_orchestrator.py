@@ -24,6 +24,7 @@ class StartBulkRegistrationRequest:
     content: bytes
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
     project_ids: list[uuid.UUID] = field(default_factory=list)
+    column_mapping: dict | None = None  # ColumnMapping.to_dict(); None = default headers
 
 
 @dataclass(frozen=True, kw_only=True)

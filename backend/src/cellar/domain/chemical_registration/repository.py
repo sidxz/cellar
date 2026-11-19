@@ -10,6 +10,9 @@ from cellar.domain.chemical_registration.bulk_registration import (
     BulkRegistration,
     BulkRegistrationItem,
 )
+from cellar.domain.chemical_registration.bulk_registration_mapping import (
+    BulkRegistrationMapping,
+)
 from cellar.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
 from cellar.domain.chemical_registration.disclosure_request import DisclosureRequest
 from cellar.domain.chemical_registration.merge_event import MergeEvent
@@ -57,6 +60,16 @@ class MoleculeRepository(Protocol):
     async def find_identifiers_in_workspace(
         self, workspace_id: uuid.UUID, identifiers: set[str]
     ) -> dict[str, uuid.UUID]: ...
+
+    async def find_identifier_holders(
+        self,
+        workspace_id: uuid.UUID,
+        identifiers: set[str],
+        exclude_molecule_id: uuid.UUID | None,
+    ) -> dict[str, str]:
+        """Given texts that a molecule other than ``exclude_molecule_id`` holds as an
+        identifier, compared case-insensitively → that molecule's registration number."""
+        ...
 
     async def add_to_project_many(
         self,
@@ -205,4 +218,20 @@ class SynthesisRouteRepository(Protocol):
         self, workspace_id: uuid.UUID, target_molecule_id: uuid.UUID
     ) -> SynthesisRoute | None: ...
     async def save(self, aggregate: SynthesisRoute) -> None: ...
+    async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...
+
+
+class BulkRegistrationMappingRepository(Protocol):
+    """Repository for saved bulk-registration column mappings."""
+
+    async def save(self, entity: BulkRegistrationMapping) -> None: ...
+
+    async def find_by_id_in_workspace(
+        self, workspace_id: uuid.UUID, id: uuid.UUID
+    ) -> BulkRegistrationMapping | None: ...
+
+    async def find_by_workspace(
+        self, workspace_id: uuid.UUID
+    ) -> list[BulkRegistrationMapping]: ...
+
     async def delete(self, workspace_id: uuid.UUID, id: uuid.UUID) -> None: ...

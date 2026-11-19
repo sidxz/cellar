@@ -214,6 +214,7 @@ class DataSourceModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin):
     api_key_name: Mapped[str | None] = mapped_column(String(100))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
     entity_mappings: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    registration_mapping: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
 
     __table_args__ = (

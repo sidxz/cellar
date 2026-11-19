@@ -581,13 +581,10 @@ def register_screening(container: Container) -> None:
     container.define(RemoveControlLayout, _protocol_cmd(RemoveControlLayout))
 
     # --- Targets (read-only mirror of prot-cellar) ---
-    # TargetSource is guarded so create_container(overrides={TargetSource: stub})
-    # can pre-register an in-memory source for API tests.
-    if TargetSource not in container.defined_types:
-        container.define(
-            TargetSource,
-            Singleton(lambda c: HttpTargetSource(c[httpx.AsyncClient], ProtCellarSettings())),
-        )
+    container.define(
+        TargetSource,
+        Singleton(lambda c: HttpTargetSource(c[httpx.AsyncClient], ProtCellarSettings())),
+    )
     container.define(SyncFreshness, Singleton(SyncFreshness))
 
     def _sync_targets(c: Container):
@@ -1493,15 +1490,14 @@ def register_screening(container: Container) -> None:
 
     container.define(GetMoleculeTestCounts, _get_molecule_test_counts)
 
-    # --- Suggestions from the method (off unless ASSAY_CLASSIFIER_URL is set) ---
-    # Guarded so create_container(overrides={MethodReader: stub}) can turn them on in tests.
-    if MethodReader not in container.defined_types:
-        classifier = AssayClassifierSettings()
-        if classifier.url:
-            container.define(
-                MethodReader,
-                Singleton(lambda c: HttpMethodReader(c[httpx.AsyncClient], classifier)),
-            )
+    # --- Suggestions from the method (off unless ASSAY_CLASSIFIER_URL is set; tests
+    # turn them on with create_container(overrides={MethodReader: stub})) ---
+    classifier = AssayClassifierSettings()
+    if classifier.url:
+        container.define(
+            MethodReader,
+            Singleton(lambda c: HttpMethodReader(c[httpx.AsyncClient], classifier)),
+        )
     container.define(
         SuggestFromMethod,
         Singleton(

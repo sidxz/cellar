@@ -28,7 +28,9 @@ from cellar.domain.inventory.batch_identifier import BatchIdentifier
 
 logger = structlog.get_logger(__name__)
 
-SkipReason = Literal["already_mapped", "workspace_conflict", "malformed_batch_number"]
+SkipReason = Literal["already_mapped", "workspace_conflict", "malformed_batch_number", "too_long"]
+
+_MAX_IDENTIFIER_LENGTH = 255  # batch_identifiers.identifier is String(255)
 
 
 @dataclass(frozen=True)
@@ -134,6 +136,17 @@ class SyncBatchIdentifierMirrors:
                 ],
             )
         mirror_string = f"{identifier.identifier}-{suffix}"
+        if len(mirror_string) > _MAX_IDENTIFIER_LENGTH:
+            return MirrorSummary(
+                created=0,
+                skipped=[
+                    SkippedMirror(
+                        batch_number=batch.batch_number.value,
+                        mirror_string=mirror_string[:60] + "…",
+                        reason="too_long",
+                    )
+                ],
+            )
 
         # Skip if same string already on this batch (manual or prior auto-mirror).
         if any(bi.identifier == mirror_string for bi in batch.identifiers):

@@ -77,6 +77,7 @@ class SQLAlchemyCddMoleculeImportRepository(
             error_count=model.error_count,
             skipped_count=model.skipped_count,
             last_processed_offset=model.last_processed_offset,
+            report=model.report,
             submitted_by=model.submitted_by,
             submitted_at=model.submitted_at,
             completed_at=model.completed_at,
@@ -105,6 +106,7 @@ class SQLAlchemyCddMoleculeImportRepository(
             error_count=aggregate.error_count,
             skipped_count=aggregate.skipped_count,
             last_processed_offset=aggregate.last_processed_offset,
+            report=aggregate.report,
             submitted_by=aggregate.submitted_by,
             submitted_at=aggregate.submitted_at,
             completed_at=aggregate.completed_at,
@@ -124,4 +126,5 @@ class SQLAlchemyCddMoleculeImportRepository(
         model.error_count = aggregate.error_count
         model.skipped_count = aggregate.skipped_count
         model.last_processed_offset = aggregate.last_processed_offset
+        model.report = aggregate.report
         model.completed_at = aggregate.completed_at

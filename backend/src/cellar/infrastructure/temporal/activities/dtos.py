@@ -7,6 +7,7 @@ Temporal's event history, so they must be small and serializable.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Registration activity
@@ -18,10 +19,20 @@ class ChunkItem:
     """A single molecule record within a processing chunk."""
 
     row_index: int
+    file_row: int = 0  # the row number a person sees in the file
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "identifier_type", "source"?, "decides"?}. Any, not str: Temporal's
+    # converter rejects the bool "decides" under a dict[str, str] hint.
+    external_ids: list[dict[str, Any]] = field(default_factory=list)
+    # {"identifier", "source", "identifier_type"?, "decides"?} — stored on the row's
+    # batch (see row_batch.py)
+    batch_ids: list[dict[str, Any]] = field(default_factory=list)
+    # Parser's per-row error; the row registers nothing.
+    error: str | None = None
+    # The compound registers but the row gets no batch (parser's in-file check).
+    batch_problem: str | None = None
     # Batch fields
     amount_value: float | None = None
     amount_unit: str = "mg"
@@ -30,7 +41,8 @@ class ChunkItem:
     purity: float | None = None
     batch_source: str = "synthesized"
     appearance: str | None = None
-    vendor_catalog_number: str | None = None  # CDD molecule_batch_identifier
+    # Values the row had but that are not stored (CDD: labels, too-long IDs).
+    warnings: list[str] = field(default_factory=list)
     cdd_molecule_id: int | None = None
     cdd_batch_id: int | None = None  # CDD batch numeric ID (for plate well resolution)
     cdd_modified_at: str | None = None  # ISO timestamp from CDD
@@ -71,6 +83,13 @@ class ChunkItemResult:
     cdd_molecule_id: int | None = None
     cdd_modified_at: str | None = None
     batch_skipped: bool = False
+    # Stored-only IDs not stored because another compound / batch holds them.
+    warnings: list[str] = field(default_factory=list)
+    # What happened to the row's batch: "created" | "existing" | None (no batch).
+    batch_action: str | None = None
+    # Batch IDs stored on the row's batch (new or existing).
+    ids_added: int = 0
+    values_skipped: int = 0  # of ``warnings``, those that say a value was not stored
 
 
 @dataclass
@@ -89,6 +108,8 @@ class ChunkOutput:
     mol_registered: int = 0
     mol_duplicate: int = 0
     mol_error: int = 0
+    # Run-report delta for this chunk (see CddMoleculeImport.record_report).
+    report: dict = field(default_factory=dict)
     results: list[ChunkItemResult] = field(default_factory=list)
 
 
@@ -179,6 +200,7 @@ class UpdateCddImportProgressInput:
     error: int = 0
     skipped: int = 0
     last_processed_offset: int = 0
+    report: dict = field(default_factory=dict)
 
 
 @dataclass
@@ -255,6 +277,10 @@ class CddPollExportInput:
     secret_ref: str
     vault_id: str
     export_id: int
+    # A molecule export's registration mapping (and its molecule EntityMapping, for the
+    # vault id): the labels and names in it are found when it is split.
+    registration_mapping: list[dict] | None = None
+    entity_mappings: list[dict] | None = None
 
 
 @dataclass
@@ -280,6 +306,7 @@ class LoadExportChunkInput:
     limit: int
     max_molecules: int | None = None
     entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
+    registration_mapping: list[dict] | None = None  # the data source's, snapshot at start
 
 
 @dataclass

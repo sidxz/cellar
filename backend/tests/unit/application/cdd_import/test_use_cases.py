@@ -26,6 +26,7 @@ from cellar.application.cdd_import.preview_cdd_protocol_import import (
     PreviewCddProtocolImport,
     PreviewCddProtocolImportQuery,
 )
+from cellar.application.cdd_import.registration_mapping import default_cdd_registration_mapping
 from cellar.application.cdd_import.start_cdd_molecule_import import (
     StartCddMoleculeImport,
     StartCddMoleculeImportCommand,
@@ -67,10 +68,17 @@ class FakeGateway:
 
 
 class _FakeDataSource:
-    def __init__(self, vault_id="12345", create_batch_on_duplicate: bool = False):
+    def __init__(
+        self, vault_id="12345", create_batch_on_duplicate: bool = False, registration_mapping=...
+    ):
         self.config = {"vault_id": vault_id} if vault_id else {}
         self.api_key_name = "key123"
         self.entity_mappings = []
+        self.registration_mapping = (
+            default_cdd_registration_mapping()
+            if registration_mapping is ...
+            else registration_mapping
+        )
         self._create_batch_on_duplicate = create_batch_on_duplicate
 
     @property
@@ -91,6 +99,7 @@ class FakeGetDataSource:
         vault_id: str | None = "12345",
         api_key: str | None = "key123",
         create_batch_on_duplicate: bool = False,
+        registration_mapping=...,
         result=None,
     ):
         if result is None:
@@ -99,6 +108,7 @@ class FakeGetDataSource:
                     data_source=_FakeDataSource(
                         vault_id=vault_id,
                         create_batch_on_duplicate=create_batch_on_duplicate,
+                        registration_mapping=registration_mapping,
                     ),
                     api_key=api_key,
                 )
@@ -419,6 +429,28 @@ class TestStartCddMoleculeImport:
         assert isinstance(result, Failure)
         orchestrator.start.assert_not_called()
 
+    @pytest.mark.asyncio
+    async def test_the_field_mapping_is_snapshot_into_the_run(self):
+        orchestrator = AsyncMock()
+        orchestrator.start = AsyncMock(return_value="wf-1")
+        uc = StartCddMoleculeImport(get_data_source=FakeGetDataSource(), orchestrator=orchestrator)
+
+        await uc(self._make_command(), auth=_make_auth())
+
+        request = orchestrator.start.call_args[0][0]
+        assert request.registration_mapping == default_cdd_registration_mapping()
+
+    @pytest.mark.asyncio
+    async def test_a_source_without_field_mapping_never_starts(self):
+        orchestrator = AsyncMock()
+        uc = StartCddMoleculeImport(
+            get_data_source=FakeGetDataSource(registration_mapping=None),
+            orchestrator=orchestrator,
+        )
+        result = await uc(self._make_command(), auth=_make_auth())
+        assert isinstance(result, Failure)
+        assert "no field mapping" in str(result.failure())
+        orchestrator.start.assert_not_called()
 
     def _filtered(self, filter_criteria: dict | None, *, mode: str = "filtered"):
         return StartCddMoleculeImportCommand(
@@ -449,7 +481,9 @@ class TestStartCddMoleculeImport:
     @pytest.mark.asyncio
     async def test_filtered_import_keeps_a_name_with_spaces_whole(self):
         uc, orchestrator = self._make_uc()
-        result = await uc(self._filtered({"names": ["16:0  CoA", "Palmitoyl CoA"]}), auth=_make_auth())
+        result = await uc(
+            self._filtered({"names": ["16:0  CoA", "Palmitoyl CoA"]}), auth=_make_auth()
+        )
 
         assert isinstance(result, Success)
         request = orchestrator.start.call_args[0][0]

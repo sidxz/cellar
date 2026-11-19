@@ -1,35 +1,59 @@
-"""Pure mapper: CDD Vault molecule JSON -> BulkRegistrationItem DTOs.
+"""Pure mapper: CDD Vault molecule JSON -> registration rows.
 
-No I/O. Maps CDD molecule objects (with embedded batches) into the
-application-layer DTOs that the registration pipeline expects.
+No I/O. Which vault field goes where is the CDD data source's registration mapping
+(``ColumnMapping``; headers are vault field paths, ``batch.<path>`` for batch fields),
+applied by the file importer's ``extract_row``. The molecule/batch ``EntityMapping``s
+only say where the vault ids and the batches are.
 
-Field extraction is driven entirely by ``EntityMapping`` config from the
-DataSource aggregate.  Source fields support:
-  - Dot notation for nested access: ``"batch_fields.Amount"``
-  - Pipe-separated fallback chains: ``"smiles|cxsmiles"``
+Only the vault's own IDs decide which compound or batch a row is (CDD mapper spec
+2026-11-18 §3a): the molecule's vault id and name, the batch's vault id and CDD batch
+name. Every other mapped ID is stored only (``"decides": False``).
+
+``_resolve_field`` / ``_collect_fields`` also serve the plate mapper.
 """
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from cellar.application.cdd_import.registration_mapping import BATCH_PREFIX
+from cellar.application.chemical_registration.bulk_column_mapping import (
+    ColumnMapping,
+    ColumnTarget,
+    ExtractedRow,
+    MappedColumn,
+    extract_row,
+)
 from cellar.domain.workspace_config.data_source import EntityMapping
 
 __all__ = [
     "MappedBatch",
     "MappedMolecule",
     "MoleculeMapWarning",
+    "compute_labels",
+    "compute_names",
     "map_cdd_molecules",
 ]
+
+# The batch field whose value decides which batch a row is: the CDD batch name.
+DECIDING_BATCH_PATH = f"{BATCH_PREFIX}molecule_batch_identifier"
+
+# CDD defaults as columns read before the mapping's own, so a mapped value wins: a
+# molecule without a name is "EXT-<vault id>", a batch's source is "purchased".
+_EXT_NAME = MappedColumn("\0ext-name", ColumnTarget.NAME)
+_PURCHASED = MappedColumn("\0purchased", ColumnTarget.BATCH_SOURCE)
 
 
 @dataclass(frozen=True)
 class MappedBatch:
-    """A single batch extracted from a CDD molecule's ``batches`` array."""
+    """One batch from a CDD molecule's ``batches`` array."""
 
-    cdd_batch_id: int
-    batch_name: str | None = None
+    cdd_batch_id: int | None
+    # {"identifier", "source", "identifier_type"?, "decides"} — see row_batch.py
+    batch_ids: list[dict[str, Any]] = field(default_factory=list)
     amount_value: float | None = None
     amount_unit: str = "mg"
     purity: float | None = None
@@ -37,6 +61,7 @@ class MappedBatch:
     salt_code: str | None = None
     salt_stoichiometry: int = 1
     appearance: str | None = None
+    warnings: list[str] = field(default_factory=list)  # values not stored, and why
 
 
 @dataclass(frozen=True)
@@ -55,11 +80,11 @@ class MappedMolecule:
     name: str | None = None
     smiles: str | None = None
     molecule_type: str = "small_molecule"
-    external_ids: list[dict[str, str]] = field(default_factory=list)
+    # {"identifier", "identifier_type", "source"?, "decides"?}
+    external_ids: list[dict[str, Any]] = field(default_factory=list)
     batches: list[MappedBatch] = field(default_factory=list)
-    cdd_modified_at: str | None = None  # ISO timestamp from source
-    skipped: bool = False
-    skip_reason: str | None = None
+    cdd_modified_at: str | None = None  # ISO timestamp from source (the sync watermark)
+    warnings: list[str] = field(default_factory=list)  # values not stored, and why
 
 
 # ---------------------------------------------------------------------------
@@ -69,27 +94,91 @@ class MappedMolecule:
 
 def map_cdd_molecules(
     objects: list[dict[str, Any]],
-    molecule_mapping: EntityMapping,
-    batch_mapping: EntityMapping | None = None,
+    mapping: ColumnMapping,
+    *,
+    id_mapping: EntityMapping,
+    batch_id_mapping: EntityMapping | None,
+    labels: Mapping[str, int] | None = None,
+    names: Mapping[str, int] | None = None,
 ) -> tuple[list[MappedMolecule], list[MoleculeMapWarning]]:
-    """Map a list of CDD molecule JSON objects to registration DTOs.
+    """Map CDD molecule objects with the registration ``mapping``.
 
-    Returns (mapped_molecules, warnings).
+    ``id_mapping`` / ``batch_id_mapping``: the molecule / batch ``EntityMapping``
+    (vault id field, its storage, where batches are); no batch mapping, no batches.
+    ``labels``: ``compute_labels`` of the run — those compound IDs are not stored.
+    ``names``: ``compute_names`` of the run — a compound ID that is another molecule's
+    name or vault id is not stored.
     """
+    cols = _split(mapping)
     mapped: list[MappedMolecule] = []
     warnings: list[MoleculeMapWarning] = []
-
     for obj in objects:
-        mol, mol_warnings = _map_single(obj, molecule_mapping, batch_mapping)
+        mol, mol_warnings = _map_single(
+            obj, cols, id_mapping, batch_id_mapping, labels or {}, names or {}
+        )
         mapped.append(mol)
         warnings.extend(mol_warnings)
-
     return mapped, warnings
+
+
+def compute_labels(objects: list[dict[str, Any]], mapping: ColumnMapping) -> dict[str, int]:
+    """Compound-ID values (lower-cased) on 2+ of ``objects`` → on how many: series
+    labels such as "Benzimidazole series", not IDs (spec §3b). Case-insensitive, as
+    compound lookup by identifier is."""
+    molecule_cols, _, _ = _split(mapping)
+    counts: Counter[str] = Counter()
+    for obj in objects:
+        row = _row(_getter(obj, 0), molecule_cols)
+        counts.update({e["identifier"].lower() for e in _compound_ids(row)})
+    return {v: n for v, n in counts.items() if n > 1}
+
+
+def compute_names(
+    objects: list[dict[str, Any]], mapping: ColumnMapping, id_mapping: EntityMapping
+) -> dict[str, int]:
+    """Each molecule's deciding values — its name and vault id, lower-cased — → its vault
+    id, kept only where some molecule also lists the value as a compound ID (so the file
+    stays small on a Full run). Stored on another compound, such a value would make that
+    molecule's own row find (or conflict with) the wrong compound, whichever is read first.
+
+    ponytail: only the run's own molecules are known; a value equal to the name of a
+    molecule outside the run (an earlier Sync / Specific run, or one not read yet) is
+    still stored when free. A Full run sees every name; a vault-wide name index would
+    close the gap for the others.
+    """
+    molecule_cols, _, _ = _split(mapping)
+    names: dict[str, int] = {}
+    listed: set[str] = set()
+    for obj in objects:
+        entity_id: int = _resolve_field(obj, id_mapping.id_field) or 0
+        row = _row(_getter(obj, entity_id), molecule_cols)
+        listed.update(e["identifier"].lower() for e in _compound_ids(row))
+        for value in (row.name, str(entity_id) if entity_id else None):
+            if value:
+                names.setdefault(value.lower(), entity_id)
+    return {v: owner for v, owner in names.items() if v in listed}
 
 
 # ---------------------------------------------------------------------------
 # Field resolution helpers
 # ---------------------------------------------------------------------------
+
+
+# Groups keyed by the vault's own field names, which may hold dots ("Cat. No.").
+_FIELD_GROUPS = frozenset({"molecule_fields", "batch_fields"})
+
+
+def _path_parts(path: str) -> list[str]:
+    """``a.b.c`` → keys; after a field group the rest is one field name."""
+    parts: list[str] = []
+    rest = path.strip()
+    while rest:
+        head, sep, rest = rest.partition(".")
+        parts.append(head)
+        if sep and head in _FIELD_GROUPS:
+            parts.append(rest)
+            break
+    return parts
 
 
 def _resolve_field(obj: dict[str, Any], source_field: str) -> Any:
@@ -98,11 +187,12 @@ def _resolve_field(obj: dict[str, Any], source_field: str) -> Any:
     ``"batch_fields.Amount|batch_fields.amount"`` tries:
       1. obj["batch_fields"]["Amount"]
       2. obj["batch_fields"]["amount"]
-    Returns the first non-None value, or None.
+    Returns the first non-None value, or None. A field name after
+    ``molecule_fields.`` / ``batch_fields.`` is read whole, dots and all.
     """
     for path in source_field.split("|"):
         val: Any = obj
-        for part in path.strip().split("."):
+        for part in _path_parts(path):
             if isinstance(val, dict):
                 val = val.get(part)
             else:
@@ -142,112 +232,169 @@ def _collect_fields(
     return core, identifiers
 
 
+def _split(mapping: ColumnMapping) -> tuple[ColumnMapping, ColumnMapping, ColumnMapping]:
+    """(molecule columns, deciding batch-ID columns, other batch columns), each
+    behind the CDD defaults. Levels never mix within a header (validated on save)."""
+    molecule: list[MappedColumn] = []
+    deciding: list[MappedColumn] = []
+    other: list[MappedColumn] = []
+    for c in mapping.columns:
+        paths = [p.strip() for p in c.header.split("|")]
+        if not paths[0].startswith(BATCH_PREFIX):
+            molecule.append(c)
+        elif c.target == ColumnTarget.BATCH_ID and DECIDING_BATCH_PATH in paths:
+            deciding.append(c)
+        else:
+            other.append(c)
+    return (
+        ColumnMapping((_EXT_NAME, *molecule)),
+        ColumnMapping((_EXT_NAME, *deciding)),
+        ColumnMapping((_EXT_NAME, _PURCHASED, *other)),
+    )
+
+
+def _getter(
+    obj: dict[str, Any], entity_id: int, prefix: str = ""
+) -> Callable[[str], str | list[str] | None]:
+    """``extract_row``'s cell reader over one vault object; ``prefix`` is stripped
+    from each ``|`` alternative (``batch.`` for a batch)."""
+
+    def get(header: str) -> str | list[str] | None:
+        if header == _EXT_NAME.header:
+            return f"EXT-{entity_id}"
+        if header == _PURCHASED.header:
+            return "purchased"
+        path = "|".join(p.strip().removeprefix(prefix) for p in header.split("|"))
+        val = _resolve_field(obj, path)
+        if val is None:
+            return None
+        if isinstance(val, list):
+            return [str(v) for v in val if v is not None]
+        return val.strip() if isinstance(val, str) else str(val)
+
+    return get
+
+
+def _row(get: Callable[[str], str | list[str] | None], mapping: ColumnMapping) -> ExtractedRow:
+    row = extract_row(get, mapping)
+    assert row is not None  # the EXT name column always gives a name
+    return row
+
+
+def _compound_ids(row: ExtractedRow) -> list[dict[str, Any]]:
+    """The row's mapped compound IDs, less its own name (CDD synonyms repeat it)."""
+    return [e for e in row.external_ids if e["identifier"] != row.name]
+
+
 # ---------------------------------------------------------------------------
-# Molecule mapping
+# Molecule and batch mapping
 # ---------------------------------------------------------------------------
 
 
 def _map_single(
     obj: dict[str, Any],
-    mol_mapping: EntityMapping,
-    batch_mapping: EntityMapping | None,
+    cols: tuple[ColumnMapping, ColumnMapping, ColumnMapping],
+    id_mapping: EntityMapping,
+    batch_id_mapping: EntityMapping | None,
+    labels: Mapping[str, int],
+    names: Mapping[str, int],
 ) -> tuple[MappedMolecule, list[MoleculeMapWarning]]:
-    """Map a single CDD molecule object."""
+    molecule_cols, deciding_cols, batch_cols = cols
+    entity_id: int = _resolve_field(obj, id_mapping.id_field) or 0
+    row = _row(_getter(obj, entity_id), molecule_cols)
+
     warnings: list[MoleculeMapWarning] = []
-
-    # External ID from id_field
-    entity_id: int = _resolve_field(obj, mol_mapping.id_field) or 0
-
-    # Collect mapped fields
-    core, extra_ids = _collect_fields(obj, mol_mapping)
-
-    name: str | None = core.get("name")
-    smiles: str | None = core.get("smiles")
-    modified_at: str | None = core.get("modified_at")
-
-    if not name:
-        name = f"EXT-{entity_id}"
+    if row.name == f"EXT-{entity_id}":
         warnings.append(MoleculeMapWarning(entity_id, "No name field; using external ID"))
-
-    if not smiles:
+    if not row.smiles:
         warnings.append(MoleculeMapWarning(entity_id, "No SMILES — registering as undisclosed"))
 
-    # Build external identifiers list from id_storage config
-    external_ids: list[dict[str, str]] = []
-    storage = mol_mapping.id_storage
-    if storage.storage_type == "identifier" and storage.identifier_type:
-        external_ids.append(
-            {"identifier": str(entity_id), "identifier_type": storage.identifier_type}
-        )
-    elif storage.storage_type == "custom_field" and storage.custom_field_name:
-        external_ids.append(
-            {"identifier": str(entity_id), "identifier_type": storage.custom_field_name}
-        )
+    # The vault id decides (with the name, promoted by the registration); the compound
+    # holding it, with this type, is the row's compound.
+    storage = id_mapping.id_storage
+    id_type = (
+        storage.identifier_type
+        if storage.storage_type == "identifier"
+        else storage.custom_field_name
+    )
+    external_ids: list[dict[str, Any]] = (
+        [{"identifier": str(entity_id), "identifier_type": id_type, "vault_id": True}]
+        if id_type
+        else []
+    )
+    not_stored = list(row.warnings)
+    for e in _compound_ids(row):
+        value = e["identifier"].lower()
+        n = labels.get(value)
+        if names.get(value, entity_id) != entity_id:
+            not_stored.append(
+                f"'{e['identifier']}' is the name of another compound in the vault; "
+                "not stored as an ID"
+            )
+        elif n:
+            not_stored.append(
+                f"'{e['identifier']}' is on {n} compounds in the vault; not stored as an ID"
+            )
+        else:
+            external_ids.append({**e, "decides": False})
 
-    # Filter out identifiers that duplicate the name
-    for eid in extra_ids:
-        if eid["identifier"] != name:
-            external_ids.append(eid)
-
-    # Map embedded child entities (e.g. batches) via parent_path
     batches: list[MappedBatch] = []
-    if batch_mapping:
-        raw = _resolve_field(obj, batch_mapping.parent_path) if batch_mapping.parent_path else []
-        batches = _map_batches(raw or [], batch_mapping)
+    if batch_id_mapping is not None and batch_id_mapping.parent_path:
+        raw = _resolve_field(obj, batch_id_mapping.parent_path) or []
+        batches = [
+            _map_batch(b, entity_id, batch_id_mapping.id_field, deciding_cols, batch_cols)
+            for b in raw
+        ]
 
     return (
         MappedMolecule(
             cdd_molecule_id=entity_id,
-            name=name,
-            smiles=smiles,
+            name=row.name,
+            smiles=row.smiles,
+            molecule_type=row.molecule_type,
             external_ids=external_ids,
             batches=batches,
-            cdd_modified_at=modified_at,
+            cdd_modified_at=obj.get("modified_at"),
+            warnings=not_stored,
         ),
         warnings,
     )
 
 
-# ---------------------------------------------------------------------------
-# Batch mapping
-# ---------------------------------------------------------------------------
-
-
-def _map_batches(
-    raw_batches: list[dict[str, Any]],
-    batch_mapping: EntityMapping,
-) -> list[MappedBatch]:
-    """Map batch objects using the batch EntityMapping."""
-    mapped: list[MappedBatch] = []
-
-    for b in raw_batches:
-        batch_id: int = _resolve_field(b, batch_mapping.id_field) or 0
-
-        core, _ = _collect_fields(b, batch_mapping)
-
-        # Salt: filter placeholder values like "Unknown Salt"
-        salt_name = core.get("salt_name")
-        salt_code = salt_name if salt_name and salt_name != "Unknown Salt" else None
-
-        mapped.append(
-            MappedBatch(
-                cdd_batch_id=batch_id,
-                batch_name=core.get("vendor_catalog_number"),
-                amount_value=_safe_float(core.get("amount_value")),
-                amount_unit=core.get("amount_unit") or "mg",
-                purity=_safe_float(core.get("purity")),
-                batch_source="purchased",
-                salt_code=salt_code,
-                appearance=core.get("appearance"),
-            )
+def _map_batch(
+    b: dict[str, Any],
+    entity_id: int,
+    id_field: str,
+    deciding_cols: ColumnMapping,
+    batch_cols: ColumnMapping,
+) -> MappedBatch:
+    get = _getter(b, entity_id, BATCH_PREFIX)
+    named = _row(get, deciding_cols)
+    row = _row(get, batch_cols)
+    cdd_batch_id = _resolve_field(b, id_field)
+    batch_ids: list[dict[str, Any]] = [
+        *({**x, "decides": True} for x in named.batch_ids),
+        *({**x, "decides": False} for x in row.batch_ids),
+    ]
+    if cdd_batch_id is not None:  # also kept in custom_fields: plates resolve by it
+        batch_ids.append(
+            {
+                "identifier": str(cdd_batch_id),
+                "source": "CDD import",
+                "identifier_type": "cdd_batch_id",
+                "decides": True,
+            }
         )
-    return mapped
-
-
-def _safe_float(val: Any) -> float | None:
-    if val is None:
-        return None
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        return None
+    return MappedBatch(
+        cdd_batch_id=cdd_batch_id,
+        batch_ids=batch_ids,
+        amount_value=row.amount_value,
+        amount_unit=row.amount_unit,
+        purity=row.purity,
+        batch_source=row.batch_source,
+        # "Unknown Salt" is CDD's placeholder for none
+        salt_code=row.salt_code if row.salt_code != "Unknown Salt" else None,
+        salt_stoichiometry=row.salt_stoichiometry,
+        appearance=row.appearance,
+        warnings=[*named.warnings, *row.warnings],
+    )

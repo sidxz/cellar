@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
@@ -397,6 +397,9 @@ class RegistrationResponse(BaseModel):
 class ExternalIdBody(BaseModel):
     identifier: str
     identifier_type: str
+    # The row's own id in its source (a CDD vault molecule id): the compound holding this
+    # text with this type is the row's compound, whatever its structure.
+    vault_id: bool = False
 
 
 class BatchBody(BaseModel):
@@ -439,6 +442,13 @@ class RegisterMoleculeBody(BaseModel):
     project_ids: list[uuid.UUID] = []
 
 
+class PreviewBatchIdBody(BaseModel):
+    identifier: str
+    # A batch ID matches only one held with the same type; "cdd_batch_id" for a CDD
+    # vault batch id.
+    identifier_type: str = "custom"
+
+
 class PreviewRegistrationItemBody(BaseModel):
     """Mirrors RegisterMoleculeBody so a caller can preview the exact payload it will
     POST; keys the forecast does not use (originating_org_id, batch, …) are ignored."""
@@ -447,6 +457,12 @@ class PreviewRegistrationItemBody(BaseModel):
     smiles: str | None = None  # None = intends an undisclosed registration
     molecule_type: str = "small_molecule"
     external_ids: list[ExternalIdBody] = []
+    # The row's batch IDs (bulk registration); when given, the batch is forecast too.
+    batch_ids: list[PreviewBatchIdBody] = []
+    # IDs that are only stored, never matched: one another compound / batch already
+    # holds comes back in `warnings` instead of a conflict or a batch problem.
+    stored_only_ids: list[str] = []
+    stored_only_batch_ids: list[str] = []
 
 
 class PreviewRegistrationBody(BaseModel):
@@ -460,6 +476,17 @@ class PreviewRegistrationItemResponse(BaseModel):
     matched_molecule_id: uuid.UUID | None = None
     conflict_reason: str | None = None
     error: str | None = None
+    # Rows with the same key are the same compound: "molecule:<id>" when it is already in
+    # ChemCellar, else the InChIKey (identifiers if undisclosed).
+    compound_key: str | None = None
+    # Only when the item sent batch_ids: new | existing | problem.
+    batch_action: Literal["new", "existing", "problem"] | None = None
+    matched_batch_number: str | None = None
+    batch_problem: str | None = None
+    # A new batch for a compound already in ChemCellar: how many batches it has.
+    existing_batch_count: int | None = None
+    # Stored-only IDs that would not be stored, and why.
+    warnings: list[str] = []
 
 
 class PreviewRegistrationResponse(BaseModel):
@@ -500,7 +527,9 @@ async def register_molecule(
         smiles=body.smiles,
         molecule_type=body.molecule_type,
         external_ids=[
-            ExternalId(identifier=e.identifier, identifier_type=e.identifier_type)
+            ExternalId(
+                identifier=e.identifier, identifier_type=e.identifier_type, vault_id=e.vault_id
+            )
             for e in body.external_ids
         ],
         originating_org_id=body.originating_org_id,
@@ -631,6 +660,8 @@ async def preview_registration(
     set) / ``disclosed`` (structure discloses an undisclosed molecule) / ``conflict``
     (``conflict_reason`` set). ``merge_candidate`` only arises in a race. ``action`` is
     null with ``error`` set when the structure cannot be processed. At most 500 items.
+    ``stored_only_ids`` / ``stored_only_batch_ids`` never match or conflict; one that
+    another compound or batch already holds is listed in ``warnings``.
     """
     query = PreviewRegistrationQuery(
         workspace_id=auth.workspace_id,
@@ -639,6 +670,12 @@ async def preview_registration(
                 name=item.name,
                 smiles=item.smiles,
                 external_ids=[e.identifier for e in item.external_ids],
+                batch_ids=[(b.identifier, b.identifier_type) for b in item.batch_ids],
+                stored_only_ids=item.stored_only_ids,
+                stored_only_batch_ids=item.stored_only_batch_ids,
+                vault_ids=[
+                    (e.identifier, e.identifier_type) for e in item.external_ids if e.vault_id
+                ],
             )
             for item in body.items
         ],
@@ -652,6 +689,12 @@ async def preview_registration(
                 matched_molecule_id=i.matched_molecule_id,
                 conflict_reason=i.conflict_reason,
                 error=i.error,
+                compound_key=i.compound_key,
+                batch_action=i.batch_action,
+                matched_batch_number=i.matched_batch_number,
+                batch_problem=i.batch_problem,
+                existing_batch_count=i.existing_batch_count,
+                warnings=list(i.warnings),
             )
             for i in outcome.items
         ]

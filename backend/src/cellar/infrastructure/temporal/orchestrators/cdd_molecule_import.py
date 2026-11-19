@@ -52,6 +52,7 @@ class TemporalCddMoleculeImportOrchestrator:
                 filter_criteria=request.filter_criteria,
                 max_molecules=request.max_molecules,
                 entity_mappings=request.entity_mappings,
+                registration_mapping=request.registration_mapping,
                 create_batch_on_duplicate=request.create_batch_on_duplicate,
             ),
             id=workflow_id,

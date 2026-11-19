@@ -154,6 +154,7 @@ class DataSource(AggregateRoot):
         api_key_name: str | None = None,
         is_active: bool = True,
         entity_mappings: list[EntityMapping] | None = None,
+        registration_mapping: list[dict[str, Any]] | None = None,
         created_by: uuid.UUID,
         version: int = 1,
         created_at: datetime | None = None,
@@ -172,6 +173,8 @@ class DataSource(AggregateRoot):
         self.api_key_name = api_key_name
         self.is_active = is_active
         self.entity_mappings = entity_mappings or []
+        # CDD sources: vault field path -> registration target (ColumnMapping columns).
+        self.registration_mapping = registration_mapping
         self.created_by = created_by
 
     # ------------------------------------------------------------------
@@ -188,6 +191,7 @@ class DataSource(AggregateRoot):
         config: dict[str, Any] | None = None,
         api_key_name: str | None = None,
         entity_mappings: list[EntityMapping] | None = None,
+        registration_mapping: list[dict[str, Any]] | None = None,
         created_by: uuid.UUID,
     ) -> DataSource:
         """Generic factory — used for custom source types or when caller
@@ -205,6 +209,7 @@ class DataSource(AggregateRoot):
             config=config,
             api_key_name=api_key_name.strip() if api_key_name else None,
             entity_mappings=entity_mappings or [],
+            registration_mapping=registration_mapping,
             created_by=created_by,
         )
         ds.register_event(
@@ -226,9 +231,11 @@ class DataSource(AggregateRoot):
         name: str,
         vault_id: str,
         api_key_name: str,
+        registration_mapping: list[dict[str, Any]] | None = None,
         created_by: uuid.UUID,
     ) -> DataSource:
-        """Factory with CDD Vault default entity mappings."""
+        """Factory with CDD Vault default entity mappings (``registration_mapping`` is
+        the application layer's default; the domain cannot build it)."""
         if not vault_id or not vault_id.strip():
             raise ValidationError("vault_id must not be empty")
         if not api_key_name or not api_key_name.strip():
@@ -241,6 +248,7 @@ class DataSource(AggregateRoot):
             config={"vault_id": vault_id.strip()},
             api_key_name=api_key_name,
             entity_mappings=_cdd_vault_defaults(),
+            registration_mapping=registration_mapping,
             created_by=created_by,
         )
 
@@ -275,6 +283,7 @@ class DataSource(AggregateRoot):
         config: dict[str, Any] = ...,  # type: ignore[assignment]
         api_key_name: str | None = ...,  # type: ignore[assignment]
         entity_mappings: list[EntityMapping] = ...,  # type: ignore[assignment]
+        registration_mapping: list[dict[str, Any]] | None = ...,  # type: ignore[assignment]
     ) -> None:
         """Partial update — only provided fields are changed. Uses sentinel ``...``."""
         if name is not ...:
@@ -293,6 +302,10 @@ class DataSource(AggregateRoot):
                 self.api_key_name = str(api_key_name).strip() or None
         if entity_mappings is not ...:
             self.entity_mappings = list(entity_mappings)
+        if registration_mapping is not ...:
+            self.registration_mapping = (
+                None if registration_mapping is None else [dict(c) for c in registration_mapping]
+            )
 
         self.updated_at = datetime.now(UTC)
         self.register_event(
@@ -364,34 +377,21 @@ def _cdd_vault_defaults() -> list[EntityMapping]:
     """Default entity mappings for a CDD Vault data source.
 
     Maps standard CDD fields that are present in all vault exports.
-    Vault-specific custom fields (``batch_fields.*``, ``molecule_fields.*``)
-    should be added by the admin via the Data Source UI.
-
-    Source fields use pipe syntax for fallback chains:
-    ``"smiles|cxsmiles"`` means try ``smiles`` first, fall back to ``cxsmiles``.
-    Dot notation accesses nested dicts: ``"batch_fields.Purity >"``.
+    Molecule and batch carry only the id/parent wiring; which vault fields go
+    where lives in ``DataSource.registration_mapping``. Plate and well keep
+    field mappings (``|`` = fallback chain, dots = nested access).
     """
     return [
         EntityMapping(
             entity_type="molecule",
             id_field="id",
             id_storage=IdStorageConfig("custom_field", None, "cdd_molecule_id"),
-            field_mappings=[
-                FieldMapping("name|cdd_registry_number", "name", "core"),
-                FieldMapping("smiles|cxsmiles", "smiles", "core"),
-                FieldMapping("synonyms", "custom", "identifier"),
-                FieldMapping("modified_at", "modified_at", "core"),
-            ],
         ),
         EntityMapping(
             entity_type="batch",
             id_field="id",
             id_storage=IdStorageConfig("custom_field", None, "cdd_batch_id"),
             parent_path="batches",
-            field_mappings=[
-                FieldMapping("molecule_batch_identifier|name", "vendor_catalog_number", "core"),
-                FieldMapping("salt_name", "salt_name", "core"),
-            ],
         ),
         EntityMapping(
             entity_type="plate",

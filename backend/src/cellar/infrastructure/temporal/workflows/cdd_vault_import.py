@@ -49,6 +49,8 @@ class CddVaultImportWorkflowInput:
     filter_criteria: dict | None = None  # filtered mode: {"names": [...]}
     max_molecules: int | None = None
     entity_mappings: list[dict] | None = None  # serialized EntityMapping dicts
+    # The data source's registration mapping, snapshot at start (vault field → target).
+    registration_mapping: list[dict] | None = None
     create_batch_on_duplicate: bool | None = None
     # Resume fields — populated by continue-as-new to carry state across executions
     import_id: str | None = None
@@ -225,6 +227,7 @@ class CddVaultImportWorkflow:
                     limit=CHUNK_SIZE,
                     max_molecules=input.max_molecules,
                     entity_mappings=input.entity_mappings,
+                    registration_mapping=input.registration_mapping,
                 ),
                 start_to_close_timeout=timedelta(minutes=2),
                 retry_policy=_RETRY,
@@ -258,6 +261,7 @@ class CddVaultImportWorkflow:
                         error=reg_result.mol_error,
                         skipped=chunk_result.skipped,
                         last_processed_offset=offset + CHUNK_SIZE,
+                        report=reg_result.report,
                     ),
                     start_to_close_timeout=timedelta(seconds=30),
                 )
@@ -279,17 +283,6 @@ class CddVaultImportWorkflow:
                 self._progress.registered_count += reg_result.mol_registered
                 self._progress.duplicate_count += reg_result.mol_duplicate
                 self._progress.error_count += reg_result.mol_error
-            elif chunk_result.skipped > 0:
-                await workflow.execute_activity(
-                    BulkTrackingActivities.update_cdd_import_progress,
-                    UpdateCddImportProgressInput(
-                        workspace_id=input.workspace_id,
-                        import_id=import_id,
-                        skipped=chunk_result.skipped,
-                        last_processed_offset=offset + CHUNK_SIZE,
-                    ),
-                    start_to_close_timeout=timedelta(seconds=30),
-                )
 
             self._progress.skipped_count += chunk_result.skipped
             self._progress.current_offset = offset + CHUNK_SIZE
@@ -387,6 +380,8 @@ class CddVaultImportWorkflow:
                         secret_ref=input.secret_ref,
                         vault_id=input.cdd_vault_id,
                         export_id=export_result.export_id,
+                        registration_mapping=input.registration_mapping,
+                        entity_mappings=input.entity_mappings,
                     ),
                     start_to_close_timeout=timedelta(minutes=60),
                     heartbeat_timeout=timedelta(seconds=60),

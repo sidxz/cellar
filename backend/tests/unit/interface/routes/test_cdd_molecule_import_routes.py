@@ -12,6 +12,7 @@ from returns.result import Success
 from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
     CheckCddMoleculeIdentifiers,
 )
+from cellar.application.cdd_import.registration_mapping import default_cdd_registration_mapping
 from cellar.application.cdd_import.start_cdd_molecule_import import StartCddMoleculeImport
 from cellar.application.workspace_config.get_data_source_for_import import (
     DataSourceImportConfig,
@@ -29,6 +30,7 @@ class _DataSource:
     config = {"vault_id": "4443"}
     api_key_name = "cdd"
     entity_mappings: list = []
+    registration_mapping = default_cdd_registration_mapping()
     create_batch_on_duplicate = False
 
 
@@ -76,6 +78,7 @@ class _App:
                 get_data_source=self.get_data_source, orchestrator=self.orchestrator
             ),
         }
+        self.app = app
         self.client = AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
@@ -157,3 +160,30 @@ async def test_a_filter_without_names_starts_nothing():
         response = await app.client.post(START, json=_filtered_body(filter_criteria))
         assert response.status_code == 422
     app.orchestrator.start.assert_not_called()
+
+
+async def test_the_history_carries_each_import_s_report():
+    """A finished import's report is readable after the page that started it is gone."""
+    from cellar.application.cdd_import.list_cdd_molecule_imports import ListCddMoleculeImports
+    from cellar.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
+    from cellar.domain.chemical_registration.enums import CddImportMode
+
+    done = CddMoleculeImport(
+        workspace_id=uuid.uuid4(),
+        cdd_vault_id="4443",
+        import_mode=CddImportMode.FULL_VAULT,
+        originating_org_id=uuid.uuid4(),
+        submitted_by=uuid.uuid4(),
+        report={"ids_added": 18, "problem_lines": ["SACC-1: 'X' is on 2 compounds"]},
+    )
+    listing = AsyncMock(spec=ListCddMoleculeImports, return_value=Success([done]))
+    app = _App("editor")
+    app.app.state.container[ListCddMoleculeImports] = listing
+
+    response = await app.client.get(START)
+
+    assert response.status_code == 200, response.text
+    (row,) = response.json()
+    assert row["report"]["ids_added"] == 18
+    assert row["report"]["problem_lines"] == ["SACC-1: 'X' is on 2 compounds"]
+    assert row["report"]["compounds_added"] == 0

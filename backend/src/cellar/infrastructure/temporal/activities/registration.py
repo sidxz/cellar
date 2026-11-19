@@ -21,14 +21,15 @@ from cellar.application.chemical_registration.merge_side_effect_registry import 
 )
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
 from cellar.application.chemical_registration.register_molecule import (
-    ExternalId,
     RegisterMolecule,
     RegisterMoleculeCommand,
     RegistrationOutcome,
+    external_ids,
 )
-from cellar.application.inventory.batch_identifiers import (
-    AddBatchIdentifier,
-    AddBatchIdentifierCommand,
+from cellar.application.chemical_registration.row_batch import (
+    ApplyRowBatch,
+    ApplyRowBatchCommand,
+    row_batch_ids,
 )
 from cellar.application.inventory.batch_policy import should_create_batch
 from cellar.application.inventory.create_batch import CreateBatch, CreateBatchCommand
@@ -150,21 +151,28 @@ class RegistrationActivities:
         )
 
         output = ChunkOutput()
+        # A CDD molecule is one row per batch, all with its row_index: what is said about
+        # the compound goes on its first row only, so a report counts it once.
+        seen_rows: set[int] = set()
 
         for item in input.items:
+            first_row = item.row_index not in seen_rows
+            seen_rows.add(item.row_index)
+            if item.error:
+                # The parser could not read this row; it registers nothing.
+                output.error += 1
+                output.results.append(
+                    ChunkItemResult(row_index=item.row_index, success=False, error=item.error)
+                )
+                continue
+
             has_explicit_name = bool(item.name)
             cmd = RegisterMoleculeCommand(
                 workspace_id=ws_id,
                 name=item.name or f"Compound-{item.row_index + 1}",
                 smiles=item.smiles,
                 molecule_type=item.molecule_type,
-                external_ids=[
-                    ExternalId(
-                        identifier=eid["identifier"],
-                        identifier_type=eid["identifier_type"],
-                    )
-                    for eid in item.external_ids
-                ],
+                external_ids=external_ids(item.external_ids),
                 originating_org_id=org_id,
                 registered_by=submitted_by,
                 promote_name_as_identifier=has_explicit_name,
@@ -208,6 +216,10 @@ class RegistrationActivities:
             batch_number: str | None = None
             salt_matched = False
             batch_skipped = False
+            batch_problem: str | None = None
+            batch_warnings: tuple[str, ...] = ()
+            batch_action: str | None = None
+            ids_added = 0
             if action not in (RegistrationAction.MERGE_CANDIDATE, RegistrationAction.CONFLICT):
                 create_batch_now = should_create_batch(
                     is_new_molecule=outcome.is_new,
@@ -215,7 +227,26 @@ class RegistrationActivities:
                     override=None,
                     workspace_default=effective_policy_default,
                 )
-                if create_batch_now:
+                if item.batch_problem:
+                    batch_problem = item.batch_problem
+                elif item.batch_ids:
+                    (
+                        batch_id,
+                        batch_number,
+                        salt_matched,
+                        batch_problem,
+                        batch_warnings,
+                        batch_action,
+                        ids_added,
+                    ) = await _apply_row_batch(
+                        item=item,
+                        reg_outcome=outcome,
+                        workspace_id=ws_id,
+                        submitted_by=submitted_by,
+                        session_factory=session_factory,
+                        dispatcher=dispatcher,
+                    )
+                elif create_batch_now:
                     batch_id, batch_number, salt_matched = await _create_batch(
                         item=item,
                         reg_outcome=outcome,
@@ -224,6 +255,7 @@ class RegistrationActivities:
                         session_factory=session_factory,
                         dispatcher=dispatcher,
                     )
+                    batch_action = "created" if batch_id else None
                 else:
                     batch_skipped = True
 
@@ -244,8 +276,23 @@ class RegistrationActivities:
                     else None,
                     disclosure_id=str(outcome.disclosure_id) if outcome.disclosure_id else None,
                     conflict_reason=outcome.conflict_reason,
+                    # The compound is registered; this says why its batch is not.
+                    error=f"Compound registered, batch not created: {batch_problem}"
+                    if batch_problem
+                    else None,
                     cdd_molecule_id=item.cdd_molecule_id,
                     cdd_modified_at=item.cdd_modified_at,
+                    warnings=[
+                        *item.warnings,
+                        *((*outcome.notes, *outcome.skipped_ids) if first_row else ()),
+                        *batch_warnings,
+                    ],
+                    batch_action=batch_action,
+                    ids_added=outcome.ids_added + ids_added,
+                    # a note (a structure left as it was) is a line, not a skipped value
+                    values_skipped=len(item.warnings)
+                    + (len(outcome.skipped_ids) if first_row else 0)
+                    + len(batch_warnings),
                 )
             )
 
@@ -275,7 +322,44 @@ class RegistrationActivities:
             else:
                 output.mol_error += 1
 
+        output.report = chunk_report(
+            output, {i.row_index: i.name or f"Compound-{i.row_index + 1}" for i in input.items}
+        )
         return output
+
+
+def chunk_report(output: ChunkOutput, names: dict[int, str]) -> dict:
+    """The run-report delta for one chunk (see ``CddMoleculeImport.record_report``).
+
+    A problem is a row that failed, a compound whose batch could not be made, or a
+    conflict; a skipped value is a warning that a value was not stored. Both, and notes
+    (a structure the vault id left as it was), get a line. A compound that failed is
+    one problem, not one per batch row.
+    """
+    lines: list[str] = []
+    problems = 0
+    failed: set[int] = set()
+    for r in output.results:
+        name = names.get(r.row_index, f"row {r.row_index + 1}")
+        problem = r.error or (r.conflict_reason if r.action == "conflict" else None)
+        if not r.success:
+            if r.row_index in failed:
+                continue
+            failed.add(r.row_index)
+        if problem:
+            problems += 1
+            lines.append(f"{name}: {problem}")
+        lines.extend(f"{name}: {w}" for w in r.warnings)
+    return {
+        "compounds_added": output.mol_registered,
+        "compounds_matched": output.mol_duplicate,
+        "batches_created": sum(r.batch_action == "created" for r in output.results),
+        "batches_matched": sum(r.batch_action == "existing" for r in output.results),
+        "ids_added": sum(r.ids_added for r in output.results),
+        "values_skipped": sum(r.values_skipped for r in output.results),
+        "problems": problems,
+        "problem_lines": lines,
+    }
 
 
 async def _create_batch(
@@ -287,7 +371,99 @@ async def _create_batch(
     session_factory: async_sessionmaker,
     dispatcher,
 ) -> tuple[uuid.UUID | None, str | None, bool]:
-    """Resolve salt and create a batch. Uses a fresh UoW for each call."""
+    """A row without batch IDs: resolve salt and create a batch (the duplicate policy
+    already said yes). Uses a fresh UoW for each call."""
+    batch_cmd, salt_matched, create_batch = await _batch_command(
+        item=item,
+        reg_outcome=reg_outcome,
+        workspace_id=workspace_id,
+        submitted_by=submitted_by,
+        session_factory=session_factory,
+        dispatcher=dispatcher,
+    )
+    batch_result = await create_batch(batch_cmd)
+    if isinstance(batch_result, Failure):
+        logger.warning(
+            "registration.batch_create_failed",
+            molecule_id=str(reg_outcome.molecule.id),
+            row_index=item.row_index,
+            error=str(batch_result.failure()),
+        )
+        return None, None, False
+    batch = batch_result.unwrap().batch
+    return batch.id, batch.batch_number.value, salt_matched
+
+
+async def _apply_row_batch(
+    *,
+    item: ChunkItem,
+    reg_outcome: RegistrationOutcome,
+    workspace_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    session_factory: async_sessionmaker,
+    dispatcher,
+) -> tuple[uuid.UUID | None, str | None, bool, str | None, tuple[str, ...], str | None, int]:
+    """The row names its batch (``item.batch_ids``): find or create exactly that
+    batch (``row_batch.ApplyRowBatch``). Returns ``(batch_id, batch_number,
+    salt_matched, problem, skipped-ID warnings, batch action, IDs added)``; on a
+    problem the compound stays registered."""
+    batch_cmd, salt_matched, create_batch = await _batch_command(
+        item=item,
+        reg_outcome=reg_outcome,
+        workspace_id=workspace_id,
+        submitted_by=submitted_by,
+        session_factory=session_factory,
+        dispatcher=dispatcher,
+    )
+    row_uow = AsyncUnitOfWork(session_factory)
+    apply = ApplyRowBatch(
+        uow=row_uow,
+        batch_repo=SQLAlchemyBatchRepository(row_uow),
+        create_batch=create_batch,
+        dispatcher=dispatcher,
+    )
+    result = await apply(
+        ApplyRowBatchCommand(
+            workspace_id=workspace_id,
+            molecule_id=reg_outcome.molecule.id,
+            batch_ids=row_batch_ids(item.batch_ids),
+            create=batch_cmd,
+            actor=submitted_by,
+        )
+    )
+    if isinstance(result, Failure):
+        logger.warning(
+            "registration.row_batch_failed",
+            molecule_id=str(reg_outcome.molecule.id),
+            row_index=item.row_index,
+            error=str(result.failure()),
+        )
+        return None, None, False, str(result.failure()), (), None, 0
+    r = result.unwrap()
+    if r.action == "problem":
+        return None, None, False, r.problem, (), None, 0
+    created = r.action == "created"
+    return (
+        r.batch_id,
+        r.batch_number,
+        salt_matched and created,
+        None,
+        r.skipped,
+        r.action,
+        r.ids_added,
+    )
+
+
+async def _batch_command(
+    *,
+    item: ChunkItem,
+    reg_outcome: RegistrationOutcome,
+    workspace_id: uuid.UUID,
+    submitted_by: uuid.UUID,
+    session_factory: async_sessionmaker,
+    dispatcher,
+) -> tuple[CreateBatchCommand, bool, CreateBatch]:
+    """Resolve salt; build the batch command and the use case that runs it."""
     molecule = reg_outcome.molecule
     detected_salt = reg_outcome.detected_salt
 
@@ -354,15 +530,8 @@ async def _create_batch(
         sync=SyncBatchIdentifierMirrors(batch_repo),
     )
 
-    # Separate UoW for the alias-capture step; AddBatchIdentifier manages its own txn.
-    alias_uow = AsyncUnitOfWork(session_factory)
-    add_batch_alias = AddBatchIdentifier(
-        uow=alias_uow,
-        repo=SQLAlchemyBatchRepository(alias_uow),
-        dispatcher=dispatcher,
-    )
-
-    # Merge CDD batch ID into custom_fields for plate well resolution
+    # The CDD vault batch id also goes into custom_fields: plate wells resolve by it.
+    # (It is a batch ID too — ``item.batch_ids`` — which ApplyRowBatch stores.)
     custom_fields = None
     if item.cdd_batch_id is not None:
         custom_fields = {"cdd_batch_id": item.cdd_batch_id}
@@ -381,47 +550,7 @@ async def _create_batch(
         formula_weight=formula_weight,
         purity=item.purity,
         appearance=item.appearance,
-        vendor_catalog_number=item.vendor_catalog_number,
         custom_fields=custom_fields,
     )
 
-    batch_result = await create_batch(batch_cmd)
-
-    if isinstance(batch_result, Failure):
-        logger.warning(
-            "registration.batch_create_failed",
-            molecule_id=str(molecule.id),
-            row_index=item.row_index,
-            error=str(batch_result.failure()),
-        )
-        return None, None, False
-
-    batch = batch_result.unwrap().batch
-
-    # Capture the CDD batch id as a BatchIdentifier so future imports + plate
-    # lookups can resolve via find_by_external_identifier (mirror of how
-    # MoleculeIdentifier captures CDD molecule id). The custom_fields write
-    # above stays as the existing plate-well-resolution mechanism for now.
-    if item.cdd_batch_id is not None:
-        alias_result = await add_batch_alias(
-            AddBatchIdentifierCommand(
-                workspace_id=workspace_id,
-                batch_id=batch.id,
-                identifier=str(item.cdd_batch_id),
-                identifier_type="cdd_batch_id",
-                source="CDD import",
-                registered_by=submitted_by,
-            ),
-            auth=None,  # Temporal activities run as system; auth=None bypasses guard
-        )
-        if isinstance(alias_result, Failure):
-            # Conflict on re-import is expected (identifier already exists for this
-            # batch); log and continue. Other failures are also non-fatal: the batch
-            # exists, only the alias capture failed.
-            logger.warning(
-                "registration.cdd_batch_alias_failed",
-                cdd_batch_id=item.cdd_batch_id,
-                error=str(alias_result.failure()),
-            )
-
-    return batch.id, batch.batch_number.value, salt_matched
+    return batch_cmd, salt_matched, create_batch

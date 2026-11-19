@@ -37,6 +37,7 @@ import {
   useDataSourceTemplate,
   useUpdateDataSource,
 } from "../hooks/use-data-sources";
+import { MatchFields } from "./match-fields";
 
 // ---------------------------------------------------------------------------
 // Schema
@@ -92,6 +93,8 @@ const ENTITY_TYPE_LABELS: Record<string, string> = {
 const CHILD_ENTITY_PARENTS: Record<string, string> = {
   well: "plate",
 };
+
+const MATCHED_ENTITIES = new Set(["molecule", "batch"]);
 
 const TARGET_TYPES = [
   { value: "core", label: "Core Field" },
@@ -403,8 +406,12 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
     return <div className="py-12 text-center text-muted-foreground">Data source not found.</div>;
   }
 
-  // Active tab state is derived — default to first mapping's entity_type
-  const defaultTab = entityTypes[0] ?? "molecule";
+  // CDD vaults: molecule/batch fields are matched in "Match fields"; only plates stay here.
+  const isCdd = ds.source_type === "cdd_vault";
+  const shown = mappingFields.filter(
+    (m) => !CHILD_ENTITY_PARENTS[m.entity_type] && !(isCdd && MATCHED_ENTITIES.has(m.entity_type)),
+  );
+  const defaultTab = shown[0]?.entity_type ?? "molecule";
 
   return (
     <div className="space-y-6">
@@ -484,6 +491,8 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
           </div>
         </div>
 
+        {isCdd && <MatchFields dataSourceId={dataSourceId} saved={ds.registration_mapping} />}
+
         {/* Entity Mappings */}
         <div className="space-y-3">
           <div className="flex items-center justify-between">
@@ -496,62 +505,58 @@ export function DataSourceDetail({ dataSourceId }: DataSourceDetailProps) {
             )}
           </div>
 
-          {mappingFields.length === 0 ? (
+          {shown.length === 0 ? (
             <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
               No entity mappings configured for this source type.
             </div>
           ) : (
             <Tabs defaultValue={defaultTab}>
               <TabsList>
-                {mappingFields
-                  .filter((m) => !CHILD_ENTITY_PARENTS[m.entity_type])
-                  .map((m) => (
-                    <TabsTrigger key={m.entity_type} value={m.entity_type}>
-                      {ENTITY_TYPE_LABELS[m.entity_type] ?? m.entity_type}
-                    </TabsTrigger>
-                  ))}
+                {shown.map((m) => (
+                  <TabsTrigger key={m.entity_type} value={m.entity_type}>
+                    {ENTITY_TYPE_LABELS[m.entity_type] ?? m.entity_type}
+                  </TabsTrigger>
+                ))}
               </TabsList>
-              {mappingFields
-                .filter((m) => !CHILD_ENTITY_PARENTS[m.entity_type])
-                .map((m) => {
-                  const children = mappingFields.filter(
-                    (c) => CHILD_ENTITY_PARENTS[c.entity_type] === m.entity_type,
-                  );
-                  // Find the live watched value for this entity type
-                  const liveMapping = mappings.find((lm) => lm.entity_type === m.entity_type) as
-                    | EntityMapping
-                    | undefined;
-                  return (
-                    <TabsContent key={m.entity_type} value={m.entity_type}>
-                      {liveMapping && (
-                        <EntityMappingEditor
-                          mapping={liveMapping}
-                          onChange={(updated) => handleMappingChange(m.entity_type, updated)}
-                        />
-                      )}
-                      {children.map((child) => {
-                        const liveChild = mappings.find(
-                          (lm) => lm.entity_type === child.entity_type,
-                        ) as EntityMapping | undefined;
-                        return (
-                          <div key={child.entity_type} className="mt-6">
-                            <h4 className="text-sm font-semibold mb-3 capitalize">
-                              {child.entity_type} Mapping
-                            </h4>
-                            {liveChild && (
-                              <EntityMappingEditor
-                                mapping={liveChild}
-                                onChange={(updated) =>
-                                  handleMappingChange(child.entity_type, updated)
-                                }
-                              />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </TabsContent>
-                  );
-                })}
+              {shown.map((m) => {
+                const children = mappingFields.filter(
+                  (c) => CHILD_ENTITY_PARENTS[c.entity_type] === m.entity_type,
+                );
+                // Find the live watched value for this entity type
+                const liveMapping = mappings.find((lm) => lm.entity_type === m.entity_type) as
+                  | EntityMapping
+                  | undefined;
+                return (
+                  <TabsContent key={m.entity_type} value={m.entity_type}>
+                    {liveMapping && (
+                      <EntityMappingEditor
+                        mapping={liveMapping}
+                        onChange={(updated) => handleMappingChange(m.entity_type, updated)}
+                      />
+                    )}
+                    {children.map((child) => {
+                      const liveChild = mappings.find(
+                        (lm) => lm.entity_type === child.entity_type,
+                      ) as EntityMapping | undefined;
+                      return (
+                        <div key={child.entity_type} className="mt-6">
+                          <h4 className="text-sm font-semibold mb-3 capitalize">
+                            {child.entity_type} Mapping
+                          </h4>
+                          {liveChild && (
+                            <EntityMappingEditor
+                              mapping={liveChild}
+                              onChange={(updated) =>
+                                handleMappingChange(child.entity_type, updated)
+                              }
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </TabsContent>
+                );
+              })}
             </Tabs>
           )}
         </div>

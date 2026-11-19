@@ -10,7 +10,11 @@ vi.mock("@/shared/lib/api/custom-instance", () => ({
 }));
 vi.mock("@/shared/lib/toast", () => ({ showSuccess: vi.fn(), showError: vi.fn() }));
 
-import { useStartBulkRegistration } from "./use-registration-wizard-api";
+import {
+  usePreviewBulkRegistration,
+  useStartBulkRegistration,
+  useSuggestColumnMapping,
+} from "./use-registration-wizard-api";
 
 function wrapper({ children }: { children: ReactNode }) {
   const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
@@ -30,5 +34,54 @@ describe("useStartBulkRegistration", () => {
     );
     const form = customInstance.mock.calls[0][0].data as FormData;
     expect(form.getAll("project_ids")).toEqual(["p-1", "p-2"]);
+  });
+});
+
+describe("usePreviewBulkRegistration", () => {
+  it("sends the column mapping as JSON next to the file, and no field without one", async () => {
+    customInstance.mockClear();
+    const { result } = renderHook(() => usePreviewBulkRegistration(), { wrapper });
+    const file = new File(["Molecule Name\n"], "rows.csv");
+    const mapping = { columns: [{ header: "Molecule Name", target: "name" as const }] };
+    await act(() => result.current.mutateAsync({ file, mapping }));
+    await act(() => result.current.mutateAsync({ file, mapping: null }));
+
+    const [withMapping, without] = customInstance.mock.calls.map((c) => c[0]);
+    expect(withMapping.url).toBe("/api/v1/bulk-registrations/preview");
+    expect((withMapping.data as FormData).get("file")).toBeInstanceOf(File);
+    expect(JSON.parse((withMapping.data as FormData).get("column_mapping") as string)).toEqual(
+      mapping,
+    );
+    expect((without.data as FormData).has("column_mapping")).toBe(false);
+  });
+});
+
+describe("useStartBulkRegistration column mapping", () => {
+  it("passes the mapping through as the column_mapping form field", async () => {
+    customInstance.mockClear();
+    const { result } = renderHook(() => useStartBulkRegistration(), { wrapper });
+    const mapping = JSON.stringify({ columns: [{ header: "SMILES", target: "smiles" }] });
+    await act(() =>
+      result.current.mutateAsync({
+        file: new File(["SMILES\n"], "rows.csv"),
+        originating_org_id: "org-1",
+        file_format: "csv",
+        column_mapping: mapping,
+      }),
+    );
+    expect((customInstance.mock.calls[0][0].data as FormData).get("column_mapping")).toBe(mapping);
+  });
+});
+
+describe("useSuggestColumnMapping", () => {
+  it("posts the headers to the suggestion endpoint", async () => {
+    customInstance.mockClear();
+    const { result } = renderHook(() => useSuggestColumnMapping(), { wrapper });
+    await act(() => result.current.mutateAsync(["Molecule Name", "SMILES"]));
+    expect(customInstance.mock.calls[0][0]).toMatchObject({
+      url: "/api/v1/bulk-registrations/suggest-mapping",
+      method: "POST",
+      data: { headers: ["Molecule Name", "SMILES"] },
+    });
   });
 });

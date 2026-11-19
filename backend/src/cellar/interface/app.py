@@ -339,6 +339,9 @@ def create_app() -> FastAPI:
     app.include_router(kiosk_device_router)
     app.include_router(kiosk_router)
 
+    from cellar.interface.routes.bulk_registration_mappings import (
+        router as bulk_registration_mappings_router,
+    )
     from cellar.interface.routes.campaigns import router as campaign_router
     from cellar.interface.routes.campaigns_channels import (
         router as campaign_channels_router,
@@ -376,6 +379,7 @@ def create_app() -> FastAPI:
     app.include_router(collection_router)
     app.include_router(collection_import_previews_router)
     app.include_router(collection_import_templates_router)
+    app.include_router(bulk_registration_mappings_router)
     app.include_router(saved_search_router)
     app.include_router(saved_visualization_router)
     app.include_router(campaign_router)

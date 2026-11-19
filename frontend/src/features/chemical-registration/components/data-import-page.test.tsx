@@ -443,6 +443,78 @@ describe("DataImportPage: import modes", () => {
     });
   });
 
+  it("explains what Full does", () => {
+    renderAs(false);
+    expect(
+      screen.getByText(/Compounds and batches already in ChemCellar get the IDs and batches/),
+    ).toBeVisible();
+    chooseMode(SPECIFIC);
+    expect(screen.queryByText(/nothing is created twice/)).toBeNull();
+  });
+
+  it("shows the run report, with its problems, once the import has run", async () => {
+    h.status = {
+      status: "completed",
+      registered_count: 2,
+      duplicate_count: 0,
+      error_count: 0,
+      skipped_count: 0,
+      total_count: 2,
+      pages_processed: 1,
+      report: {
+        compounds_added: 2,
+        compounds_matched: 5,
+        batches_created: 3,
+        batches_matched: 4,
+        ids_added: 9,
+        values_skipped: 1,
+        problems: 1,
+        problem_lines: ["SACC-1: 'Paracetamol' is already an ID of CMP-7; not stored on SACC-1"],
+      },
+    };
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(startButton());
+
+    expect(
+      await screen.findByText(/2 compounds added, 5 matched; 3 batches created/),
+    ).toBeVisible();
+    expect(screen.getByText("Problems (2)")).toBeInTheDocument(); // 1 problem + 1 value skipped
+    expect(screen.getByText(/'Paracetamol' is already an ID of CMP-7/)).toBeInTheDocument();
+  });
+
+  it("shows the last finished import's report on a fresh page, counting skipped values as problems", () => {
+    const saved = h.molecule;
+    h.molecule = {
+      ...saved,
+      status: "completed_with_errors",
+      completed_at: "2026-11-18T22:55:46Z",
+      report: {
+        compounds_added: 0,
+        compounds_matched: 4760,
+        batches_created: 83,
+        batches_matched: 4757,
+        ids_added: 5005,
+        values_skipped: 2,
+        problems: 1,
+        problem_lines: [
+          "SACC-0009631: Identifier '41116192' is already assigned to another molecule",
+          "SACC-1: 'X' is on 2 compounds in the vault; not stored as an ID",
+          "SACC-2: 'Y' is on 2 compounds in the vault; not stored as an ID",
+        ],
+      },
+    } as typeof saved;
+    try {
+      renderAs(false);
+      expect(
+        screen.getByText(/0 compounds added, 4,760 matched; 83 batches created/),
+      ).toBeVisible();
+      expect(screen.getByText("Problems (3)")).toBeInTheDocument();
+    } finally {
+      h.molecule = saved;
+    }
+  });
+
   it("labels an import of specific molecules Selected in the history", () => {
     const mode = h.molecule.import_mode;
     h.molecule.import_mode = "filtered";
@@ -453,5 +525,94 @@ describe("DataImportPage: import modes", () => {
     } finally {
       h.molecule.import_mode = mode;
     }
+  });
+});
+
+describe("DataImportPage: Preview", () => {
+  const ITEM = {
+    row_index: 0,
+    file_row: 1,
+    name: "SACC-1",
+    smiles: "CCO",
+    external_ids: [
+      {
+        identifier: "11",
+        identifier_type: "cdd_molecule_id",
+        source: "CDD import",
+        decides: true,
+        vault_id: true,
+      },
+      { identifier: "JSF-1", identifier_type: "custom", source: "Alternate Names", decides: false },
+    ],
+    batch_ids: [{ identifier: "SACC-1-001", source: "CDD", decides: true }],
+    warnings: ["'X' is on 2 compounds in the vault; not stored as an ID"],
+  };
+
+  it("shows the sample, with warnings under the IDs, and forecasts stored-only IDs apart", async () => {
+    h.request
+      .mockReset()
+      .mockImplementation(async ({ url }: { url: string }) =>
+        url.endsWith("/cdd-import/preview")
+          ? { total_count: 1, error_count: 0, items: [ITEM] }
+          : { items: [] },
+      );
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText("A sample of up to 20 molecules from the vault.")).toBeVisible();
+    expect(screen.getByText("SACC-1")).toBeVisible();
+    expect(screen.getByText(/is on 2 compounds in the vault/)).toBeVisible();
+    await waitFor(() =>
+      expect(h.request).toHaveBeenCalledWith(
+        expect.objectContaining({ url: "/api/v1/molecules/preview-registration" }),
+      ),
+    );
+    const forecast = h.request.mock.calls.find(([r]) => r.url.endsWith("preview-registration"));
+    const sent = forecast?.[0].data.items[0];
+    expect(sent.external_ids).toEqual([
+      { identifier: "11", identifier_type: "cdd_molecule_id", vault_id: true },
+    ]);
+    expect(sent.stored_only_ids).toEqual(["JSF-1"]);
+    expect(sent.batch_ids).toEqual([{ identifier: "SACC-1-001", identifier_type: "custom" }]);
+    expect(sent.stored_only_batch_ids).toBeUndefined();
+    expect(h.request.mock.calls[0][0].data).toEqual({ names: null });
+  });
+
+  it("shows the forecast's warnings under the row, and the vault numbers in bench words", async () => {
+    const held = "'JSF-1' is already an ID of CC-000007; not stored on SACC-1";
+    h.request.mockReset().mockImplementation(async ({ url }: { url: string }) =>
+      url.endsWith("/cdd-import/preview")
+        ? {
+            total_count: 1,
+            error_count: 0,
+            items: [
+              {
+                ...ITEM,
+                warnings: [],
+                batch_ids: [
+                  ...ITEM.batch_ids,
+                  {
+                    identifier: "13250",
+                    source: "CDD import",
+                    identifier_type: "cdd_batch_id",
+                    decides: true,
+                  },
+                ],
+              },
+            ],
+          }
+        : {
+            items: [{ index: 0, action: "registered", compound_key: "KEY-1", warnings: [held] }],
+          },
+    );
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(screen.getByRole("button", { name: "Preview" }));
+
+    expect(await screen.findByText(held)).toBeVisible();
+    expect(screen.getByText("CDD vault molecule number · 11")).toBeVisible();
+    expect(screen.getByText("CDD vault batch number · 13250")).toBeVisible();
+    expect(screen.getByText("Alternate Names · JSF-1")).toBeVisible();
   });
 });

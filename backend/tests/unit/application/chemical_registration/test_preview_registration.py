@@ -144,6 +144,8 @@ class TestPreviewRegistration:
         assert [i.index for i in items] == [0, 1]
         assert items[0].action == RegistrationAction.DEDUPLICATED
         assert items[0].matched_molecule_id == known.id
+        # Rows are grouped by the compound they go to, not by what classified them.
+        assert items[0].compound_key == f"molecule:{known.id}"
         assert (
             items[1].action == RegistrationAction.CONFLICT
         )  # name claimed by a disclosed molecule

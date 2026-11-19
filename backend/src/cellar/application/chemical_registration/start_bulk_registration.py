@@ -10,6 +10,7 @@ case absorbs the branching that previously lived in the route.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Literal
@@ -17,6 +18,7 @@ from typing import Literal
 from returns.result import Failure, Result, Success
 
 from cellar.application.auth import AuthContext, require_editor, require_same_workspace
+from cellar.application.chemical_registration.bulk_column_mapping import ColumnMapping
 from cellar.application.chemical_registration.bulk_registration_orchestrator import (
     BulkRegistrationOrchestrator,
     StartBulkRegistrationRequest,
@@ -54,6 +56,7 @@ class StartBulkRegistrationFromFileCommand(Command):
     content: bytes
     create_batch_on_duplicate: bool | None = None  # None → use workspace default
     project_ids: list[uuid.UUID] = field(default_factory=list)
+    column_mapping: ColumnMapping | None = None  # None = the file's headers as named
 
 
 @dataclass(frozen=True)
@@ -107,6 +110,25 @@ class StartBulkRegistration:
         except ValueError:
             return Failure(ValidationError(f"Unsupported file format: {input.file_format!r}"))
 
+        if input.column_mapping is not None:
+            # Check the mapping against the file's headers before a workflow starts;
+            # only the header row is read here, the worker parses the rows.
+            # (SDF headers need every record read: off the event loop, as the parse is.)
+            try:
+                headers = await asyncio.to_thread(
+                    self._parser.headers,
+                    content=input.content,
+                    filename=input.filename,
+                    file_format=file_format,
+                )
+            except ValidationError as err:
+                return Failure(err)
+            mapping_err = input.column_mapping.validate(
+                headers, structure_implied=file_format == BulkRegistrationFileFormat.SDF
+            )
+            if mapping_err is not None:
+                return Failure(mapping_err)
+
         if input.project_ids:
             # Validate once here: the worker registers rows as the system and
             # trusts this list.
@@ -126,6 +148,7 @@ class StartBulkRegistration:
             content=input.content,
             create_batch_on_duplicate=input.create_batch_on_duplicate,
             project_ids=input.project_ids,
+            column_mapping=input.column_mapping.to_dict() if input.column_mapping else None,
         )
 
         try:
@@ -135,18 +158,27 @@ class StartBulkRegistration:
             pass  # Fall through to in-process pipeline
 
         # --- Sync fallback: parse in-process and run BulkRegistrationService ---
-        parsed = self._parser.parse(
-            content=input.content,
-            filename=input.filename,
-            file_format=file_format,
-        )
+        try:
+            parsed = await asyncio.to_thread(
+                self._parser.parse,
+                content=input.content,
+                filename=input.filename,
+                file_format=file_format,
+                column_mapping=input.column_mapping,
+            )
+        except ValidationError as err:
+            return Failure(err)
         items = [
             BulkRegistrationItem(
                 row_index=p.row_index,
+                file_row=p.file_row,
                 name=p.name,
                 smiles=p.smiles,
                 molecule_type=p.molecule_type,
                 external_ids=p.external_ids,
+                batch_ids=p.batch_ids,
+                batch_problem=p.batch_problem,
+                warnings=list(p.warnings),
                 error=p.error,
                 amount_value=p.amount_value,
                 amount_unit=p.amount_unit,

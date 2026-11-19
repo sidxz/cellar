@@ -76,6 +76,9 @@ async def main():
     print(f"Workflow ID: {workflow_id}")
 
     # 2. Start Temporal workflow with resume fields
+    from cellar.application.cdd_import.registration_mapping import (
+        default_cdd_registration_mapping,
+    )
     from cellar.domain.workspace_config.data_source import get_default_template
     from cellar.infrastructure.temporal.workflows.cdd_vault_import import (
         CddVaultImportWorkflow,
@@ -96,6 +99,8 @@ async def main():
             originating_org_id=ORIGINATING_ORG_ID,
             secret_ref=SECRET_REF,
             entity_mappings=entity_mappings,
+            # Edit to the data source's own mapping if it differs from the default.
+            registration_mapping=default_cdd_registration_mapping(),
             # Resume fields — skip export, jump to processing
             import_id=str(import_id),
             storage_path=STORAGE_PATH,

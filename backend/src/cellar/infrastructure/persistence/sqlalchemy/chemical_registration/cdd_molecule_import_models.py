@@ -36,6 +36,7 @@ class CddMoleculeImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
     error_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     skipped_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     last_processed_offset: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    report: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     submitted_by: Mapped[uuid.UUID] = mapped_column(Uuid, nullable=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

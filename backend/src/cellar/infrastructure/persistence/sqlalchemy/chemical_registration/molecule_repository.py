@@ -330,6 +330,28 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         result = await self._session.execute(stmt)
         return {row[0]: row[1] for row in result}
 
+    async def find_identifier_holders(
+        self,
+        workspace_id: uuid.UUID,
+        identifiers: set[str],
+        exclude_molecule_id: uuid.UUID | None,
+    ) -> dict[str, str]:
+        if not identifiers:
+            return {}
+        lowered = func.lower(MoleculeIdentifierModel.identifier)
+        stmt = (
+            select(lowered, MoleculeModel.registration_number)
+            .join(MoleculeModel, MoleculeModel.id == MoleculeIdentifierModel.molecule_id)
+            .where(
+                MoleculeIdentifierModel.workspace_id == workspace_id,
+                lowered.in_({i.lower() for i in identifiers}),
+            )
+        )
+        if exclude_molecule_id is not None:
+            stmt = stmt.where(MoleculeIdentifierModel.molecule_id != exclude_molecule_id)
+        holders = dict((await self._session.execute(stmt)).tuples().all())
+        return {i: holders[i.lower()] for i in identifiers if i.lower() in holders}
+
     async def find_active(
         self,
         workspace_id: uuid.UUID,

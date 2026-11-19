@@ -58,12 +58,16 @@ import type { ExternalIdentifierInput } from "../../types/registration-wizard";
 
 // ─── CSV template ───────────────────────────────────────────────────────────
 
+// Headers the server's column suggestions recognise (bulk_column_mapping.py), so a
+// filled-in template maps itself. One compound with two batches shows that each
+// row is one batch.
 const CSV_TEMPLATE_HEADERS = [
   "name",
   "smiles",
   "molecule_type",
-  "identifier",
-  "identifier_type",
+  "synonym",
+  "cas_number",
+  "batch_id",
   "amount_value",
   "amount_unit",
   "salt_code",
@@ -77,8 +81,9 @@ const CSV_TEMPLATE_ROWS = [
     "Aspirin",
     "CC(=O)Oc1ccccc1C(=O)O",
     "small_molecule",
+    "Acetylsalicylic acid",
     "50-78-2",
-    "cas_number",
+    "ASP-LOT-001",
     "100",
     "mg",
     "",
@@ -87,11 +92,26 @@ const CSV_TEMPLATE_ROWS = [
     "White crystalline powder",
   ],
   [
+    "Aspirin",
+    "CC(=O)Oc1ccccc1C(=O)O",
+    "small_molecule",
+    "Acetylsalicylic acid",
+    "50-78-2",
+    "ASP-LOT-002",
+    "250",
+    "mg",
+    "",
+    "98.7",
+    "purchased",
+    "White crystalline powder",
+  ],
+  [
     "Ibuprofen",
     "CC(C)Cc1ccc(cc1)[C@@H](C)C(=O)O",
     "small_molecule",
+    "",
     "15687-27-1",
-    "cas_number",
+    "IBU-LOT-001",
     "250",
     "mg",
     "",

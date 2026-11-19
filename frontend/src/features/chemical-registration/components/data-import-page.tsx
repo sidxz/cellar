@@ -29,10 +29,13 @@ import { isTerminalImportStatus } from "@/shared/lib/job-status";
 import { useAuthzHasRole } from "@duar-auth/nextjs";
 import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Loader2, Square, XCircle } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { MOLECULES_KEY } from "../hooks/query-keys";
+import { useCddImportPreview } from "../hooks/use-cdd-import-preview";
 import {
   type CddMoleculeIdentifierCheck,
+  type CddMoleculeImportStatus,
   useCancelCddMoleculeImport,
   useCddMoleculeImportStatus,
   useForceFailImport,
@@ -46,6 +49,7 @@ import {
   usePlateImportHistory,
   useStartCddPlateImport,
 } from "../hooks/use-cdd-plate-import";
+import { PreviewTable } from "./preview-table";
 import { NotFoundIdentifiers, SelectedMoleculesImport } from "./selected-molecules-import";
 
 /** The Import Mode choices; "filtered" is "Specific molecules", the import of a pasted list. */
@@ -74,8 +78,10 @@ export function DataImportPage() {
     orgId: string;
     result: CddMoleculeIdentifierCheck;
   } | null>(null);
+  const previewMutation = useCddImportPreview();
   const [error, setError] = useState<string | null>(null);
   const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  const [report, setReport] = useState<CddMoleculeImportStatus["report"] | null>(null);
   // Identifiers the vault did not know, for the "specific molecules" import now running or just done.
   // ponytail: page state only, so reloading mid-import drops the list; keep it on the import
   // record if it has to outlive the page.
@@ -95,6 +101,9 @@ export function DataImportPage() {
 
   // Find active import from history (survives page reload)
   const activeImport = history?.find((imp) => !isTerminalImportStatus(imp.status));
+  // The newest finished import's report, for a page opened after it ran (newest first).
+  const lastFinished = history?.find((imp) => isTerminalImportStatus(imp.status));
+  const fromHistory = !report && !workflowId && !activeImport ? lastFinished : undefined;
 
   // Auto-resume polling for active imports
   useEffect(() => {
@@ -109,6 +118,7 @@ export function DataImportPage() {
   useEffect(() => {
     if (liveStatus && isTerminalImportStatus(liveStatus.status)) {
       setWorkflowId(null);
+      setReport(liveStatus.report);
       qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
       qc.invalidateQueries({ queryKey: MOLECULES_KEY });
 
@@ -132,6 +142,7 @@ export function DataImportPage() {
   ) => {
     setError(null);
     setCompletionMessage(null);
+    setReport(null);
     setNotFound(identifiersNotFound);
     try {
       const result = await startMutation.mutateAsync(params);
@@ -256,6 +267,16 @@ export function DataImportPage() {
                   <span>{completionMessage}</span>
                 </div>
               )}
+              {report && <RunReport report={report} />}
+              {fromHistory && (
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Last import ·{" "}
+                    {formatDateTime(fromHistory.completed_at ?? fromHistory.submitted_at)}
+                  </p>
+                  <RunReport report={fromHistory.report} />
+                </div>
+              )}
 
               {error && (
                 <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
@@ -318,7 +339,17 @@ export function DataImportPage() {
                   </div>
 
                   <div className="grid gap-2">
-                    <Label>Import Mode</Label>
+                    <div className="flex items-center justify-between">
+                      <Label>Import Mode</Label>
+                      {isAdmin && (
+                        <Link
+                          href="/admin/data-sources"
+                          className="text-xs text-primary hover:underline"
+                        >
+                          Field mapping
+                        </Link>
+                      )}
+                    </div>
                     <RadioGroup
                       value={importMode}
                       onValueChange={(v) => setImportMode(v as ImportMode)}
@@ -343,6 +374,13 @@ export function DataImportPage() {
                         </Label>
                       </div>
                     </RadioGroup>
+                    {importMode === "full_vault" && (
+                      <p className="text-xs text-muted-foreground">
+                        Reads every molecule in the vault. Compounds and batches already in
+                        ChemCellar get the IDs and batches they are missing; nothing is created
+                        twice.
+                      </p>
+                    )}
                   </div>
 
                   {isSpecific ? (
@@ -386,6 +424,20 @@ export function DataImportPage() {
                         )}
                         Start Import
                       </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() =>
+                          previewMutation.mutate({ names: isSpecific ? checked?.found : null })
+                        }
+                        disabled={
+                          previewMutation.isPending || (isSpecific && !checked?.found.length)
+                        }
+                      >
+                        {previewMutation.isPending && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        Preview
+                      </Button>
                       {isSpecific && checked && (
                         <span className="text-sm tabular-nums text-muted-foreground">
                           {checked.found.length.toLocaleString()} found
@@ -398,6 +450,20 @@ export function DataImportPage() {
                       </p>
                     )}
                   </div>
+                </div>
+              )}
+
+              {!isImportActive && previewMutation.isError && (
+                <p className="text-sm text-destructive">
+                  {previewMutation.error?.message ?? "Could not read a sample from the vault"}
+                </p>
+              )}
+              {!isImportActive && previewMutation.data && (
+                <div className="space-y-4">
+                  <p className="text-sm text-muted-foreground">
+                    A sample of up to 20 molecules from the vault.
+                  </p>
+                  <PreviewTable items={previewMutation.data.items} createBatchOnDuplicate={false} />
                 </div>
               )}
 
@@ -820,6 +886,38 @@ function CounterCard({
     <div className="rounded-md border p-2.5 text-center">
       <div className={`text-lg font-semibold tabular-nums ${color}`}>{value.toLocaleString()}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
+    </div>
+  );
+}
+
+/** What a finished run added and what it skipped; the lines say which values and why. */
+function RunReport({ report }: { report: CddMoleculeImportStatus["report"] }) {
+  const n = (v: number) => v.toLocaleString();
+  return (
+    <div className="space-y-2 text-sm">
+      <p>
+        {n(report.compounds_added)} compounds added, {n(report.compounds_matched)} matched;{" "}
+        {n(report.batches_created)} batches created, {n(report.batches_matched)} matched;{" "}
+        {n(report.ids_added)} IDs added; {n(report.values_skipped)} values skipped.
+      </p>
+      {report.problem_lines.length > 0 && (
+        <details>
+          <summary className="cursor-pointer">
+            Problems ({n(report.problems + report.values_skipped)})
+          </summary>
+          <ul className="mt-1 max-h-64 space-y-0.5 overflow-auto text-xs text-muted-foreground">
+            {report.problem_lines.map((line, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: lines repeat, the list is static
+              <li key={i}>{line}</li>
+            ))}
+          </ul>
+          {report.problems + report.values_skipped > report.problem_lines.length && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Showing the first {n(report.problem_lines.length)} lines.
+            </p>
+          )}
+        </details>
+      )}
     </div>
   );
 }

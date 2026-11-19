@@ -1,15 +1,19 @@
 # Never ship local installs/builds into the image — node_modules is
 # platform-specific (darwin vs linux) and overlaying it on the deps stage
 # breaks pnpm's dependency verification during `pnpm build`.
+# Patterns are root-relative: use **/ to match at any depth.
 node_modules
 .next
 .turbo
 coverage
 playwright-report
 test-results
+*.tsbuildinfo
+.pytest_cache
+**/.DS_Store
 
 # Local logs & env files (runtime config comes from APP_* vars, not baked env)
-*.log
+**/*.log
 .env
 .env.*
 
