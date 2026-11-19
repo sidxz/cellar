@@ -519,17 +519,24 @@ def _leastsq(
 
 
 def _converged(fit: Result[ModelResult, DomainError]) -> Result[ModelResult, DomainError]:
-    if isinstance(fit, Success) and not (fit.unwrap().success or fit.unwrap().errorbars):
-        return Failure(ValidationError("Curve fitting did not converge"))
+    """A fit counts once leastsq has stopped on its own with finite parameters: it succeeded,
+    or it could refine them no further ("tolerance seems to be too small", as when a plateau
+    ends on its bound), which leaves no covariance, so no error bars and no CI. A fit cut off
+    at its evaluation budget (``aborted``) has not converged."""
+    if isinstance(fit, Success):
+        result = fit.unwrap()
+        values = [p.value for p in result.params.values()] + [result.chisqr]
+        if result.aborted or not np.all(np.isfinite(values)):
+            return Failure(ValidationError("Curve fitting did not converge"))
     return fit
 
 
 def _fit_single_start(
-    log_c: np.ndarray, responses: np.ndarray, config: DoseResponseConfig
+    log_c: np.ndarray, responses: np.ndarray, config: DoseResponseConfig, inset: float = 0.01
 ) -> Result[ModelResult, DomainError]:
-    """The fit from ``_build_params``'s start alone: the fitter before multi-start, kept so
-    tests can hold the multi-start against it."""
-    params, _, _ = _build_params(log_c, responses, config)
+    """The fit from ``_build_params``'s start alone (``inset=0``: the fitter before multi-start,
+    plateaus clamped onto their bounds), kept so tests can hold the multi-start against it."""
+    params, _, _ = _build_params(log_c, responses, config, inset)
     return _converged(_leastsq(lmfit.Model(_hill_equation), params, log_c, responses))
 
 
@@ -543,19 +550,26 @@ def _fit_multi_start(
     clamped onto its bound can leave the optimizer where it began.
 
     The first start (``_build_params``'s) is fitted in full, so the result is never worse
-    than it, a tie keeps it, and when nothing converges its failure is the one reported. The
-    others are screened on a tenth of lmfit's evaluation budget and only the best of them is
-    carried on to convergence: a start that reaches a minimum of a real curve does so in a
-    few hundred evaluations, while on flat, noise-only data every start crawls towards a
-    bound for the full budget, twelve times over.
+    than it, a tie keeps it, and when nothing converges its failure is the one reported. So is
+    the start the fitter used before multi-start, with plateaus clamped onto their bounds
+    (``inset=0``), so the result is never worse than that fitter's either. The others are
+    screened on a tenth of lmfit's evaluation budget: each that converges in it stays a
+    candidate, and when the best of them has not, it alone is carried on to convergence. A
+    start that reaches a minimum of a real curve does so in a few hundred evaluations, while
+    on flat, noise-only data every start crawls towards a bound for the full budget, twelve
+    times over.
     """
     params, _, _ = _build_params(log_c, responses, config)
     model = lmfit.Model(_hill_equation)
     first, *others = _starting_points(params, log_c, responses)
     fits = [_converged(_leastsq(model, first, log_c, responses))]
+    clamped, _, _ = _build_params(log_c, responses, config, inset=0.0)
+    if [p.value for p in clamped.values()] != [p.value for p in first.values()]:
+        fits.append(_converged(_leastsq(model, clamped, log_c, responses)))
 
     budget = 200 * (sum(p.vary for p in params.values()) + 1)  # lmfit's default: 2000·(n + 1)
     screened = [_leastsq(model, start, log_c, responses, budget) for start in others]
+    fits += [_converged(fit) for fit in screened]
     finished = [
         fit.unwrap()
         for fit in screened
@@ -563,7 +577,8 @@ def _fit_multi_start(
     ]
     if finished:
         lead = min(finished, key=lambda result: result.chisqr)
-        fits.append(_converged(_leastsq(model, lead.params, log_c, responses)))
+        if lead.aborted:
+            fits.append(_converged(_leastsq(model, lead.params, log_c, responses)))
 
     converged = [fit.unwrap() for fit in fits if isinstance(fit, Success)]
     if not converged:
@@ -632,10 +647,11 @@ def _build_params(
     log_concentrations: np.ndarray,
     responses: np.ndarray,
     config: DoseResponseConfig,
+    inset: float = 0.01,
 ) -> tuple[lmfit.Parameters, float, float]:
     """Build lmfit Parameters with direction-aware initial guesses, log-space
     EC50 bounds tied to the observed dose range, and Prism-style top/bottom/hill
-    constraints from ``config``.
+    constraints from ``config``. Starts keep ``inset`` off their bounds (``_start_inside``).
 
     Returns ``(params, log_ec50_min, log_ec50_max)`` so callers can detect
     whether the converged log_ec50 sits at a bound.
@@ -683,7 +699,9 @@ def _build_params(
         h_min = config.hill_slope_min if config.hill_slope_min is not None else -20.0
         h_max = config.hill_slope_max if config.hill_slope_max is not None else 20.0
         params["hill"].set(
-            value=_start_inside(hill_init, h_min, h_max, open_width=1.0), min=h_min, max=h_max
+            value=_start_inside(hill_init, h_min, h_max, open_width=1.0, inset=inset),
+            min=h_min,
+            max=h_max,
         )
     elif constraint == HillSlopeConstraint.POSITIVE_ONLY:
         params["hill"].set(value=max(hill_init, 0.5), min=0.01, max=20.0)
@@ -699,7 +717,9 @@ def _build_params(
         t_min = config.top_constraint_min if config.top_constraint_min is not None else -np.inf
         t_max = config.top_constraint_max if config.top_constraint_max is not None else np.inf
         params["top"].set(
-            value=_start_inside(top_init, t_min, t_max, open_width=_response_span(responses)),
+            value=_start_inside(
+                top_init, t_min, t_max, open_width=_response_span(responses), inset=inset
+            ),
             min=t_min,
             max=t_max,
         )
@@ -715,7 +735,9 @@ def _build_params(
             config.bottom_constraint_max if config.bottom_constraint_max is not None else np.inf
         )
         params["bottom"].set(
-            value=_start_inside(bottom_init, b_min, b_max, open_width=_response_span(responses)),
+            value=_start_inside(
+                bottom_init, b_min, b_max, open_width=_response_span(responses), inset=inset
+            ),
             min=b_min,
             max=b_max,
         )
@@ -723,14 +745,17 @@ def _build_params(
     return params, log_ec50_min, log_ec50_max
 
 
-def _start_inside(value: float, lo: float, hi: float, *, open_width: float) -> float:
-    """A start for a parameter bounded by ``[lo, hi]`` (either may be ±inf): ``value`` kept 1 %
-    of the range's width off each bound, or 1 % of ``open_width`` when the range is half-open.
+def _start_inside(
+    value: float, lo: float, hi: float, *, open_width: float, inset: float = 0.01
+) -> float:
+    """A start for a parameter bounded by ``[lo, hi]`` (either may be ±inf): ``value`` kept
+    ``inset`` (1 %) of the range's width off each bound, or of ``open_width`` when the range is
+    half-open; ``inset=0`` clamps it into the range.
 
     lmfit maps a bounded parameter through a transform whose slope is zero at the bound, so
     from a start exactly on one leastsq sees no gradient and stops where it began.
     """
-    margin = 0.01 * (hi - lo if np.isfinite(hi - lo) else open_width)
+    margin = inset * (hi - lo if np.isfinite(hi - lo) else open_width)
     return min(max(value, lo + margin), hi - margin)
 
 

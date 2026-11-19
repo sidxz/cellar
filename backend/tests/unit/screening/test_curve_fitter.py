@@ -1083,19 +1083,71 @@ def test_one_start_moves_off_a_plateau_start_clamped_into_its_range(series, cros
 
 @pytest.mark.parametrize("bounded", [False, True], ids=["free", "bounds-around-truth"])
 def test_multi_start_never_worse_than_single_start_on_grid(bounded):
+    """Never worse than the start inside the bounds, nor than the fitter before multi-start
+    (plateau starts clamped onto their bounds, ``inset=0``)."""
     worse = []
     for case in GRID:
         cfg = _bounds_around(case, 10, 10) if bounded else _make_config()
         points = case.points()
         log_c = np.log10([p.concentration for p in points])
         y = np.array([p.response for p in points])
-        old = _fit_single_start(log_c, y, cfg)
         new = _fit_multi_start(log_c, y, cfg)
-        if isinstance(old, Success) and not (
-            isinstance(new, Success) and new.unwrap().chisqr <= old.unwrap().chisqr
-        ):
-            worse.append(case.name)
+        for inset in (0.01, 0.0):
+            old = _fit_single_start(log_c, y, cfg, inset)
+            if isinstance(old, Success) and not (
+                isinstance(new, Success) and new.unwrap().chisqr <= old.unwrap().chisqr
+            ):
+                worse.append((case.name, inset))
     assert worse == []
+
+
+# Plateau ranges labs set on % layers (CDD 76918's, PRT-00006's).
+_BOUNDED_EC50_EC90 = DoseResponseConfig(
+    curve_type=CurveType.EC50,
+    y_readout_name="% Inhibition",
+    intercepts=(InterceptSpec(InterceptKind.EC, 50), InterceptSpec(InterceptKind.EC, 90)),
+    bottom_constraint_min=-10.0,
+    bottom_constraint_max=10.0,
+    top_constraint_min=90.0,
+    top_constraint_max=110.0,
+)
+# CDD 76918 (Mtb WCA Resazurin), row 1153888750: a clean step between 3.125 and 6.25 µM (CDD
+# EC50 5.43). The bottom plateau sits below its range, so the fit ends with it on -10.
+_CDD_76918_1153888750 = [
+    (0.0244140625, -8.72), (0.048828125, -22.05), (0.09765625, -18.79), (0.1953125, -16.63),
+    (0.390625, -32.17), (0.78125, -19.75), (1.5625, -15.51), (3.125, -8.1), (6.25, 73.02),
+    (12.5, 102.03), (25.0, 102.23), (50.0, 102.29),
+]  # fmt: skip
+# PRT-00006 CC-000975 and CC-000980: no inhibition at any dose, flat around -10 %.
+_CC_000975 = [
+    (0.2, 8.89), (0.4, -12.12), (1.0, 0.13), (1.5, -6.66), (3.0, -22.82), (6.0, -13.85),
+    (13.0, -19.37), (25.0, -13.95), (50.0, -19.05), (100.0, -11.5),
+]  # fmt: skip
+_CC_000980 = [
+    (0.2, -4.52), (0.4, -10.05), (1.0, -11.71), (1.5, -2.3), (3.0, -21.08), (6.0, -14.03),
+    (13.0, -15.85), (25.0, -4.1), (50.0, -10.69), (100.0, -0.86),
+]  # fmt: skip
+
+
+def test_a_bounded_fit_whose_plateau_ends_on_its_bound_is_kept():
+    """leastsq stops with the bottom on its bound, unable to refine it further, and so cannot
+    estimate error bars. The fit is still the curve's best: it is kept, with no CI."""
+    fitted = (
+        LmfitCurveFitter()
+        .fit(_points(_CDD_76918_1153888750), _BOUNDED_EC50_EC90, ResponseScale())
+        .unwrap()
+    )
+    assert fitted.curve_class == CurveClass.FULL
+    ec50 = fitted.intercept_values[0]
+    assert ec50.qualifier == ValueQualifier.EQ
+    assert 3.125 < ec50.value < 6.25
+
+
+@pytest.mark.parametrize("series", [_CC_000975, _CC_000980], ids=["CC-000975", "CC-000980"])
+def test_a_flat_bounded_curve_whose_plateau_ends_on_its_bound_reads_inactive(series):
+    """Inactive reads "> highest dose" whatever its intercepts store (the class wins)."""
+    fitted = LmfitCurveFitter().fit(_points(series), _BOUNDED_EC50_EC90, ResponseScale()).unwrap()
+    assert fitted.curve_class == CurveClass.INACTIVE
 
 
 # ──────────────────────────────────────────────────────────────────────────
