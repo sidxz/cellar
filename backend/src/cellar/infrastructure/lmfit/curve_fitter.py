@@ -41,6 +41,8 @@ from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
 from cellar.domain.shared.errors import DomainError, ValidationError
 
 if TYPE_CHECKING:
+    from lmfit.model import ModelResult
+
     from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 
 
@@ -221,21 +223,15 @@ class LmfitCurveFitter:
         log_concentrations = np.log10(concentrations)
 
         # ──────────────────────────────────────────────────────────────────
-        # First-pass fit
+        # First-pass fit: the best of several starting points
         # ──────────────────────────────────────────────────────────────────
-        params, log_ec50_min, log_ec50_max = _build_params(log_concentrations, responses, config)
+        fitted = _fit_multi_start(log_concentrations, responses, config)
+        if isinstance(fitted, Failure):
+            return Failure(fitted.failure())
 
-        try:
-            fit_result = lmfit.Model(_hill_equation).fit(
-                responses, params, log_c=log_concentrations, method="leastsq"
-            )
-        except Exception as exc:
-            return Failure(ValidationError(f"Curve fitting did not converge: {exc}"))
-
-        if not fit_result.success and not fit_result.errorbars:
-            return Failure(ValidationError("Curve fitting did not converge"))
-
-        best = fit_result.params
+        best = fitted.unwrap().params
+        log_ec50_min = float(best["log_ec50"].min)
+        log_ec50_max = float(best["log_ec50"].max)
         fitted_top = float(best["top"].value)
         fitted_bottom = float(best["bottom"].value)
         fitted_log_ec50 = float(best["log_ec50"].value)
@@ -440,6 +436,129 @@ class LmfitCurveFitter:
                 outlier_suggestions=outlier_suggestions,
             )
         )
+
+
+def _leastsq(
+    model: lmfit.Model,
+    params: lmfit.Parameters,
+    log_c: np.ndarray,
+    responses: np.ndarray,
+    max_nfev: int | None = None,
+) -> Result[ModelResult, DomainError]:
+    try:
+        return Success(
+            model.fit(responses, params, log_c=log_c, method="leastsq", max_nfev=max_nfev)
+        )
+    except Exception as exc:
+        return Failure(ValidationError(f"Curve fitting did not converge: {exc}"))
+
+
+def _converged(fit: Result[ModelResult, DomainError]) -> Result[ModelResult, DomainError]:
+    if isinstance(fit, Success) and not (fit.unwrap().success or fit.unwrap().errorbars):
+        return Failure(ValidationError("Curve fitting did not converge"))
+    return fit
+
+
+def _fit_single_start(
+    log_c: np.ndarray, responses: np.ndarray, config: DoseResponseConfig
+) -> Result[ModelResult, DomainError]:
+    """The fit from ``_build_params``'s start alone: the fitter before multi-start, kept so
+    tests can hold the multi-start against it."""
+    params, _, _ = _build_params(log_c, responses, config)
+    return _converged(_leastsq(lmfit.Model(_hill_equation), params, log_c, responses))
+
+
+def _fit_multi_start(
+    log_c: np.ndarray, responses: np.ndarray, config: DoseResponseConfig
+) -> Result[ModelResult, DomainError]:
+    """Fit from the starts in ``_starting_points`` and keep the converged fit with the lowest
+    residual sum of squares.
+
+    From one start, leastsq settles in whatever minimum lies next to it, and a plateau start
+    clamped onto its bound can leave the optimizer where it began.
+
+    The first start (``_build_params``'s) is fitted in full, so the result is never worse
+    than it, a tie keeps it, and when nothing converges its failure is the one reported. The
+    others are screened on a tenth of lmfit's evaluation budget and only the best of them is
+    carried on to convergence: a start that reaches a minimum of a real curve does so in a
+    few hundred evaluations, while on flat, noise-only data every start crawls towards a
+    bound for the full budget, twelve times over.
+    """
+    params, _, _ = _build_params(log_c, responses, config)
+    model = lmfit.Model(_hill_equation)
+    first, *others = _starting_points(params, log_c, responses)
+    fits = [_converged(_leastsq(model, first, log_c, responses))]
+
+    budget = 200 * (sum(p.vary for p in params.values()) + 1)  # lmfit's default: 2000·(n + 1)
+    screened = [_leastsq(model, start, log_c, responses, budget) for start in others]
+    finished = [
+        fit.unwrap()
+        for fit in screened
+        if isinstance(fit, Success) and np.isfinite(fit.unwrap().chisqr)
+    ]
+    if finished:
+        lead = min(finished, key=lambda result: result.chisqr)
+        fits.append(_converged(_leastsq(model, lead.params, log_c, responses)))
+
+    converged = [fit.unwrap() for fit in fits if isinstance(fit, Success)]
+    if not converged:
+        return fits[0]
+    return Success(min(converged, key=lambda result: result.chisqr))
+
+
+def _starting_points(
+    params: lmfit.Parameters, log_c: np.ndarray, responses: np.ndarray
+) -> list[lmfit.Parameters]:
+    """``params`` (``_build_params``'s start) first, then every pairing of
+    - log EC50 at 5 evenly spaced points across the tested log doses, and at the dose where the
+      responses cross the midpoint of their range (``_crossing_log_dose``);
+    - plateaus at the lowest-/highest-dose quarter means (``params``'s) and at the data's
+      max / min.
+    Each value is clamped into its parameter's bounds and a locked parameter keeps its own;
+    Hill keeps ``params``'s start. Starts that come out identical are fitted once.
+    """
+    lo, hi = float(np.min(log_c)), float(np.max(log_c))
+    step = (hi - lo) / 4.0
+    log_ec50s = (
+        params["log_ec50"].value,  # the middle of the 5
+        lo,
+        lo + step,
+        hi - step,
+        hi,
+        _crossing_log_dose(log_c, responses),
+    )
+    plateaus = (
+        (params["top"].value, params["bottom"].value),
+        (float(np.max(responses)), float(np.min(responses))),
+    )
+    seen: set[tuple[float, ...]] = set()
+    starts: list[lmfit.Parameters] = []
+    for top, bottom in plateaus:
+        for log_ec50 in log_ec50s:
+            start = params.copy()
+            for name, value in (("top", top), ("bottom", bottom), ("log_ec50", log_ec50)):
+                if start[name].vary:
+                    start[name].set(value=_clamp(value, start[name].min, start[name].max))
+            key = tuple(start[name].value for name in ("top", "bottom", "log_ec50"))
+            if key not in seen:
+                seen.add(key)
+                starts.append(start)
+    return starts
+
+
+def _crossing_log_dose(log_c: np.ndarray, responses: np.ndarray) -> float:
+    """Log dose where the per-dose mean responses cross the midpoint of their own range,
+    interpolated on the steepest step that crosses it; the middle of the doses when the
+    responses are all equal."""
+    doses, inverse = np.unique(log_c, return_inverse=True)
+    means = np.bincount(inverse, weights=responses) / np.bincount(inverse)
+    offset = means - (np.min(means) + np.max(means)) / 2.0
+    crossings = np.flatnonzero(np.sign(offset[:-1]) != np.sign(offset[1:]))
+    if not len(crossings):
+        return float((doses[0] + doses[-1]) / 2.0)
+    i = crossings[np.argmax(np.abs(np.diff(means)[crossings]))]
+    fraction = -offset[i] / (offset[i + 1] - offset[i])
+    return float(doses[i] + fraction * (doses[i + 1] - doses[i]))
 
 
 def _build_params(

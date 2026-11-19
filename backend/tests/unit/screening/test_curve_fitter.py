@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import random
 
+import numpy as np
 import pytest
 from returns.result import Failure, Success
 
@@ -18,7 +19,12 @@ from cellar.domain.screening_assay.enums import (
     CurveType,
     HillSlopeConstraint,
 )
-from cellar.infrastructure.lmfit.curve_fitter import LmfitCurveFitter
+from cellar.infrastructure.lmfit.curve_fitter import (
+    LmfitCurveFitter,
+    _fit_multi_start,
+    _fit_single_start,
+)
+from tests.unit.screening.dr_synthetic import GRID, Case
 
 
 def _generate_hill_data(
@@ -974,3 +980,98 @@ class TestMultiIntercept:
         import math
         assert result2.intercept_values[0].at_bound
         assert math.isnan(result2.intercept_values[0].value)
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Multi-start: bounded fits find the best fit, not the one next to the start
+# ──────────────────────────────────────────────────────────────────────────
+
+
+def _bounds_around(case: Case, below: float, above: float) -> DoseResponseConfig:
+    """Plateau ranges that contain the generating plateaus, ``below`` under and ``above`` over."""
+    return DoseResponseConfig(
+        curve_type=CurveType.EC50,
+        y_readout_name="% Inhibition",
+        top_constraint_min=case.top - below,
+        top_constraint_max=case.top + above,
+        bottom_constraint_min=case.bottom - below,
+        bottom_constraint_max=case.bottom + above,
+    )
+
+
+# Exact data, so the generating parameters are the one perfect fit: missing them is the
+# optimizer's fault. (With noise, a shallow curve's Hill is not pinned to 15 % by its points.)
+_RECOVERABLE = [c for c in GRID if c.position == "inside" and c.noise_sd == 0]
+
+
+@pytest.mark.parametrize(
+    ("below", "above"), [(10, 10), (20, 5), (5, 20)], ids=["centred", "truth-high", "truth-low"]
+)
+@pytest.mark.parametrize("case", _RECOVERABLE, ids=lambda c: c.name)
+def test_bounded_fit_recovers_generating_params(case, below, above):
+    fitted = LmfitCurveFitter().fit(case.points(), _bounds_around(case, below, above)).unwrap()
+    assert math.log10(fitted.fitted_value) == pytest.approx(case.log_ec50, abs=0.1)
+    assert fitted.hill_slope == pytest.approx(case.hill, rel=0.15)
+
+
+# The WCA_DHFR plate (Resazurin, % inhibition = 100·(NEG - raw)/(NEG - POS), NEG 16370,
+# POS 2472), as (µM, %). Both fit cleanly when free. Under bottom [-10, 10] with some of the
+# top / Hill ranges labs pair it with, the single start used to sit still: inactive, or an
+# EC50 off the crossing. Batch MSD-549135706-001G001 is SACC-0428727.
+_MSD_549135706 = [
+    (0.0002, -4.22), (0.0004, 10.6), (0.001, 13.05), (0.0015, 38.7), (0.003, 75.05),
+    (0.0065, 84.62), (0.0125, 87.52), (0.025, 89.4), (0.05, 92.19), (0.1, 90.42), (0.2, 84.49),
+    (0.4, 89.42), (1.0, 90.32), (1.5, 91.67), (3.0, 91.39), (6.5, 92.18), (12.5, 92.33),
+    (25.0, 95.42), (50.0, 93.57), (100.0, 92.23),
+]  # fmt: skip
+# Rifampicin, wells O18-O20 left out.
+_RIFAMPICIN = [
+    (0.0006, 1.76), (0.0013, 28.29), (0.0025, 38.19), (0.005, 63.14), (0.01, 74.83),
+    (0.02, 93.41), (0.03, 95.33), (0.06, 95.87), (0.13, 94.81), (0.25, 99.49), (0.5, 100.34),
+    (1.0, 99.32), (2.0, 99.76), (2.0, 100.73),
+]  # fmt: skip
+
+
+# Bottom [-10, 10] with each top and Hill setting labs use on it in the CDD protocols.
+@pytest.mark.parametrize(
+    "top", [None, (85.0, 110.0), (90.0, 110.0), (90.0, 100.0), (95.0, 105.0)], ids=str
+)
+@pytest.mark.parametrize("hill", [None, (0.9, 1.1)], ids=str)
+@pytest.mark.parametrize(
+    ("series", "crossing"),
+    [(_MSD_549135706, (0.0015, 0.003)), (_RIFAMPICIN, (0.0025, 0.005))],
+    ids=["MSD-549135706", "rifampicin"],
+)
+def test_plate_regressions_bounded(series, crossing, top, hill):
+    cfg = DoseResponseConfig(
+        curve_type=CurveType.EC50,
+        y_readout_name="% Inhibition",
+        bottom_constraint_min=-10.0,
+        bottom_constraint_max=10.0,
+        top_constraint_min=top[0] if top else None,
+        top_constraint_max=top[1] if top else None,
+        hill_slope_min=hill[0] if hill else None,
+        hill_slope_max=hill[1] if hill else None,
+    )
+    points = [ConcentrationResponsePoint(concentration=c, response=r) for c, r in series]
+    fitted = LmfitCurveFitter().fit(points, cfg).unwrap()
+    assert fitted.curve_class != CurveClass.INACTIVE
+    # The EC50 sits between the two doses the responses cross 50 % at.
+    assert crossing[0] < fitted.fitted_value < crossing[1]
+
+
+@pytest.mark.parametrize("bounded", [False, True], ids=["free", "bounds-around-truth"])
+def test_multi_start_never_worse_than_single_start_on_grid(bounded):
+    worse = []
+    for case in GRID:
+        cfg = _bounds_around(case, 10, 10) if bounded else _make_config()
+        points = case.points()
+        log_c = np.log10([p.concentration for p in points])
+        y = np.array([p.response for p in points])
+        old = _fit_single_start(log_c, y, cfg)
+        new = _fit_multi_start(log_c, y, cfg)
+        if isinstance(old, Success) and not (
+            isinstance(new, Success) and new.unwrap().chisqr <= old.unwrap().chisqr
+        ):
+            worse.append(case.name)
+    assert worse == []
