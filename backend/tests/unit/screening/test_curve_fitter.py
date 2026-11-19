@@ -942,6 +942,22 @@ class TestMultiIntercept:
         # Hill=1 → IC90 / IC50 = 9 (analytic).
         assert ic90.value / ic50.value == pytest.approx(9.0, rel=0.02)
 
+    def test_ic90_of_a_falling_curve_needs_more_compound_than_its_ic50(self):
+        """A relative level is measured from the no-compound (low-dose) plateau towards the
+        high-dose one, whichever way the curve runs (InterceptKind: IC90 is where the
+        response has dropped 90 % of the way down): IC90 lies past IC50, 9x for Hill 1."""
+        points = _generate_hill_data(ic50=100.0, top=100.0, bottom=0.0, noise_pct=0.001)
+        cfg = DoseResponseConfig(
+            curve_type=CurveType.IC50,
+            y_readout_name="% Control",
+            intercepts=(InterceptSpec(InterceptKind.IC, 50), InterceptSpec(InterceptKind.IC, 90)),
+        )
+        result = self.fitter.fit(points, cfg).unwrap()
+        assert result.hill_slope < 0
+        ic50, ic90 = result.intercept_values
+        assert ic50.value == pytest.approx(100.0, rel=0.05)
+        assert ic90.value / ic50.value == pytest.approx(9.0, rel=0.02)
+
     def test_intercept_outside_curve_window_returns_at_bound(self):
         """IC90 on a curve that plateaus at 50% inhibition can never reach 90%."""
         from cellar.domain.screening_assay.dose_response_config import (
@@ -1217,10 +1233,10 @@ def test_a_falling_curve_is_read_with_top_as_its_upper_plateau():
     fitted = LmfitCurveFitter().fit(_points(_CDD_26279_157278680), config).unwrap()
     assert fitted.top > fitted.bottom
     assert fitted.hill_slope < 0
-    # Relative levels are measured from the bottom plateau (today's rule), so on this falling
-    # curve IC90 lies at a lower dose than IC50.
+    # Relative levels are measured from the low-dose plateau, so on this falling curve IC90
+    # lies at a higher dose than IC50.
     ic50, ic90 = fitted.intercept_values
-    assert ic90.value < ic50.value
+    assert ic90.value > ic50.value
 
 
 @pytest.mark.parametrize("series", [_CC_000975, _CC_000980], ids=["CC-000975", "CC-000980"])
@@ -1277,7 +1293,7 @@ def test_intercepts_and_class_follow_the_generating_curve_on_grid(case):
     ec50, ec90 = fitted.intercept_values
     for iv, expected, offset in (
         (ec50, case.expected_ec50, 0.0),
-        (ec90, case.expected_ec90, math.log10(9.0) / case.hill),
+        (ec90, case.expected_ec90, math.log10(9.0) / abs(case.hill)),
     ):
         assert iv.qualifier in expected
         assert iv.at_bound == (iv.qualifier == ValueQualifier.GT)

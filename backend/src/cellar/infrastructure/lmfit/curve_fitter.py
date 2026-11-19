@@ -125,21 +125,25 @@ def _hill_inverse_log10(
     return log_ec50 - math.log10(ratio) / hill
 
 
-def _response_target(spec, top: float, bottom: float) -> float:
+def _response_target(spec, top: float, bottom: float, hill: float) -> float:
     """Translate an ``InterceptSpec`` into the absolute y-value the curve
     must cross.
 
-    For ``RELATIVE_PERCENT``, the level is interpreted as a percentage of
-    the response window from bottom to top — symmetric for IC and EC.
-    The "kind" label (IC vs EC) is a naming convention (decreasing vs
-    increasing assay readout); on a normalized %inhibition curve where
-    bottom=0, top=100, both produce ``y_target = level`` directly.
+    For ``RELATIVE_PERCENT``, the level is the share of the way from the
+    curve's low-dose (no-compound) plateau to its high-dose one, as
+    ``InterceptKind`` defines it: ICN on a decreasing curve is where the
+    response has dropped N % below the upper plateau, ECN on an increasing
+    one where it has risen N % above the lower plateau. With a positive
+    Hill the low-dose plateau is ``bottom`` (bottom + N % of the window), with
+    a negative one ``top`` (top - N %); a 50 % level is the midpoint either
+    way, and a 90 % level always lies past it in dose.
 
     For ``ABSOLUTE``, the level is an absolute Y value.
     """
     if spec.basis == InterceptBasis.ABSOLUTE:
         return float(spec.level)
-    return bottom + (spec.level / 100.0) * (top - bottom)
+    start, end = (bottom, top) if hill > 0 else (top, bottom)
+    return start + (spec.level / 100.0) * (end - start)
 
 
 class LmfitCurveFitter:
@@ -424,8 +428,9 @@ def _read_intercept(
     across the doses; plateaus extrapolated past them (a steep step at the last dose, a
     shallow curve's far ends) are not one.
 
-    With a transition, the level sits at its % of the fitted window (``_response_target``, as
-    before) and the effect runs the way the curve does; on a flat curve read on a ``scale``,
+    With a transition, the level sits at its % of the way from the fitted curve's low-dose
+    plateau to its high-dose one (``_response_target``) and the effect runs the way the curve
+    does; on a flat curve read on a ``scale``,
     the level sits at its % of the scale and the effect runs the scale's way.
     Then: past the level at the lowest dose is "<" the lowest dose, short of it at the
     highest dose is ">" the highest; otherwise the curve crosses it inside the doses ("="),
@@ -445,7 +450,7 @@ def _read_intercept(
             bottom=bottom,
             log_ec50=log_ec50,
             hill=hill,
-            y_target=_response_target(spec, top, bottom),
+            y_target=_response_target(spec, top, bottom, hill),
         )
         if log_x is None or 10.0**log_x > hi:
             return _censored(spec, ValueQualifier.GT, hi)
@@ -461,7 +466,7 @@ def _read_intercept(
         )
         rising = scale.full > scale.zero
     else:
-        target = _response_target(spec, top, bottom)
+        target = _response_target(spec, top, bottom, hill)
         rising = bool(f_hi > f_lo)
 
     def reached(response: float) -> bool:

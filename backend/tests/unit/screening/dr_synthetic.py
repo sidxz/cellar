@@ -115,13 +115,14 @@ def _intercept_outcomes(
     band = NOISE_BAND * noise_sd
     out: set[tuple[str, ValueQualifier]] = set()
 
-    # With a transition: y* sits at ``level`` % of the fitted window (today's rule, for either
-    # direction), and the qualifier follows where that crossing falls against the doses.
+    # With a transition: y* sits ``level`` % of the way from the low-dose plateau to the
+    # high-dose one, and the qualifier follows where that crossing falls against the doses.
     transition_possible = span + band >= DEFAULT_INACTIVE_THRESHOLD or (
         noise_sd == 0 and amplitude >= DEFAULT_INACTIVE_THRESHOLD
     )
     if transition_possible and top != bottom:
-        y = bottom + level / 100.0 * (top - bottom)
+        start, end = (bottom, top) if hill > 0 else (top, bottom)
+        y = start + level / 100.0 * (end - start)
         crossing = log_ec50 - math.log10((top - y) / (y - bottom)) / hill
         # Response per decade at the crossing: |top - bottom|·|hill|·ln10·p(1 - p).
         p = level / 100.0
