@@ -10,6 +10,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from cellar.domain.screening_assay.curve_fitting import InterceptValue
+
 
 @dataclass(frozen=True)
 class CurveRow:
@@ -39,9 +41,12 @@ class CurveRow:
 
 @dataclass(frozen=True)
 class CompoundCurveRow(CurveRow):
-    """A curve with its batch's number (``None`` when the batch is not the workspace's)."""
+    """A curve with its batch's number (``None`` when the batch is not the workspace's)
+    and its intercepts read as the curve repository reads them (one stored before
+    intercepts were stored reads its fitted value as its one)."""
 
     batch_number: str | None = None
+    intercepts: tuple[InterceptValue, ...] = ()
 
 
 @runtime_checkable

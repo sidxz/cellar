@@ -32,6 +32,7 @@ from cellar.interface.routes._intercept_response import (
     InterceptValueResponse,
 )
 from cellar.interface.routes.protocols import MeltConfigModel
+from cellar.interface.routes.readout_data import DoseResponseCurveResponse
 
 __all__ = ["InterceptSpecResponse", "InterceptValueResponse"]
 
@@ -319,8 +320,9 @@ async def get_compound_dose_response(
     molecule_id: uuid.UUID,
     auth: AuthDep,
     uc: GetCompoundCurvesDep,
-) -> list[dict]:
-    """All dose-response curves for a compound in a protocol."""
+) -> list[DoseResponseCurveResponse]:
+    """All dose-response curves for a compound in a protocol, each in the shape of every
+    other curve response (intercepts with their qualifiers, the fitted layer)."""
     from cellar.application.screening.get_compound_curves import GetCompoundCurvesQuery
 
     query = GetCompoundCurvesQuery(

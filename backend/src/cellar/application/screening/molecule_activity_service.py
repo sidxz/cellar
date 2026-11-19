@@ -85,14 +85,15 @@ from cellar.domain.shared.units import is_concentration_unit
 _MAX_RUNS_PAYLOAD: int = 10
 
 
-def _serialize_intercept_values(
+def serialize_intercept_values(
     values: list[InterceptValue] | None,
 ) -> list[dict[str, Any]]:
     """Flatten domain ``InterceptValue`` objects into wire-shape dicts.
 
     Same shape consumed by ``CurveDetail.intercept_values`` on the molecule
-    activity tab and ``ActivityValue.intercept_values`` on the search grid —
-    one helper keeps the two payloads from drifting.
+    activity tab, ``ActivityValue.intercept_values`` on the search grid and a
+    compound's curves (``GetCompoundCurves``) — one helper keeps the payloads from
+    drifting.
     """
     if not values:
         return []
@@ -372,7 +373,7 @@ class MoleculeActivityService:
             if curve.raw_data and isinstance(curve.raw_data, list):
                 data_points = _condense_raw_data(curve.raw_data)
 
-            intercept_values_payload = _serialize_intercept_values(curve.intercept_values)
+            intercept_values_payload = serialize_intercept_values(curve.intercept_values)
 
             unit = protocols_by_id.get(curve.protocol_id, ("", "", "uM"))[2]
             curves_by_proto.setdefault(curve.protocol_id, []).append(
@@ -831,7 +832,7 @@ class MoleculeActivityService:
                     curve_r_squared=c.r_squared,
                     curve_raw_data=c.raw_data,
                     curve_excluded_points=c.excluded_points,
-                    intercept_values=_serialize_intercept_values(c.intercept_values) or None,
+                    intercept_values=serialize_intercept_values(c.intercept_values) or None,
                     curve_type=c.curve_type.value if c.curve_type else None,
                     curve_confidence_interval_low=c.confidence_interval_low,
                     curve_confidence_interval_high=c.confidence_interval_high,

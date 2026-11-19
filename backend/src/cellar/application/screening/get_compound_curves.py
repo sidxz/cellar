@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
+from cellar.application.screening._response_scale import curve_fitted_layer
 from cellar.application.screening.compound_curves_reader import (
     CompoundCurvesReader,
 )
+from cellar.application.screening.molecule_activity_service import serialize_intercept_values
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.screening_assay.repository import ProtocolRepository
@@ -78,6 +80,10 @@ class GetCompoundCurves:
                     "curve_class": r.curve_class,
                     "raw_data": r.raw_data,
                     "excluded_points": r.excluded_points,
+                    # Each with its stored qualifier: an n.d. or censored intercept reads
+                    # from it, never from a value.
+                    "intercept_values": serialize_intercept_values(list(r.intercepts)),
+                    "fitted_layer": curve_fitted_layer(protocol, r.readout_definition_id),
                 }
             )
         return Success(items)

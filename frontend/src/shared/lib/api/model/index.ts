@@ -334,7 +334,6 @@ export * from './flaggedProtocolResponse';
 export * from './flagInfeasibleRequest';
 export * from './flagOutliersRequest';
 export * from './flagOutliersResponse';
-export * from './getCompoundDoseResponseApiV1ProtocolsProtocolIdCompoundsMoleculeIdDoseResponseGet200Item';
 export * from './getConditionGroupsApiV1ProtocolsProtocolIdConditionGroupsGetParams';
 export * from './getGroupTreeApiV1PlateGroupsTreeGetParams';
 export * from './getPeakCandidatesApiV1RunsRunIdWellsWellIdPeakCandidatesGetParams';

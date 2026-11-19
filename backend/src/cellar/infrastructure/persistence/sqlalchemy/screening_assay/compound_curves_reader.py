@@ -8,7 +8,11 @@ from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.application.screening.compound_curves_reader import CompoundCurveRow
+from cellar.domain.screening_assay.enums import CurveType
 from cellar.infrastructure.persistence.sqlalchemy.inventory.models import BatchModel
+from cellar.infrastructure.persistence.sqlalchemy.screening_assay.dose_response_curve_repository import (  # noqa: E501
+    _hydrate_intercept_values,
+)
 from cellar.infrastructure.persistence.sqlalchemy.screening_assay.models import (
     DoseResponseCurveModel,
     RunModel,
@@ -70,6 +74,15 @@ class SQLAlchemyCompoundCurvesReader:
                     excluded_points=r.excluded_points,
                     intercept_values=r.intercept_values,
                     batch_number=batch_number,
+                    intercepts=tuple(
+                        _hydrate_intercept_values(
+                            r.intercept_values,
+                            fallback_curve_type=CurveType(r.curve_type),
+                            fallback_value=r.fitted_value,
+                            fallback_ci_low=r.confidence_interval_low,
+                            fallback_ci_high=r.confidence_interval_high,
+                        )
+                    ),
                 )
                 for r, batch_number in rows
             ]
