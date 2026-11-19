@@ -1,6 +1,5 @@
 "use client";
 
-import { showInfo } from "@/shared/lib/toast";
 import { useState } from "react";
 import { yLayers } from "../../lib/dose-response-curve-check";
 import { PERCENT_FIT_RANGES, WELL_CONC_X } from "../../lib/readout-constants";
@@ -119,7 +118,7 @@ export interface ReadoutDefinitionFormReturn {
   openEditReadout: (rdId: string, protocol: Protocol) => void;
   closeEditReadout: () => void;
   resetDoseResponseFields: () => void;
-  handleDrYReadoutChange: (newY: string, protocol: Protocol) => void;
+  handleDrYReadoutChange: (newY: string) => void;
   applySuggestedRanges: (protocol: Protocol) => void;
 
   // ---- derived / validation ----
@@ -399,39 +398,13 @@ export function useReadoutDefinitionForm(): ReadoutDefinitionFormReturn {
     };
   };
 
-  // When the Y readout changes, prefill Top/Bottom/Hill with the suggested
-  // ranges for its normalization — but only if the user hasn't already chosen
-  // something. Lets the dialog feel pre-configured without clobbering
-  // explicit choices.
-  const handleDrYReadoutChange = (newY: string, protocol: Protocol) => {
+  // Picking a Y readout changes no fit bounds: they are the protocol's choice. The
+  // suggested ranges are one lab's convention, applied only from "Use suggested".
+  const handleDrYReadoutChange = (newY: string) => {
     setDrYReadout(newY);
     // Different Y readout — its layers are its own. Null fits its only layer (or its raw
     // values when it calculates none); with two or more the editor asks which.
     setDrYNormalization(null);
-    const suggested = suggestedRangesForY(newY, protocol);
-    if (!suggested) return;
-    let injected = false;
-    if (drTopMode === "free") {
-      setDrTopMode("range");
-      setDrTopMin(String(suggested.topMin));
-      setDrTopMax(String(suggested.topMax));
-      injected = true;
-    }
-    if (drBottomMode === "free") {
-      setDrBottomMode("range");
-      setDrBottomMin(String(suggested.bottomMin));
-      setDrBottomMax(String(suggested.bottomMax));
-      injected = true;
-    }
-    if (!drHillCustomRange) {
-      setDrHillCustomRange(true);
-      setDrHillMin(String(suggested.hillMin));
-      setDrHillMax(String(suggested.hillMax));
-      injected = true;
-    }
-    if (injected) {
-      showInfo("Applied suggested ranges for % readout");
-    }
   };
 
   /** Apply suggested ranges to Top, Bottom, Hill in one click. */

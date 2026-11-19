@@ -248,7 +248,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
         </div>
         <div className="grid gap-1">
           <Label className="text-xs">Y-Axis Readout</Label>
-          <Select value={drYReadout} onValueChange={(v) => handleDrYReadoutChange(v, protocol)}>
+          <Select value={drYReadout} onValueChange={handleDrYReadoutChange}>
             <SelectTrigger>
               <SelectValue placeholder="Select..." />
             </SelectTrigger>
@@ -585,9 +585,9 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
 
       {/* Classification thresholds — collapsed by default. Defaults match
           the backend (30 / 0.8 / 80 / 20 / 0.6) calibrated for % readouts.
-          Override per-protocol for raw-signal assays. Intentionally NOT
-          auto-touched by the suggestedRangesForY flow — these are a
-          one-time per-protocol calibration, not a per-Y-readout suggestion. */}
+          Override per-protocol for raw-signal assays. "Use suggested" leaves
+          them alone — these are a one-time per-protocol calibration, not a
+          per-Y-readout suggestion. */}
       <details className="rounded-md border bg-background">
         <summary className="cursor-pointer px-3 py-2 text-xs font-medium select-none">
           Classification thresholds
