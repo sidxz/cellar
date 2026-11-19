@@ -11,6 +11,7 @@ export interface CddMoleculeImportSummary {
   cdd_vault_id: string;
   import_mode: string;
   status: string;
+  failure_reason?: string | null;
   workflow_id: string | null;
   total_count: number;
   registered_count: number;
@@ -22,4 +23,7 @@ export interface CddMoleculeImportSummary {
   report: CddMoleculeImportReport;
   resumable: boolean;
   last_processed_offset: number;
+  originating_org_id?: string | null;
+  max_molecules?: number | null;
+  selected_names?: string[] | null;
 }

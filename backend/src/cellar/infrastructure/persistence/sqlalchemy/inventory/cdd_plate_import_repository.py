@@ -64,6 +64,7 @@ class SQLAlchemyCddPlateImportRepository(
             cdd_vault_id=model.cdd_vault_id,
             status=CddPlateImportStatus(model.status),
             workflow_id=model.workflow_id,
+            failure_reason=model.failure_reason,
             total_count=model.total_count,
             plates_registered=model.plates_registered,
             plates_duplicate=model.plates_duplicate,
@@ -90,6 +91,7 @@ class SQLAlchemyCddPlateImportRepository(
             cdd_vault_id=aggregate.cdd_vault_id,
             status=aggregate.status.value,
             workflow_id=aggregate.workflow_id,
+            failure_reason=aggregate.failure_reason,
             total_count=aggregate.total_count,
             plates_registered=aggregate.plates_registered,
             plates_duplicate=aggregate.plates_duplicate,
@@ -110,6 +112,7 @@ class SQLAlchemyCddPlateImportRepository(
     def _update_model(self, model: CddPlateImportModel, aggregate: CddPlateImport) -> None:
         model.status = aggregate.status.value
         model.workflow_id = aggregate.workflow_id
+        model.failure_reason = aggregate.failure_reason
         model.total_count = aggregate.total_count
         model.plates_registered = aggregate.plates_registered
         model.plates_duplicate = aggregate.plates_duplicate

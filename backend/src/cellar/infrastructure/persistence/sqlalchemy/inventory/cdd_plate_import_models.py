@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, Index, Integer, String, Uuid
+from sqlalchemy import DateTime, Index, Integer, String, Text, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from cellar.infrastructure.persistence.sqlalchemy.base import (
@@ -23,6 +23,7 @@ class CddPlateImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMixin
 
     cdd_vault_id: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(String(30), nullable=False, server_default="pending")
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     workflow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     total_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     plates_registered: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

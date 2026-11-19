@@ -85,6 +85,7 @@ class CddMoleculeImportReport(BaseModel):
 class CddMoleculeImportStatusResponse(BaseModel):
     import_id: str
     status: str
+    failure_reason: str | None = None
     total_count: int
     registered_count: int
     duplicate_count: int
@@ -100,6 +101,7 @@ class CddMoleculeImportSummary(BaseModel):
     cdd_vault_id: str
     import_mode: str
     status: str
+    failure_reason: str | None = None
     workflow_id: str | None
     total_count: int
     registered_count: int
@@ -112,6 +114,9 @@ class CddMoleculeImportSummary(BaseModel):
     # A failed run that saved its export picks up here (molecules already done).
     resumable: bool
     last_processed_offset: int
+    originating_org_id: str | None = None
+    max_molecules: int | None = None
+    selected_names: list[str] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -140,6 +145,7 @@ async def list_cdd_molecule_imports(
             cdd_vault_id=imp.cdd_vault_id,
             import_mode=imp.import_mode.value,
             status=imp.status.value,
+            failure_reason=imp.failure_reason,
             workflow_id=imp.workflow_id,
             total_count=imp.total_count,
             registered_count=imp.registered_count,
@@ -151,6 +157,9 @@ async def list_cdd_molecule_imports(
             report=CddMoleculeImportReport(**imp.report),
             resumable=imp.resumable,
             last_processed_offset=imp.last_processed_offset,
+            originating_org_id=str(imp.originating_org_id),
+            max_molecules=(imp.run_settings or {}).get("max_molecules"),
+            selected_names=(imp.filter_criteria or {}).get("names"),
         )
         for imp in imports
     ]
@@ -219,6 +228,7 @@ async def get_cdd_molecule_import_status(
     return CddMoleculeImportStatusResponse(
         import_id=data.import_id,
         status=data.status,
+        failure_reason=data.failure_reason,
         total_count=data.total_count,
         registered_count=data.registered_count,
         duplicate_count=data.duplicate_count,

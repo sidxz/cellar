@@ -35,6 +35,7 @@ class CddPlateImportStatusResult:
     wells_unresolved: int
     current_offset: int
     pages_processed: int
+    failure_reason: str | None = None
 
 
 class GetCddPlateImportStatusFromDb:
@@ -64,6 +65,7 @@ class GetCddPlateImportStatusFromDb:
             CddPlateImportStatusResult(
                 import_id=str(imp.id),
                 status=imp.status.value,
+                failure_reason=imp.failure_reason,
                 total_count=imp.total_count,
                 plates_registered=imp.plates_registered,
                 plates_duplicate=imp.plates_duplicate,

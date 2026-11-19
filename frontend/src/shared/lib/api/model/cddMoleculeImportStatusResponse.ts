@@ -9,6 +9,7 @@ import type { CddMoleculeImportReport } from './cddMoleculeImportReport';
 export interface CddMoleculeImportStatusResponse {
   import_id: string;
   status: string;
+  failure_reason?: string | null;
   total_count: number;
   registered_count: number;
   duplicate_count: number;

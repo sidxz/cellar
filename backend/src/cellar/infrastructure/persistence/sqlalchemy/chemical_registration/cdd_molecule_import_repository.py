@@ -71,6 +71,7 @@ class SQLAlchemyCddMoleculeImportRepository(
             filter_criteria=model.filter_criteria,
             status=CddMoleculeImportStatus(model.status),
             workflow_id=model.workflow_id,
+            failure_reason=model.failure_reason,
             total_count=model.total_count,
             registered_count=model.registered_count,
             duplicate_count=model.duplicate_count,
@@ -102,6 +103,7 @@ class SQLAlchemyCddMoleculeImportRepository(
             filter_criteria=aggregate.filter_criteria,
             status=aggregate.status.value,
             workflow_id=aggregate.workflow_id,
+            failure_reason=aggregate.failure_reason,
             total_count=aggregate.total_count,
             registered_count=aggregate.registered_count,
             duplicate_count=aggregate.duplicate_count,
@@ -124,6 +126,7 @@ class SQLAlchemyCddMoleculeImportRepository(
     def _update_model(self, model: CddMoleculeImportModel, aggregate: CddMoleculeImport) -> None:
         model.status = aggregate.status.value
         model.workflow_id = aggregate.workflow_id
+        model.failure_reason = aggregate.failure_reason
         model.total_count = aggregate.total_count
         model.registered_count = aggregate.registered_count
         model.duplicate_count = aggregate.duplicate_count

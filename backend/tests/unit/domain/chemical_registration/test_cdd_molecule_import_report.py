@@ -46,3 +46,20 @@ def test_record_report_needs_a_processing_import() -> None:
     imp.fail("x")
     with pytest.raises(ValidationError):
         imp.record_report({"problems": 1})
+
+
+def test_stop_reason_round_trips_through_the_import_record() -> None:
+    imp = _processing()
+    imp.fail("Cancelled by user")
+    assert imp.failure_reason == "Cancelled by user"
+
+
+def test_plate_import_records_its_stop_reason() -> None:
+    from cellar.domain.inventory.cdd_plate_import import CddPlateImport
+
+    imp = CddPlateImport.create(
+        workspace_id=uuid.uuid4(), cdd_vault_id="v", submitted_by=uuid.uuid4()
+    )
+    imp.start_discovery()
+    imp.fail("Cancelled by user")
+    assert imp.failure_reason == "Cancelled by user"

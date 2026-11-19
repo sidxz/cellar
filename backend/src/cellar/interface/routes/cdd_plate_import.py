@@ -43,6 +43,7 @@ class CddPlateImportAcceptedResponse(BaseModel):
 class CddPlateImportStatusResponse(BaseModel):
     import_id: str
     status: str
+    failure_reason: str | None = None
     total_count: int
     plates_registered: int
     plates_duplicate: int
@@ -57,6 +58,7 @@ class CddPlateImportSummary(BaseModel):
     id: str
     cdd_vault_id: str
     status: str
+    failure_reason: str | None = None
     workflow_id: str | None
     total_count: int
     plates_registered: int
@@ -92,6 +94,7 @@ async def list_cdd_plate_imports(
             id=str(imp.id),
             cdd_vault_id=imp.cdd_vault_id,
             status=imp.status.value,
+            failure_reason=imp.failure_reason,
             workflow_id=imp.workflow_id,
             total_count=imp.total_count,
             plates_registered=imp.plates_registered,
@@ -137,6 +140,7 @@ async def get_cdd_plate_import_status(
     return CddPlateImportStatusResponse(
         import_id=data.import_id,
         status=data.status,
+        failure_reason=data.failure_reason,
         total_count=data.total_count,
         plates_registered=data.plates_registered,
         plates_duplicate=data.plates_duplicate,

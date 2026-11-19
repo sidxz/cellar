@@ -98,6 +98,7 @@ class CddMoleculeImport(AggregateRoot):
         submitted_by: uuid.UUID,
         submitted_at: datetime | None = None,
         completed_at: datetime | None = None,
+        failure_reason: str | None = None,
         created_at: datetime | None = None,
         updated_at: datetime | None = None,
         version: int = 1,
@@ -127,6 +128,7 @@ class CddMoleculeImport(AggregateRoot):
         self.submitted_by = submitted_by
         self.submitted_at = submitted_at or datetime.now(UTC)
         self.completed_at = completed_at
+        self.failure_reason = failure_reason
 
     # ------------------------------------------------------------------
     # Factory method
@@ -288,6 +290,7 @@ class CddMoleculeImport(AggregateRoot):
         """DISCOVERING or PROCESSING -> FAILED."""
         self._guard_transition(CddMoleculeImportStatus.FAILED)
         self.status = CddMoleculeImportStatus.FAILED
+        self.failure_reason = reason
         self.completed_at = datetime.now(UTC)
         self.updated_at = datetime.now(UTC)
         self.register_event(
@@ -319,6 +322,7 @@ class CddMoleculeImport(AggregateRoot):
         self.status = CddMoleculeImportStatus.PROCESSING
         self.workflow_id = workflow_id
         self.completed_at = None
+        self.failure_reason = None
         self.updated_at = datetime.now(UTC)
         self.register_event(
             CddMoleculeImportResumed(

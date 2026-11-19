@@ -29,7 +29,6 @@ from cellar.application.orchestration.workflow_status import (
     WorkflowOrchestratorUnavailable,
 )
 from cellar.domain.shared.errors import NotFoundError
-
 from tests.fakes.fake_auth import FakeAuth
 
 WORKSPACE_ID = uuid.uuid4()
@@ -83,7 +82,9 @@ class _FakeSyncFailed:
         self.calls.append((workspace_id, import_id, workflow_id))
 
 
-def _progress(status: str = "processing", import_id: str = "import-1") -> CddMoleculeImportProgress:
+def _progress(
+    status: str = "processing", import_id: str = "import-1"
+) -> CddMoleculeImportProgress:
     return CddMoleculeImportProgress(
         import_id=import_id,
         status=status,
@@ -182,9 +183,7 @@ class TestGetCddMoleculeImportRuntimeStatus:
 
     @pytest.mark.asyncio
     async def test_orchestrator_unavailable_falls_back_to_db(self):
-        orch = _FakeOrchestrator(
-            raise_exc=WorkflowOrchestratorUnavailable("Temporal down")
-        )
+        orch = _FakeOrchestrator(raise_exc=WorkflowOrchestratorUnavailable("Temporal down"))
         uc = GetCddMoleculeImportRuntimeStatus(
             orchestrator=orch,
             db_status=_FakeDbStatus(_db_status_result(status="processing")),
@@ -208,9 +207,7 @@ class TestGetCddMoleculeImportRuntimeStatus:
             sync_failed=_FakeSyncFailed(),
         )
         result = await uc(
-            GetCddMoleculeImportRuntimeStatusQuery(
-                workspace_id=WORKSPACE_ID, workflow_id="x"
-            ),
+            GetCddMoleculeImportRuntimeStatusQuery(workspace_id=WORKSPACE_ID, workflow_id="x"),
             auth=_auth(),
         )
         assert isinstance(result, Failure)
@@ -246,10 +243,85 @@ class TestCancelCddMoleculeImport:
         uc = CancelCddMoleculeImport(orchestrator=orch)
         wf = f"cdd-mol-import-{WORKSPACE_ID}-{uuid.uuid4()}"
         result = await uc(
-            CancelCddMoleculeImportCommand(
-                workspace_id=WORKSPACE_ID, workflow_id=wf
-            ),
+            CancelCddMoleculeImportCommand(workspace_id=WORKSPACE_ID, workflow_id=wf),
             auth=_auth(role="editor"),
         )
         assert isinstance(result, Success)
         assert orch.cancelled == [wf]
+
+
+@pytest.mark.parametrize("runtime_available", [True, False])
+async def test_stop_reason_survives_live_and_fallback_reads(runtime_available):
+    from dataclasses import replace
+
+    stored = replace(_db_status_result("failed").unwrap(), failure_reason="Cancelled by user")
+    orch = _FakeOrchestrator(
+        progress=_progress(status="failed"),
+        raise_exc=None if runtime_available else NotFoundError("Workflow", "gone"),
+    )
+    uc = GetCddMoleculeImportRuntimeStatus(
+        orchestrator=orch, db_status=_FakeDbStatus(Success(stored)), sync_failed=_FakeSyncFailed()
+    )
+    result = await uc(
+        GetCddMoleculeImportRuntimeStatusQuery(workspace_id=WORKSPACE_ID, workflow_id="wf"),
+        auth=_auth(),
+    )
+    assert isinstance(result, Success)
+    assert result.unwrap().failure_reason == "Cancelled by user"
+    assert result.unwrap().status == "failed"
+
+
+async def test_saved_partial_outcome_overrides_worker_completed_status():
+    uc = GetCddMoleculeImportRuntimeStatus(
+        orchestrator=_FakeOrchestrator(progress=_progress("completed")),
+        db_status=_FakeDbStatus(_db_status_result("completed_with_errors")),
+        sync_failed=_FakeSyncFailed(),
+    )
+    result = await uc(
+        GetCddMoleculeImportRuntimeStatusQuery(workspace_id=WORKSPACE_ID, workflow_id="wf"),
+        auth=_auth(),
+    )
+    assert isinstance(result, Success)
+    assert result.unwrap().status == "completed_with_errors"
+
+
+@pytest.mark.parametrize("runtime_available", [True, False])
+async def test_plate_stop_reason_is_available_after_a_reload(runtime_available):
+    from unittest.mock import AsyncMock
+
+    from cellar.application.cdd_import.cdd_plate_import_orchestrator import CddPlateImportProgress
+    from cellar.application.cdd_import.get_cdd_plate_import_runtime_status import (
+        GetCddPlateImportRuntimeStatus,
+        GetCddPlateImportRuntimeStatusQuery,
+    )
+    from cellar.application.cdd_import.get_cdd_plate_import_status import (
+        CddPlateImportStatusResult,
+    )
+
+    values = dict(
+        import_id="plate-1",
+        status="failed",
+        total_count=5,
+        plates_registered=2,
+        plates_duplicate=0,
+        plates_error=0,
+        wells_mapped=20,
+        wells_unresolved=0,
+        current_offset=2,
+        pages_processed=1,
+    )
+    stored = CddPlateImportStatusResult(**values, failure_reason="Cancelled by user")
+    orch = _FakeOrchestrator(
+        progress=CddPlateImportProgress(**values),
+        raise_exc=None if runtime_available else NotFoundError("Workflow", "gone"),
+    )
+    uc = GetCddPlateImportRuntimeStatus(
+        orchestrator=orch, db_status=_FakeDbStatus(Success(stored)), sync_failed=AsyncMock()
+    )
+    result = await uc(
+        GetCddPlateImportRuntimeStatusQuery(workspace_id=WORKSPACE_ID, workflow_id="wf"),
+        auth=_auth(),
+    )
+    assert isinstance(result, Success)
+    assert result.unwrap().failure_reason == "Cancelled by user"
+    assert result.unwrap().plates_registered == 2

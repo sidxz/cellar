@@ -35,6 +35,7 @@ class CddMoleculeImportStatusResult:
     current_offset: int
     pages_processed: int
     report: dict
+    failure_reason: str | None = None
 
 
 class GetCddMoleculeImportStatusFromDb:
@@ -64,6 +65,7 @@ class GetCddMoleculeImportStatusFromDb:
             CddMoleculeImportStatusResult(
                 import_id=str(imp.id),
                 status=imp.status.value,
+                failure_reason=imp.failure_reason,
                 total_count=imp.total_count,
                 registered_count=imp.registered_count,
                 duplicate_count=imp.duplicate_count,

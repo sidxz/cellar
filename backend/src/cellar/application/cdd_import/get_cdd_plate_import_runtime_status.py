@@ -44,6 +44,7 @@ class CddPlateImportStatusView:
     wells_unresolved: int
     current_offset: int
     pages_processed: int
+    failure_reason: str | None = None
 
 
 class GetCddPlateImportRuntimeStatus:
@@ -80,6 +81,17 @@ class GetCddPlateImportRuntimeStatus:
 
         if progress.status == "failed":
             await self._sync_failed.run(input.workspace_id, progress.import_id)
+
+        if progress.status in ("completed", "completed_with_errors", "failed"):
+            # Read the saved outcome and reason once at the end, including a
+            # user-requested stop. Keep runtime progress if it has not been saved.
+            stored = await self._fallback_to_db(input, auth)
+            if isinstance(stored, Success) and stored.unwrap().status in (
+                "completed",
+                "completed_with_errors",
+                "failed",
+            ):
+                return stored
 
         return Success(
             CddPlateImportStatusView(
@@ -123,5 +135,6 @@ class GetCddPlateImportRuntimeStatus:
                 wells_unresolved=data.wells_unresolved,
                 current_offset=data.current_offset,
                 pages_processed=data.pages_processed,
+                failure_reason=data.failure_reason,
             )
         )

@@ -59,6 +59,7 @@ class CddMoleculeImportStatusView:
     current_offset: int
     pages_processed: int
     report: dict
+    failure_reason: str | None = None
 
 
 class GetCddMoleculeImportRuntimeStatus:
@@ -105,6 +106,8 @@ class GetCddMoleculeImportRuntimeStatus:
         # workflow's progress carries only the counters. It is read once the run
         # has finished, which is when the page shows it, not on every poll.
         report = empty_report()
+        failure_reason = None
+        status = progress.status
         if progress.status in TERMINAL_STATUSES:
             stored = await self._db_status(
                 GetCddMoleculeImportStatusQuery(
@@ -113,12 +116,18 @@ class GetCddMoleculeImportRuntimeStatus:
                 auth=auth,
             )
             if isinstance(stored, Success):
-                report = stored.unwrap().report
+                data = stored.unwrap()
+                report = data.report
+                failure_reason = data.failure_reason
+                # The worker reports "completed" even when the saved outcome
+                # includes row errors. The persisted terminal outcome is authoritative.
+                if data.status in TERMINAL_STATUSES:
+                    status = data.status
 
         return Success(
             CddMoleculeImportStatusView(
                 import_id=progress.import_id,
-                status=progress.status,
+                status=status,
                 total_count=progress.total_count,
                 registered_count=progress.registered_count,
                 duplicate_count=progress.duplicate_count,
@@ -127,6 +136,7 @@ class GetCddMoleculeImportRuntimeStatus:
                 current_offset=progress.current_offset,
                 pages_processed=progress.pages_processed,
                 report=report,
+                failure_reason=failure_reason,
             )
         )
 
@@ -157,5 +167,6 @@ class GetCddMoleculeImportRuntimeStatus:
                 current_offset=data.current_offset,
                 pages_processed=data.pages_processed,
                 report=data.report,
+                failure_reason=data.failure_reason,
             )
         )

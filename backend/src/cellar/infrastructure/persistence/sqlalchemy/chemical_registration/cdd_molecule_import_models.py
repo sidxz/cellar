@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Uuid
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String, Text, Uuid
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -29,6 +29,7 @@ class CddMoleculeImportModel(Base, EntityModelMixin, WorkspaceIdMixin, VersionMi
     )
     filter_criteria: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     status: Mapped[str] = mapped_column(String(30), nullable=False, server_default="pending")
+    failure_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     workflow_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     total_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
     registered_count: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")

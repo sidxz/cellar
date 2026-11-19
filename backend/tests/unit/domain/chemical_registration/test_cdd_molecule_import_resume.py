@@ -45,10 +45,12 @@ def _failed(**kwargs) -> CddMoleculeImport:
 def test_a_failed_import_with_its_export_resumes_on_a_new_workflow() -> None:
     imp = _failed()
     assert imp.resumable
+    assert imp.failure_reason == "chunk failed"
 
     imp.resume("wf-2", resumed_by=USER)
 
     assert imp.status is CddMoleculeImportStatus.PROCESSING
+    assert imp.failure_reason is None
     assert (imp.workflow_id, imp.completed_at, imp.last_processed_offset) == ("wf-2", None, 50750)
     (event,) = imp.collect_events()
     assert isinstance(event, CddMoleculeImportResumed)

@@ -58,9 +58,11 @@ async def test_export_id_and_run_settings_round_trip(session_factory) -> None:  
     await _save(session_factory, loaded)
     failed = await _load(session_factory, ws_id, imp.id)
     assert failed.resumable
+    assert failed.failure_reason == "chunk failed"
 
     failed.resume("wf-2", resumed_by=uuid.uuid4())
     await _save(session_factory, failed)
     resumed = await _load(session_factory, ws_id, imp.id)
     assert (resumed.status, resumed.workflow_id) == (CddMoleculeImportStatus.PROCESSING, "wf-2")
     assert resumed.completed_at is None
+    assert resumed.failure_reason is None
