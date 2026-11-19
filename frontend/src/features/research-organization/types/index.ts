@@ -8,6 +8,7 @@ import type {
   CollectionType,
   ColumnGroupResponse,
   CreateCollectionBody,
+  CurveDetailResponse,
   MembershipResultResponse,
   MoleculeReferenceBody,
   ProjectMemberResponse,
@@ -669,7 +670,7 @@ export interface CurveInterceptValue {
   qualifier?: string | null;
 }
 
-export interface CurveDetail {
+export interface CurveDetail extends Pick<CurveDetailResponse, "fitted_layer"> {
   curve_id: string;
   run_id: string;
   /** Date of the owning run (ISO date string from the BE). Drives the

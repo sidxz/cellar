@@ -3,6 +3,7 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
+import { percentYRange } from "@/features/screening-assay/lib/curve-frame";
 import { fitNoteLabel } from "@/features/screening-assay/lib/dose-response-display";
 import type {
   CurveClass,
@@ -106,6 +107,7 @@ function adaptCurve(curve: CurveDetail, protocolId: string, molecule: Molecule):
     excluded_points: curve.excluded_points ?? null,
     fit_quality_warnings: (curve.fit_quality_warnings ?? []).map(fitNoteLabel),
     intercept_values: curve.intercept_values ?? [],
+    fitted_layer: curve.fitted_layer,
     additional_curves: null,
     aggregate: null,
   };
@@ -217,7 +219,13 @@ function SourceCurveCard({
   const figure = useMemo(
     () =>
       adapted
-        ? buildDoseResponsePlot([adapted], { showCI: true, showMarker: true, showPlateaus: false })
+        ? buildDoseResponsePlot([adapted], {
+            showCI: true,
+            showMarker: true,
+            showPlateaus: false,
+            // A % curve reads on the 0–100 % frame; any other layer frames itself.
+            yRange: percentYRange([adapted]),
+          })
         : null,
     [adapted],
   );

@@ -31,10 +31,19 @@ vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
     return <div data-testid="overlay-figure" />;
   },
 }));
+const plotArgs = vi.hoisted(
+  () => [] as Array<[Array<Record<string, unknown>>, Record<string, unknown>]>,
+);
 vi.mock("@structflo/components/dose-response", () => ({
   MAX_OVERLAY_CURVES: 8,
   overlayColor: (i: number) => `colour-${i}`,
-  buildDoseResponsePlot: () => ({ traces: [], layout: {}, config: {} }),
+  buildDoseResponsePlot: (
+    curves: Array<Record<string, unknown>>,
+    opts: Record<string, unknown>,
+  ) => {
+    plotArgs.push([curves, opts]);
+    return { traces: [], layout: {}, config: {} };
+  },
   DoseResponseSummaryCard: ({
     curve,
   }: { curve: { fitted_value: number; readout_definition_id: string } }) => (
@@ -116,6 +125,26 @@ function setup(
   );
   return navigate;
 }
+
+describe("compound drawer curve frame", () => {
+  it("keeps the curve's fitted layer and draws a % curve on the 0–100 % frame", () => {
+    plotArgs.length = 0;
+    setup([
+      {
+        ...curve,
+        curve_class: "partial",
+        fitted_layer: "percent_inhibition",
+        raw_data: [
+          { x: 0.1, y: 40 },
+          { x: 10, y: 55 },
+        ],
+      },
+    ]);
+    const [curves, opts] = plotArgs.at(-1) ?? [[], {} as Record<string, unknown>];
+    expect(curves[0].fitted_layer).toBe("percent_inhibition");
+    expect(opts.yRange).toEqual([-10, 110]);
+  });
+});
 
 describe("compound drawer evidence", () => {
   it("uses the search aggregate instead of recomputing across fetched fits", () => {
