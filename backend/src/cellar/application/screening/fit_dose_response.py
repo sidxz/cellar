@@ -308,7 +308,10 @@ class FitDoseResponseCurves:
             #     the calculation engine and the API treat as primary.
             #   * Else (no normalizations on the def), fit the raw layer.
             target_formula: ReadoutNormalization | None
-            layer = config.y_normalization or primary_normalization(y_rd.normalizations)
+            # A readout that calculates no layer is fitted on its raw rows, whatever layer
+            # a stored curve still names.
+            primary = primary_normalization(y_rd.normalizations)
+            layer = (config.y_normalization or primary) if primary is not None else None
             if y_rd.is_calculated:
                 target_formula = None  # filtered by is_computed below
                 use_computed = True

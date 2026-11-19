@@ -9,6 +9,7 @@ concentration into the 4PL and collapsing the fit to zeros.
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 from datetime import date
 from types import TracebackType
 from typing import Self
@@ -309,6 +310,33 @@ async def test_a_y_readout_declaring_only_none_fits_raw_rows():
     its curve fits the raw rows (it used to look for rows tagged ``none`` and fit nothing)."""
     protocol, y_def, _ = _make_protocol_with_y()
     y_def.normalizations = frozenset({ReadoutNormalization.NONE})
+    run, wells = _make_run_with_dose_series(
+        protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0, 100.0]
+    )
+    raw_y_values = [0.55, 0.40, 0.20, 0.05]
+    readout_data = [
+        _rd(run_id=run.id, well_id=w.id, readout_definition_id=y_def.id, value=v,
+            is_computed=False)
+        for w, v in zip(wells, raw_y_values, strict=True)
+    ]
+
+    fitter = _RecordingFitter()
+    result = await _make_use_case(fitter).fit_for_run(
+        run=run, protocol=protocol, readout_data=readout_data, workspace_id=WS,
+    )
+    assert isinstance(result, Success)
+    assert sorted(p.response for p in fitter.calls[0]) == sorted(raw_y_values)
+
+
+@pytest.mark.asyncio
+async def test_a_stale_layer_on_a_y_readout_with_no_layers_fits_raw_rows():
+    """A stored curve whose layer its Y readout no longer calculates (and that calculates
+    none) fits the raw rows, as the calculation engine does, instead of nothing."""
+    protocol, y_def, ic50_def = _make_protocol_with_y()
+    assert ic50_def.dose_response_config is not None
+    ic50_def.dose_response_config = replace(
+        ic50_def.dose_response_config, y_normalization=ReadoutNormalization.PERCENT_INHIBITION
+    )
     run, wells = _make_run_with_dose_series(
         protocol_id=protocol.id, concentrations=[0.1, 1.0, 10.0, 100.0]
     )
