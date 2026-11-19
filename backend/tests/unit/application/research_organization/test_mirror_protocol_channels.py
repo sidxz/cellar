@@ -133,7 +133,9 @@ async def test_mirror_creates_one_channel_per_intercept() -> None:
             InterceptSpec(kind=InterceptKind.EC, level=90.0),
         ],
     )
-    protocol = _make_protocol(auth.workspace_id, readouts=[rd])
+    protocol = _make_protocol(
+        auth.workspace_id, readouts=[_numeric_readout(name="raw signal"), rd]
+    )
 
     saved: list[Campaign] = []
     uc = MirrorProtocolChannels(
@@ -154,11 +156,15 @@ async def test_mirror_creates_one_channel_per_intercept() -> None:
 
     assert isinstance(out, Success)
     outcome = out.unwrap()
-    assert outcome.channels_created == 2
+    # Two intercept channels, plus the readout channel of the signal the curve plots.
+    assert outcome.channels_created == 3
     assert outcome.channels_skipped == 0
-    assert len(campaign.channels) == 2
+    curve_channels = [
+        ch for ch in campaign.channels if ch.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE
+    ]
+    assert len(curve_channels) == 2
 
-    by_ik = {ch.intercept_key: ch for ch in campaign.channels}
+    by_ik = {ch.intercept_key: ch for ch in curve_channels}
     primary = by_ik[None]
     secondary = by_ik[InterceptKey(kind="ec", level=90.0)]
 
@@ -178,7 +184,9 @@ async def test_mirror_is_idempotent_skips_duplicates() -> None:
         name="Resazurin",
         intercepts=[InterceptSpec(kind=InterceptKind.EC, level=50.0)],
     )
-    protocol = _make_protocol(auth.workspace_id, readouts=[rd])
+    protocol = _make_protocol(
+        auth.workspace_id, readouts=[_numeric_readout(name="raw signal"), rd]
+    )
 
     uc = MirrorProtocolChannels(
         uow=FakeUnitOfWork(),
@@ -193,17 +201,18 @@ async def test_mirror_is_idempotent_skips_duplicates() -> None:
         protocol_id=protocol.id,
     )
 
+    # One curve channel and one channel for the signal it plots.
     out1 = await uc(cmd, auth=auth)
     assert isinstance(out1, Success)
-    assert out1.unwrap().channels_created == 1
+    assert out1.unwrap().channels_created == 2
     assert out1.unwrap().channels_skipped == 0
-    assert len(campaign.channels) == 1
+    assert len(campaign.channels) == 2
 
     out2 = await uc(cmd, auth=auth)
     assert isinstance(out2, Success)
     assert out2.unwrap().channels_created == 0
-    assert out2.unwrap().channels_skipped == 1
-    assert len(campaign.channels) == 1
+    assert out2.unwrap().channels_skipped == 2
+    assert len(campaign.channels) == 2
 
 
 @pytest.mark.asyncio
@@ -314,7 +323,9 @@ async def test_mirror_label_dedups_cdd_style_readout_name() -> None:
             InterceptSpec(kind=InterceptKind.EC, level=90.0),
         ],
     )
-    protocol = _make_protocol(auth.workspace_id, readouts=[rd])
+    protocol = _make_protocol(
+        auth.workspace_id, readouts=[_numeric_readout(name="raw signal"), rd]
+    )
 
     uc = MirrorProtocolChannels(
         uow=FakeUnitOfWork(),
@@ -333,7 +344,11 @@ async def test_mirror_label_dedups_cdd_style_readout_name() -> None:
     )
 
     assert isinstance(out, Success)
-    labels = sorted(ch.label for ch in campaign.channels)
+    labels = sorted(
+        ch.label
+        for ch in campaign.channels
+        if ch.source_kind == ChannelSourceKind.DOSE_RESPONSE_CURVE
+    )
     assert labels == ["EC50", "EC90"]
 
 

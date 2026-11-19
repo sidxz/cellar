@@ -119,7 +119,6 @@ class TestReadoutDefinitionPickList:
 
 
 class TestReadoutDefinitionDoseResponse:
-
     def test_dose_response_without_config_raises(self):
         with pytest.raises(ValidationError, match="dose_response_config"):
             ReadoutDefinition(
@@ -194,9 +193,7 @@ class TestProtocolDoseResponseCrossValidation:
         assert len(protocol.readout_definitions) == 3
 
     def test_add_dose_response_with_missing_x_axis_raises(self):
-        protocol = _make_protocol(
-            readout_definitions=[_make_readout("% inhibition")]
-        )
+        protocol = _make_protocol(readout_definitions=[_make_readout("% inhibition")])
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
             x_readout_name="log_dose",
@@ -208,7 +205,7 @@ class TestProtocolDoseResponseCrossValidation:
             data_type=ReadoutDataType.DOSE_RESPONSE,
             dose_response_config=cfg,
         )
-        with pytest.raises(ValidationError, match="X-axis.*log_dose"):
+        with pytest.raises(ValidationError, match="uses 'log_dose' for concentration"):
             protocol.add_readout_definition(dr_readout)
 
     def test_update_dose_response_with_missing_x_axis_raises(self):
@@ -239,15 +236,11 @@ class TestProtocolDoseResponseCrossValidation:
             x_readout_name="ghost_readout",
             y_readout_name="% inhibition",
         )
-        with pytest.raises(ValidationError, match="X-axis.*ghost_readout"):
-            protocol.update_readout_definition(
-                ic50_def.id, dose_response_config=bad_cfg
-            )
+        with pytest.raises(ValidationError, match="uses 'ghost_readout' for concentration"):
+            protocol.update_readout_definition(ic50_def.id, dose_response_config=bad_cfg)
 
     def test_add_dose_response_with_missing_y_axis_raises(self):
-        protocol = _make_protocol(
-            readout_definitions=[_make_readout("log_dose")]
-        )
+        protocol = _make_protocol(readout_definitions=[_make_readout("log_dose")])
         cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
             x_readout_name="log_dose",
@@ -259,7 +252,9 @@ class TestProtocolDoseResponseCrossValidation:
             data_type=ReadoutDataType.DOSE_RESPONSE,
             dose_response_config=cfg,
         )
-        with pytest.raises(ValidationError, match="Y-axis.*% inhibition"):
+        with pytest.raises(
+            ValidationError, match="fits '% inhibition', which is not a numeric readout"
+        ):
             protocol.add_readout_definition(dr_readout)
 
 
@@ -362,7 +357,10 @@ class TestProtocolVersioningNewFields:
             PickListValue(label="Inactive"),
         ]
         # Verify it's a copy, not shared reference
-        assert new_protocol.readout_definitions[0].pick_list_values is not protocol.readout_definitions[0].pick_list_values
+        assert (
+            new_protocol.readout_definitions[0].pick_list_values
+            is not protocol.readout_definitions[0].pick_list_values
+        )
 
     def test_versioning_clones_dose_response_config(self):
         from cellar.domain.screening_assay.protocol_versioning_service import (
@@ -479,9 +477,7 @@ class TestProtocolVersioningNewFields:
         assert len(new_protocol.recommended_hit_criteria) == 1
         assert new_protocol.recommended_hit_criteria[0].value == 50.0
         # Verify deep copy
-        assert (
-            new_protocol.recommended_hit_criteria[0].value == 50.0
-        )
+        assert new_protocol.recommended_hit_criteria[0].value == 50.0
 
 
 # ---------------------------------------------------------------------------
@@ -546,7 +542,6 @@ class TestProtocolOntologyAnnotations:
         with pytest.raises(ValidationError, match="reason"):
             protocol.remove_ontology_annotation("bioassay_type")
 
-
     def test_overwrite_annotation(self):
         protocol = _make_protocol()
         terms1 = [
@@ -584,7 +579,10 @@ class TestProtocolVersioningOntologyAnnotations:
         assert new_protocol.ontology_annotations["bioassay_type"][0].term_id == "BAO:0000142"
         # Verify it's a deep copy
         assert new_protocol.ontology_annotations is not protocol.ontology_annotations
-        assert new_protocol.ontology_annotations["bioassay_type"] is not protocol.ontology_annotations["bioassay_type"]
+        assert (
+            new_protocol.ontology_annotations["bioassay_type"]
+            is not protocol.ontology_annotations["bioassay_type"]
+        )
 
     def test_versioning_empty_annotations(self):
         from cellar.domain.screening_assay.protocol_versioning_service import (

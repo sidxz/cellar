@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import copy
 import math
 import re
 import uuid
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -482,6 +484,95 @@ def _clean_fixed_value(
 # ---------------------------------------------------------------------------
 
 
+def _layers(rd: ReadoutDefinition) -> list[str]:
+    """The calculated layers a readout emits, sorted (``none`` is not a layer)."""
+    return sorted(str(n) for n in rd.normalizations if n != ReadoutNormalization.NONE)
+
+
+def _curve_problems(readouts: Sequence[ReadoutDefinition]) -> set[str]:
+    """Why each dose-response curve among ``readouts`` cannot fit as intended (one line per
+    curve, built from names only so two snapshots of a protocol compare)."""
+    by_name = {rd.name: rd for rd in readouts}
+    problems: set[str] = set()
+    for rd in readouts:
+        if rd.data_type != ReadoutDataType.DOSE_RESPONSE:
+            continue
+        cfg = rd.dose_response_config
+        if cfg is None:  # ReadoutDefinition refuses this; nothing to fit against
+            continue
+        y = by_name.get(cfg.y_readout_name)
+        if y is None or y.data_type != ReadoutDataType.NUMERIC:
+            problems.add(
+                f"'{rd.name}' fits '{cfg.y_readout_name}', which is not a numeric readout "
+                "of this protocol"
+            )
+        # The fit reads concentration from the well; a reserved well-metadata name
+        # ("concentration") says exactly that.
+        x = cfg.x_readout_name
+        if x is not None and x not in by_name and not is_reserved_readout_name(x):
+            problems.add(
+                f"'{rd.name}' uses '{cfg.x_readout_name}' for concentration, which is not a "
+                "readout of this protocol"
+            )
+        if y is None:
+            continue
+        layers = _layers(y)
+        if cfg.y_normalization is not None and str(cfg.y_normalization) not in layers:
+            problems.add(
+                f"'{rd.name}' fits the {cfg.y_normalization} layer, which '{y.name}' does "
+                "not calculate"
+            )
+        elif cfg.y_normalization is None and len(layers) > 1:
+            problems.add(
+                f"'{rd.name}' must say which layer of '{y.name}' it fits ({', '.join(layers)})"
+            )
+    return problems
+
+
+def _refuse_curve_problems(
+    after: Sequence[ReadoutDefinition], before: Sequence[ReadoutDefinition] = ()
+) -> None:
+    """Refuse the problems ``after`` has that ``before`` did not: a change may not break a
+    curve, and a curve broken before the change does not block unrelated edits."""
+    new = _curve_problems(after) - _curve_problems(before)
+    if new:
+        raise ValidationError("; ".join(sorted(new)))
+
+
+def _carry_curves(
+    readouts: list[ReadoutDefinition], old: ReadoutDefinition, new: ReadoutDefinition
+) -> list[ReadoutDefinition]:
+    """Curves that plot ``old`` follow it to ``new``: a rename moves their X/Y, and a curve
+    that fitted ``old``'s only layer keeps that layer once ``new`` calculates more."""
+    old_layers, new_layers = _layers(old), _layers(new)
+    carried: list[ReadoutDefinition] = []
+    for rd in readouts:
+        cfg = rd.dose_response_config
+        if cfg is None or old.name not in (cfg.x_readout_name, cfg.y_readout_name):
+            carried.append(rd)
+            continue
+        moved_cfg = replace(
+            cfg,
+            x_readout_name=new.name if cfg.x_readout_name == old.name else cfg.x_readout_name,
+            y_readout_name=new.name if cfg.y_readout_name == old.name else cfg.y_readout_name,
+        )
+        if (
+            cfg.y_readout_name == old.name
+            and cfg.y_normalization is None
+            and len(old_layers) == 1
+            and len(new_layers) > 1
+            and old_layers[0] in new_layers
+        ):
+            moved_cfg = replace(moved_cfg, y_normalization=ReadoutNormalization(old_layers[0]))
+        if moved_cfg == cfg:
+            carried.append(rd)
+            continue
+        moved = copy.copy(rd)
+        moved.dose_response_config = moved_cfg
+        carried.append(moved)
+    return carried
+
+
 class Protocol(AggregateRoot):
     """A versioned template describing an experimental procedure and its measurements.
 
@@ -687,6 +778,7 @@ class Protocol(AggregateRoot):
                 seen.add(d.name)
         if len(name.strip()) > MAX_NAME_LENGTH:
             raise ValidationError(f"Protocol name must be at most {MAX_NAME_LENGTH} characters")
+        _refuse_curve_problems(readout_definitions)
 
         protocol = cls(
             workspace_id=workspace_id,
@@ -731,6 +823,8 @@ class Protocol(AggregateRoot):
                 "This protocol's name is incomplete or clashes with another; "
                 "fix it before publishing"
             )
+        # A new version clones its parent's curves, broken ones included.
+        _refuse_curve_problems(self.readout_definitions)
         self._guard_transition(ProtocolStatus.ACTIVE)
         self.status = ProtocolStatus.ACTIVE
         self.updated_at = datetime.now(UTC)
@@ -1001,35 +1095,7 @@ class Protocol(AggregateRoot):
         if any(rd.name == definition.name for rd in self.readout_definitions):
             raise ConflictError(f"ReadoutDefinition with name '{definition.name}' already exists")
 
-        # Cross-readout validation for dose_response type. x_readout_name is
-        # optional — None means "use the well's concentration as X".
-        if (
-            definition.data_type == ReadoutDataType.DOSE_RESPONSE
-            and definition.dose_response_config is not None
-        ):
-            existing_by_name = {rd.name: rd for rd in self.readout_definitions}
-            cfg = definition.dose_response_config
-            if cfg.x_readout_name is not None and cfg.x_readout_name not in existing_by_name:
-                raise ValidationError(
-                    f"Dose-response X-axis readout '{cfg.x_readout_name}' "
-                    "not found among existing readout definitions"
-                )
-            if cfg.y_readout_name not in existing_by_name:
-                raise ValidationError(
-                    f"Dose-response Y-axis readout '{cfg.y_readout_name}' "
-                    "not found among existing readout definitions"
-                )
-            # When y_normalization is set, the referenced Y readout def must
-            # actually emit that formula.
-            if cfg.y_normalization is not None:
-                y_rd = existing_by_name[cfg.y_readout_name]
-                if cfg.y_normalization not in y_rd.normalizations:
-                    raise ValidationError(
-                        f"Dose-response Y-normalization '{cfg.y_normalization.value}' "
-                        f"is not emitted by readout '{cfg.y_readout_name}' "
-                        f"(emits: {sorted(n.value for n in y_rd.normalizations)})"
-                    )
-
+        _refuse_curve_problems([*self.readout_definitions, definition], self.readout_definitions)
         self._check_window_agreement(definition, self.readout_definitions)
         self._check_dose_unit(definition)
 
@@ -1135,6 +1201,15 @@ class Protocol(AggregateRoot):
                     "published protocol while it is in use — create a new version. "
                     f"In use: {'; '.join(reasons)}."
                 )
+        else:
+            name = self.readout_definitions[idx].name
+            for curve in self.readout_definitions:
+                cfg = curve.dose_response_config
+                if cfg is not None and name in (cfg.x_readout_name, cfg.y_readout_name):
+                    raise ConflictError(
+                        f"Cannot remove '{name}': the dose-response readout '{curve.name}' "
+                        f"plots it. Change or remove '{curve.name}' first."
+                    )
 
         if len(self.readout_definitions) <= 1:
             raise ValidationError(
@@ -1248,40 +1323,13 @@ class Protocol(AggregateRoot):
             created_at=existing.created_at,
         )
 
-        # Cross-readout validation — same rules as add_readout_definition.
-        # When the replacement is a dose-response def, x_readout_name must
-        # either be None (use well.dose) or match an existing readout in
-        # this protocol; y_readout_name must always match.
-        if (
-            replacement.data_type == ReadoutDataType.DOSE_RESPONSE
-            and replacement.dose_response_config is not None
-        ):
-            existing_by_name = {
-                rd.name: rd
-                for rd in self.readout_definitions
-                if rd.id != definition_id  # exclude the row being replaced
-            }
-            existing_by_name[replacement.name] = replacement
-            cfg = replacement.dose_response_config
-            if cfg.x_readout_name is not None and cfg.x_readout_name not in existing_by_name:
-                raise ValidationError(
-                    f"Dose-response X-axis readout '{cfg.x_readout_name}' "
-                    "not found among existing readout definitions"
-                )
-            if cfg.y_readout_name not in existing_by_name:
-                raise ValidationError(
-                    f"Dose-response Y-axis readout '{cfg.y_readout_name}' "
-                    "not found among existing readout definitions"
-                )
-            if cfg.y_normalization is not None:
-                y_def = existing_by_name[cfg.y_readout_name]
-                if cfg.y_normalization not in y_def.normalizations:
-                    raise ValidationError(
-                        f"Dose-response y_normalization "
-                        f"'{cfg.y_normalization.value}' is not in "
-                        f"y readout '{cfg.y_readout_name}' normalizations "
-                        f"{sorted(n.value for n in y_def.normalizations)}"
-                    )
+        # Curves that plot this readout follow it (a published protocol only gets here
+        # while the readout is unused, so this carries curves on drafts); then the
+        # change may not leave a curve that cannot fit.
+        after = list(self.readout_definitions)
+        after[idx] = replacement
+        after = _carry_curves(after, existing, replacement)
+        _refuse_curve_problems(after, self.readout_definitions)
 
         self._check_window_agreement(replacement, self.readout_definitions)
         self._check_dose_unit(replacement)
@@ -1321,7 +1369,7 @@ class Protocol(AggregateRoot):
                     f"unlocked ACTIVE.{in_use}"
                 )
 
-        self.readout_definitions[idx] = replacement
+        self.readout_definitions[:] = after
         self.updated_at = datetime.now(UTC)
 
     # ------------------------------------------------------------------

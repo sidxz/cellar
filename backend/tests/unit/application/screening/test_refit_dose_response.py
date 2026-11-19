@@ -172,7 +172,12 @@ def _make_protocol() -> Protocol:
         name="Test",
         protocol_type=ProtocolType.BIOCHEMICAL,
         created_by=USER,
-        readout_definitions=[rd],
+        readout_definitions=[
+            ReadoutDefinition(
+                protocol_id=rd.protocol_id, name="response", data_type=ReadoutDataType.NUMERIC
+            ),
+            rd,
+        ],
     )
 
 
