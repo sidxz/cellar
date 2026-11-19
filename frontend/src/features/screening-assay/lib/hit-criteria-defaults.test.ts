@@ -80,7 +80,20 @@ describe("deriveChannelHitDefaults", () => {
       name: "IC50",
       data_type: "dose_response",
     });
-    expect(d.allowed_curve_classes).toEqual(["full", "partial"]);
+    expect(d.allowed_curve_classes).toEqual(["full", "partial", "active_all_doses"]);
+  });
+
+  it("a filter that allows full also allows active at all doses, a stronger result", () => {
+    const d = deriveChannelHitDefaults([curveClass("full")], {
+      name: "IC50",
+      data_type: "dose_response",
+    });
+    expect(d.allowed_curve_classes).toEqual(["full", "active_all_doses"]);
+    const partial = deriveChannelHitDefaults([curveClass("partial")], {
+      name: "IC50",
+      data_type: "dose_response",
+    });
+    expect(partial.allowed_curve_classes).toEqual(["partial"]);
   });
 
   it("ignores Curve Class for non-DR readouts (the chip filter would dangle otherwise)", () => {
@@ -97,7 +110,7 @@ describe("deriveChannelHitDefaults", () => {
       data_type: "dose_response",
     });
     expect(d.hit_operator).toBe("");
-    expect(d.allowed_curve_classes).toEqual(["full"]);
+    expect(d.allowed_curve_classes).toEqual(["full", "active_all_doses"]);
   });
 
   // ── intercept_key carry-forward (Surface #7 follow-on) ──────────────────────
@@ -215,7 +228,7 @@ describe("deriveChannelHitDefaults", () => {
       EC90,
     );
     expect(d.hit_operator).toBe("lt");
-    expect(d.allowed_curve_classes).toEqual(["full", "partial"]);
+    expect(d.allowed_curve_classes).toEqual(["full", "partial", "active_all_doses"]);
   });
 
   it("passes a recommended not_between criterion through as outside", () => {

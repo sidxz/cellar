@@ -35,6 +35,14 @@ export interface ChannelHitDefaults {
   intercept_key: InterceptKey | null;
 }
 
+/** The classes a saved class list admits, as the backend reads one: allowing "full" allows
+ *  "active_all_doses" too, a stronger result (its potency lies below the tested doses). */
+export function admittedClasses(classes: readonly string[]): string[] {
+  return classes.includes("full") && !classes.includes("active_all_doses")
+    ? [...classes, "active_all_doses"]
+    : [...classes];
+}
+
 const EMPTY: ChannelHitDefaults = {
   hit_operator: "",
   hit_value: "",
@@ -118,7 +126,7 @@ export function deriveChannelHitDefaults(
           (c) => c.readout_name === "Curve Class" && c.operator === "in" && Array.isArray(c.value),
         )
       : undefined;
-  const allowed_curve_classes = (curveClass?.value as string[] | undefined) ?? [];
+  const allowed_curve_classes = admittedClasses((curveClass?.value as string[] | undefined) ?? []);
 
   if (numeric.length === 0) {
     return { ...EMPTY, allowed_curve_classes };

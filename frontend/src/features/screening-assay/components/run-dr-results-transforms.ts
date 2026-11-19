@@ -1,5 +1,6 @@
 import { groupBy } from "@/shared/lib/group-by";
 import { shortId } from "@/shared/lib/utils";
+import { admittedClasses } from "../lib/hit-criteria-defaults";
 import {
   type InterceptDisplay,
   curvePotency,
@@ -135,7 +136,10 @@ export function applyHitFilter(
     rules.every((rule) => {
       if (rule.readout_name === "Curve Class") {
         if (rule.operator === "in" && Array.isArray(rule.value)) {
-          return row.curve_class != null && (rule.value as string[]).includes(row.curve_class);
+          return (
+            row.curve_class != null &&
+            admittedClasses(rule.value as string[]).includes(row.curve_class)
+          );
         }
         return true;
       }

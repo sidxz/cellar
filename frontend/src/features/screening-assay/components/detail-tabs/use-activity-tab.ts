@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useCompoundCurves, useMultiCompoundCurves } from "../../hooks/use-compound-curves";
 import { useCompoundFlags, useCreateFlag, useDeleteFlag } from "../../hooks/use-compound-flags";
 import { useProtocolActivity } from "../../hooks/use-protocol-activity";
+import { admittedClasses } from "../../lib/hit-criteria-defaults";
 import {
   curvePotency,
   doseRange,
@@ -40,11 +41,9 @@ export function ruleOutcome(item: CompoundActivity, rule: HitCriterion): boolean
       .map((rv) => rv.curve_class)
       .filter((c): c is NonNullable<typeof c> => c != null);
     if (classes.length === 0) return null;
-    return (
-      rule.operator === "in" &&
-      Array.isArray(rule.value) &&
-      classes.some((c) => (rule.value as string[]).includes(c))
-    );
+    if (rule.operator !== "in" || !Array.isArray(rule.value)) return false;
+    const admitted = admittedClasses(rule.value as string[]);
+    return classes.some((c) => admitted.includes(c));
   }
   const readout = item.readouts[rule.readout_name];
   if (!readout) return null;

@@ -73,6 +73,15 @@ describe("applyHitFilter", () => {
     expect(result.map((r) => r.molecule_id)).toEqual(["mol-1", "mol-2"]);
   });
 
+  it("a Curve Class rule that allows full also allows active at all doses", () => {
+    const rows = [
+      makeRow({ molecule_id: "flat", curve_class: "active_all_doses" }),
+      makeRow({ molecule_id: "weak", curve_class: "partial" }),
+    ];
+    const full: HitCriterion[] = [{ readout_name: "Curve Class", operator: "in", value: ["full"] }];
+    expect(applyHitFilter(rows, full, DR).map((r) => r.molecule_id)).toEqual(["flat"]);
+  });
+
   it("filters by a secondary intercept (intercept_key=EC90) instead of fitted_value", () => {
     const iv = (kind: "ec" | "ic", level: number, value: number) => ({
       spec: { kind, level, basis: "relative_percent" as const, label: null },

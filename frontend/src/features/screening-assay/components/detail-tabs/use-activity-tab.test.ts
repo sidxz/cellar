@@ -106,6 +106,13 @@ describe("hitStatus — a dose-response readout reads its reported value", () =>
     intercept_key: { kind: "ec", level: 90 },
   });
 
+  it("a Curve Class rule that allows full also allows active at all doses", () => {
+    const flat = compound("active_all_doses", null, 6.1, [iv(50, "<", 0.0002)]);
+    const rule: HitCriterion = { readout_name: "Curve Class", operator: "in", value: ["full"] };
+    expect(hitStatus(flat, [rule])).toBe("meets");
+    expect(hitStatus(flat, [{ ...rule, value: ["partial"] }])).toBe("fails");
+  });
+
   it("meets on a curve active at every dose, though no exact best exists", () => {
     // SACC-0428730-like: midpoint ~6 µM, every dose already past 50 %.
     const flat = compound("active_all_doses", null, 6.1, [iv(50, "<", 0.0002)]);
