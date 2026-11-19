@@ -1,17 +1,15 @@
 """Tests for CDD protocol mapper — pure functions, no I/O."""
 
-import pytest
-
 from cellar.application.cdd_import.mapper import (
-    CddProtocolMappingResult,
     CddProtocolSummary,
-    MappedReadout,
     MappingWarning,
     map_cdd_protocol,
     map_cdd_protocol_list,
 )
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
 from cellar.domain.screening_assay.enums import (
     ConditionDataType,
+    HillSlopeConstraint,
     ReadoutAggregation,
     ReadoutDataType,
     ReadoutNormalization,
@@ -118,8 +116,7 @@ class TestMapCddProtocol:
         result = map_cdd_protocol(proto)
         assert result.readouts == []
         assert any(
-            w.field_name == "Attachment" and "File" in w.source_type
-            for w in result.warnings
+            w.field_name == "Attachment" and "File" in w.source_type for w in result.warnings
         )
 
     def test_date_dropped_with_warning(self):
@@ -127,10 +124,7 @@ class TestMapCddProtocol:
         proto = _protocol_json(readouts=[_readout("Exp Date", "Date")])
         result = map_cdd_protocol(proto)
         assert result.readouts == []
-        assert any(
-            w.field_name == "Exp Date" and "Date" in w.source_type
-            for w in result.warnings
-        )
+        assert any(w.field_name == "Exp Date" and "Date" in w.source_type for w in result.warnings)
 
     def test_unknown_type_skipped_with_warning(self):
         proto = _protocol_json(
@@ -146,9 +140,7 @@ class TestMapCddProtocol:
         assert "SomeWeirdType" in result.warnings[0].reason
 
     def test_display_order_sequential(self):
-        proto = _protocol_json(
-            readouts=[_readout("A", "Number"), _readout("B", "Text")]
-        )
+        proto = _protocol_json(readouts=[_readout("A", "Number"), _readout("B", "Text")])
         result = map_cdd_protocol(proto)
         assert result.readouts[0].display_order == 0
         assert result.readouts[1].display_order == 1
@@ -198,8 +190,18 @@ class TestMapCddProtocol:
                 {"id": 102, "name": "IC50calc", "data_type": "Number", "unit_label": "uM"},
                 {"id": 103, "name": "Hill slope", "data_type": "Number"},
                 {"id": 104, "name": "R squared", "data_type": "Number"},
-                {"id": 105, "name": "IC50calc CI (Lower)", "data_type": "Number", "unit_label": "uM"},
-                {"id": 106, "name": "IC50calc CI (Upper)", "data_type": "Number", "unit_label": "uM"},
+                {
+                    "id": 105,
+                    "name": "IC50calc CI (Lower)",
+                    "data_type": "Number",
+                    "unit_label": "uM",
+                },
+                {
+                    "id": 106,
+                    "name": "IC50calc CI (Upper)",
+                    "data_type": "Number",
+                    "unit_label": "uM",
+                },
             ],
             "calculations": [
                 {
@@ -207,7 +209,9 @@ class TestMapCddProtocol:
                     "class": "dose response calculation",
                     "inputs": {"response_readout_definition": 101, "dose_readout_definition": 100},
                     "outputs": {
-                        "intercept_readout_definitions": [[102, {"confidence_interval_readout_definitions": [105, 106]}]],
+                        "intercept_readout_definitions": [
+                            [102, {"confidence_interval_readout_definitions": [105, 106]}]
+                        ],
                         "hill_slope_readout_definition": 103,
                         "r_squared_readout_definition": 104,
                     },
@@ -249,9 +253,7 @@ class TestMapCddProtocol:
         )
         result = map_cdd_protocol(proto)
         names = [r.name for r in result.readouts]
-        assert names == ["Raw AU"], (
-            "Reserved well-metadata names must be skipped"
-        )
+        assert names == ["Raw AU"], "Reserved well-metadata names must be skipped"
         skipped = {w.field_name for w in result.warnings}
         assert skipped == {"Concentration", "Dose", "Batch"}
         for w in result.warnings:
@@ -329,11 +331,8 @@ class TestMapCddProtocol:
         # Output readout is skipped — only Raw Data emerges.
         assert names == ["Raw Data"]
         rd = result.readouts[0]
-        assert rd.normalizations == frozenset(
-            {ReadoutNormalization.PERCENT_INHIBITION}
-        ), (
-            "percent inhibition calc must lift onto input readout "
-            "normalizations set"
+        assert rd.normalizations == frozenset({ReadoutNormalization.PERCENT_INHIBITION}), (
+            "percent inhibition calc must lift onto input readout normalizations set"
         )
 
     def test_dr_response_pointing_at_calc_output_redirects_to_input_with_y_normalization(self):
@@ -395,8 +394,7 @@ class TestMapCddProtocol:
             "when the CDD response_readout_definition is itself a calc output"
         )
         assert (
-            dr.dose_response_config.y_normalization
-            == ReadoutNormalization.PERCENT_INHIBITION
+            dr.dose_response_config.y_normalization == ReadoutNormalization.PERCENT_INHIBITION
         ), "y_normalization must record the lifted formula layer"
 
         # And the input readout itself has the normalization lifted.
@@ -522,14 +520,17 @@ class TestCurvesThatCanFit:
         result = map_cdd_protocol(_percent_of_control_curve_protocol(999999))
         assert "IC50" not in [r.name for r in result.readouts]
         assert "RLU" in [r.name for r in result.readouts]
-        assert MappingWarning(
-            field_name="IC50",
-            source_type="dose response calculation",
-            reason=(
-                "Not imported: 'IC50' fits 'Response', which is not a numeric readout of "
-                "this protocol"
-            ),
-        ) in result.warnings
+        assert (
+            MappingWarning(
+                field_name="IC50",
+                source_type="dose response calculation",
+                reason=(
+                    "Not imported: 'IC50' fits 'Response', which is not a numeric readout of "
+                    "this protocol"
+                ),
+            )
+            in result.warnings
+        )
 
     def test_a_curve_with_no_layer_over_two_layers_is_left_out(self) -> None:
         # CDD fits the raw RLU while RLU also calculates % inhibition and z-score: the
@@ -564,11 +565,118 @@ class TestCurvesThatCanFit:
         }
         result = map_cdd_protocol(proto)
         assert [r.name for r in result.readouts] == ["RLU"]
-        assert MappingWarning(
-            field_name="IC50",
-            source_type="dose response calculation",
-            reason=(
-                "Not imported: 'IC50' must say which layer of 'RLU' it fits "
-                "(percent_inhibition, z_score)"
-            ),
-        ) in result.warnings
+        assert (
+            MappingWarning(
+                field_name="IC50",
+                source_type="dose response calculation",
+                reason=(
+                    "Not imported: 'IC50' must say which layer of 'RLU' it fits "
+                    "(percent_inhibition, z_score)"
+                ),
+            )
+            in result.warnings
+        )
+
+
+def _curve_with_fit_settings(fit_parameters: dict | None) -> DoseResponseConfig:
+    proto = _percent_of_control_curve_protocol(370947)
+    if fit_parameters is not None:
+        proto["calculations"][1]["fit_parameters"] = fit_parameters
+    ic50 = next(r for r in map_cdd_protocol(proto).readouts if r.name == "IC50")
+    assert ic50.dose_response_config is not None
+    return ic50.dose_response_config
+
+
+_FREE = {"modifier": None, "value": None}
+
+
+class TestFitSettingsFromCdd:
+    """Each CDD protocol's own min / max / slope settings become the curve's bottom / top /
+    Hill bounds, so an imported protocol fits under its source's settings."""
+
+    def test_free_settings_import_as_free(self) -> None:
+        cfg = _curve_with_fit_settings({"min": _FREE, "max": _FREE, "slope": _FREE})
+        assert cfg == _curve_with_fit_settings(None)
+        assert (cfg.bottom_constraint, cfg.bottom_constraint_min, cfg.bottom_constraint_max) == (
+            None,
+            None,
+            None,
+        )
+        assert (cfg.top_constraint, cfg.top_constraint_min, cfg.top_constraint_max) == (
+            None,
+            None,
+            None,
+        )
+        assert (cfg.hill_slope_min, cfg.hill_slope_max) == (None, None)
+        assert cfg.hill_slope_constraint == HillSlopeConstraint.UNCONSTRAINED
+
+    def test_ranges_import_as_ranges(self) -> None:
+        cfg = _curve_with_fit_settings(
+            {
+                "min": {"range": {"min": -10.0, "max": 10.0}},
+                "max": {"range": {"min": 90.0, "max": 110.0}},
+                "slope": {"range": {"min": 0.9, "max": 1.1}},
+            }
+        )
+        assert (cfg.bottom_constraint_min, cfg.bottom_constraint_max) == (-10.0, 10.0)
+        assert (cfg.top_constraint_min, cfg.top_constraint_max) == (90.0, 110.0)
+        assert (cfg.hill_slope_min, cfg.hill_slope_max) == (0.9, 1.1)
+
+    def test_equals_imports_as_a_lock(self) -> None:
+        cfg = _curve_with_fit_settings(
+            {
+                "min": {"modifier": "=", "value": 0.0},
+                "max": {"modifier": "=", "value": 100.0},
+                "slope": {"modifier": "=", "value": 1.0},
+            }
+        )
+        assert cfg.bottom_constraint == 0.0
+        assert cfg.top_constraint == 100.0
+        assert cfg.hill_slope_constraint == HillSlopeConstraint.FIXED_AT_ONE
+
+    def test_one_sided_settings_import_as_one_sided_ranges(self) -> None:
+        cfg = _curve_with_fit_settings(
+            {
+                "min": {"modifier": "<=", "value": 20.0},
+                "max": {"modifier": ">=", "value": 90.0},
+                "slope": {"modifier": ">=", "value": 2.0},
+            }
+        )
+        assert (cfg.bottom_constraint_min, cfg.bottom_constraint_max) == (None, 20.0)
+        assert (cfg.top_constraint_min, cfg.top_constraint_max) == (90.0, None)
+        assert (cfg.hill_slope_min, cfg.hill_slope_max) == (2.0, None)
+
+    def test_a_hill_lock_other_than_one_is_left_free_with_a_warning(self) -> None:
+        proto = _percent_of_control_curve_protocol(370947)
+        proto["calculations"][1]["fit_parameters"] = {
+            "min": {"range": {"min": -10.0, "max": 10.0}},
+            "max": _FREE,
+            "slope": {"modifier": "=", "value": 2.5},
+        }
+        result = map_cdd_protocol(proto)
+        cfg = next(r for r in result.readouts if r.name == "IC50").dose_response_config
+        assert cfg is not None
+        assert cfg.hill_slope_constraint == HillSlopeConstraint.UNCONSTRAINED
+        assert (cfg.hill_slope_min, cfg.hill_slope_max) == (None, None)
+        assert (cfg.bottom_constraint_min, cfg.bottom_constraint_max) == (-10.0, 10.0)
+        assert (
+            MappingWarning(
+                field_name="IC50",
+                source_type="dose response calculation",
+                reason="CDD fixes the Hill slope at 2.5; Cellar can only fix it at 1, so it is free",
+            )
+            in result.warnings
+        )
+
+    def test_contradictory_settings_import_as_free_with_a_warning(self) -> None:
+        proto = _percent_of_control_curve_protocol(370947)
+        proto["calculations"][1]["fit_parameters"] = {
+            "min": {"modifier": "=", "value": 100.0},
+            "max": {"modifier": "=", "value": 0.0},
+            "slope": _FREE,
+        }
+        result = map_cdd_protocol(proto)
+        cfg = next(r for r in result.readouts if r.name == "IC50").dose_response_config
+        assert cfg == _curve_with_fit_settings(None)
+        warning = next(w for w in result.warnings if w.field_name == "IC50")
+        assert warning.reason.startswith("CDD's fit settings cannot be used, so the fit is free:")

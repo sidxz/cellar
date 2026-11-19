@@ -22,6 +22,7 @@ from cellar.domain.screening_assay.protocol import (
     curve_problems_by_curve,
     is_reserved_readout_name,
 )
+from cellar.domain.shared.errors import ValidationError
 
 __all__ = [
     "CddProtocolMappingResult",
@@ -296,10 +297,65 @@ def _build_normalization_output_index(
     return out_index
 
 
+_CDD_FIT_PARAMS = (("min", "bottom"), ("max", "top"))
+
+
+def _fit_bounds_from_cdd(
+    fit_parameters: dict[str, Any] | None, curve_name: str, warnings: list[MappingWarning]
+) -> dict[str, Any]:
+    """CDD's per-curve min / max / slope settings as DoseResponseConfig bounds.
+
+    Each setting is ``{"range": {"min", "max"}}`` or ``{"modifier": "=" | "<=" | ">=" |
+    None, "value"}``. CDD's min / max are the bottom / top plateaus; its slope is the Hill
+    slope in the same sign convention as the fitter.
+    """
+    bounds: dict[str, Any] = {}
+    fp = fit_parameters or {}
+    for cdd_name, plateau in _CDD_FIT_PARAMS:
+        lock, lo, hi = _cdd_setting(fp.get(cdd_name))
+        bounds |= {
+            f"{plateau}_constraint": lock,
+            f"{plateau}_constraint_min": lo,
+            f"{plateau}_constraint_max": hi,
+        }
+    lock, lo, hi = _cdd_setting(fp.get("slope"))
+    bounds |= {"hill_slope_min": lo, "hill_slope_max": hi}
+    if lock == 1.0:
+        bounds["hill_slope_constraint"] = HillSlopeConstraint.FIXED_AT_ONE
+    elif lock is not None:
+        warnings.append(
+            MappingWarning(
+                field_name=curve_name,
+                source_type="dose response calculation",
+                reason=f"CDD fixes the Hill slope at {lock:g}; Cellar can only fix it at 1, "
+                "so it is free",
+            )
+        )
+    return {k: v for k, v in bounds.items() if v is not None}
+
+
+def _cdd_setting(setting: Any) -> tuple[float | None, float | None, float | None]:
+    """One CDD fit setting as (lock, min, max)."""
+    if not isinstance(setting, dict):
+        return None, None, None
+    if isinstance(setting.get("range"), dict):
+        return None, setting["range"].get("min"), setting["range"].get("max")
+    value = setting.get("value")
+    match setting.get("modifier"):
+        case "=":
+            return value, None, None
+        case "<=":
+            return None, None, value
+        case ">=":
+            return None, value, None
+    return None, None, None
+
+
 def _build_dose_response_readouts(
     calculations: list[dict[str, Any]],
     rd_by_id: dict[int, dict[str, Any]],
     start_order: int,
+    warnings: list[MappingWarning],
 ) -> list[MappedReadout]:
     """Synthesize DOSE_RESPONSE readouts from dose-response calculations.
 
@@ -366,6 +422,27 @@ def _build_dose_response_readouts(
         dr_name = intercept_rd.get("name", "Dose Response")
         dr_unit = intercept_rd.get("unit_label")
 
+        config = {
+            "curve_type": CurveType.IC50,
+            "x_readout_name": x_name,
+            "y_readout_name": y_name,
+            "y_normalization": y_normalization,
+            "hill_slope_constraint": HillSlopeConstraint.UNCONSTRAINED,
+            "normalization_scope": NormalizationScope.PER_PLATE,
+        }
+        bounds = _fit_bounds_from_cdd(calc.get("fit_parameters"), dr_name, warnings)
+        try:
+            dr_config = DoseResponseConfig(**(config | bounds))
+        except ValidationError as exc:
+            warnings.append(
+                MappingWarning(
+                    field_name=dr_name,
+                    source_type="dose response calculation",
+                    reason=f"CDD's fit settings cannot be used, so the fit is free: {exc}",
+                )
+            )
+            dr_config = DoseResponseConfig(**config)
+
         dr_readouts.append(
             MappedReadout(
                 name=dr_name,
@@ -376,14 +453,7 @@ def _build_dose_response_readouts(
                 normalizations=frozenset(),
                 precision=None,
                 pick_list_values=None,
-                dose_response_config=DoseResponseConfig(
-                    curve_type=CurveType.IC50,
-                    x_readout_name=x_name,
-                    y_readout_name=y_name,
-                    y_normalization=y_normalization,
-                    hill_slope_constraint=HillSlopeConstraint.UNCONSTRAINED,
-                    normalization_scope=NormalizationScope.PER_PLATE,
-                ),
+                dose_response_config=dr_config,
                 display_order=order,
             )
         )
@@ -564,7 +634,7 @@ def map_cdd_protocol(protocol_data: dict[str, Any]) -> CddProtocolMappingResult:
         readout_idx += 1
 
     # Synthesize DOSE_RESPONSE readouts from dose-response calculations
-    dr_readouts = _build_dose_response_readouts(calculations, rd_by_id, readout_idx)
+    dr_readouts = _build_dose_response_readouts(calculations, rd_by_id, readout_idx, warnings)
     readouts.extend(dr_readouts)
     readouts = _drop_curves_that_cannot_fit(readouts, warnings)
 
