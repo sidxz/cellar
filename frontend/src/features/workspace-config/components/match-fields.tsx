@@ -5,7 +5,10 @@ import {
   type MappingRow,
 } from "@/features/chemical-registration/components/column-mapping-table";
 import { useSuggestColumnMapping } from "@/features/chemical-registration/hooks/use-registration-wizard-api";
-import { TARGET_GROUPS } from "@/features/chemical-registration/lib/column-targets";
+import {
+  TARGET_GROUPS,
+  oneColumnPerTarget,
+} from "@/features/chemical-registration/lib/column-targets";
 import { Button } from "@/shared/components/ui/button";
 import type {
   ColumnMappingBody,
@@ -74,20 +77,21 @@ export function MatchFields({ dataSourceId, saved }: Props) {
   // biome-ignore lint/correctness/useExhaustiveDependencies: build once per fields/saved load; the mutation is stable.
   useEffect(() => {
     if (!fields && !error) return;
-    const build = (byLabel: Map<string, ColumnMappingColumnBody>) =>
-      setMapping({
-        columns: rows.map((r) => {
-          const s = savedBy.get(r.key);
-          if (s) return s;
-          const g = byLabel.get(r.label);
-          // A suggestion only counts when it is a target of this field's level.
-          const ok =
-            g && TARGET_GROUPS.some((t) => t.label === r.group && t.targets.includes(g.target));
-          return ok
-            ? { header: r.key, target: g.target, source: g.source ?? null, separator: g.separator }
-            : { header: r.key, target: "ignore", source: null };
-        }),
+    const build = (byLabel: Map<string, ColumnMappingColumnBody>) => {
+      const columns = rows.map((r): ColumnMappingColumnBody => {
+        const s = savedBy.get(r.key);
+        if (s) return s;
+        const g = byLabel.get(r.label);
+        // A suggestion only counts when it is a target of this field's level.
+        const ok =
+          g && TARGET_GROUPS.some((t) => t.label === r.group && t.targets.includes(g.target));
+        return ok
+          ? { header: r.key, target: g.target, source: g.source ?? null, separator: g.separator }
+          : { header: r.key, target: "ignore", source: null };
       });
+      // A saved field keeps its target; a suggestion for one already taken is dropped.
+      setMapping({ columns: oneColumnPerTarget(columns, (c) => savedBy.has(c.header)) });
+    };
     const unsaved = rows.filter((r) => !savedBy.has(r.key)).map((r) => r.label);
     if (unsaved.length === 0) return build(new Map());
     suggest

@@ -66,13 +66,22 @@ export const isLabelled = (t: ColumnTarget) => LABELLED.has(t);
 export const isSplittable = (t: ColumnTarget) => t === "compound_id" || t === "batch_id";
 export const isMulti = (t: ColumnTarget) => MULTI.has(t);
 
+type MappedColumn = ColumnMappingBody["columns"][number];
+
 /** The sentence that blocks Preview, or null when the mapping can be previewed. */
 export function mappingProblem(
   mapping: ColumnMappingBody,
   structureImplied: boolean,
 ): string | null {
+  const owner = new Map<ColumnTarget, string>();
   for (const c of mapping.columns) {
     if (isLabelled(c.target) && !c.source?.trim()) return `Give "${c.header}" a Source.`;
+    if (isMulti(c.target)) continue;
+    const first = owner.get(c.target);
+    if (first !== undefined) {
+      return `"${first}" and "${c.header}" both go to ${TARGET_LABELS[c.target]}; only one column can.`;
+    }
+    owner.set(c.target, c.header);
   }
   const targets = new Set(mapping.columns.map((c) => c.target));
   if (!structureImplied && !targets.has("name") && !targets.has("smiles")) {
@@ -101,17 +110,33 @@ export function applySavedMapping(
   suggestion: ColumnMappingBody,
 ): ColumnMappingBody {
   const byNorm = new Map(saved.columns.map((c) => [norm(c.header), c]));
-  return {
-    columns: suggestion.columns.map((c) => {
-      const s = byNorm.get(norm(c.header));
-      return s
-        ? {
-            header: c.header,
-            target: s.target,
-            source: s.source ?? null,
-            separator: s.separator ?? undefined,
-          }
-        : c;
-    }),
-  };
+  const columns = suggestion.columns.map((c) => {
+    const s = byNorm.get(norm(c.header));
+    return s
+      ? {
+          header: c.header,
+          target: s.target,
+          source: s.source ?? null,
+          separator: s.separator ?? undefined,
+        }
+      : c;
+  });
+  return { columns: oneColumnPerTarget(columns, (c) => byNorm.has(norm(c.header))) };
+}
+
+/**
+ * A single-valued target takes one column: the columns ``kept`` says keep claim theirs
+ * first, then a suggestion for a target already taken becomes "Don't import".
+ */
+export function oneColumnPerTarget(
+  columns: MappedColumn[],
+  kept: (c: MappedColumn) => boolean,
+): MappedColumn[] {
+  const taken = new Set(columns.filter((c) => kept(c) && !isMulti(c.target)).map((c) => c.target));
+  return columns.map((c) => {
+    if (kept(c) || isMulti(c.target)) return c;
+    if (taken.has(c.target)) return { header: c.header, target: "ignore", source: null };
+    taken.add(c.target);
+    return c;
+  });
 }

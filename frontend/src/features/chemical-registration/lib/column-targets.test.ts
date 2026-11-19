@@ -6,6 +6,7 @@ import {
   isLabelled,
   isMulti,
   mappingProblem,
+  oneColumnPerTarget,
   scoreSavedMapping,
 } from "./column-targets";
 
@@ -108,5 +109,46 @@ describe("applySavedMapping", () => {
         { header: "CAS", target: "cas_number", source: "CAS" },
       ],
     });
+  });
+});
+
+describe("one column per single-valued target", () => {
+  it("blocks Preview when two columns go to one single-valued target", () => {
+    const mapping: ColumnMappingBody = {
+      columns: [
+        { header: "Compound", target: "name" },
+        { header: "Name", target: "name" },
+      ],
+    };
+    expect(mappingProblem(mapping, false)).toBe(
+      '"Compound" and "Name" both go to Compound name; only one column can.',
+    );
+  });
+
+  it("lets a saved column keep its target and drops a suggestion for it", () => {
+    const saved: ColumnMappingBody = { columns: [{ header: "Compound", target: "name" }] };
+    const suggestion: ColumnMappingBody = {
+      columns: [
+        { header: "Compound", target: "ignore" },
+        { header: "Name", target: "name" },
+        { header: "Synonyms", target: "compound_id", source: "Synonyms" },
+      ],
+    };
+    expect(applySavedMapping(saved, suggestion).columns.map((c) => c.target)).toEqual([
+      "name",
+      "ignore",
+      "compound_id",
+    ]);
+  });
+
+  it("keeps the first of two suggestions for one target", () => {
+    const cols = oneColumnPerTarget(
+      [
+        { header: "a", target: "salt_code" },
+        { header: "b", target: "salt_code" },
+      ],
+      () => false,
+    );
+    expect(cols.map((c) => c.target)).toEqual(["salt_code", "ignore"]);
   });
 });

@@ -55,11 +55,13 @@ export function ColumnMappingTable({
   hideSmiles,
   groupTitles,
 }: Props) {
-  // Single-valued targets already used, and by which row.
-  const takenBy = new Map<ColumnTarget, string>();
+  // Single-valued targets already used, and by which row (its key: two rows may share a label).
+  const takenBy = new Map<ColumnTarget, { key: string; label: string }>();
   const labelOf = new Map(rows.map((r) => [r.key, r.label]));
   for (const c of mapping.columns) {
-    if (!isMulti(c.target)) takenBy.set(c.target, labelOf.get(c.header) ?? c.header);
+    if (!isMulti(c.target)) {
+      takenBy.set(c.target, { key: c.header, label: labelOf.get(c.header) ?? c.header });
+    }
   }
 
   const update = (key: string, patch: Partial<ColumnMappingBody["columns"][number]>) =>
@@ -131,11 +133,11 @@ export function ColumnMappingTable({
                             .filter((t) => !(hideSmiles && t === "smiles"))
                             .map((t) => {
                               const owner = takenBy.get(t);
-                              const usedElsewhere = !!owner && owner !== r.label;
+                              const usedElsewhere = !!owner && owner.key !== r.key;
                               return (
                                 <SelectItem key={t} value={t} disabled={usedElsewhere}>
                                   {TARGET_LABELS[t]}
-                                  {usedElsewhere ? ` (used by ${owner})` : ""}
+                                  {usedElsewhere ? ` (used by ${owner.label})` : ""}
                                 </SelectItem>
                               );
                             })}
