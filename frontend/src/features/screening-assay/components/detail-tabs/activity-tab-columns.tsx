@@ -172,10 +172,11 @@ function interceptColumn(
     return formatInterceptDisplay({
       value,
       at_bound: iv?.at_bound,
+      // A mean over several curves has no one curve's class, qualifier or doses: those belong
+      // to the best curve, and an "active at all doses" best would hide a valid mean.
       qualifier: useMean ? null : iv?.qualifier,
       primary: c.primary,
-      curve_class: rv?.curve_class,
-      // The best curve's doses censor its own value, not a mean over several curves.
+      curve_class: useMean ? null : rv?.curve_class,
       ...doseRange(useMean ? null : rv?.data_points),
     });
   };

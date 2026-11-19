@@ -86,6 +86,11 @@ describe("activity intercept column on an Active-at-all-doses curve", () => {
     },
   } as unknown as CompoundActivity;
 
+  it("shows a valid geometric mean beside an Active-at-all-doses best curve", () => {
+    // One AAD curve and one exact curve at 3: the mean is 3; the best curve is the AAD one.
+    expect(value("mean", row)).toBe(3);
+  });
+
   it("reads a secondary intercept by its own qualifier, not the class", () => {
     const ic90 = { primary: false, intercept: { kind: "ic", level: 90 } } as Partial<CatalogColumn>;
     expect(value("best", row, ic90)).toBe(Number.POSITIVE_INFINITY);
