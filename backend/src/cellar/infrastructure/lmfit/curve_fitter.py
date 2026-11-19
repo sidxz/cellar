@@ -31,6 +31,7 @@ from cellar.domain.screening_assay.curve_fitting import (
     ConcentrationResponsePoint,
     FittedCurveResult,
     InterceptValue,
+    ResponseScale,
 )
 from cellar.domain.screening_assay.enums import (
     CurveClass,
@@ -38,12 +39,16 @@ from cellar.domain.screening_assay.enums import (
     InterceptBasis,
 )
 from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.domain.shared.errors import DomainError, ValidationError
 
 if TYPE_CHECKING:
     from lmfit.model import ModelResult
 
-    from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+    from cellar.domain.screening_assay.dose_response_config import (
+        DoseResponseConfig,
+        InterceptSpec,
+    )
 
 
 _MIN_FITTING_POINTS = 4
@@ -144,11 +149,15 @@ class LmfitCurveFitter:
         self,
         points: list[ConcentrationResponsePoint],
         config: DoseResponseConfig,
+        scale: ResponseScale | None = None,
     ) -> Result[FittedCurveResult, DomainError]:
         """Fit a direction-agnostic 4PL curve to the provided data points.
 
         A point at dose <= 0 (a vehicle well in a titration) has no place on the log-dose
         axis: it is left out of the fit and counted in a ``DOSE_ZERO_LEFT_OUT`` note.
+
+        ``scale`` is the % scale of the fitted layer, if it has one: a curve with no
+        transition is judged against it (see ``_read_intercept``).
         """
         left_out = sum(1 for p in points if not p.concentration > 0)
         notes = [f"{DOSE_ZERO_LEFT_OUT}:{left_out}"] if left_out else []
@@ -216,6 +225,10 @@ class LmfitCurveFitter:
                     raw_data=raw_data,
                     excluded_points=excluded_data,
                     fit_quality_warnings=notes,
+                    intercept_values=tuple(
+                        _censored(spec, ValueQualifier.GT, float(np.max(concentrations)))
+                        for spec in config.intercepts
+                    ),
                     outlier_suggestions=(),
                 )
             )
@@ -319,25 +332,30 @@ class LmfitCurveFitter:
         # "—" rather than a fake interval.
         # ──────────────────────────────────────────────────────────────────
         fitted_ec50 = float(10.0**fitted_log_ec50)
-        ci_low: float | None
-        ci_high: float | None
+        ci_half_width: float | None = None
         if (
-            ec50_at_bound
-            or log_ec50_stderr is None
-            or not np.isfinite(log_ec50_stderr)
-            or log_ec50_stderr <= 0
+            not ec50_at_bound
+            and log_ec50_stderr is not None
+            and np.isfinite(log_ec50_stderr)
+            and 0 < 1.96 * log_ec50_stderr < 10.0  # a 10-decade interval says nothing
         ):
-            ci_low = None
-            ci_high = None
-        else:
-            half_width = 1.96 * log_ec50_stderr
-            if half_width >= 10.0:
-                # stderr is so large the CI is meaningless — still degenerate.
-                ci_low = None
-                ci_high = None
-            else:
-                ci_low = float(10.0 ** (fitted_log_ec50 - half_width))
-                ci_high = float(10.0 ** (fitted_log_ec50 + half_width))
+            ci_half_width = 1.96 * float(log_ec50_stderr)
+        ci_low, ci_high = _log_interval(fitted_log_ec50, ci_half_width)
+
+        # Each intercept, read against the tested doses. ``config.intercepts`` is non-empty
+        # by construction (DoseResponseConfig.__post_init__ defaults to a single 50%
+        # intercept derived from curve_type when none are set).
+        intercept_values = [
+            _read_intercept(
+                spec,
+                curve=(fitted_top, fitted_bottom, fitted_log_ec50, fitted_hill),
+                doses=(float(np.min(concentrations)), float(np.max(concentrations))),
+                transition_threshold=config.inactive_threshold,
+                scale=scale,
+                ci_half_width=ci_half_width,
+            )
+            for spec in config.intercepts
+        ]
 
         curve_class = _classify_curve(
             responses=responses,
@@ -346,74 +364,15 @@ class LmfitCurveFitter:
             r_squared=r_squared,
             fitted_top=fitted_top,
             fitted_bottom=fitted_bottom,
+            primary=intercept_values[0].qualifier,
             config=config,
         )
 
-        # Compute the per-spec intercepts. ``config.intercepts`` is non-empty
-        # by construction (DoseResponseConfig.__post_init__ defaults to a
-        # single 50% intercept derived from curve_type when none are set).
-        intercept_values: list[InterceptValue] = []
-        for spec in config.intercepts:
-            y_target = _response_target(spec, fitted_top, fitted_bottom)
-            log_x = _hill_inverse_log10(
-                top=fitted_top,
-                bottom=fitted_bottom,
-                log_ec50=fitted_log_ec50,
-                hill=fitted_hill,
-                y_target=y_target,
-            )
-            if log_x is None:
-                intercept_values.append(
-                    InterceptValue(
-                        spec=spec,
-                        value=float("nan"),
-                        confidence_interval_low=None,
-                        confidence_interval_high=None,
-                        at_bound=True,
-                    )
-                )
-                continue
-            value = float(10.0**log_x)
-            # CI: the offset (log_x - log_ec50) is constant for fixed
-            # (top, bottom, hill, y_target), so log-space stderr propagates
-            # unchanged. Reuse the same gating as the headline CI.
-            i_ci_low: float | None
-            i_ci_high: float | None
-            if (
-                ec50_at_bound
-                or log_ec50_stderr is None
-                or not np.isfinite(log_ec50_stderr)
-                or log_ec50_stderr <= 0
-            ):
-                i_ci_low = None
-                i_ci_high = None
-            else:
-                half_width = 1.96 * float(log_ec50_stderr)
-                if half_width >= 10.0:
-                    i_ci_low = None
-                    i_ci_high = None
-                else:
-                    i_ci_low = float(10.0 ** (log_x - half_width))
-                    i_ci_high = float(10.0 ** (log_x + half_width))
-            intercept_values.append(
-                InterceptValue(
-                    spec=spec,
-                    value=value,
-                    confidence_interval_low=i_ci_low,
-                    confidence_interval_high=i_ci_high,
-                    at_bound=False,
-                )
-            )
-
-        # Headline ``fitted_value`` stays as the primary intercept's value
-        # for back-compat with all existing readers (grids, sparkline,
-        # exports). For a default single-50%-intercept config this equals
-        # the legacy log_ec50 → 10**log_ec50 conversion.
-        primary_value = (
-            intercept_values[0].value
-            if intercept_values and not intercept_values[0].at_bound
-            else fitted_ec50
-        )
+        # Headline ``fitted_value``: the primary intercept's value when it is exact, else
+        # the fitted midpoint. Charts draw the sigmoid from it, so it is never a bound dose;
+        # displayed values come from the intercepts' qualifiers.
+        primary = intercept_values[0]
+        primary_value = primary.value if primary.qualifier == ValueQualifier.EQ else fitted_ec50
 
         return Success(
             FittedCurveResult(
@@ -436,6 +395,112 @@ class LmfitCurveFitter:
                 outlier_suggestions=outlier_suggestions,
             )
         )
+
+
+def _read_intercept(
+    spec: InterceptSpec,
+    *,
+    curve: tuple[float, float, float, float],
+    doses: tuple[float, float],
+    transition_threshold: float,
+    scale: ResponseScale | None,
+    ci_half_width: float | None,
+) -> InterceptValue:
+    """One intercept of the fitted ``curve`` (top, bottom, log EC50, Hill), read against the
+    lowest and highest tested ``doses``.
+
+    A transition is a change of at least ``transition_threshold`` that the fitted curve makes
+    across the doses; plateaus extrapolated past them (a steep step at the last dose, a
+    shallow curve's far ends) are not one.
+
+    With a transition, the level sits at its % of the fitted window (``_response_target``, as
+    before) and the effect runs the way the curve does; on a flat curve read on a ``scale``,
+    the level sits at its % of the scale and the effect runs the scale's way.
+    Then: past the level at the lowest dose is "<" the lowest dose, short of it at the
+    highest dose is ">" the highest; otherwise the curve crosses it inside the doses ("="),
+    or, when flat, the level lies inside a band whose shape is noise ("nd").
+
+    A flat curve with no scale (raw signal, Z-score) has nothing to judge it by and keeps
+    its own crossing, wherever that falls.
+    """
+    top, bottom, log_ec50, hill = curve
+    lo, hi = doses
+    f_lo, f_hi = _hill_equation(np.log10([lo, hi]), top, bottom, log_ec50, hill)
+    flat = abs(float(f_hi - f_lo)) < transition_threshold
+    if flat and scale is None:
+        log_x = _hill_inverse_log10(
+            top=top,
+            bottom=bottom,
+            log_ec50=log_ec50,
+            hill=hill,
+            y_target=_response_target(spec, top, bottom),
+        )
+        if log_x is None:
+            return _censored(spec, ValueQualifier.GT, hi)
+        return _exact(spec, log_x, ci_half_width)
+
+    if flat and scale is not None:
+        target = (
+            float(spec.level)
+            if spec.basis == InterceptBasis.ABSOLUTE
+            else scale.zero + spec.level / 100.0 * (scale.full - scale.zero)
+        )
+        rising = scale.full > scale.zero
+    else:
+        target = _response_target(spec, top, bottom)
+        rising = bool(f_hi > f_lo)
+
+    def reached(response: float) -> bool:
+        return response >= target if rising else response <= target
+
+    if reached(f_lo):
+        return _censored(spec, ValueQualifier.LT, lo)
+    if not reached(f_hi):
+        return _censored(spec, ValueQualifier.GT, hi)
+    if flat:
+        return InterceptValue(
+            spec=spec,
+            value=float("nan"),
+            confidence_interval_low=None,
+            confidence_interval_high=None,
+            qualifier=ValueQualifier.ND,
+        )
+    log_x = _hill_inverse_log10(
+        top=top, bottom=bottom, log_ec50=log_ec50, hill=hill, y_target=target
+    )
+    # Short of the level at ``lo`` and at it at ``hi``: the crossing is in (lo, hi], and
+    # only exactly at a saturated ``hi`` can the inverse miss it.
+    return _exact(spec, math.log10(hi) if log_x is None else log_x, ci_half_width)
+
+
+def _exact(spec: InterceptSpec, log_x: float, ci_half_width: float | None) -> InterceptValue:
+    # The offset log_x - log_ec50 is constant for a fixed curve and level, so the log EC50's
+    # interval carries over unchanged.
+    ci_low, ci_high = _log_interval(log_x, ci_half_width)
+    return InterceptValue(
+        spec=spec,
+        value=float(10.0**log_x),
+        confidence_interval_low=ci_low,
+        confidence_interval_high=ci_high,
+        qualifier=ValueQualifier.EQ,
+    )
+
+
+def _censored(spec: InterceptSpec, qualifier: ValueQualifier, dose: float) -> InterceptValue:
+    return InterceptValue(
+        spec=spec,
+        value=dose,
+        confidence_interval_low=None,
+        confidence_interval_high=None,
+        at_bound=qualifier == ValueQualifier.GT,
+        qualifier=qualifier,
+    )
+
+
+def _log_interval(log_x: float, half_width: float | None) -> tuple[float | None, float | None]:
+    if half_width is None:
+        return None, None
+    return float(10.0 ** (log_x - half_width)), float(10.0 ** (log_x + half_width))
 
 
 def _leastsq(
@@ -688,6 +753,7 @@ def _classify_curve(
     r_squared: float,
     fitted_top: float,
     fitted_bottom: float,
+    primary: ValueQualifier | None,
     config: DoseResponseConfig,
 ) -> CurveClass:
     """Classify a fitted curve using thresholds from ``config``.
@@ -695,6 +761,9 @@ def _classify_curve(
     Defaults are calibrated for normalized (%) Y axes. Raw-signal protocols
     must override ``inactive_threshold``/``full_top_min``/``full_bottom_max``
     on the protocol's ``DoseResponseConfig`` to classify correctly.
+
+    A curve past its primary intercept's level at the lowest dose (``primary`` "<") is
+    active at all doses, whatever its R².
     """
     max_response = float(np.max(responses))
     if max_response < config.inactive_threshold:
@@ -708,6 +777,9 @@ def _classify_curve(
         is_monotonic = bool(np.all(diffs <= 0) or np.all(diffs >= 0))
         if not is_monotonic:
             return CurveClass.BELL_SHAPED
+
+    if primary == ValueQualifier.LT:
+        return CurveClass.ACTIVE_ALL_DOSES
 
     if (
         r_squared >= config.full_r2_min

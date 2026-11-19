@@ -245,6 +245,9 @@ class CurveClass(StrEnum):
     PARTIAL = "partial"
     BELL_SHAPED = "bell_shaped"
     INACTIVE = "inactive"
+    # At or past the primary intercept's level at every tested dose (its value reads
+    # "< lowest dose"); mirrors INACTIVE, which reads "> highest dose".
+    ACTIVE_ALL_DOSES = "active_all_doses"
 
 
 class PosControlSignal(StrEnum):

@@ -12,13 +12,16 @@ from returns.result import Failure, Success
 from cellar.domain.screening_assay.curve_fitting import (
     DOSE_ZERO_LEFT_OUT,
     ConcentrationResponsePoint,
+    ResponseScale,
 )
-from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
+from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig, InterceptSpec
 from cellar.domain.screening_assay.enums import (
     CurveClass,
     CurveType,
     HillSlopeConstraint,
+    InterceptKind,
 )
+from cellar.domain.shared.aggregation_types import ValueQualifier
 from cellar.infrastructure.lmfit.curve_fitter import (
     LmfitCurveFitter,
     _fit_multi_start,
@@ -458,10 +461,9 @@ class TestRangeConstraints:
 
         Also asserts the multi-intercept feature (Phase I): with
         intercepts=(IC50, IC90), the fitter emits both values from the same
-        Hill fit. IC90 must land outside the tested dose range (the curve
-        plateaus around IC50) but still produce a finite extrapolated
-        value — not at_bound — because Top=110 means a 90% level (=99) is
-        reachable on the asymptote.
+        Hill fit. IC90 lies past the tested dose range (the curve plateaus
+        around IC50): the fitted curve has not reached its 90% level (=99)
+        at 100 µM, so it reads "> 100 µM" rather than an extrapolated value.
         """
         from cellar.domain.screening_assay.dose_response_config import (
             InterceptSpec,
@@ -504,13 +506,11 @@ class TestRangeConstraints:
         ic90 = fitted.intercept_values[1]
         assert ic50.spec.level == 50
         assert ic90.spec.level == 90
-        # IC90 needs more drug than IC50 for a rising inhibition curve.
+        # IC90 needs more drug than IC50 for a rising inhibition curve: here more
+        # than the highest tested dose.
         assert ic90.value > ic50.value
-        # Top fits ≥ 90 (well inside [85, 110]) so IC90 is reachable on the
-        # 4PL asymptote — finite, not at_bound, even though it's an
-        # extrapolation past the highest tested dose (100 µM).
-        assert not ic90.at_bound
-        assert math.isfinite(ic90.value)
+        assert ic50.qualifier == ValueQualifier.EQ
+        assert (ic90.qualifier, ic90.value, ic90.at_bound) == (ValueQualifier.GT, 100.0, True)
 
     def test_lock_and_range_mutually_exclusive_at_construction(self):
         """Domain-layer ValidationError, not a runtime fitter error."""
@@ -966,7 +966,8 @@ class TestMultiIntercept:
         # be at_bound. Adjust expectation: IC90 == conc at 90% along the
         # 0..50 window. That's reachable.
         assert not result.intercept_values[0].at_bound
-        # Now ask for IC@y=80 absolute → outside the curve, must be at_bound.
+        # Now ask for IC@y=80 absolute → outside the curve: not reached at the highest
+        # dose, so "> 100" and at_bound.
         from cellar.domain.screening_assay.enums import InterceptBasis
         cfg2 = DoseResponseConfig(
             curve_type=CurveType.IC50,
@@ -977,9 +978,8 @@ class TestMultiIntercept:
             intercepts=(InterceptSpec(InterceptKind.IC, 80, basis=InterceptBasis.ABSOLUTE),),
         )
         result2 = self.fitter.fit(points, cfg2).unwrap()
-        import math
-        assert result2.intercept_values[0].at_bound
-        assert math.isnan(result2.intercept_values[0].value)
+        iv = result2.intercept_values[0]
+        assert (iv.qualifier, iv.value, iv.at_bound) == (ValueQualifier.GT, 100.0, True)
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -1096,3 +1096,152 @@ def test_multi_start_never_worse_than_single_start_on_grid(bounded):
         ):
             worse.append(case.name)
     assert worse == []
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Intercepts read against the tested doses; "Active at all doses"
+# ──────────────────────────────────────────────────────────────────────────
+
+_EC50_EC90 = DoseResponseConfig(
+    curve_type=CurveType.EC50,
+    y_readout_name="% Inhibition",
+    intercepts=(InterceptSpec(InterceptKind.EC, 50), InterceptSpec(InterceptKind.EC, 90)),
+)
+
+
+# Known misreadings, kept visible: on 6-10 points at noise SD 8 the free fit puts a plateau far
+# past the data (bottom -367 from points at 10; plateaus at ±4000; top 197 from points at 109),
+# so the 50 % level of that window lies outside every response and reads "< lowest dose",
+# active at all doses. Today they show equally wrong exact EC50s far below the doses.
+_EXTRAPOLATED_PLATEAUS = {
+    "rise-full-inside-h0.5-3dec6-sd8",
+    "fall-partial-inside-h1-3dec6-sd8",
+    "fall-partial-inside-h0.5-4dec10-sd8",
+}
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            c,
+            id=c.name,
+            marks=pytest.mark.xfail(
+                c.name in _EXTRAPOLATED_PLATEAUS,
+                reason="relative target on plateaus extrapolated past the data",
+                strict=True,
+            ),
+        )
+        for c in GRID
+    ],
+)
+def test_intercepts_and_class_follow_the_generating_curve_on_grid(case):
+    scale = ResponseScale(*case.scale) if case.scale else None
+    fitted = LmfitCurveFitter().fit(case.points(), _EC50_EC90, scale).unwrap()
+    lo, hi = case.doses[0], case.doses[-1]
+
+    assert fitted.curve_class in case.expected_class
+    ec50, ec90 = fitted.intercept_values
+    for iv, expected, offset in (
+        (ec50, case.expected_ec50, 0.0),
+        (ec90, case.expected_ec90, math.log10(9.0) / case.hill),
+    ):
+        assert iv.qualifier in expected
+        assert iv.at_bound == (iv.qualifier == ValueQualifier.GT)
+        if iv.qualifier == ValueQualifier.LT:
+            assert iv.value == lo
+        elif iv.qualifier == ValueQualifier.GT:
+            assert iv.value == hi
+        elif iv.qualifier == ValueQualifier.ND:
+            assert math.isnan(iv.value)
+        elif scale is not None:
+            assert lo <= iv.value <= hi
+        if case.noise_sd == 0 and expected == {ValueQualifier.EQ} and case.position == "inside":
+            # Exact data: the crossing is the generating curve's own.
+            assert math.log10(iv.value) == pytest.approx(case.log_ec50 + offset, abs=0.05)
+
+    # fitted_value keeps its meaning: the primary's value when exact, else the fitted midpoint
+    # (0.0 on the inactive fast path); never a bound dose.
+    if ec50.qualifier == ValueQualifier.EQ:
+        assert fitted.fitted_value == ec50.value
+    else:
+        assert math.isfinite(fitted.fitted_value)
+        assert fitted.fitted_value not in (lo, hi)
+
+
+# The two compounds of the WCA_DHFR plate that inhibit 85-100 % at every dose (µM, %).
+_SACC_0428730 = [
+    (0.0002, 85.67), (0.0004, 86.06), (0.001, 85.27), (0.0015, 87.3), (0.003, 91.47),
+    (0.0065, 91.5), (0.0125, 92.35), (0.025, 92.39), (0.05, 90.12), (0.1, 91.61), (0.2, 92.57),
+    (0.4, 92.47), (1.0, 92.98), (1.5, 90.96), (3.0, 93.66), (6.5, 92.49), (12.5, 93.36),
+    (25.0, 91.53), (50.0, 88.4), (100.0, 100.94),
+]  # fmt: skip
+_SACC_0519396 = [
+    (0.0002, 92.35), (0.0004, 91.23), (0.001, 90.72), (0.0015, 91.38), (0.003, 91.62),
+    (0.0065, 87.93), (0.0125, 90.12), (0.025, 92.7), (0.05, 95.01), (0.1, 95.01), (0.2, 94.3),
+    (0.4, 95.48), (1.0, 91.6), (1.5, 93.02), (3.0, 92.24), (6.5, 97.53), (12.5, 100.05),
+    (25.0, 101.73), (50.0, 99.45), (100.0, 98.32),
+]  # fmt: skip
+
+
+def _points(series):
+    return [ConcentrationResponsePoint(concentration=c, response=r) for c, r in series]
+
+
+@pytest.mark.parametrize("series", [_SACC_0428730, _SACC_0519396], ids=["0428730", "0519396"])
+def test_wca_flat_compounds_are_active_at_all_doses(series):
+    fitted = LmfitCurveFitter().fit(_points(series), _EC50_EC90, ResponseScale()).unwrap()
+    assert fitted.curve_class == CurveClass.ACTIVE_ALL_DOSES
+    ec50, ec90 = fitted.intercept_values
+    assert (ec50.qualifier, ec50.value) == (ValueQualifier.LT, 0.0002)
+    assert not ec50.at_bound
+    # EC90 (90 % on the scale) is read off the fitted band: below it at the lowest dose
+    # ("<"), or inside it ("n.d.").
+    band = (min(fitted.top, fitted.bottom), max(fitted.top, fitted.bottom))
+    assert ec90.qualifier == (ValueQualifier.LT if band[0] >= 90 else ValueQualifier.ND)
+
+
+@pytest.mark.parametrize("series", [_SACC_0428730, _SACC_0519396], ids=["0428730", "0519396"])
+def test_a_flat_curve_without_a_scale_keeps_todays_intercepts(series):
+    """Raw-signal and Z-score layers have no scale to judge a flat line by: its intercepts are
+    the fitted curve's own crossings, as before, and it is never "active at all doses"."""
+    fitted = LmfitCurveFitter().fit(_points(series), _EC50_EC90).unwrap()
+    assert fitted.curve_class in (CurveClass.INACTIVE, CurveClass.PARTIAL)
+    assert [iv.qualifier for iv in fitted.intercept_values] == [ValueQualifier.EQ] * 2
+    assert fitted.fitted_value == fitted.intercept_values[0].value
+
+
+@pytest.mark.parametrize("scale", [None, ResponseScale()], ids=["no-scale", "percent"])
+def test_the_inactive_fast_path_reads_above_the_highest_dose(scale):
+    points = [
+        ConcentrationResponsePoint(concentration=10.0**-i, response=5.0 + (i % 3))
+        for i in range(8)
+    ]
+    fitted = LmfitCurveFitter().fit(points, _EC50_EC90, scale).unwrap()
+    assert fitted.curve_class == CurveClass.INACTIVE
+    assert fitted.fitted_value == 0.0
+    assert [
+        (iv.qualifier, iv.value, iv.at_bound, iv.confidence_interval_low)
+        for iv in fitted.intercept_values
+    ] == [(ValueQualifier.GT, 1.0, True, None)] * 2
+
+
+def test_a_bell_shaped_series_keeps_todays_class_and_reads_its_intercepts_on_the_fit():
+    """Rising to ~94 % then falling back to ~27 %: the 4PL fits one direction (it cannot
+    turn), so the class comes from today's R² / plateau rules (R² 0.52: inactive), never
+    "bell_shaped" from the fit, and its intercepts follow the censoring rules on that fitted
+    curve, which crosses both levels inside the doses."""
+    log_doses = np.linspace(-3, 2, 11)
+    rise = 90.0 / (1.0 + 10.0 ** ((-2.0 - log_doses) * 1.5))
+    fall = 70.0 / (1.0 + 10.0 ** ((1.0 - log_doses) * 1.5))
+    series = list(zip(10.0**log_doses, rise - fall + 5.0, strict=True))
+    fitted = LmfitCurveFitter().fit(_points(series), _EC50_EC90, ResponseScale()).unwrap()
+    assert fitted.curve_class == CurveClass.INACTIVE
+    assert [iv.qualifier for iv in fitted.intercept_values] == [ValueQualifier.EQ] * 2
+
+
+def test_a_response_scale_needs_a_direction():
+    from cellar.domain.shared.errors import ValidationError as VE
+
+    with pytest.raises(VE, match="full must differ from zero"):
+        ResponseScale(zero=50.0, full=50.0)

@@ -13,7 +13,8 @@ from cellar.domain.screening_assay.dose_response_config import (
 )
 from cellar.domain.screening_assay.enums import CurveClass
 from cellar.domain.screening_assay.outlier_suggestion import OutlierSuggestion
-from cellar.domain.shared.errors import DomainError
+from cellar.domain.shared.aggregation_types import ValueQualifier
+from cellar.domain.shared.errors import DomainError, ValidationError
 
 # Fit-quality code for points left out of a fit because their dose is zero or negative (no
 # place on a log-dose axis), suffixed with how many: ``"dose_zero_left_out:2"``.
@@ -30,13 +31,38 @@ class ConcentrationResponsePoint:
 
 
 @dataclass(frozen=True)
-class InterceptValue:
-    """One computed intercept derived from the same Hill fit.
+class ResponseScale:
+    """The scale a fitted layer is read on: the response of no effect (``zero``) and of the
+    full effect (``full``). The effect rises with the response when ``full > zero``.
 
-    ``value`` is the concentration in linear space (not log) at which the
-    curve crosses the response threshold defined by ``spec``. ``at_bound``
-    is True when the response threshold is outside ``[bottom, top]`` — the
-    curve never reaches it; ``value`` is NaN in that case.
+    A curve whose plateaus show no transition is judged against it: a flat line at 95 % on a
+    0-100 % scale is past its 50 % level at every dose. Layers with no such scale (raw
+    signal, Z-score) pass none.
+    """
+
+    zero: float = 0.0
+    full: float = 100.0
+
+    def __post_init__(self) -> None:
+        if self.full == self.zero:
+            raise ValidationError("ResponseScale full must differ from zero")
+
+
+@dataclass(frozen=True)
+class InterceptValue:
+    """One computed intercept derived from the same Hill fit, read against the tested doses.
+
+    ``qualifier`` says how ``value`` (a concentration, linear space) reads:
+
+    * ``=``: the fitted curve crosses the intercept's level at ``value``, inside the doses;
+    * ``<``: it is past the level already at the lowest dose, ``value``;
+    * ``>``: it has not reached the level at the highest dose, ``value``;
+    * ``nd``: a flat curve whose band holds the level, so no crossing can be read from
+      it; ``value`` is NaN.
+
+    ``None`` marks an intercept stored before qualifiers existed: readers apply today's rules.
+    ``at_bound`` is True exactly when the qualifier is ``>``, so readers that only know
+    ``at_bound`` show "> highest dose" and never a wrong one.
     """
 
     spec: InterceptSpec
@@ -44,6 +70,7 @@ class InterceptValue:
     confidence_interval_low: float | None
     confidence_interval_high: float | None
     at_bound: bool = False
+    qualifier: ValueQualifier | None = None
 
 
 @dataclass(frozen=True)
@@ -95,4 +122,5 @@ class CurveFittingService(Protocol):
         self,
         points: list[ConcentrationResponsePoint],
         config: DoseResponseConfig,
+        scale: ResponseScale | None = None,
     ) -> Result[FittedCurveResult, DomainError]: ...

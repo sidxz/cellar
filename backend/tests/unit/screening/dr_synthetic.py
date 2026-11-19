@@ -11,13 +11,15 @@ imported from the fitter, so the generator stays an independent truth.
 inside and right of the tested doses, full / partial / flat curves (flat at 0, 40 and 95 %
 effect), Hill 0.5-6 and noise SD 0, 3 and 8. No case is tuned to any dataset.
 
-Each case also carries the outcomes the censoring rules (design spec 2026-11-19, section B) give
-under the default config (free plateaus and slope, default thresholds) and the case's % scale.
-They are sets: the outcomes the rules can reach once noise moves the fit. A crossing may land
-``EDGE_DECADES`` either side of where the generating curve puts it, and the fitted curve at a
-tested-dose edge may sit ``NOISE_BAND`` noise SDs off the generating one. Noise-free cases are
-crisp, except where a curve whose transition lies outside the doses lets the fit either
-extrapolate the true plateaus or read the data as flat.
+Each case also carries the outcomes the censoring rules (design spec 2026-11-19, section B, with
+the controller's rulings) give under the default config (free plateaus and slope, default
+thresholds) and the case's ``scale``: rising cases are read on a % scale (0 to 100), falling
+cases on none, as raw-signal layers are. They are sets: the outcomes the rules can reach once
+noise moves the fit. The fitted curve may sit ``NOISE_BAND`` noise SDs off the generating one
+at a tested-dose edge or a plateau, so a crossing may land as far either side as that moves the
+curve at it (``EDGE_DECADES`` at least). Noise-free cases are crisp, except where a curve whose
+transition lies outside the doses lets the fit either extrapolate the true plateaus or read the
+data as flat.
 """
 
 from __future__ import annotations
@@ -40,13 +42,10 @@ from cellar.domain.shared.aggregation_types import ValueQualifier
 EDGE_DECADES = 0.5
 NOISE_BAND = 3.0
 
-# Curve classes as their stored strings; Task 2 adds ``CurveClass.ACTIVE_ALL_DOSES``.
 FULL, PARTIAL, INACTIVE, ACTIVE_ALL_DOSES = "full", "partial", "inactive", "active_all_doses"
 
-# The % scale each direction is read on, as (zero, full, effect_increases): a rising curve is
-# % inhibition / % activation, a falling one the same effect on a readout that drops with it.
-RISING_SCALE = (0.0, 100.0, True)
-FALLING_SCALE = (100.0, 0.0, False)
+# The % scale of a rising curve (% inhibition / % activation), as (zero, full).
+RISING_SCALE = (0.0, 100.0)
 
 # (decades, points, lowest dose)
 DOSE_DESIGNS = ((3, 6, 0.1), (4, 10, 0.01), (6, 20, 0.0001))
@@ -89,7 +88,7 @@ class Case:
     noise_sd: float
     seed: int
     position: str  # "left" | "inside" | "right" | "flat"
-    scale: tuple[float, float, bool]  # (zero, full, effect_increases)
+    scale: tuple[float, float] | None  # (zero, full); None: no scale to judge a flat curve by
     expected_class: frozenset[str]
     expected_ec50: frozenset[ValueQualifier]
     expected_ec90: frozenset[ValueQualifier]
@@ -123,24 +122,29 @@ def _intercept_outcomes(
     if transition_possible and top != bottom:
         y = bottom + level / 100.0 * (top - bottom)
         crossing = log_ec50 - math.log10((top - y) / (y - bottom)) / hill
-        tolerance = EDGE_DECADES if noise_sd else 0.0
-        for x in (crossing - tolerance, crossing, crossing + tolerance):
-            q = (
-                ValueQualifier.LT
-                if x <= log_lo
-                else ValueQualifier.GT
-                if x > log_hi
-                else ValueQualifier.EQ
-            )
-            out.add(("transition", q))
+        # Response per decade at the crossing: |top - bottom|·|hill|·ln10·p(1 - p).
+        p = level / 100.0
+        slope = amplitude * abs(hill) * math.log(10.0) * p * (1.0 - p)
+        tolerance = max(EDGE_DECADES, band / slope) if noise_sd else 0.0
+        lo_x, hi_x = crossing - tolerance, crossing + tolerance
+        if lo_x <= log_lo:
+            out.add(("transition", ValueQualifier.LT))
+        if hi_x > log_hi:
+            out.add(("transition", ValueQualifier.GT))
+        if lo_x <= log_hi and hi_x > log_lo:
+            out.add(("transition", ValueQualifier.EQ))
 
-    # Without one: y* sits at ``level`` % of the scale, the direction is the scale's.
-    if span - band < DEFAULT_INACTIVE_THRESHOLD:
-        zero, full, increases = scale
+    # Without one and without a scale: today's rule, the fit's own crossing reported as is,
+    # or ">" when it has none (exactly flat data: top == bottom).
+    if span - band < DEFAULT_INACTIVE_THRESHOLD and scale is None:
+        out |= {("flat", ValueQualifier.EQ), ("flat", ValueQualifier.GT)}
+    # Without one, on a scale: y* sits at ``level`` % of the scale, the direction is the scale's.
+    elif span - band < DEFAULT_INACTIVE_THRESHOLD:
+        zero, full = scale
         y = zero + level / 100.0 * (full - zero)
 
         def reached(v: float) -> bool:
-            return v >= y if increases else v <= y
+            return v >= y if full > zero else v <= y
 
         lo_reached = {reached(v) for v in (f_lo - band, f_lo + band)}
         hi_reached = {reached(v) for v in (f_hi - band, f_hi + band)}
@@ -159,6 +163,11 @@ def _transition_classes(*, top, bottom, log_ec50, hill, log_doses, noise_sd) -> 
     classes = {FULL if full else PARTIAL}
     if noise_sd == 0:
         return classes
+    band = NOISE_BAND * noise_sd
+    if top + band >= DEFAULT_FULL_TOP_MIN and bottom - band <= DEFAULT_FULL_BOTTOM_MAX:
+        classes.add(FULL)
+    if top - band < DEFAULT_FULL_TOP_MIN or bottom + band > DEFAULT_FULL_BOTTOM_MAX:
+        classes.add(PARTIAL)
     y = _4pl(log_doses, top, bottom, log_ec50, hill)
     if abs(y[-1] - y[0]) < 0.8 * abs(top - bottom):
         # Plateaus not seen: the fit extrapolates them, either side of the full thresholds.
@@ -248,13 +257,15 @@ def _build_grid() -> list[Case]:
                                 doses=doses,
                                 noise_sd=noise_sd,
                                 position=position,
-                                scale=RISING_SCALE if rising else FALLING_SCALE,
+                                scale=RISING_SCALE if rising else None,
                             )
                         )
             for effect in FLAT_EFFECTS:
-                for direction, scale in (("rise", RISING_SCALE), ("fall", FALLING_SCALE)):
-                    zero, full, _ = scale
-                    level = zero + effect / 100.0 * (full - zero)
+                # The same effect on a rising % readout and on a falling raw one (100 = none).
+                for direction, level, scale in (
+                    ("rise", effect, RISING_SCALE),
+                    ("fall", 100.0 - effect, None),
+                ):
                     specs.append(
                         dict(
                             name=f"{direction}-flat{effect:g}-{design}-sd{noise_sd:g}",
