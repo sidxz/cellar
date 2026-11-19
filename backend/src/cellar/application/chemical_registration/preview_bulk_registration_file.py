@@ -7,6 +7,7 @@ before kicking off the durable Temporal workflow.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any, Protocol
@@ -121,7 +122,9 @@ class PreviewBulkRegistrationFile:
             return Failure(ValidationError("file exceeds 50 MB cap"))
 
         try:
-            items = self._parser.parse(
+            # RDKit / pandas work on a 50 MB file would stall the event loop.
+            items = await asyncio.to_thread(
+                self._parser.parse,
                 content=input.content,
                 filename=input.filename,
                 file_format=input.file_format,

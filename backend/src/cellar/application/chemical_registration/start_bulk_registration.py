@@ -10,6 +10,7 @@ case absorbs the branching that previously lived in the route.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Literal
@@ -112,9 +113,13 @@ class StartBulkRegistration:
         if input.column_mapping is not None:
             # Check the mapping against the file's headers before a workflow starts;
             # only the header row is read here, the worker parses the rows.
+            # (SDF headers need every record read: off the event loop, as the parse is.)
             mapping_err = input.column_mapping.validate(
-                self._parser.headers(
-                    content=input.content, filename=input.filename, file_format=file_format
+                await asyncio.to_thread(
+                    self._parser.headers,
+                    content=input.content,
+                    filename=input.filename,
+                    file_format=file_format,
                 ),
                 structure_implied=file_format == BulkRegistrationFileFormat.SDF,
             )
@@ -151,7 +156,8 @@ class StartBulkRegistration:
 
         # --- Sync fallback: parse in-process and run BulkRegistrationService ---
         try:
-            parsed = self._parser.parse(
+            parsed = await asyncio.to_thread(
+                self._parser.parse,
                 content=input.content,
                 filename=input.filename,
                 file_format=file_format,
