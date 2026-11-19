@@ -40,6 +40,7 @@ import {
   useCddMoleculeImportStatus,
   useForceFailImport,
   useImportHistory,
+  useResumeCddMoleculeImport,
   useStartCddMoleculeImport,
 } from "../hooks/use-cdd-molecule-import";
 import {
@@ -95,6 +96,7 @@ export function DataImportPage() {
   const { data: history, refetch: refetchHistory } = useImportHistory();
   const startMutation = useStartCddMoleculeImport();
   const forceFailMutation = useForceFailImport();
+  const resumeMutation = useResumeCddMoleculeImport();
   const cancelMutation = useCancelCddMoleculeImport();
   // Force-failing an import is admin-only in the backend.
   const isAdmin = useAuthzHasRole("admin");
@@ -135,6 +137,17 @@ export function DataImportPage() {
       }
     }
   }, [liveStatus, qc]);
+
+  const resumeImport = async (importId: string) => {
+    setCompletionMessage(null);
+    setReport(null);
+    try {
+      const result = await resumeMutation.mutateAsync(importId);
+      setWorkflowId(result.workflow_id);
+    } catch {
+      // The reason shows in the history, beside the button (resumeMutation.error).
+    }
+  };
 
   const startImport = async (
     params: Parameters<typeof startMutation.mutateAsync>[0],
@@ -548,6 +561,14 @@ export function DataImportPage() {
 
             {/* Tab 2: History */}
             <TabsContent value="history" className="mt-4">
+              {resumeMutation.error && (
+                <div
+                  role="alert"
+                  className="mb-3 rounded-md bg-destructive/10 p-3 text-sm text-destructive"
+                >
+                  {resumeMutation.error.message}
+                </div>
+              )}
               {!history || history.length === 0 ? (
                 <div className="py-12 text-center text-sm text-muted-foreground">
                   No imports have been run yet.
@@ -597,6 +618,16 @@ export function DataImportPage() {
                           {imp.total_count.toLocaleString()}
                         </TableCell>
                         <TableCell>
+                          {imp.resumable && !activeImport && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => resumeImport(imp.id)}
+                              disabled={resumeMutation.isPending}
+                            >
+                              Resume from {imp.last_processed_offset.toLocaleString()}
+                            </Button>
+                          )}
                           {isAdmin && !isTerminalImportStatus(imp.status) && (
                             <Button
                               variant="ghost"

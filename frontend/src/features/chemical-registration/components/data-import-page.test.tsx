@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DataImportPage } from "./data-import-page";
 
 // One running import in each history, so Force Stop would be offered.
@@ -12,6 +12,9 @@ const h = vi.hoisted(() => ({
   // request as it is sent.
   request: vi.fn(),
   check: { mutateAsync: vi.fn(), isPending: false },
+  resume: { mutateAsync: vi.fn(), isPending: false },
+  // The molecule history, when a test needs other rows than the one running import.
+  history: undefined as Record<string, unknown>[] | undefined,
   // What the status poll answers once an import has started; undefined is "no answer yet".
   status: undefined as Record<string, unknown> | undefined,
   molecule: {
@@ -60,7 +63,8 @@ vi.mock("../hooks/use-cdd-molecule-import", async (importOriginal) => ({
   useStartCddMoleculeImport: (
     await importOriginal<typeof import("../hooks/use-cdd-molecule-import")>()
   ).useStartCddMoleculeImport,
-  useImportHistory: () => ({ data: [h.molecule], refetch: () => {} }),
+  useImportHistory: () => ({ data: h.history ?? [h.molecule], refetch: () => {} }),
+  useResumeCddMoleculeImport: () => h.resume,
   useCheckCddMoleculeIdentifiers: () => h.check,
   useForceFailImport: () => h.idle,
   useCancelCddMoleculeImport: () => h.idle,
@@ -614,5 +618,72 @@ describe("DataImportPage: Preview", () => {
     expect(screen.getByText("CDD vault molecule number · 11")).toBeVisible();
     expect(screen.getByText("CDD vault batch number · 13250")).toBeVisible();
     expect(screen.getByText("Alternate Names · JSF-1")).toBeVisible();
+  });
+});
+
+describe("DataImportPage: Resume a failed import", () => {
+  const failed = {
+    ...h.molecule,
+    id: "m9",
+    status: "failed",
+    registered_count: 49455,
+    total_count: 489425,
+    resumable: true,
+    last_processed_offset: 50750,
+    report: {
+      compounds_added: 49455,
+      compounds_matched: 936,
+      batches_created: 0,
+      batches_matched: 0,
+      ids_added: 0,
+      values_skipped: 0,
+      problems: 0,
+      problem_lines: [],
+    },
+  };
+
+  beforeEach(() => {
+    h.resume = {
+      mutateAsync: vi.fn().mockResolvedValue({ workflow_id: "wf-2" }),
+      isPending: false,
+    };
+  });
+
+  afterEach(() => {
+    h.history = undefined;
+  });
+
+  it("offers Resume from the saved position on a failed run that can resume", async () => {
+    h.history = [failed];
+    renderAs(false);
+    openTab("History");
+
+    fireEvent.click(screen.getByRole("button", { name: "Resume from 50,750" }));
+
+    await waitFor(() => expect(h.resume.mutateAsync).toHaveBeenCalledWith("m9"));
+  });
+
+  it("says in the history why a resume was refused", () => {
+    const refused = "The export for this run is no longer on disk. Start a new import.";
+    h.resume = { mutateAsync: vi.fn(), isPending: false, error: new Error(refused) } as never;
+    h.history = [failed];
+    renderAs(false);
+    openTab("History");
+
+    expect(screen.getByRole("alert")).toHaveTextContent(refused);
+  });
+
+  it("offers no Resume on a run that can't resume", () => {
+    h.history = [{ ...failed, resumable: false }];
+    renderAs(false);
+    openTab("History");
+    expect(screen.queryByRole("button", { name: /^Resume from/ })).toBeNull();
+  });
+
+  it("offers no Resume while another import runs", () => {
+    h.history = [h.molecule, failed];
+    renderAs(false);
+    openTab("History");
+    expect(screen.queryByRole("button", { name: /^Resume from/ })).toBeNull();
   });
 });

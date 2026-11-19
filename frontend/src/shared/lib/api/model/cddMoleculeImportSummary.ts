@@ -20,4 +20,6 @@ export interface CddMoleculeImportSummary {
   submitted_at: string;
   completed_at: string | null;
   report: CddMoleculeImportReport;
+  resumable: boolean;
+  last_processed_offset: number;
 }

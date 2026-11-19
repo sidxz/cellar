@@ -115,6 +115,21 @@ export function useForceFailImport() {
   });
 }
 
+/** Start a failed import again from where it stopped, on the export it already downloaded. */
+export function useResumeCddMoleculeImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (importId: string) =>
+      customInstance<CddMoleculeImportAccepted>({
+        url: `${API_V1}/cdd-import/molecules/${importId}/resume`,
+        method: "POST",
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["cdd-molecule-import", "history"] });
+    },
+  });
+}
+
 export function useImportHistory() {
   return useQuery({
     queryKey: ["cdd-molecule-import", "history"],
