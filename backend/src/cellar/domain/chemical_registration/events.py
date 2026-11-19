@@ -153,6 +153,13 @@ class CddMoleculeImportFailed(DomainEvent):
     reason: str
 
 
+@dataclass(frozen=True, kw_only=True)
+class CddMoleculeImportResumed(DomainEvent):
+    workflow_id: str
+    resumed_by: uuid.UUID
+    from_offset: int
+
+
 # ---------------------------------------------------------------------------
 # Synthesis Route events
 # ---------------------------------------------------------------------------

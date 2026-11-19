@@ -13,6 +13,7 @@ from cellar.domain.chemical_registration.events import (
     CddMoleculeImportCompleted,
     CddMoleculeImportDiscoveryComplete,
     CddMoleculeImportFailed,
+    CddMoleculeImportResumed,
     CddMoleculeImportStarted,
 )
 from cellar.domain.shared.entity import AggregateRoot
@@ -66,6 +67,7 @@ class CddMoleculeImport(AggregateRoot):
                                              -> completed_with_errors
                    discovering -> failed  (auth error, vault not found)
                                  processing -> failed  (unrecoverable)
+                                       failed -> processing  (resume, see ``resume``)
 
     Invariants:
         - cdd_vault_id must not be empty
@@ -91,6 +93,8 @@ class CddMoleculeImport(AggregateRoot):
         skipped_count: int = 0,
         last_processed_offset: int = 0,
         report: dict | None = None,
+        cdd_export_id: int | None = None,
+        run_settings: dict | None = None,
         submitted_by: uuid.UUID,
         submitted_at: datetime | None = None,
         completed_at: datetime | None = None,
@@ -117,6 +121,9 @@ class CddMoleculeImport(AggregateRoot):
         self.skipped_count = skipped_count
         self.last_processed_offset = last_processed_offset
         self.report = {**empty_report(), **(report or {})}
+        # What a resume needs: the CDD export on disk, and the options the run started with.
+        self.cdd_export_id = cdd_export_id
+        self.run_settings = run_settings
         self.submitted_by = submitted_by
         self.submitted_at = submitted_at or datetime.now(UTC)
         self.completed_at = completed_at
@@ -136,6 +143,7 @@ class CddMoleculeImport(AggregateRoot):
         submitted_by: uuid.UUID,
         workflow_id: str | None = None,
         filter_criteria: dict | None = None,
+        run_settings: dict | None = None,
     ) -> CddMoleculeImport:
         """Create a new import in PENDING status."""
         imp = cls(
@@ -146,6 +154,7 @@ class CddMoleculeImport(AggregateRoot):
             submitted_by=submitted_by,
             workflow_id=workflow_id,
             filter_criteria=filter_criteria,
+            run_settings=run_settings,
         )
         imp.register_event(
             CddMoleculeImportStarted(
@@ -184,13 +193,15 @@ class CddMoleculeImport(AggregateRoot):
         self.status = CddMoleculeImportStatus.DISCOVERING
         self.updated_at = datetime.now(UTC)
 
-    def complete_discovery(self, total_count: int) -> None:
-        """DISCOVERING -> PROCESSING. Sets total_count."""
+    def complete_discovery(self, total_count: int, export_id: int | None = None) -> None:
+        """DISCOVERING -> PROCESSING. Sets total_count, and the CDD export the run reads."""
         self._guard_transition(CddMoleculeImportStatus.PROCESSING)
         if total_count < 0:
             raise ValidationError("total_count must not be negative")
         self.status = CddMoleculeImportStatus.PROCESSING
         self.total_count = total_count
+        if export_id is not None:
+            self.cdd_export_id = export_id
         self.updated_at = datetime.now(UTC)
         self.register_event(
             CddMoleculeImportDiscoveryComplete(
@@ -285,6 +296,38 @@ class CddMoleculeImport(AggregateRoot):
                 aggregate_type="CddMoleculeImport",
                 workspace_id=self.workspace_id,
                 reason=reason,
+            )
+        )
+
+    @property
+    def resumable(self) -> bool:
+        """A failed run whose export and settings were saved can pick up where it stopped."""
+        return (
+            self.status == CddMoleculeImportStatus.FAILED
+            and self.cdd_export_id is not None
+            and self.run_settings is not None
+        )
+
+    def resume(self, workflow_id: str, resumed_by: uuid.UUID) -> None:
+        """FAILED -> PROCESSING on a new workflow, from ``last_processed_offset``.
+
+        Not in ``_TRANSITIONS``: failed stays a status the run has finished in until
+        someone resumes it.
+        """
+        if not self.resumable:
+            raise ValidationError("Only a failed import that saved its export can be resumed")
+        self.status = CddMoleculeImportStatus.PROCESSING
+        self.workflow_id = workflow_id
+        self.completed_at = None
+        self.updated_at = datetime.now(UTC)
+        self.register_event(
+            CddMoleculeImportResumed(
+                aggregate_id=self.id,
+                aggregate_type="CddMoleculeImport",
+                workspace_id=self.workspace_id,
+                workflow_id=workflow_id,
+                resumed_by=resumed_by,
+                from_offset=self.last_processed_offset,
             )
         )
 
