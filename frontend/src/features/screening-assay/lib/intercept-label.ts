@@ -371,10 +371,13 @@ export function curvePotency(curve: {
   intercept_values?: readonly unknown[] | null;
   raw_data?: readonly unknown[] | null;
 }): InterceptDisplay {
-  const primary = curve.intercept_values?.[0] as { at_bound?: boolean } | undefined;
+  const primary = curve.intercept_values?.[0] as
+    | { at_bound?: boolean; qualifier?: string | null }
+    | undefined;
   return formatInterceptDisplay({
     value: curve.fitted_value,
     at_bound: primary?.at_bound,
+    qualifier: primary?.qualifier,
     curve_class: curve.curve_class,
     ...doseRange(curve.raw_data),
   });

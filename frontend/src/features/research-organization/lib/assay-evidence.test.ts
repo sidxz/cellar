@@ -115,6 +115,32 @@ describe("assay endpoint evidence", () => {
   });
 });
 
+describe("assay endpoint evidence — stored qualifier on one curve", () => {
+  const raw_data = [
+    { x: 0.0002, y: 92 },
+    { x: 100, y: 95 },
+  ];
+  const ec90 = { kind: "ec", level: 90 } as const;
+  const withEc90 = (qualifier: string, value: number | null) =>
+    ({
+      ...av,
+      raw_data,
+      intercept_values: [
+        { spec: { ...ec90, basis: "relative_percent" }, value, at_bound: false, qualifier },
+      ],
+    }) as unknown as ActivityValue;
+
+  it("reads a secondary intercept censored at the lowest dose as a bound, not an exact number", () => {
+    const { display } = activityEndpoint(withEc90("<", 0.0002), ec90, false, "latest");
+    expect(display.text).toBe("< 0.0002");
+  });
+
+  it("reads a secondary intercept the curve cannot give as ND", () => {
+    const { display } = activityEndpoint(withEc90("nd", null), ec90, false, "latest");
+    expect(display.text).toBe("ND");
+  });
+});
+
 describe("selectivity ratio", () => {
   it("converts mixed concentration units before dividing counter by target", () => {
     expect(

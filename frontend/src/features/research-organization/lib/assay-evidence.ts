@@ -18,13 +18,17 @@ export function activityEndpoint(
   const value = aggregate ? aggregate.selected_value : (iv?.value ?? (isPrimary ? av.value : null));
   const qualifier = aggregate ? aggregate.selected_qualifier : isPrimary ? av.qualifier : null;
   const mode = av.selection_rule ? wireToAggregationMode(av.selection_rule) : fallbackMode;
+  const oneCurve = !aggregate && !av.aggregate;
   const display = formatInterceptDisplay({
     value,
     at_bound: aggregate ? false : iv?.at_bound,
+    // One curve's stored outcome reads against its own doses. `av.qualifier` is the backend's
+    // reported qualifier for the cell, applied below, not the stored one.
+    qualifier: oneCurve ? iv?.qualifier : null,
     curve_class: aggregate ? null : av.curve_params?.curve_class,
     // The tested doses censor one curve's value. An aggregate can summarize several runs
     // (raw_data is the representative's alone): it keeps the qualifier the backend resolved.
-    ...doseRange(aggregate || av.aggregate ? null : av.raw_data),
+    ...doseRange(oneCurve ? av.raw_data : null),
     runCount: av.run_count ?? 1,
     mode,
     foldRange: aggregate?.aggregate_stats?.fold_range,

@@ -657,10 +657,13 @@ export interface CurveInterceptSpec {
 }
 export interface CurveInterceptValue {
   spec: CurveInterceptSpec;
-  value: number;
+  /** Null when the qualifier is "nd". */
+  value: number | null;
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
   at_bound: boolean;
+  /** "=" | "<" | ">" | "nd"; absent on intercepts stored before qualifiers existed. */
+  qualifier?: string | null;
 }
 
 export interface CurveDetail {

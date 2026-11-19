@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { InterceptKey, InterceptSpec, InterceptValue } from "../types";
 import {
+  curvePotency,
   doseRange,
   findInterceptValue,
   formatInterceptDisplay,
@@ -469,5 +470,20 @@ describe("formatInterceptDisplay — stored qualifier", () => {
     expect(show({ value: 0.00001 }).text).toBe("< 0.0002");
     expect(show({ value: null }).kind).toBe("missing");
     expect(show({ value: 3.87 }).text).toBe("3.870");
+  });
+});
+
+describe("curvePotency — stored qualifier", () => {
+  it("reads a curve whose primary intercept sits below the doses as a bound", () => {
+    const out = curvePotency({
+      fitted_value: 3.2, // the fitted midpoint of a flat curve: not a potency
+      curve_class: "full",
+      intercept_values: [{ value: 0.0002, at_bound: false, qualifier: "<" }],
+      raw_data: [
+        { x: 0.0002, y: 92 },
+        { x: 100, y: 95 },
+      ],
+    });
+    expect(out.text).toBe("< 0.0002");
   });
 });

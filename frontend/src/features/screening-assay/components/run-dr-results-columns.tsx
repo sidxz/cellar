@@ -213,6 +213,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
         return formatInterceptDisplay({
           value,
           at_bound: iv?.at_bound,
+          qualifier: iv?.qualifier,
           curve_class: params.data.curve_class,
           ...doseRange(params.data.data_points),
         }).sortValue;
@@ -224,6 +225,7 @@ function buildInterceptColumns(intercepts: InterceptSpec[]): ColDef<CompoundCurv
         const display = formatInterceptDisplay({
           value,
           at_bound: iv?.at_bound,
+          qualifier: iv?.qualifier,
           curve_class: params.data.curve_class,
           ...doseRange(params.data.data_points),
         });

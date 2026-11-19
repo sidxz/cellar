@@ -238,6 +238,7 @@ export function ReadoutDataTable({
                 return formatInterceptDisplay({
                   value,
                   at_bound: iv?.at_bound,
+                  qualifier: iv?.qualifier,
                   curve_class: curve.curve_class,
                   ...doseRange(curve.raw_data),
                 }).sortValue;
@@ -252,6 +253,7 @@ export function ReadoutDataTable({
                 const display = formatInterceptDisplay({
                   value,
                   at_bound: iv?.at_bound,
+                  qualifier: iv?.qualifier,
                   curve_class: curve.curve_class,
                   ...doseRange(curve.raw_data),
                 });

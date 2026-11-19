@@ -252,10 +252,14 @@ export interface InterceptSpec {
 
 export interface InterceptValue {
   spec: InterceptSpec;
-  value: number;
+  /** Null when the qualifier is "nd" (not determinable). */
+  value: number | null;
   confidence_interval_low: number | null;
   confidence_interval_high: number | null;
   at_bound: boolean;
+  /** "=" exact, "<" / ">" outside the tested doses, "nd" not determinable; null on
+   *  intercepts stored before qualifiers existed. */
+  qualifier?: string | null;
 }
 
 /**
@@ -281,6 +285,7 @@ export function narrowInterceptValues(
     confidence_interval_low: iv.confidence_interval_low ?? null,
     confidence_interval_high: iv.confidence_interval_high ?? null,
     at_bound: iv.at_bound ?? false,
+    qualifier: iv.qualifier ?? null,
   }));
 }
 

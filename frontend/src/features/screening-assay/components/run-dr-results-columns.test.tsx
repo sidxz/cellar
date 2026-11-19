@@ -30,3 +30,20 @@ describe("run dose-response curve column", () => {
     }
   });
 });
+
+describe("run dose-response intercept column", () => {
+  it("sorts a value stored as below the lowest dose ahead of every exact value", () => {
+    const spec = { kind: "ec", level: 50, basis: "relative_percent" } as const;
+    const col = buildColumnDefs([spec]).find((c) => c.headerName?.startsWith("EC50"));
+    const getter = col?.valueGetter as (p: { data: CompoundCurveRow }) => unknown;
+    const data = {
+      ...row(95),
+      data_points: [
+        { x: 0.0002, y: 92 },
+        { x: 100, y: 95 },
+      ],
+      intercept_values: [{ spec, value: 0.0002, at_bound: false, qualifier: "<" }],
+    } as unknown as CompoundCurveRow;
+    expect(getter({ data })).toBe(Number.NEGATIVE_INFINITY);
+  });
+});
