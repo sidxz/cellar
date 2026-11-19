@@ -68,7 +68,8 @@ class TemporalCddMoleculeImportOrchestrator:
         export_dir = cdd_export_dir(request.cdd_export_id)
         if not export_on_disk(export_dir):
             raise ValidationError(
-                "The export for this run is no longer on disk. Start a new import."
+                "This run's export isn't on disk: it never finished downloading, or has been "
+                "removed since. Start a new import."
             )
         # One id per import and offset: a second resume of the same stop while the first
         # runs is refused by Temporal, not started twice.
@@ -124,6 +125,14 @@ class TemporalCddMoleculeImportOrchestrator:
             pages_processed=progress.pages_processed,
         )
 
+    async def terminate(self, workflow_id: str, reason: str) -> None:
+        try:
+            await self._client.get_workflow_handle(workflow_id).terminate(reason=reason)
+        except RPCError as exc:
+            if exc.status == RPCStatusCode.NOT_FOUND:
+                return  # already ended, or never known: nothing left to stop
+            raise
+
     async def cancel(self, workflow_id: str) -> None:
         handle = self._client.get_workflow_handle(workflow_id)
         try:
@@ -175,6 +184,11 @@ class NullCddMoleculeImportOrchestrator:
     async def resume(self, request: ResumeCddMoleculeImportRequest) -> str:
         raise WorkflowOrchestratorUnavailable(
             "Temporal is not available. Resuming a CDD import requires Temporal."
+        )
+
+    async def terminate(self, workflow_id: str, reason: str) -> None:
+        raise WorkflowOrchestratorUnavailable(
+            "Temporal is not available. Cannot stop the workflow."
         )
 
     async def get_progress(self, workflow_id: str) -> CddMoleculeImportProgress:

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 from temporalio.exceptions import WorkflowAlreadyStartedError
+from temporalio.service import RPCError, RPCStatusCode
 
 from cellar.application.cdd_import.cdd_molecule_import_orchestrator import (
     ResumeCddMoleculeImportRequest,
@@ -48,10 +49,26 @@ def _request() -> ResumeCddMoleculeImportRequest:
     )
 
 
+class _Handle:
+    def __init__(self, raises: Exception | None) -> None:
+        self.reasons: list[str | None] = []
+        self._raises = raises
+
+    async def terminate(self, *, reason: str | None = None) -> None:
+        if self._raises is not None:
+            raise self._raises
+        self.reasons.append(reason)
+
+
 class _Client:
-    def __init__(self, raises: Exception | None = None) -> None:
+    def __init__(self, raises: Exception | None = None, handle_raises=None) -> None:  # type: ignore[no-untyped-def]
         self.started: list[dict] = []
         self._raises = raises
+        self.handles: dict[str, _Handle] = {}
+        self._handle_raises = handle_raises
+
+    def get_workflow_handle(self, workflow_id: str) -> _Handle:
+        return self.handles.setdefault(workflow_id, _Handle(self._handle_raises))
 
     async def start_workflow(self, run, arg, *, id: str, task_queue: str):  # type: ignore[no-untyped-def]
         if self._raises is not None:
@@ -96,7 +113,7 @@ async def test_resume_starts_the_run_on_the_export_on_disk(export_dir: Path) -> 
 async def test_resume_without_the_export_on_disk_starts_nothing(export_dir: Path) -> None:
     client = _Client()
 
-    with pytest.raises(ValidationError, match="no longer on disk"):
+    with pytest.raises(ValidationError, match="never finished downloading, or has been removed"):
         await TemporalCddMoleculeImportOrchestrator(client).resume(_request())  # type: ignore[arg-type]
 
     assert client.started == []
@@ -108,3 +125,19 @@ async def test_a_second_resume_of_the_same_run_is_refused(export_dir: Path) -> N
 
     with pytest.raises(ConflictError, match="already resuming"):
         await TemporalCddMoleculeImportOrchestrator(_Client(raises=running)).resume(_request())  # type: ignore[arg-type]
+
+
+async def test_terminate_stops_the_run_at_once() -> None:
+    client = _Client()
+
+    await TemporalCddMoleculeImportOrchestrator(client).terminate("wf-1", "Superseded")  # type: ignore[arg-type]
+
+    assert client.handles["wf-1"].reasons == ["Superseded"]
+
+
+async def test_terminate_leaves_a_run_that_already_ended_alone() -> None:
+    ended = RPCError("workflow execution already completed", RPCStatusCode.NOT_FOUND, b"")
+
+    orchestrator = TemporalCddMoleculeImportOrchestrator(_Client(handle_raises=ended))  # type: ignore[arg-type]
+
+    await orchestrator.terminate("wf-1", "x")

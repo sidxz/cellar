@@ -71,6 +71,10 @@ class ResumeCddMoleculeImport:
         if refusal is not None:
             return Failure(ValidationError(refusal))
 
+        # A failed record's workflow can still be running: Force Stop only marks the
+        # record. Left alone it would carry on beside the resume once the record reopens.
+        if imp.workflow_id:
+            await self._orchestrator.terminate(imp.workflow_id, "Superseded by a resume")
         try:
             workflow_id = await self._orchestrator.resume(_request(imp, input.resumed_by))
         except DomainError as exc:
@@ -88,8 +92,10 @@ class ResumeCddMoleculeImport:
                 events = await self._uow.commit()
         except Exception:
             # The run has started but the import does not say so: stop it rather than
-            # let it register rows under a record that is still failed.
-            await self._orchestrator.cancel(workflow_id)
+            # let it register rows under a record that is still failed. Terminated, not
+            # cancelled: a cancelled run would try to fail the failed record, retry that
+            # forever, and keep this resume's workflow id taken.
+            await self._orchestrator.terminate(workflow_id, "The import could not be reopened")
             raise
 
         await self._dispatcher.dispatch_all(events)

@@ -99,6 +99,7 @@ class _Orchestrator:
     def __init__(self, raises: Exception | None = None) -> None:
         self.requests: list[ResumeCddMoleculeImportRequest] = []
         self.cancelled: list[str] = []
+        self.terminated: list[str] = []
         self._raises = raises
 
     async def resume(self, request: ResumeCddMoleculeImportRequest) -> str:
@@ -109,6 +110,9 @@ class _Orchestrator:
 
     async def cancel(self, workflow_id: str) -> None:
         self.cancelled.append(workflow_id)
+
+    async def terminate(self, workflow_id: str, reason: str) -> None:
+        self.terminated.append(workflow_id)
 
 
 class _Dispatcher:
@@ -157,6 +161,17 @@ async def test_resume_starts_from_the_saved_offset_with_the_runs_settings() -> N
     assert [type(e) for e in dispatcher.events] == [CddMoleculeImportResumed]
 
 
+async def test_resume_stops_what_is_left_of_the_failed_run_first() -> None:
+    """A force-stopped run's workflow may still be retrying; it must not run beside the resume."""
+    imp = _import()
+    orch = _Orchestrator()
+
+    await _use_case(_Repo(imp), orch)(_cmd(imp), auth=_auth())
+
+    assert orch.terminated == ["wf-1"]
+    assert len(orch.requests) == 1
+
+
 async def test_resume_is_refused_while_another_import_runs() -> None:
     imp, running = _import(), _import(failed=False)
     orch = _Orchestrator()
@@ -199,7 +214,10 @@ async def test_viewer_may_not_resume() -> None:
 
 async def test_export_gone_from_disk_is_refused_and_the_record_stays_failed() -> None:
     imp = _import()
-    gone = ValidationError("The export for this run is no longer on disk. Start a new import.")
+    gone = ValidationError(
+        "This run's export isn't on disk: it never finished downloading, or has been "
+        "removed since. Start a new import."
+    )
 
     result = await _use_case(_Repo(imp), _Orchestrator(raises=gone))(_cmd(imp), auth=_auth())
 
@@ -207,14 +225,17 @@ async def test_export_gone_from_disk_is_refused_and_the_record_stays_failed() ->
     assert imp.status is CddMoleculeImportStatus.FAILED
 
 
-async def test_a_failed_record_update_cancels_the_started_run() -> None:
+async def test_a_failed_record_update_stops_the_started_run() -> None:
+    """Terminated, not cancelled: a cancelled run would try to fail a record that is
+    already failed, retry that forever, and hold the resume's workflow id."""
     imp = _import()
     orch = _Orchestrator()
 
     with pytest.raises(ConcurrencyConflictError):
         await _use_case(_Repo(imp, fail_save_on=1), orch)(_cmd(imp), auth=_auth())
 
-    assert orch.cancelled == ["wf-2"]
+    assert orch.terminated == ["wf-1", "wf-2"]
+    assert orch.cancelled == []
 
 
 async def test_a_poll_of_the_old_workflow_leaves_the_resumed_import_alone() -> None:

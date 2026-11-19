@@ -99,6 +99,14 @@ class CddMoleculeImportOrchestrator(Protocol):
         """
         ...
 
+    async def terminate(self, workflow_id: str, reason: str) -> None:
+        """Stop the workflow at once: nothing more runs in it, no clean-up either.
+
+        No-op if it has already ended or is not known. Raises
+        ``WorkflowOrchestratorUnavailable`` if the engine is down.
+        """
+        ...
+
     async def cancel(self, workflow_id: str) -> None:
         """Send a cancel signal to the workflow.
 
