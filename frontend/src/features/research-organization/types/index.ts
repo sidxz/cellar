@@ -549,6 +549,9 @@ export interface ActivityValue {
   representative_curve_id?: string | null;
   /** Every in-scope run that was a candidate for this cell, newest first. */
   run_ids?: string[] | null;
+  /** The layer the representative curve fits (null: raw values); absent from payloads
+   *  before it existed. */
+  fitted_layer?: string | null;
 }
 
 // ─── "any" column — CLIENT-SIDE narrowing, NOT a DTO alias ─────────────────

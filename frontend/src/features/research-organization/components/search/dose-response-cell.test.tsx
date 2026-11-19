@@ -212,6 +212,28 @@ describe("search curve cell frame", () => {
     expect(figureCalls[0].yRange).toEqual([-36, 156]);
   });
 
+  it("frames on the layer the cell's curve says it fits, over the column's guess", () => {
+    reset();
+    const raw = { ...activity(85), fitted_layer: null };
+    const pct = { ...activity(92), fitted_layer: "percent_inhibition" };
+    const both = [{ id: "a", activity: { "drc:raw": raw, "drc:pct": pct } }];
+    function LayerFrames({ children }: { children: ReactNode }) {
+      return (
+        <CurveFramesContext.Provider value={useCurveFramesFor(both)}>
+          {children}
+        </CurveFramesContext.Provider>
+      );
+    }
+    render(
+      <LayerFrames>
+        <DoseResponseCell value={raw} frameKey="drc:raw" percent />
+        <DoseResponseCell value={pct} frameKey="drc:pct" percent={false} />
+      </LayerFrames>,
+    );
+    expect(figureCalls[0].yRange).not.toEqual([-10, 110]);
+    expect(figureCalls[1].yRange).toEqual([-10, 110]);
+  });
+
   it("frames itself outside a grid", () => {
     reset();
     render(<DoseResponseCell value={activity(85)} />);

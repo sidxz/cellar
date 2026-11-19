@@ -162,16 +162,23 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
     return drDef?.dose_response_config?.intercepts ?? [];
   }, [protocol]);
 
-  // The layer the curves fit, and one frame every thumbnail shares (all rows, so the
-  // frame stays put when the hit filter changes).
-  const yLayer = useMemo(() => curveLayer(protocol?.readout_definitions ?? []), [protocol]);
+  // The layer a curve fits: the one it names, else (a payload without it) the protocol's.
+  // One frame every thumbnail shares (all rows, so it stays put when the hit filter changes).
+  const protocolLayer = useMemo(() => curveLayer(protocol?.readout_definitions ?? []), [protocol]);
+  const layerOf = useCallback(
+    (c: { fitted_layer?: string | null } | undefined) =>
+      c?.fitted_layer === undefined ? protocolLayer : c.fitted_layer,
+    [protocolLayer],
+  );
   const frame = useMemo(
     () =>
       curveFrame(
         allRows.map((r) => r.data_points),
-        { percent: isPercentNormalization(yLayer) },
+        {
+          percent: allRows.length > 0 && allRows.every((r) => isPercentNormalization(layerOf(r))),
+        },
       ),
-    [allRows, yLayer],
+    [allRows, layerOf],
   );
   const columnDefs = useMemo(
     () => buildColumnDefs(protocolIntercepts, frame),
@@ -421,7 +428,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                         isInteractive
                         runIsLocked={run.is_locked}
                         protocolConfig={drDef?.dose_response_config ?? null}
-                        yReadoutNormalization={yLayer}
+                        yReadoutNormalization={layerOf(viewingCurves[0])}
                       />
                     );
                   })()}

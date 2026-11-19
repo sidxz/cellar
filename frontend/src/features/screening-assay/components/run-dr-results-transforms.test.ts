@@ -285,6 +285,11 @@ describe("buildCompoundRows — best curve", () => {
       intercept_values: [{ spec: { kind: "ec", level: 50 }, value: null, qualifier }],
     }) as unknown as DoseResponseCurve;
 
+  it("carries the layer the best curve fits, as the API names it", () => {
+    const fit = { ...curve("a", "full", 1), fitted_layer: "percent_inhibition" };
+    expect(buildCompoundRows([fit])[0].fitted_layer).toBe("percent_inhibition");
+  });
+
   it("ranks an exact fit ahead of an n.d. one, though the n.d. midpoint is lower", () => {
     const [row] = buildCompoundRows([stored("nd", "nd", 1), stored("exact", "=", 3)]);
     expect(row.fitted_value).toBe(3);

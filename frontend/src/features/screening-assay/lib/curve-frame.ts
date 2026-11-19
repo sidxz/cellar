@@ -80,20 +80,24 @@ function dataRange(lo: number, hi: number): [number, number] {
 interface CurveReadout {
   name: string;
   normalizations?: readonly string[] | null;
+  is_calculated?: boolean | null;
   dose_response_config?: { y_readout_name: string; y_normalization?: string | null } | null;
 }
 
-/** The layer a protocol's dose-response readout fits: the one it names, else its Y readout's
- *  first calculated layer; null on raw values. Without a name, the protocol's first curve. */
+/** The layer a protocol's dose-response readout fits, by the backend's rule
+ *  (`_response_scale.fitted_layer`): the one its config names, else its Y readout's primary
+ *  layer (the first other than "none" in sorted order); null when the Y readout calculates no
+ *  layer (raw values, whatever a stale config names) or is itself calculated. Without a name,
+ *  the protocol's first curve. For hosts whose payload lacks the curve's own `fitted_layer`. */
 export function curveLayer(readouts: readonly CurveReadout[], curveName?: string): string | null {
   const curve = readouts.find((r) =>
     curveName === undefined ? r.dose_response_config != null : r.name === curveName,
   );
   const cfg = curve?.dose_response_config;
-  if (!cfg) return null;
-  if (cfg.y_normalization) return cfg.y_normalization;
-  const y = readouts.find((r) => r.name === cfg.y_readout_name);
-  return y?.normalizations?.find((n) => n !== "none") ?? null;
+  const y = cfg ? readouts.find((r) => r.name === cfg.y_readout_name) : undefined;
+  if (!cfg || !y || y.is_calculated) return null;
+  const primary = [...(y.normalizations ?? [])].sort().find((n) => n !== "none");
+  return primary ? cfg.y_normalization || primary : null;
 }
 
 /** The y range for curves drawn together in one chart when every one fits a % layer: their

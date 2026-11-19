@@ -133,6 +133,34 @@ describe("curveLayer", () => {
   it("takes the protocol's first curve when no name is given", () => {
     expect(curveLayer(readouts)).toBe("z_score");
   });
+
+  // The backend's rule (_response_scale.fitted_layer), so a table frames what was fitted.
+  it("is null when the Y readout no longer calculates a layer, whatever the config names", () => {
+    const stale = [
+      { name: "Signal", normalizations: [] },
+      {
+        name: "IC50",
+        dose_response_config: { y_readout_name: "Signal", y_normalization: "percent_inhibition" },
+      },
+    ];
+    expect(curveLayer(stale, "IC50")).toBeNull();
+  });
+
+  it("is null on a calculated Y readout's formula values", () => {
+    const calculated = [
+      { name: "Ratio", normalizations: ["percent_inhibition"], is_calculated: true },
+      { name: "IC50", dose_response_config: { y_readout_name: "Ratio", y_normalization: null } },
+    ];
+    expect(curveLayer(calculated, "IC50")).toBeNull();
+  });
+
+  it("falls back to the Y readout's primary layer: the first in sorted order", () => {
+    const unsorted = [
+      { name: "Signal", normalizations: ["z_score", "none", "percent_inhibition"] },
+      { name: "IC50", dose_response_config: { y_readout_name: "Signal", y_normalization: null } },
+    ];
+    expect(curveLayer(unsorted, "IC50")).toBe("percent_inhibition");
+  });
 });
 
 describe("percentYRange", () => {

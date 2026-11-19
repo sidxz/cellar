@@ -42,6 +42,8 @@ export interface CompoundCurveRow {
   /** Per-spec intercepts (EC50, EC90, IC10, ...) from this curve's fit.
    *  Columns matching protocol intercepts read values out of this list. */
   intercept_values: InterceptValue[] | null;
+  /** The layer the curve fits (null: raw values), as the API names it. */
+  fitted_layer?: string | null;
   /** All curves for this molecule in this run (for detail panel) */
   all_curves: DoseResponseCurve[];
 }
@@ -104,6 +106,7 @@ export function buildCompoundRows(curves: DoseResponseCurve[]): CompoundCurveRow
       curve_class: (best.curve_class as CurveClass | null) ?? null,
       data_points: dataPoints,
       intercept_values: narrowInterceptValues(best.intercept_values),
+      fitted_layer: best.fitted_layer,
       all_curves: molCurves,
     });
   }

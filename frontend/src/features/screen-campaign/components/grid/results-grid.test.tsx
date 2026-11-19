@@ -605,6 +605,25 @@ describe("curveFramesByChannel", () => {
     expect(frames.get("c1")?.yRange).toEqual([-37, 167]);
   });
 
+  it("frames on the layer the snapshot says it fits; an older snapshot asks the protocol", () => {
+    const fitted = (layer: string | null, y: number) =>
+      ({
+        channel_id: "c1",
+        curve_snapshot: { ...snapshot(y), fitted_layer: layer },
+      }) as unknown as CampaignMeasurementResponse;
+    const frame = (...ms: CampaignMeasurementResponse[]) =>
+      curveFramesByChannel(
+        [channel("c1", "ic50")],
+        ms.map((m) => ({ measurements: [m] })) as unknown as CampaignResponse["results"] & object,
+        new Map(),
+        protocols,
+      ).get("c1")?.yRange;
+    // The protocol says % (ic50 on Signal), but these curves were fitted raw.
+    expect(frame(fitted(null, 1000), fitted(null, 3000))).toEqual([900, 3100]);
+    // A snapshot frozen before the key existed: the protocol's layer.
+    expect(frame(measure("c1", 85))).toEqual([-10, 110]);
+  });
+
   it("fits a raw-signal curve column to its data", () => {
     const frames = curveFramesByChannel(
       [channel("c2", "rawfit")],

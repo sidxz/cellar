@@ -109,7 +109,12 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
     const byReadout = new Map<string, CurveFrame>();
     for (const rd of readoutDefs) {
       if (rd.data_type !== "dose_response") continue;
-      const percent = isPercentNormalization(curveLayer(protocol.readout_definitions, rd.name));
+      // The layer the summary says the readout fits; the protocol's for a payload without it.
+      const layer =
+        rd.fitted_layer === undefined
+          ? curveLayer(protocol.readout_definitions, rd.name)
+          : rd.fitted_layer;
+      const percent = isPercentNormalization(layer);
       const points = (items ?? []).map((row) => row.readouts?.[rd.name]?.data_points);
       byReadout.set(rd.name, curveFrame(points, { percent }));
     }

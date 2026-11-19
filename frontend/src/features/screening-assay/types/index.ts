@@ -37,6 +37,7 @@ import type {
   ProtocolSummaryResponse,
   ProtocolTargetRefResponse,
   ReadoutDataResponse,
+  ReadoutDefInfoResponse,
   RefitDoseResponseCurveRequest,
   RelabelPositionsResponse,
   RunCountsResponse as RunCountsResponseModel,
@@ -768,7 +769,7 @@ export interface ReadoutValue {
   sd?: number | null;
 }
 
-export interface ReadoutDefInfo {
+export interface ReadoutDefInfo extends Pick<ReadoutDefInfoResponse, "fitted_layer"> {
   name: string;
   data_type: string;
   unit: string | null;

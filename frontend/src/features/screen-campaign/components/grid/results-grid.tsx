@@ -114,14 +114,20 @@ export function curveFramesByChannel(
   const frames = new Map<string, CurveFrame>();
   for (const ch of channels) {
     if (ch.source_kind !== "dose_response_curve") continue;
+    const snapshots = results.map((r) => {
+      const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
+      return m ? curveSnapshotFromMeasurement(m, liveById) : null;
+    });
+    // The layer a snapshot names (null: raw); one frozen before the key existed asks the
+    // channel's protocol.
+    const named = snapshots.find((s) => s != null && "fitted_layer" in s) as
+      | { fitted_layer?: string | null }
+      | undefined;
     const readouts = protocolsById.get(ch.protocol_id)?.readout_definitions ?? [];
     const curveName = readouts.find((r) => r.id === ch.readout_definition_id)?.name;
-    const percent = curveName ? isPercentNormalization(curveLayer(readouts, curveName)) : false;
-    const points = results.flatMap((r) => {
-      const m = r.measurements?.find((mm) => mm.channel_id === ch.id);
-      return m ? drawnPoints(curveSnapshotFromMeasurement(m, liveById)) : [];
-    });
-    frames.set(ch.id, curveFrame(points, { percent }));
+    const layer = named ? named.fitted_layer : curveName ? curveLayer(readouts, curveName) : null;
+    const points = snapshots.flatMap(drawnPoints);
+    frames.set(ch.id, curveFrame(points, { percent: isPercentNormalization(layer) }));
   }
   return frames;
 }

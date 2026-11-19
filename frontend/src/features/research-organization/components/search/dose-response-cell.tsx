@@ -9,6 +9,7 @@ import {
   curveFrame,
   drawnPoints,
 } from "@/features/screening-assay/lib/curve-frame";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import { createContext, memo, useContext, useMemo } from "react";
 import { activityValueToCurveSnapshot } from "../../lib/activity-curve-snapshot";
 import type { ActivityValue } from "../../types";
@@ -56,7 +57,10 @@ interface DoseResponseCellProps {
  */
 function DoseResponseCellInner({ value, frameKey, percent = false }: DoseResponseCellProps) {
   const frameFor = useContext(CurveFramesContext);
-  const frame = frameKey && frameFor ? frameFor(frameKey, percent) : undefined;
+  // The layer the cell's curve names wins over the column's guess from the protocol.
+  const isPercent =
+    value?.fitted_layer === undefined ? percent : isPercentNormalization(value.fitted_layer);
+  const frame = frameKey && frameFor ? frameFor(frameKey, isPercent) : undefined;
   const curve = activityValueToCurveSnapshot(value);
   // `curve` non-null implies `value` non-null (the mapper guards `!av`); the
   // `!value` keeps that provable for the type checker without a `!` assertion.
