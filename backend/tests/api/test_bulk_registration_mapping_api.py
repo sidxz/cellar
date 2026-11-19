@@ -387,9 +387,9 @@ async def test_preview_registration_forecasts_batches(client: AsyncClient) -> No
         "API-0001-001 and API-0001-002 belong to two different batches" in split["batch_problem"]
     )
     # Rows of one compound share a key; a different structure has another one.
-    assert len(existing["compound_key"]) == 27  # InChIKey
+    assert existing["compound_key"] == f"molecule:{existing['matched_molecule_id']}"
     assert new["compound_key"] == existing["compound_key"] == old["compound_key"]
-    assert other["compound_key"] != existing["compound_key"]
+    assert len(other["compound_key"]) == 27  # a new compound: its InChIKey
     assert undisclosed["compound_key"] == "ids:JX-9|UNDISC-1"
     assert undisclosed["batch_action"] == "new"
 

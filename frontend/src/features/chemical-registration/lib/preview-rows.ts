@@ -40,16 +40,20 @@ export function buildPreviewRows(
     const f = forecast?.get(item.row_index);
     return f?.compound_key ?? `row:${item.row_index}`;
   };
+  // Only deciding batch IDs say which batch a row is; a stored-only one is stored or
+  // skipped, never matched and never a problem.
+  const decidingBatchIds = (item: PreviewItem) =>
+    (item.batch_ids ?? []).filter((b) => b.decides !== false).map((b) => b.identifier);
 
   // A batch ID on rows of two different compounds can't be unique in the workspace.
   const keysByBatchId = new Map<string, Set<string>>();
   if (forecast) {
     for (const item of items) {
       if (item.error) continue;
-      for (const b of item.batch_ids ?? []) {
-        const keys = keysByBatchId.get(b.identifier) ?? new Set<string>();
+      for (const id of decidingBatchIds(item)) {
+        const keys = keysByBatchId.get(id) ?? new Set<string>();
         keys.add(keyOf(item));
-        keysByBatchId.set(b.identifier, keys);
+        keysByBatchId.set(id, keys);
       }
     }
   }
@@ -104,7 +108,7 @@ export function buildPreviewRows(
 
     // Batch — a possible merge waits for the scientist's decision, so no batch yet.
     if (f.action === "merge_candidate") return view(compound, "No new batch", null);
-    const batchIds = (item.batch_ids ?? []).map((b) => b.identifier);
+    const batchIds = decidingBatchIds(item);
     // The server's own check of the file (same rule the import applies).
     if (item.batch_problem) return view(compound, null, item.batch_problem);
     if (batchIds.length > 0) {

@@ -77,8 +77,8 @@ class RegistrationPreviewItem:
     matched_molecule_id: uuid.UUID | None = None
     conflict_reason: str | None = None
     error: str | None = None
-    # What the compound was classified by (InChIKey, or its identifiers when
-    # undisclosed) — rows with the same key are the same compound.
+    # The compound the row goes to — rows with the same key are the same compound: the
+    # matched compound ("molecule:<id>"), else the InChIKey (identifiers if undisclosed).
     compound_key: str | None = None
     batch_action: Literal["new", "existing", "problem"] | None = None
     matched_batch_number: str | None = None
@@ -168,6 +168,10 @@ class PreviewRegistration:
 
         matched = forecast.matched_molecule
         matched_id = matched.id if matched else None
+        if matched is not None:
+            # The run puts the row on this compound, even when the vault id chose it
+            # over the structure's.
+            compound_key = f"molecule:{matched.id}"
         this = matched.registration_number.value if matched else item.name or "the new compound"
         held = await held_elsewhere(self._repo, workspace_id, item.stored_only_ids, matched_id)
         warnings = [

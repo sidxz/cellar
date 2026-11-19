@@ -476,7 +476,8 @@ class PreviewRegistrationItemResponse(BaseModel):
     matched_molecule_id: uuid.UUID | None = None
     conflict_reason: str | None = None
     error: str | None = None
-    # Rows with the same key are the same compound (InChIKey, or identifiers if undisclosed).
+    # Rows with the same key are the same compound: "molecule:<id>" when it is already in
+    # ChemCellar, else the InChIKey (identifiers if undisclosed).
     compound_key: str | None = None
     # Only when the item sent batch_ids: new | existing | problem.
     batch_action: Literal["new", "existing", "problem"] | None = None

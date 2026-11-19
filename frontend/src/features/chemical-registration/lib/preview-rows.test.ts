@@ -138,6 +138,26 @@ describe("buildPreviewRows", () => {
     expect(counts).toMatchObject({ problems: 2, newBatches: 0, newCompounds: 2 });
   });
 
+  it("never matches or flags a stored-only batch ID", () => {
+    const storedOnly = (id: string) => [{ identifier: id, source: "CDD", decides: false }];
+    const { rows, counts } = buildPreviewRows(
+      [
+        item(0, { batch_ids: [...batch("A-001"), ...storedOnly("001")] }),
+        item(1, { batch_ids: [...batch("B-001"), ...storedOnly("001")] }),
+        item(2, { batch_ids: [...batch("B-002"), ...storedOnly("001")] }),
+      ],
+      forecastOf([
+        [0, { compound_key: "KEY-A", batch_action: "new" }],
+        [1, { compound_key: "KEY-B", batch_action: "new" }],
+        [2, { compound_key: "KEY-B", batch_action: "new" }],
+      ]),
+      false,
+    );
+    expect(rows.map((r) => r.problem)).toEqual([null, null, null]);
+    expect(rows.map((r) => r.batch)).toEqual(["New batch", "New batch", "New batch"]);
+    expect(counts).toMatchObject({ problems: 0, newBatches: 3 });
+  });
+
   it("reads the same batch ID twice for one compound as one batch", () => {
     const { rows, counts } = buildPreviewRows(
       [
