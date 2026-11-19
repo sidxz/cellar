@@ -23,6 +23,7 @@ from cellar.application.chemical_registration.bulk_column_mapping import (
     suggest_column_mapping,
 )
 from cellar.domain.chemical_registration.enums import BulkRegistrationFileFormat
+from cellar.domain.shared.errors import ValidationError
 
 
 @dataclass(frozen=True)
@@ -71,7 +72,8 @@ class ChemicalFileParser(Protocol):
 
 
 def _default_mapping(headers: list[str]) -> ColumnMapping:
-    """No mapping sent: today's header names, stored with today's sources."""
+    """No mapping sent: the suggestions, stored with today's sources (synonym and
+    batch-ID headers are read too; see ``bulk_column_mapping``)."""
     return suggest_column_mapping(headers).without_sources()
 
 
@@ -100,14 +102,28 @@ def _extract_item(
     return ParsedMoleculeItem(row_index=row_index, file_row=file_row, **asdict(row))
 
 
+def _compound_key(it: ParsedMoleculeItem) -> str | None:
+    """Which compound a row is, as the run will see it: its structure (canonical SMILES
+    standing in for the InChIKey), else its name. Two names of one structure are one
+    compound."""
+    # ponytail: no salt stripping, so a salt form and its parent count as two compounds
+    # here; use the registration's StructureProcessor if that ever flags a real file.
+    if it.smiles:
+        mol = Chem.MolFromSmiles(it.smiles)
+        return "smiles:" + (Chem.MolToSmiles(mol) if mol is not None else it.smiles)
+    return f"name:{it.name}" if it.name else None
+
+
 def _flag_shared_batch_ids(items: list[ParsedMoleculeItem]) -> list[ParsedMoleculeItem]:
     """A batch ID on rows of different compounds of one file can't be unique in the
     workspace (e.g. a bare "001" column): every such row registers its compound but
-    gets no batch. Compounds are told apart by the row's name, else its structure."""
+    gets no batch."""
     keys_by_id: dict[str, set[str]] = {}
     for it in items:
-        key = it.name or it.smiles
-        if it.error or not key:
+        if it.error or not it.batch_ids:
+            continue
+        key = _compound_key(it)
+        if not key:
             continue
         for b in it.batch_ids:
             keys_by_id.setdefault(b["identifier"], set()).add(key)
@@ -213,8 +229,7 @@ class TabularParser:
     ) -> list[ParsedMoleculeItem]:
         fmt = self._detect_format(filename)
         df = self._read_dataframe(content, fmt)
-        # Exports often pad header cells; the wizard shows them trimmed.
-        headers = [str(c).strip() for c in df.columns]
+        headers = _trimmed(df.columns)
         if mapping is None:
             mapping = _default_mapping(headers)
         else:
@@ -250,7 +265,7 @@ class TabularParser:
                 )
         except pd.errors.EmptyDataError:
             return []
-        return [str(c).strip() for c in df.columns]
+        return _trimmed(df.columns)
 
     def _detect_format(self, filename: str) -> BulkRegistrationFileFormat:
         suffix = Path(filename).suffix.lower()
@@ -270,33 +285,26 @@ class TabularParser:
             return pd.DataFrame()
 
 
+def _trimmed(columns: pd.Index) -> list[str]:
+    """Header cells, trimmed: exports often pad them and the wizard shows them trimmed.
+    Two that are the same once trimmed can't be told apart, so the file is refused."""
+    seen: dict[str, str] = {}
+    for raw in map(str, columns):
+        h = raw.strip()
+        if h in seen:
+            raise ValidationError(
+                f"Columns {seen[h]!r} and {raw!r} have the same name once spaces are "
+                "trimmed; rename one"
+            )
+        seen[h] = raw
+    return list(seen)
+
+
 def _safe_str(val: object) -> str | None:
     if val is None:
         return None
     s = str(val).strip()
     return s if s else None
-
-
-def _safe_float(val: object) -> float | None:
-    """Parse a value to float, returning None on failure."""
-    s = _safe_str(val)
-    if s is None:
-        return None
-    try:
-        return float(s)
-    except (ValueError, TypeError):
-        return None
-
-
-def _safe_int(val: object) -> int | None:
-    """Parse a value to int, returning None on failure."""
-    s = _safe_str(val)
-    if s is None:
-        return None
-    try:
-        return int(float(s))  # handles "1.0" style strings
-    except (ValueError, TypeError):
-        return None
 
 
 # ---------------------------------------------------------------------------
@@ -317,18 +325,19 @@ def get_parser(file_format: BulkRegistrationFileFormat) -> ChemicalFileParser:
 
 
 class BulkFileParserAdapter:
-    def headers(
-        self, *, content: bytes, filename: str, file_format: BulkRegistrationFileFormat
-    ) -> list[str]:
-        """The file's column names, without parsing its rows."""
-        return get_parser(file_format).headers(content, filename)
-
     """Adapter that satisfies the application BulkFileParserProtocol.
 
     Bridges the infra ``ChemicalFileParser`` factory and the application
     ``ParsedItemDTO``. Lives in infrastructure so the application layer never
     imports infra modules.
     """
+
+    def headers(
+        self, *, content: bytes, filename: str, file_format: BulkRegistrationFileFormat
+    ) -> list[str]:
+        """The file's column names, without parsing its rows. Raises ``ValidationError``
+        when two are the same once trimmed."""
+        return get_parser(file_format).headers(content, filename)
 
     def parse(
         self,

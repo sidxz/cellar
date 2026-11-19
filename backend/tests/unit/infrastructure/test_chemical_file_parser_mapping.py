@@ -369,3 +369,31 @@ def test_semicolon_column_splits_through_the_parser() -> None:
         ("B", "custom"),
         ("51-52-5", "cas_number"),
     ]
+
+
+def test_one_structure_under_two_names_keeps_its_shared_batch_id() -> None:
+    """The run makes one compound of these rows, so '001' is one compound's batch."""
+    rows = [
+        ["Aspirin", None, "CC(=O)Oc1ccccc1C(=O)O", None, None, None, "001", "LOT-1", None],
+        [
+            "Acetylsalicylic acid",
+            None,
+            "OC(=O)c1ccccc1OC(C)=O",
+            None,
+            None,
+            None,
+            "001",
+            "LOT-1",
+            None,
+        ],
+    ]
+    items = TabularParser().parse(_xlsx(rows), "x.xlsx", CDD_MAPPING)
+    assert [i.batch_problem for i in items] == [None, None]
+
+
+def test_headers_the_same_once_trimmed_are_refused() -> None:
+    csv = b"Name,Name ,SMILES\nA,B,CCO\n"
+    with pytest.raises(ValidationError, match="'Name' and 'Name '"):
+        TabularParser().headers(csv, "x.csv")
+    with pytest.raises(ValidationError, match="rename one"):
+        TabularParser().parse(csv, "x.csv")

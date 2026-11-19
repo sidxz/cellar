@@ -3,8 +3,9 @@
 Application-layer value object. The wizard's "Match columns" step builds one;
 it travels with the upload (form field → workflow input → parse activity) and
 the infrastructure parser applies it. Without one, the parser applies
-``suggest_column_mapping`` to the file's headers, which reproduces the fixed
-header names the parser always accepted.
+``suggest_column_mapping`` to the file's headers (spec 2026-11-18 §3): a file using
+the fixed parser's header names reads as it always did, and synonym and batch-ID
+headers, which that parser ignored, are read too.
 """
 
 from __future__ import annotations

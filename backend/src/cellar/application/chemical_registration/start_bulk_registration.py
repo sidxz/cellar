@@ -114,14 +114,17 @@ class StartBulkRegistration:
             # Check the mapping against the file's headers before a workflow starts;
             # only the header row is read here, the worker parses the rows.
             # (SDF headers need every record read: off the event loop, as the parse is.)
-            mapping_err = input.column_mapping.validate(
-                await asyncio.to_thread(
+            try:
+                headers = await asyncio.to_thread(
                     self._parser.headers,
                     content=input.content,
                     filename=input.filename,
                     file_format=file_format,
-                ),
-                structure_implied=file_format == BulkRegistrationFileFormat.SDF,
+                )
+            except ValidationError as err:
+                return Failure(err)
+            mapping_err = input.column_mapping.validate(
+                headers, structure_implied=file_format == BulkRegistrationFileFormat.SDF
             )
             if mapping_err is not None:
                 return Failure(mapping_err)
