@@ -27,8 +27,13 @@ async function fetchAllTargets(): Promise<Target[]> {
   throw new Error("targets: cursor pagination did not terminate after 50 pages");
 }
 
-export function useTargets() {
-  return useQuery({ queryKey: TARGETS_KEY, queryFn: fetchAllTargets });
+/** Every target (pages through the whole list); `enabled: false` skips the fetch. */
+export function useTargets(options?: { enabled?: boolean }) {
+  return useQuery({
+    queryKey: TARGETS_KEY,
+    queryFn: fetchAllTargets,
+    enabled: options?.enabled ?? true,
+  });
 }
 
 /** Admin-only full sync from prot-cellar. Errors carry the backend message

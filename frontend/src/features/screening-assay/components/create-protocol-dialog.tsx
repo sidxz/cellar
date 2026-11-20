@@ -153,10 +153,11 @@ export function CreateProtocolDialog({
   const router = useRouter();
   const createMutation = useCreateProtocol();
   const assignToProject = useAssignProtocolToProject();
-  const { data: projects } = useProjects();
+  const { data: projects, isError: projectsFailed } = useProjects();
   const { data: protocolForms } = useProtocolForms();
   const { data: categories } = useProtocolCategories();
-  const { data: targets } = useTargets();
+  // Only a link needs the whole list (to drop targets it does not know); the picker loads its own.
+  const { data: targets, isError: targetsFailed } = useTargets({ enabled: Boolean(start) });
   const facetSlots = useProtocolFacetSlots();
   // For @-completion in the formula editor.
   const { data: allProtocols } = useProtocols();
@@ -295,24 +296,34 @@ export function CreateProtocolDialog({
     applyPickedForm(id ? pickFormForCategory(protocolForms ?? [], id) : null);
   };
   // Opened from a link: the category applies its form as if picked, then the link's type wins
-  // over the form's, then targets and project. Once per opening, after the data has loaded.
-  const startApplied = useRef(false);
+  // over the form's; targets and project follow when their own lists arrive (a list that fails
+  // to load drops its values). Each part once per opening, so a late list never overwrites
+  // what the scientist has since chosen.
+  const startApplied = useRef({ facts: false, targets: false, project: false });
   useEffect(() => {
-    if (!open || !start || startApplied.current) return;
-    if (!categories || !protocolForms || !targets || !projects) return;
-    startApplied.current = true;
+    if (!open || !start) return;
+    const done = startApplied.current;
     const s = resolveProtocolLink(start, {
-      categoryLabels: categories.map((c) => c.label),
-      targetIds: targets.map((t) => t.id),
-      projectIds: projects.map((p) => p.id),
+      categoryLabels: categories?.map((c) => c.label) ?? [],
+      targetIds: targets?.map((t) => t.id) ?? [],
+      projectIds: projects?.map((p) => p.id) ?? [],
     });
-    if (s.category) {
-      form.setValue("category", s.category);
-      onCategoryPicked(s.category);
+    if (!done.facts && categories && protocolForms) {
+      done.facts = true;
+      if (s.category) {
+        form.setValue("category", s.category);
+        onCategoryPicked(s.category);
+      }
+      if (s.protocolType) form.setValue("protocol_type", s.protocolType);
     }
-    if (s.protocolType) form.setValue("protocol_type", s.protocolType);
-    if (s.targetIds.length > 0) form.setValue("target_ids", s.targetIds);
-    if (s.projectId) setProjectId(s.projectId);
+    if (!done.targets && (targets || targetsFailed)) {
+      done.targets = true;
+      if (s.targetIds.length > 0) form.setValue("target_ids", s.targetIds);
+    }
+    if (!done.project && (projects || projectsFailed)) {
+      done.project = true;
+      if (s.projectId) setProjectId(s.projectId);
+    }
   });
 
   const { own: ownForms, generic: genericForms } = formsForCategory(
@@ -472,7 +483,11 @@ export function CreateProtocolDialog({
           // Straight on to the draft: its remaining setup and Publish live there.
           if (protocol?.id) {
             const back = returnTarget ? `?return_to=${encodeURIComponent(returnTarget.url)}` : "";
-            router.push(`/assays/protocols/${protocol.id}${back}`);
+            // From a link, the draft takes the link's place in history: Back goes to the app
+            // that sent it, not to this dialog again.
+            const draft = `/assays/protocols/${protocol.id}${back}`;
+            if (start) router.replace(draft);
+            else router.push(draft);
           }
         },
       },

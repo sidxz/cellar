@@ -45,6 +45,10 @@ const state = vi.hoisted(() => ({
   suggestionsOn: false,
   suggest: vi.fn(),
   targets: [] as { id: string }[],
+  targetsLoaded: true,
+  targetsError: false,
+  targetsEnabled: null as boolean | null,
+  replace: vi.fn(),
   projects: [] as { id: string; name: string }[],
   categoriesLoaded: true,
   assign: vi.fn(),
@@ -59,11 +63,17 @@ afterEach(() => {
   state.suggestionsOn = false;
   state.suggest.mockReset();
   state.targets = [];
+  state.targetsLoaded = true;
+  state.targetsError = false;
+  state.targetsEnabled = null;
+  state.replace.mockReset();
   state.projects = [];
   state.categoriesLoaded = true;
   state.assign.mockReset();
 });
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: state.push }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: state.push, replace: state.replace }),
+}));
 
 // The preview is canned, unless a test runs the real hook against the canned server response.
 vi.mock("../hooks/use-protocol-name-preview", async (importOriginal) => {
@@ -90,7 +100,15 @@ vi.mock("../hooks/use-method-suggestions", () => ({
   useMethodSuggestionsEnabled: () => state.suggestionsOn,
   useSuggestFromMethod: () => ({ mutate: state.suggest, isPending: false }),
 }));
-vi.mock("../hooks/use-targets", () => ({ useTargets: () => ({ data: state.targets }) }));
+vi.mock("../hooks/use-targets", () => ({
+  useTargets: (options?: { enabled?: boolean }) => {
+    state.targetsEnabled = options?.enabled ?? true;
+    return {
+      data: state.targetsLoaded ? state.targets : undefined,
+      isError: state.targetsError,
+    };
+  },
+}));
 vi.mock("../hooks/use-protocol-projects", () => ({
   useAssignProtocolToProject: () => ({ mutateAsync: state.assign }),
 }));
@@ -1115,7 +1133,7 @@ describe("CreateProtocolDialog opened from a link", () => {
     expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("Growth inhibition");
   });
 
-  it("goes to the draft with return_to", async () => {
+  it("goes to the draft with return_to, in place of the link in history", async () => {
     known();
     state.mutate.mockImplementation((_body, opts: { onSuccess: (p: unknown) => Promise<void> }) =>
       opts.onSuccess({ id: "p-new" }),
@@ -1129,11 +1147,43 @@ describe("CreateProtocolDialog opened from a link", () => {
       />,
     );
     await submit();
+    // Back from the draft goes to the app that sent the link, not to the pre-filled dialog.
     await waitFor(() =>
-      expect(state.push).toHaveBeenCalledWith(
+      expect(state.replace).toHaveBeenCalledWith(
         "/assays/protocols/p-new?return_to=https%3A%2F%2Fd.org%2Fs%3Fr%3D1",
       ),
     );
+    expect(state.push).not.toHaveBeenCalled();
     expect(state.assign).toHaveBeenCalledWith({ protocolId: "p-new", projectId: "pr1" });
+  });
+
+  it("asks for the whole target list only when opened from a link", () => {
+    render(<CreateProtocolDialog open={false} onOpenChange={() => {}} />);
+    expect(state.targetsEnabled).toBe(false);
+  });
+
+  it("applies the category without waiting for targets, then the targets when they arrive", async () => {
+    known();
+    state.targetsLoaded = false;
+    const { rerender } = render(
+      <CreateProtocolDialog open onOpenChange={() => {}} start={start} />,
+    );
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("Cytotoxicity");
+
+    state.targetsLoaded = true;
+    rerender(<CreateProtocolDialog open onOpenChange={() => {}} start={start} />);
+    const payload = await submit();
+    expect(payload.target_ids).toEqual(["t1"]);
+  });
+
+  it("keeps the rest of the link when the target list fails to load", async () => {
+    known();
+    state.targetsLoaded = false;
+    state.targetsError = true;
+    render(<CreateProtocolDialog open onOpenChange={() => {}} start={start} />);
+    expect(screen.getByRole("combobox", { name: "Category" })).toHaveValue("Cytotoxicity");
+    const payload = await submit();
+    expect(payload.protocol_type).toBe("whole_cell");
+    expect(payload.target_ids).toEqual([]);
   });
 });

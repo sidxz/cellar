@@ -14,10 +14,13 @@ describe("return after login", () => {
     expect(takePlace()).toBeNull();
   });
 
-  it.each(["//evil.com", "https://evil.com", "/\\evil.com", ""])("never goes to %s", (path) => {
-    rememberPlace(path);
-    expect(takePlace()).toBeNull();
-  });
+  it.each(["//evil.com", "https://evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", ""])(
+    "never goes to %j",
+    (path) => {
+      rememberPlace(path);
+      expect(takePlace()).toBeNull();
+    },
+  );
 
   it("refuses a place planted in storage", () => {
     window.sessionStorage.setItem("cellar.returnAfterLogin", "//evil.com");
