@@ -12,7 +12,7 @@ from cellar.application.screening.get_melting_analysis import (
     GetMeltingAnalysis,
     GetMeltingAnalysisQuery,
 )
-from cellar.application.screening.manage_melting_steps import NOT_EDITABLE
+from cellar.application.screening.manage_melting_steps import LOCKED, NOT_EDITABLE
 from cellar.domain.screening_assay.enums import (
     PlateFormat,
     ProtocolType,
@@ -226,13 +226,13 @@ async def test_edit_refusal_is_none_on_a_completed_run(status):
 async def test_edit_refusal_on_an_approved_run():
     h = Harness(status=RunStatus.APPROVED)
     refusal = (await h.read()).unwrap().edit_refusal
-    assert refusal == NOT_EDITABLE == "Peaks cannot be changed on an approved run"
+    assert refusal == NOT_EDITABLE
 
 
 @pytest.mark.parametrize("status", [RunStatus.DRAFT, RunStatus.COMPLETED, RunStatus.APPROVED])
 async def test_edit_refusal_on_a_locked_run(status):
     h = Harness(status=status, locked=True)
-    assert (await h.read()).unwrap().edit_refusal == "This run is locked"
+    assert (await h.read()).unwrap().edit_refusal == LOCKED
 
 
 async def test_run_not_found():

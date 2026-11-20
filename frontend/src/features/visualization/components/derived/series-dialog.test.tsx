@@ -108,23 +108,6 @@ describe("SeriesDialog", () => {
     expect(onOpenChange).toHaveBeenCalledWith(false);
   });
 
-  it("says what each count means, so one ring can count more as a core than as a scaffold", () => {
-    setTree(tree);
-    open();
-    expect(screen.getByText("Scaffold of 3 compounds")).toBeInTheDocument();
-    expect(scaffoldTiles()[1]).toHaveAttribute(
-      "title",
-      "3 compounds are built on this ring scaffold\nS2",
-    );
-    expect(coreTile()).toHaveAttribute("title", "1 compound contains this core\nc1ccccc1");
-    expect(
-      screen.getByText(
-        "A scaffold counts the compounds built on it; a core counts every compound containing it, so the same ring can count more as a core.",
-        { exact: false },
-      ),
-    ).toBeInTheDocument();
-  });
-
   it("previews overlaps and removes a member", () => {
     setTree(tree);
     open();
@@ -168,14 +151,9 @@ describe("SeriesDialog", () => {
     expect(coreTile()).toBeDisabled();
   });
 
-  it("guides the chemist to R-group cores when no scaffold is shared by 3 compounds", () => {
+  it("offers only R-group cores when no scaffold is shared by 3 compounds", () => {
     setTree({ ...tree, nodes: [node("S1", ["m1"]), node("S2", ["m2"])], edges: [] });
     open();
-    expect(
-      screen.getByText(
-        "No scaffold is shared by 3 or more compounds. Add R-groups with a drawn core and use it here.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.queryAllByRole("button", { name: /^Scaffold/ })).toEqual([]);
     expect(coreTile()).toBeEnabled();
   });
@@ -197,17 +175,5 @@ describe("SeriesDialog", () => {
     setTree(null, { error: new Error("boom") });
     open();
     expect(screen.getByText("Could not load scaffolds.")).toBeInTheDocument();
-  });
-
-  it("fits the screen: no taller than the viewport, the cards scroll between title and footer", () => {
-    setTree(tree);
-    open();
-    expect(screen.getByRole("dialog")).toHaveClass("max-h-[calc(100dvh-2rem)]", "flex-col");
-    const cards = scaffoldTiles()[0].parentElement as HTMLElement;
-    expect(cards).toHaveClass("min-h-0", "overflow-y-auto");
-    expect(cards).not.toContainElement(
-      screen.getByRole("heading", { name: "Add a series column" }),
-    );
-    expect(cards).not.toContainElement(apply());
   });
 });

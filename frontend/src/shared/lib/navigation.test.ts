@@ -36,8 +36,12 @@ describe("activeHref — longest whole-segment prefix wins", () => {
 describe("activeNavItem", () => {
   it("child inherits the parent's iconClass", () => {
     const item = activeNavItem(navigation, "/admin/custom-fields");
+    const parent = navigation
+      .flatMap((group) => group.items)
+      .find((nav) => nav.children?.some((child) => child.href === "/admin/custom-fields"));
     expect(item?.title).toBe("Custom Fields");
-    expect(item?.iconClass).toBe("text-emerald-500");
+    expect(parent?.iconClass).toBeDefined();
+    expect(item?.iconClass).toBe(parent?.iconClass);
   });
 });
 

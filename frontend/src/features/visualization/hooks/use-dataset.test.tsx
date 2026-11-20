@@ -1,5 +1,10 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { renderHook } from "@testing-library/react";
+import {
+  QueryClient,
+  QueryClientProvider,
+  focusManager,
+  onlineManager,
+} from "@tanstack/react-query";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
@@ -42,17 +47,28 @@ describe("useDataset", () => {
     );
   });
 
-  it("never refetches a loaded dataset in the background", () => {
-    const client = new QueryClient();
-    const wrapper = ({ children }: { children: ReactNode }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    );
-    renderHook(() => useDataset({ kind: "run", runId: "r1" }, "wells"), { wrapper });
-    const [query] = client.getQueryCache().getAll();
-    expect(query.options).toMatchObject({
-      staleTime: Number.POSITIVE_INFINITY,
-      refetchOnWindowFocus: false,
-      refetchOnReconnect: false,
-    });
+  it("never refetches a loaded dataset in the background", async () => {
+    const fetch = vi.mocked(customInstance);
+    fetch.mockClear();
+    fetch.mockResolvedValueOnce({ row_count: 0 });
+    const wrapper = wrapperOf(new QueryClient());
+    const load = () => useDataset({ kind: "run", runId: "r1" }, "wells");
+    const { result } = renderHook(load, { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    try {
+      // Back to the tab, back online, and a second view of the same dataset mounting.
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        onlineManager.setOnline(false);
+        onlineManager.setOnline(true);
+      });
+      renderHook(load, { wrapper });
+      await act(() => new Promise((r) => setTimeout(r, 0)));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    } finally {
+      focusManager.setFocused(undefined);
+      onlineManager.setOnline(true);
+    }
   });
 });

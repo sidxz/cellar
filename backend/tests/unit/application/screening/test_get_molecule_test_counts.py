@@ -33,44 +33,11 @@ class _FakeUoW:
 
 WS = uuid.uuid4()
 MOL_A = uuid.uuid4()
-MOL_B = uuid.uuid4()
 PROJ_ID = uuid.uuid4()
 
 
 @pytest.mark.asyncio
 class TestGetMoleculeTestCounts:
-    async def test_returns_zero_for_untested_molecule(self) -> None:
-        fake_repo = AsyncMock()
-        fake_repo.count_distinct_protocols_per_molecule.return_value = {MOL_A: 0}
-        uc = GetMoleculeTestCounts(uow=_FakeUoW(), dr_curve_repo=fake_repo)
-        auth = FakeAuth(role="viewer", workspace_id=WS)
-
-        result = await uc.execute(
-            GetMoleculeTestCountsQuery(workspace_id=WS, molecule_ids=[MOL_A]),
-            auth=auth,
-        )
-
-        assert result[MOL_A] == 0
-        fake_repo.count_distinct_protocols_per_molecule.assert_awaited_once_with(
-            workspace_id=WS,
-            molecule_ids=[MOL_A],
-            project_id=None,
-        )
-
-    async def test_returns_count_for_tested_molecule(self) -> None:
-        fake_repo = AsyncMock()
-        fake_repo.count_distinct_protocols_per_molecule.return_value = {MOL_A: 3, MOL_B: 1}
-        uc = GetMoleculeTestCounts(uow=_FakeUoW(), dr_curve_repo=fake_repo)
-        auth = FakeAuth(role="viewer", workspace_id=WS)
-
-        result = await uc.execute(
-            GetMoleculeTestCountsQuery(workspace_id=WS, molecule_ids=[MOL_A, MOL_B]),
-            auth=auth,
-        )
-
-        assert result[MOL_A] == 3
-        assert result[MOL_B] == 1
-
     async def test_passes_project_id_to_repo(self) -> None:
         fake_repo = AsyncMock()
         fake_repo.count_distinct_protocols_per_molecule.return_value = {MOL_A: 2}

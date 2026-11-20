@@ -63,16 +63,9 @@ describe("ConcentrationChart", () => {
     });
     expect(last().layout.xaxis.title.text).toContain("µM");
     expect(last().layout.yaxis.title.text).toBe("ΔTm (°C)");
-    expect(last().layout.height).toBe(260);
-    const [[save]] = last().config.modeBarButtons as { name: string }[][];
-    expect(save.name).toBe("Save as SVG");
     expect(last().layout.shapes[0]).toMatchObject({ y0: -2, y1: 2 });
-    // Labels at the left end, the band's below it and the zero line's above;
-    // nothing at the right edge, where the highest dose sits.
-    expect(last().layout.annotations).toMatchObject([
-      { text: "outside −2 to 2 °C is a hit", x: 0, xanchor: "left", y: -2, yanchor: "top" },
-      { text: "ΔTm = 0 (reference)", x: 0, xanchor: "left", y: 0, yanchor: "bottom" },
-    ]);
+    // One label on the band's edge, one on the zero line.
+    expect(last().layout.annotations.map((a: { y: number }) => a.y)).toEqual([-2, 0]);
     expect(pts.marker.line.color).toBe(selectedOutline(undefined));
   });
 
@@ -86,16 +79,10 @@ describe("ConcentrationChart", () => {
     expect(last().data[0].marker.line.width).toEqual([0, 2, 2, 0]);
   });
 
-  it("says Reviewed on hover for a reviewed point and nothing about review otherwise", () => {
+  it("marks only the reviewed (non-provisional) points as reviewed on hover", () => {
     show();
-    const pts = last().data[0];
-    expect(pts.text).toBeUndefined();
-    expect(pts.hovertemplate).toEqual([
-      "%{x} µM: %{y:.1f} °C · Reviewed<extra></extra>",
-      "%{x} µM: %{y:.1f} °C<extra></extra>",
-      "%{x} µM: %{y:.1f} °C · Reviewed<extra></extra>",
-      "%{x} µM: %{y:.1f} °C · Reviewed<extra></extra>",
-    ]);
+    const hover: string[] = last().data[0].hovertemplate;
+    expect(hover.map((t) => t.includes("Reviewed"))).toEqual([true, false, true, true]);
   });
 
   it("joins means in dose order with a tick where a dose repeats", () => {

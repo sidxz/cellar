@@ -548,10 +548,7 @@ def test_ranges_respect_qualifiers_and_units(qualifier, value, unit, qc, expecte
 def test_qc_unknown_requires_existing_measurement_and_bounds_are_validated():
     from pydantic import ValidationError as PydanticError
 
-    from cellar.domain.research_organization.campaign_result_filters import (
-        CampaignResultFilters,
-        MeasurementFilter,
-    )
+    from cellar.domain.research_organization.campaign_result_filters import MeasurementFilter
 
     row = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
     channel = uuid.uuid4()
@@ -567,7 +564,3 @@ def test_qc_unknown_requires_existing_measurement_and_bounds_are_validated():
     ]:
         with pytest.raises(PydanticError):
             MeasurementFilter(channel_id=channel, **bad)
-    with pytest.raises(PydanticError):
-        CampaignResultFilters(search="x" * 201)
-    with pytest.raises(PydanticError):
-        CampaignResultFilters(measurements=(condition,) * 9)

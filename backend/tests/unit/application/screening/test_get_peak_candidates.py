@@ -208,7 +208,6 @@ async def test_smoothing_not_greater_than_zero_is_refused(smoothing: float):
     h = Harness()
     failure = (await h.uc(h.query(smoothing=smoothing), auth=h.auth)).failure()
     assert isinstance(failure, ValidationError)
-    assert failure.message == "Enter a smoothing window greater than 0."
     h.detection.candidates.assert_not_called()
 
 

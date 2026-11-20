@@ -60,7 +60,6 @@ class TestAuditOperation:
 
         op.add_signature(sig)
 
-        assert op.signature is not None
-        assert op.signature.operation_id == op.id
-        assert op.signature.auth_method == AuthMethod.MFA
+        assert op.signature is sig
+        assert sig.operation_id == op.id
 

@@ -11,7 +11,6 @@ from unittest.mock import AsyncMock
 import pytest
 from returns.result import Failure, Success
 
-from cellar.application.shared.sentinel import UNSET
 from cellar.application.workspace_config.create_custom_field import (
     CreateCustomField,
     CreateCustomFieldCommand,
@@ -197,26 +196,6 @@ class TestCreateCustomField:
 
 class TestListCustomFields:
     @pytest.mark.asyncio
-    async def test_delegates_to_repo(self):
-        workspace_id = uuid.uuid4()
-        cfds = [
-            _make_cfd(workspace_id, name="purity"),
-            _make_cfd(workspace_id, name="source"),
-        ]
-        repo = AsyncMock()
-        repo.find_by_workspace.return_value = cfds
-
-        uc = ListCustomFields(uow=FakeUnitOfWork(), repo=repo)
-        query = ListCustomFieldsQuery(workspace_id=workspace_id)
-        result = await uc(query)
-
-        assert isinstance(result, Success)
-        assert result.unwrap() == cfds
-        repo.find_by_workspace.assert_called_once_with(
-            workspace_id, applies_to=None, active_only=True
-        )
-
-    @pytest.mark.asyncio
     async def test_passes_applies_to_filter(self):
         workspace_id = uuid.uuid4()
         repo = AsyncMock()
@@ -231,16 +210,6 @@ class TestListCustomFields:
         repo.find_by_workspace.assert_called_once_with(
             workspace_id, applies_to=FieldTarget.BATCH, active_only=False
         )
-
-    @pytest.mark.asyncio
-    async def test_returns_empty_list_when_none_found(self):
-        workspace_id = uuid.uuid4()
-        repo = AsyncMock()
-        repo.find_by_workspace.return_value = []
-
-        uc = ListCustomFields(uow=FakeUnitOfWork(), repo=repo)
-        result = await uc(ListCustomFieldsQuery(workspace_id=workspace_id))
-        assert result.unwrap() == []
 
 
 # ---------------------------------------------------------------------------

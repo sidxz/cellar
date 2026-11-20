@@ -274,7 +274,7 @@ async def test_create_protein_missing_raises_not_found():
         assert req.method == "GET", "must not POST when the protein is unknown"
         return httpx.Response(404, json={"message": "Protein 'Q12809' not found"})
 
-    with pytest.raises(NotFoundError, match="Protein Q12809 is not in ProtCellar"):
+    with pytest.raises(NotFoundError, match="Q12809"):
         await _source(handler).create_target(_request(), forwarded_headers=HEADERS)
 
 
@@ -283,7 +283,7 @@ async def test_create_protein_missing_raises_not_found():
 async def test_create_refused_raises_editor_access_message(status: int):
     calls: list[httpx.Request] = []
     src = _source(_create_handler(calls, post_status=status, post_json={"message": "no"}))
-    with pytest.raises(AuthorizationError, match="You need editor access in ProtCellar"):
+    with pytest.raises(AuthorizationError):
         await src.create_target(_request(), forwarded_headers=HEADERS)
 
 

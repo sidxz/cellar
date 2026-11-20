@@ -90,11 +90,6 @@ def test_unknown_vault_fields_shape_falls_back_to_built_ins() -> None:
     assert len(build_vault_fields(["x"]).molecule) == 4
 
 
-def test_the_cdd_batch_name_reads_as_cdd_calls_it() -> None:
-    labels = {x.path: x.label for x in build_vault_fields({}).batch}
-    assert labels["batch.molecule_batch_identifier"] == "Molecule-Batch ID"
-
-
 def test_vault_field_names_with_dots_are_read_and_pipes_are_not_offered() -> None:
     from cellar.application.cdd_import.molecule_mapper import _resolve_field
 

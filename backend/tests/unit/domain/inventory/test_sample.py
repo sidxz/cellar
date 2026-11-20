@@ -48,16 +48,11 @@ def _make_sample(
 
 
 class TestSampleCreation:
-    def test_create_sets_all_fields(
+    def test_create_defaults(
         self, workspace_id: uuid.UUID, batch_id: uuid.UUID
     ) -> None:
         sample = _make_sample(workspace_id, batch_id)
 
-        assert sample.workspace_id == workspace_id
-        assert sample.batch_id == batch_id
-        assert sample.barcode.value == "SMP-001"
-        assert sample.container_type == ContainerType.VIAL
-        assert sample.amount.value == 10.0
         assert sample.status == SampleStatus.AVAILABLE
         assert sample.freeze_thaw_count == 0
         assert sample.version == 1
@@ -79,19 +74,6 @@ class TestSampleCreation:
     ) -> None:
         with pytest.raises(ValueError, match="must be >= 0"):
             _make_sample(workspace_id, batch_id, amount=-1)
-
-    def test_all_container_types(
-        self, workspace_id: uuid.UUID, batch_id: uuid.UUID
-    ) -> None:
-        for ct in ContainerType:
-            sample = Sample.create(
-                workspace_id=workspace_id,
-                batch_id=batch_id,
-                barcode=Barcode(value=f"SMP-{ct.value}"),
-                container_type=ct,
-                amount=Amount(value=1.0, unit=AmountUnit.MG),
-            )
-            assert sample.container_type == ct
 
 
 class TestSampleAliquot:

@@ -109,7 +109,7 @@ describe("the curve editor shows the layer the fit really uses", () => {
       />,
     );
     editCurve();
-    expect(screen.getByText("Fits the % Inhibition layer of Signal.")).toBeInTheDocument();
+    expect(screen.getByText(/% Inhibition layer of Signal/)).toBeInTheDocument();
     expect(screen.queryByText("Raw signal")).not.toBeInTheDocument();
     expect(save()).toBeEnabled();
   });
@@ -134,11 +134,8 @@ describe("the curve editor shows the layer the fit really uses", () => {
       />,
     );
     editCurve();
-    expect(
-      screen.getByText(
-        "'Signal' is not a numeric readout of this protocol. Choose the readout this curve fits.",
-      ),
-    ).toBeInTheDocument();
+    // The curve check owns the wording; the editor names the missing readout.
+    expect(screen.getByText(/'Signal'/)).toBeInTheDocument();
     expect(save()).toBeDisabled();
   });
 });

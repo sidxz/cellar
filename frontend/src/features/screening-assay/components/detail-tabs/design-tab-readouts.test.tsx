@@ -97,9 +97,6 @@ describe("DesignTab readouts of a published protocol", () => {
     expect(editButton("Sginal")).toHaveAttribute("title", "Edit");
     fireEvent.click(editButton("Sginal"));
     expect(screen.getByDisplayValue("Sginal")).toBeEnabled();
-    expect(
-      screen.getByText("Nothing uses this readout yet, so every field can still be changed."),
-    ).toBeInTheDocument();
   });
 
   it("keeps a used readout to cosmetic edits and says what uses it", () => {
@@ -148,7 +145,6 @@ describe("DesignTab readouts elsewhere", () => {
     }
     fireEvent.click(editButton("Signal"));
     expect(screen.getByDisplayValue("Signal")).toBeEnabled();
-    expect(screen.getByText("Update fields on this readout.")).toBeInTheDocument();
   });
 
   it("leaves a locked protocol as it was: nothing edits or removes, usage unread", () => {

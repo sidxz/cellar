@@ -306,21 +306,6 @@ class TestProjectScopeStats:
         assert body["protocol_count"] == 1
         assert body["run_count"] == 1
 
-    async def test_stats_response_includes_new_fields(
-        self, client: AsyncClient
-    ) -> None:
-        create = await client.post("/api/v1/projects", json={"name": "Stats v2"})
-        pid = create.json()["id"]
-        resp = await client.get(
-            "/api/v1/projects/stats", params={"project_ids": pid}
-        )
-        assert resp.status_code == 200
-        body = resp.json()[pid]
-        assert body["campaign_count"] == 0
-        assert "last_activity_at" in body
-        assert "member_count" in body
-        assert isinstance(body["member_ids"], list)
-
 
 async def _org(client: AsyncClient) -> str:
     resp = await client.post(

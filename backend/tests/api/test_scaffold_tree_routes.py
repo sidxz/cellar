@@ -41,11 +41,9 @@ async def test_post_rejects_when_neither_input_given(client: AsyncClient) -> Non
 
 @pytest.mark.asyncio
 async def test_post_with_unknown_collection_id_returns_404(client: AsyncClient) -> None:
-    # Collection doesn't exist → ListCollectionMolecules returns Failure →
-    # result_to_response surfaces as HTTPException (typically 404).
+    # Collection doesn't exist → ListCollectionMolecules fails with NotFoundError → 404.
     res = await client.post(
         "/api/v1/scaffold-tree",
         json={"collection_id": str(uuid.uuid4())},
     )
-    # The exact status depends on how DomainError maps; accept 404 OR 400.
-    assert res.status_code in (400, 404)
+    assert res.status_code == 404, res.text

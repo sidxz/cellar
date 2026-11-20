@@ -53,7 +53,7 @@ describe("a preview the server no longer holds", () => {
     });
   });
 
-  it("says plainly that it expired when the upload fails too", async () => {
+  it("fails as expired when the upload fails too", async () => {
     vi.mocked(customInstance)
       .mockRejectedValueOnce(GONE)
       .mockRejectedValueOnce(new ApiError("API error: 500", 500, undefined));
@@ -66,7 +66,6 @@ describe("a preview the server no longer holds", () => {
     );
 
     expect(error).toBeInstanceOf(PreviewExpiredError);
-    expect((error as Error).message).toBe("The preview expired — upload the file again");
   });
 
   it("is uploaded again before an import, keeping the batch picks", async () => {

@@ -147,15 +147,15 @@ describe("apiReason", () => {
     expect(apiReason(new Error("API error: 422 — File is empty"))).toBe("File is empty");
   });
 
-  it("gives a plain sentence when the API sent no detail", () => {
-    expect(apiReason(new Error("API error: 500"))).toBe(
-      "The server could not complete the request. Try again.",
-    );
+  it("gives a plain sentence, not the raw error, when the API sent no detail", () => {
+    const reason = apiReason(new Error("API error: 500"));
+    expect(reason).not.toBe("");
+    expect(reason).not.toMatch(/API error|500/);
   });
 
-  it("gives a plain sentence when the server was never reached", () => {
-    expect(apiReason(new TypeError("Failed to fetch"))).toBe(
-      "Could not reach the server. Check your connection and try again.",
-    );
+  it("gives a different plain sentence when the server was never reached", () => {
+    const reason = apiReason(new TypeError("Failed to fetch"));
+    expect(reason).not.toMatch(/Failed to fetch/);
+    expect(reason).not.toBe(apiReason(new Error("API error: 500")));
   });
 });

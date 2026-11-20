@@ -16,7 +16,7 @@ describe("SaveSelectionDialog", () => {
       />,
     );
     expect(screen.getByDisplayValue(/Diversify-5 from My Set/)).toBeInTheDocument();
-    expect(screen.getByText(/Save 3 compounds as a new collection/i)).toBeInTheDocument();
+    expect(screen.getByText(/\b3 compounds\b/)).toBeInTheDocument();
   });
 
   it("calls onSave with name + projectId (no ids)", () => {

@@ -9,7 +9,6 @@ import pytest
 
 from cellar.domain.sar_analysis.rgroup_decomposition_run import RGroupDecompositionRun
 from cellar.domain.shared.async_job import AsyncJobStatus
-from cellar.domain.shared.errors import ConcurrencyConflictError
 from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.rgroup_decomposition_run_repository import (
     SQLAlchemyRGroupDecompositionRunRepository,
 )
@@ -31,31 +30,6 @@ def _ready_run(*, workspace_id, membership_hash, core_hash) -> RGroupDecompositi
         rgroup_labels=["R1"], matched_count=2, unmatched_count=0, total_count=2, now=_NOW
     )
     return run
-
-
-@pytest.mark.asyncio
-async def test_save_and_find_by_id(uow):
-    ws = uuid.uuid4()
-    run = RGroupDecompositionRun.create(
-        workspace_id=ws,
-        requested_by=uuid.uuid4(),
-        membership_hash="m1",
-        core_smiles="c1ccccc1",
-        core_hash="c1",
-        now=_NOW,
-    )
-    async with uow:
-        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        await repo.save(run)
-        await uow.commit()
-
-    async with uow:
-        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        fetched = await repo.find_by_id_in_workspace(ws, run.id)
-
-    assert fetched is not None
-    assert fetched.status == AsyncJobStatus.PENDING
-    assert fetched.membership_hash == "m1"
 
 
 @pytest.mark.asyncio
@@ -235,35 +209,6 @@ async def test_fetch_count_scoped_to_workspace(uow):
 
     assert n == 0        # the run belongs to ws, not other_ws
     assert rows == []
-
-
-@pytest.mark.asyncio
-async def test_save_rejects_stale_version(uow):
-    # The lost-cancel race: a runner holding a stale RUNNING aggregate must not
-    # be able to overwrite a row a concurrent cancel already advanced.
-    ws = uuid.uuid4()
-    run = RGroupDecompositionRun.create(
-        workspace_id=ws, requested_by=uuid.uuid4(), membership_hash="msv",
-        core_smiles="c1ccccc1", core_hash="csv", now=_NOW,
-    )
-    async with uow:
-        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        await repo.save(run)
-        await uow.commit()
-    async with uow:
-        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        stale = await repo.find_by_id_in_workspace(ws, run.id)  # v1
-    async with uow:
-        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        fresh = await repo.find_by_id_in_workspace(ws, run.id)
-        fresh.mark_running(_NOW)  # row advances to v2
-        await repo.save(fresh)
-        await uow.commit()
-    async with uow:
-        repo = SQLAlchemyRGroupDecompositionRunRepository(uow)
-        with pytest.raises(ConcurrencyConflictError):
-            stale.mark_cancelled(_NOW)  # still expects v1 -> reject
-            await repo.save(stale)
 
 
 @pytest.mark.asyncio

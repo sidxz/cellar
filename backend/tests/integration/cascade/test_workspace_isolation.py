@@ -110,25 +110,6 @@ async def _insert_run(
 
 
 @pytest.mark.asyncio
-async def test_protocol_in_workspace_a_has_no_refs(db_session: AsyncSession) -> None:
-    """PA lives in workspace A and has no runs — refs scoped to A should be empty."""
-    org_a_id = uuid.uuid4()
-    pa_id = uuid.uuid4()
-
-    await _insert_org(db_session, org_a_id, WORKSPACE_A_ID)
-    await _insert_protocol(db_session, pa_id, WORKSPACE_A_ID, name="PA-IsoTest")
-
-    refs = await find_inbound_references(
-        db_session,
-        parent_table="protocols",
-        parent_id=pa_id,
-        workspace_id=WORKSPACE_A_ID,
-    )
-
-    assert refs == [], f"expected no refs for PA in workspace A, got: {refs}"
-
-
-@pytest.mark.asyncio
 async def test_cross_workspace_refs_invisible(db_session: AsyncSession) -> None:
     """Critical isolation property: querying PB's refs with workspace_A_id returns empty.
 

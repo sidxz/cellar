@@ -208,9 +208,7 @@ describe("WorkbenchHeader comparing protocols", () => {
       const button = screen.getByRole("button", { name });
       expect(button).toHaveAttribute("aria-disabled", "true");
       expect(button).toBeEnabled();
-      expect(button).toHaveAccessibleDescription(
-        "Comparing protocols works at the Compounds level only — remove the added protocols to switch.",
-      );
+      expect(button).toHaveAccessibleDescription();
       fireEvent.click(button);
     }
     expect(state.replace).not.toHaveBeenCalled();

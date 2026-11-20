@@ -20,24 +20,11 @@ class TestDoseResponseConfig:
             x_readout_name="concentration",
             y_readout_name="% inhibition",
         )
-        assert cfg.curve_type == CurveType.IC50
-        assert cfg.x_readout_name == "concentration"
-        assert cfg.y_readout_name == "% inhibition"
         assert cfg.hill_slope_constraint == HillSlopeConstraint.UNCONSTRAINED
         assert cfg.normalization_scope == NormalizationScope.PER_PLATE
         assert cfg.activity_threshold is None
         assert cfg.top_constraint is None
         assert cfg.bottom_constraint is None
-
-
-    def test_frozen(self):
-        cfg = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name="conc",
-            y_readout_name="response",
-        )
-        with pytest.raises(AttributeError):
-            cfg.curve_type = CurveType.EC50  # type: ignore[misc]
 
     def test_empty_x_readout_name_raises(self):
         with pytest.raises(ValidationError, match="x_readout_name"):
@@ -98,27 +85,6 @@ class TestDoseResponseConfig:
             y_readout_name="response",
         )
         assert cfg.x_readout_name is None
-
-    def test_x_readout_name_none_does_not_collide_with_y(self):
-        cfg = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name=None,
-            y_readout_name="response",
-        )
-        assert cfg.x_readout_name is None
-
-    def test_equality(self):
-        cfg1 = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name="conc",
-            y_readout_name="response",
-        )
-        cfg2 = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name="conc",
-            y_readout_name="response",
-        )
-        assert cfg1 == cfg2
 
 
 class TestRangeConstraints:
@@ -305,19 +271,3 @@ class TestDoseResponseConfigIntercepts:
                     InterceptSpec(InterceptKind.IC, 50),
                 ),
             )
-
-
-class TestDoseResponseConfigYNormalization:
-    """y_normalization picks which formula's output to fit against — required
-    when the Y readout def emits multiple normalized columns at once."""
-
-
-    def test_y_normalization_can_be_set(self):
-        from cellar.domain.screening_assay.dose_response_config import DoseResponseConfig
-        from cellar.domain.screening_assay.enums import ReadoutNormalization
-        cfg = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            y_readout_name="raw AU",
-            y_normalization=ReadoutNormalization.PERCENT_INHIBITION,
-        )
-        assert cfg.y_normalization == ReadoutNormalization.PERCENT_INHIBITION

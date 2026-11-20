@@ -1,7 +1,13 @@
 """One default per category, enforced in the use case and the database."""
 
+import importlib.util
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
+
+from alembic.migration import MigrationContext
+from alembic.operations import Operations
+from sqlalchemy import text
 
 from cellar.application.workspace_config.create_protocol_form import (
     CreateProtocolForm,
@@ -30,6 +36,7 @@ from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from tests._auth import admin_auth
 
 READOUT = [{"name": "Signal", "data_type": "numeric"}]
+_M089 = Path(__file__).parents[2] / "alembic" / "versions" / "089_protocol_form_category.py"
 
 
 class _NoEvents:
@@ -139,38 +146,39 @@ async def test_a_form_cannot_point_at_another_workspaces_category(
     assert [(f.name, f.category_id) for f in forms] == [("Own", None)]
 
 
+def _load_m089():  # type: ignore[no-untyped-def]
+    spec = importlib.util.spec_from_file_location("m089", _M089)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 async def test_migration_keeps_one_default_per_workspace(session_factory, workspace_id):
-    """089's dedupe statement, run against two legacy defaults."""
-    from sqlalchemy import text
+    """089's upgrade, run over two legacy defaults in one workspace."""
+    m089 = _load_m089()
+    insert = text(
+        "insert into protocol_forms (id, workspace_id, name, is_default, "
+        "readout_templates, version, created_at, updated_at) values "
+        "(gen_random_uuid(), :ws, :n, true, '[]'::jsonb, 1, :ts, :ts)"
+    )
+
+    def run(sync_conn) -> dict[str, bool]:  # type: ignore[no-untyped-def]
+        with Operations.context(MigrationContext.configure(sync_conn)):
+            m089.downgrade()
+            for name, ts in (
+                ("old", datetime(2026, 1, 1, tzinfo=UTC)),
+                ("new", datetime(2026, 2, 1, tzinfo=UTC)),
+            ):
+                sync_conn.execute(insert, {"ws": workspace_id, "n": name, "ts": ts})
+            m089.upgrade()
+        rows = sync_conn.execute(
+            text("select name, is_default from protocol_forms where workspace_id=:ws"),
+            {"ws": workspace_id},
+        ).all()
+        return dict(rows)
 
     async with session_factory() as s:
-        await s.execute(text("drop index if exists ux_protocol_form_default"))
-        for name, ts in (
-            ("old", datetime(2026, 1, 1, tzinfo=UTC)),
-            ("new", datetime(2026, 2, 1, tzinfo=UTC)),
-        ):
-            await s.execute(
-                text(
-                    "insert into protocol_forms (id, workspace_id, name, is_default, "
-                    "readout_templates, version, created_at, updated_at) values "
-                    "(gen_random_uuid(), :ws, :n, true, '[]'::jsonb, 1, :ts, :ts)"
-                ),
-                {"ws": workspace_id, "n": name, "ts": ts},
-            )
-        await s.execute(
-            text(
-                "update protocol_forms f set is_default = false where f.is_default and exists ("
-                "select 1 from protocol_forms g where g.workspace_id = f.workspace_id "
-                "and g.is_default and (g.updated_at, g.id) > (f.updated_at, f.id))"
-            )
-        )
-        rows = dict(
-            (
-                await s.execute(
-                    text("select name, is_default from protocol_forms where workspace_id=:ws"),
-                    {"ws": workspace_id},
-                )
-            ).all()
-        )
-        await s.rollback()
+        rows = await s.run_sync(lambda sync: run(sync.connection()))
+        await s.rollback()  # DDL is transactional: the shared test schema stays at head
     assert rows == {"old": False, "new": True}

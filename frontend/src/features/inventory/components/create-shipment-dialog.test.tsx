@@ -82,7 +82,7 @@ describe("CreateShipmentDialog", () => {
     expect(screen.getByLabelText(/from organization/i)).toBeInTheDocument();
   });
 
-  it("resolve: plate row without amount, sample row with amount, unresolved barcodes in red", async () => {
+  it("resolve: plate row without amount, sample row with amount, unresolved barcodes flagged", async () => {
     setup();
     const list = await resolveBarcodes("0001\nSMP-1\nnope");
     expect(list.getByText("Plate")).toBeInTheDocument();
@@ -90,7 +90,7 @@ describe("CreateShipmentDialog", () => {
     expect(list.getByText("Sample")).toBeInTheDocument();
     expect(list.queryByLabelText("Amount for 0001")).not.toBeInTheDocument();
     expect(list.getByLabelText("Amount for SMP-1")).toBeInTheDocument();
-    expect(screen.getByText("nope — not found")).toHaveClass("text-destructive");
+    expect(screen.getByText("nope — not found")).toBeInTheDocument();
   });
 
   it("submits direction, loan_id and typed items (plates without amount)", async () => {

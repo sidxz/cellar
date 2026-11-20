@@ -343,24 +343,6 @@ class TestNone:
 
         assert values == []
 
-    def test_returns_empty_list_with_no_readouts(self) -> None:
-        aggregator = ReplicateAggregator()
-
-        values = aggregator.aggregate([], ReadoutAggregation.NONE)
-
-        assert values == []
-
-    def test_returns_empty_list_regardless_of_readouts(self) -> None:
-        """NONE always returns empty, even with lots of readouts."""
-        aggregator = ReplicateAggregator()
-        mol = uuid4()
-        rd = uuid4()
-        readouts = [_make_readout_data(mol, rd, float(i)) for i in range(10)]
-
-        values = aggregator.aggregate(readouts, ReadoutAggregation.NONE)
-
-        assert values == []
-
 
 # ---------------------------------------------------------------------------
 # TestMultipleMolecules

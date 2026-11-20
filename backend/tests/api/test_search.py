@@ -264,9 +264,7 @@ class TestCountSearch:
             },
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert "total_count" in data
-        assert data["total_count"] >= 1
+        assert resp.json()["total_count"] == 1
 
     async def test_empty_criteria_counts_all(self, client: AsyncClient, org_id: str) -> None:
         await client.post(

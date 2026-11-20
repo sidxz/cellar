@@ -93,8 +93,10 @@ async def test_bulk_commits_resolved_only(
     )
     assert response.status_code == 200, response.text
     data = response.json()
-    assert data["resolved_count"] in (0, 1)
+    assert data["resolved_count"] == 1
     assert data["unregistered_count"] == 1
+    members = await client.get(f"/api/v1/collections/{collection_id}/molecules")
+    assert members.json() == [existing_mol["id"]]
 
 
 @pytest.mark.asyncio

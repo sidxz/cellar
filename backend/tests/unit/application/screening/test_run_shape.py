@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from cellar.application.screening.run_shape import (
+    NOT_A_PLATE,
     refuse_if_not_plate_holder,
     refuse_if_welled,
     refuse_if_wellless,
@@ -67,9 +68,6 @@ class TestRefuseIfWellless:
         assert isinstance(error, ConflictError)
         assert "well-less summary results" in str(error)
         assert str(run_id) in str(error)
-
-
-NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it."
 
 
 class TestRefuseIfNotPlateHolder:

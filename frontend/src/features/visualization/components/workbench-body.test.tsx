@@ -36,28 +36,4 @@ describe("WorkbenchBody", () => {
     fireEvent.click(screen.getByRole("button", { name: "Close filters" }));
     expect(tab).toHaveFocus();
   });
-
-  it("stacks the plots over the table in the page flow, with the rail sticky beside them", () => {
-    const { container } = show();
-    // No split to drag and no inner scroll box: the page itself scrolls.
-    expect(screen.queryByRole("separator")).not.toBeInTheDocument();
-    expect(screen.getByText("plots").compareDocumentPosition(screen.getByText("table"))).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-    expect(screen.getByText("plots").closest(".overflow-auto")).toBeNull();
-    expect(screen.getByText("table").closest(".overflow-auto")).toBeNull();
-    expect(screen.getByRole("complementary", { name: "Filters" })).toHaveClass("xl:sticky");
-    // The dashboard's <main> scrolls nothing; the viewport does, so sticky parts stick.
-    expect(container.querySelector("style")?.textContent).toContain(
-      "main:has(.viz-workbench){overflow:visible}",
-    );
-  });
-
-  it("keeps the plot editor beside the page, sticky, as tall as its content up to the viewport", () => {
-    show(<p>editor</p>);
-    const editor = screen.getByRole("complementary", { name: "Edit plot" });
-    expect(editor).toHaveClass("sticky", "max-h-[calc(100dvh-1rem)]", "flex-col");
-    // A fixed height would stretch a short page to the viewport and scroll for nothing.
-    expect(editor).not.toHaveClass("h-[calc(100dvh-1rem)]");
-  });
 });

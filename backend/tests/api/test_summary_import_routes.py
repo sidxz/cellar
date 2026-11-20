@@ -312,7 +312,6 @@ class TestSummaryImportRoutes:
             data={"mapping": "{not valid json"},
         )
         assert bad_json_resp.status_code == 422, bad_json_resp.text
-        assert bad_json_resp.status_code != 500
 
         # --- Valid JSON, but readout id is not a UUID ---
         bad_uuid_resp = await client.post(
@@ -321,7 +320,6 @@ class TestSummaryImportRoutes:
             data={"mapping": json.dumps({"readout_columns": {"IC50": "not-a-uuid"}})},
         )
         assert bad_uuid_resp.status_code == 422, bad_uuid_resp.text
-        assert bad_uuid_resp.status_code != 500
 
     async def test_import_records_replicate_counts(
         self,

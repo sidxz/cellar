@@ -17,12 +17,10 @@ class TestDescriptorCalculator:
         desc = calculator.calculate(mol)
         assert desc.molecular_formula == "C9H8O4"
         assert 180.0 < desc.molecular_weight < 181.0
-        assert desc.exact_mass is not None
-        assert desc.logp is not None
-        assert desc.tpsa > 0
-        assert desc.hbd >= 0
-        assert desc.hba >= 0
-        assert desc.rotatable_bonds >= 0
+        assert desc.exact_mass == pytest.approx(180.0423, abs=1e-4)
+        assert desc.logp == pytest.approx(1.31, abs=0.01)
+        assert desc.tpsa == pytest.approx(63.6, abs=0.1)
+        assert (desc.hbd, desc.hba, desc.rotatable_bonds) == (1, 3, 2)
         assert desc.aromatic_rings == 1
         assert desc.ring_count == 1
         assert desc.heavy_atom_count == 13
@@ -43,12 +41,6 @@ class TestDescriptorCalculator:
         assert desc.ring_count == 1
         assert desc.heavy_atom_count == 6
         assert desc.hbd == 0
-
-    def test_returns_frozen_vo(self, calculator: DescriptorCalculator) -> None:
-        mol = Chem.MolFromSmiles("CC")
-        desc = calculator.calculate(mol)
-        with pytest.raises(Exception):  # Pydantic frozen model
-            desc.molecular_weight = 999.0  # type: ignore[misc]
 
     def test_large_molecule_ro5(self, calculator: DescriptorCalculator) -> None:
         # A molecule that violates Ro5: MW>500, LogP>5, HBD>5

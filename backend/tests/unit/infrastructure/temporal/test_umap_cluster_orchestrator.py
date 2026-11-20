@@ -61,15 +61,6 @@ async def test_null_orchestrator_invokes_runner_inline():
     assert runner.calls[0]["picker_params"] == {"n": 5}
 
 
-@pytest.mark.asyncio
-async def test_null_orchestrator_cancel_is_noop():
-    async def _noop(**_kwargs):
-        pass
-
-    orch = NullUmapClusterOrchestrator(runner=_noop)
-    await orch.cancel(job_id=uuid.uuid4())  # must not raise
-
-
 class BoomRunner:
     async def execute(self, *, job_id, workspace_id, molecule_ids, picker, picker_params):
         raise RuntimeError("runner boom")

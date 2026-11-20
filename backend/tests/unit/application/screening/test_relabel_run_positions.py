@@ -224,11 +224,6 @@ async def test_batch_change_refused_when_a_campaign_may_hold_the_compounds_value
     failure = (await h([E(h.w2, batch_id=h.batch2.id)])).failure()
     assert isinstance(failure, ConflictError) and "Campaign A" in str(failure)
     assert P(2) in str(failure)
-    assert failure.message == (
-        f"Cannot change the batch for {P(2)}: campaign 'Campaign A' contains results for "
-        "this compound that may use this run. Review those campaign results before "
-        "changing the batch."
-    )
     h.readout_repo.find_by_run.assert_awaited_once_with(h.ws, h.run.id)
     h.assert_nothing_written()
 

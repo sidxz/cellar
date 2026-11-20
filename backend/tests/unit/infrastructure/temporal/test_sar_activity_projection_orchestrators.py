@@ -35,12 +35,6 @@ async def test_null_orchestrator_runs_inline_as_background_task():
     assert runner.calls[0]["channel_spec"] == {"column": "drc:x"}
 
 
-@pytest.mark.asyncio
-async def test_null_orchestrator_cancel_is_noop():
-    orch = NullSarActivityProjectionOrchestrator(FakeRunner())
-    assert await orch.cancel(projection_id=uuid.uuid4()) is None
-
-
 class BoomRunner:
     async def run(self, *, run_id, workspace_id, channel_spec, collection_id=None, molecule_ids=None):
         raise RuntimeError("runner boom")

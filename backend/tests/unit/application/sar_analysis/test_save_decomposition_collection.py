@@ -87,7 +87,7 @@ def _input(**over):
     return SaveDecompositionCollectionInput(**base)
 
 
-def _uc(*, ids, run=True, proj=True, create=None, add=None):
+def _uc(*, ids, run=True, proj=True, create=None, add=None, reader=None):
     cid = uuid.uuid4()
     create = create if create is not None else Success(FakeCollection(cid))
     add = add if add is not None else Success(MembershipResult(added=list(ids), already_present=0, unresolved=[]))
@@ -95,7 +95,7 @@ def _uc(*, ids, run=True, proj=True, create=None, add=None):
     uc = SaveDecompositionCollection(
         run_repository=FakeRunRepo(run),
         projection_repository=FakeProjRepo(proj),
-        reader=FakeReader(ids),
+        reader=reader if reader is not None else FakeReader(ids),
         create_collection=fc,
         add_molecules=fa,
         uow=FakeUoW(),
@@ -115,14 +115,27 @@ async def test_creates_collection_and_adds_matched_ids_as_uuid_refs():
     assert {r.value for r in fa.calls[0].refs} == {str(a), str(b)}
 
 
+class FilteringReader:
+    """Matches ``ids`` only under the given grid filter and projection, as the table would."""
+
+    def __init__(self, ids, *, projection_id, filter):
+        self.ids, self.projection_id, self.filter = ids, projection_id, filter
+
+    async def fetch_matched_ids(self, run_id, *, workspace_id, projection_id=None, filter=None):
+        matches = (projection_id, filter) == (self.projection_id, self.filter)
+        return self.ids if matches else []
+
+
 @pytest.mark.asyncio
-async def test_passes_filter_and_projection_to_reader():
-    uc, fc, fa, cid = _uc(ids=[uuid.uuid4()])
+async def test_saves_the_molecules_the_filtered_grid_shows():
+    shown = uuid.uuid4()
     pid = uuid.uuid4()
     flt = {"R1": {"kind": "text", "op": "eq", "value": "Cl"}}
-    await uc.execute(_input(filter=flt, projection_id=pid), auth=None)
-    assert uc._reader.calls[0][2] == pid   # projection_id forwarded
-    assert uc._reader.calls[0][3] == flt   # filter forwarded
+    reader = FilteringReader([shown], projection_id=pid, filter=flt)
+    uc, fc, fa, cid = _uc(ids=[shown], reader=reader)
+    out = await uc.execute(_input(filter=flt, projection_id=pid), auth=None)
+    assert out.unwrap() == cid
+    assert [r.value for r in fa.calls[0].refs] == [str(shown)]
 
 
 @pytest.mark.asyncio

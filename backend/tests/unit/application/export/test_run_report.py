@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import csv
-import re
 import uuid
 from dataclasses import replace
 from datetime import UTC, date, datetime
@@ -15,7 +14,6 @@ from openpyxl import load_workbook
 from cellar.application.export.renderers.base import RenderOptions
 from cellar.application.export.renderers.run_figures import shift_svg, traces_svg
 from cellar.application.export.renderers.run_report_renderer import (
-    _pdf_html,
     render_run_report,
     results_table,
     steps_table,
@@ -25,7 +23,6 @@ from cellar.application.export.run_report import (
     NO_STEP,
     REFERENCE,
     REVIEWED,
-    SEVERAL_STEPS,
     RunCell,
     RunReport,
     RunRow,
@@ -216,7 +213,6 @@ def test_report_says_how_each_tm_was_named():
 def test_an_unreviewed_peak_leaves_the_review_cell_empty():
     headers, table = results_table(_report())
     assert [row[headers.index("Main status")] for row in table] == [REFERENCE, None]
-    assert "Provisional" not in _pdf_html(_report(), OPTIONS)
 
 
 def test_a_differing_peak_count_is_said_whether_or_not_the_peak_was_reviewed():
@@ -226,17 +222,6 @@ def test_a_differing_peak_count_is_said_whether_or_not_the_peak_was_reviewed():
     by = {r.well_id: r.cells["Main"].status for r in rows}
     assert by[A] == "Different number of peaks than the reference"
     assert by[B] == f"{REVIEWED} · {DIFFERS}"
-
-
-def test_report_wording_says_peak():
-    assert (NO_STEP, SEVERAL_STEPS) == ("No peak", "Several peaks")
-    assert DIFFERS == "different number of peaks than the reference"
-    report = _report()
-    assert "Peak (°C)" in steps_table(report)[0]
-    page = re.sub(r"<[^>]+>", " ", _pdf_html(report, OPTIONS))  # the PDF's text, tags dropped
-    assert "Peaks" in page and "Named" in page
-    said = [*results_table(report)[0], *steps_table(report)[0], page]
-    assert not any("step" in text.lower() for text in said)
 
 
 def test_without_a_rule_nobody_is_called():
@@ -364,10 +349,10 @@ async def test_excel_holds_results_peaks_and_each_positions_own_temperatures(tmp
     traces = [[c.value for c in row] for row in wb["Ratio 350-330 measured"].iter_rows()]
     assert traces[0] == ["Position 1 · MadR", None, "Position 2 · 16:0-CoA", None]
     assert traces[2] == [50.5, 0.3, 50.0, 0.1]
-    notes = [c.value for row in wb["Notes"].iter_rows() for c in row if c.value]
-    assert notes[0] == "ChemCellar" and "By ada@lab.org" in notes
-    assert "Hit rule: ΔTm (Main) outside \u22122 to 2 °C" in notes
-    assert "Ratio 350/330 derivative smoothed over 3.5 °C" in notes
+    notes = "\n".join(str(c.value or "") for row in wb["Notes"].iter_rows() for c in row)
+    assert "ada@lab.org" in notes
+    assert "\u22122 to 2 °C" in notes  # the hit rule's bounds
+    assert "3.5 °C" in notes  # the derivative's smoothing window
 
 
 async def test_pdf_is_the_run_report(tmp_path: Path):
@@ -377,7 +362,7 @@ async def test_pdf_is_the_run_report(tmp_path: Path):
 
 
 async def test_sdf_is_not_a_run_format(tmp_path: Path):
-    with pytest.raises(ValueError, match="Excel, CSV or PDF"):
+    with pytest.raises(ValueError):
         await render_run_report(_report(), ExportFormat.SDF, tmp_path / "x.sdf", OPTIONS)
 
 

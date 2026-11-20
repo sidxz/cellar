@@ -202,7 +202,6 @@ class TestSetRunHitCriteria:
 
         assert isinstance(result, Success), result
         assert run.hit_criteria == []
-        assert run.hit_criteria is not None
         assert run.hit_criteria_set_by == auth.user_id
 
     @pytest.mark.asyncio

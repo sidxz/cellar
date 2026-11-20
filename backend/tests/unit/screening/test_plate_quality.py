@@ -4,10 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from cellar.domain.screening_assay.plate_quality import (
-    PlateQualityCalculator,
-    PlateQualityResult,
-)
+from cellar.domain.screening_assay.plate_quality import PlateQualityCalculator
 
 
 class TestPlateQualityCalculator:
@@ -60,8 +57,9 @@ class TestPlateQualityCalculator:
         pos = [95.0, 96.0, 94.0, 95.5]
         neg = [5.0, 6.0, 4.0, 5.5]
         result = self.calc.compute(pos, neg)
-        assert isinstance(result, PlateQualityResult)
-        assert result.positive_control_mean > 0
-        assert result.positive_control_sd >= 0
-        assert result.negative_control_mean > 0
-        assert result.negative_control_sd >= 0
+        assert result.positive_control_mean == pytest.approx(95.125)
+        assert result.negative_control_mean == pytest.approx(5.125)
+        # Sample SD (n - 1).
+        assert result.positive_control_sd == pytest.approx(0.8539, abs=1e-4)
+        assert result.negative_control_sd == pytest.approx(0.8539, abs=1e-4)
+        assert (result.positive_control_n, result.negative_control_n) == (4, 4)

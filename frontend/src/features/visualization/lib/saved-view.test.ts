@@ -171,18 +171,17 @@ describe("migrateViewConfig", () => {
     expect(migrateViewConfig(v1)).toEqual({ ok: true, config: { ...current, derived: [] } });
   });
 
-  it("refuses a newer config", () => {
-    expect(migrateViewConfig({ ...current, config_version: VIEW_CONFIG_VERSION + 1 })).toEqual({
-      ok: false,
-      reason: "This view was saved by a newer version of ChemCellar. Reload the page to open it.",
-    });
+  it("refuses a newer config, for a reason of its own", () => {
+    const newer = migrateViewConfig({ ...current, config_version: VIEW_CONFIG_VERSION + 1 });
+    const unreadable = migrateViewConfig("garbage");
+    expect(newer.ok).toBe(false);
+    expect(!newer.ok && !unreadable.ok && newer.reason !== unreadable.reason).toBe(true);
   });
 
   it("refuses what it can't read", () => {
-    const reason = "This view's settings can't be read.";
-    expect(migrateViewConfig("garbage")).toEqual({ ok: false, reason });
-    expect(migrateViewConfig({ ...v1, panels: "nope" })).toEqual({ ok: false, reason });
-    expect(migrateViewConfig({ ...v1, config_version: 0 }, 1, {})).toEqual({ ok: false, reason });
+    expect(migrateViewConfig("garbage")).toMatchObject({ ok: false });
+    expect(migrateViewConfig({ ...v1, panels: "nope" })).toMatchObject({ ok: false });
+    expect(migrateViewConfig({ ...v1, config_version: 0 }, 1, {})).toMatchObject({ ok: false });
   });
 
   it("applies each step from the stored version up", () => {

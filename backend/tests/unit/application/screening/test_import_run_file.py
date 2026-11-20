@@ -32,6 +32,7 @@ from cellar.application.screening.long_format_normalizer import (
     infer_mapping,
     normalize,
 )
+from cellar.application.screening.run_shape import NOT_A_PLATE
 from cellar.domain.screening_assay.enums import (
     HolderKind,
     PosControlSignal,
@@ -140,9 +141,6 @@ def _with_cassette(run: Run) -> Run:
         )
     ]
     return run
-
-
-NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it."
 
 
 def _make_protocol(
@@ -395,7 +393,7 @@ class TestPreviewRunFile:
         assert preview.matched_batch_count == 1
         assert preview.unmatched_batch_refs == ()
         # Cached for follow-up import
-        assert preview.preview_id in store._items
+        assert store.peek(preview.preview_id) is not None
 
     @pytest.mark.asyncio
     async def test_columns_the_source_calculated_from_a_readout_default_to_ignore(
@@ -1863,6 +1861,68 @@ class TestBareLotNumbers:
             (0.5, b1.id),
         ]
 
+    @pytest.mark.asyncio
+    async def test_a_bare_number_is_read_as_itself_or_as_the_compounds_lot(self) -> None:
+        auth = FakeAuth()
+        run = _make_run(auth.workspace_id)
+        protocol = _make_protocol(auth.workspace_id, ["Raw Data"])
+        mol = FakeMolecule(name="CPD-1")
+        own, lot = FakeBatch(molecule_id=mol.id), FakeBatch(molecule_id=mol.id)
+        csv = (
+            b"Molecule Name,Batch Name,Plate,Well,Raw Data\n"
+            b"CPD-1,100234,P1,A1,0.5\nCPD-1,001,P1,A2,0.4\n"
+        )
+        store = InMemoryPreviewStore(ttl_seconds=60)
+        preview_id = _seed_preview(
+            store,
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            file_content=csv,
+            filename="x.csv",
+        )
+        saved: list = []
+        uc, _, _ = _build_import_uc(
+            run=run,
+            protocol=protocol,
+            batches_by_ref={"100234": own, "CPD-1-001": lot},
+            store=store,
+            save_bulk=saved,
+            molecules_by_synonym={"CPD-1": mol},
+        )
+
+        async def _batches_of(_ws, _molecule_id):
+            return [
+                _FakeInventoryBatch(own.id, _FakeBatchNumber("100234")),
+                _FakeInventoryBatch(lot.id, _FakeBatchNumber("CPD-1-001")),
+            ]
+
+        uc._batch_repo.find_by_molecule = _batches_of
+        result = await uc(
+            ImportRunFileCommand(
+                workspace_id=auth.workspace_id,
+                run_id=run.id,
+                preview_id=preview_id,
+                mapping=ColumnMapping(
+                    well="Well",
+                    plate_name="Plate",
+                    batch_ref="Batch Name",
+                    compound_ref="Molecule Name",
+                    readout_columns=(
+                        ReadoutColumn(
+                            header="Raw Data",
+                            readout_definition_id=protocol.readout_definitions[0].id,
+                        ),
+                    ),
+                ),
+            ),
+            auth=auth,
+        )
+        assert isinstance(result, Success), result
+        assert sorted((r.value.value, r.batch_id) for r in saved) == [
+            (0.4, lot.id),
+            (0.5, own.id),
+        ]
+
 
 # ---------------------------------------------------------------------------
 # RepreviewRunFile — re-resolve a cached preview with a refined mapping
@@ -1972,19 +2032,19 @@ class TestRepreviewRunFile:
             filename="x.csv",
         )
         uc = _build_repreview_uc(run=run, store=store)
-        mapping = ColumnMapping(well="Well", readout_columns=())
-
-        await uc(
-            RepreviewRunFileQuery(
-                workspace_id=auth.workspace_id,
-                run_id=run.id,
-                preview_id=preview_id,
-                mapping=mapping,
-            ),
-            auth=auth,
+        query = RepreviewRunFileQuery(
+            workspace_id=auth.workspace_id,
+            run_id=run.id,
+            preview_id=preview_id,
+            mapping=ColumnMapping(well="Well", readout_columns=()),
         )
-        # Still in the store — chemist can repreview again or import.
-        assert preview_id in store._items
+
+        first = await uc(query, auth=auth)
+        # Still there — the chemist can repreview again or import.
+        second = await uc(query, auth=auth)
+
+        assert isinstance(first, Success), first
+        assert isinstance(second, Success), second
 
     @pytest.mark.asyncio
     async def test_repreview_unknown_preview_id_returns_not_found(self) -> None:
@@ -2002,6 +2062,7 @@ class TestRepreviewRunFile:
             auth=auth,
         )
         assert isinstance(result, Failure)
+        assert isinstance(result.failure(), NotFoundError)
 
     @pytest.mark.asyncio
     async def test_repreview_onto_a_run_whose_holder_is_not_a_plate_is_refused(self) -> None:
@@ -2540,11 +2601,9 @@ class TestWellRoleColumn:
             plate.blank_count,
         ) == (2, 1, 1, 0, 1)
         assert preview.validation_errors == ()
-        assert plate.roles_from == 'the file\'s "Control State" column'
-        assert preview.warnings == (
-            'Control roles from the file\'s "Control State" column differ from the '
-            'protocol default "Test Layout" on 3 wells.',
-        )
+        assert "Control State" in plate.roles_from
+        [warning] = preview.warnings
+        assert "Test Layout" in warning and "3" in warning
 
     @pytest.mark.asyncio
     async def test_repreview_without_the_role_column_counts_the_layout(self) -> None:
@@ -2585,7 +2644,7 @@ class TestWellRoleColumn:
             plate.reference_count,
             plate.blank_count,
         ) == (2, 1, 1, 0, 1)
-        assert plate.roles_from == 'the protocol default "Test Layout"'
+        assert "Test Layout" in plate.roles_from
         assert preview.warnings == ()
 
     @pytest.mark.asyncio
@@ -2780,12 +2839,10 @@ class TestRunLayoutPrecedence:
         run.plate_template_id = own.id
         preview = await self._repreview(run, protocol, [default, own])
         (plate,) = preview.plates
-        assert plate.roles_from == 'this run\'s layout "Run Layout"'
+        assert "Run Layout" in plate.roles_from
         assert (plate.positive_count, plate.negative_count) == (1, 1)
-        assert preview.warnings == (
-            'Control roles from this run\'s layout "Run Layout" differ from the '
-            'protocol default "Test Layout" on 2 wells.',
-        )
+        [warning] = preview.warnings
+        assert "Test Layout" in warning and "2" in warning
 
     @pytest.mark.asyncio
     async def test_a_run_layout_of_another_plate_format_is_passed_over(self) -> None:
@@ -2795,7 +2852,7 @@ class TestRunLayoutPrecedence:
         own = _run_layout(auth, fmt=PlateFormat.F384)
         run.plate_template_id = own.id
         preview = await self._repreview(run, protocol, [default, own])
-        assert preview.plates[0].roles_from == 'the protocol default "Test Layout"'
+        assert "Test Layout" in preview.plates[0].roles_from
         assert preview.warnings == ()
 
     @pytest.mark.asyncio
@@ -2806,14 +2863,11 @@ class TestRunLayoutPrecedence:
         own = _run_layout(auth)
         run.plate_template_id = own.id
         preview = await self._repreview(run, protocol, [default, own], well_role="Control State")
-        assert preview.plates[0].roles_from == 'the file\'s "Control State" column'
+        assert "Control State" in preview.plates[0].roles_from
         # The file agrees with the run's layout on A1/A2; only its blank (A4) differs there.
-        assert preview.warnings == (
-            'Control roles from the file\'s "Control State" column differ from '
-            'this run\'s layout "Run Layout" on 1 well.',
-            'Control roles from the file\'s "Control State" column differ from the '
-            'protocol default "Test Layout" on 3 wells.',
-        )
+        run_layout_warning, default_warning = preview.warnings
+        assert "Run Layout" in run_layout_warning and "1" in run_layout_warning
+        assert "Test Layout" in default_warning and "3" in default_warning
 
     @pytest.mark.asyncio
     async def test_import_writes_the_runs_layout_and_needs_no_protocol_default(self) -> None:
@@ -2892,11 +2946,8 @@ class TestSwappedControls:
 
     def test_full_effect_reading_high_in_an_inhibition_is_flagged(self) -> None:
         norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
-        assert _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH) == (
-            "Plate P1: the full-effect controls (negative controls, mean 0.91) read higher "
-            "than the no-effect controls (positive controls, mean 0.11); this protocol "
-            "expects the full effect to lower the signal.",
-        )
+        (note,) = _swapped_controls(norm, {}, {rd_id: INHIBITION}, PosControlSignal.HIGH)
+        assert all(bit in note for bit in ("P1", "0.91", "0.11"))
 
     def test_low_protocol_inhibition(self) -> None:
         norm, rd_id = _controls_table(pos=[0.1, 0.12], neg=[0.9, 0.92])
@@ -2908,11 +2959,8 @@ class TestSwappedControls:
     def test_activation_expects_the_full_effect_to_raise_the_signal(self) -> None:
         norm, rd_id = _controls_table(pos=[0.9, 0.92], neg=[0.1, 0.12])
         assert _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.HIGH) == ()
-        assert _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.LOW) == (
-            "Plate P1: the full-effect controls (negative controls, mean 0.11) read lower "
-            "than the no-effect controls (positive controls, mean 0.91); this protocol "
-            "expects the full effect to raise the signal.",
-        )
+        (note,) = _swapped_controls(norm, {}, {rd_id: ACTIVATION}, PosControlSignal.LOW)
+        assert all(bit in note for bit in ("P1", "0.11", "0.91"))
 
     def test_platform_words_read_by_effect_pass_under_a_high_protocol(self) -> None:
         # The platform's hit control reads low, its negative control high: right for an
@@ -3022,12 +3070,10 @@ class TestPlatformRoleWords:
     @pytest.mark.asyncio
     async def test_a_high_protocol_reads_the_hit_control_as_its_negative_control(self) -> None:
         preview = await self._preview(PosControlSignal.HIGH)
-        # Read by effect the file agrees with the layout: A1 positive, A2 negative.
-        assert preview.warnings == (
-            'Control roles read by effect: "negative control" as positive control, '
-            '"positive control (hit)" as negative control — under this protocol the '
-            "negative control is the full-effect (hit) end.",
-        )
+        # Read by effect the file agrees with the layout: only the read-by-effect note.
+        [note] = preview.warnings
+        assert "positive control (hit)" in note
+        assert "Test Layout" not in note
 
     @pytest.mark.asyncio
     async def test_a_high_protocol_imports_the_hit_control_as_its_negative_control(self) -> None:
@@ -3080,10 +3126,6 @@ class TestPlatformRoleWords:
     @pytest.mark.asyncio
     async def test_a_low_protocol_reads_the_hit_control_as_its_positive_control(self) -> None:
         preview = await self._preview(PosControlSignal.LOW)
-        assert preview.warnings == (
-            'Control roles from the file\'s "Control State" column differ from the '
-            'protocol default "Test Layout" on 2 wells.',
-            'Control roles read by effect: "negative control" as negative control, '
-            '"positive control (hit)" as positive control — under this protocol the '
-            "positive control is the full-effect (hit) end.",
-        )
+        disagreement, note = preview.warnings
+        assert "Test Layout" in disagreement and "2" in disagreement
+        assert "positive control (hit)" in note

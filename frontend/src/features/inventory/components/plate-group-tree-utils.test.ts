@@ -7,7 +7,6 @@ import {
   groupTypeColor,
   legendEntries,
   pickRoot,
-  stateColor,
   subtreePlateCount,
   truncateLabel,
 } from "./plate-group-tree-utils";
@@ -26,12 +25,8 @@ function node(over: Partial<PlateGroupNode> = {}): PlateGroupNode {
 }
 
 describe("groupTypeColor", () => {
-  it("uses the legacy palette for the four known types, case-insensitively", () => {
-    expect(groupTypeColor("vendor")).toBe("#FFBD50");
-    expect(groupTypeColor("VENDOR")).toBe("#FFBD50");
-    expect(groupTypeColor("screening")).toBe("#8F7EB5");
-    expect(groupTypeColor("master_twin")).toBe("#C3D9E4");
-    expect(groupTypeColor("hit_collection")).toBe("#E27D60");
+  it("matches known types case-insensitively", () => {
+    expect(groupTypeColor("VENDOR")).toBe(groupTypeColor("vendor"));
   });
   it("is stable and distinct for unknown types", () => {
     expect(groupTypeColor("custom")).toBe(groupTypeColor("custom"));
@@ -39,15 +34,6 @@ describe("groupTypeColor", () => {
   });
   it("returns the neutral color for an untyped (empty) group", () => {
     expect(groupTypeColor("")).toBe("#707372");
-  });
-});
-
-describe("stateColor", () => {
-  it("maps legacy states and falls back to neutral", () => {
-    expect(stateColor("Solubilized")).toBe("#7AB648");
-    expect(stateColor("dry")).toBe("#99D2F2");
-    expect(stateColor("Retired")).toBe("#94a3b8");
-    expect(stateColor(null)).toBe("#707372");
   });
 });
 

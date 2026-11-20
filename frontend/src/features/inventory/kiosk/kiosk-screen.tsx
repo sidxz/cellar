@@ -174,6 +174,7 @@ export default function KioskScreen() {
         <output
           aria-live="polite"
           data-testid="kiosk-result"
+          data-state={result.kind}
           className={`w-full max-w-lg rounded-xl p-8 text-center text-white ${result.kind === "ok" ? "bg-green-600" : "bg-red-600"}`}
         >
           {result.kind === "ok" ? (

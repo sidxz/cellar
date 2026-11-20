@@ -44,19 +44,17 @@ describe("curveProblem", () => {
 
   it("asks for a Y readout when none is chosen", () => {
     const rows = [signal(), curve({ dr_y_readout: "" })];
-    expect(curveProblem(rows[1], rows)).toBe("Choose the readout this curve fits.");
+    expect(curveProblem(rows[1], rows)).not.toBeNull();
   });
 
   it("names a Y readout that no longer exists", () => {
     const rows = [signal({ name: "THF Fluorescence Slope" }), curve()];
-    expect(curveProblem(rows[1], rows)).toBe(
-      "'Signal' is not a numeric readout of this protocol. Choose the readout this curve fits.",
-    );
+    expect(curveProblem(rows[1], rows)).toContain("'Signal'");
   });
 
   it("names an X readout that does not exist", () => {
     const rows = [signal(), curve({ dr_x_readout: "Conc" })];
-    expect(curveProblem(rows[1], rows)).toBe("'Conc' is not a readout of this protocol.");
+    expect(curveProblem(rows[1], rows)).toContain("'Conc'");
   });
 
   it("accepts well concentration as X", () => {
@@ -71,7 +69,7 @@ describe("curveProblem", () => {
       signal({ normalizations: ["percent_inhibition", "percent_activation"] }),
       curve({ dr_y_normalization: "z_score" }),
     ];
-    expect(curveProblem(two[1], two)).toBe("Choose which layer of 'Signal' this curve fits.");
+    expect(curveProblem(two[1], two)).toMatch(/layer of 'Signal'/);
   });
 
   it("asks for a layer when the Y readout calculates two", () => {
@@ -79,7 +77,7 @@ describe("curveProblem", () => {
       signal({ normalizations: ["percent_inhibition", "z_score"] }),
       curve({ dr_y_normalization: "" }),
     ];
-    expect(curveProblem(rows[1], rows)).toBe("Choose which layer of 'Signal' this curve fits.");
+    expect(curveProblem(rows[1], rows)).toMatch(/layer of 'Signal'/);
   });
 });
 

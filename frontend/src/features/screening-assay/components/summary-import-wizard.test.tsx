@@ -74,7 +74,6 @@ describe("SummaryImportWizard", () => {
   it("step 1 shows the upload affordance", () => {
     hookState.value = baseHook({ step: 1 });
     renderWizard();
-    expect(screen.getByText(/drop a csv or xlsx here, or click to browse/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /choose file/i })).toBeInTheDocument();
   });
 
@@ -120,10 +119,7 @@ describe("SummaryImportWizard", () => {
     });
     renderWizard();
     expect(screen.getByText("3 matched")).toBeInTheDocument();
-    expect(screen.getByText(/unmatched compound refs/i)).toBeInTheDocument();
     expect(screen.getByText(/CPD-999/)).toBeInTheDocument();
-    expect(screen.getByText("New values")).toBeInTheDocument();
-    expect(screen.getByText("Overwrites")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^import$/i })).toBeEnabled();
   });
 

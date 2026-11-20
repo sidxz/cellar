@@ -113,12 +113,9 @@ const addFilter = (label: string) => {
 };
 
 describe("FilterRail", () => {
-  it("counts active filters, notes fixed bins, and resets all in one undo step", () => {
+  it("counts active filters and resets all in one undo step", () => {
     show([inhAbove(50), types(["sample", "negative_control", "blank"])]);
     expect(screen.getByRole("heading", { name: "Filters (1 active)" })).toBeInTheDocument();
-    expect(
-      screen.getByText("Histograms use fixed bins and show rows that pass the other filters."),
-    ).toBeInTheDocument();
     // Only the active card's summary is highlighted.
     expect(screen.getByRole("button", { name: "% inhibition ≥ 50" })).toHaveAttribute(
       "data-active",

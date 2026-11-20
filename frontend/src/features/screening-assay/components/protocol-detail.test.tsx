@@ -136,8 +136,7 @@ describe("ProtocolDetail actions", () => {
     expect(screen.getByRole("button", { name: "New Run" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Visualize" })).not.toBeInTheDocument();
     selectTab("Results");
-    const visualize = screen.getByRole("button", { name: "Visualize" }).parentElement;
-    expect(visualize).toContainElement(screen.getByRole("button", { name: "Saved views" }));
+    expect(screen.getByRole("button", { name: "Saved views" })).toBeInTheDocument();
   });
 });
 

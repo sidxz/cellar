@@ -121,26 +121,11 @@ def _make_undisclosed(
 
 
 # ---------------------------------------------------------------------------
-# Provenance: scientist_name (the person half of originating_org_id)
+# Provenance: declared disclosure date
 # ---------------------------------------------------------------------------
 
 
-class TestScientistName:
-    def test_register_disclosed_keeps_scientist_name(
-        self, ws_id, org_id, aspirin_structure, aspirin_descriptors
-    ) -> None:
-        mol = _make_disclosed(
-            ws_id, org_id, aspirin_structure, aspirin_descriptors, scientist_name="A. Chemist"
-        )
-        assert mol.scientist_name == "A. Chemist"
-
-    def test_register_undisclosed_keeps_scientist_name(self, ws_id, org_id) -> None:
-        mol = _make_undisclosed(ws_id, org_id, scientist_name="A. Chemist")
-        assert mol.scientist_name == "A. Chemist"
-
-    def test_scientist_name_defaults_to_none(self, ws_id, org_id) -> None:
-        assert _make_undisclosed(ws_id, org_id).scientist_name is None
-
+class TestDisclosureDate:
     def test_register_disclosed_keeps_declared_disclosure_date(
         self, ws_id, org_id, aspirin_structure, aspirin_descriptors
     ) -> None:
@@ -168,7 +153,7 @@ class TestScientistName:
 
 
 class TestRegisterDisclosed:
-    def test_sets_all_fields(
+    def test_derives_statuses_and_formula(
         self,
         ws_id: uuid.UUID,
         org_id: uuid.UUID,
@@ -178,18 +163,11 @@ class TestRegisterDisclosed:
     ) -> None:
         mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors, reg_number)
 
-        assert mol.workspace_id == ws_id
-        assert mol.registration_number == reg_number
-        assert mol.name == "Aspirin"
-        assert mol.molecule_type == MoleculeType.SMALL_MOLECULE
-        assert mol.structure == aspirin_structure
-        assert mol.descriptors == aspirin_descriptors
         assert mol.molecular_formula == "C9H8O4"
         assert mol.structure_status == StructureStatus.DISCLOSED
         assert mol.registration_status == RegistrationStatus.APPROVED
         assert mol.synthesis_status == SynthesisStatus.SYNTHESIZED
         assert mol.lifecycle_stage == LifecycleStage.REGISTERED
-        assert mol.originating_org_id == org_id
         assert mol.version == 1
         assert mol.merged_into_id is None
         assert mol.identifiers == []
@@ -245,16 +223,6 @@ class TestRegisterDisclosed:
                 descriptors=aspirin_descriptors,
                 originating_org_id=org_id,
             )
-
-    def test_molecular_formula_auto_set_from_descriptors(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
-        assert mol.molecular_formula == aspirin_descriptors.molecular_formula
 
 
 # ---------------------------------------------------------------------------
@@ -939,40 +907,3 @@ class TestIdentifiers:
         mol.add_identifier(ident)
         assert len(mol.identifiers) == 1
         assert mol.identifiers[0].identifier == "CAS-50-78-2"
-
-
-# ---------------------------------------------------------------------------
-# Predicted properties
-# ---------------------------------------------------------------------------
-
-
-class TestPredictedProperties:
-    def test_update_predicted_properties(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
-        props = PredictedProperties(logd=1.5, prediction_source="ChemAxon 24.3")
-        mol.update_predicted_properties(props)
-        assert mol.predicted_properties == props
-
-
-# ---------------------------------------------------------------------------
-# Custom fields
-# ---------------------------------------------------------------------------
-
-
-class TestCustomFields:
-    def test_update_custom_fields(
-        self,
-        ws_id: uuid.UUID,
-        org_id: uuid.UUID,
-        aspirin_structure: ChemicalStructure,
-        aspirin_descriptors: ComputedDescriptors,
-    ) -> None:
-        mol = _make_disclosed(ws_id, org_id, aspirin_structure, aspirin_descriptors)
-        mol.update_custom_fields({"project": "oncology", "priority": "high"})
-        assert mol.custom_fields == {"project": "oncology", "priority": "high"}

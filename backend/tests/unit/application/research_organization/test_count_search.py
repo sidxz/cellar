@@ -50,9 +50,11 @@ def _make_saved_search(workspace_id: uuid.UUID) -> SavedSearch:
 
 class TestCountSearch:
     @pytest.mark.asyncio
-    async def test_inline_query_returns_count(self) -> None:
+    async def test_inline_query_is_counted_without_fetching_rows(self) -> None:
         ws_id = uuid.uuid4()
         auth = FakeAuth(workspace_id=ws_id)
+        project_ids = [uuid.uuid4()]
+        query = {"criteria": [], "logic": "and"}
 
         mol_reader = AsyncMock()
         mol_reader.count_by_query = AsyncMock(return_value=42)
@@ -64,15 +66,13 @@ class TestCountSearch:
         )
 
         result = await uc(
-            CountSearchQuery(
-                workspace_id=ws_id,
-                query={"criteria": [], "logic": "and"},
-            ),
+            CountSearchQuery(workspace_id=ws_id, query=query, project_ids=project_ids),
             auth=auth,
         )
 
         assert isinstance(result, Success)
-        assert result.unwrap() == 42
+        mol_reader.count_by_query.assert_awaited_once_with(ws_id, query, project_ids=project_ids)
+        mol_reader.search_by_query.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_saved_search_resolved_then_counted(self) -> None:
@@ -191,27 +191,3 @@ class TestCountSearch:
                 ),
                 auth=auth,
             )
-
-    @pytest.mark.asyncio
-    async def test_does_not_call_search_by_query(self) -> None:
-        """Count path must not materialize rows -- only count_by_query."""
-        ws_id = uuid.uuid4()
-        auth = FakeAuth(workspace_id=ws_id)
-
-        mol_reader = AsyncMock()
-        mol_reader.count_by_query = AsyncMock(return_value=3)
-        # search_by_query is also AsyncMock by default; assert it stays untouched
-
-        uc = CountSearch(
-            uow=FakeUnitOfWork(),
-            molecule_reader=mol_reader,
-            saved_search_repo=AsyncMock(),
-        )
-
-        result = await uc(
-            CountSearchQuery(workspace_id=ws_id, query={"criteria": []}),
-            auth=auth,
-        )
-
-        assert isinstance(result, Success)
-        mol_reader.search_by_query.assert_not_awaited()

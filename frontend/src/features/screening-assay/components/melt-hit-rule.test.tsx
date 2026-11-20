@@ -61,15 +61,15 @@ describe("MeltHitRule", () => {
     show({ run: recorded([outside, other]), applicable: APPLICABLE, other: [other] });
     expect(screen.getByText(/Hit rule: ΔTm \(Main\) outside -2 – 2/)).toBeInTheDocument();
     expect(screen.getByText("member u1")).toBeInTheDocument();
-    expect(screen.getByText("Not evaluated here: Inhibition > 50")).toBeInTheDocument();
+    expect(screen.getByText(/Inhibition > 50/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Edit" }));
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
   it("says when the recorded rule has nothing on Tm or ΔTm", () => {
     show({ run: recorded([other]), other: [other] });
-    expect(screen.getByText("No hit rule on Tm or ΔTm for this run")).toBeInTheDocument();
-    expect(screen.getByText("Not evaluated here: Inhibition > 50")).toBeInTheDocument();
+    expect(screen.queryByText(/ΔTm \(Main\)/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Inhibition > 50/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Edit" })).toBeInTheDocument();
   });
 
@@ -87,7 +87,6 @@ describe("MeltHitRule", () => {
 
   it("with nothing recommended, offers to set a rule", () => {
     show();
-    expect(screen.getByText("No hit rule for this run")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Set hit rule" })).toBeInTheDocument();
   });
 
@@ -115,9 +114,7 @@ describe("MeltHitRule", () => {
       { name: "Max ΔTm (Main)", melt_config: { measure: "max_delta_tm" } },
     ] as unknown as ReadoutDefinition[];
     show({ recommendation: [outside, series], readoutDefinitions: readouts });
-    expect(
-      screen.getByText("Left out (a series value is not a run rule): Max ΔTm (Main) < -5"),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Max ΔTm \(Main\) < -5/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Apply to this run" }));
     expect(setMutate.mock.calls[0][0]).toEqual({ runId: "r1", criteria: [outside] });
   });

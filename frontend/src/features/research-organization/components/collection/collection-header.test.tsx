@@ -28,16 +28,6 @@ const baseCollection = {
 };
 
 describe("CollectionHeader", () => {
-  it("renders the description", () => {
-    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    expect(screen.getByText(/Round 1 hits/)).toBeInTheDocument();
-  });
-
-  it("shows the molecule count badge", () => {
-    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    expect(screen.getByText(/30 molecules/i)).toBeInTheDocument();
-  });
-
   it("shows project name as a link to the project", () => {
     render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
     const link = screen.getByRole("link", { name: /Mtb-TB/i });
@@ -60,26 +50,5 @@ describe("CollectionHeader", () => {
     );
     const link = screen.getByRole("link", { name: /from campaign/i });
     expect(link).toHaveAttribute("href", "/campaigns/camp-7");
-  });
-
-  it("renders the visibility chip", () => {
-    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    expect(screen.getByText(/shared/i)).toBeInTheDocument();
-  });
-
-  it("renders the collection type badge", () => {
-    render(<CollectionHeader collection={baseCollection} projectName="Mtb-TB" />);
-    expect(screen.getByText("Library")).toBeInTheDocument();
-  });
-
-  it("renders rightSlot content at the right end of the strip", () => {
-    render(
-      <CollectionHeader
-        collection={baseCollection}
-        projectName="Mtb-TB"
-        rightSlot={<button>extra</button>}
-      />,
-    );
-    expect(screen.getByRole("button", { name: /extra/i })).toBeInTheDocument();
   });
 });

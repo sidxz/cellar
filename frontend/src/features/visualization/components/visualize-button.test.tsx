@@ -60,10 +60,12 @@ describe("VisualizeButton", () => {
     expect(potency).toHaveTextContent("NadD lead series");
   });
 
-  it("says so when the protocol has no saved views", () => {
+  it("lists no view when the protocol has no saved views", () => {
     render(<VisualizeButton protocolId="p1" />);
     openMenu();
-    expect(screen.getByText("No saved views for this protocol yet")).toBeInTheDocument();
+    const hrefs = screen.getAllByRole("menuitem").map((i) => i.getAttribute("href") ?? "");
+    expect(hrefs).toContain("/assays/visualize");
+    expect(hrefs.filter((h) => h.startsWith("/assays/visualize/"))).toEqual([]);
   });
 
   it("links to every saved view the chemist can see", () => {

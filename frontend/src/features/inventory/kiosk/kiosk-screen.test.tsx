@@ -139,7 +139,7 @@ describe("KioskScreen", () => {
     });
     expect(mockCustomInstance).toHaveBeenCalledTimes(1);
     expect(screen.getByText("No pending kiosk action for plate '1'")).toBeInTheDocument();
-    expect(screen.getByTestId("kiosk-result")).toHaveClass("bg-red-600");
+    expect(screen.getByTestId("kiosk-result")).toHaveAttribute("data-state", "error");
 
     act(() => {
       vi.advanceTimersByTime(5000);

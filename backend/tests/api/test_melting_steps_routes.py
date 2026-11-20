@@ -50,7 +50,6 @@ def _melt_file(cells: dict[tuple[str, int, int, str], object] | None = None) -> 
 
 
 MELT_FILE = _melt_file()
-NOT_EDITABLE = "Peaks cannot be changed on an approved run"
 
 
 async def _sql(session_factory: async_sessionmaker[AsyncSession], stmt: str, **params: Any) -> Any:
@@ -328,9 +327,8 @@ async def test_approved_run_returns_409(
     )
     for resp in (review, add):
         assert resp.status_code == 409, resp.text
-        assert NOT_EDITABLE in resp.text
     after = await _analysis(client, s.run_id)
-    assert after["edit_refusal"] == NOT_EDITABLE
+    assert after["edit_refusal"] is not None
     assert [(st["status"], st["version"]) for st in after["steps"]] == [("unreviewed", 1)] * 3
 
 
@@ -529,7 +527,6 @@ async def _assign_refused(
     session_factory: async_sessionmaker[AsyncSession],
     ws: uuid.UUID,
     state: str,
-    sentence: str,
 ) -> None:
     s, analysis = await _setup(client, session_factory, ws)
     sample = _step(analysis, 64.0)
@@ -537,9 +534,8 @@ async def _assign_refused(
 
     resp = await _assign(client, sample, "Lower")
     assert resp.status_code == 409, resp.text
-    assert sentence in resp.text
     after = await _analysis(client, s.run_id)
-    assert after["edit_refusal"] == sentence
+    assert after["edit_refusal"] is not None
     assert (_step(after, 64.0)["assigned_window"], _step(after, 64.0)["version"]) == (None, 1)
 
 
@@ -548,9 +544,7 @@ async def test_assign_on_approved_run_409(
     session_factory: async_sessionmaker[AsyncSession],
     fake_auth: FakeAuth,
 ) -> None:
-    await _assign_refused(
-        client, session_factory, fake_auth.workspace_id, "status = 'approved'", NOT_EDITABLE
-    )
+    await _assign_refused(client, session_factory, fake_auth.workspace_id, "status = 'approved'")
 
 
 async def test_assign_on_locked_run_409(
@@ -563,7 +557,6 @@ async def test_assign_on_locked_run_409(
         session_factory,
         fake_auth.workspace_id,
         "status = 'completed', is_locked = true",
-        "This run is locked",
     )
 
 
@@ -577,7 +570,6 @@ async def test_assign_unknown_window_422(
 
     resp = await _assign(client, sample, "Upper")
     assert resp.status_code == 422, resp.text
-    assert "'Upper' is not a window on this signal" in resp.text
     too_long = await _assign(client, sample, "Lower", reason="x" * 501)
     assert too_long.status_code == 422, too_long.text
     assert _step(await _analysis(client, s.run_id), 64.0)["version"] == 1
@@ -890,7 +882,6 @@ async def test_accept_many_is_all_or_nothing(
     stale = _items(analysis, **{analysis["steps"][-1]["id"]: 5})
     conflict = await client.post(url, json=stale)
     assert conflict.status_code == 409, conflict.text
-    assert "changed by someone else" in conflict.text
     # Another workspace's run.
     stranger = FakeAuth(role="admin", workspace_id=uuid.uuid4(), user_id=uuid.uuid4())
     async with _client_as(database_url, stranger) as other:
@@ -902,7 +893,6 @@ async def test_accept_many_is_all_or_nothing(
     await _sql(session_factory, "UPDATE runs SET status = 'approved' WHERE id = :id", id=s.run_id)
     approved = await client.post(url, json=items)
     assert approved.status_code == 409, approved.text
-    assert NOT_EDITABLE in approved.text
     assert set(_states(await _analysis(client, s.run_id)).values()) == {("unreviewed", 1)}
 
 

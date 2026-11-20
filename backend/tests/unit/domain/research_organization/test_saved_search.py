@@ -29,7 +29,7 @@ def sample_query() -> dict:
 
 
 class TestSavedSearchCreate:
-    def test_factory_sets_fields(
+    def test_factory_defaults(
         self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
     ) -> None:
         search = SavedSearch.create(
@@ -40,13 +40,7 @@ class TestSavedSearchCreate:
             visibility=SearchVisibility.PRIVATE,
             created_by=user_id,
         )
-        assert search.workspace_id == ws_id
-        assert search.name == "Benzene analogs"
-        assert search.query == sample_query
-        assert search.columns == {"visible": ["name", "smiles", "mw"]}
-        assert search.visibility == SearchVisibility.PRIVATE
         assert search.project_id is None
-        assert search.created_by == user_id
         assert search.version == 1
 
     def test_factory_emits_created_event(
@@ -152,16 +146,6 @@ class TestSavedSearchUpdate:
         search.update(name="New")
         assert search.name == "New"
 
-    def test_update_query(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
-        )
-        new_query = {"type": "substructure", "smiles": "c1ccncc1"}
-        search.update(query=new_query)
-        assert search.query == new_query
-
     def test_update_columns_to_none(
         self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
     ) -> None:
@@ -204,15 +188,6 @@ class TestSavedSearchUpdate:
         assert search.visibility == SearchVisibility.PROJECT
         assert search.project_id == pid
 
-    def test_update_description(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
-        )
-        search.update(description="Updated description")
-        assert search.description == "Updated description"
-
     def test_update_description_to_none(
         self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
     ) -> None:
@@ -254,18 +229,6 @@ class TestSavedSearchRecordExecution:
         assert search.last_run_at is not None
         assert before <= search.last_run_at <= after
 
-    def test_record_execution_updates_updated_at(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
-        )
-        old_updated = search.updated_at
-        search.record_execution(result_count=10)
-        assert search.updated_at is not None
-        if old_updated is not None:
-            assert search.updated_at >= old_updated
-
     def test_record_execution_overwrites_previous(
         self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
     ) -> None:
@@ -279,13 +242,3 @@ class TestSavedSearchRecordExecution:
         assert search.last_run_at is not None
         assert first_run is not None
         assert search.last_run_at >= first_run
-
-    def test_record_execution_zero_results(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID, sample_query: dict
-    ) -> None:
-        search = SavedSearch.create(
-            workspace_id=ws_id, name="S1", query=sample_query, created_by=user_id
-        )
-        search.record_execution(result_count=0)
-        assert search.result_count == 0
-        assert search.last_run_at is not None

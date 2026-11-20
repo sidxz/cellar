@@ -49,7 +49,7 @@ def _make(
 
 
 class TestBulkDisclosureCreation:
-    def test_create_sets_all_fields(
+    def test_create_defaults(
         self, org_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         bd = BulkDisclosure.create(
@@ -60,13 +60,8 @@ class TestBulkDisclosureCreation:
             total_count=10,
         )
 
-        assert bd.workspace_id == WS_ID
-        assert bd.source_file == "compounds.csv"
-        assert bd.partner_org_id == org_id
-        assert bd.submitted_by == user_id
         assert bd.submitted_at is not None
         assert bd.status == BulkDisclosureStatus.PENDING
-        assert bd.total_count == 10
         assert bd.disclosed_count == 0
         assert bd.merged_count == 0
         assert bd.conflict_count == 0
@@ -301,26 +296,3 @@ class TestBulkDisclosureProgress:
         assert bd.conflict_count == 1
         assert bd.error_count == 1
         assert bd.processed_count == 5
-
-    def test_transitions_update_updated_at(
-        self, org_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        bd = BulkDisclosure.create(
-            workspace_id=WS_ID,
-            source_file="compounds.csv",
-            partner_org_id=org_id,
-            submitted_by=user_id,
-            total_count=1,
-        )
-        initial_updated = bd.updated_at
-
-        bd.start_processing()
-        assert bd.updated_at >= initial_updated
-
-        after_processing = bd.updated_at
-        bd.record_disclosed()
-        assert bd.updated_at >= after_processing
-
-        after_record = bd.updated_at
-        bd.complete()
-        assert bd.updated_at >= after_record

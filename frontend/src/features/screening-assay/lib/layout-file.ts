@@ -6,6 +6,7 @@
 import Papa from "papaparse";
 
 import type { PositionLabelMatchesResponse } from "@/shared/lib/api/model";
+import { formatCount } from "@/shared/lib/format-number";
 import { type LayoutFile, type LayoutFileRow, WELL_TYPE_LABELS, type WellType } from "../types";
 import { type LabellingRow, MAX_LABEL, parseDose } from "./labelling-rows";
 
@@ -200,5 +201,67 @@ export function applyLabelMatches<T extends LabellingRow>(
     matched: applied.filled,
     alreadyMatched: rows.filter((r) => r.used && r.moleculeId).length,
     unmatched: [...unmatched],
+  };
+}
+
+/** What Fill from file says it did; `saveButton` is the button that stores it. */
+export function filledMessage(filled: number, fileName: string, saveButton: string): string {
+  return `Filled ${formatCount(filled, "position")} from ${fileName}. Nothing is saved until you press ${saveButton}.`;
+}
+
+/** Labels that found no compound are listed up to this many; the rest are counted. */
+const MAX_UNMATCHED_LISTED = 20;
+
+export interface LabelMatchMessage {
+  /** "neutral" is neither success nor a warning. */
+  tone: "ok" | "neutral" | "warn";
+  text: string;
+  /** A muted second line: the labels that found no compound, beside a match. */
+  detail: string | null;
+}
+
+/** What Match from labels says it did. Nothing new is a warning only when no position has
+ *  a compound at all: the wizard matches on its own when the file is read, and what is
+ *  left may be controls. Beside a match, the unmatched labels are a muted line, not a
+ *  warning: many, such as a control's, name no compound. */
+export function labelMatchMessage({
+  matched,
+  alreadyMatched,
+  unmatched,
+  saveButton,
+}: {
+  matched: number;
+  alreadyMatched: number;
+  unmatched: readonly string[];
+  saveButton: string;
+}): LabelMatchMessage {
+  const more = unmatched.length - MAX_UNMATCHED_LISTED;
+  const notFound =
+    unmatched.length > 0
+      ? `No compound found for: ${unmatched.slice(0, MAX_UNMATCHED_LISTED).join(", ")}${
+          more > 0 ? ` and ${more} more` : ""
+        }`
+      : null;
+  if (matched === 0) {
+    const lead =
+      alreadyMatched === 0
+        ? "No label matched a registered compound."
+        : alreadyMatched === 1
+          ? "1 position is already matched."
+          : `${alreadyMatched} positions are already matched.`;
+    return {
+      tone: alreadyMatched > 0 ? "neutral" : "warn",
+      text: notFound ? `${lead} ${notFound}.` : lead,
+      detail: null,
+    };
+  }
+  const also =
+    alreadyMatched > 0
+      ? ` ${alreadyMatched} ${alreadyMatched === 1 ? "was" : "were"} already matched.`
+      : "";
+  return {
+    tone: "ok",
+    text: `Matched ${formatCount(matched, "position")} from ${matched === 1 ? "its label" : "their labels"}.${also} Nothing is saved until you press ${saveButton}.`,
+    detail: notFound,
   };
 }

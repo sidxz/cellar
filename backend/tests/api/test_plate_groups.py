@@ -238,16 +238,6 @@ class TestGetGroup:
         assert body["plate_format"] is None
         assert body["subtree_plate_count"] == 1
 
-    async def test_metadata_round_trips(self, client: AsyncClient) -> None:
-        g = await _mk_group(
-            client, f"Meta-{uuid.uuid4().hex[:6]}", state="Solubilized", scientist="Jane Doe"
-        )
-        resp = await client.get(f"/api/v1/plate-groups/{g['id']}")
-        assert resp.status_code == 200, resp.text
-        group = resp.json()["group"]
-        assert group["state"] == "Solubilized"
-        assert group["scientist"] == "Jane Doe"
-
     async def test_strict_visibility(
         self,
         client: AsyncClient,

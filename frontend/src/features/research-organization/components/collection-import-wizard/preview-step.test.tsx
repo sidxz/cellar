@@ -50,13 +50,26 @@ describe("PreviewStep", () => {
     expect(onRecheck).toHaveBeenCalled();
   });
 
-  it("enables commit button only when resolved_count > 0", () => {
-    render(<PreviewStep result={result as any} collectionId="c1" onCommit={vi.fn()} />);
-    // There are two commit buttons (top + bottom); both should be enabled.
+  it("enables commit only when resolved_count > 0", () => {
+    const { unmount } = render(
+      <PreviewStep result={result as any} collectionId="c1" onCommit={vi.fn()} />,
+    );
+    // Two commit buttons (top + bottom); both enabled.
     const buttons = screen.getAllByRole("button", { name: /add 1 resolved/i });
-    expect(buttons.length).toBeGreaterThan(0);
-    for (const b of buttons) {
-      expect(b).toBeEnabled();
-    }
+    expect(buttons).toHaveLength(2);
+    for (const b of buttons) expect(b).toBeEnabled();
+    unmount();
+
+    render(
+      <PreviewStep
+        result={{ ...result, resolved_count: 0 } as any}
+        collectionId="c1"
+        onCommit={vi.fn()}
+      />,
+    );
+    // Nothing resolved: only the bottom button remains, disabled.
+    const none = screen.getAllByRole("button", { name: /add 0 resolved/i });
+    expect(none).toHaveLength(1);
+    expect(none[0]).toBeDisabled();
   });
 });

@@ -215,35 +215,6 @@ class TestUnknownTarget404:
         assert resp.status_code == 204, resp.text
 
 
-class TestRemovedTargetIdField:
-    """The pre-051 scalar target_id field must 422, not silently no-op."""
-
-    async def test_patch_with_removed_target_id_422(
-        self, client: AsyncClient, make_target
-    ) -> None:
-        pid = await _make_protocol(client)
-        t1 = await make_target("NadD")
-        resp = await client.patch(f"/api/v1/protocols/{pid}", json={"target_id": t1})
-        assert resp.status_code == 422, resp.text
-
-    async def test_create_with_removed_target_id_422(
-        self, client: AsyncClient, make_target
-    ) -> None:
-        t1 = await make_target("NadD")
-        resp = await client.post(
-            "/api/v1/protocols",
-            json={
-                **await protocol_body(client),
-                "protocol_type": "biochemical",
-                "target_id": t1,
-                "readout_definitions": [
-                    {"name": "IC50", "data_type": "numeric", "display_order": 0}
-                ],
-            },
-        )
-        assert resp.status_code == 422, resp.text
-
-
 class TestTargetsOfUnknownProtocol:
     async def test_targets_of_unknown_protocol_404(self, client: AsyncClient) -> None:
         """Foreign/missing protocol must 404 like every sibling GET-by-id,

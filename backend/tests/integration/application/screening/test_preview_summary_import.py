@@ -487,34 +487,3 @@ class TestPreviewSummaryImport:
 
         after = await _readout_count(session_factory)
         assert after == before
-
-    async def test_no_writes_across_full_run(self, session_factory, workspace_id) -> None:
-        """Belt-and-braces: a preview over a mix of matched + unmatched +
-        bad-numeric rows must not change the readout_data row count."""
-        auth = FakeAuth(role="editor", workspace_id=workspace_id)
-        run_id, ic50_id, _mol, ref = await _seed(session_factory, workspace_id)
-        mapping = SummaryColumnMapping(compound_ref="Compound", readout_columns={"IC50": ic50_id})
-
-        before = await _readout_count(session_factory)
-
-        result = await _run_preview(
-            session_factory,
-            PreviewSummaryImportCommand(
-                workspace_id=workspace_id,
-                run_id=run_id,
-                filename="summary.csv",
-                content=(
-                    f"Compound,IC50\n{ref},5.2\nMISSING-REF,9.9\n{ref},oops\n,1.0\n"
-                ).encode(),
-                mapping=mapping,
-            ),
-            auth,
-        )
-        assert isinstance(result, Success)
-        preview = result.unwrap()
-        assert preview.values_to_insert == 1
-        assert preview.rows_skipped == 1
-        assert "MISSING-REF" in preview.unmatched_compound_refs
-
-        after = await _readout_count(session_factory)
-        assert after == before

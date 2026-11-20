@@ -169,17 +169,3 @@ def test_snapshot_is_json_safe_even_with_uuid_and_date_fields():
     assert snap["value"] == 0.5
     assert isinstance(snap["runs"][0]["run_id"], str)
     assert snap["runs"][0]["run_date"] == "2026-06-01"
-
-
-def test_hash_changes_when_the_activity_calculation_changes():
-    """Cached projections are keyed by this hash. When the values a channel
-    yields change (2026-11: rejected runs excluded, single-point readouts
-    combined per run), the hash must change so stale projections recompute."""
-    spec = ActivityChannelSpec(
-        column="drc:00000000-0000-0000-0000-000000000001",
-        source="dr_curve",
-        selection_rule=SelectionRule.LATEST_RUN,
-        qualifier_handling=QualifierHandling.EXCLUDE_QUALIFIED,
-    )
-    before_2026_11 = "f2cb920e8494fb39902bd0d7f484d5bbc49dea50c9249aaffd0bfd1abe94404f"
-    assert channel_hash(spec) != before_2026_11

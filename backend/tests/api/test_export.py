@@ -4,8 +4,35 @@ from __future__ import annotations
 
 import uuid
 
+from datetime import UTC, datetime
+
 import pytest
 from httpx import AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+
+from cellar.infrastructure.persistence.sqlalchemy.export.export_job_model import ExportJobModel
+
+
+async def _seed_pending_job(session_factory: async_sessionmaker[AsyncSession], fake_auth) -> str:
+    """A PENDING job with no runner behind it, so its status cannot move under the test
+    (a job started through the API renders inline and races the assertions)."""
+    job_id = uuid.uuid4()
+    async with session_factory() as s:
+        s.add(
+            ExportJobModel(
+                id=job_id,
+                workspace_id=fake_auth.workspace_id,
+                requested_by=fake_auth.user_id,
+                source="search",
+                format="csv",
+                query_snapshot={},
+                status="pending",
+                filename="export.csv",
+                requested_at=datetime.now(UTC),
+            )
+        )
+        await s.commit()
+    return str(job_id)
 
 
 # ---------------------------------------------------------------------------
@@ -27,28 +54,6 @@ class TestStartExport:
         assert "job_id" in body
         # Must be a valid UUID
         uuid.UUID(body["job_id"])
-
-    async def test_unsupported_source_returns_422(self, client: AsyncClient) -> None:
-        """Only 'search' is a supported source; any other value fails validation."""
-        res = await client.post(
-            "/api/v1/exports",
-            json={
-                "source": "not_a_valid_source",
-                "format": "csv",
-                "payload": {},
-            },
-        )
-        assert res.status_code == 422
-
-    async def test_invalid_format_returns_422(self, client: AsyncClient) -> None:
-        res = await client.post(
-            "/api/v1/exports",
-            json={
-                "format": "docx",
-                "payload": {},
-            },
-        )
-        assert res.status_code == 422
 
 
 class TestGetExport:
@@ -79,15 +84,6 @@ class TestGetExport:
 
 
 class TestListExports:
-    async def test_returns_list(self, client: AsyncClient) -> None:
-        res = await client.get("/api/v1/exports")
-        assert res.status_code == 200
-        assert isinstance(res.json(), list)
-
-    async def test_limit_query_param(self, client: AsyncClient) -> None:
-        res = await client.get("/api/v1/exports?limit=10")
-        assert res.status_code == 200
-
     async def test_limit_too_large_returns_422(self, client: AsyncClient) -> None:
         res = await client.get("/api/v1/exports?limit=999")
         assert res.status_code == 422
@@ -114,44 +110,27 @@ class TestCancelExport:
         res = await client.post(f"/api/v1/exports/{uuid.uuid4()}/cancel")
         assert res.status_code == 404
 
-    async def test_cancel_pending_job(self, client: AsyncClient) -> None:
-        start = await client.post(
-            "/api/v1/exports",
-            json={
-                "format": "sdf",
-                "payload": {"query": {"criteria": []}, "protocol_columns": []},
-            },
-        )
-        assert start.status_code == 202
-        job_id = start.json()["job_id"]
+    async def test_cancel_pending_job(
+        self, client: AsyncClient, session_factory: async_sessionmaker[AsyncSession], fake_auth
+    ) -> None:
+        job_id = await _seed_pending_job(session_factory, fake_auth)
 
         cancel = await client.post(f"/api/v1/exports/{job_id}/cancel")
-        # 204 No Content on success; the job may have already completed (409 conflict)
-        # depending on how fast the Null orchestrator runs — both are acceptable.
-        assert cancel.status_code in {204, 409}
+        assert cancel.status_code == 204, cancel.text
+
+        poll = await client.get(f"/api/v1/exports/{job_id}")
+        assert poll.json()["status"] == "cancel_requested"
 
 
 class TestDownloadExport:
-    async def test_not_ready_returns_409(self, client: AsyncClient) -> None:
-        """A freshly created job that is still PENDING returns 409."""
-        start = await client.post(
-            "/api/v1/exports",
-            json={
-                "format": "csv",
-                "payload": {"query": {"criteria": []}, "protocol_columns": []},
-            },
-        )
-        assert start.status_code == 202
-        job_id = start.json()["job_id"]
+    async def test_not_ready_returns_409(
+        self, client: AsyncClient, session_factory: async_sessionmaker[AsyncSession], fake_auth
+    ) -> None:
+        """A job that is still PENDING has no file to download yet."""
+        job_id = await _seed_pending_job(session_factory, fake_auth)
 
-        # Check status first — if the Null orchestrator ran synchronously the job
-        # could already be READY (and the download would return 200).  Only assert
-        # 409 when the job is genuinely not ready.
-        poll = await client.get(f"/api/v1/exports/{job_id}")
-        status = poll.json()["status"]
-        if status != "ready":
-            dl = await client.get(f"/api/v1/exports/{job_id}/download")
-            assert dl.status_code == 409
+        dl = await client.get(f"/api/v1/exports/{job_id}/download")
+        assert dl.status_code == 409, dl.text
 
     async def test_unknown_id_returns_404(self, client: AsyncClient) -> None:
         res = await client.get(f"/api/v1/exports/{uuid.uuid4()}/download")

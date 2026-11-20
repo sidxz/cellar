@@ -2,10 +2,7 @@ import uuid
 
 import pytest
 
-from cellar.domain.research_organization.campaign_lock_guard import (
-    CampaignLockChecker,
-    CampaignLockGuard,
-)
+from cellar.domain.research_organization.campaign_lock_guard import CampaignLockGuard
 from cellar.domain.shared.errors import DataLockedError
 
 
@@ -28,8 +25,3 @@ async def test_guard_raises_when_locked():
     guard = CampaignLockGuard(_FakeChecker(locked=True))
     with pytest.raises(DataLockedError, match="closed or superseded"):
         await guard.guard_write(uuid.uuid4(), uuid.uuid4())
-
-
-def test_protocol_is_runtime_checkable():
-    # any class with is_locked(workspace_id, campaign_id) -> bool satisfies it
-    assert isinstance(_FakeChecker(False), CampaignLockChecker)

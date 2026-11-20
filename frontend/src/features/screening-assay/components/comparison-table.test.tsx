@@ -26,6 +26,7 @@ describe("ComparisonTable", () => {
       />,
     );
     expect(screen.getByRole("cell", { name: "> 500" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "125.8" })).toHaveClass("text-success");
+    expect(screen.getByRole("cell", { name: "125.8" })).toHaveAttribute("data-best");
+    expect(screen.getByRole("cell", { name: "> 500" })).not.toHaveAttribute("data-best");
   });
 });

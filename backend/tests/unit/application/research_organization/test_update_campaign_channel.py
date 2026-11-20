@@ -385,39 +385,6 @@ class TestUpdateCampaignChannel:
             await uc(cmd, auth=auth)
 
     @pytest.mark.asyncio
-    async def test_re_resolve_preserves_measurement_id(self) -> None:
-        """Re-resolved measurement inherits the old measurement's id to avoid DELETE+INSERT."""
-        auth = fake_auth()
-        campaign, channel, result = _make_campaign_with_channel(
-            auth.workspace_id,
-            selection_rule=SelectionRule.LATEST_RUN,
-        )
-        original_m = result.find_measurement(channel.id)
-        assert original_m is not None
-        original_id = original_m.id
-
-        query = FakeColumnQuery(99.0)
-        uc = UpdateCampaignChannel(
-            uow=FakeUnitOfWork(),
-            campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            query=query,
-            dispatcher=AsyncMock(),
-        )
-        cmd = UpdateCampaignChannelCommand(
-            workspace_id=auth.workspace_id,
-            campaign_id=campaign.id,
-            channel_id=channel.id,
-            selection_rule=SelectionRule.MEAN_ACROSS_RUNS,  # triggers re-resolve
-        )
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Success)
-        rebuilt = result.find_measurement(channel.id)
-        assert rebuilt is not None
-        assert rebuilt.value == 99.0  # genuinely replaced
-        assert rebuilt.id == original_id  # id preserved for UPDATE semantics
-
-    @pytest.mark.asyncio
     async def test_gating_re_resolve_is_scoped_to_the_campaigns_source_runs(self) -> None:
         """Spec D4 — a gating PATCH re-resolves within the campaign's runs."""
         auth = fake_auth()

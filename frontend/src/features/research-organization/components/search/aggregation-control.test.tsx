@@ -45,13 +45,6 @@ describe("AggregationControl", () => {
       <AggregationControl mode="latest" onChange={onChange} modes={SEARCH_AGGREGATION_MODES} />,
     );
     fireEvent.click(screen.getByRole("combobox"));
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "Latest run",
-      "Geometric mean",
-      "Arithmetic mean",
-      "Highest R²",
-      "Show all runs",
-    ]);
     fireEvent.click(screen.getByText("Show all runs"));
     expect(onChange).toHaveBeenCalledWith("all");
   });

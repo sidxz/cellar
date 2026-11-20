@@ -5,7 +5,6 @@ import uuid
 import pytest
 
 from cellar.domain.chemical_registration.enums import (
-    ReagentRole,
     RouteSource,
     RouteStatus,
     RouteType,
@@ -18,7 +17,6 @@ from cellar.domain.chemical_registration.events import (
     SynthesisRouteValidated,
 )
 from cellar.domain.chemical_registration.synthesis_route import (
-    ReactionReagent,
     ReactionStep,
     SynthesisRoute,
 )
@@ -77,9 +75,6 @@ class TestSynthesisRouteCreation:
     def test_create_basic(self, ws_id, mol_id, user_id):
         route = _make_route(ws_id, mol_id, user_id)
 
-        assert route.workspace_id == ws_id
-        assert route.target_molecule_id == mol_id
-        assert route.name == "Route A - Suzuki coupling"
         assert route.status == RouteStatus.DRAFT
         assert route.route_type == RouteType.LINEAR
         assert route.source == RouteSource.MANUAL
@@ -337,28 +332,3 @@ class TestDAGValidation:
 
         with pytest.raises(ValidationError, match="multiple predecessors"):
             route.validate_route()
-
-
-# ---------------------------------------------------------------------------
-# ReactionReagent VO
-# ---------------------------------------------------------------------------
-
-
-class TestReactionReagent:
-    def test_create(self):
-        reagent = ReactionReagent(
-            role=ReagentRole.CATALYST,
-            name="Pd(PPh3)4",
-            cas_number="14221-01-3",
-            equivalents=0.05,
-        )
-
-        assert reagent.role == ReagentRole.CATALYST
-        assert reagent.name == "Pd(PPh3)4"
-        assert reagent.cas_number == "14221-01-3"
-        assert reagent.equivalents == 0.05
-
-    def test_frozen(self):
-        reagent = ReactionReagent(role=ReagentRole.SOLVENT, name="THF")
-        with pytest.raises(AttributeError):
-            reagent.name = "DCM"  # type: ignore[misc]

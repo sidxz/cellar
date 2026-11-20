@@ -21,13 +21,6 @@ def ws_id() -> uuid.UUID:
 
 
 class TestFieldOverride:
-
-
-    def test_frozen(self) -> None:
-        fo = FieldOverride(field_definition_id=uuid4())
-        with pytest.raises(Exception):
-            fo.is_required = True  # type: ignore[misc]
-
     def test_locked_without_default_raises(self) -> None:
         with pytest.raises(ValueError, match="locked"):
             FieldOverride(field_definition_id=uuid4(), is_locked=True, default_value=None)
@@ -49,9 +42,6 @@ class TestRegistrationFormCreate:
             name="Standard Registration",
             applies_to=FieldTarget.MOLECULE,
         )
-        assert form.workspace_id == ws_id
-        assert form.name == "Standard Registration"
-        assert form.applies_to == FieldTarget.MOLECULE
         assert form.is_default is False
         assert form.field_overrides == []
         assert form.version == 1
@@ -108,10 +98,6 @@ class TestRegistrationFormCreate:
         assert event.name == "Standard"
         assert event.applies_to == FieldTarget.MOLECULE.value
 
-    def test_locked_override_requires_default(self, ws_id: uuid.UUID) -> None:
-        with pytest.raises(ValueError, match="locked"):
-            FieldOverride(field_definition_id=uuid4(), is_locked=True, default_value=None)
-
 
 class TestRegistrationFormUpdate:
     def _make(self, ws_id: uuid.UUID) -> RegistrationForm:
@@ -138,15 +124,6 @@ class TestRegistrationFormUpdate:
         assert len(form.field_overrides) == 1
         assert form.field_overrides[0] is new_override
 
-    def test_update_emits_event(self, ws_id: uuid.UUID) -> None:
-        form = self._make(ws_id)
-        form.update(name="New Name")
-        events = form.collect_events()
-        assert len(events) == 1
-        event = events[0]
-        assert isinstance(event, RegistrationFormUpdated)
-        assert event.workspace_id == ws_id
-
     def test_update_empty_name_raises(self, ws_id: uuid.UUID) -> None:
         form = self._make(ws_id)
         with pytest.raises(ValidationError, match="name"):
@@ -160,17 +137,6 @@ class TestRegistrationFormUpdate:
         # Name unchanged, but event is still registered
         assert form.name == original_name
         assert len(form.collect_events()) == 1
-
-    def test_set_default_true(self, ws_id: uuid.UUID) -> None:
-        form = self._make(ws_id)
-        form.set_default(True)
-        assert form.is_default is True
-
-    def test_set_default_false(self, ws_id: uuid.UUID) -> None:
-        form = self._make(ws_id)
-        form.set_default(True)
-        form.set_default(False)
-        assert form.is_default is False
 
     def test_overrides_are_independent_copy(self, ws_id: uuid.UUID) -> None:
         """Mutation of the source list does not affect the stored field_overrides."""

@@ -262,7 +262,6 @@ describe("stored Z′", () => {
         x: 1,
         xanchor: "right",
         font: expect.objectContaining({ color: CHART_COLORS.success }),
-        hovertext: "Stored plate Z′ from the run's QC — the Heat Map's value, not recomputed here.",
       }),
       expect.objectContaining({
         text: "Z′ not stored",

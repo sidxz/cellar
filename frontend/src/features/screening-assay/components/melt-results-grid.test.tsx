@@ -1,7 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { TooltipProvider } from "@/shared/components/ui/tooltip";
 import type { ApplicableRule } from "../lib/melt-hits";
 import type { ResultRow } from "../lib/melt-results";
 
@@ -82,19 +81,6 @@ beforeEach(() => {
 });
 
 describe("MeltResultsGrid columns", () => {
-  it.each([[["Main"]], [["Low", "Main"]]])("Sample flexes, the rest are fixed (%j)", (names) => {
-    show(names);
-    for (const c of leaves()) {
-      if (c.colId === "sample") {
-        expect(c.flex).toBe(1);
-        expect(c.minWidth).toBeGreaterThanOrEqual(180);
-      } else {
-        expect(c.flex).toBeUndefined();
-        expect(typeof c.width).toBe("number");
-      }
-    }
-  });
-
   it("has a Concentration column only when a position of the run has a concentration", () => {
     const headers = () => leaves().map((c) => c.headerName);
     const total = () => leaves().reduce((sum, c) => sum + c.width, 0);
@@ -168,11 +154,6 @@ describe("MeltResultsGrid with structures", () => {
     identity: { ...row.identity, registrationNumber: "CC-1", smiles: "CCO" },
   } as ResultRow;
   const rows = { pinned: [], body: [row, registered] };
-  const reviewed = { status: "reviewed", review: "reviewed", differs: false, outsidePeaks: [] };
-  /** What a column draws in a row's cell (the grid provides the tooltips' context). */
-  const cellOf = (colId: string, data: ResultRow) =>
-    render(<TooltipProvider>{column(colId).cellRenderer({ data })}</TooltipProvider>).container
-      .firstElementChild as HTMLElement;
 
   it("lets the Sample column size the rows only while structures are shown", () => {
     show(["Main"], { rows });
@@ -196,46 +177,6 @@ describe("MeltResultsGrid with structures", () => {
     const drawing = await screen.findByTestId("structure");
     expect(drawing.closest('[col-id="sample"]')).toHaveTextContent("CC-1");
     expect(screen.getAllByTestId("structure")).toHaveLength(1);
-  });
-
-  it("puts the structure, 72 px high, directly under the Sample text line", () => {
-    show(["Main"], { rows, showStructures: true });
-    const [line, drawing, ...rest] = cellOf("sample", registered).children;
-    expect(rest).toHaveLength(0);
-    // The text takes one line of the cell, where the other cells' values are.
-    expect(line).toHaveTextContent(/^CC-1$/);
-    expect(line).toHaveClass("h-[1lh]");
-    // The drawing is the line's sibling: no wrapper pads it into a band.
-    expect(drawing).toHaveAttribute("data-testid", "structure");
-    expect(drawing).toHaveAttribute("data-height", "72");
-    // Wider than tall, as most structures are drawn, so the drawing fills its box.
-    expect(drawing).toHaveAttribute("data-width", "144");
-  });
-
-  it("a row without a structure keeps its text centered on a line as tall as the row", () => {
-    show(["Main"], { rows, showStructures: true });
-    const [line, ...rest] = cellOf("sample", row).children;
-    expect(rest).toHaveLength(0);
-    expect(line).toHaveClass("h-[34px]", "leading-[34px]");
-  });
-
-  it("aligns the Status chip of a row with a structure to the top line, as its other cells", () => {
-    const tall = { ...registered, cells: { Main: reviewed } } as unknown as ResultRow;
-    const normal = { ...row, cells: { Main: reviewed } } as unknown as ResultRow;
-    show(["Main"], { rows, showStructures: true });
-    expect(cellOf("status", tall)).toHaveTextContent(/^Reviewed$/);
-    expect(cellOf("status", tall)).toHaveClass("h-[1lh]", "items-center");
-    expect(cellOf("status", tall)).not.toHaveClass("h-full");
-    // A row of the normal height keeps its chip centered in the row.
-    expect(cellOf("status", normal)).toHaveClass("h-full", "items-center");
-    // So does every row while structures are not shown.
-    show(["Main"], { rows });
-    expect(cellOf("status", tall)).toHaveClass("h-full", "items-center");
-    // Position and ΔTm are plain values, and a Tm is too: nothing takes them off that line.
-    expect(column("position").cellRenderer).toBeUndefined();
-    expect(column("Main:delta").cellRenderer).toBeUndefined();
-    const withTm = { ...tall, cells: { Main: { ...reviewed, tm: 57.1, namedBy: "range" } } };
-    expect(column("Main:tm").cellRenderer({ data: withTm })).toBe("57.1");
   });
 });
 

@@ -48,12 +48,6 @@ async def test_null_orchestrator_invokes_runner_inline():
     assert runner.calls[0]["molecule_ids"] == mol_ids
 
 
-@pytest.mark.asyncio
-async def test_null_orchestrator_cancel_is_noop():
-    orch = NullScaffoldTreeOrchestrator(FakeRunner())
-    await orch.cancel(job_id=uuid.uuid4())  # must not raise
-
-
 class BoomRunner:
     async def run(self, *, job_id, workspace_id, molecule_ids):
         raise RuntimeError("runner boom")

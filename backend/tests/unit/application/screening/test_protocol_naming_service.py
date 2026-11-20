@@ -205,7 +205,9 @@ async def test_an_incomplete_name_never_overwrites_an_existing_one():
             ReadoutDefinition(protocol_id=pid, name="Signal", data_type=ReadoutDataType.NUMERIC)
         ],
     )
-    result = await _service().apply(legacy, reason="Names generated", person=False, allow_incomplete=True)
+    result = await _service().apply(
+        legacy, reason="Names generated", person=False, allow_incomplete=True
+    )
     assert result.unwrap().rendered.missing == ("category",)
     assert legacy.name == "Legacy hand-typed name" and legacy.aliases == []
     assert legacy.name_flag == NameFlag.NEEDS_FACTS
@@ -231,7 +233,7 @@ async def test_strain_comes_from_its_annotation_and_a_missing_one_is_named():
         discriminator=None,
     )
     failed = _service().check(bare, person=True, allow_incomplete=False).failure()
-    assert str(failed) == "This protocol's name needs a strain"
+    assert isinstance(failed, ValidationError) and "strain" in str(failed)
 
 
 async def test_context_reads_legacy_single_home_organism_the_same_way():

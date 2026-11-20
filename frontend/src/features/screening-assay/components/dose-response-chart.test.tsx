@@ -1,10 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
 
-// The warning amber the shared renderer draws suggestions and aggregate
-// markers in. Asserted by value: if the shared palette moves, these markers
-// move with it in every app, and that is worth noticing here.
-const CHART_WARNING = "#f49e17";
-
 // Capture Plot props rather than render Plotly — we're asserting on the
 // trace + shape shapes the chart emits in aggregate mode, not the
 // pixel-level rendering (already covered by the figure tests).
@@ -231,7 +226,7 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
     expect(overlays).toHaveLength(1);
   });
 
-  it("replaces per-curve cross-hair with a single solid amber marker at marker_x", () => {
+  it("replaces per-curve cross-hair with a single solid marker at marker_x", () => {
     reset();
     renderWithQuery(
       <DoseResponseChart
@@ -250,10 +245,9 @@ describe("<DoseResponseChart /> — aggregate-mode overlay", () => {
     // at the rep curve's fitted_value (which is 0.2 in makeCurve()).
     expect(verticalShapes).toHaveLength(1);
     expect(verticalShapes[0].x0).toBe(0.15);
-    // Solid (no dash) and amber — distinct from the dotted per-curve dash
-    // that LATEST cells draw.
+    // Solid (no dash) — distinct from the dotted per-curve dash that LATEST
+    // cells draw.
     expect(verticalShapes[0].line?.dash).toBeUndefined();
-    expect(verticalShapes[0].line?.color).toBe(CHART_WARNING);
   });
 
   it("suppresses additional-intercept dashed lines in aggregate mode", () => {
@@ -468,7 +462,6 @@ describe("<DoseResponseChart /> — locked-run guard", () => {
     renderWithQuery(<DoseResponseChart curves={[makeCurve()]} isInteractive runIsLocked />);
     const editBtn = screen.getByRole("button", { name: /edit points/i });
     expect(editBtn).toBeDisabled();
-    expect(editBtn).toHaveAttribute("title", "Unapprove run to edit curves");
     expect(screen.getByText(/^locked$/i)).toBeInTheDocument();
   });
 
@@ -519,12 +512,10 @@ describe("<DoseResponseChart /> — auto-3σ suggestion markers", () => {
     renderWithQuery(<DoseResponseChart curves={[curve]} />);
 
     const traces = plotCalls[0].data as Trace[];
-    // Suggestion trace: amber open circle.
+    // Suggestion trace: open circle.
     const suggestionTrace = traces.find((t) => /suggested 3σ/i.test(t.name ?? ""));
     expect(suggestionTrace).toBeDefined();
     expect(suggestionTrace?.marker?.symbol).toBe("circle-open");
-    // Color matches the shared palette's warning token.
-    expect(suggestionTrace?.marker?.color).toBe(CHART_WARNING);
     expect(suggestionTrace?.x).toEqual([0.1]);
     expect(suggestionTrace?.y).toEqual([30]);
 

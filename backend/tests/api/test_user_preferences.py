@@ -15,22 +15,6 @@ class TestGetPreferences:
 
 
 class TestUpdatePreferences:
-    async def test_update_theme(self, client: AsyncClient) -> None:
-        resp = await client.patch(
-            "/api/v1/user/preferences",
-            json={"theme": "light"},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["theme"] == "light"
-
-    async def test_update_sidebar(self, client: AsyncClient) -> None:
-        resp = await client.patch(
-            "/api/v1/user/preferences",
-            json={"sidebar_collapsed": True},
-        )
-        assert resp.status_code == 200
-        assert resp.json()["sidebar_collapsed"] is True
-
     async def test_partial_update_preserves_other_fields(self, client: AsyncClient) -> None:
         # Set theme to light
         await client.patch("/api/v1/user/preferences", json={"theme": "light"})

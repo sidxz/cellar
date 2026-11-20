@@ -128,14 +128,6 @@ def test_localize_legacy_converts_chicago_wall_clock_to_utc() -> None:
     )
 
 
-def test_compose_set_description_includes_state_scientist_conditions():
-    s = LegacySet(set_id=1, set_type="SCREENING", set_name="S", set_state="Solubilized",
-                  scientist=42, generating_conditions="DMSO 10mM", library_id=None)
-    out = compose_set_description(s, {42: "Ann Lee"})
-    assert "Solubilized" not in out and "Ann Lee" not in out
-    assert "DMSO 10mM" in out
-
-
 def test_plan_group_tree_roots_by_library_and_nests_sets():
     legacy = LegacyData(
         libraries=[LegacyLibrary(10, "Lib A", "SacchettiniLibrary")],

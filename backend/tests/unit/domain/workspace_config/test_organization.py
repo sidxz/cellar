@@ -20,7 +20,7 @@ def ws_id() -> uuid.UUID:
 
 
 class TestOrganizationCreate:
-    def test_factory_sets_fields(self, ws_id: uuid.UUID) -> None:
+    def test_factory_defaults(self, ws_id: uuid.UUID) -> None:
         org = Organization.create(
             workspace_id=ws_id,
             name="Merck",
@@ -29,12 +29,6 @@ class TestOrganizationCreate:
             contact_email="alice@merck.com",
             notes="Key partner",
         )
-        assert org.workspace_id == ws_id
-        assert org.name == "Merck"
-        assert org.org_type == OrganizationType.PHARMA_PARTNER
-        assert org.contact_name == "Alice"
-        assert org.contact_email == "alice@merck.com"
-        assert org.notes == "Key partner"
         assert org.is_active is True
         assert org.version == 1
 

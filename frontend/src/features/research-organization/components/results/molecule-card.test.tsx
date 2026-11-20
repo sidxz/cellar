@@ -59,19 +59,6 @@ describe("MoleculeCard", () => {
     expect(screen.getByTestId("mol-thumb")).toHaveAttribute("data-smiles", "CCO");
   });
 
-  it("renders the registration number and name", () => {
-    render(
-      <MoleculeCard
-        molecule={baseMol}
-        selected={false}
-        onSelectChange={vi.fn()}
-        onOpen={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/CV-00001/)).toBeInTheDocument();
-    expect(screen.getByText(/Test Mol/)).toBeInTheDocument();
-  });
-
   it("renders MW + cLogP + Ro5 ✓ when descriptors are present", () => {
     render(
       <MoleculeCard

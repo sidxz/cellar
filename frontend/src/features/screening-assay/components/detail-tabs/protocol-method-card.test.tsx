@@ -40,7 +40,6 @@ describe("ProtocolMethodCard", () => {
     card(protocol());
     const text = screen.getByText(/Preincubate 10 min/);
     expect(text.textContent).toBe(METHOD);
-    expect(text).toHaveClass("whitespace-pre-wrap");
   });
 
   it("saves a draft's method without asking for a reason", () => {
@@ -140,10 +139,13 @@ describe("ProtocolMethodCard", () => {
     expect(screen.queryByRole("button", { name: "Edit method" })).not.toBeInTheDocument();
   });
 
-  it("is read-only for a viewer, and says when nothing is recorded", () => {
+  it("is read-only for a viewer", () => {
     state.editor = false;
-    card(protocol({ description: null }));
-    expect(screen.getByText("No method recorded.")).toBeInTheDocument();
+    const { unmount } = card(protocol({ description: null }));
+    expect(screen.queryByRole("button", { name: /Add the method/ })).not.toBeInTheDocument();
+    unmount();
+    card(protocol());
+    expect(screen.queryByRole("button", { name: "Edit method" })).not.toBeInTheDocument();
   });
 
   it("invites an editor to add a missing method", () => {
@@ -155,10 +157,10 @@ describe("ProtocolMethodCard", () => {
   it("clamps a long method behind Show all", () => {
     const long = Array.from({ length: 20 }, (_, i) => `${i + 1}. step`).join("\n");
     card(protocol({ description: long }));
-    const text = screen.getByText(/1\. step/);
-    expect(text).toHaveClass("line-clamp-12");
-    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
-    expect(text).not.toHaveClass("line-clamp-12");
+    const toggle = screen.getByRole("button", { name: "Show all" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
   });
 
   it("links to the files for the SOP", () => {

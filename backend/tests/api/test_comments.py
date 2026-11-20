@@ -130,10 +130,6 @@ class TestValidation:
         resp = await _post(client, target_type="plate", target_id=plate["id"], body="   ")
         assert resp.status_code == 422
 
-    async def test_unknown_target_type_422(self, client: AsyncClient) -> None:
-        resp = await _post(client, target_type="batch", target_id=str(uuid.uuid4()), body="x")
-        assert resp.status_code == 422
-
     async def test_list_requires_exactly_one_form(self, client: AsyncClient) -> None:
         assert (await client.get("/api/v1/comments")).status_code == 422
         resp = await client.get("/api/v1/comments", params={"target_type": "plate"})

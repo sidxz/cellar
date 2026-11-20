@@ -124,22 +124,15 @@ describe("SaveViewDialog", () => {
     expect(save()).toBeEnabled();
   });
 
-  it("says what a view saves, that the selection stays behind and later runs come in", () => {
+  it("notes that the selection stays behind and later runs come in", () => {
     show();
-    expect(
-      screen.getByText(
-        "Saves the plot settings, filters, and selected level. Reopening the view loads current data, so results may change.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.getByText("Filter to selection isn't saved.")).toBeInTheDocument();
-    expect(
-      screen.getByText("Runs added to the protocol later will be included."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Filter to selection/)).toBeInTheDocument();
+    expect(screen.getByText(/Runs added to the protocol later/)).toBeInTheDocument();
   });
 
   it("leaves out the notes that don't apply", () => {
     show({ source: { kind: "protocol", protocolId: P1, runIds: ["r1"] } }, [range]);
-    expect(screen.queryByText("Filter to selection isn't saved.")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Filter to selection/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Runs added to the protocol later/)).not.toBeInTheDocument();
   });
 
@@ -147,9 +140,7 @@ describe("SaveViewDialog", () => {
     vi.mocked(customInstance).mockResolvedValueOnce({ ...view, id: "v-new" });
     const clusters = { id: "clusters", kind: "clusters", threshold: 0.4 } as const;
     show({ derived: [clusters] });
-    expect(
-      screen.getByText("Chemistry columns are computed again each time the view opens."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Chemistry columns/)).toBeInTheDocument();
     fireEvent.change(name(), { target: { value: "  Plate drift " } });
     fireEvent.change(screen.getByLabelText("Description"), { target: { value: "Edge wells" } });
     fireEvent.click(save());

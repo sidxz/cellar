@@ -1,9 +1,8 @@
-"""Unit tests for ListTags and GetTagsForEntity queries."""
+"""Unit tests for the GetTagsForEntity query."""
 
 from __future__ import annotations
 
 import uuid
-from unittest.mock import AsyncMock
 
 import pytest
 from returns.result import Success
@@ -12,7 +11,6 @@ from cellar.application.workspace_config.tagging.get_tags_for_entity import (
     GetTagsForEntity,
     GetTagsForEntityQuery,
 )
-from cellar.application.workspace_config.tagging.list_tags import ListTags, ListTagsQuery
 from cellar.domain.workspace_config.tagging.tag import TaggableEntityType
 from tests.unit.application.workspace_config.tagging._helpers import (
     FakeUnitOfWork,
@@ -20,35 +18,6 @@ from tests.unit.application.workspace_config.tagging._helpers import (
     make_link_provider,
     make_tag,
 )
-
-
-class TestListTags:
-    @pytest.mark.asyncio
-    async def test_passes_filters_to_repo(self) -> None:
-        auth = fake_auth()
-        tag = make_tag(auth.workspace_id, "kinase", None, auth.user_id)
-        repo = AsyncMock()
-        repo.search = AsyncMock(return_value=[tag])
-        uc = ListTags(FakeUnitOfWork(), repo)
-
-        query = ListTagsQuery(
-            workspace_id=auth.workspace_id,
-            q="kin",
-            created_by=auth.user_id,
-            entity_type=TaggableEntityType.MOLECULE,
-            limit=10,
-        )
-        result = await uc(query, auth=auth)
-
-        assert isinstance(result, Success)
-        assert result.unwrap() == [tag]
-        repo.search.assert_awaited_once_with(
-            auth.workspace_id,
-            q="kin",
-            created_by=auth.user_id,
-            entity_type=TaggableEntityType.MOLECULE,
-            limit=10,
-        )
 
 
 class TestGetTagsForEntity:

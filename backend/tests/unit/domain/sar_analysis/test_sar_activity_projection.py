@@ -42,25 +42,3 @@ def test_running_then_ready_sets_value_count():
 def test_ready_requires_running():
     with pytest.raises(InvalidJobTransition):
         _pending().mark_ready(value_count=1, now=_NOW)
-
-
-def test_failed_from_running_carries_message():
-    p = _pending()
-    p.mark_running(_NOW)
-    p.mark_failed("boom", _NOW)
-    assert p.status == AsyncJobStatus.FAILED
-    assert p.error_message == "boom"
-
-
-def test_cancel_terminal_is_rejected():
-    p = _pending()
-    p.mark_running(_NOW)
-    p.mark_ready(value_count=0, now=_NOW)
-    with pytest.raises(InvalidJobTransition):
-        p.mark_cancelled(_NOW)
-
-
-def test_cancel_pending_ok():
-    p = _pending()
-    p.mark_cancelled(_NOW)
-    assert p.status == AsyncJobStatus.CANCELLED

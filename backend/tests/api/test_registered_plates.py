@@ -66,7 +66,7 @@ class TestWellRoles:
 
     async def test_invalid_well_type_rejected(self, client: AsyncClient) -> None:
         resp = await _register(client, well_map={"A1": {"well_type": "bogus"}})
-        assert resp.status_code >= 400
+        assert resp.status_code == 422, resp.text
 
 
 class TestExport:

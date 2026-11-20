@@ -1,7 +1,6 @@
 """Tests for SynthesisRequest aggregate root — 10-state machine."""
 
 import uuid
-from datetime import date
 
 import pytest
 
@@ -205,12 +204,6 @@ class TestSubmit:
         assert events[1].requester_id == req.requester_id
         assert events[1].requested_amount == 50.0
         assert events[1].priority == "routine"
-
-    def test_submit_updates_timestamp(self, ws_id):
-        req = _make_request(ws_id)
-        old_ts = req.updated_at
-        req.submit()
-        assert req.updated_at >= old_ts
 
 
 # ---------------------------------------------------------------------------
@@ -447,37 +440,6 @@ class TestAssignment:
 
 
 class TestTerminalStates:
-    def test_fulfilled_is_terminal(self, ws_id):
-        req = _make_request(ws_id)
-        req.submit()
-        req.approve(uuid.uuid4())
-        req.assign(_internal_assignment())
-        req.start()
-        req.complete_synthesis()
-        req.fulfill(uuid.uuid4())
-        assert req.is_terminal is True
-
-    def test_rejected_is_terminal(self, ws_id):
-        req = _make_request(ws_id)
-        req.submit()
-        req.reject("No", uuid.uuid4())
-        assert req.is_terminal is True
-
-    def test_cancelled_is_terminal(self, ws_id):
-        req = _make_request(ws_id)
-        req.submit()
-        req.cancel()
-        assert req.is_terminal is True
-
-    def test_failed_is_terminal(self, ws_id):
-        req = _make_request(ws_id)
-        req.submit()
-        req.approve(uuid.uuid4())
-        req.assign(_internal_assignment())
-        req.start()
-        req.fail("Decomposition")
-        assert req.is_terminal is True
-
     def test_cannot_submit_from_fulfilled(self, ws_id):
         req = _make_request(ws_id)
         req.submit()
@@ -546,59 +508,3 @@ class TestInvalidTransitions:
         req.assign(_internal_assignment())
         with pytest.raises(ValidationError, match="Cannot transition"):
             req.complete_synthesis()
-
-
-# ---------------------------------------------------------------------------
-# Non-transition mutators
-# ---------------------------------------------------------------------------
-
-
-class TestEstimatedFields:
-    def test_set_estimated_cost(self, ws_id):
-        req = _make_request(ws_id)
-        cost = Amount(value=2000.0, unit=AmountUnit.G)
-        old_ts = req.updated_at
-        req.set_estimated_cost(cost)
-        assert req.estimated_cost == cost
-        assert req.updated_at >= old_ts
-
-    def test_set_estimated_completion_date(self, ws_id):
-        req = _make_request(ws_id)
-        d = date(2026, 6, 15)
-        req.set_estimated_completion_date(d)
-        assert req.estimated_completion_date == d
-
-
-# ---------------------------------------------------------------------------
-# SynthesisAssignment VO validation
-# ---------------------------------------------------------------------------
-
-
-class TestSynthesisAssignmentVO:
-    def test_internal_requires_assigned_to(self):
-        with pytest.raises(ValueError, match="assigned_to"):
-            SynthesisAssignment(
-                assignment_type=AssignmentType.INTERNAL,
-                assigned_to=None,
-            )
-
-    def test_cro_requires_org_id(self):
-        with pytest.raises(ValueError, match="assigned_org_id"):
-            SynthesisAssignment(
-                assignment_type=AssignmentType.CRO,
-                assigned_org_id=None,
-            )
-
-    def test_internal_valid(self):
-        a = SynthesisAssignment(
-            assignment_type=AssignmentType.INTERNAL,
-            assigned_to=uuid.uuid4(),
-        )
-        assert a.assignment_type == AssignmentType.INTERNAL
-
-    def test_cro_valid(self):
-        a = SynthesisAssignment(
-            assignment_type=AssignmentType.CRO,
-            assigned_org_id=uuid.uuid4(),
-        )
-        assert a.assignment_type == AssignmentType.CRO

@@ -128,4 +128,4 @@ async def test_preview_rejects_when_parser_returns_zero_records(
         auth=auth,
     )
     assert isinstance(result, Failure)
-    assert "no records" in str(result.failure())
+    assert isinstance(result.failure(), ValidationError)

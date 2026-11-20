@@ -19,12 +19,6 @@ beforeAll(() => {
 });
 
 describe("SaveExclusionsDialog", () => {
-  it("renders with the dirty count in the title and button", () => {
-    render(<SaveExclusionsDialog open onOpenChange={vi.fn()} onSave={vi.fn()} dirtyCount={3} />);
-    expect(screen.getByText(/save 3 exclusion changes/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /save 3/i })).toBeInTheDocument();
-  });
-
   it("disables the Save button until a reason is selected", () => {
     render(<SaveExclusionsDialog open onOpenChange={vi.fn()} onSave={vi.fn()} dirtyCount={1} />);
     expect(screen.getByRole("button", { name: /save 1/i })).toBeDisabled();

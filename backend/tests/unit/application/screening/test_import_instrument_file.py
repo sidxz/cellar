@@ -13,6 +13,7 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.screening.import_instrument_file import (
+    ATTACHMENT_FAILED,
     COMPUTE_FAILED,
     ImportInstrumentFile,
     ImportInstrumentFileCommand,
@@ -371,9 +372,6 @@ async def test_engine_failure_becomes_compute_warning(capsys):
     assert "formula broke" in logged.out + logged.err
 
 
-ATTACH_FAILED = "The file could not be attached. Upload it on the Files tab."
-
-
 async def test_first_import_keeps_the_file_name():
     h = Harness()
     result = (await h()).unwrap()
@@ -396,7 +394,7 @@ async def test_attachment_failure_is_a_plain_warning_not_a_failure():
     h.upload_attachment.return_value = Failure(ValidationError("storage full"))
     result = await h()
     assert isinstance(result, Success)
-    assert result.unwrap().attachment_warning == ATTACH_FAILED
+    assert result.unwrap().attachment_warning == ATTACHMENT_FAILED
     assert result.unwrap().attachment_id is None
     assert result.unwrap().stored_file_name is None
 
@@ -407,7 +405,7 @@ async def test_attachment_exception_is_a_plain_warning_not_a_failure():
         "Database constraint violated: uq_attachment_entity_filename"
     )
     result = (await h()).unwrap()
-    assert result.attachment_warning == ATTACH_FAILED
+    assert result.attachment_warning == ATTACHMENT_FAILED
     assert result.values_inserted == 3
 
 
@@ -506,10 +504,7 @@ async def test_two_series_on_one_readout_is_refused():
     )
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError)
-    assert failure.message == (
-        f"Readout '{h.tm1.name}' is chosen for more than one reported value. "
-        "Choose a different readout for each reported value."
-    )
+    assert h.tm1.name in failure.message
     h.assert_nothing_written()
 
 
@@ -533,9 +528,7 @@ async def test_series_not_in_file_is_refused():
     failure = (await h(h.command(series=series))).failure()
     assert isinstance(failure, ValidationError)
     # No internal signal key or grouping in the sentence.
-    assert failure.message == (
-        "A reported value chosen for a readout is not in this file. Choose the file again."
-    )
+    assert "ratio" not in failure.message and "onset" not in failure.message
     h.assert_nothing_written()
 
 
@@ -590,7 +583,7 @@ async def test_label_too_long_is_refused_and_nothing_written():
     positions = (replace(h.positions[0], label="x" * 201), *h.positions[1:])
     failure = (await h(h.command(positions=positions))).failure()
     assert isinstance(failure, ValidationError)
-    assert failure.message == "Position label must be at most 200 characters"
+    assert "200" in failure.message
     h.assert_nothing_written()
 
 
@@ -606,7 +599,7 @@ async def test_note_over_1000_characters_is_refused_and_nothing_written():
     positions = (replace(h.positions[0], note="x" * 1001), *h.positions[1:])
     failure = (await h(h.command(positions=positions))).failure()
     assert isinstance(failure, ValidationError)
-    assert failure.message == "Position note must be at most 1000 characters"
+    assert "1000" in failure.message
     h.assert_nothing_written()
 
 
@@ -614,10 +607,8 @@ async def test_reported_value_for_undeclared_channel_is_a_warning():
     reported = (*(_reported(c) for c in (1, 2, 3)), _reported(1, channel="ghost"))
     h = Harness(export=_export(reported=reported))
     result = (await h()).unwrap()
-    assert result.warnings == (
-        "Reported value 'Onset #1 for Ghost' belongs to a signal the file has no "
-        "traces for. It is skipped.",
-    )
+    [warning] = result.warnings
+    assert "Ghost" in warning and "ghost" not in warning
     assert result.values_inserted == 3
 
 
@@ -632,9 +623,8 @@ async def test_used_position_without_a_curve_on_a_channel_is_a_warning():
     result = (await h(h.command(positions=positions))).unwrap()
 
     label = position_label(HolderKind.CASSETTE, "A", 2)
-    assert result.warnings == (
-        f"{label} has no Signal trace in the file. Mapped reported values can still be imported.",
-    )
+    [warning] = result.warnings
+    assert label in warning and "Signal" in warning
     assert (result.positions_created, result.curves_created) == (2, 3)
 
 

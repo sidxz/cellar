@@ -129,9 +129,24 @@ describe("ProtocolFormAdmin", () => {
     });
   });
 
-  it("groups forms under their category", () => {
-    render(<ProtocolFormAdmin />);
-    expect(screen.getByText("Enzyme inhibition")).toBeInTheDocument();
+  it("groups forms under their category, generic forms last", () => {
+    const original = state.forms;
+    // An unknown category falls back to the generic group.
+    state.forms = [
+      { ...original[0], id: "f2", name: "Generic", category_id: "gone", is_default: false },
+      ...original,
+    ];
+    try {
+      render(<ProtocolFormAdmin />);
+      const rows = screen.getAllByRole("row").map((r) => r.textContent ?? "");
+      const order = ["Enzyme inhibition", "Standard IC50", "Any category", "Generic"].map((s) =>
+        rows.findIndex((t) => t.startsWith(s)),
+      );
+      expect(order.every((i) => i >= 0)).toBe(true);
+      expect([...order].sort((a, b) => a - b)).toEqual(order);
+    } finally {
+      state.forms = original;
+    }
   });
 
   it("adds the default forms", () => {

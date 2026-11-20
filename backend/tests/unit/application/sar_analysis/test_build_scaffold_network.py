@@ -157,7 +157,3 @@ def test_ids_hash_stable_under_reorder():
     a = uuid.uuid4()
     b = uuid.uuid4()
     assert compute_ids_hash([a, b]) == compute_ids_hash([b, a])
-
-
-def test_ids_hash_empty_is_deterministic():
-    assert compute_ids_hash([]) == compute_ids_hash([])

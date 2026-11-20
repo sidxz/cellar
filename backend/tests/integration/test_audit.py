@@ -6,6 +6,7 @@ import uuid
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from cellar.domain.audit_compliance.enums import (
@@ -155,6 +156,18 @@ class TestAuditRepositoryIntegration:
         assert len(loaded.entries) == 5
 
 
+# plpgsql RAISE EXCEPTION from the prevent_audit_modification() trigger (migration 001).
+_TRIGGER_RAISED = "P0001"
+
+
+async def _assert_blocked_by_trigger(
+    db_session: AsyncSession, sql: str, row_id: uuid.UUID
+) -> None:
+    with pytest.raises(DBAPIError) as exc:
+        await db_session.execute(text(sql), {"id": str(row_id)})
+    assert exc.value.orig.sqlstate == _TRIGGER_RAISED
+
+
 class TestAuditAppendOnly:
     """Verify that audit tables reject UPDATE and DELETE at the DB level."""
 
@@ -165,14 +178,9 @@ class TestAuditAppendOnly:
         await audit_repo.save(op)
         await db_session.flush()
 
-        # Attempt raw UPDATE — should fail due to REVOKE
-        with pytest.raises(Exception):  # noqa: B017
-            await db_session.execute(
-                text(
-                    "UPDATE audit_operations SET reason = 'hacked' WHERE id = :id"
-                ),
-                {"id": str(op.id)},
-            )
+        await _assert_blocked_by_trigger(
+            db_session, "UPDATE audit_operations SET reason = 'hacked' WHERE id = :id", op.id
+        )
 
     async def test_delete_audit_operation_denied(
         self, audit_repo: SQLAlchemyAuditRepository, db_session: AsyncSession
@@ -181,12 +189,9 @@ class TestAuditAppendOnly:
         await audit_repo.save(op)
         await db_session.flush()
 
-        # Attempt raw DELETE — should fail due to REVOKE
-        with pytest.raises(Exception):  # noqa: B017
-            await db_session.execute(
-                text("DELETE FROM audit_operations WHERE id = :id"),
-                {"id": str(op.id)},
-            )
+        await _assert_blocked_by_trigger(
+            db_session, "DELETE FROM audit_operations WHERE id = :id", op.id
+        )
 
     async def test_delete_audit_entry_denied(
         self, audit_repo: SQLAlchemyAuditRepository, db_session: AsyncSession
@@ -195,9 +200,6 @@ class TestAuditAppendOnly:
         await audit_repo.save(op)
         await db_session.flush()
 
-        entry_id = op.entries[0].id
-        with pytest.raises(Exception):  # noqa: B017
-            await db_session.execute(
-                text("DELETE FROM audit_entries WHERE id = :id"),
-                {"id": str(entry_id)},
-            )
+        await _assert_blocked_by_trigger(
+            db_session, "DELETE FROM audit_entries WHERE id = :id", op.entries[0].id
+        )

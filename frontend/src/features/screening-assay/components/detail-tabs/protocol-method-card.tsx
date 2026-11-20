@@ -153,6 +153,7 @@ export function ProtocolMethodCard({
                 variant="link"
                 size="sm"
                 className="h-auto justify-self-start p-0"
+                aria-expanded={expanded}
                 onClick={() => setExpanded((e) => !e)}
               >
                 {expanded ? "Show less" : "Show all"}

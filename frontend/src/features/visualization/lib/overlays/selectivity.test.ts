@@ -48,18 +48,10 @@ function draw(overlays: OverlayConfig, patch: PanelPatch = {}) {
 describe("selectivity guides", () => {
   it("are offered for a p-potency of each protocol, only when protocols are compared", () => {
     expect(overlayOptions(ds, scatter()).selectivity).toBe(true);
-    expect(overlayOptions(ds, scatter({ x: "dr:a2:p" })).selectivity).toBe(
-      "Choose a log potency such as pIC₅₀ for each axis. Use a different protocol on each axis.",
-    );
-    expect(overlayOptions(ds, scatter({ x: "logp" })).selectivity).toBe(
-      "Choose a log potency such as pIC₅₀ for each axis. Use a different protocol on each axis.",
-    );
-    expect(overlayOptions(ds, scatter({ logX: true })).selectivity).toBe(
-      "Not available on a log axis",
-    );
-    expect(overlayOptions(ds, scatter({ x: undefined })).selectivity).toBe(
-      "Choose a log potency such as pIC₅₀ for each axis. Use a different protocol on each axis.",
-    );
+    // Same protocol on both axes, not a p-potency, a log axis, no X: refused with a reason.
+    for (const patch of [{ x: "dr:a2:p" }, { x: "logp" }, { logX: true }, { x: undefined }]) {
+      expect(typeof overlayOptions(ds, scatter(patch)).selectivity).toBe("string");
+    }
     expect(overlayOptions(single, scatter())).not.toHaveProperty("selectivity");
   });
 

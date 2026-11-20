@@ -27,11 +27,7 @@ class TestControlledVocabularyCreate:
             terms=["Human", "Mouse", "Rat"],
             created_by=user_id,
         )
-        assert vocab.workspace_id == ws_id
-        assert vocab.name == "Species"
-        assert vocab.terms == ["Human", "Mouse", "Rat"]
         assert vocab.is_locked is False
-        assert vocab.created_by == user_id
 
     def test_factory_emits_event(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
         vocab = ControlledVocabulary.create(

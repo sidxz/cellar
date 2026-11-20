@@ -182,7 +182,7 @@ class TestUpdateCampaignMetadata:
         assert isinstance(result, Failure)
         err = result.failure()
         assert isinstance(err, DataLockedError)
-        assert "CLOSED" in str(err) or "closed" in str(err).lower()
+        assert CampaignStatus.CLOSED.value in str(err)
         repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio

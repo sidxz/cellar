@@ -92,16 +92,12 @@ async def test_the_files_control_state_column_beats_the_protocol_layout(
         "reference_count": 0,
         "blank_count": 0,
     }
-    assert plate["roles_from"] == 'the file\'s "Control State" column'
+    assert "Control State" in plate["roles_from"]
     assert preview["validation_errors"] == []
     assert preview["swapped_controls"] == []
-    assert preview["warnings"] == [
-        'Control roles from the file\'s "Control State" column differ from the '
-        'protocol default "Layout" on 2 wells.',
-        'Control roles read by effect: "negative control" as negative control, '
-        '"positive control (hit)" as positive control — under this protocol the '
-        "positive control is the full-effect (hit) end.",
-    ]
+    # One note that the file overrides the layout (on 2 wells), one on how roles were read.
+    differ, _read_by_effect = preview["warnings"]
+    assert "2 wells" in differ
 
     mapping = {
         "well": "Well",

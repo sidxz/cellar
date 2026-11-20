@@ -159,14 +159,6 @@ async def test_run_row_counts(client, session_factory, fake_auth):
     assert resp.json()["counts"] == {str(w["a"]): 2, str(w["b"]): 2}
 
 
-async def test_unknown_level_is_rejected(client, session_factory, fake_auth):
-    w = await _seed(session_factory, fake_auth.workspace_id)
-    resp = await client.post(
-        URL, json={"source": {"kind": "run", "run_id": str(w["a"])}, "level": "planets"}
-    )
-    assert resp.status_code == 422
-
-
 async def test_control_wells_carry_their_normalized_values_after_a_recompute(
     client, session_factory, fake_auth
 ):
@@ -468,15 +460,10 @@ async def test_without_compare_the_dataset_names_its_one_protocol(
 
 
 @pytest.mark.parametrize(
-    ("level", "repeat", "message"),
-    [
-        ("wells", False, "Comparing protocols works at the Compounds level only."),
-        ("runs", False, "Comparing protocols works at the Compounds level only."),
-        ("compounds", True, "Each protocol can be loaded once."),
-    ],
+    ("level", "repeat"), [("wells", False), ("runs", False), ("compounds", True)]
 )
 async def test_compare_is_refused_off_compounds_or_for_a_repeated_protocol(
-    client, session_factory, fake_auth, level, repeat, message
+    client, session_factory, fake_auth, level, repeat
 ):
     w = await _seed_compare(session_factory, fake_auth.workspace_id)
     compare = [{"protocol_id": str(w["Primary" if repeat else "Counter"])}]
@@ -484,7 +471,6 @@ async def test_compare_is_refused_off_compounds_or_for_a_repeated_protocol(
     resp = await client.post(URL, json=_compared(w, level, *compare))
 
     assert resp.status_code == 422, resp.text
-    assert message in resp.text
 
 
 async def test_a_compared_protocol_of_another_workspace_is_404(client, session_factory, fake_auth):

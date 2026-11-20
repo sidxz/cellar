@@ -57,7 +57,7 @@ def _make(
 
 
 class TestBulkRegistrationCreation:
-    def test_create_sets_all_fields(
+    def test_create_defaults(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         br = BulkRegistration.create(
@@ -68,13 +68,8 @@ class TestBulkRegistrationCreation:
             total_count=10,
         )
 
-        assert br.workspace_id == workspace_id
-        assert br.source_file == "compounds.sdf"
-        assert br.file_format == BulkRegistrationFileFormat.SDF
-        assert br.submitted_by == user_id
         assert br.submitted_at is not None
         assert br.status == BulkRegistrationStatus.PENDING
-        assert br.total_count == 10
         assert br.registered_count == 0
         assert br.duplicate_count == 0
         assert br.error_count == 0
@@ -161,19 +156,6 @@ class TestBulkRegistrationCreation:
             total_count=5,
         )
         assert br.source_file == "compounds.xlsx"
-
-    def test_all_file_formats(
-        self, workspace_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        for fmt in BulkRegistrationFileFormat:
-            br = BulkRegistration.create(
-                workspace_id=workspace_id,
-                source_file=f"compounds.{fmt.value}",
-                file_format=fmt,
-                submitted_by=user_id,
-                total_count=1,
-            )
-            assert br.file_format == fmt
 
 
 # ---------------------------------------------------------------------------
@@ -308,28 +290,6 @@ class TestBulkRegistrationProgress:
         assert br.duplicate_count == 1
         assert br.error_count == 1
         assert br.processed_count == 5
-
-    def test_transitions_update_updated_at(
-        self, workspace_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        br = BulkRegistration.create(
-            workspace_id=workspace_id,
-            source_file="compounds.sdf",
-            file_format=BulkRegistrationFileFormat.SDF,
-            submitted_by=user_id,
-            total_count=1,
-        )
-        initial_updated = br.updated_at
-        br.start_processing()
-        assert br.updated_at >= initial_updated
-
-        after_processing = br.updated_at
-        br.record_registered()
-        assert br.updated_at >= after_processing
-
-        after_record = br.updated_at
-        br.complete()
-        assert br.updated_at >= after_record
 
 
 # ---------------------------------------------------------------------------

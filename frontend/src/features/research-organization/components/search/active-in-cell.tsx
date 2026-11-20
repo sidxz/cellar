@@ -39,6 +39,7 @@ export function ActiveInCell({ value }: { value: AnyProtocolActivity | undefined
           <div
             key={`${e.protocol_id}:${e.readout_definition_id}:${e.source}`}
             data-testid="active-in-row"
+            data-state={inactive ? "inactive" : undefined}
             className={cn("flex min-w-0 items-center gap-1.5", inactive && "text-muted-foreground")}
           >
             {e.curve_class ? (

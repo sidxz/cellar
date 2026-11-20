@@ -52,11 +52,13 @@ describe("useDebounce", () => {
     expect(result.current).toBe("c");
   });
 
-  it("cleans up the timer on unmount", () => {
-    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
-    const { unmount } = renderHook(() => useDebounce("x", 300));
+  it("leaves no pending update behind on unmount", () => {
+    const { rerender, unmount } = renderHook(({ value }) => useDebounce(value, 300), {
+      initialProps: { value: "x" },
+    });
+    rerender({ value: "y" });
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
     unmount();
-    expect(clearSpy).toHaveBeenCalled();
-    clearSpy.mockRestore();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

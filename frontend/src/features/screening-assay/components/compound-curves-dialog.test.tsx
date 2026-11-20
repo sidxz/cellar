@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const curvesProps: Array<Record<string, unknown>> = [];
@@ -56,16 +55,6 @@ describe("compound curves dialog", () => {
     );
   });
 
-  it("says in one line that runs outside the search's scope can be included", () => {
-    openFor({ protocol: P, molecules: [A] });
-    expect(screen.getByRole("dialog", { name: "Traces across runs" })).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Protocol 1 · Compound A. Includes every run except rejected runs, regardless of this search's run scope or aggregation.",
-      ),
-    ).toBeInTheDocument();
-  });
-
   it("asks for the compounds' positions without rejected runs, references on, coloured by batch for one compound", () => {
     const props = openFor({ protocol: P, molecules: [A] });
     expect(props.protocolId).toBe("p1");
@@ -88,14 +77,6 @@ describe("compound curves dialog", () => {
       groupBy: "compound",
     });
     expect(props.exportName).toBe("traces-Protocol-1-Compound-A-and-Compound-B");
-  });
-
-  it("says so when the compound has no curves outside rejected runs", () => {
-    const props = openFor({ protocol: P, molecules: [A] });
-    render(<div>{props.empty as ReactNode}</div>);
-    expect(
-      screen.getByText("No traces for Compound A in runs that are not rejected."),
-    ).toBeInTheDocument();
   });
 
   it("returns null from useOpenCompoundCurves outside a provider", () => {

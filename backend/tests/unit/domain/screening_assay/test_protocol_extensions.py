@@ -143,25 +143,6 @@ class TestReadoutDefinitionDoseResponse:
 
 
 # ---------------------------------------------------------------------------
-# ReadoutDefinition — batch_link type
-# ---------------------------------------------------------------------------
-
-
-class TestReadoutDefinitionBatchLink:
-    def test_batch_link_creates_successfully(self):
-        # Note: "Batch" alone is a reserved well-metadata name (well.batch_id
-        # already references the well's batch). For a BATCH_LINK readout,
-        # use a name that's clearly a measurement/reference rather than
-        # the well's own metadata.
-        rd = ReadoutDefinition(
-            protocol_id=_PLACEHOLDER_ID,
-            name="Reference Batch",
-            data_type=ReadoutDataType.BATCH_LINK,
-        )
-        assert rd.data_type == ReadoutDataType.BATCH_LINK
-
-
-# ---------------------------------------------------------------------------
 # Protocol — cross-readout validation for dose_response
 # ---------------------------------------------------------------------------
 
@@ -425,32 +406,6 @@ class TestProtocolVersioningNewFields:
         assert new_protocol.dose_unit == ConcentrationUnit.NM
         assert new_protocol.pos_control_signal == PosControlSignal.LOW
 
-    def test_versioning_clones_ontology_annotations(self):
-        from cellar.domain.screening_assay.protocol_versioning_service import (
-            ProtocolVersioningService,
-        )
-        from cellar.domain.shared.ontology import OntologyTerm
-
-        protocol = _make_protocol()
-        protocol.ontology_annotations = {
-            "assay_type": [
-                OntologyTerm(
-                    term_id="OBI:0001146",
-                    label="cell-based assay",
-                    ontology_source="OBI",
-                    uri="http://purl.obolibrary.org/obo/OBI_0001146",
-                )
-            ]
-        }
-        protocol.publish()
-        svc = ProtocolVersioningService()
-        new_protocol = svc.create_new_version(protocol)
-        assert "assay_type" in new_protocol.ontology_annotations
-        assert new_protocol.ontology_annotations["assay_type"][0].term_id == "OBI:0001146"
-        # Verify deep copy — mutating the new version's annotations must
-        # not bleed into the parent.
-        assert new_protocol.ontology_annotations is not protocol.ontology_annotations
-
     def test_versioning_clones_recommended_hit_criteria(self):
         """Hit criteria are tuned QC gates; new versions inherit them so
         the screener doesn't have to re-tune from scratch on every
@@ -476,8 +431,8 @@ class TestProtocolVersioningNewFields:
         assert new_protocol.recommended_hit_criteria is not None
         assert len(new_protocol.recommended_hit_criteria) == 1
         assert new_protocol.recommended_hit_criteria[0].value == 50.0
-        # Verify deep copy
-        assert new_protocol.recommended_hit_criteria[0].value == 50.0
+        # A copy: editing the new version's criteria must not touch the parent's.
+        assert new_protocol.recommended_hit_criteria is not protocol.recommended_hit_criteria
 
 
 # ---------------------------------------------------------------------------

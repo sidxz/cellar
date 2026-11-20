@@ -13,7 +13,6 @@ from cellar.domain.research_organization.enums import (
     ValueQualifier,
 )
 from cellar.domain.research_organization.measurement_facts import (
-    TEST_CONCENTRATION,
     Concentration,
     build_column_profile,
     describe_column,
@@ -49,10 +48,6 @@ def test_bare_number_uses_default_unit():
 def test_same_as_across_units():
     assert Concentration(1, "µM").same_as(Concentration(1000, "nM"))
     assert not Concentration(1, "µM").same_as(Concentration(2, "µM"))
-
-
-def test_label_constant():
-    assert TEST_CONCENTRATION == "Test concentration"
 
 
 def _channel(rule=SelectionRule.LATEST_RUN, conc=None):

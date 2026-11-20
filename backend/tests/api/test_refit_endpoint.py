@@ -179,10 +179,10 @@ class TestRefitEndpoint:
         assert suggestion["excluded"] is False
         assert suggestion["source"] == "auto_3sigma"
 
-    async def test_sprint1_back_compat_excluded_indices(
+    async def test_bare_excluded_point_indices_exclude_those_points(
         self, client: AsyncClient, seeded_curve: DoseResponseCurve
     ) -> None:
-        """Sprint 1 callers (bare excluded_point_indices) keep working unchanged."""
+        """A bare ``excluded_point_indices`` list (no reasons) still excludes the points."""
         response = await client.post(
             f"/api/v1/dose-response-curves/{seeded_curve.id}/refit",
             json={
@@ -191,3 +191,6 @@ class TestRefitEndpoint:
             },
         )
         assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["excluded_points"] == [{"concentration": 1.0, "response": 50.0}]
+        assert body["num_points"] == len(seeded_curve.raw_data) - 1

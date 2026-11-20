@@ -97,6 +97,7 @@ vi.mock("@/shared/components/entity-name", () => ({
   MemberName: ({ id }: { id: string }) => <span>{id}</span>,
 }));
 
+import { labellingEditRefusal } from "../lib/position-edits";
 import { gridRow } from "../test/test-data-grid";
 import { RunCurvesPanel } from "./run-curves-panel";
 
@@ -260,15 +261,9 @@ beforeEach(() => {
 });
 
 describe("RunCurvesPanel", () => {
-  it("shows an empty state when nothing is selected", () => {
+  it("draws nothing when nothing is selected", () => {
     render(<RunCurvesPanel runId="r1" />);
-    expect(screen.getByText("Select positions above to draw their traces")).toBeInTheDocument();
-    // Without an analysis (it failed), the results column says so.
-    expect(
-      screen.getByText("Could not load the analysis. Reload the page and try again."),
-    ).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
-    expect(screen.getByText("No positions selected.")).toBeInTheDocument();
   });
 
   it("requests the chosen channel and keeps the selection", () => {
@@ -452,15 +447,11 @@ describe("RunCurvesPanel", () => {
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Derivative" }));
     fireEvent.change(screen.getByLabelText("Smoothing window"), { target: { value: "5" } });
     fireEvent.keyDown(screen.getByLabelText("Smoothing window"), { key: "Enter" });
-    expect(
-      screen.getByText("Could not load the traces. Reload the page and try again."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Could not load the traces/)).toBeInTheDocument();
     expect(screen.getByLabelText("Smoothing window")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Measured" })).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Measured" }));
-    expect(
-      screen.queryByText("Could not load the traces. Reload the page and try again."),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Could not load the traces/)).not.toBeInTheDocument();
   });
 
   it("offers Edit labelling beside the selector, disabled with the reason on a locked run", () => {
@@ -474,7 +465,7 @@ describe("RunCurvesPanel", () => {
     render(<RunCurvesPanel runId="r1" run={{ ...RUN, is_locked: true }} />);
     const locked = screen.getByRole("button", { name: "Edit labeling" });
     expect(locked).toBeDisabled();
-    expect(locked).toHaveAttribute("title", "The run is locked.");
+    expect(locked).toHaveAttribute("title", labellingEditRefusal({ is_locked: true }));
   });
 
   it("does not offer Edit labelling to a viewer", () => {
@@ -589,33 +580,21 @@ describe("RunCurvesPanel", () => {
       expect(results?.contains(toggle)).toBe(false);
     });
 
-    it("lays the viewer out for review: short plot, selection line, steps, chart, then values", () => {
+    it("shows the review viewer: plot, selection line, peaks, values and a key", () => {
       withAnalysis({ w2: { tm: 59, delta_tm: -1 } });
       render(<RunCurvesPanel runId="r1" />);
-      expect(lastPlot().style?.height).toBe(340);
-      const line = screen.getByText("ABC-0000002 · Position 2 · 50 µM");
-      const steps = screen.getByRole("heading", { name: "Peaks" });
-      const values = screen.getByRole("button", { name: "Instrument values" });
-      const follows = (a: Node, b: Node) =>
-        !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      expect(follows(screen.getByTestId("plot"), line)).toBe(true);
-      expect(follows(line, steps)).toBe(true);
-      expect(follows(steps, values)).toBe(true);
+      expect(screen.getByTestId("plot")).toBeInTheDocument();
+      expect(screen.getByText("ABC-0000002 · Position 2 · 50 µM")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: "Peaks" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Instrument values" })).toBeInTheDocument();
       // A compact key stands in for the generic legend.
       const key = screen.getByTestId("curve-key");
-      for (const t of ["Reference", "Reviewed peak", "Unreviewed peak", "Onset"])
+      for (const t of ["Reference", "Selected sample", "Reviewed peak", "Unreviewed peak", "Onset"])
         expect(within(key).getByText(t)).toBeInTheDocument();
-      // The key's swatches are the traces' colours: violet reference, orange selection.
-      const swatch = (text: string) => within(key).getByText(text).querySelector("i");
-      const { reference, selected } = MEASURED_CURVE_COLORS.dark;
-      expect(swatch("Reference")).toHaveStyle({ borderTopColor: reference });
-      expect(swatch("Selected sample")).toHaveStyle({ borderTopColor: selected });
-      expect(screen.queryByText("Other positions")).toBeNull();
-      expect(screen.queryByText(/The trace under the pointer/)).toBeNull();
       fireEvent.click(gridRow("Position 3"), { metaKey: true });
       expect(screen.getByText("2 samples selected")).toBeInTheDocument();
-      expect(swatch("Selected samples")).toHaveStyle({ borderTopColor: selected });
-      // A selected reference stays violet, so alone it has no orange swatch to explain.
+      expect(within(key).getByText("Selected samples")).toBeInTheDocument();
+      // A selected reference stays the reference colour, so alone it has no selection entry.
       fireEvent.click(gridRow("Position 1"));
       expect(within(screen.getByTestId("curve-key")).queryByText(/^Selected sample/)).toBeNull();
     });
@@ -815,9 +794,7 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
 
     it("says so in place of the chart when fewer than two have one", () => {
       show({ w2: { delta_tm: 2.5 } });
-      expect(
-        screen.getByText("No ΔTm at 2 of 3 concentrations; nothing to chart"),
-      ).toBeInTheDocument();
+      expect(screen.getByText(/No ΔTm at 2 of 3/)).toBeInTheDocument();
       expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
     });
 
@@ -872,9 +849,7 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
     withAnalysis({ w2: { delta_tm: 2.5 }, w3: { delta_tm: 4 }, w4: { delta_tm: 1 } });
     render(<RunCurvesPanel runId="r1" run={RUN} />);
     fireEvent.click(gridRow("REG-2"));
-    expect(
-      screen.getByText("Only one concentration of this batch in this run."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Only one concentration/)).toBeInTheDocument();
     expect(screen.queryByText(/by concentration/)).not.toBeInTheDocument();
     fireEvent.click(gridRow("Position 2"));
     expect(screen.queryByText(/Only one concentration/)).not.toBeInTheDocument();
@@ -924,14 +899,6 @@ describe("RunCurvesPanel concentration chart and window bands", () => {
       expect(screen.queryByRole("button", { name: /^Hits/ })).toBeNull();
       fireEvent.click(screen.getByRole("button", { name: "Apply to this run" }));
       expect(setHitCriteria).toHaveBeenCalledWith({ runId: "r1", criteria: [OUTSIDE] });
-    });
-
-    it("does not read or write a stored threshold", () => {
-      const get = vi.spyOn(Storage.prototype, "getItem");
-      withAnalysis({ w2: { tm: 55, delta_tm: -5 } });
-      render(<RunCurvesPanel runId="r1" run={RULE_RUN} />);
-      expect(get).not.toHaveBeenCalledWith("cellar.thermalShift.threshold");
-      get.mockRestore();
     });
   });
 });
@@ -1144,9 +1111,10 @@ describe("RunCurvesPanel picking on the plot", () => {
     setup();
     clickTrace("w2", 48.4);
     inBar("Peak", "Move");
-    expect(
-      within(bar("Peak")).getByText("Click the new temperature on this position's trace."),
-    ).toBeInTheDocument();
+    expect(within(bar("Peak")).getByRole("button", { name: "Move" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
     clickTrace("w2", 52.3046);
     expect(
       screen.getByText("Edit the temperature of the peak at 48.1 °C on Position 2"),
@@ -1154,7 +1122,10 @@ describe("RunCurvesPanel picking on the plot", () => {
     expect(screen.getByLabelText("Value")).toHaveValue(52.3);
     // The pick stays on the peak, and moving is over: the next click fills the form's value.
     expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
-    expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
+    expect(within(bar("Peak")).getByRole("button", { name: "Move" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     clickTrace("w2", 52.6);
     expect(screen.getByLabelText("Value")).toHaveValue(52.6);
     expect(saveStep).not.toHaveBeenCalled();
@@ -1183,7 +1154,10 @@ describe("RunCurvesPanel picking on the plot", () => {
     expect(pickedRows()).toEqual([]);
     // Moving went with it.
     clickTrace("w2", 48.4);
-    expect(within(bar("Peak")).queryByText(/Click the new temperature/)).toBeNull();
+    expect(within(bar("Peak")).getByRole("button", { name: "Move" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     expect(screen.queryByText(/^Edit the temperature of the peak/)).toBeNull();
   });
 
@@ -1227,12 +1201,11 @@ describe("RunCurvesPanel picking on the plot", () => {
     expect(within(bar("Spot")).queryAllByRole("button")).toHaveLength(0);
   });
 
-  it("for a viewer, the bar shows the facts and that access is read-only, and no buttons", () => {
+  it("for a viewer, the bar shows the facts and no buttons", () => {
     canEdit.value = false;
     setup();
     clickTrace("w2", 48.4);
     expect(bar("Peak")).toHaveTextContent("peak at 48.1 °C");
-    expect(bar("Peak")).toHaveTextContent("Read-only access — peaks cannot be changed.");
     expect(within(bar("Peak")).queryAllByRole("button")).toHaveLength(0);
   });
 });

@@ -159,25 +159,27 @@ class TestSubstructureExecutes:
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
-        "kekule_query",
+        "benzene_query",
         [
             "C1=CC=CC=C1",  # Kekulé SMILES
             "[#6]1-[#6]=[#6]-[#6]=[#6]-[#6]=1",  # exact Ketcher SMARTS export
+            "[c]1[c][c][c][c][c]1",  # explicit aromatic-atom SMARTS
         ],
     )
-    async def test_kekule_benzene_matches_aromatic_storage(
+    async def test_untagged_benzene_queries_match_aromatic_storage(
         self,
         db_session: AsyncSession,
         workspace_id: uuid.UUID,
         benzene: MoleculeModel,
-        kekule_query: str,
+        benzene_query: str,
     ) -> None:
         """Regression: a chemist drawing benzene in Ketcher exports Kekulé
         SMARTS. The cartridge stores molecules with aromaticity perceived,
         so explicit -/= bonds in the query never match aromatic bonds in
         storage without query-side aromatization. Without the normalizer,
         these queries return zero hits — the most common medchem search
-        appears completely broken.
+        appears completely broken. The other SMARTS spellings of benzene must
+        survive the normalizer too.
         """
         ids = await _execute_clause(
             db_session,
@@ -185,11 +187,11 @@ class TestSubstructureExecutes:
             {"criteria": [{
                 "type": "structure",
                 "kind": "substructure",
-                "smiles_or_smarts": kekule_query,
+                "smiles_or_smarts": benzene_query,
             }]},
         )
         assert benzene.id in ids, (
-            f"Kekulé query {kekule_query!r} failed to match aromatic-stored "
+            f"Query {benzene_query!r} failed to match aromatic-stored "
             f"benzene — query-side aromatization regression"
         )
 
@@ -222,11 +224,19 @@ class TestSubstructureExecutes:
         assert benzene.id in ids
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "smarts_query",
+        [
+            "[#6]1[#6][#6][#6][#6][#6]1",
+            "[#6]1~[#6]~[#6]~[#6]~[#6]~[#6]~1",  # atomic-number + any-bond SMARTS
+        ],
+    )
     async def test_smarts_kind_with_atom_list_executes(
         self,
         db_session: AsyncSession,
         workspace_id: uuid.UUID,
         benzene: MoleculeModel,
+        smarts_query: str,
     ) -> None:
         """SMARTS-only feature (atom list) survives the SMARTS dispatch —
         chemist's '4-halo-phenyl' style query."""
@@ -237,7 +247,7 @@ class TestSubstructureExecutes:
                 "type": "structure",
                 "kind": "substructure",
                 "query_kind": "smarts",
-                "smiles_or_smarts": "[#6]1[#6][#6][#6][#6][#6]1",
+                "smiles_or_smarts": smarts_query,
             }]},
         )
         # Benzene matches "ring of 6 carbons" (no bond-order constraint).
@@ -267,6 +277,36 @@ class TestSubstructureExecutes:
             }]},
         )
         assert benzene.id in ids
+
+
+    @pytest.mark.asyncio
+    async def test_generalized_finds_a_tautomer_strict_misses(
+        self,
+        db_session: AsyncSession,
+        workspace_id: uuid.UUID,
+        org_id: uuid.UUID,
+    ) -> None:
+        """2-pyridone is registered; the chemist draws its enol, 2-hydroxypyridine.
+        Only the 'match across tautomers' toggle finds it."""
+        pyridone = _make_molecule_model(
+            workspace_id, org_id, smiles="O=C1NC=CC=C1", name="2-pyridone"
+        )
+        db_session.add(pyridone)
+        await db_session.flush()
+
+        def criterion(generalized: bool) -> dict:
+            return {"criteria": [{
+                "type": "structure",
+                "kind": "substructure",
+                "query_kind": "smiles",
+                "smiles_or_smarts": "OC1=CC=CC=N1",
+                "generalized": generalized,
+            }]}
+
+        assert pyridone.id in await _execute_clause(db_session, workspace_id, criterion(True))
+        assert pyridone.id not in await _execute_clause(
+            db_session, workspace_id, criterion(False)
+        )
 
 
 # ─── Similarity ────────────────────────────────────────────────────────────

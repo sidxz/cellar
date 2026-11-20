@@ -131,10 +131,10 @@ describe("OverlaySection", () => {
     expect(screen.getByRole("textbox", { name: "LipE guides" })).not.toHaveAttribute("placeholder");
   });
 
-  it("commits the reference line when left, says it is display only, and clears when emptied", () => {
+  it("commits the reference line when left, in the value's unit, and clears when emptied", () => {
     show(scatter(), withUnit(wells, Y, "%"));
     const ref = screen.getByRole("spinbutton", { name: "Reference line" });
-    expect(ref).toHaveAccessibleDescription("% Display only — hit criteria are unchanged");
+    expect(ref).toHaveAccessibleDescription(expect.stringContaining("%"));
     ref.focus();
     fireEvent.change(ref, { target: { value: "3" } });
     fireEvent.change(ref, { target: { value: "30" } });

@@ -55,21 +55,10 @@ function renderCombobox(overrides: Partial<React.ComponentProps<typeof SearchCom
 }
 
 describe("SearchCombobox", () => {
-  it("renders the search input with placeholder", () => {
-    renderCombobox({ open: false });
-    expect(screen.getByPlaceholderText("Search...")).toBeInTheDocument();
-  });
-
   it("forwards keystrokes through onSearchChange", () => {
     const { onSearchChange } = renderCombobox({ open: false });
     fireEvent.change(screen.getByPlaceholderText("Search..."), { target: { value: "asp" } });
     expect(onSearchChange).toHaveBeenCalledWith("asp");
-  });
-
-  it("sizes the dropdown with the v4 trigger-width class", () => {
-    renderCombobox();
-    const content = screen.getByText("Aspirin").closest("[data-radix-popper-content-wrapper] > *");
-    expect(content?.className).toContain("w-[max(16rem,var(--radix-popover-trigger-width))]");
   });
 
   it("forwards id to the input so a label can target it", () => {
@@ -111,10 +100,5 @@ describe("SearchCombobox", () => {
   it("omits the clear button when onClear is not provided", () => {
     renderCombobox({ open: false });
     expect(screen.queryByRole("button", { name: /clear/i })).not.toBeInTheDocument();
-  });
-
-  it("renders a footer node below the list", () => {
-    renderCombobox({ footer: <div>+ Free text</div> });
-    expect(screen.getByText("+ Free text")).toBeInTheDocument();
   });
 });

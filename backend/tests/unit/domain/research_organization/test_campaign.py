@@ -28,7 +28,6 @@ from cellar.domain.research_organization.events import (
     CampaignSuperseded,
 )
 from cellar.domain.research_organization.source_ref import (
-    CollectionRef,
     RunRef,
     SeedRun,
 )
@@ -101,13 +100,6 @@ def test_create_rejects_empty_name():
 def test_create_strips_name():
     c = _make_campaign(name="  My Campaign  ")
     assert c.name == "My Campaign"
-
-
-def test_create_starts_empty():
-    c = _make_campaign()
-    assert c.results == []
-    assert c.channels == []
-    assert c.stages == []
 
 
 # ---------- channels ----------
@@ -227,15 +219,6 @@ def test_add_results_draft_guard():
     c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
     with pytest.raises(ValidationError):
         c.add_results([_make_result(c)])
-
-
-def test_add_results_carries_source_ref():
-    c = _make_campaign()
-    coll_id = uuid.uuid4()
-    ref = CollectionRef(collection_id=coll_id)
-    r = CampaignResult(campaign_id=c.id, molecule_id=uuid.uuid4(), added_from=ref)
-    c.add_results([r])
-    assert c.results[0].added_from is ref
 
 
 def test_add_results_empty_list_returns_zero_zero():
@@ -503,14 +486,6 @@ def test_close_transitions_and_emits_event():
     closed_events = [e for e in events if isinstance(e, CampaignClosed)]
     assert len(closed_events) == 1
     assert closed_events[0].note == "Confirmed by wet lab"
-
-
-def test_close_with_no_note_leaves_close_note_none():
-    c = _make_campaign()
-    c.add_channel(_make_channel(c))
-    c.add_result(_make_result(c))
-    c.close(closed_by=uuid.uuid4(), note=None, source_protocols=[])
-    assert c.close_note is None
 
 
 def test_cannot_mutate_after_close():

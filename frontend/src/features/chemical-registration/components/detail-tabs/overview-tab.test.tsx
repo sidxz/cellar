@@ -41,9 +41,7 @@ describe("ProvenanceCard", () => {
         })}
       />,
     );
-    expect(screen.getByText("Scientist")).toBeInTheDocument();
     expect(screen.getByText("A. Chemist")).toBeInTheDocument();
-    expect(screen.getByText("Disclosure date")).toBeInTheDocument();
     expect(screen.getByText(/2024/)).toBeInTheDocument();
     expect(screen.getByText(/recorded .*2026/)).toBeInTheDocument();
   });

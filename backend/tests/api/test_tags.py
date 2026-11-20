@@ -7,6 +7,8 @@ import uuid
 from httpx import AsyncClient
 
 from tests.api.conftest import OTHER_ORG_ID
+from tests.api.test_melting_steps_routes import _client_as
+from tests.fakes.fake_auth import FakeAuth
 
 
 async def _make_collection(client: AsyncClient, name: str) -> str:
@@ -110,12 +112,20 @@ class TestListTags:
         kin = await client.get("/api/v1/tags", params={"q": "kin"})
         assert {t["key"] for t in kin.json()} == {"kinase"}
 
-    async def test_mine_filter(self, client: AsyncClient) -> None:
+    async def test_mine_filter(
+        self, client: AsyncClient, database_url: str, fake_auth: FakeAuth
+    ) -> None:
         cid = await _make_collection(client, "TagCol-7")
+        colleague = FakeAuth(
+            role="admin", workspace_id=fake_auth.workspace_id, user_id=uuid.uuid4()
+        )
+        async with _client_as(database_url, colleague) as other:
+            theirs = await other.post(f"/api/v1/collections/{cid}/tags", json={"key": "their-tag"})
+            assert theirs.status_code == 201, theirs.text
         await client.post(f"/api/v1/collections/{cid}/tags", json={"key": "mine-tag"})
         resp = await client.get("/api/v1/tags", params={"mine": "true"})
         assert resp.status_code == 200
-        assert any(t["key"] == "mine-tag" for t in resp.json())
+        assert [t["key"] for t in resp.json()] == ["mine-tag"]
 
 
 class TestAuth:

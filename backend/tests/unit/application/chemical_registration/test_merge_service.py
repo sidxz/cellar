@@ -13,7 +13,6 @@ from returns.result import Failure, Success
 from cellar.application.chemical_registration.merge_service import (
     MergeCommand,
     MergeService,
-    _build_snapshot,
 )
 from cellar.application.chemical_registration.merge_side_effect_registry import (
     MergeSideEffectRegistry,
@@ -417,6 +416,15 @@ class TestMergeSnapshot:
     async def test_merge_snapshot_contains_registration_number(self, _deps: dict) -> None:
         """The snapshot dict persisted in MergeEvent captures source state."""
         source = _make_source()
+        source.add_identifier(
+            MoleculeIdentifier.create(
+                molecule_id=source.id,
+                identifier="CAS-123",
+                identifier_type=IdentifierType.CAS_NUMBER,
+                source="vendor",
+                registered_by=USER_ID,
+            )
+        )
         target = _make_target()
         _deps["mol_repo"].add(source)
         _deps["mol_repo"].add(target)
@@ -430,20 +438,4 @@ class TestMergeSnapshot:
         assert snap["name"] == "Source compound"
         assert snap["molecule_type"] == "small_molecule"
         assert snap["structure_status"] == "undisclosed"
-        assert isinstance(snap["identifiers"], list)
-
-    def test_build_snapshot_helper(self) -> None:
-        """Direct test of _build_snapshot utility."""
-        mol = _make_source()
-        mol.add_identifier(
-            MoleculeIdentifier.create(
-                molecule_id=mol.id,
-                identifier="CAS-123",
-                identifier_type=IdentifierType.CAS_NUMBER,
-                source="vendor",
-                registered_by=USER_ID,
-            )
-        )
-        snap = _build_snapshot(mol)
-        assert snap["registration_number"] == "CV-00001"
         assert snap["identifiers"] == [{"identifier": "CAS-123", "type": "cas_number"}]

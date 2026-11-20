@@ -93,15 +93,13 @@ describe("DesignTab condition dialog", () => {
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("names each condition's data type in words, and its pick-list editor Values", () => {
+  it("names each condition's data type in words, not its raw key", () => {
     render(<DesignTab protocol={protocol} protocolId="p1" />);
     const pick = screen.getByText("S9").closest("tr") as HTMLElement;
     expect(within(pick).getByText("Pick List")).toBeInTheDocument();
     expect(screen.queryByText(/pick_list/i)).not.toBeInTheDocument();
     const numeric = screen.getByText("Incubation time").closest("tr") as HTMLElement;
     expect(within(numeric).getByText("Numeric")).toBeInTheDocument();
-    fireEvent.click(pick.querySelectorAll("button")[0]);
-    expect(screen.getByText("Values")).toBeInTheDocument();
   });
 
   it("shows a fixed value with its unit, and one that varies per run", () => {
@@ -138,15 +136,12 @@ describe("DesignTab condition dialog", () => {
     });
   });
 
-  it("on a published protocol, adds without a fixed value and points to Correct details", () => {
+  it("on a published protocol, adds without a fixed value", () => {
     render(<DesignTab protocol={{ ...protocol, status: "active" } as Protocol} protocolId="p1" />);
     expect(screen.queryByRole("button", { name: "Edit S9" })).not.toBeInTheDocument();
     const header = screen.getByText("Assay conditions").parentElement?.parentElement;
     fireEvent.click(within(header as HTMLElement).getByRole("button", { name: /Add/ }));
     expect(screen.queryByLabelText("Fixed for this protocol")).not.toBeInTheDocument();
-    expect(
-      screen.getByText("Add the condition, then set its fixed value with Correct details."),
-    ).toBeInTheDocument();
   });
 
   it("keeps condition management unavailable on a locked protocol", () => {

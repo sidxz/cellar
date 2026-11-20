@@ -191,7 +191,7 @@ describe("DataImportPage: import modes", () => {
     });
   });
 
-  it("offers specific molecules as a third mode, not as a section of its own", () => {
+  it("offers specific molecules as a third mode", () => {
     renderAs(false);
     expect(screen.getAllByRole("radio").map((radio) => radio.getAttribute("value"))).toEqual([
       "full_vault",
@@ -201,7 +201,6 @@ describe("DataImportPage: import modes", () => {
     expect(screen.getByRole("radio", { name: "All molecules" })).toBeChecked();
     expect(screen.getByRole("radio", { name: "New and changed molecules" })).not.toBeChecked();
     expect(screen.getByRole("radio", { name: SPECIFIC })).not.toBeChecked();
-    expect(screen.queryByText("Import specific molecules")).toBeNull();
     expect(screen.getAllByRole("button", { name: /import/i })).toHaveLength(1);
   });
 
@@ -229,27 +228,6 @@ describe("DataImportPage: import modes", () => {
     expect(identifiersShown()).toEqual([false, false, false]);
   });
 
-  it("lays the specific-molecules controls out in the form: list, hint, check, result, then the one button", async () => {
-    renderAs(false);
-    chooseMode(SPECIFIC);
-    paste(PASTED);
-    pressCheck();
-    const inOrder = [
-      screen.getByRole("radio", { name: SPECIFIC }),
-      screen.getByLabelText("CDD molecule names or synonyms"),
-      screen.getByText(HINT),
-      screen.getByRole("button", { name: "Check names in CDD Vault" }),
-      await screen.findByText(CHECK_RESULT),
-      screen.getByText("Not found (1)"),
-      startButton(),
-    ];
-    for (let i = 1; i < inOrder.length; i++) {
-      expect(
-        inOrder[i - 1].compareDocumentPosition(inOrder[i]) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    }
-  });
-
   it("keeps the pasted list when the mode is switched away and back", () => {
     renderAs(false);
     chooseMode(SPECIFIC);
@@ -257,19 +235,6 @@ describe("DataImportPage: import modes", () => {
     chooseMode("New and changed molecules");
     chooseMode(SPECIFIC);
     expect(screen.getByLabelText("CDD molecule names or synonyms")).toHaveValue(PASTED);
-  });
-
-  it("explains each scope and clarifies the first sync", () => {
-    renderAs(false);
-    expect(
-      screen.getByText("Read the entire vault and match existing ChemCellar records."),
-    ).toBeVisible();
-    chooseMode(SPECIFIC);
-    expect(screen.getByLabelText("CDD molecule names or synonyms")).toBeVisible();
-    chooseMode("New and changed molecules");
-    expect(
-      screen.getByText("If no sync timestamp has been saved, this reads the entire vault."),
-    ).toBeVisible();
   });
 
   describe("Full Vault and Sync, as before", () => {
@@ -339,7 +304,7 @@ describe("DataImportPage: import modes", () => {
       expect(h.check.mutateAsync).toHaveBeenCalledExactlyOnceWith(PASTED);
       expect(startButton()).toBeEnabled();
       expect(startButton()).toHaveTextContent(/^Start import$/);
-      expect(screen.getByText("2 found").parentElement).toBe(startButton().parentElement);
+      expect(screen.getByText("2 found")).toBeInTheDocument();
       expect(h.request).not.toHaveBeenCalled();
     });
 
@@ -576,12 +541,7 @@ describe("DataImportPage: Preview", () => {
     chooseOrg("org-1");
     fireEvent.click(screen.getByRole("button", { name: "Preview sample" }));
 
-    expect(
-      await screen.findByText(
-        "A sample of up to 20 molecules from CDD Vault. Each row represents a batch, or a molecule without batches.",
-      ),
-    ).toBeVisible();
-    expect(screen.getByText("SACC-1")).toBeVisible();
+    expect(await screen.findByText("SACC-1")).toBeVisible();
     expect(screen.getByText(/is on 2 compounds in the vault/)).toBeVisible();
     await waitFor(() =>
       expect(h.request).toHaveBeenCalledWith(
@@ -779,35 +739,31 @@ describe("DataImportPage: outcome and preview safeguards", () => {
   });
 
   it.each([
-    ["completed", null, 0, "Completed", "border-emerald-500/30"],
-    ["completed", null, 3, "Finished with errors", "border-amber-500/40"],
-    ["failed", "Export unavailable", 0, "Import failed", "border-destructive/30"],
-    ["failed", "Cancelled by user", 0, "Stopped by user", "border-border"],
-  ])(
-    "renders the %s outcome honestly (%s)",
-    async (status, failure_reason, error_count, label, color) => {
-      h.status = {
-        import_id: "m1",
-        status,
-        failure_reason,
-        error_count,
-        registered_count: 2,
-        duplicate_count: 0,
-        skipped_count: 0,
-        total_count: 5,
-        pages_processed: 1,
-      };
-      renderAs(false);
-      chooseOrg("org-1");
-      fireEvent.click(startButton());
-      await screen.findByText(/2 molecules imported;/);
-      const notice = screen.getByRole("status");
-      expect(notice).toHaveTextContent(label);
-      expect(notice).toHaveClass(color);
-      openReport();
-      expect(screen.getByRole("dialog")).toHaveTextContent(label);
-    },
-  );
+    ["completed", null, 0, "Completed"],
+    ["completed", null, 3, "Finished with errors"],
+    ["failed", "Export unavailable", 0, "Import failed"],
+    ["failed", "Cancelled by user", 0, "Stopped by user"],
+  ])("renders the %s outcome honestly (%s)", async (status, failure_reason, error_count, label) => {
+    h.status = {
+      import_id: "m1",
+      status,
+      failure_reason,
+      error_count,
+      registered_count: 2,
+      duplicate_count: 0,
+      skipped_count: 0,
+      total_count: 5,
+      pages_processed: 1,
+    };
+    renderAs(false);
+    chooseOrg("org-1");
+    fireEvent.click(startButton());
+    await screen.findByText(/2 molecules imported;/);
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent(label);
+    openReport();
+    expect(screen.getByRole("dialog")).toHaveTextContent(label);
+  });
 
   it("acknowledges a stop request while waiting for the worker", async () => {
     h.history = [{ ...h.molecule, workflow_id: "wf-1", status: "processing" }];

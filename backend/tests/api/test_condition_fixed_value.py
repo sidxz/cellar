@@ -84,7 +84,7 @@ async def test_a_published_protocol_refuses_adding_a_fixed_condition(client):
     assert (await client.post(f"/api/v1/protocols/{p['id']}/publish")).status_code == 200
     url = f"/api/v1/protocols/{p['id']}/condition-definitions"
     r = await client.post(url, json=TIME)
-    assert r.status_code == 409 and "Correct details" in r.text
+    assert r.status_code == 409, r.text
     r = await client.post(url, json=TIME | {"fixed_value": None})
     assert r.status_code == 201, r.text
     assert _by_name(r.json())["Incubation time"]["fixed_value"] is None

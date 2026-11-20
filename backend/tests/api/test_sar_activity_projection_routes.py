@@ -177,20 +177,6 @@ async def test_heatmap_nonexistent_run_404(client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_rows_carry_activity_when_projection_given(client, api_app, workspace_id) -> None:
-    run_id, projection_id, potent = await _seed_heatmap_fixture(api_app, workspace_id)
-    res = await client.post(
-        f"/api/v1/sar/decomposition/{run_id}/rows",
-        json={"offset": 0, "limit": 50, "projection_id": str(projection_id),
-              "sort": [{"col": "activity", "dir": "asc"}]},
-    )
-    assert res.status_code == 200
-    rows = res.json()["rows"]
-    assert rows[0]["registration_number"] == "CV-POTENT"  # lowest activity first
-    assert rows[0]["activity"] == pytest.approx(0.1)
-
-
-@pytest.mark.asyncio
 async def test_rows_rejects_unknown_projection(client, api_app, workspace_id) -> None:
     # Valid run + a projection_id not owned by this workspace -> 404, never a
     # 200 with silently-null activity. Proves /rows validates projection
@@ -215,5 +201,6 @@ async def test_rows_return_snapshot_and_reference(client, api_app, workspace_id)
     body = res.json()
     assert body["activity_reference"] == pytest.approx(0.1)  # min across the set
     top = body["rows"][0]
-    assert top["registration_number"] == "CV-POTENT"
+    assert top["registration_number"] == "CV-POTENT"  # lowest activity first
+    assert top["activity"] == pytest.approx(0.1)
     assert top["activity_snapshot"] == {"value": 0.1}  # the stored snapshot, per row

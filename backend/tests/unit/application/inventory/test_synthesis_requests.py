@@ -40,7 +40,7 @@ from cellar.application.inventory.synthesis_requests import (
 from cellar.domain.inventory.enums import SynthesisRequestStatus
 from cellar.domain.inventory.synthesis_request import SynthesisRequest
 from cellar.domain.shared.enums import AmountUnit, AssignmentType
-from cellar.domain.shared.errors import NotFoundError, ValidationError
+from cellar.domain.shared.errors import AuthorizationError, NotFoundError, ValidationError
 from cellar.domain.shared.events import DomainEvent
 from cellar.domain.shared.value_objects import Amount, SynthesisAssignment
 from tests.fakes.fake_auth import FakeAuth
@@ -269,8 +269,9 @@ class TestCreateSynthesisRequest:
             amount_unit="mg",
             purpose="Should fail",
         )
-        with pytest.raises(Exception):
+        with pytest.raises(AuthorizationError):
             await uc(cmd, auth)
+        assert repo._store == {}
 
 
 # ---------------------------------------------------------------------------

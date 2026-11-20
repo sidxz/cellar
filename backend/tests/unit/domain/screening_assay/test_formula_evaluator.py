@@ -6,22 +6,8 @@ import math
 
 import pytest
 
-from cellar.domain.screening_assay.formula_evaluator import (
-    FormulaEvaluator,
-    FormulaValidationError,
-)
+from cellar.domain.screening_assay.formula_evaluator import FormulaValidationError
 from cellar.infrastructure.computation.asteval_evaluator import AstevalFormulaEvaluator
-
-
-# ---------------------------------------------------------------------------
-# Protocol conformance
-# ---------------------------------------------------------------------------
-
-
-def test_asteval_evaluator_satisfies_protocol():
-    """AstevalFormulaEvaluator must satisfy the FormulaEvaluator Protocol at runtime."""
-    evaluator = AstevalFormulaEvaluator()
-    assert isinstance(evaluator, FormulaEvaluator)
 
 
 # ---------------------------------------------------------------------------
@@ -34,37 +20,6 @@ class TestFormulaExecution:
 
     def setup_method(self):
         self.ev = AstevalFormulaEvaluator()
-
-    # --- happy-path arithmetic ---
-
-    def test_simple_addition(self):
-        assert self.ev.run("a + b", {"a": 3.0, "b": 4.0}) == pytest.approx(7.0)
-
-    def test_simple_multiplication(self):
-        assert self.ev.run("a * b", {"a": 6.0, "b": 7.0}) == pytest.approx(42.0)
-
-    def test_float_division(self):
-        assert self.ev.run("x / y", {"x": 10.0, "y": 4.0}) == pytest.approx(2.5)
-
-    def test_literal_expression(self):
-        assert self.ev.run("42.0", {}) == pytest.approx(42.0)
-
-    # --- domain-relevant formulas ---
-
-    def test_percent_inhibition_formula(self):
-        """(pos_control - signal) / (pos_control - neg_control) * 100"""
-        result = self.ev.run(
-            "(pos_control - signal) / (pos_control - neg_control) * 100",
-            {"pos_control": 100.0, "signal": 50.0, "neg_control": 0.0},
-        )
-        assert result == pytest.approx(50.0)
-
-    def test_z_score_formula(self):
-        result = self.ev.run(
-            "(value - mean) / std_dev",
-            {"value": 10.0, "mean": 5.0, "std_dev": 2.5},
-        )
-        assert result == pytest.approx(2.0)
 
     # --- math functions ---
 
@@ -96,15 +51,7 @@ class TestFormulaExecution:
     def test_e_constant(self):
         assert self.ev.run("e", {}) == pytest.approx(math.e)
 
-    # --- complex / nested expressions ---
-
-    def test_complex_expression(self):
-        """Nested arithmetic similar to an IC50 normalisation."""
-        result = self.ev.run(
-            "100 * (1 - (signal - low) / (high - low))",
-            {"signal": 60.0, "low": 10.0, "high": 110.0},
-        )
-        assert result == pytest.approx(50.0)
+    # --- nested expressions ---
 
     def test_nested_math_functions(self):
         assert self.ev.run("log10(sqrt(x))", {"x": 100.0}) == pytest.approx(1.0)

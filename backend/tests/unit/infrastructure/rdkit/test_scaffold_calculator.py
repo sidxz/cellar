@@ -35,12 +35,9 @@ def test_fused_ring_naphthalene(calc):
 
 
 def test_diphenhydramine_keeps_aromatic_rings(calc):
+    # Murcko keeps both rings + the linker carbon; the ether side chain goes.
     mol = Chem.MolFromSmiles("c1ccc(C(OCCN(C)C)c2ccccc2)cc1")
-    scaffold = calc.compute(mol)
-    assert scaffold is not None
-    # Murcko keeps both rings + the linker carbon
-    assert scaffold  # truthy — non-empty
-    assert "ccccc1" in scaffold or "c1ccc" in scaffold
+    assert calc.compute(mol) == "c1ccc(Cc2ccccc2)cc1"
 
 
 def test_invalid_mol_returns_none(calc):

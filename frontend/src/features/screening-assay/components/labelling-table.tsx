@@ -24,6 +24,8 @@ import { type LabellingRow, parseDose } from "../lib/labelling-rows";
 import {
   applyLabelMatches,
   applyLayout,
+  filledMessage,
+  labelMatchMessage,
   labelsToMatch,
   layoutTemplateCsv,
 } from "../lib/layout-file";
@@ -52,6 +54,7 @@ export function Notice({
   return (
     <div
       role={tone === "bad" ? "alert" : undefined}
+      data-tone={tone}
       className={cn(
         "rounded-md border p-3 text-sm",
         tone === "ok" && "border-green-500/30 bg-green-500/5",
@@ -304,9 +307,6 @@ type LayoutOutcome =
       saveButton: string;
     };
 
-/** Labels that found no compound are listed up to this many; the rest are counted. */
-const MAX_UNMATCHED_LISTED = 20;
-
 /** Fill from file and Match from labels: send the file or the labels (reading changes
  *  nothing stored), apply the answer to the rows as they are when it arrives, and keep
  *  what to tell the user about it. */
@@ -379,47 +379,18 @@ function LayoutMessages({ outcome }: { outcome: LayoutOutcome | null }) {
   if (!outcome) return null;
   if (outcome.kind === "refused") return <Notice tone="bad">{outcome.message}</Notice>;
   if (outcome.kind === "matched") {
-    const { matched, alreadyMatched, unmatched, saveButton } = outcome;
-    const more = unmatched.length - MAX_UNMATCHED_LISTED;
-    const notFound =
-      unmatched.length > 0 &&
-      `No compound found for: ${unmatched.slice(0, MAX_UNMATCHED_LISTED).join(", ")}${
-        more > 0 ? ` and ${more} more` : ""
-      }`;
-    if (matched === 0) {
-      // Nothing new is a warning only when no position has a compound at all: the wizard
-      // matches on its own when the file is read, and what is left may be controls.
-      const already =
-        alreadyMatched === 1
-          ? "1 position is already matched."
-          : `${alreadyMatched} positions are already matched.`;
-      return (
-        <Notice tone={alreadyMatched > 0 ? "neutral" : "warn"}>
-          {alreadyMatched > 0 ? already : "No label matched a registered compound."}
-          {notFound && ` ${notFound}.`}
-        </Notice>
-      );
-    }
-    const also =
-      alreadyMatched > 0
-        ? ` ${alreadyMatched} ${alreadyMatched === 1 ? "was" : "were"} already matched.`
-        : "";
-    // The unmatched labels are muted, not a warning: many, such as a control's, name no compound.
+    const { tone, text, detail } = labelMatchMessage(outcome);
     return (
-      <Notice tone="ok">
-        Matched {matched} position{matched === 1 ? "" : "s"} from{" "}
-        {matched === 1 ? "its label" : "their labels"}.{also} Nothing is saved until you press{" "}
-        {saveButton}.{notFound && <p className="mt-1 text-muted-foreground">{notFound}</p>}
+      <Notice tone={tone}>
+        {text}
+        {detail && <p className="mt-1 text-muted-foreground">{detail}</p>}
       </Notice>
     );
   }
   const { fileName, filled, problems, notices, saveButton } = outcome;
   return (
     <div className="flex flex-col gap-2">
-      <Notice tone="ok">
-        Filled {filled} position{filled === 1 ? "" : "s"} from {fileName}. Nothing is saved until
-        you press {saveButton}.
-      </Notice>
+      <Notice tone="ok">{filledMessage(filled, fileName, saveButton)}</Notice>
       {problems.length > 0 && (
         <Notice tone="warn">
           <p className="font-medium">

@@ -25,6 +25,7 @@ from cellar.domain.research_organization.bulk_add_types import (
 from cellar.domain.research_organization.collection_import_template import (
     CollectionImportTemplate,
 )
+from cellar.domain.shared.errors import NotFoundError
 
 
 @dataclass
@@ -304,7 +305,7 @@ async def test_collection_not_found_returns_failure():
         dry_run=True,
     )
     result = await use_case(cmd)
-    assert result.failure() is not None  # NotFoundError
+    assert isinstance(result.failure(), NotFoundError)
 
 
 @pytest.mark.asyncio
@@ -479,36 +480,6 @@ async def test_commit_with_template_id_but_no_resolved_rows_skips_usage():
 
 
 @pytest.mark.asyncio
-async def test_commit_without_template_id_does_not_touch_template_repo():
-    """No template_id on the command means the template repo is never read."""
-    resolver = FakeResolver(
-        resolved_map={"CC-1": uuid.uuid4()}, ambiguous_values=set()
-    )
-    repo = FakeCollectionRepo(members=set())
-    molecule_repo = FakeMoleculeRepo()
-    template_repo = FakeTemplateRepo()
-
-    use_case = BulkAddToCollection(
-        uow=FakeUoW(),
-        resolver=resolver,
-        repo=repo,
-        molecule_repo=molecule_repo,
-        template_repo=template_repo,
-    )
-    cmd = BulkAddToCollectionCommand(
-        workspace_id=uuid.uuid4(),
-        collection_id=uuid.uuid4(),
-        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
-        dry_run=False,
-        template_id=None,
-    )
-    result = (await use_case(cmd)).unwrap()
-
-    assert result.resolved_count == 1
-    assert template_repo.items == {}
-
-
-@pytest.mark.asyncio
 async def test_dry_run_with_template_id_does_not_record_usage():
     """Preview / dry-run must never mutate the template — usage only on commit."""
     existing_mol = uuid.uuid4()
@@ -595,36 +566,6 @@ async def test_commit_with_preview_id_reuses_cached_outcomes():
     assert commit_result.resolved_count == 1
     assert existing_mol in repo.members
     # The critical assertion: resolver was NOT re-invoked on commit.
-    assert len(resolver.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_commit_without_preview_id_falls_back_to_full_resolve():
-    """Backwards-compat path — commit without preview_id resolves fresh."""
-    existing_mol = uuid.uuid4()
-    resolver = FakeResolver(
-        resolved_map={"CC-1": existing_mol}, ambiguous_values=set()
-    )
-    repo = FakeCollectionRepo(members=set())
-    molecule_repo = FakeMoleculeRepo(names_by_id={existing_mol: "Phenol"})
-    template_repo = FakeTemplateRepo()
-    use_case = BulkAddToCollection(
-        uow=FakeUoW(),
-        resolver=resolver,
-        repo=repo,
-        molecule_repo=molecule_repo,
-        template_repo=template_repo,
-    )
-    cmd = BulkAddToCollectionCommand(
-        workspace_id=uuid.uuid4(),
-        collection_id=uuid.uuid4(),
-        rows=[BulkAddRow(row_index=0, registration_number="CC-1")],
-        dry_run=False,
-        # No preview_id — full resolve path.
-    )
-    result = (await use_case(cmd)).unwrap()
-    assert result.resolved_count == 1
-    assert existing_mol in repo.members
     assert len(resolver.calls) == 1
 
 

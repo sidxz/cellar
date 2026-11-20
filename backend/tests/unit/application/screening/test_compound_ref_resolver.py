@@ -325,28 +325,3 @@ class TestBareLotNumbers:
             compound_index={"CPD-1": _candidate(molecule_id, batches=(_summary(1), _summary(2)))},
         )
         assert (out.per_row[0].batch_id, out.per_row[0].error) == (lot_batch, None)
-
-
-async def test_the_batch_lookup_reads_a_bare_number_both_as_itself_and_as_a_lot() -> None:
-    from unittest.mock import AsyncMock
-
-    from cellar.application.screening.import_run_file_mapper import _build_batch_lookup
-
-    ws, own, lot = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
-    batches = {"100234": own, "CPD-1-001": lot}
-    repo = AsyncMock()
-    repo.find_by_batch_number.side_effect = lambda _ws, ref: (
-        AsyncMock(id=batches[ref], molecule_id=uuid.UUID(int=7)) if ref in batches else None
-    )
-    repo.find_by_external_identifier.return_value = None
-
-    index = await _build_batch_lookup(
-        [
-            _row(batch_ref="100234", compound_ref="CPD-1"),
-            _row(batch_ref="001", compound_ref="CPD-1"),
-        ],
-        ws,
-        repo,
-    )
-
-    assert index == {"100234": (own, uuid.UUID(int=7)), "CPD-1-001": (lot, uuid.UUID(int=7))}

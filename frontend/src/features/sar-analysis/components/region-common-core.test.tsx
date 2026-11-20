@@ -85,10 +85,12 @@ describe("<RegionCommonCore />", () => {
     expect(screen.getByRole("button", { name: /Common core/i })).toBeDisabled();
   });
 
-  it("says so plainly when the selection is outside the sizes the endpoint takes", () => {
-    setMcs(null, { outOfRange: true });
+  it("offers no core when the selection is outside the sizes the endpoint takes", () => {
+    // A core still held from an earlier answer must not be offered for an out-of-range region.
+    setMcs({}, { outOfRange: true });
     open(REGION);
 
-    expect(screen.getByText(/between 2 and 10,000 compounds/i)).toBeInTheDocument();
+    expect(screen.queryByTestId(`thumb-${PYRIDINE}`)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Use as R-group core/i })).not.toBeInTheDocument();
   });
 });

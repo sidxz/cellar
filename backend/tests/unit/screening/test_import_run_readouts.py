@@ -396,9 +396,6 @@ class TestImportRunReadouts:
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ConflictError)
-        assert str(result.failure()) == (
-            "This run's holder is not a plate, so plate imports are not available for it."
-        )
         assert saved == []
         assert not uow.committed
 

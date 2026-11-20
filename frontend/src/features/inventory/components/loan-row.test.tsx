@@ -58,7 +58,7 @@ describe("LoanRow", () => {
     expect(screen.getByText("2 plates")).toBeInTheDocument();
     expect(screen.getByText("1 checked out")).toBeInTheDocument();
     expect(screen.getByText("1 return pending")).toBeInTheDocument();
-    expect(screen.getByText(/y overdue$/)).toHaveClass("text-destructive");
+    expect(screen.getByText(/y overdue$/)).toBeInTheDocument();
     expect(screen.getByText("Lent to Sanofi")).toBeInTheDocument();
     expect(screen.getByText(/requested Aug 1, 2026/)).toBeInTheDocument();
     expect(screen.getByTitle("Migrated · requester: Xuelin Bian")).toBeInTheDocument();

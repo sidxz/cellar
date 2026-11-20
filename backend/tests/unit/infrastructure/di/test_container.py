@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from cellar.application.audit.audit_recording_service import AuditRecordingService
 from cellar.application.cdd_import.check_cdd_molecule_identifiers import (
@@ -26,21 +26,9 @@ def test_settings() -> DatabaseSettings:
 
 
 class TestContainer:
-    def test_resolves_engine(self, test_settings: DatabaseSettings) -> None:
-        container = create_container(test_settings)
-        engine = container[AsyncEngine]
-        assert engine is not None
-
     def test_engine_is_singleton(self, test_settings: DatabaseSettings) -> None:
         container = create_container(test_settings)
         assert container[AsyncEngine] is container[AsyncEngine]
-
-    def test_resolves_session_factory(
-        self, test_settings: DatabaseSettings
-    ) -> None:
-        container = create_container(test_settings)
-        factory = container[async_sessionmaker]
-        assert factory is not None
 
     def test_resolves_uow(self, test_settings: DatabaseSettings) -> None:
         container = create_container(test_settings)

@@ -74,14 +74,6 @@ class TestStorageLocationCreation:
 
 
 class TestStorageLocationHierarchy:
-    def test_site_requires_no_parent(self, workspace_id: uuid.UUID) -> None:
-        loc = StorageLocation.create(
-            workspace_id=workspace_id,
-            name="Site",
-            type=StorageLocationType.SITE,
-        )
-        assert loc.parent_id is None
-
     def test_building_requires_site_parent(self, workspace_id: uuid.UUID) -> None:
         loc = StorageLocation.create(
             workspace_id=workspace_id,

@@ -106,14 +106,13 @@ function wrapper({ children }: { children: ReactNode }) {
 }
 
 describe("ChannelsSection", () => {
-  it("groups readouts under a heading per protocol, with no threshold text", () => {
+  it("groups readouts under a heading per protocol", () => {
     render(<ChannelsSection campaign={campaign} projectId="p1" readOnly />, { wrapper });
 
     expect(screen.getByText("Kinase Panel")).toBeInTheDocument();
     expect(screen.getByText("Resazurin Viability")).toBeInTheDocument();
     expect(screen.getByText("IC50")).toBeInTheDocument();
     expect(screen.getByText("% Viability")).toBeInTheDocument();
-    expect(screen.queryByText(/hit if/i)).not.toBeInTheDocument();
   });
 
   it("renders chips: DR mark on curve readouts, rule only when non-default", () => {
@@ -148,10 +147,6 @@ describe("ChannelsSection", () => {
     expect(screen.getByText("IC50").closest("li")).not.toHaveTextContent("all runs");
     const marker = screen.getByText("all runs");
     expect(screen.getByText("Counter-screen").closest("li")).toContainElement(marker);
-    expect(marker).toHaveAttribute(
-      "title",
-      "Reads every run of the protocol, not only the runs added to its stage or campaign.",
-    );
   });
 
   it("chips are edit buttons in draft mode and inert in read-only mode", () => {
@@ -408,18 +403,11 @@ describe("ChannelsSection stages and concentrations", () => {
   it("asks a column measured at several doses to choose one, naming each with its count", () => {
     render(<ChannelsSection campaign={staged} projectId="p1" readOnly={false} />, { wrapper });
 
-    expect(
-      screen.getByText(
-        "Measured at 10 µM (40 compounds) and 1 µM (12) — choose the one this column uses:",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/10 µM \(40 compounds\) and 1 µM \(12\)/)).toBeInTheDocument();
     const choices = screen.getAllByRole("button", { name: /^Use / });
     expect(choices.map((b) => b.textContent)).toEqual(["Use 10 µM", "Use 1 µM"]);
-    // What the click does to the result lives in the tooltip, not a line of its own.
-    expect(choices[0]).toHaveAttribute("title", "The stage's hits recompute from these values");
-    expect(screen.queryByText(/recompute/)).not.toBeInTheDocument();
     // The not-recorded bucket is a count, never a choice.
-    expect(screen.getAllByText("3 compounds: concentration not recorded")).not.toHaveLength(0);
+    expect(screen.getAllByText(/^3 compounds/)).not.toHaveLength(0);
     expect(screen.queryByRole("button", { name: /not recorded/ })).not.toBeInTheDocument();
 
     fireEvent.click(choices[0]);

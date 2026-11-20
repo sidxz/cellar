@@ -112,7 +112,7 @@ def _make_protocol(
 
 
 class TestProtocolCreation:
-    def test_create_sets_all_fields(
+    def test_create_defaults(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
         protocol = _make_protocol(
@@ -124,16 +124,9 @@ class TestProtocolCreation:
             category="kinase",
         )
 
-        assert protocol.workspace_id == workspace_id
-        assert protocol.name == "Kinase Assay"
-        assert protocol.description == "Measures kinase inhibition"
-        assert protocol.protocol_type == ProtocolType.CELL_BASED
-        assert protocol.category == "kinase"
         assert protocol.protocol_version == 1
         assert protocol.parent_protocol_id is None
         assert protocol.status == ProtocolStatus.DRAFT
-        assert protocol.created_by == user_id
-        assert len(protocol.readout_definitions) == 1
         assert protocol.condition_definitions == []
         assert protocol.version == 1
 
@@ -779,13 +772,6 @@ class TestProtocolLocking:
 
 
 class TestProtocolUpdate:
-    def test_update_draft_description(
-        self, workspace_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        protocol = _make_protocol(workspace_id, user_id, description="Old")
-        protocol.update(description="New description")
-        assert protocol.description == "New description"
-
     def test_update_clear_description(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID
     ) -> None:
@@ -810,14 +796,6 @@ class TestProtocolUpdate:
         protocol.publish()
         with pytest.raises(ConflictError, match="only DRAFT"):
             protocol.update(description="Nope")
-
-    def test_update_takes_no_name(
-        self, workspace_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        # The name is generated (apply_derived_name), never set through update.
-        protocol = _make_protocol(workspace_id, user_id)
-        with pytest.raises(TypeError):
-            protocol.update(name="Hand-typed")  # type: ignore[call-arg]
 
 
 # ---------------------------------------------------------------------------

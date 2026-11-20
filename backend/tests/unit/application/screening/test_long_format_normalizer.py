@@ -42,9 +42,16 @@ _NADD_FIXTURE = os.environ.get("NADD_FIXTURE", "")
 
 class TestInferMappingSynonyms:
     def test_compound_ref_synonyms_recognized(self) -> None:
-        # Compound name / synonym / external id all map to compound_ref,
+        # Compound name / id / synonym / external id all map to compound_ref,
         # not batch_ref. Reg number does too.
-        for header in ("Compound", "Compound Name", "Synonym", "External ID", "Reg Number"):
+        for header in (
+            "Compound",
+            "Compound Name",
+            "Compound ID",
+            "Synonym",
+            "External ID",
+            "Reg Number",
+        ):
             table = _make_table(
                 ["Well", header, "Raw"],
                 [{"Well": "A1", header: "MOL-A", "Raw": "0.5"}],
@@ -52,17 +59,6 @@ class TestInferMappingSynonyms:
             suggestion = infer_mapping(table)
             roles = {s.header: s.role for s in suggestion.suggestions}
             assert roles[header] == "compound_ref", header
-
-    def test_compound_id_no_longer_maps_to_batch_ref(self) -> None:
-        # Pre-resolver wiring, "Compound ID" was a batch_ref synonym;
-        # it should now map to compound_ref instead.
-        table = _make_table(
-            ["Well", "Compound ID", "Raw"],
-            [{"Well": "A1", "Compound ID": "MOL-A", "Raw": "0.5"}],
-        )
-        suggestion = infer_mapping(table)
-        roles = {s.header: s.role for s in suggestion.suggestions}
-        assert roles["Compound ID"] == "compound_ref"
 
     def test_nadd_headers_resolved_via_synonyms(self) -> None:
         table = _make_table(
@@ -136,7 +132,6 @@ class TestInferMappingReadoutDefMatch:
         assert sci.role == "readout"
         assert sci.confidence == "high"
         assert sci.readout_definition_id == defs[0].id
-        assert "readout def" in sci.reason
 
     def test_match_is_case_and_punctuation_insensitive(self) -> None:
         table = _make_table(["Well", "raw au"], [{"Well": "A01", "raw au": "0.6"}])
@@ -200,17 +195,6 @@ class TestInferMappingReadoutDefMatch:
         s = infer_mapping(table, readout_defs=defs)
         status = next(x for x in s.suggestions if x.header == "Status")
         assert status.readout_definition_id is None
-
-    def test_no_readout_defs_passed_preserves_legacy_behavior(self) -> None:
-        """Back-compat: pre-Phase-B callers don't pass readout_defs;
-        suggestions must look identical to before."""
-        table = _make_table(["Well", "Scientist"], [{"Well": "A01", "Scientist": "Dan"}])
-        s = infer_mapping(table)  # default readout_defs=()
-        sci = next(x for x in s.suggestions if x.header == "Scientist")
-        assert sci.readout_definition_id is None
-        # "Scientist" has no synonym hit, no readout-def hit, falls through
-        # to value-based which can't classify text → role=None.
-        assert sci.role is None
 
     def test_no_match_when_protocol_lacks_def(self) -> None:
         table = _make_table(["Well", "Scientist"], [{"Well": "A01", "Scientist": "Dan"}])

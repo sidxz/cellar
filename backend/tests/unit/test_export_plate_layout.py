@@ -5,6 +5,7 @@ import io
 import uuid
 from dataclasses import dataclass
 
+from openpyxl import load_workbook
 from returns.result import Failure, Success
 
 from cellar.application.inventory.export_plate_layout import (
@@ -141,7 +142,9 @@ class TestRenderers:
         assert reader[2] == ["A2", "", "", "", "positive_control"]
 
     def test_xlsx_is_a_workbook(self):
-        out = render_xlsx(self._rows())
-        # XLSX files are zip archives — magic bytes "PK".
-        assert out[:2] == b"PK"
-        assert len(out) > 100
+        sheet = load_workbook(io.BytesIO(render_xlsx(self._rows())))["Well Map"]
+        assert list(sheet.iter_rows(values_only=True)) == [
+            ("Well", "Batch Number", "Concentration", "Unit", "Role"),
+            ("A1", "CC-000001-001", 10, "uM", "sample"),
+            ("A2", None, None, None, "positive_control"),
+        ]

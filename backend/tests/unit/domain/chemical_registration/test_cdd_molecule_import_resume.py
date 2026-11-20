@@ -4,10 +4,7 @@ import uuid
 
 import pytest
 
-from cellar.domain.chemical_registration.cdd_molecule_import import (
-    TERMINAL_STATUSES,
-    CddMoleculeImport,
-)
+from cellar.domain.chemical_registration.cdd_molecule_import import CddMoleculeImport
 from cellar.domain.chemical_registration.enums import CddImportMode, CddMoleculeImportStatus
 from cellar.domain.chemical_registration.events import CddMoleculeImportResumed
 from cellar.domain.shared.errors import ValidationError
@@ -88,7 +85,3 @@ def test_only_a_failed_import_resumes() -> None:
         assert not imp.resumable
         with pytest.raises(ValidationError):
             imp.resume("wf-2", resumed_by=USER)
-
-
-def test_failed_stays_terminal() -> None:
-    assert "failed" in TERMINAL_STATUSES

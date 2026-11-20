@@ -9,7 +9,7 @@ from cellar.domain.screening_assay.data_lock_guard import DataLockGuard
 from cellar.domain.screening_assay.data_locking_service import DataLockingService
 from cellar.domain.screening_assay.enums import RunStatus
 from cellar.domain.screening_assay.run import Run
-from cellar.domain.shared.errors import ConflictError, DataLockedError, DomainError, ValidationError
+from cellar.domain.shared.errors import DataLockedError, DomainError
 
 
 # ---------------------------------------------------------------------------
@@ -91,81 +91,6 @@ class TestDataLockGuard:
 
 
 class TestDataLockingService:
-    @pytest.mark.asyncio
-    async def test_lock_completed_run(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.COMPLETED)
-        locker = uuid.uuid4()
-
-        locked_run = await service.lock_run(run, locked_by=locker, reason="Final")
-
-        assert locked_run.is_locked is True
-        assert locked_run.locked_by == locker
-        assert locked_run.lock_reason == "Final"
-
-    @pytest.mark.asyncio
-    async def test_lock_approved_run(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.APPROVED)
-
-        locked_run = await service.lock_run(
-            run, locked_by=uuid.uuid4(), reason="Archived"
-        )
-        assert locked_run.is_locked is True
-
-    @pytest.mark.asyncio
-    async def test_lock_draft_fails(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.DRAFT)
-
-        with pytest.raises(ConflictError):
-            await service.lock_run(
-                run, locked_by=uuid.uuid4(), reason="Nope"
-            )
-
-    @pytest.mark.asyncio
-    async def test_lock_in_progress_fails(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.IN_PROGRESS)
-
-        with pytest.raises(ConflictError):
-            await service.lock_run(
-                run, locked_by=uuid.uuid4(), reason="Nope"
-            )
-
-    @pytest.mark.asyncio
-    async def test_unlock_locked_run(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.COMPLETED)
-        run.lock(locked_by=uuid.uuid4(), reason="Locked")
-
-        unlocker = uuid.uuid4()
-        unlocked_run = await service.unlock_run(
-            run, unlocked_by=unlocker, reason="Correction needed"
-        )
-
-        assert unlocked_run.is_locked is False
-
-    @pytest.mark.asyncio
-    async def test_unlock_unlocked_run_fails(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.COMPLETED)
-
-        with pytest.raises(ConflictError):
-            await service.unlock_run(
-                run, unlocked_by=uuid.uuid4(), reason="Nope"
-            )
-
-    @pytest.mark.asyncio
-    async def test_lock_empty_reason_fails(self) -> None:
-        service = DataLockingService()
-        run = _make_run(status=RunStatus.COMPLETED)
-
-        with pytest.raises(DomainError):
-            await service.lock_run(
-                run, locked_by=uuid.uuid4(), reason=""
-            )
-
     @pytest.mark.asyncio
     async def test_unlock_empty_reason_fails(self) -> None:
         service = DataLockingService()

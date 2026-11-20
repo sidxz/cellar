@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { UseInstrumentImportWizardResult } from "../hooks/use-instrument-import-wizard";
 import { draftFromPreview } from "../lib/instrument-labelling";
+import { filledMessage } from "../lib/layout-file";
 import type { InstrumentImportResult, InstrumentPreview, LayoutFile } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
@@ -194,11 +195,8 @@ describe("InstrumentImportWizard", () => {
     hookState.value = withPreview(2, { draft, canImport: false });
     renderWizard();
     expect(screen.getByRole("button", { name: /continue/i })).toBeDisabled();
-    expect(
-      screen.getByText(
-        "Correct the following before continuing: Position 2: the concentration must be a number, 0 or more.",
-      ),
-    ).toBeInTheDocument();
+    // The labelling check owns the wording; the step names the position that blocks.
+    expect(screen.getByText(/Position 2: /)).toBeInTheDocument();
   });
 
   it("step 2 renders one row per position with the API's position label and the dose unit", () => {
@@ -241,11 +239,6 @@ describe("InstrumentImportWizard", () => {
     renderWizard();
     expect(screen.getByRole("button", { name: /^import$/i })).toBeDisabled();
     expect(screen.getByText(/2 positions have no batch/i)).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Choose a batch for each to link their traces and reported values to a compound.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.getByText(/which the file has no curves for/)).toBeInTheDocument();
     const used = screen.getByText("positions used").parentElement as HTMLElement;
     expect(within(used).getByText("3")).toBeInTheDocument();
@@ -343,11 +336,7 @@ describe("InstrumentImportWizard", () => {
     fireEvent.change(input, { target: { files: [new File(["x"], "layout.csv")] } });
     const filled = replacePositions.mock.calls[0][0];
     expect(filled[2]).toMatchObject({ row: 1, column: 3, dose: "5", used: false });
-    expect(
-      screen.getByText(
-        "Filled 1 position from layout.csv. Nothing is saved until you press Import.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(filledMessage(1, "layout.csv", "Import"))).toBeInTheDocument();
   });
 
   it("step 1 lists the supported instrument files before a file is chosen", () => {

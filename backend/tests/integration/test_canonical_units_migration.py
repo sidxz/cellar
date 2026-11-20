@@ -12,7 +12,6 @@ from cellar.infrastructure.persistence.sqlalchemy.screening_assay.protocol_repos
 )
 from cellar.infrastructure.persistence.unit_of_work import AsyncUnitOfWork
 from cellar.infrastructure.persistence.unit_rewrite import (
-    _DISPLAY_UNIT_COLUMNS,
     rewrite_saved_search_units,
     rewrite_stored_units,
 )
@@ -84,14 +83,19 @@ async def test_closed_campaign_snapshot_is_left_untouched(session_factory, works
     assert trigger_state == "O"  # the lock trigger is never disabled
 
 
-def test_only_live_definition_units_are_rewritten():
-    assert _DISPLAY_UNIT_COLUMNS == (
-        ("readout_definitions", "unit"),
-        ("condition_definitions", "unit"),
-    )
-    # Frozen campaign snapshots and ConcentrationUnit enum columns ("uM", parsed back) stay.
-    assert "campaign_measurement" not in {t for t, _ in _DISPLAY_UNIT_COLUMNS}
-    assert not {c for _, c in _DISPLAY_UNIT_COLUMNS} & {"test_concentration_unit", "dose_unit"}
+async def test_concentration_enum_units_are_left_untouched(session_factory, workspace_id, user_id):
+    """dose_unit holds a ConcentrationUnit enum value ("uM") that code parses back."""
+    protocol = await _save_protocol(session_factory, workspace_id, user_id, names=("a",))
+    async with session_factory() as s:
+        await s.execute(
+            text("update protocols set dose_unit='uM' where id=:p"), {"p": protocol.id}
+        )
+        await s.run_sync(lambda sync: rewrite_stored_units(sync.connection()))
+        await s.commit()
+        dose_unit = await s.scalar(
+            text("select dose_unit from protocols where id=:p"), {"p": protocol.id}
+        )
+    assert dose_unit == "uM"
 
 
 async def test_form_template_units_are_rewritten(session_factory, workspace_id):

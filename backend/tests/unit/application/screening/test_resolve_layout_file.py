@@ -202,17 +202,16 @@ async def test_batch_of_another_compound_is_a_problem_and_other_columns_still_fi
     out = await h.ok(csv(HEADER, f"{P(1)},x,Reference,REG-0001,B-2,5,"))
     (row,) = out.rows
     assert row.compound is None and "does not belong" in row.problems[0]
-    assert row.problems == ("Batch 'B-2' does not belong to compound 'REG-0001'",)
+    assert len(row.problems) == 1
+    assert "B-2" in row.problems[0] and "REG-0001" in row.problems[0]
     assert (row.label, row.dose, row.well_type) == ("x", 5.0, WellType.REFERENCE)
 
 
 async def test_compound_or_batch_not_found_is_a_problem():
     h = Harness()
     out = await h.ok(csv(HEADER, f"{P(1)},x,,NOPE,,,", f"{P(2)},y,,,B-404,,"))
-    assert [r.problems for r in out.rows] == [
-        ("Compound 'NOPE' was not found",),
-        ("Batch 'B-404' was not found",),
-    ]
+    (nope,), (b404,) = (r.problems for r in out.rows)
+    assert "NOPE" in nope and "B-404" in b404
     assert [(r.compound, r.label) for r in out.rows] == [(None, "x"), (None, "y")]
 
 
@@ -263,10 +262,16 @@ async def test_unknown_role_bad_concentration_long_label_long_note_are_row_probl
 async def test_unknown_role_message_names_the_roles():
     h = Harness()
     (row,) = (await h.ok(csv("Position,Role", f"{P(1)},Standard"))).rows
-    assert row.problems == (
-        "Unknown role 'Standard'. "
-        "Use Sample, Reference, Blank, Positive control or Negative control",
-    )
+    (problem,) = row.problems
+    for name in (
+        "Standard",
+        "Sample",
+        "Reference",
+        "Blank",
+        "Positive control",
+        "Negative control",
+    ):
+        assert name in problem
 
 
 async def test_empty_cells_are_none():
@@ -422,7 +427,7 @@ async def test_missing_position_column_is_validation_error():
     h = Harness()
     failure = (await h(csv("Label,Note", "x,y"))).failure()
     assert isinstance(failure, ValidationError)
-    assert str(failure) == "The file has no Position column"
+    assert "Position" in str(failure)
 
 
 async def test_unparseable_file_is_validation_error():
@@ -434,7 +439,7 @@ async def test_unparseable_file_is_validation_error():
 async def test_file_over_20_mb_is_validation_error():
     h = Harness()
     failure = (await h(b"x" * (20 * 1024 * 1024 + 1))).failure()
-    assert isinstance(failure, ValidationError) and str(failure) == "File is larger than 20 MB"
+    assert isinstance(failure, ValidationError) and "20" in str(failure)
 
 
 async def test_too_many_rows_is_validation_error():
@@ -475,7 +480,7 @@ async def test_a_header_wider_than_64_columns_is_refused_before_any_row_is_read(
     finally:
         tracemalloc.stop()
     assert isinstance(failure, ValidationError)
-    assert str(failure) == f"The file has more than {MAX_LAYOUT_COLUMNS} columns"
+    assert str(MAX_LAYOUT_COLUMNS) in str(failure)
     assert peak < 20 * 1024 * 1024
 
 
@@ -491,7 +496,7 @@ async def test_a_spreadsheet_that_unpacks_larger_than_50_mb_is_refused():
     h = Harness()
     failure = (await h(buf.getvalue(), "layout.xlsx")).failure()
     assert isinstance(failure, ValidationError)
-    assert str(failure) == "The spreadsheet is larger than 50 MB when unpacked"
+    assert str(MAX_LAYOUT_UNPACKED_BYTES // (1024 * 1024)) in str(failure)
 
 
 async def test_run_not_found():

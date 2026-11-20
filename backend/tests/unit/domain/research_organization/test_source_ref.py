@@ -116,11 +116,6 @@ def test_campaign_ref_ignores_legacy_decision_filter():
     assert back.stage_id is None
 
 
-def test_campaign_ref_kind_is_campaign_not_derived_from_campaign():
-    src = CampaignRef(campaign_id=uuid.uuid4())
-    assert src.to_dict()["kind"] == "campaign"
-
-
 # ---------- RunRef ----------
 
 

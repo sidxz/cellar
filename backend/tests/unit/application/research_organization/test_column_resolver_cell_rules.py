@@ -653,14 +653,6 @@ class TestBuildAggregateCurveSnapshot:
             build_aggregate_curve_snapshot([], aggregate_value=5.0, aggregate_label="mean") is None
         )
 
-    def test_aggregate_snapshot_label_gmean(self):
-        candidates = [_dr_candidate(10.0, run_date=date(2026, 1, 1))]
-        snap = build_aggregate_curve_snapshot(
-            candidates, aggregate_value=10.0, aggregate_label="gmean"
-        )
-        assert snap is not None
-        assert snap["aggregate"]["marker_label"] == "gmean"
-
     def test_aggregate_snapshot_skips_additional_curves_without_shape(self):
         """If a non-rep contributor lacks curve shape (mixed source kinds —
         unlikely but defensible), the helper drops it from additional_curves

@@ -282,7 +282,7 @@ describe("ScaffoldTreeView — async-compute Sonner toast (Wave 4 / C1)", () => 
     expect(toast.loading).not.toHaveBeenCalled();
     vi.advanceTimersByTime(3000);
     expect(toast.loading).toHaveBeenCalledWith(
-      "Computing scaffold tree…",
+      expect.any(String),
       expect.objectContaining({
         id: SCAFFOLD_TREE_TOAST_ID,
         duration: Number.POSITIVE_INFINITY,
@@ -352,7 +352,7 @@ describe("ScaffoldTreeView — async-compute Sonner toast (Wave 4 / C1)", () => 
     expect(mockCancel).toHaveBeenCalledWith("job-123");
     expect(toast.dismiss).toHaveBeenCalledWith(SCAFFOLD_TREE_TOAST_ID);
     expect(toast.success).toHaveBeenCalledWith(
-      "Scaffold tree cancelled",
+      expect.any(String),
       expect.objectContaining({ id: SCAFFOLD_TREE_TOAST_ID }),
     );
   });

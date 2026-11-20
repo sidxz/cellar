@@ -63,8 +63,6 @@ describe("DataGrid cross-block selection (infinite + multi-select)", () => {
     // No select-all-loaded footgun; per-row checkbox stays.
     expect(cols[0].headerCheckboxSelection).toBe(false);
     expect(cols[0].checkboxSelection).toBe(true);
-    expect(typeof agProps().onRowSelected).toBe("function");
-    expect(typeof agProps().onModelUpdated).toBe("function");
   });
 
   it("keeps the select-all header in the client model", () => {

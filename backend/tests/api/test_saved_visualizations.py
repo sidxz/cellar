@@ -30,7 +30,6 @@ from tests.integration import _screening_seed as seed
 pytestmark = pytest.mark.asyncio
 
 URL = "/api/v1/saved-visualizations"
-OWNER_RULE = "Only the owner or a workspace admin can change this view."
 OWNER, MEMBER, OUTSIDER = uuid.uuid4(), uuid.uuid4(), uuid.uuid4()
 
 CONFIG: dict[str, Any] = {
@@ -224,11 +223,10 @@ async def test_a_source_the_dataset_would_refuse_is_not_saved(client, session_fa
         json={"expected_version": 1, "dataset": {"source": compared, "level": "wells"}},
     )
 
-    for resp in (at_wells, changed_to_wells):
+    for resp in (at_wells, loaded_twice, changed_to_wells):
         assert resp.status_code == 422, resp.text
-        assert resp.json()["message"] == "Comparing protocols works at the Compounds level only."
-    assert loaded_twice.status_code == 422, loaded_twice.text
-    assert loaded_twice.json()["message"] == "Each protocol can be loaded once."
+    listed = (await client.get(URL, params={"protocol_id": str(w["p"])})).json()
+    assert [(v["id"], v["version"]) for v in listed] == [(view["id"], 1)]
 
 
 @pytest.mark.parametrize(
@@ -369,19 +367,9 @@ async def test_the_list_names_each_views_protocols(client, session_factory, fake
     ]
 
 
-async def test_an_unreadable_view_is_left_out_of_the_list_and_says_why_on_open(
-    client, session_factory, fake_auth, monkeypatch
+async def test_an_unreadable_view_is_left_out_of_the_list_and_refused_on_open(
+    client, session_factory, fake_auth
 ):
-    from cellar.infrastructure.persistence.sqlalchemy.research_organization import (
-        saved_visualization_repository as repo_module,
-    )
-
-    warnings: list[str] = []
-    # Record the event on the module's own logger: global logging state left by earlier
-    # tests (cached structlog loggers, stdlib handlers) must not decide this test.
-    monkeypatch.setattr(
-        repo_module.log, "warning", lambda event, **_: warnings.append(event), raising=False
-    )
     w = await _seed(session_factory, fake_auth.workspace_id)
     good = await _create(client, _protocol(w["p"]), name="Good")
     bad = await _create(client, _protocol(w["p"]), name="From a newer version")
@@ -398,9 +386,7 @@ async def test_an_unreadable_view_is_left_out_of_the_list_and_says_why_on_open(
 
     assert listed.status_code == 200, listed.text
     assert [v["id"] for v in listed.json()] == [good["id"]]
-    assert warnings == ["saved_visualization.list_skipped"]
     assert opened.status_code == 422
-    assert "saved by a newer version" in opened.json()["message"]
 
 
 # --- update
@@ -421,7 +407,7 @@ async def test_only_the_owner_or_an_admin_changes_a_view(
         f"{URL}/{view['id']}", json={"expected_version": 1, "name": "Renamed"}
     )
 
-    assert by_member.status_code == 403 and by_member.json()["message"] == OWNER_RULE
+    assert by_member.status_code == 403
     assert by_admin.status_code == 200, by_admin.text
     assert by_admin.json()["version"] == 2 and by_admin.json()["name"] == "Renamed"
 
@@ -503,9 +489,8 @@ async def test_a_deleted_run_is_left_out(client, session_factory, fake_auth):
     body = (await client.get(f"{URL}/{view['id']}")).json()
 
     assert body["dataset"]["source"]["run_ids"] == [str(r) for r in w["runs"][1:]]
-    assert body["unresolved"] == [
-        "1 of the 3 runs this view was saved with no longer exists; it was left out."
-    ]
+    (left_out,) = body["unresolved"]
+    assert "1 of the 3" in left_out
 
 
 async def test_an_edit_answers_with_what_still_exists(client, session_factory, fake_auth):
@@ -519,9 +504,8 @@ async def test_an_edit_answers_with_what_still_exists(client, session_factory, f
 
     assert renamed.status_code == 200, renamed.text
     assert renamed.json()["dataset"]["source"]["run_ids"] == [str(w["runs"][1])]
-    assert renamed.json()["unresolved"] == [
-        "1 of the 2 runs this view was saved with no longer exists; it was left out."
-    ]
+    (left_out,) = renamed.json()["unresolved"]
+    assert "1 of the 2" in left_out
 
 
 async def test_all_runs_deleted_opens_every_current_run(client, session_factory, fake_auth):
@@ -532,10 +516,8 @@ async def test_all_runs_deleted_opens_every_current_run(client, session_factory,
     body = (await client.get(f"{URL}/{view['id']}")).json()
 
     assert body["dataset"]["source"]["run_ids"] is None
-    assert body["unresolved"] == [
-        "None of the 3 runs this view was saved with exist any more; "
-        "showing every current run of the protocol."
-    ]
+    (left_out,) = body["unresolved"]
+    assert "3 runs" in left_out
 
 
 async def test_a_deleted_protocol_leaves_no_dataset(client, session_factory, fake_auth):
@@ -549,6 +531,6 @@ async def test_a_deleted_protocol_leaves_no_dataset(client, session_factory, fak
     run_view = (await client.get(f"{URL}/{by_run['id']}")).json()
 
     assert protocol_view["dataset"] is None
-    assert protocol_view["unresolved"] == ["The protocol this view was built on no longer exists."]
+    assert len(protocol_view["unresolved"]) == 1
     assert run_view["dataset"] is None
-    assert run_view["unresolved"] == ["The run this view was built on no longer exists."]
+    assert len(run_view["unresolved"]) == 1

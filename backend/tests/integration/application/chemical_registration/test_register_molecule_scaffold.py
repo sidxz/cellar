@@ -81,30 +81,9 @@ async def test_register_molecule_persists_scaffold(uow: AsyncUnitOfWork) -> None
     result = await use_case(cmd, auth=FakeAuth(role="editor", workspace_id=ws_id))
 
     assert isinstance(result, Success)
-    mol = result.unwrap().molecule
-    assert mol.bemis_murcko_smiles == "c1ccccc1"
-
-
-@pytest.mark.asyncio
-async def test_register_acyclic_records_empty_scaffold(uow: AsyncUnitOfWork) -> None:
-    """Registering an acyclic compound stores '' (empty string) as the scaffold."""
-    ws_id = uuid.uuid4()
-    org_id = uuid.uuid4()
+    mol_id = result.unwrap().molecule.id
 
     async with uow:
-        await _ensure_org(uow, org_id, ws_id)
-        await uow.commit()
-
-    use_case = _make_use_case(uow)
-    cmd = RegisterMoleculeCommand(
-        workspace_id=ws_id,
-        name="Pentane",
-        smiles="CCCCC",
-        originating_org_id=org_id,
-        registered_by=uuid.uuid4(),
-    )
-    result = await use_case(cmd, auth=FakeAuth(role="editor", workspace_id=ws_id))
-
-    assert isinstance(result, Success)
-    mol = result.unwrap().molecule
-    assert mol.bemis_murcko_smiles == ""
+        stored = await SQLAlchemyMoleculeRepository(uow).find_by_id_in_workspace(ws_id, mol_id)
+    assert stored is not None
+    assert stored.bemis_murcko_smiles == "c1ccccc1"

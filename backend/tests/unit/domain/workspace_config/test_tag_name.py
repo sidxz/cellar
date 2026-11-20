@@ -1,7 +1,6 @@
 """Tests for the TagName value object (normalization + validation)."""
 
 import pytest
-from pydantic import ValidationError
 
 from cellar.domain.workspace_config.tagging.tag import TagName
 from cellar.infrastructure.persistence.sqlalchemy.tagging.backfill_sql import (
@@ -61,11 +60,6 @@ class TestTagNameNormalization:
             TagName(key="k", value="PROD").normalized_value
             == TagName(key="k", value="prod").normalized_value
         )
-
-    def test_is_frozen(self) -> None:
-        name = TagName(key="env")
-        with pytest.raises(ValidationError):
-            name.key = "other"  # type: ignore[misc]
 
 
 class TestTagNameValidation:

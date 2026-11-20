@@ -83,26 +83,15 @@ class TestSaltDetection:
         result = standardizer.standardize("CCN.Cl")
         assert isinstance(result, Success)
         mol = result.unwrap()
-        # HCl may or may not be detected depending on chembl pipeline behavior
-        # At minimum, the parent should be just ethylamine
-        assert "Cl" not in mol.canonical_smiles or mol.detected_salt is not None
-
-    def test_salt_mw_is_positive(self, standardizer: StructureStandardizer) -> None:
-        result = standardizer.standardize("CC(=O)Oc1ccccc1C([O-])=O.[Na+]")
-        assert isinstance(result, Success)
-        mol = result.unwrap()
-        if mol.detected_salt:
-            assert mol.detected_salt.salt_fragment_mw > 0
+        assert mol.canonical_smiles == "CCN"
+        assert mol.detected_salt is not None
+        assert (mol.detected_salt.salt_smiles, mol.detected_salt.stoichiometry) == ("Cl", 1)
 
     def test_no_salt_for_non_salt_mixture(self, standardizer: StructureStandardizer) -> None:
         """Multiple different fragment types should return None (ambiguous)."""
         result = standardizer.standardize("CCO.CC.C")
         assert isinstance(result, Success)
-        mol = result.unwrap()
-        # Parent extraction picks the largest fragment; remaining two differ
-        # so detected_salt should be None (ambiguous) or the pipeline
-        # may simplify further — either way, no crash
-        assert mol.detected_salt is None or mol.detected_salt.stoichiometry >= 1
+        assert result.unwrap().detected_salt is None
 
 
 class TestStereoPreservation:

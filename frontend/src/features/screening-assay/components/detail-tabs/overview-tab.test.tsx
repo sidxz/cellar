@@ -55,10 +55,7 @@ describe("NameFlagNotice", () => {
     expect(screen.queryByText("Assay conditions")).not.toBeInTheDocument();
   });
 
-  it.each([
-    ["needs_discriminator", /share a name/i],
-    ["name_conflict", /exact same name/i],
-  ])("%s explains itself", (flag, text) => {
+  it.each(["needs_discriminator", "name_conflict"])("%s shows a notice in words", (flag) => {
     render(
       <OverviewTab
         protocol={protocol({ name_flag: flag })}
@@ -66,7 +63,7 @@ describe("NameFlagNotice", () => {
         onTabChange={vi.fn()}
       />,
     );
-    expect(screen.getByText(text)).toBeInTheDocument();
+    expect(screen.getByRole("status")).not.toHaveTextContent(flag);
   });
 
   it("shows nothing when the name is fine, and the discriminator in details", () => {

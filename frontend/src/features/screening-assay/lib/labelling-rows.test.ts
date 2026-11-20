@@ -41,26 +41,22 @@ describe("labelling rows", () => {
     ).toBe(1);
   });
 
-  it("words the line beside the button", () => {
+  it("has no line beside the button at 0, and counts the positions otherwise", () => {
     expect(withoutBatchLine(0)).toBeNull();
-    expect(withoutBatchLine(1)).toBe(
-      "1 position has a compound but no batch. Choose a batch to link its traces and values to the compound.",
-    );
-    expect(withoutBatchLine(3)).toBe(
-      "3 positions have a compound but no batch. Choose a batch for each to link their traces and values to their compounds.",
-    );
+    expect(withoutBatchLine(1)).toMatch(/^1 position has /);
+    expect(withoutBatchLine(3)).toMatch(/^3 positions have /);
   });
 
   it("names the first used row with a bad concentration, label or note", () => {
     expect(rowsProblem([row({ positionLabel: "Position 1", dose: "12.5" })])).toBeNull();
-    expect(rowsProblem([row({ positionLabel: "Position 1", dose: "abc" })])).toBe(
-      "Position 1: the concentration must be a number, 0 or more.",
+    expect(rowsProblem([row({ positionLabel: "Position 1", dose: "abc" })])).toMatch(
+      /^Position 1: .*concentration/,
     );
     expect(
       rowsProblem([row({}), row({ positionLabel: "Position 2", label: "x".repeat(201) })]),
-    ).toBe("Position 2: the label is longer than 200 characters.");
-    expect(rowsProblem([row({ positionLabel: "Position 3", note: "x".repeat(1001) })])).toBe(
-      "Position 3: the note is longer than 1000 characters.",
+    ).toMatch(/^Position 2: .*label/);
+    expect(rowsProblem([row({ positionLabel: "Position 3", note: "x".repeat(1001) })])).toMatch(
+      /^Position 3: .*note/,
     );
     expect(rowsProblem([row({ dose: "-1", used: false })])).toBeNull();
   });

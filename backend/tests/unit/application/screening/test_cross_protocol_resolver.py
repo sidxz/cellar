@@ -234,9 +234,7 @@ class TestRewriteFormula:
 
     def test_rewrite_multiple_references(self) -> None:
         resolver = _make_resolver()
-        rewritten = resolver.rewrite_formula(
-            "@PRT-00001.ReadoutX + @{PRT-00002}.{Readout Y}"
-        )
+        rewritten = resolver.rewrite_formula("@PRT-00001.ReadoutX + @{PRT-00002}.{Readout Y}")
         assert rewritten == "PRT_00001__ReadoutX + PRT_00002__Readout_Y"
 
     def test_rewrite_no_refs_unchanged(self) -> None:
@@ -265,9 +263,7 @@ class TestResolveBracedReference:
 
         resolver = _make_resolver(protocol_repo, readout_data_repo)
 
-        result = await resolver.resolve(
-            WS, mol_id, "@{PRT-00007}.{IC50 nM} + 1"
-        )
+        result = await resolver.resolve(WS, mol_id, "@{PRT-00007}.{IC50 nM} + 1")
 
         assert isinstance(result, Success)
         bindings = result.unwrap()
@@ -296,9 +292,7 @@ class TestDedupReferences:
 
         resolver = _make_resolver(protocol_repo, readout_data_repo)
 
-        result = await resolver.resolve(
-            WS, mol_id, "@PRT-00001.IC50 + @PRT-00001.IC50"
-        )
+        result = await resolver.resolve(WS, mol_id, "@PRT-00001.IC50 + @PRT-00001.IC50")
 
         assert isinstance(result, Success)
         # find_latest_active_by_code only called once despite two occurrences
@@ -331,10 +325,13 @@ class TestMissingReadoutDefinitionFails:
 class TestNamesAreNotReferences:
     """Protocol names change; only codes are references."""
 
-    def test_a_braced_name_is_not_a_reference(self) -> None:
-        resolver = _make_resolver()
-        assert resolver._extract_refs("@{Target Assay}.IC50") == []
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("formula", ["@{Target Assay}.IC50", "@TargetAssay.IC50"])
+    async def test_a_protocol_name_is_not_a_reference(self, formula: str) -> None:
+        protocol_repo = AsyncMock()
+        resolver = _make_resolver(protocol_repo=protocol_repo)
 
-    def test_a_bare_name_is_not_a_reference(self) -> None:
-        resolver = _make_resolver()
-        assert resolver._extract_refs("@TargetAssay.IC50") == []
+        result = await resolver.resolve(WS, uuid.uuid4(), formula)
+
+        assert result == Success({})
+        protocol_repo.find_latest_active_by_code.assert_not_called()

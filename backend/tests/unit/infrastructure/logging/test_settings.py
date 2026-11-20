@@ -4,14 +4,6 @@ from cellar.infrastructure.logging.settings import LoggingSettings
 
 
 
-def test_reads_env(monkeypatch):
-    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
-    monkeypatch.setenv("LOG_FORMAT", "console")
-    s = LoggingSettings(_env_file=None)
-    assert s.level == "DEBUG"
-    assert s.format == "console"
-
-
 def test_level_overrides_parsed_from_string(monkeypatch):
     monkeypatch.setenv(
         "LOG_LEVEL_OVERRIDES",

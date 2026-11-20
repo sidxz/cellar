@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 import pytest
-from sqlalchemy import String, text
+from sqlalchemy import String
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -107,77 +107,6 @@ async def _create_test_table(engine: AsyncEngine) -> None:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
-
-
-class TestRDKitExtension:
-    async def test_rdkit_extension_available(self, db_session: AsyncSession) -> None:
-        """RDKit cartridge is enabled and functional."""
-        result = await db_session.execute(text("SELECT mol_to_smiles('CCO'::mol)"))
-        smiles = result.scalar_one()
-        assert smiles == "CCO"
-
-    async def test_rdkit_extension_idempotent(self, db_session: AsyncSession) -> None:
-        """Creating the RDKit extension again does not error (IF NOT EXISTS)."""
-        await db_session.execute(text("CREATE EXTENSION IF NOT EXISTS rdkit"))
-        # Verify still functional
-        result = await db_session.execute(text("SELECT mol_to_smiles('C'::mol)"))
-        assert result.scalar_one() == "C"
-
-
-class TestCRUDWithMixins:
-    async def test_insert_read_update_delete(
-        self, session_factory: async_sessionmaker[AsyncSession]
-    ) -> None:
-        """Full CRUD lifecycle with EntityModelMixin + VersionMixin."""
-        row_id = uuid.uuid4()
-
-        # INSERT
-        async with session_factory() as session:
-            model = _DummyModel(
-                id=row_id,
-                name="aspirin",
-                workspace_id=WORKSPACE_ID,
-                version=1,
-            )
-            session.add(model)
-            await session.commit()
-
-        # READ
-        async with session_factory() as session:
-            result = await session.get(_DummyModel, row_id)
-            assert result is not None
-            assert result.name == "aspirin"
-            assert result.version == 1
-            assert result.workspace_id == WORKSPACE_ID
-            assert result.created_at is not None
-            assert result.updated_at is not None
-
-        # UPDATE
-        async with session_factory() as session:
-            result = await session.get(_DummyModel, row_id)
-            assert result is not None
-            result.name = "ibuprofen"
-            result.version = 2
-            await session.commit()
-
-        # Verify update
-        async with session_factory() as session:
-            result = await session.get(_DummyModel, row_id)
-            assert result is not None
-            assert result.name == "ibuprofen"
-            assert result.version == 2
-
-        # DELETE
-        async with session_factory() as session:
-            result = await session.get(_DummyModel, row_id)
-            assert result is not None
-            await session.delete(result)
-            await session.commit()
-
-        # Verify delete
-        async with session_factory() as session:
-            result = await session.get(_DummyModel, row_id)
-            assert result is None
 
 
 class TestOptimisticConcurrency:

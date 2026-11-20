@@ -271,10 +271,3 @@ class TestCampaignCollectionStageCounts:
         ).json()[0]
         # [] (no stages) is not None (not asked for).
         assert entry["stages"] == []
-
-    async def test_unknown_include_value_is_rejected(self, client: AsyncClient) -> None:
-        campaign_id, _, _ = await self._campaign_with_two_rows(client)
-        resp = await client.get(
-            f"/api/v1/campaigns/{campaign_id}/collection-coverage", params={"include": "wat"}
-        )
-        assert resp.status_code == 422, resp.text

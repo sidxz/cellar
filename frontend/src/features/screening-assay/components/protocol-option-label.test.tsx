@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { ProtocolOptionLabel } from "./protocol-option-label";
 
 describe("ProtocolOptionLabel", () => {
-  it("shows the code before the name", () => {
+  it("shows the code with the name", () => {
     render(<ProtocolOptionLabel code="PRT-00142" name="PptT inhibition [FP]" />);
     expect(screen.getByText("PRT-00142")).toBeInTheDocument();
     expect(screen.getByText("PptT inhibition [FP]")).toBeInTheDocument();

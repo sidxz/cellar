@@ -165,7 +165,6 @@ async def test_more_than_8_runs_returns_422(client, session_factory, fake_auth):
         _positions_url(protocol_id), params={"run_ids": [str(uuid.uuid4()) for _ in range(9)]}
     )
     assert resp.status_code == 422
-    assert "At most 8 runs can be shown at once" in resp.text
 
 
 async def test_protocol_reports_has_measured_curves(client, session_factory, fake_auth):

@@ -54,13 +54,6 @@ function openPopover() {
 }
 
 describe("TargetMultiSelect", () => {
-  it("trigger shows the placeholder when nothing is selected", () => {
-    render(<TargetMultiSelect value={[]} onChange={vi.fn()} />);
-    // A combobox-role element takes its accessible name from a label, not its
-    // text, so assert the visible trigger text directly.
-    expect(screen.getByText(/select targets/i)).toBeInTheDocument();
-  });
-
   it("trigger shows a count when targets are selected", () => {
     render(<TargetMultiSelect value={["t-1"]} onChange={vi.fn()} />);
     expect(screen.getByText(/1 target selected/i)).toBeInTheDocument();

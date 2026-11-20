@@ -19,6 +19,8 @@ from cellar.domain.screening_assay.repository import ReadoutDataRepository
 from cellar.domain.screening_assay.run import Run
 from cellar.domain.shared.errors import ConflictError
 
+NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it."
+
 
 def refuse_if_welled(run: Run) -> ConflictError | None:
     """Summary (well-less) import onto a run that already has plates/wells."""
@@ -51,7 +53,5 @@ def refuse_if_not_plate_holder(run: Run) -> ConflictError | None:
     would put values on the wrong kind of position.
     """
     if any(p.holder_kind is not HolderKind.PLATE for p in run.plates):
-        return ConflictError(
-            "This run's holder is not a plate, so plate imports are not available for it."
-        )
+        return ConflictError(NOT_A_PLATE)
     return None

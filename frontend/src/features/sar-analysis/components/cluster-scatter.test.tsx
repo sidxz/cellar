@@ -49,11 +49,10 @@ describe("ClusterScatter", () => {
     expect(screen.getByTestId("plotly").dataset.traces).toBe("1");
   });
 
-  it("sets a stable uirevision so the lasso selection survives redraws", () => {
-    // react-plotly.js redraws on every render; without a constant uirevision,
-    // each redraw clears the selection and fires spurious deselect/empty-select
-    // events that wipe the user's lasso. This locks the fix.
-    render(
+  it("keeps uirevision stable across redraws so the lasso selection survives", () => {
+    // react-plotly.js redraws on every render; a uirevision that changes (or is absent)
+    // clears the selection and fires spurious deselect/empty-select events.
+    const { rerender } = render(
       <ClusterScatter
         points={[{ moleculeId: "a", x: 0, y: 0 }]}
         clusters={[{ moleculeId: "a", clusterId: 0 }]}
@@ -65,6 +64,26 @@ describe("ClusterScatter", () => {
         onPointClick={() => {}}
       />,
     );
-    expect(screen.getByTestId("plotly").dataset.uirevision).toBe("cluster-map");
+    const before = screen.getByTestId("plotly").dataset.uirevision;
+    expect(before).not.toBe("");
+    rerender(
+      <ClusterScatter
+        points={[
+          { moleculeId: "a", x: 0, y: 0 },
+          { moleculeId: "b", x: 1, y: 1 },
+        ]}
+        clusters={[
+          { moleculeId: "a", clusterId: 0 },
+          { moleculeId: "b", clusterId: 1 },
+        ]}
+        representatives={[{ moleculeId: "b", clusterId: 1 }]}
+        colorMode={{ mode: "cluster" }}
+        activityPic50={{}}
+        scaffoldByMol={{}}
+        onSelected={() => {}}
+        onPointClick={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("plotly").dataset.uirevision).toBe(before);
   });
 });

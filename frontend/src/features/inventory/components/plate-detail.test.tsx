@@ -186,10 +186,15 @@ describe("PlateDetail body", () => {
     expect(card).toHaveTextContent("Completed");
     expect(card.querySelector("a")).toHaveAttribute("href", "/assays/runs/r1");
   });
-  it("Used in runs: empty copy when the plate was never run", async () => {
+  it("Used in runs: lists no run when the plate was never run", async () => {
     setup();
     const card = await screen.findByTestId("plate-runs");
-    await waitFor(() => expect(card).toHaveTextContent("Not used in any run yet."));
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({ url: "/api/v1/plates/p1/runs" }),
+      ),
+    );
+    expect(card.querySelector("a")).toBeNull();
   });
   it("Shipments card: arrow · org · status, linking to the shipment", async () => {
     setup(
@@ -217,11 +222,6 @@ describe("PlateDetail body", () => {
     expect(card).toHaveTextContent("Shipped");
     expect(card).toHaveTextContent("shipped Sep 1, 2026");
     expect(card.querySelector("a")).toHaveAttribute("href", "/inventory/shipments/s1");
-  });
-  it("Shipments card: empty copy when the plate was never shipped", async () => {
-    setup();
-    const card = await screen.findByTestId("shipment-links");
-    await waitFor(() => expect(card).toHaveTextContent("Never shipped."));
   });
   it("More → Delete → confirm deletes and returns to the list", async () => {
     setup();

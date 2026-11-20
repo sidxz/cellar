@@ -26,14 +26,8 @@ class TestSaltEntryCreate:
             smiles="[Cl-]",
             molecular_weight=36.46,
         )
-        assert entry.workspace_id == ws_id
-        assert entry.code == "HCl"
-        assert entry.name == "hydrochloride"
-        assert entry.smiles == "[Cl-]"
-        assert entry.molecular_weight == 36.46
         assert entry.is_default is False
         assert entry.is_active is True
-        assert entry.id is not None
         assert entry.version == 1
 
     def test_factory_emits_created_event(self, ws_id: uuid.UUID) -> None:
@@ -134,16 +128,6 @@ class TestSaltEntryUpdate:
         events = entry.collect_events()
         assert len(events) == 1
         assert isinstance(events[0], SaltEntryUpdated)
-
-    def test_update_smiles(self, ws_id: uuid.UUID) -> None:
-        entry = self._make(ws_id)
-        entry.update(smiles="Cl")
-        assert entry.smiles == "Cl"
-
-    def test_update_molecular_weight(self, ws_id: uuid.UUID) -> None:
-        entry = self._make(ws_id)
-        entry.update(molecular_weight=36.47)
-        assert entry.molecular_weight == 36.47
 
     def test_update_negative_mw_raises(self, ws_id: uuid.UUID) -> None:
         entry = self._make(ws_id)

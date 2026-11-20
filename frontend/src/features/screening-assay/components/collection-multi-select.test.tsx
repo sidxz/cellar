@@ -46,11 +46,6 @@ function openPopover() {
 }
 
 describe("CollectionMultiSelect", () => {
-  it("trigger shows the placeholder when nothing is selected", () => {
-    render(<CollectionMultiSelect value={[]} onChange={vi.fn()} />);
-    expect(screen.getByText(/add a collection/i)).toBeInTheDocument();
-  });
-
   it("trigger shows a count when collections are selected", () => {
     render(<CollectionMultiSelect value={["c1"]} onChange={vi.fn()} />);
     expect(screen.getByText(/1 collection selected/i)).toBeInTheDocument();

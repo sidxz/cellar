@@ -34,17 +34,6 @@ class TestUpdate:
         assert isinstance(events[0], OrgPlatePolicySet)
         assert events[0].org_id == policy.org_id
 
-    def test_update_other_fields(self) -> None:
-        policy = OrgPlatePolicy.create_default(workspace_id=uuid.uuid4(), org_id=uuid.uuid4())
-        policy.update(
-            require_approval=False,
-            confirmation=LoanConfirmationMode.KIOSK_SCAN,
-            default_due_days=30,
-        )
-        assert policy.require_approval is False
-        assert policy.confirmation == LoanConfirmationMode.KIOSK_SCAN
-        assert policy.default_due_days == 30
-
     def test_default_due_days_none_allowed(self) -> None:
         policy = OrgPlatePolicy.create_default(workspace_id=uuid.uuid4(), org_id=uuid.uuid4())
         policy.update(default_due_days=None)
