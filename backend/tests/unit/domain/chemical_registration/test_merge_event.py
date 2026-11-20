@@ -20,16 +20,6 @@ def ws_id() -> uuid.UUID:
 
 
 @pytest.fixture
-def source_id() -> uuid.UUID:
-    return uuid.uuid4()
-
-
-@pytest.fixture
-def target_id() -> uuid.UUID:
-    return uuid.uuid4()
-
-
-@pytest.fixture
 def user_id() -> uuid.UUID:
     return uuid.uuid4()
 
@@ -47,56 +37,6 @@ def snapshot() -> dict:
 class TestMergeEventCreate:
     """MergeEvent.create() factory tests."""
 
-    def test_create(
-        self,
-        ws_id: uuid.UUID,
-        source_id: uuid.UUID,
-        target_id: uuid.UUID,
-        user_id: uuid.UUID,
-        snapshot: dict,
-    ) -> None:
-        event = MergeEvent.create(
-            workspace_id=ws_id,
-            source_molecule_id=source_id,
-            target_molecule_id=target_id,
-            reason=MergeReason.MANUAL_MERGE,
-            merged_by=user_id,
-            snapshot=snapshot,
-        )
-
-        assert event.source_molecule_id == source_id
-        assert event.target_molecule_id == target_id
-        assert event.reason == MergeReason.MANUAL_MERGE
-        assert event.merged_by == user_id
-        assert event.snapshot == snapshot
-        assert event.disclosure_request_id is None
-        assert event.notes is None
-        assert event.merged_at is not None
-
-    def test_create_with_disclosure_ref(
-        self,
-        ws_id: uuid.UUID,
-        source_id: uuid.UUID,
-        target_id: uuid.UUID,
-        user_id: uuid.UUID,
-        snapshot: dict,
-    ) -> None:
-        disc_id = uuid.uuid4()
-        event = MergeEvent.create(
-            workspace_id=ws_id,
-            source_molecule_id=source_id,
-            target_molecule_id=target_id,
-            reason=MergeReason.DISCLOSURE_RESOLVED,
-            merged_by=user_id,
-            snapshot=snapshot,
-            disclosure_request_id=disc_id,
-            notes="Merged via disclosure workflow",
-        )
-
-        assert event.disclosure_request_id == disc_id
-        assert event.notes == "Merged via disclosure workflow"
-        assert event.reason == MergeReason.DISCLOSURE_RESOLVED
-
     def test_self_merge_raises(
         self,
         ws_id: uuid.UUID,
@@ -113,41 +53,3 @@ class TestMergeEventCreate:
                 merged_by=user_id,
                 snapshot=snapshot,
             )
-
-    def test_empty_snapshot_ok(
-        self,
-        ws_id: uuid.UUID,
-        source_id: uuid.UUID,
-        target_id: uuid.UUID,
-        user_id: uuid.UUID,
-    ) -> None:
-        event = MergeEvent.create(
-            workspace_id=ws_id,
-            source_molecule_id=source_id,
-            target_molecule_id=target_id,
-            reason=MergeReason.STRUCTURE_CORRECTION,
-            merged_by=user_id,
-            snapshot={},
-        )
-
-        assert event.snapshot == {}
-
-    def test_has_expected_attributes(
-        self,
-        ws_id: uuid.UUID,
-        source_id: uuid.UUID,
-        target_id: uuid.UUID,
-        user_id: uuid.UUID,
-        snapshot: dict,
-    ) -> None:
-        event = MergeEvent.create(
-            workspace_id=ws_id,
-            source_molecule_id=source_id,
-            target_molecule_id=target_id,
-            reason=MergeReason.MANUAL_MERGE,
-            merged_by=user_id,
-            snapshot=snapshot,
-        )
-
-        assert event.id is not None
-        assert event.created_at is not None

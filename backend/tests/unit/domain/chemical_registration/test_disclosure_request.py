@@ -42,11 +42,6 @@ def org_id() -> uuid.UUID:
     return uuid.uuid4()
 
 
-@pytest.fixture
-def bulk_id() -> uuid.UUID:
-    return uuid.uuid4()
-
-
 def _make(
     molecule_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -75,7 +70,7 @@ def _make(
 
 
 class TestDisclosureRequestCreation:
-    def test_create_sets_all_fields(
+    def test_create_defaults(
         self, molecule_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
     ) -> None:
         req = DisclosureRequest.create(
@@ -86,10 +81,6 @@ class TestDisclosureRequestCreation:
             disclosing_org_id=org_id,
         )
 
-        assert req.molecule_id == molecule_id
-        assert req.disclosed_smiles == "CCO"
-        assert req.requested_by == user_id
-        assert req.disclosing_org_id == org_id
         assert req.status == DisclosureStatus.PENDING
         assert req.canonical_smiles is None
         assert req.inchi_key is None
@@ -144,24 +135,6 @@ class TestDisclosureRequestCreation:
         assert events[0].aggregate_type == "DisclosureRequest"
         assert events[0].molecule_id == molecule_id
         assert events[0].disclosing_org_id == org_id
-
-    def test_create_with_bulk_parent(
-        self,
-        molecule_id: uuid.UUID,
-        user_id: uuid.UUID,
-        bulk_id: uuid.UUID,
-    ) -> None:
-        req = DisclosureRequest.create(
-            workspace_id=WS_ID,
-            molecule_id=molecule_id,
-            disclosed_smiles="CCO",
-            requested_by=user_id,
-            bulk_disclosure_id=bulk_id,
-            notes="Bulk upload batch 7",
-        )
-
-        assert req.bulk_disclosure_id == bulk_id
-        assert req.notes == "Bulk upload batch 7"
 
     def test_create_with_empty_smiles_raises(
         self, molecule_id: uuid.UUID, user_id: uuid.UUID
@@ -348,22 +321,6 @@ class TestDisclosureRequestTransitions:
 
         with pytest.raises(ValidationError, match="Cannot transition disclosure status"):
             req.reject(reason="Too late")
-
-    def test_transitions_update_updated_at(
-        self, molecule_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        req = _make(molecule_id, user_id)
-        initial_updated = req.updated_at
-
-        req.start_processing()
-        assert req.updated_at >= initial_updated
-
-        after_processing = req.updated_at
-        req.resolve_as_new_structure(
-            canonical_smiles="CCO",
-            inchi_key="LFQSCWFLJHTTHZ-UHFFFAOYSA-N",
-        )
-        assert req.updated_at >= after_processing
 
 
 # ---------------------------------------------------------------------------

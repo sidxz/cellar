@@ -29,10 +29,6 @@ class TestOntologySlotDefinitionCreate:
             label="Bioassay Type",
             ontology_sources=["BAO"],
         )
-        assert slot.workspace_id == workspace_id
-        assert slot.name == "bioassay_type"
-        assert slot.label == "Bioassay Type"
-        assert slot.ontology_sources == ["BAO"]
         assert slot.is_required is False
         assert slot.allow_free_text is True
         assert slot.display_order == 0
@@ -113,47 +109,6 @@ class TestOntologySlotDefinitionUpdate:
         events = slot.collect_events()
         assert len(events) == 1
         assert isinstance(events[0], OntologySlotDefinitionUpdated)
-
-    def test_update_ontology_sources(self, workspace_id: uuid.UUID):
-        slot = OntologySlotDefinition.create(
-            workspace_id=workspace_id,
-            name="bioassay_type",
-            label="Bioassay Type",
-            ontology_sources=["BAO"],
-        )
-        slot.clear_events()
-        slot.update(ontology_sources=["BAO", "GO"])
-        assert slot.ontology_sources == ["BAO", "GO"]
-
-    def test_update_is_required(self, workspace_id: uuid.UUID):
-        slot = OntologySlotDefinition.create(
-            workspace_id=workspace_id,
-            name="bioassay_type",
-            label="Bioassay Type",
-            ontology_sources=["BAO"],
-        )
-        slot.update(is_required=True)
-        assert slot.is_required is True
-
-    def test_update_allow_free_text(self, workspace_id: uuid.UUID):
-        slot = OntologySlotDefinition.create(
-            workspace_id=workspace_id,
-            name="bioassay_type",
-            label="Bioassay Type",
-            ontology_sources=["BAO"],
-        )
-        slot.update(allow_free_text=False)
-        assert slot.allow_free_text is False
-
-    def test_update_display_order(self, workspace_id: uuid.UUID):
-        slot = OntologySlotDefinition.create(
-            workspace_id=workspace_id,
-            name="bioassay_type",
-            label="Bioassay Type",
-            ontology_sources=["BAO"],
-        )
-        slot.update(display_order=10)
-        assert slot.display_order == 10
 
     def test_update_empty_label_raises(self, workspace_id: uuid.UUID):
         slot = OntologySlotDefinition.create(

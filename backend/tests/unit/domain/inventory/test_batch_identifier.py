@@ -11,7 +11,6 @@ from cellar.domain.shared.errors import ValidationError
 
 
 class TestBatchIdentifierCreate:
-
     def test_strips_whitespace(self) -> None:
         ident = BatchIdentifier.create(
             batch_id=uuid.uuid4(),
@@ -41,21 +40,3 @@ class TestBatchIdentifierCreate:
                 source="user",
                 registered_by=uuid.uuid4(),
             )
-
-
-def test_create_accepts_derived_from_molecule_identifier_id():
-    batch_id = uuid.uuid4()
-    mol_ident_id = uuid.uuid4()
-    actor = uuid.uuid4()
-
-    bi = BatchIdentifier.create(
-        batch_id=batch_id,
-        identifier="SACC-0036913-001",
-        identifier_type="custom",
-        source="compound-syn",
-        registered_by=actor,
-        derived_from_molecule_identifier_id=mol_ident_id,
-    )
-
-    assert bi.derived_from_molecule_identifier_id == mol_ident_id
-

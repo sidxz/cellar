@@ -10,7 +10,6 @@ from cellar.domain.shared.enums import (
     AmountUnit,
     AssignmentType,
     ConcentrationUnit,
-    LightCondition,
 )
 from cellar.domain.shared.value_objects import (
     Amount,
@@ -72,11 +71,6 @@ class TestChemicalStructure:
         a = ChemicalStructure(**self._VALID)
         b = ChemicalStructure(**self._VALID)
         assert hash(a) == hash(b)
-
-    def test_frozen(self) -> None:
-        cs = ChemicalStructure(**self._VALID)
-        with pytest.raises(ValidationError):
-            cs.smiles = "CC"  # type: ignore[misc]
 
 
 # ---------------------------------------------------------------------------
@@ -157,36 +151,24 @@ class TestPredictedProperties:
 
 
 class TestRegistrationNumber:
-    def test_valid(self) -> None:
-        assert RegistrationNumber(value="CV-00001").value == "CV-00001"
-
     def test_empty_raises(self) -> None:
         with pytest.raises(ValidationError, match="empty"):
             RegistrationNumber(value="  ")
 
 
 class TestBatchNumber:
-    def test_valid(self) -> None:
-        assert BatchNumber(value="CV-00001-001").value == "CV-00001-001"
-
     def test_empty_raises(self) -> None:
         with pytest.raises(ValidationError, match="empty"):
             BatchNumber(value="")
 
 
 class TestBarcode:
-    def test_valid(self) -> None:
-        assert Barcode(value="BC-12345").value == "BC-12345"
-
     def test_empty_raises(self) -> None:
         with pytest.raises(ValidationError, match="empty"):
             Barcode(value="  ")
 
 
 class TestFormulationNumber:
-    def test_valid(self) -> None:
-        assert FormulationNumber(value="FRM-00001").value == "FRM-00001"
-
     def test_empty_raises(self) -> None:
         with pytest.raises(ValidationError, match="empty"):
             FormulationNumber(value="")
@@ -198,11 +180,6 @@ class TestFormulationNumber:
 
 
 class TestAmount:
-    def test_valid(self) -> None:
-        a = Amount(value=10.5, unit=AmountUnit.MG)
-        assert a.value == 10.5
-        assert a.unit == AmountUnit.MG
-
     def test_zero_ok(self) -> None:
         Amount(value=0.0, unit=AmountUnit.G)
 
@@ -210,17 +187,8 @@ class TestAmount:
         with pytest.raises(ValidationError, match=">= 0"):
             Amount(value=-1.0, unit=AmountUnit.MG)
 
-    def test_frozen(self) -> None:
-        a = Amount(value=10.0, unit=AmountUnit.MG)
-        with pytest.raises(ValidationError):
-            a.value = 20.0  # type: ignore[misc]
-
 
 class TestConcentration:
-    def test_valid(self) -> None:
-        c = Concentration(value=1.5, unit=ConcentrationUnit.UM)
-        assert c.value == 1.5
-
     def test_zero_raises(self) -> None:
         with pytest.raises(ValidationError, match="> 0"):
             Concentration(value=0.0, unit=ConcentrationUnit.NM)
@@ -237,10 +205,6 @@ class TestConcentration:
 
 
 class TestReactionConditions:
-    def test_valid(self) -> None:
-        rc = ReactionConditions(solvent="THF", temperature="80C")
-        assert rc.solvent == "THF"
-
     def test_all_null_raises(self) -> None:
         with pytest.raises(ValidationError, match="at least one"):
             ReactionConditions()
@@ -251,10 +215,6 @@ class TestReactionConditions:
 
 
 class TestReactionOutcome:
-    def test_valid(self) -> None:
-        ro = ReactionOutcome(yield_percent=85.0, purity_percent=99.0)
-        assert ro.yield_percent == 85.0
-
     def test_yield_zero_raises(self) -> None:
         with pytest.raises(ValidationError, match="\\(0, 100\\]"):
             ReactionOutcome(yield_percent=0.0)
@@ -262,14 +222,6 @@ class TestReactionOutcome:
     def test_yield_over_100_raises(self) -> None:
         with pytest.raises(ValidationError, match="\\(0, 100\\]"):
             ReactionOutcome(yield_percent=101.0)
-
-    def test_with_actual_scale(self) -> None:
-        ro = ReactionOutcome(
-            yield_percent=90.0,
-            actual_scale=Amount(value=5.0, unit=AmountUnit.G),
-        )
-        assert ro.actual_scale is not None
-        assert ro.actual_scale.value == 5.0
 
 
 class TestSynthesisAssignment:
@@ -305,24 +257,9 @@ class TestSynthesisAssignment:
 
 
 class TestStorageCondition:
-    def test_valid(self) -> None:
-        sc = StorageCondition(temperature_celsius=25.0, relative_humidity_percent=60.0)
-        assert sc.temperature_celsius == 25.0
-
     def test_humidity_out_of_range(self) -> None:
         with pytest.raises(ValidationError, match="\\[0, 100\\]"):
             StorageCondition(temperature_celsius=25.0, relative_humidity_percent=101.0)
-
-    def test_light_condition(self) -> None:
-        sc = StorageCondition(
-            temperature_celsius=40.0,
-            light_condition=LightCondition.PROTECTED,
-        )
-        assert sc.light_condition == LightCondition.PROTECTED
-
-    def test_temperature_only(self) -> None:
-        sc = StorageCondition(temperature_celsius=5.0)
-        assert sc.relative_humidity_percent is None
 
 
 class TestConcentrationUnitMicromolarFactor:

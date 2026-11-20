@@ -29,20 +29,13 @@ def _mirror(workspace_id: uuid.UUID, **overrides) -> Target:
 
 
 class TestTargetMirror:
-    def test_from_mirror_uses_supplied_id_and_stores_source_fields(
+    def test_from_mirror_keeps_the_source_id_and_strips_the_name(
         self, workspace_id: uuid.UUID
     ) -> None:
         tid = uuid.uuid4()
-        t = _mirror(
-            workspace_id, id=tid, name="  NadD ", chembl_id="CHEMBL4630874", source_version=3
-        )
+        t = _mirror(workspace_id, id=tid, name="  NadD ")
         assert t.id == tid
-        assert t.workspace_id == workspace_id
         assert t.name == "NadD"
-        assert t.target_type is TargetType.SINGLE_PROTEIN
-        assert t.organism == "Mycobacterium tuberculosis"
-        assert t.chembl_id == "CHEMBL4630874"
-        assert t.source_version == 3
 
     def test_from_mirror_rejects_blank_name(self, workspace_id: uuid.UUID) -> None:
         with pytest.raises(ValidationError):

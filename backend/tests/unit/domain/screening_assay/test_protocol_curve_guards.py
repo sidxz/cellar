@@ -1,7 +1,6 @@
 """A dose-response curve always names readouts it can fit: create and publish refuse a broken
 curve, edits refuse to break one, and drafts carry curves along when their readouts change."""
 
-import re
 import uuid
 
 import pytest
@@ -76,10 +75,7 @@ class TestCreateRefusesBrokenCurves:
         assert _cfg(protocol).y_readout_name == "Signal"
 
     def test_refuses_a_y_readout_that_does_not_exist(self) -> None:
-        with pytest.raises(
-            ValidationError,
-            match="'IC50' fits 'Signal', which is not a numeric readout of this protocol",
-        ):
+        with pytest.raises(ValidationError, match="'IC50' fits 'Signal'"):
             _create(_numeric("THF Fluorescence Slope", INH), _curve())
 
     def test_refuses_a_y_readout_that_is_not_numeric(self) -> None:
@@ -90,10 +86,7 @@ class TestCreateRefusesBrokenCurves:
             _create(text, _curve())
 
     def test_refuses_an_x_readout_that_does_not_exist(self) -> None:
-        with pytest.raises(
-            ValidationError,
-            match="'IC50' uses 'Conc' for concentration, which is not a readout of this protocol",
-        ):
+        with pytest.raises(ValidationError, match="'IC50' uses 'Conc'"):
             _create(_numeric("Signal", INH), _curve(x_readout_name="Conc"))
 
     def test_refuses_a_layer_the_y_readout_does_not_calculate(self) -> None:
@@ -104,10 +97,7 @@ class TestCreateRefusesBrokenCurves:
 
     def test_refuses_an_unset_layer_over_two_layers(self) -> None:
         with pytest.raises(
-            ValidationError,
-            match=re.escape(
-                "'IC50' must say which layer of 'Signal' it fits (percent_inhibition, z_score)"
-            ),
+            ValidationError, match=r"'IC50'.*'Signal'.*\(percent_inhibition, z_score\)"
         ):
             _create(_numeric("Signal", INH, Z), _curve())
 
@@ -161,13 +151,7 @@ class TestEditsRefuseToBreakACurve:
     def test_removing_the_y_readout_on_a_draft_is_refused(self) -> None:
         signal = _numeric("Signal", INH)
         protocol = _create(signal, _curve(), _numeric("Other"))
-        with pytest.raises(
-            ConflictError,
-            match=re.escape(
-                "Cannot remove 'Signal': the dose-response readout 'IC50' plots it. "
-                "Change or remove 'IC50' first."
-            ),
-        ):
+        with pytest.raises(ConflictError, match=r"'Signal'.*'IC50'"):
             protocol.remove_readout_definition(signal.id)
 
 

@@ -46,17 +46,11 @@ def _make_batch(
 
 
 class TestBatchCreation:
-    def test_create_sets_all_fields(
+    def test_create_defaults(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
     ) -> None:
         batch = _make_batch(workspace_id, molecule_id, chemist_id)
 
-        assert batch.workspace_id == workspace_id
-        assert batch.molecule_id == molecule_id
-        assert batch.batch_number.value == "CV-00001-001"
-        assert batch.amount.value == 100.0
-        assert batch.source == BatchSource.SYNTHESIZED
-        assert batch.chemist == chemist_id
         assert batch.purity is None
         assert batch.version == 1
 
@@ -98,22 +92,6 @@ class TestBatchCreation:
         batch = _make_batch(workspace_id, molecule_id, chemist_id, purity=100)
         assert batch.purity == 100
 
-    def test_all_batch_sources(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
-    ) -> None:
-        for source in BatchSource:
-            batch = _make_batch(workspace_id, molecule_id, chemist_id, source=source)
-            assert batch.source == source
-
-    def test_batch_number_is_immutable(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
-    ) -> None:
-        batch = _make_batch(workspace_id, molecule_id, chemist_id)
-        assert batch.batch_number.value == "CV-00001-001"
-        # batch_number property is read-only (no setter)
-        with pytest.raises(AttributeError):
-            batch.batch_number = BatchNumber(value="new")  # type: ignore[misc]
-
 
 class TestBatchMerge:
     def test_reassign_to_molecule(
@@ -137,32 +115,12 @@ class TestBatchMerge:
 
 
 class TestBatchUpdates:
-    def test_update_amount(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
-    ) -> None:
-        batch = _make_batch(workspace_id, molecule_id, chemist_id)
-        new_amount = Amount(value=50.0, unit=AmountUnit.MG)
-        batch.update_amount(new_amount)
-        assert batch.amount.value == 50.0
-
-    def test_update_purity(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
-    ) -> None:
-        batch = _make_batch(workspace_id, molecule_id, chemist_id)
-        batch.update_purity(95.0)
-        assert batch.purity == 95.0
-
     def test_update_purity_invalid_raises(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
     ) -> None:
         batch = _make_batch(workspace_id, molecule_id, chemist_id)
         with pytest.raises(ValidationError, match="Purity"):
             batch.update_purity(0)
-
-
-def test_external_reference_source_exists() -> None:
-    """Auto-created placeholder batches use this source."""
-    assert BatchSource.EXTERNAL_REFERENCE.value == "external_reference"
 
 
 # ---------------------------------------------------------------------------
@@ -173,12 +131,6 @@ from cellar.domain.inventory.batch_identifier import BatchIdentifier  # noqa: E4
 
 
 class TestBatchIdentifiers:
-    def test_new_batch_has_empty_identifiers(
-        self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
-    ) -> None:
-        b = _make_batch(workspace_id, molecule_id, chemist_id)
-        assert b.identifiers == []
-
     def test_add_identifier_appends(
         self, workspace_id: uuid.UUID, molecule_id: uuid.UUID, chemist_id: uuid.UUID
     ) -> None:

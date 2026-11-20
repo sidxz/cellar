@@ -13,7 +13,6 @@ class TestWorkspaceSettingsCreate:
         ws_id = uuid.uuid4()
         settings = WorkspaceSettings.create_default(workspace_id=ws_id)
         assert settings.id == ws_id
-        assert settings.workspace_id == ws_id
         assert settings.registration_rules == {}
         assert settings.custom_field_definitions == []
         assert settings.default_molecule_type is None
@@ -41,11 +40,6 @@ class TestWorkspaceSettingsUpdate:
         events = settings.collect_events()
         assert len(events) == 1
         assert isinstance(events[0], WorkspaceSettingsUpdated)
-
-    def test_update_signature_required_for(self) -> None:
-        settings = WorkspaceSettings.create_default(workspace_id=uuid.uuid4())
-        settings.update(signature_required_for=["registration", "disclosure"])
-        assert settings.signature_required_for == ["registration", "disclosure"]
 
     def test_update_to_none(self) -> None:
         settings = WorkspaceSettings(

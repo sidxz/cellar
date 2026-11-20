@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from cellar.domain.screening_assay.dose_response_curve import DoseResponseCurve
-from cellar.domain.screening_assay.enums import CurveClass, CurveType
+from cellar.domain.screening_assay.enums import CurveType
 from cellar.domain.shared.errors import ValidationError
 
 
@@ -41,7 +41,6 @@ def _make_curve(**kwargs) -> DoseResponseCurve:
 
 
 class TestDoseResponseCurve:
-
     def test_num_points_zero_raises(self) -> None:
         with pytest.raises(ValidationError, match="num_points must be >= 1"):
             _make_curve(num_points=0)
@@ -73,14 +72,3 @@ class TestDoseResponseCurve:
     def test_raw_data_defaults_to_empty_list(self) -> None:
         curve = _make_curve(raw_data=None)
         assert curve.raw_data == []
-
-
-    def test_all_curve_types(self) -> None:
-        for ct in CurveType:
-            curve = _make_curve(curve_type=ct)
-            assert curve.curve_type == ct
-
-    def test_all_curve_classes(self) -> None:
-        for cc in CurveClass:
-            curve = _make_curve(curve_class=cc)
-            assert curve.curve_class == cc

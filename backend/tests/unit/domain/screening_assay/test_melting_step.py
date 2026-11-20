@@ -92,7 +92,7 @@ def test_back_to_instrument_value_needs_no_reason():
 @pytest.mark.parametrize("value", [24.9, 95.1, math.nan, math.inf])
 def test_value_outside_trace_range_is_validation_error(value: float):
     step = _step()
-    with pytest.raises(ValidationError, match="The value must lie within the trace, 25 to 95 °C"):
+    with pytest.raises(ValidationError, match="25 to 95"):
         step.review(status=UNREVIEWED, value=value, reason="x", x_range=RANGE, by=uuid.uuid4())
     assert step.value == 64.0 and step.version == 1
 

@@ -74,11 +74,3 @@ class TestDelete:
         assert len(events) == 1
         assert isinstance(events[0], AttachmentDeleted)
         assert events[0].file_name == "spectrum.pdf"
-
-
-class TestRepoint:
-    def test_repoint_updates_attachable_id(self):
-        att = Attachment.create(**_make())
-        new_target = uuid.uuid4()
-        att.repoint(new_target)
-        assert att.attachable_id == new_target

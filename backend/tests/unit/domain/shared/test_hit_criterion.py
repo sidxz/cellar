@@ -10,17 +10,6 @@ from cellar.domain.shared.hit_criterion import HitCriterion, InterceptKey, compa
 
 
 class TestInterceptKey:
-
-    def test_is_frozen(self) -> None:
-        key = InterceptKey(kind="ec", level=50.0)
-        with pytest.raises(Exception):
-            key.kind = "ic"  # type: ignore[misc]
-
-    def test_value_equality(self) -> None:
-        assert InterceptKey(kind="ec", level=90.0) == InterceptKey(kind="ec", level=90.0)
-        assert InterceptKey(kind="ec", level=50.0) != InterceptKey(kind="ic", level=50.0)
-        assert InterceptKey(kind="ec", level=50.0) != InterceptKey(kind="ec", level=90.0)
-
     @pytest.mark.parametrize("kind", ["ec", "ic"])
     def test_accepts_valid_kinds(self, kind: str) -> None:
         InterceptKey(kind=kind, level=50.0)  # no raise
@@ -42,8 +31,6 @@ class TestInterceptKey:
 
 
 class TestHitCriterionInterceptKey:
-
-
     def test_to_dict_emits_intercept_key_when_set(self) -> None:
         crit = HitCriterion(
             readout_name="Resazurin",

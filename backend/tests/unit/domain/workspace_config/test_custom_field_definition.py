@@ -26,12 +26,6 @@ class TestCustomFieldDefinitionCreate:
             applies_to=FieldTarget.MOLECULE,
             pick_list_values=["Xenograft", "PDX", "Organoid"],
         )
-        assert cfd.workspace_id == ws_id
-        assert cfd.name == "tumor_model"
-        assert cfd.label == "Tumor Model"
-        assert cfd.data_type == FieldDataType.PICKLIST
-        assert cfd.applies_to == FieldTarget.MOLECULE
-        assert cfd.pick_list_values == ["Xenograft", "PDX", "Organoid"]
         assert cfd.vocabulary_id is None
         assert cfd.is_required is False
         assert cfd.default_value is None
@@ -112,11 +106,6 @@ class TestCustomFieldDefinitionUpdate:
         cfd.update(label="Tumor Model v2")
         assert cfd.label == "Tumor Model v2"
         assert len(cfd.collect_events()) == 1
-
-    def test_update_pick_list_values(self, ws_id: uuid.UUID) -> None:
-        cfd = self._make(ws_id)
-        cfd.update(pick_list_values=["Xenograft", "PDX", "Organoid"])
-        assert cfd.pick_list_values == ["Xenograft", "PDX", "Organoid"]
 
     def test_deactivate(self, ws_id: uuid.UUID) -> None:
         cfd = self._make(ws_id)

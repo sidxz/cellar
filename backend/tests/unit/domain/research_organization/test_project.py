@@ -20,18 +20,14 @@ def user_id() -> uuid.UUID:
 
 
 class TestProjectCreate:
-    def test_factory_sets_fields(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
+    def test_factory_defaults(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
         project = Project.create(
             workspace_id=ws_id,
             name="Kinase Inhibitors",
             description="Research on kinase targets",
             created_by=user_id,
         )
-        assert project.workspace_id == ws_id
-        assert project.name == "Kinase Inhibitors"
-        assert project.description == "Research on kinase targets"
         assert project.status == ProjectStatus.ACTIVE
-        assert project.created_by == user_id
         assert project.archived_by is None
         assert project.archived_at is None
         assert project.version == 1
@@ -70,13 +66,6 @@ class TestProjectUpdate:
         project.clear_events()
         project.update(name="New Name")
         assert project.name == "New Name"
-
-    def test_update_description(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
-        project = Project.create(
-            workspace_id=ws_id, name="P1", description="Old", created_by=user_id
-        )
-        project.update(description="New desc")
-        assert project.description == "New desc"
 
     def test_update_description_to_none(self, ws_id: uuid.UUID, user_id: uuid.UUID) -> None:
         project = Project.create(

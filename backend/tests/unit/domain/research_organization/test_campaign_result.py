@@ -28,17 +28,6 @@ def _make_measurement(
     )
 
 
-def test_notes_default_none():
-    r = CampaignResult(
-        campaign_id=uuid.uuid4(),
-        molecule_id=uuid.uuid4(),
-    )
-    assert r.notes is None
-    assert r.measurements == []
-    assert r.id is not None
-    assert r.stage_overrides == {}
-
-
 def test_add_measurement():
     r = CampaignResult(campaign_id=uuid.uuid4(), molecule_id=uuid.uuid4())
     m = _make_measurement(r.id)

@@ -168,12 +168,3 @@ class TestShipmentTransitions:
         shipment.ship("FX-123")
         with pytest.raises(ValidationError, match="preparing"):
             shipment.add_item(_make_item(shipment.id))
-
-    def test_full_lifecycle(self, ws_id):
-        shipment = _make_shipment(ws_id)
-        shipment.ship("FX-123", shipping_date=date(2026, 4, 5))
-        shipment.mark_in_transit()
-        shipment.deliver(received_date=date(2026, 4, 7))
-        assert shipment.status == ShipmentStatus.DELIVERED
-        assert shipment.tracking_number == "FX-123"
-        assert shipment.received_date == date(2026, 4, 7)

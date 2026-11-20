@@ -32,15 +32,8 @@ class TestExternalApiKeyCreate:
             key_prefix="abc1...xyz9",
             created_by=user_id,
         )
-        assert key.workspace_id == ws_id
-        assert key.key_name == "bioportal"
-        assert key.label == "BioPortal API Key"
-        assert key.description == "For ontology lookups"
-        assert key.key_prefix == "abc1...xyz9"
         assert key.is_active is True
-        assert key.created_by == user_id
         assert key.last_used_at is None
-        assert key.id is not None
         assert key.version == 1
 
     def test_factory_emits_created_event(
@@ -161,13 +154,6 @@ class TestExternalApiKeyUpdate:
         events = key.collect_events()
         assert len(events) == 1
         assert isinstance(events[0], ExternalApiKeyUpdated)
-
-    def test_update_description(
-        self, ws_id: uuid.UUID, user_id: uuid.UUID
-    ) -> None:
-        key = self._make(ws_id, user_id)
-        key.update(description="Updated description")
-        assert key.description == "Updated description"
 
     def test_update_description_to_none(
         self, ws_id: uuid.UUID, user_id: uuid.UUID

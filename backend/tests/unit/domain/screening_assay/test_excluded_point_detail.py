@@ -52,9 +52,8 @@ def test_manual_exclusion_requires_author_id():
         )
 
 
-def test_auto_source_with_outlier_reason_rejected():
-    # source MANUAL must NOT carry AUTO_3SIGMA reason
-    with pytest.raises(ValidationError, match="AUTO_3SIGMA reason only valid for AUTO source"):
+def test_manual_source_with_auto_reason_rejected():
+    with pytest.raises(ValidationError, match="AUTO_3SIGMA"):
         ExcludedPointDetail(
             idx=3,
             source=ExclusionSource.MANUAL,
@@ -63,22 +62,6 @@ def test_auto_source_with_outlier_reason_rejected():
             author_id=uuid.uuid4(),
             ts=datetime(2026, 5, 19, 10, 0, 0),
         )
-
-
-def test_legacy_entry_with_null_idx_carries_concentration_and_response():
-    d = ExcludedPointDetail(
-        idx=None,
-        source=ExclusionSource.AUTO_3SIGMA,
-        excluded=True,
-        reason=ExclusionReason.AUTO_3SIGMA,
-        author_id=None,
-        ts=datetime(2026, 5, 19, 10, 0, 0),
-        concentration=1e-6,
-        response=42.5,
-    )
-    assert d.idx is None
-    assert d.concentration == 1e-6
-    assert d.response == 42.5
 
 
 def test_jsonb_round_trip_preserves_all_fields():

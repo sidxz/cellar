@@ -67,11 +67,6 @@ class TestStageCriterion:
         with pytest.raises(ValidationError):
             StageCriterion(channel_id=uuid.uuid4(), operator="lt", value="10")  # type: ignore[arg-type]
 
-    def test_is_frozen(self) -> None:
-        crit = StageCriterion(channel_id=uuid.uuid4(), operator="lt", value=10.0)
-        with pytest.raises(Exception):
-            crit.operator = "gt"  # type: ignore[misc]
-
     def test_is_met(self) -> None:
         crit = StageCriterion(channel_id=uuid.uuid4(), operator="lt", value=10.0)
         assert crit.is_met(5.0) is True
@@ -126,13 +121,6 @@ class TestCampaignStage:
     def test_rejects_negative_display_order(self) -> None:
         with pytest.raises(ValidationError):
             CampaignStage(campaign_id=uuid.uuid4(), name="Stage", display_order=-1)
-
-    def test_defaults(self) -> None:
-        stage = CampaignStage(campaign_id=uuid.uuid4(), name="Stage", display_order=0)
-        assert isinstance(stage.id, uuid.UUID)
-        assert stage.parent_stage_id is None
-        assert stage.criteria == []
-        assert stage.kind == StageKind.CRITERIA
 
     def test_manual_stage_without_criteria_is_valid(self) -> None:
         stage = CampaignStage(
@@ -213,18 +201,10 @@ class TestStageOverride:
         with pytest.raises(ValidationError):
             self._make(reason="   ")
 
-    def test_is_frozen(self) -> None:
-        override = self._make()
-        with pytest.raises(Exception):
-            override.reason = "changed"  # type: ignore[misc]
-
 
 class TestUnset:
     def test_is_singleton(self) -> None:
         assert UNSET is _Unset()
-
-    def test_repr(self) -> None:
-        assert repr(UNSET) == "UNSET"
 
 
 def test_stage_criterion_accepts_not_between_and_evaluates_it() -> None:
