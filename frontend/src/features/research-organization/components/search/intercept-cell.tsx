@@ -30,6 +30,9 @@ export interface InterceptCellProps {
   curves?: CompoundCurvesTarget | null;
   /** The unit the column header states; a value in that unit omits it. */
   headerUnit?: string | null;
+  /** List all runs: mark each fitted run with its curve's colour (not when an
+   *  overlaid split protocol's colours name its groups). */
+  colourRuns?: boolean;
 }
 
 function specToKey(spec: InterceptKey | InterceptSpec | null): InterceptKey | null {
@@ -68,6 +71,7 @@ export function InterceptCell({
   mode,
   curves,
   headerUnit,
+  colourRuns = true,
 }: InterceptCellProps) {
   if (!av) return <span className="text-muted-foreground">&mdash;</span>;
 
@@ -206,6 +210,7 @@ export function InterceptCell({
         mode={mode}
         curves={curves}
         summary={gmeanLine}
+        colourRuns={colourRuns}
       />
     );
   }

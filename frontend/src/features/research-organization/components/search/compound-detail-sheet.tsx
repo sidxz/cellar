@@ -237,9 +237,10 @@ function SourceCurveCard({
   // List all runs: the large plot draws every listed run's curve, as the grid
   // cell does (a split protocol's group overlay wins, as in the grid). Curve i
   // takes overlayColor(i), the i-th dot in the value list: every fitted run
-  // carries a snapshot, so none drops out and shifts the colours. No legend,
-  // intercept lines or value labels — the value list beside it is the key, and
-  // fifty of each would bury the curves. Framed like the grid's thumbnails.
+  // carries a snapshot, so none drops out and shifts the colours. No intercept
+  // lines or value labels — fifty of each would bury the curves — and no legend
+  // while the value list beside it is the key (a split protocol has no list
+  // there, so it keeps the legend). Framed like the grid's thumbnails.
   const listed = !overlay && listsRuns(mode) ? av : undefined;
   const runPlot = useMemo(() => {
     const snaps = (listed?.runs ?? []).flatMap((r) =>
@@ -315,8 +316,10 @@ function SourceCurveCard({
       )}
       {runPlot && (
         <p className="text-xs leading-relaxed text-muted-foreground">
-          Every listed run’s curve, coloured like its value. The source curve above opens one fit’s
-          details.
+          {channels.length > 0
+            ? "Every listed run’s curve, coloured like its value."
+            : "Every listed run’s curve, named by run date in the legend."}{" "}
+          The source curve above opens one fit’s details.
         </p>
       )}
       {curve.fit_quality_warnings && curve.fit_quality_warnings.length > 0 && (
@@ -354,7 +357,7 @@ function SourceCurveCard({
               data={plot.traces}
               layout={{
                 ...plot.layout,
-                ...(runPlot ? { showlegend: false } : {}),
+                ...(runPlot && channels.length > 0 ? { showlegend: false } : {}),
                 height: 300,
                 autosize: true,
                 margin: { l: 55, r: 15, t: 25, b: 50 },

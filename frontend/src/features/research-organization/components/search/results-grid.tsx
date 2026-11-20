@@ -367,6 +367,9 @@ export function buildDrcColumns(
   visibleIntercepts?: ReadonlyArray<{ kind: string; level: number }> | null,
   aggregationMode: AggregationMode = "latest",
   groupKey = "",
+  /** List all runs gives each fitted run its curve's colour; an overlaid split
+   *  protocol's colours name its groups instead, so its runs go uncoloured. */
+  colourRuns = true,
 ): ColDef<EnrichedMolecule>[] {
   // Cells read the group's activity key; grid column ids carry the group last.
   const colId = withGroup(token, groupKey);
@@ -406,6 +409,7 @@ export function buildDrcColumns(
           mode={aggregationMode}
           curves={rowCurves(proto, params.data)}
           headerUnit={proto?.dose_unit}
+          colourRuns={colourRuns}
         />
       ),
     });
@@ -430,6 +434,7 @@ export function buildDrcColumns(
             mode={aggregationMode}
             curves={rowCurves(proto, params.data)}
             headerUnit={proto?.dose_unit}
+            colourRuns={colourRuns}
           />
         ),
       });
@@ -513,6 +518,7 @@ function buildProtocolChildren(
   aggregationMode: AggregationMode,
   groupKey: string,
   groupId: string,
+  colourRuns = true,
 ): (ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[] {
   const catalog = new Map(
     activityCatalog(
@@ -580,7 +586,9 @@ function buildProtocolChildren(
   for (const { parentColId, visible } of drcByRdId.values()) {
     const rdId = parentColId.split(":")[1];
     activityKeys.push(withGroup(parentColId, groupKey));
-    curves.push(...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey));
+    curves.push(
+      ...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey, colourRuns),
+    );
   }
 
   const leaves = quietWhenUntested([...readouts.map((r) => r.col), ...curves], activityKeys);
@@ -729,6 +737,7 @@ export function buildProtocolColumnGroups(
               aggregationMode,
               group.key,
               `p:${protoId}@${group.key}`,
+              !overlay,
             ).filter((c) => !overlay || "children" in c || !isPlotColumn(c.colId)),
           }));
     if (overlay) children.push(...buildOverlayPlotColumns(entries, proto, split));

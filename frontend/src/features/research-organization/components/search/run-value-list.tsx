@@ -33,6 +33,9 @@ interface RunValueListProps {
   curves?: CompoundCurvesTarget | null;
   /** Spread line under the list (gmean ×fold), inside the run-history control. */
   summary?: ReactNode;
+  /** Dot each fitted run in its curve's colour; off where the plot's colours
+   *  mean something else (an overlaid split protocol's groups). */
+  colourRuns?: boolean;
 }
 
 /**
@@ -48,11 +51,12 @@ export function RunValueList({
   mode,
   curves,
   summary,
+  colourRuns = true,
 }: RunValueListProps) {
   const runs = av.runs ?? [];
   const total = av.run_count ?? runs.length;
   const unit = av.unit && !sameUnit(av.unit, headerUnit) ? ` ${av.unit}` : "";
-  const dotted = runs.some((r) => r.curve_snapshot);
+  const dotted = colourRuns && runs.some((r) => r.curve_snapshot);
   return (
     <div className="flex h-full min-w-0 flex-col gap-1">
       <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">

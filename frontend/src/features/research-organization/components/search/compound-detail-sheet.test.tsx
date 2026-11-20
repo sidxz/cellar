@@ -21,8 +21,12 @@ vi.mock("../../hooks/use-molecule-activity-detail", () => ({
 }));
 vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
 vi.mock("@/shared/components/status-badge", () => ({ StatusBadge: () => null }));
+const plotProps = vi.hoisted(() => [] as Array<{ layout?: Record<string, unknown> }>);
 vi.mock("@/shared/lib/plotly", () => ({
-  Plot: () => <div data-testid="visible-curve">Dose–response plot</div>,
+  Plot: (props: { layout?: Record<string, unknown> }) => {
+    plotProps.push(props);
+    return <div data-testid="visible-curve">Dose–response plot</div>;
+  },
 }));
 const figureProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
@@ -188,6 +192,61 @@ describe("compound drawer under List all runs", () => {
     expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
     // Each fit stays inspectable through the source picker.
     expect(screen.getByLabelText("Source curve · Potency")).toBeInTheDocument();
+    // The value list beside the plot is its key.
+    expect(plotProps.at(-1)?.layout?.showlegend).toBe(false);
+  });
+
+  it("keeps the legend for a split protocol, where no value list sits beside the plot", () => {
+    plotProps.length = 0;
+    const runs = [1.3, 9.1].map((fitted_value, i) => ({
+      run_id: `run-${i}`,
+      run_date: `2026-0${6 - i}-05`,
+      curve_id: `fit-${i}`,
+      curve_class: "full",
+      r_squared: 0.98,
+      intercept_values: [],
+      curve_snapshot: { fitted_value, top: 100, bottom: 0, hill_slope: 1, raw_data: [] },
+    }));
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
+          {
+            protocol_id: "proto",
+            protocol_name: "Target assay",
+            curves: [{ ...curve, run_id: "run-0" }],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{
+          ...molecule,
+          activity: { "drc:rd@cond:1 mM": { ...av, run_ids: ["run-0"], run_count: 2, runs } },
+        }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        columnGroups={{
+          proto: {
+            split: { by: "condition", condition: "ATP" },
+            groups: [
+              { key: "cond:1 mM", label: "1 mM", run_ids: ["run-0"], run_count: 2, flags: [] },
+            ],
+          },
+        }}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="all"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(runPlot()).toBeTruthy();
+    expect(plotProps.at(-1)?.layout?.showlegend).not.toBe(false);
   });
 
   it("keeps the one source curve when no listed run carries a curve", () => {
