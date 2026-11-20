@@ -11,9 +11,6 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  Fingerprint,
-  FlaskConical,
-  Hexagon,
   Loader2,
   Plus,
   RotateCcw,
@@ -23,17 +20,18 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchCount } from "../../hooks/use-search-count";
+import { MAX_KEYWORD_VALUES } from "../../lib/keyword-values";
 import { ANY_COLUMN_ID, drcColId, rdColId } from "../../lib/protocol-column-id";
 import type {
   ActivityCriterion,
   ActivityWhereCondition,
   GroupCriterion,
+  KeywordCriterion,
   PropertyCriterion,
   ScaffoldCriterion,
   SearchCriterion,
   SearchQuery,
   StructureCriterion,
-  TextCriterion,
 } from "../../types";
 import {
   AdvancedFilters,
@@ -46,12 +44,17 @@ import {
   collectionCriteriaToTerms,
   termsToCollectionCriteria,
 } from "./collection-section";
-import { KeywordSection } from "./keyword-section";
+import { KeywordSection, defaultKeywordCriterion } from "./keyword-section";
 import { ProjectFilter } from "./project-filter";
 import { PropertySection } from "./property-section";
 import { type ProtocolConjunction, ProtocolSection } from "./protocol-section";
 import { QuerySummary, type SummaryContext, searchQueryKey } from "./query-summary";
 import { ScaffoldSection } from "./scaffold-section";
+import {
+  AssayActivityIcon,
+  CompoundIdentifiersIcon,
+  MolecularStructureIcon,
+} from "./search-intent-icons";
 import { StructureSection } from "./structure-section";
 import {
   TagSection,
@@ -94,7 +97,7 @@ interface SearchFormProps {
 export function decomposeQuery(query: SearchQuery | undefined) {
   const activityCriteria: ActivityCriterion[] = [];
   const protocolConjunctions: ProtocolConjunction[] = [];
-  const textCriteria: TextCriterion[] = [];
+  const keywordCriteria: KeywordCriterion[] = [];
   const propertyCriteria: PropertyCriterion[] = [];
   let structureCriterion: StructureCriterion | null = null;
   const collectionCriteria: SearchCriterion[] = [];
@@ -109,7 +112,7 @@ export function decomposeQuery(query: SearchQuery | undefined) {
     return {
       activityCriteria,
       protocolConjunctions,
-      textCriteria,
+      keywordCriteria,
       propertyCriteria,
       structureCriterion,
       collectionCriteria,
@@ -147,7 +150,8 @@ export function decomposeQuery(query: SearchQuery | undefined) {
         break;
       }
       case "text":
-        textCriteria.push(c);
+      case "keyword_list":
+        keywordCriteria.push(c);
         break;
       case "property":
         propertyCriteria.push(c);
@@ -173,9 +177,6 @@ export function decomposeQuery(query: SearchQuery | undefined) {
       case "custom_field":
         advanced.customFields.push(c);
         break;
-      case "keyword_list":
-        advanced.keywordLists.push(c);
-        break;
       case "tag":
         tagCriteria.push(c);
         break;
@@ -187,7 +188,7 @@ export function decomposeQuery(query: SearchQuery | undefined) {
   return {
     activityCriteria,
     protocolConjunctions,
-    textCriteria,
+    keywordCriteria,
     propertyCriteria,
     structureCriterion,
     collectionCriteria,
@@ -336,7 +337,7 @@ function containsSimilarity(criteria: SearchCriterion[]): boolean {
 type FilterSectionKey =
   | "assays"
   | "structure"
-  | "identifiers"
+  | "keywords"
   | "properties"
   | "collections"
   | "tags"
@@ -345,7 +346,7 @@ type FilterSectionKey =
 const FILTER_SECTIONS: { key: FilterSectionKey; label: string }[] = [
   { key: "assays", label: "Assay activity" },
   { key: "structure", label: "Structure" },
-  { key: "identifiers", label: "Compound identifiers" },
+  { key: "keywords", label: "Keywords" },
   { key: "properties", label: "Properties" },
   { key: "collections", label: "Collections" },
   { key: "tags", label: "Tags" },
@@ -428,7 +429,9 @@ export function SearchForm({
   const [scaffoldCriteria, setScaffoldCriteria] = useState<ScaffoldCriterion[]>(
     initial.scaffoldCriteria,
   );
-  const [textCriteria, setTextCriteria] = useState<TextCriterion[]>(initial.textCriteria);
+  const [keywordCriteria, setKeywordCriteria] = useState<KeywordCriterion[]>(
+    initial.keywordCriteria,
+  );
   const [advanced, setAdvanced] = useState<AdvancedFiltersState>(initial.advanced);
   const [tagValue, setTagValue] = useState<TagSectionValue>(
     tagCriteriaToSection(initial.tagCriteria),
@@ -451,7 +454,7 @@ export function SearchForm({
     setPropertyCriteria(parsed.propertyCriteria);
     setCollectionTerms(collectionCriteriaToTerms(parsed.collectionCriteria));
     setScaffoldCriteria(parsed.scaffoldCriteria);
-    setTextCriteria(parsed.textCriteria);
+    setKeywordCriteria(parsed.keywordCriteria);
     setAdvanced(parsed.advanced);
     setTagValue(tagCriteriaToSection(parsed.tagCriteria));
     // Round-trip saved searches: a stored project criterion repopulates the
@@ -560,9 +563,9 @@ export function SearchForm({
       }
     }
 
-    // Text / Keywords
-    for (const c of textCriteria) {
-      if (c.value) criteria.push(c);
+    // Keywords — values within each row match with OR; rows narrow with AND.
+    for (const c of keywordCriteria) {
+      if (c.type === "text" ? c.value.trim() : c.values.length > 0) criteria.push(c);
     }
 
     // Advanced: selectivity
@@ -601,11 +604,6 @@ export function SearchForm({
       if (c.field.trim() && ready) criteria.push(c);
     }
 
-    // Advanced: keyword lists
-    for (const c of advanced.keywordLists) {
-      if (c.values.length > 0) criteria.push(c);
-    }
-
     return criteria;
   }, [
     projectIds,
@@ -616,7 +614,7 @@ export function SearchForm({
     collectionTerms,
     scaffoldCriteria,
     tagValue,
-    textCriteria,
+    keywordCriteria,
     advanced,
   ]);
 
@@ -636,7 +634,7 @@ export function SearchForm({
     setPropertyCriteria([]);
     setCollectionTerms([]);
     setScaffoldCriteria([]);
-    setTextCriteria([]);
+    setKeywordCriteria([]);
     setAdvanced(emptyAdvancedFilters());
     setTagValue(defaultTagSectionValue());
     onProjectsChange([]);
@@ -663,7 +661,7 @@ export function SearchForm({
   const visibleSections = new Set<FilterSectionKey>(openedSections);
   if (activityCriteria.length) visibleSections.add("assays");
   if (structureCriterion) visibleSections.add("structure");
-  if (textCriteria.length) visibleSections.add("identifiers");
+  if (keywordCriteria.length) visibleSections.add("keywords");
   if (propertyCriteria.length) visibleSections.add("properties");
   if (collectionTerms.length) visibleSections.add("collections");
   if (tagValue.tagIds.length) visibleSections.add("tags");
@@ -672,10 +670,8 @@ export function SearchForm({
 
   function addSection(key: FilterSectionKey) {
     setOpenedSections((sections) => [...new Set([...sections, key])]);
-    if (key === "identifiers" && !textCriteria.length)
-      setTextCriteria([
-        { type: "text", field: "registration_number", operator: "contains", value: "" },
-      ]);
+    if (key === "keywords" && !keywordCriteria.length)
+      setKeywordCriteria([defaultKeywordCriterion()]);
     if (key === "properties" && !propertyCriteria.length)
       setPropertyCriteria([{ type: "property", field: "molecular_weight", operator: "between" }]);
     if (key === "collections" && !collectionTerms.length)
@@ -690,7 +686,7 @@ export function SearchForm({
       setProtocolConjunctions([]);
     }
     if (key === "structure") setStructureCriterion(null);
-    if (key === "identifiers") setTextCriteria([]);
+    if (key === "keywords") setKeywordCriteria([]);
     if (key === "properties") setPropertyCriteria([]);
     if (key === "collections") setCollectionTerms([]);
     if (key === "tags") setTagValue(defaultTagSectionValue());
@@ -727,8 +723,15 @@ export function SearchForm({
   // A half-made choice the backend would reject: hold the count and Search
   // and say what's missing, instead of surfacing the backend's 422 text.
   const unpickedAssay = activityCriteria.findIndex(hasUnpickedRuns);
+  const longKeyword = keywordCriteria.findIndex(
+    (c) => c.type === "keyword_list" && c.values.length > MAX_KEYWORD_VALUES,
+  );
   const draftIssue =
-    unpickedAssay >= 0 ? `Pick at least one run for assay ${unpickedAssay + 1}` : null;
+    unpickedAssay >= 0
+      ? `Pick at least one run for assay ${unpickedAssay + 1}`
+      : longKeyword >= 0
+        ? `Keyword term ${longKeyword + 1} has more than ${MAX_KEYWORD_VALUES.toLocaleString()} values`
+        : null;
   const countQuery = useSearchCount(composedQuery, criteriaCount > 0 && !draftIssue);
   const totalCount = countQuery.data?.total_count;
   const countIsFetching = countQuery.isFetching;
@@ -820,30 +823,40 @@ export function SearchForm({
                       key: "assays",
                       label: "Assay activity",
                       description: "Find tested compounds and set activity thresholds",
-                      Icon: FlaskConical,
+                      Icon: AssayActivityIcon,
+                      iconClass: "bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-400",
                     },
                     {
                       key: "structure",
                       label: "Structure",
                       description: "Find a substructure, similar molecules, or an exact match",
-                      Icon: Hexagon,
+                      Icon: MolecularStructureIcon,
+                      iconClass:
+                        "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400",
                     },
                     {
-                      key: "identifiers",
-                      label: "Compound identifiers",
-                      description: "Look up compound IDs, names, formulas, or InChIKeys",
-                      Icon: Fingerprint,
+                      key: "keywords",
+                      label: "Keywords",
+                      description:
+                        "Search one value or paste a list of compound IDs, names, or keywords",
+                      Icon: CompoundIdentifiersIcon,
+                      iconClass:
+                        "bg-violet-50 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400",
                     },
                   ] as const
-                ).map(({ key, label, description, Icon }) => (
+                ).map(({ key, label, description, Icon, iconClass }) => (
                   <button
                     key={key}
                     type="button"
                     onClick={() => addSection(key)}
                     className="flex items-start gap-3 rounded-xl border border-border bg-background p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-2 focus-visible:outline-primary"
                   >
-                    <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
-                    <span>
+                    <span
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${iconClass}`}
+                    >
+                      <Icon className="size-6" />
+                    </span>
+                    <span className="min-w-0">
                       <span className="block text-sm font-semibold">{label}</span>
                       <span className="mt-1 block text-xs leading-relaxed text-muted-foreground">
                         {description}
@@ -875,12 +888,9 @@ export function SearchForm({
                 <StructureSection criterion={structureCriterion} onChange={setStructureCriterion} />
               </FilterCard>
             )}
-            {visibleSections.has("identifiers") && (
-              <FilterCard
-                label="Compound identifiers"
-                onRemove={() => removeSection("identifiers")}
-              >
-                <KeywordSection criteria={textCriteria} onChange={setTextCriteria} />
+            {visibleSections.has("keywords") && (
+              <FilterCard label="Keywords" onRemove={() => removeSection("keywords")}>
+                <KeywordSection criteria={keywordCriteria} onChange={setKeywordCriteria} />
               </FilterCard>
             )}
             {visibleSections.has("properties") && (

@@ -9,6 +9,20 @@ const protocols = ["A", "B", "C"].map(
 );
 
 describe("scientific query summaries", () => {
+  it("shows the field, operator and OR semantics of pasted keywords", () => {
+    expect(
+      querySummaryText({
+        criteria: [
+          {
+            type: "keyword_list",
+            ref_type: "any",
+            operator: "contains",
+            values: ["UCP1172", "SDDC-1230"],
+          },
+        ],
+      }),
+    ).toBe("All projects · Any field contains any of 2 values (“UCP1172”, “SDDC-1230”)");
+  });
   it("keeps nested AND/OR groups and negation explicit", () => {
     const query: SearchQuery = {
       criteria: [

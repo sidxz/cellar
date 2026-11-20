@@ -1480,6 +1480,39 @@ class TestChemistSearchCorrectness:
         assert by_ext in await _ids(client, any_("KINO-77"))
         assert by_ext not in await _ids(client, any_("kinostatin"))
 
+        # A pasted Keywords row matches ANY of its values across both fields.
+        keywords = [{
+            "type": "keyword_list", "ref_type": "any", "operator": "contains",
+            "values": ["kinostatin", "KINO-77"],
+        }]
+        hits = await _ids(client, keywords)
+        assert hits == {by_name, by_ext}
+        count = await client.post("/api/v1/search/count", json={"query": {"criteria": keywords}})
+        assert count.status_code == 200
+        assert count.json()["total_count"] == len(hits)
+
+        # Selecting a field narrows the search, and additional rows use AND.
+        name_only = {**keywords[0], "ref_type": "name"}
+        assert await _ids(client, [name_only]) == {by_name}
+        assert await _ids(client, [keywords[0], name_only]) == {by_name}
+        exact = {**keywords[0], "operator": "equals"}
+        assert await _ids(client, [exact]) == {by_name}
+        external_prefix = {
+            **keywords[0], "ref_type": "external_id", "operator": "starts_with",
+            "values": ["VENDOR-KINO", "MISSING-"],
+        }
+        assert await _ids(client, [external_prefix]) == {by_ext}
+
+        # Equals ignores case on external IDs, as it does on every other field.
+        external_exact = {**external_prefix, "operator": "equals", "values": ["vendor-kino-77"]}
+        assert await _ids(client, [external_exact]) == {by_ext}
+
+        # A term holds at most 1,000 values; a longer list is a 422, never a driver error.
+        too_long = {**keywords[0], "values": [f"V-{i}" for i in range(1001)]}
+        assert await _count_status(client, [too_long]) == 422
+        at_cap = {**too_long, "values": too_long["values"][:1000]}
+        assert await _count_status(client, [at_cap]) == 200
+
     async def test_keyword_list_and_exact_resolve_pasted_structures(
         self, client: AsyncClient, org_id: str, uow: AsyncUnitOfWork, workspace_id: uuid.UUID
     ) -> None:

@@ -460,10 +460,8 @@ def register_research_organization(container: Container) -> None:
         container.define(uc_cls, _saved_visualization(uc_cls))
 
     # --- Execute Search ---
-    def _search_reference_resolver(c: Container, uow: AsyncUnitOfWork) -> SearchReferenceResolver:
-        return SearchReferenceResolver(
-            SQLAlchemyMoleculeRepository(uow), c[StructureProcessorProtocol]
-        )
+    def _search_reference_resolver(c: Container) -> SearchReferenceResolver:
+        return SearchReferenceResolver(c[StructureProcessorProtocol])
 
     def _execute_search(c: Container):
         uow = AsyncUnitOfWork(c[async_sessionmaker])
@@ -478,7 +476,7 @@ def register_research_organization(container: Container) -> None:
                 protocol_repo=SQLAlchemyProtocolRepository(uow),
                 run_repo=SQLAlchemyRunRepository(uow),
             ),
-            reference_resolver=_search_reference_resolver(c, uow),
+            reference_resolver=_search_reference_resolver(c),
         )
 
     container.define(ExecuteSearch, _execute_search)
@@ -490,7 +488,7 @@ def register_research_organization(container: Container) -> None:
             uow,
             c[MoleculeReader],
             SQLAlchemySavedSearchRepository(uow),
-            reference_resolver=_search_reference_resolver(c, uow),
+            reference_resolver=_search_reference_resolver(c),
         )
 
     container.define(CountSearch, _count_search)

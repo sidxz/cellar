@@ -1,12 +1,12 @@
-"""SearchReferenceResolver runs on every live count and result page, so a
-pasted list must cost one lookup — not one per id."""
+"""SearchReferenceResolver standardizes pasted SMILES the way registration did,
+and leaves every other keyword field for the SQL composer to match."""
 
 from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
+import pytest
 from returns.result import Failure, Success
 
 from cellar.application.research_organization.search_reference_resolution import (
@@ -21,38 +21,30 @@ class _Processor:
         return Success(SimpleNamespace(structure=SimpleNamespace(inchi_key=f"KEY-{smiles}")))
 
 
-async def test_external_ids_resolve_in_one_batch_lookup() -> None:
-    ws, mol = uuid.uuid4(), uuid.uuid4()
-    repo = AsyncMock()
-    repo.find_identifiers_in_workspace = AsyncMock(return_value={"V-1": mol})
-    query = {
-        "criteria": [
-            {
-                "type": "keyword_list",
-                "ref_type": "external_id",
-                "values": [f"V-{i}" for i in range(500)],
-            }
-        ]
-    }
-
-    out = await SearchReferenceResolver(repo, _Processor())(ws, query)
-
-    repo.find_identifiers_in_workspace.assert_awaited_once()
-    assert out["criteria"][0] == {"type": "keyword_list", "ref_type": "uuid", "values": [str(mol)]}
-    assert query["criteria"][0]["ref_type"] == "external_id"  # caller's dict untouched
-
-
-async def test_smiles_lists_become_inchi_keys_without_db() -> None:
-    repo = AsyncMock()
+async def test_smiles_lists_become_inchi_keys() -> None:
     query = {
         "criteria": [{"type": "keyword_list", "ref_type": "smiles", "values": ["CCO", "bad"]}]
     }
 
-    out = await SearchReferenceResolver(repo, _Processor())(uuid.uuid4(), query)
+    out = await SearchReferenceResolver(_Processor())(uuid.uuid4(), query)
 
     assert out["criteria"][0] == {
         "type": "keyword_list",
         "ref_type": "inchi_key",
         "values": ["KEY-CCO"],
     }
-    repo.assert_not_called()
+    assert query["criteria"][0]["ref_type"] == "smiles"  # caller's dict untouched
+
+
+@pytest.mark.parametrize("operator", ["equals", "starts_with", None])
+async def test_external_id_lists_are_left_for_the_sql_composer(operator: str | None) -> None:
+    criterion = {
+        "type": "keyword_list",
+        "ref_type": "external_id",
+        "values": ["VENDOR-", "kino-77"],
+    }
+    if operator:
+        criterion["operator"] = operator
+    query = {"criteria": [criterion]}
+
+    assert await SearchReferenceResolver(_Processor())(uuid.uuid4(), query) == query

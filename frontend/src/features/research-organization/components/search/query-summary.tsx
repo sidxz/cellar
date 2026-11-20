@@ -37,6 +37,9 @@ const FIELDS: Record<string, string> = {
   inchi_key: "InChIKey",
   any: "Any field",
   name: "Name",
+  external_id: "External ID",
+  smiles: "SMILES",
+  uuid: "Internal ID",
 };
 const OPS: Record<string, string> = {
   eq: "=",
@@ -167,7 +170,14 @@ function criterionText(c: SearchCriterion, context: SummaryContext): string {
             : `Scaffold: ${c.scaffold_smiles}`;
       break;
     case "keyword_list":
-      text = `${c.values.length} identifiers (${c.ref_type})`;
+      text = `${fieldName(c.ref_type)} ${OPS[c.operator ?? "equals"]} ${
+        c.values.length === 1
+          ? `“${c.values[0]}”`
+          : `any of ${c.values.length} values (${c.values
+              .slice(0, 3)
+              .map((value) => `“${value}”`)
+              .join(", ")}${c.values.length > 3 ? ", …" : ""})`
+      }`;
       break;
     case "run_date":
       text = `Run date: ${c.date_from ?? "any start date"} to ${c.date_to ?? "today"}`;

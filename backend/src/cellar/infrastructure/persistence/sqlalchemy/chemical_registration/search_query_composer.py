@@ -126,7 +126,7 @@ def compose_criteria(query: dict[str, Any], *, workspace_id: uuid.UUID) -> Colum
         elif ctype == "project":
             clause = _project_membership_clause(criterion, workspace_id)
         elif ctype == "keyword_list":
-            clause = _keyword_list_clause(criterion)
+            clause = _keyword_list_clause(criterion, workspace_id)
         elif ctype == "run_date":
             clause = _run_date_clause(criterion, workspace_id)
         elif ctype == "batch":
@@ -207,7 +207,7 @@ def _group_clause(
         elif ctype == "project":
             clause = _project_membership_clause(sub, workspace_id)
         elif ctype == "keyword_list":
-            clause = _keyword_list_clause(sub)
+            clause = _keyword_list_clause(sub, workspace_id)
         elif ctype == "run_date":
             clause = _run_date_clause(sub, workspace_id)
         elif ctype == "batch":

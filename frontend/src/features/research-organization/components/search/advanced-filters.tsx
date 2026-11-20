@@ -15,15 +15,13 @@ import {
 } from "@/shared/components/ui/select";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Collapsible } from "radix-ui";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import type {
   BatchCriterion,
   BatchFieldType,
   CustomFieldCriterion,
   CustomFieldMode,
-  KeywordListCriterion,
   PropertyOperator,
-  RefType,
   RunDateCriterion,
   SelectivityCriterion,
   TextOperator,
@@ -65,14 +63,6 @@ const BATCH_FIELD_TYPE_OPTIONS: { value: BatchFieldType; label: string }[] = [
   { value: "date", label: "Synthesis Date" },
 ];
 
-const REF_TYPE_OPTIONS: { value: RefType; label: string }[] = [
-  { value: "registration_number", label: "Registration Number" },
-  { value: "name", label: "Name" },
-  { value: "external_id", label: "External ID" },
-  { value: "smiles", label: "SMILES" },
-  { value: "inchi_key", label: "InChI Key" },
-];
-
 // ─── Default factories ──────────────────────────────────────────────────────
 
 function defaultSelectivity(): SelectivityCriterion {
@@ -101,10 +91,6 @@ function defaultRunDate(): RunDateCriterion {
 
 function defaultCustomField(): CustomFieldCriterion {
   return { type: "custom_field", field: "", mode: "text", operator: "contains", value: "" };
-}
-
-function defaultKeywordList(): KeywordListCriterion {
-  return { type: "keyword_list", values: [], ref_type: "registration_number" };
 }
 
 // ─── Selectivity sub-component ──────────────────────────────────────────────
@@ -650,81 +636,6 @@ function CustomFieldTerm({
   );
 }
 
-// ─── Keyword list sub-component ─────────────────────────────────────────────
-
-function KeywordListTerm({
-  criterion,
-  onChange,
-  onRemove,
-}: {
-  criterion: KeywordListCriterion;
-  onChange: (c: KeywordListCriterion) => void;
-  onRemove: () => void;
-}) {
-  // The textarea keeps its own text (so "CC-1, " isn't rewritten to "CC-1"
-  // mid-typing) but commits the parsed list on every change — committing only
-  // on blur meant Cmd+Enter from inside the textarea searched without it.
-  const [rawText, setRawText] = useState(criterion.values.join("\n"));
-  const canonicalValues = criterion.values.join(",");
-  const lastCommitted = useRef(canonicalValues);
-
-  // Re-sync only when the values change from outside (saved-search load),
-  // never from our own commits.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the canonical string so parent re-renders with an equal list don't clobber the text.
-  useEffect(() => {
-    if (canonicalValues === lastCommitted.current) return;
-    lastCommitted.current = canonicalValues;
-    setRawText(criterion.values.join("\n"));
-  }, [canonicalValues]);
-
-  function handleTextChange(text: string) {
-    setRawText(text);
-    const parsed = text
-      .split(/[,;\t\r\n]+/)
-      .map((v) => v.trim())
-      .filter(Boolean);
-    lastCommitted.current = parsed.join(",");
-    onChange({ ...criterion, values: parsed });
-  }
-
-  return (
-    <div className="flex items-start gap-2">
-      <div className="w-52">
-        <Label className="text-xs text-muted-foreground">Identifier Type</Label>
-        <Select
-          value={criterion.ref_type}
-          onValueChange={(v) => onChange({ ...criterion, ref_type: v as RefType })}
-        >
-          <SelectTrigger className="h-9 w-full">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {REF_TYPE_OPTIONS.map((r) => (
-              <SelectItem key={r.value} value={r.value}>
-                {r.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex-1">
-        <Label className="text-xs text-muted-foreground">
-          Values ({criterion.values.length} identifier{criterion.values.length !== 1 ? "s" : ""})
-        </Label>
-        <textarea
-          className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring h-20 font-mono text-xs resize-y"
-          placeholder="Paste a column from Excel, one per line, or comma-separated…"
-          value={rawText}
-          onChange={(e) => handleTextChange(e.target.value)}
-        />
-      </div>
-      <Button variant="ghost" size="icon" className="mt-5 h-9 w-9 shrink-0" onClick={onRemove}>
-        <Trash2 className="h-4 w-4 text-muted-foreground" />
-      </Button>
-    </div>
-  );
-}
-
 // ─── Main advanced filters section ──────────────────────────────────────────
 
 export interface AdvancedFiltersState {
@@ -732,7 +643,6 @@ export interface AdvancedFiltersState {
   batch: BatchCriterion[];
   runDate: RunDateCriterion[];
   customFields: CustomFieldCriterion[];
-  keywordLists: KeywordListCriterion[];
 }
 
 export function emptyAdvancedFilters(): AdvancedFiltersState {
@@ -741,7 +651,6 @@ export function emptyAdvancedFilters(): AdvancedFiltersState {
     batch: [],
     runDate: [],
     customFields: [],
-    keywordLists: [],
   };
 }
 
@@ -758,8 +667,7 @@ export function AdvancedFilters({ state, onChange, defaultOpen = false }: Advanc
     state.selectivity.length +
     state.batch.length +
     state.runDate.length +
-    state.customFields.length +
-    state.keywordLists.length;
+    state.customFields.length;
   // A loaded saved search that uses these filters must show them — a
   // collapsed panel hides half the query the chemist is looking at.
   const hasTerms = totalTerms > 0;
@@ -914,42 +822,6 @@ export function AdvancedFilters({ state, onChange, defaultOpen = false }: Advanc
                 }
                 onRemove={() =>
                   onChange({ ...state, customFields: state.customFields.filter((_, j) => j !== i) })
-                }
-              />
-            ))}
-          </div>
-
-          {/* Keyword List */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-medium text-muted-foreground">Keyword List</Label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-6 text-xs"
-                onClick={() =>
-                  onChange({
-                    ...state,
-                    keywordLists: [...state.keywordLists, defaultKeywordList()],
-                  })
-                }
-              >
-                <Plus className="mr-1 h-3 w-3" /> Add
-              </Button>
-            </div>
-            {state.keywordLists.map((c, i) => (
-              <KeywordListTerm
-                key={`kwl-${i}`}
-                criterion={c}
-                onChange={(updated) =>
-                  onChange({
-                    ...state,
-                    keywordLists: state.keywordLists.map((s, j) => (j === i ? updated : s)),
-                  })
-                }
-                onRemove={() =>
-                  onChange({ ...state, keywordLists: state.keywordLists.filter((_, j) => j !== i) })
                 }
               />
             ))}

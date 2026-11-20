@@ -1,18 +1,14 @@
 """Resolve user-supplied references in a search query before it is composed.
 
-The SQL composer (infrastructure) can only match columns it sees. Two
-criterion shapes carry values it cannot match directly:
+The SQL composer (infrastructure) can only match what is stored. A pasted
+SMILES is not: registration stored the standardized structure's InChIKey. So
+two criterion shapes are standardized here the way registration did it:
 
-- ``keyword_list`` by ``external_id`` (lives in the identifier table) —
-  resolved to molecule UUIDs in one batch lookup; by ``smiles`` —
-  standardized the way registration did and matched as InChIKeys.
-- an ``exact`` structure match given as SMILES — standardized to the InChIKey
-  registration stored for the molecule.
+- a ``keyword_list`` by ``smiles`` — matched as InChIKeys;
+- an ``exact`` structure match given as SMILES.
 
-Both are what a chemist pastes in practice ("here are my vendor ids", "is
-this structure registered?"), so they are resolved here rather than rejected.
-This runs on every live count and every result page, so it stays one query
-at most per criterion — never one per pasted id.
+External IDs need no resolution: the composer matches them in the identifier
+table itself, case-insensitively like every other keyword field.
 """
 
 from __future__ import annotations
@@ -24,15 +20,11 @@ from typing import Any
 from returns.result import Failure
 
 from cellar.application.chemical_registration.protocols import StructureProcessorProtocol
-from cellar.domain.chemical_registration.repository import MoleculeRepository
 from cellar.domain.research_organization.criteria_walker import walk_criteria
 
 
 class SearchReferenceResolver:
-    def __init__(
-        self, molecule_repo: MoleculeRepository, structure_processor: StructureProcessorProtocol
-    ) -> None:
-        self._molecule_repo = molecule_repo
+    def __init__(self, structure_processor: StructureProcessorProtocol) -> None:
         self._structure_processor = structure_processor
 
     async def __call__(self, workspace_id: uuid.UUID, query: dict[str, Any]) -> dict[str, Any]:
@@ -46,13 +38,7 @@ class SearchReferenceResolver:
         leaves: list[dict[str, Any]] = []
         walk_criteria(resolved.get("criteria"), leaves.append)
         for c in leaves:
-            if c.get("type") == "keyword_list" and c.get("ref_type") == "external_id":
-                found = await self._molecule_repo.find_identifiers_in_workspace(
-                    workspace_id, {v.strip() for v in c.get("values") or [] if v.strip()}
-                )
-                c["ref_type"] = "uuid"
-                c["values"] = sorted({str(mid) for mid in found.values()})
-            elif c.get("type") == "keyword_list" and c.get("ref_type") == "smiles":
+            if c.get("type") == "keyword_list" and c.get("ref_type") == "smiles":
                 keys = (self._inchi_key(v) for v in c.get("values") or [])
                 c["ref_type"] = "inchi_key"
                 c["values"] = sorted({k for k in keys if k})

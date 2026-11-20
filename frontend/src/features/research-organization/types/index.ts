@@ -356,8 +356,12 @@ export interface CollectionCriterion {
 export interface KeywordListCriterion {
   type: "keyword_list";
   values: string[];
-  ref_type: RefType;
+  ref_type: RefType | "any" | "molecular_formula";
+  /** Omitted in older saved searches, where lists match exact identifiers. */
+  operator?: TextOperator;
 }
+
+export type KeywordCriterion = (TextCriterion | KeywordListCriterion) & { negate?: boolean };
 
 export interface RunDateCriterion {
   type: "run_date";

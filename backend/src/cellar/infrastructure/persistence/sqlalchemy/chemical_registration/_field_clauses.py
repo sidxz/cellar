@@ -238,30 +238,67 @@ def _project_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> Colum
     )
 
 
-def _keyword_list_clause(criterion: dict[str, Any]) -> ColumnElement:
-    """Filter molecules by a pasted list of identifiers.
+# "Any field" spends ~5 bind parameters per value; this keeps a term well under
+# asyncpg's 32,767 and the live count fast. The frontend holds Search at the same cap.
+MAX_KEYWORD_VALUES = 1000
 
-    Registration numbers and InChIKeys are upper-case by construction, names
-    match case-insensitively — pasted lists rarely preserve case. External IDs
-    and SMILES are resolved to ``uuid`` by the application layer first
-    (``resolve_search_references``); an empty resolved list matches nothing.
+
+def _keyword_list_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
+    """Match any pasted value against the selected field(s).
+
+    Older lists omit ``operator`` and keep their exact-match behavior. New
+    keyword rows also support contains / starts_with and searching every text
+    field plus external identifiers in one row. Every field matches ignoring
+    case. SMILES lists are resolved to InChIKeys by the application layer first.
     """
     values = criterion["values"]
     ref_type = criterion.get("ref_type", "registration_number")
+    operator = criterion.get("operator", "equals")
 
     if ref_type == "uuid":
         return MoleculeModel.id.in_(values) if values else sa.false()
+    values = [v.strip() for v in values if v.strip()]
     if not values:
         msg = "keyword_list values must not be empty"
         raise ValueError(msg)
-    if ref_type == "registration_number":
+    if len(values) > MAX_KEYWORD_VALUES:
+        msg = (
+            f"A keyword term holds up to {MAX_KEYWORD_VALUES:,} values; "
+            f"this one has {len(values):,}. Split the list across searches."
+        )
+        raise ValueError(msg)
+    if operator == "equals" and ref_type == "registration_number":
         return MoleculeModel.registration_number.in_([v.upper() for v in values])
-    if ref_type == "inchi_key":
+    if operator == "equals" and ref_type == "inchi_key":
         return MoleculeModel.inchi_key.in_([v.upper() for v in values])
-    if ref_type == "name":
+    if operator == "equals" and ref_type == "name":
         return sa.func.lower(MoleculeModel.name).in_([v.lower() for v in values])
-    msg = f"keyword_list ref_type '{ref_type}' requires pre-resolution to UUIDs"
-    raise ValueError(msg)
+
+    def match(column: Any) -> ColumnElement:
+        if operator == "equals":
+            return sa.func.lower(column).in_([v.lower() for v in values])
+        return sa.or_(*(_text_match(column, operator, v, "keyword") for v in values))
+
+    if ref_type == "any":
+        clauses = [match(column) for column in TEXT_FIELDS.values()]
+    elif ref_type in TEXT_FIELDS:
+        clauses = [match(TEXT_FIELDS[ref_type])]
+    elif ref_type == "external_id":
+        clauses = []
+    else:
+        msg = f"keyword_list ref_type '{ref_type}' requires pre-resolution to UUIDs"
+        raise ValueError(msg)
+
+    if ref_type in {"any", "external_id"}:
+        clauses.append(
+            MoleculeModel.id.in_(
+                sa.select(MoleculeIdentifierModel.molecule_id).where(
+                    MoleculeIdentifierModel.workspace_id == workspace_id,
+                    match(MoleculeIdentifierModel.identifier),
+                )
+            )
+        )
+    return sa.or_(*clauses)
 
 
 def _run_date_clause(criterion: dict[str, Any], workspace_id: uuid.UUID) -> ColumnElement:
