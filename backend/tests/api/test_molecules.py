@@ -205,6 +205,30 @@ class TestListMolecules:
         # IDs should be different
         assert data2["items"][0]["id"] != data["items"][0]["id"]
 
+    async def test_list_is_newest_registered_first_and_pages_on(
+        self, client: AsyncClient, seed_org: str
+    ) -> None:
+        for name, smiles in (("First", "CCO"), ("Second", "CCCO"), ("Third", "CCCCO")):
+            resp = await client.post(
+                "/api/v1/molecules",
+                json={"name": name, "smiles": smiles, "originating_org_id": seed_org},
+            )
+            assert resp.status_code == 201, resp.text
+
+        whole = (await client.get("/api/v1/molecules")).json()
+        assert [m["name"] for m in whole["items"]] == ["Third", "Second", "First"]
+
+        # One at a time, the cursor walks the same order to the end.
+        names, cursor = [], None
+        while True:
+            params = {"limit": 1, **({"cursor": cursor} if cursor else {})}
+            page = (await client.get("/api/v1/molecules", params=params)).json()
+            names += [m["name"] for m in page["items"]]
+            cursor = page["next_cursor"]
+            if not cursor:
+                break
+        assert names == ["Third", "Second", "First"]
+
 
 class TestListMoleculesByIds:
     async def test_bulk_by_ids_returns_matching_molecules(

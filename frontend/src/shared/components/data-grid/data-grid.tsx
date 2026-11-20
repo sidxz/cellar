@@ -341,6 +341,10 @@ export function DataGrid<TData = unknown>({
         <AgGridReact<TData>
           ref={gridRef}
           theme={cellarTheme}
+          // AG Grid's default `content-visibility: auto` lets Chrome skip the grid's
+          // contents; a grid created during an in-app navigation (production build)
+          // then stayed blank until a reload.
+          suppressContentVisibilityAuto
           rowModelType={isInfinite ? "infinite" : undefined}
           datasource={isInfinite ? datasource : undefined}
           rowData={isInfinite ? undefined : (rowData ?? [])}

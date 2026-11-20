@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
 from cellar.domain.chemical_registration.bulk_disclosure import BulkDisclosure
@@ -89,9 +90,12 @@ class MoleculeRepository(Protocol):
         *,
         filters: dict[str, Any] | None = None,
         search_term: str | None = None,
-        cursor_id: uuid.UUID | None = None,
+        cursor: tuple[datetime, uuid.UUID] | None = None,
         limit: int | None = None,
-    ) -> list[Molecule]: ...
+    ) -> list[Molecule]:
+        """Newest registered first; ``cursor`` is the (created_at, id) of the
+        previous page's last molecule."""
+        ...
 
     async def next_registration_number(
         self, workspace_id: uuid.UUID, *, prefix: str, width: int
