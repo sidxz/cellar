@@ -91,6 +91,19 @@ const around = (grid: React.ReactNode) =>
     </>,
   );
 
+describe("DataGrid rendering", () => {
+  // AG Grid's default `content-visibility: auto` left a grid created during an
+  // in-app navigation never laid out in the production build: blank until a reload.
+  it("keeps its contents rendered rather than letting the browser skip them", async () => {
+    const { container } = render(
+      <DataGrid<Row> rowData={rows} columnDefs={columns} searchPlaceholder={false} />,
+    );
+    await screen.findByRole("link", { name: "Alpha" });
+    const root = container.querySelector<HTMLElement>(".ag-root-wrapper");
+    expect(root?.style.getPropertyValue("content-visibility")).toBe("visible");
+  });
+});
+
 describe("DataGrid keyboard", () => {
   it("tabs from the headers through each row's links and buttons, then on out of the grid", async () => {
     around(<DataGrid<Row> rowData={rows} columnDefs={columns} searchPlaceholder={false} />);
