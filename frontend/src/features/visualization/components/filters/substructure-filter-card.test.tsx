@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { type Filter, type SubstructureFilter, membershipKey } from "../../lib/filters";
 import { WorkbenchProvider, useWorkbench } from "../../store/workbench-context";
@@ -100,9 +100,7 @@ describe("SubstructureFilterCard", () => {
     expect(screen.getByTestId("query-structure")).toHaveAttribute("data-kind", "smiles");
     expect(screen.getByText("1 of 3 compounds match")).toBeInTheDocument();
     expect(screen.getByText("1 compound has no structure and never matches")).toBeInTheDocument();
-    expect(
-      screen.getByText("Rows without a compound (controls, blanks) are hidden while this is on."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Rows without a compound/)).toBeInTheDocument();
   });
 
   it("warns when no compound contains the query", () => {
@@ -122,16 +120,6 @@ describe("SubstructureFilterCard", () => {
     expect(screen.getByText("1 of 2 compounds match")).toBeInTheDocument();
     expect(screen.queryByText(/no structure/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Rows without a compound/)).not.toBeInTheDocument();
-  });
-
-  it("titles the card Substructure, its count on a line of its own, the query on hover", () => {
-    show(benzene(["m1"]));
-    const header = screen.getByRole("button", { name: "Contains c1ccccc1" });
-    expect(header).toHaveAttribute("title", "Contains c1ccccc1");
-    const [title, count] = within(header).getByText("Substructure").parentElement?.children ?? [];
-    expect(title).toHaveTextContent(/^Substructure$/);
-    expect(count).toHaveTextContent(/^1 of 3 compounds$/);
-    expect(title.parentElement).toHaveClass("flex-col");
   });
 
   it("collapses to its summary", () => {

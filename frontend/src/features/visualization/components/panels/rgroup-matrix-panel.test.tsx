@@ -1,3 +1,4 @@
+import { potencyShade } from "@/features/sar-analysis/lib/sar-activity-display";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { matrixWells, panel } from "../../lib/traces/test-fixtures";
@@ -72,11 +73,14 @@ describe("RGroupMatrixPanel", () => {
     expect(screen.getByTitle(CL_H)).toHaveTextContent(/^2$/);
   });
 
-  it("shades potencies from the most potent cell", () => {
+  it("shades potencies by fold off the most potent cell", () => {
     show({ y: "dr:rd:raw" }, withPotency());
     expect(screen.getByTitle(CL_H)).toHaveTextContent("0.1 uM");
-    expect(screen.getByTitle(CL_H).className).toContain("bg-green-600/30");
-    expect(screen.getByTitle(F_H).className).toContain("bg-amber-500/20");
+    // The ramp itself is potencyShade's (tested there); here: the reference is the
+    // most potent cell, so Cl sits at 1× and F (1 uM) at 10× off it.
+    expect(screen.getByTitle(CL_H).className).toContain(potencyShade(0.1, 0.1));
+    expect(screen.getByTitle(F_H).className).toContain(potencyShade(1, 0.1));
+    expect(potencyShade(1, 0.1)).not.toBe(potencyShade(0.1, 0.1));
     expect(screen.queryByText("Shading is for potencies only")).not.toBeInTheDocument();
   });
 

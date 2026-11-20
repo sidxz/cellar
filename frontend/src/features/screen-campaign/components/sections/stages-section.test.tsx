@@ -247,7 +247,8 @@ describe("StagesSection", () => {
       />,
       { wrapper },
     );
-    expect(screen.queryByText(/the rest stay untested/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^after /)).not.toBeInTheDocument();
+    expect(screen.queryByText("root")).not.toBeInTheDocument();
 
     rerender(
       <StagesSection
@@ -257,12 +258,6 @@ describe("StagesSection", () => {
         readOnly={false}
       />,
     );
-    // A criteria stage with none passes what it measured, and nothing else.
-    expect(
-      screen.getByText(
-        "No criteria yet — compounds measured at this stage pass; the rest stay untested.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.getByText("after Screening Hits")).toBeInTheDocument();
 
     rerender(

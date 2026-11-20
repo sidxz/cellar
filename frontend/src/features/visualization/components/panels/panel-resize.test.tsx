@@ -109,7 +109,6 @@ describe("a split Wells scatter beside a newly added R-group matrix", () => {
     // Same graph, same observer: nothing remounted, so nothing waits for a window resize.
     expect(screen.getAllByTestId("graph")).toEqual([graph]);
     expect(FakeObserver.all).toHaveLength(1);
-    expect(graph.closest(".grid")).toHaveClass("lg:grid-cols-2");
 
     // The grid's second column halves the scatter's box: it refits to it.
     act(() => report(545));

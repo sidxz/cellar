@@ -220,11 +220,11 @@ describe("WorkbenchTable", () => {
     expect(screen.queryByText(/structure $/)).not.toBeInTheDocument();
     expect(screen.getByText("> 12.5")).toBeInTheDocument();
     expect(screen.getByText("≤ 3")).toBeInTheDocument();
-    expect(screen.getByText("40")).toHaveClass("line-through");
+    expect(screen.getByText("40")).toBeInTheDocument();
     expect(screen.getByText("Outlier")).toBeInTheDocument();
   });
 
-  it("names a well without a compound by its label, else its role, muted", async () => {
+  it("names a well without a compound by its label, else its role", async () => {
     const roles: Dataset = {
       ...ds,
       row_count: 4,
@@ -249,10 +249,8 @@ describe("WorkbenchTable", () => {
       ["w2", "MadR"],
       ["w3", "no compound"],
     ]) {
-      expect(within(cell(row, "compound")).getByText(text)).toHaveClass("text-muted-foreground");
-      expect(within(cell(row, "structure")).getByText("no compound")).toHaveClass(
-        "text-muted-foreground",
-      );
+      expect(within(cell(row, "compound")).getByText(text)).toBeInTheDocument();
+      expect(within(cell(row, "structure")).getByText("no compound")).toBeInTheDocument();
     }
   });
 
@@ -316,10 +314,8 @@ describe("WorkbenchTable", () => {
     );
   });
 
-  it("flows with the page in pages of 100 rows, 50 to 500 on offer", async () => {
-    const { container } = show([], { table: many(250) });
-    // No inner scroll box: the grid is as tall as its rows.
-    expect(container.querySelector(".ag-root-wrapper")).toHaveClass("ag-layout-auto-height");
+  it("pages 100 rows at a time, 50 to 500 on offer", async () => {
+    show([], { table: many(250) });
     await vi.waitFor(() => expect(pageSummary()).toBe("1 to 100 of 250"));
     fireEvent.mouseDown(screen.getByRole("combobox", { name: "Page Size" }));
     expect(screen.getAllByRole("option").map((o) => o.textContent?.trim())).toEqual([

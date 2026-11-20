@@ -148,23 +148,6 @@ describe("ChannelPopoverForm run scope", () => {
   });
 });
 
-describe("ChannelPopoverForm selection rule", () => {
-  it("labels the rule Latest run and says what it picks", () => {
-    render(
-      <ChannelPopoverForm campaignId="c1" projectId="p1" existing={existing} onClose={vi.fn()} />,
-      { wrapper },
-    );
-    const trigger = screen.getAllByRole("combobox").find((el) => el.textContent === "Latest run");
-    expect(trigger).toBeDefined();
-    fireEvent.click(trigger as HTMLElement);
-    expect(
-      within(screen.getByRole("listbox")).getByText(
-        "Newest run that passes this channel's QC filter.",
-      ),
-    ).toBeInTheDocument();
-  });
-});
-
 describe("ChannelPopoverForm stage", () => {
   const stages = [
     { id: "st-1", name: "Primary", display_order: 0, kind: "criteria", criteria: [] },

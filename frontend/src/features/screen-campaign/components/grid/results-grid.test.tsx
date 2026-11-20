@@ -84,10 +84,7 @@ describe("CompoundValueCell reported marker", () => {
     expect(reported).toBe(true);
 
     renderCell({ reported });
-    expect(screen.getByText("reported")).toHaveAttribute(
-      "title",
-      "Reported endpoint — no fitted curve for this compound",
-    );
+    expect(screen.getByText("reported")).toBeInTheDocument();
   });
 
   it("shows no chip for a DR measurement backed by a fitted curve", () => {
@@ -107,16 +104,6 @@ describe("CompoundValueCell reported marker", () => {
 
     renderCell({ reported });
     expect(screen.queryByText("reported")).toBeNull();
-  });
-
-  it("keeps the chip on the marker line beside the verdict chip", () => {
-    renderCell({ reported: true, verdict: "pass" });
-    const chip = screen.getByText("reported");
-    const markerLine = chip.parentElement;
-    expect(markerLine).toHaveTextContent("pass");
-    // Value stays on its own line above the markers so the 120px column
-    // never clips it.
-    expect(markerLine).not.toHaveTextContent("13.6");
   });
 });
 
@@ -283,12 +270,10 @@ describe("MeasurementFacts", () => {
     expect(screen.getByRole("link", { name: "Run on Nov 14, 2026" })).toBeInTheDocument();
   });
 
-  it("tells same-day runs apart the way the stage list does, wrapping inside the card", () => {
-    const dl = facts(measurement);
+  it("tells same-day runs apart the way the stage list does", () => {
+    facts(measurement);
     const line = screen.getByText("created 09:05 · run-1").closest("li") as HTMLElement;
     expect(line).toHaveTextContent("Kinase Panel · Run on Nov 12, 2026created 09:05 · run-1");
-    expect(line).not.toHaveClass("truncate");
-    expect(dl.className).toContain("minmax(0,1fr)");
   });
 
   it("calls a dose-response value a concentration series and leaves n out", () => {

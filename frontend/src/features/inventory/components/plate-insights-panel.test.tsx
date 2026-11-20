@@ -72,11 +72,11 @@ describe("PlateInsightsPanel", () => {
     plotCalls.length = 0;
   });
 
-  it("renders the three stat tiles, overdue styled destructive when > 0", async () => {
+  it("renders the three stat tiles, overdue flagged when > 0", async () => {
     setup("org-1");
     expect(await screen.findByText("42")).toBeInTheDocument();
     expect(screen.getByText("5")).toBeInTheDocument();
-    expect(screen.getByText("2")).toHaveClass("text-destructive");
+    expect(screen.getByText("2")).toHaveAttribute("data-state", "overdue");
   });
 
   it("renders five plots when data is present", async () => {

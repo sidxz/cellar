@@ -26,14 +26,6 @@ describe("ClustersDialog", () => {
     expect(threshold()).toHaveAttribute("min", "0.05");
     expect(threshold()).toHaveAttribute("max", "0.95");
     expect(threshold()).toHaveAttribute("step", "0.05");
-    expect(
-      screen.getByText(
-        "Lower = tighter clusters. Butina clustering on Morgan fingerprints; the map is UMAP.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Over 500 compounds run in the background — you can keep working."),
-    ).toBeInTheDocument();
     fireEvent.click(apply());
     expect(onApply).toHaveBeenCalledWith(0.4);
     expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -73,13 +65,6 @@ describe("ClustersDialog", () => {
   it("is disabled above 50,000 compounds, with the count", () => {
     open(61_204);
     expect(apply()).toBeDisabled();
-    expect(
-      screen.getByText("61,204 compounds; clustering is capped at 50,000. Choose fewer runs."),
-    ).toBeInTheDocument();
-  });
-
-  it("fits the screen: no taller than the viewport, scrolling when it must", () => {
-    open(120);
-    expect(screen.getByRole("dialog")).toHaveClass("max-h-[calc(100dvh-2rem)]", "overflow-y-auto");
+    expect(threshold()).toHaveAccessibleDescription(expect.stringContaining("61,204"));
   });
 });

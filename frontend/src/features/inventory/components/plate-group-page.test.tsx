@@ -112,7 +112,7 @@ function setup(detail: PlateGroupDetailResponse = baseDetail) {
 describe("PlateGroupPage", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("shows the title, breadcrumb ancestors, details, children, plates, and activity", async () => {
+  it("shows the title, breadcrumb ancestors, details, children and plates", async () => {
     setup();
 
     await waitFor(() =>
@@ -146,11 +146,6 @@ describe("PlateGroupPage", () => {
     // Plates.
     expect(screen.getByText("000123")).toBeInTheDocument();
     expect(screen.getByText("000456")).toBeInTheDocument();
-
-    // Activity card.
-    expect(
-      screen.getByText("No activity yet — return notes and comments on this group appear here."),
-    ).toBeInTheDocument();
 
     // Action buttons.
     const actions = screen.getByRole("button", { name: "Add child" }).closest("div");

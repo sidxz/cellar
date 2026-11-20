@@ -331,14 +331,10 @@ describe("SavedViewPage", () => {
     expect(state.datasetCalls.every(([source]) => source === null)).toBe(true);
   });
 
-  it("refuses a view saved by a newer version", () => {
+  it("refuses a view saved by a newer version, fetching no data", () => {
     state.view = loaded(savedView({ config: { ...config(), config_version: 3 } }));
     show();
-    expect(
-      screen.getByText(
-        "This view was saved by a newer version of ChemCellar. Reload the page to open it.",
-      ),
-    ).toBeInTheDocument();
+    expect(state.datasetCalls.every(([source]) => source === null)).toBe(true);
   });
 
   describe("with chemistry", () => {

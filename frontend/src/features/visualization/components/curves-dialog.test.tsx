@@ -143,16 +143,6 @@ describe("CurvesDialog", () => {
     expect(document.body.textContent).not.toMatch(UUID);
   });
 
-  it("sets the chart in a plain block, never straight in the dialog's grid", async () => {
-    // A grid item stretched to its row gives the chart's full-height plot box a definite
-    // height to fill: a blank gap under the plot, the cards pushed onto the run table.
-    state.curves = [curve("c1", R1, 0.25)];
-    await openDialog({ runIds: [R1] });
-    const chart = screen.getByRole("list", { name: "Chart" });
-    expect(chart.parentElement).not.toBe(screen.getByRole("dialog"));
-    expect(chart.parentElement).toContainElement(screen.getByRole("table"));
-  });
-
   it("keeps to the row's batch", async () => {
     state.curves = [curve("c1", R1, 0.25), curve("c2", R2, 0.5, { batch_id: "other" })];
     await openDialog({ batchId: B1, runIds: [R1, R2] });

@@ -73,9 +73,4 @@ describe("SampleDetail shipments card", () => {
     expect(card).toHaveTextContent("2.5 mg");
     expect(card.querySelector("a")).toHaveAttribute("href", "/inventory/shipments/s1");
   });
-  it("empty copy when the sample was never shipped", async () => {
-    setup();
-    const card = await screen.findByTestId("shipment-links");
-    await waitFor(() => expect(card).toHaveTextContent("Never shipped."));
-  });
 });

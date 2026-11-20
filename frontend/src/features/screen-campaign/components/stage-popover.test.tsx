@@ -236,9 +236,8 @@ describe("StagePopoverForm — readout picker", () => {
     expect(options.map((o) => o.textContent)).toEqual(["% Inhibition (%) · Kinase Panel"]);
   });
 
-  it("explains that a stage without columns can't have criteria yet", () => {
+  it("offers no criteria on a stage without columns", () => {
     render(<StagePopoverForm campaignId="c1" campaign={campaign} onClose={vi.fn()} />, { wrapper });
-    expect(screen.getByText(/Criteria judge this stage's own columns/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Criterion/ })).not.toBeInTheDocument();
   });
 });

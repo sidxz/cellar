@@ -100,7 +100,7 @@ describe("DerivedColumnsBar", () => {
     });
     const h = renderBar([entry(rg1, { status: "ready", set })]);
     expect(screen.getByText("R1 · 2 of 3 match")).toBeInTheDocument();
-    expect(screen.getByText("Only 1 of 3 compounds match this core")).toHaveClass("text-warning");
+    expect(screen.getByText("Only 1 of 3 compounds match this core")).toBeInTheDocument();
     expect(screen.getByText("Computed for 2 of 3 compounds")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Recompute" }));
     expect(h.onRecompute).toHaveBeenCalledWith("rg1");

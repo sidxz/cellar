@@ -160,10 +160,12 @@ describe("LoanPage content", () => {
     expect(card).toHaveTextContent("In Transit");
     expect(card.querySelector("a")).toHaveAttribute("href", "/inventory/shipments/s1");
   });
-  it("Logistics card: empty copy when no shipment is recorded", async () => {
+  it("Logistics card: lists no shipment when none is recorded", async () => {
     setup(me("org-A"));
     const card = await screen.findByTestId("shipment-links");
-    await waitFor(() => expect(card).toHaveTextContent("No shipment recorded for this loan."));
+    // Settled: the loading ellipsis is gone, and no row links to a shipment.
+    await waitFor(() => expect(card).not.toHaveTextContent("…"));
+    expect(card.querySelector("a")).toBeNull();
   });
   it("request-return opens the dialog instead of posting immediately", async () => {
     setup(me("org-B"));

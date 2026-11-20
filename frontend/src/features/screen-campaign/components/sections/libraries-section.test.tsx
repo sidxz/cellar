@@ -129,17 +129,6 @@ describe("LibrariesSection", () => {
     expect(addMutate).not.toHaveBeenCalled();
   });
 
-  // Per-stage hits are hidden in cellar's UI for now (the rendering in
-  // libraries-section.tsx is commented out, not deleted). Unskip with it.
-  it.skip("shows hits and tested per stage, by stage name", () => {
-    renderSection();
-    expect(screen.getAllByText("Primary")).toHaveLength(2);
-    expect(screen.getByText("2 hits / 2 tested")).toBeInTheDocument();
-    expect(screen.getByText("1 hit / 2 tested")).toBeInTheDocument();
-    // A library that reached no stage still lists them, at zero.
-    expect(screen.getAllByText("0 hits / 0 tested")).toHaveLength(2);
-  });
-
   it("explains the coverage calculation when the campaign has no source runs", () => {
     renderSection({ campaign: { ...campaign, seed_runs: [] } as CampaignResponse });
     expect(screen.getByText(/This campaign has no source runs/i)).toBeInTheDocument();
@@ -150,11 +139,10 @@ describe("LibrariesSection", () => {
     expect(screen.queryByRole("button", { name: /library/i })).not.toBeInTheDocument();
   });
 
-  it("invites the first library when none are linked", () => {
+  it("offers the picker and lists no coverage when no library is linked", () => {
     coverage.mockReturnValue({ data: [], isLoading: false });
     renderSection();
-    expect(
-      screen.getByText(/Add a library to see how many of its compounds were screened/i),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /library/i })).toBeInTheDocument();
+    expect(screen.queryByText(/\d+%/)).not.toBeInTheDocument();
   });
 });

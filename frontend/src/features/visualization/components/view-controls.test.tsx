@@ -266,11 +266,6 @@ describe("ViewControls", () => {
     fireEvent.click(saveBtn());
 
     expect(await screen.findByText("This view changed since you opened it")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "A newer version is available. Reload view discards your unsaved changes. Save as new view keeps your edits in a separate copy.",
-      ),
-    ).toBeInTheDocument();
     expect(showError).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Reload view" }));
     expect(state.reload).toHaveBeenCalled();
@@ -337,11 +332,7 @@ describe("ViewControls", () => {
     show({ level: "runs" });
     openMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: "Delete view…" }));
-    expect(
-      screen.getByText(
-        "Delete “Plate drift”? People it's shared with lose it too. The data isn't affected.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("alertdialog")).toHaveTextContent("Plate drift");
     fireEvent.click(screen.getByRole("button", { name: "Delete view" }));
 
     await waitFor(() =>

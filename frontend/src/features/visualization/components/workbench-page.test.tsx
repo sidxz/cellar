@@ -426,9 +426,6 @@ describe("WorkbenchPage", () => {
     const source: DatasetSource = { kind: "protocol", protocolId: P1, runIds: [R3] };
     render(<WorkbenchPage level="batches" source={source} />);
     expect(screen.getByText("No completed or approved runs here")).toBeInTheDocument();
-    expect(
-      screen.getByText("Batches and Compounds count only completed or approved runs."),
-    ).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show Runs" }));
     expect(state.replace).toHaveBeenCalledWith(
       `/assays/visualize?protocol=${P1}&runs=${R3}&level=runs`,

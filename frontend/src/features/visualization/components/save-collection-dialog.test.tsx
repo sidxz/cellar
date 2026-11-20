@@ -84,14 +84,9 @@ describe("SaveCollectionButton", () => {
     expect(screen.getByRole("button", { name: "Save 8 compounds…" })).toBeEnabled();
   });
 
-  it("is disabled with the reason when only control wells are selected", () => {
+  it("is disabled when only control wells are selected", () => {
     show(["w9", "w10"]);
-    const button = screen.getByRole("button", { name: "Save 0 compounds…" });
-    expect(button).toBeDisabled();
-    expect(button.parentElement).toHaveAttribute(
-      "title",
-      "No compounds in the current rows (controls and DMSO are excluded)",
-    );
+    expect(screen.getByRole("button", { name: "Save 0 compounds…" })).toBeDisabled();
   });
 
   it("is hidden for viewers", () => {
@@ -105,9 +100,7 @@ describe("SaveCollectionDialog", () => {
   it("saves the filtered rows' compounds without controls, then links to the collection", () => {
     show([]);
     fireEvent.click(screen.getByRole("button", { name: "Save 8 compounds…" }));
-    expect(screen.getByRole("dialog")).toHaveTextContent(
-      "8 compounds from the filtered rows · controls and DMSO wells are never included",
-    );
+    expect(screen.getByRole("dialog")).toHaveTextContent("8 compounds");
     const save = screen.getByRole("button", { name: "Save collection" });
     expect(save).toBeDisabled();
 

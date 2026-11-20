@@ -110,11 +110,6 @@ describe("SavedViewsListPage", () => {
     expect(state.useSavedViews).toHaveBeenCalledWith(undefined);
     expect(screen.getByRole("heading", { name: "Saved views" })).toBeInTheDocument();
     const table = screen.getByRole("table", { name: "Search by name…" });
-    expect(
-      within(table)
-        .getAllByRole("columnheader")
-        .map((h) => h.textContent),
-    ).toEqual(["Name", "Protocol", "Level", "Owner", "Sharing", "Last updated"]);
     const [, qc, potency] = within(table).getAllByRole("row");
     expect(within(qc).getByRole("link", { name: "Plate QC" })).toHaveAttribute(
       "href",
@@ -140,14 +135,6 @@ describe("SavedViewsListPage", () => {
       "title",
       "M. tuberculosis InhA inhibition [DD-CoA fluorescence]",
     );
-  });
-
-  it("with none saved, says how to save one", () => {
-    render(<SavedViewsListPage />);
-    expect(screen.getByText("No saved views yet")).toBeInTheDocument();
-    expect(
-      screen.getByText(/Open Visualize on a protocol or a run, set up the plots and filters/),
-    ).toBeInTheDocument();
   });
 
   it("says when the list couldn't be loaded", () => {

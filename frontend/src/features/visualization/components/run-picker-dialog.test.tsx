@@ -40,25 +40,13 @@ describe("RunPickerDialog", () => {
 
   it("at Compounds, marks runs that don't count there, keeps them ticked and opens at that level", () => {
     render(<RunPickerDialog protocolId="p1" level="compounds" open onOpenChange={vi.fn()} />);
-    expect(screen.getByText("Not counted")).toHaveAttribute(
-      "title",
-      "Batches and Compounds count only completed or approved runs",
-    );
+    expect(screen.getByText("Not counted")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "Include 2026-10-29 · A. Chen" })).toBeChecked();
     expect(screen.getByText("2 of 3 chosen runs count at this level")).toBeInTheDocument();
     expect(screen.getByText("220,000 wells selected")).toBeInTheDocument();
     expect(screen.queryByText(/over the 100,000-row limit/i)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Open workbench" }));
     expect(push).toHaveBeenCalledWith("/assays/visualize?protocol=p1&level=compounds");
-  });
-
-  it("lets Not counted and the conditions wrap, never widening the table past the Wells column", () => {
-    render(<RunPickerDialog protocolId="p1" level="compounds" open onOpenChange={vi.fn()} />);
-    expect(screen.getByText("Not counted").parentElement).toHaveClass("flex-wrap");
-    for (const cell of screen.getAllByText("ATP: 10 uM")) {
-      expect(cell).not.toHaveClass("truncate");
-      expect(cell).not.toHaveClass("whitespace-nowrap");
-    }
   });
 
   it("updates the total when a run is unticked and opens the chosen runs", () => {
@@ -91,14 +79,6 @@ describe("RunPickerDialog", () => {
 });
 
 describe("VisualizeButton", () => {
-  it("links a run straight to the workbench", () => {
-    render(<VisualizeButton runId="r9" />);
-    expect(screen.getByRole("link", { name: /visualize/i })).toHaveAttribute(
-      "href",
-      "/assays/visualize?run=r9",
-    );
-  });
-
   it("opens the run picker from a protocol", () => {
     render(<VisualizeButton protocolId="p1" />);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

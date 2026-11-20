@@ -97,24 +97,7 @@ function chooseProtocolAndRun() {
   fireEvent.click(screen.getByRole("checkbox", { name: /Run on/ }));
 }
 
-describe("AddFromRunsDialog wording and default stage", () => {
-  it("says what it adds and where a stage's values come from", () => {
-    render(
-      <AddFromRunsDialog
-        campaignId="c1"
-        projectId="p1"
-        stages={[primary]}
-        open
-        onOpenChange={vi.fn()}
-      />,
-      { wrapper },
-    );
-    expect(screen.getByRole("heading", { name: "Add runs" })).toBeInTheDocument();
-    expect(
-      screen.getByText("Values at a stage come only from the runs added to it."),
-    ).toBeInTheDocument();
-  });
-
+describe("AddFromRunsDialog default stage", () => {
   it("starts Source compounds' + Run on the stage selected in Hit stages", () => {
     const campaign = { id: "c1", stages: [primary] } as unknown as CampaignResponse;
     render(

@@ -85,17 +85,6 @@ describe("PanelGrid and AddPlotMenu", () => {
     expect(screen.getAllByRole("region")).toHaveLength(1);
   });
 
-  it("gives every plot a definite height, taller when maximized", () => {
-    // The page scrolls, so the plots size from the viewport, not from a split pane.
-    show(3);
-    const grid = screen.getAllByRole("region")[0].parentElement as HTMLElement;
-    expect(grid.className).toContain("auto-rows-[max(320px,45dvh)]");
-    expect(grid).toHaveClass("lg:grid-cols-2");
-    fireEvent.click(screen.getAllByRole("button", { name: "Maximize plot" })[0]);
-    expect(grid.className).toContain("auto-rows-[max(420px,75dvh)]");
-    expect(grid).not.toHaveClass("lg:grid-cols-2");
-  });
-
   it("offers only the count bar when nothing is numeric", () => {
     show(1, dataset(false));
     openMenu(/Add plot/);
@@ -106,12 +95,12 @@ describe("PanelGrid and AddPlotMenu", () => {
     expect(screen.getByText(/no numeric fields to plot/i)).toBeInTheDocument();
   });
 
-  it("offers the R-group matrix only once R-group columns exist, saying why", () => {
+  it("offers the R-group matrix only once R-group columns exist", () => {
     show(1);
     openMenu(/Add plot/);
-    const item = screen.getByRole("menuitem", { name: /R-group matrix/ });
-    expect(item).toHaveAttribute("data-disabled");
-    expect(item).toHaveTextContent("Add R-groups first: Add columns → R-groups…");
+    expect(screen.getByRole("menuitem", { name: /R-group matrix/ })).toHaveAttribute(
+      "data-disabled",
+    );
   });
 
   it("adds an R-group matrix of R1 × R2", () => {

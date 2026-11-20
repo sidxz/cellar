@@ -87,6 +87,7 @@ export function PlateInsightsPanel({ orgId }: PlateInsightsPanelProps) {
         </div>
         <div className="rounded-md border bg-card p-4">
           <div
+            data-state={data.overdue_count > 0 ? "overdue" : undefined}
             className={cn("text-2xl font-semibold", data.overdue_count > 0 && "text-destructive")}
           >
             {data.overdue_count}

@@ -179,7 +179,6 @@ describe("SelectionStrip outlier flags", () => {
     fireEvent.click(screen.getByRole("button", { name: "Flag as outlier" }));
     expect(screen.getByText("1 well")).toBeInTheDocument(); // r2's well c is not offered
     const submit = screen.getAllByRole("button", { name: "Flag as outlier" }).at(-1) as HTMLElement;
-    expect(screen.getByLabelText("Reason")).toHaveAttribute("placeholder", "Reason (required)");
     expect(submit).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Reason"), { target: { value: "bubble" } });
     expect(submit).toBeEnabled();

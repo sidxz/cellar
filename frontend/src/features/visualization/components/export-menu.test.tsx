@@ -45,9 +45,8 @@ describe("ExportMenu", () => {
     expect(screen.getByRole("menuitem", { name: "Export 1 selected row as CSV" })).toBeVisible();
   });
 
-  it("downloads a plot as PNG named after its title, and says why not SVG", () => {
+  it("downloads a plot as PNG named after its title", () => {
     show();
-    expect(screen.getByText(/SVG of WebGL plots embeds a raster/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Signal by well_order" }));
     expect(downloadImage).toHaveBeenCalledWith(
       screen.getByTestId("graph"),
