@@ -127,10 +127,6 @@ function setup(
 }
 
 describe("compound drawer under List all runs", () => {
-  beforeEach(() => {
-    figureProps.length = 0;
-  });
-
   function renderListed(runCurves: Array<number | null>) {
     const runs = runCurves.map((fitted_value, i) => ({
       run_id: `run-${i}`,
@@ -167,24 +163,36 @@ describe("compound drawer under List all runs", () => {
     );
   }
 
+  beforeEach(() => {
+    plotArgs.length = 0;
+  });
+  const runPlot = () => plotArgs.find(([, opts]) => opts.showMarker === false);
+
   it("draws every listed run's curve in the large plot, labelled by run date", () => {
-    renderListed([1.3, null, 9.1]);
-    const props = figureProps.find((p) => p.size === "full");
-    expect(props).toBeTruthy();
-    const curves = props?.curves as { label: string; curve: { fitted_value: number } | null }[];
-    expect(curves.map((c) => [c.label, c.curve?.fitted_value ?? null])).toEqual([
+    renderListed([1.3, 9.1, 0.4]);
+    const call = runPlot();
+    expect(call).toBeTruthy();
+    const [curves, opts] = call as [
+      Array<{ label: string; fitted_value: number }>,
+      Record<string, unknown>,
+    ];
+    expect(curves.map((c) => [c.label, c.fitted_value])).toEqual([
       ["2026-06-05", 1.3],
-      ["2026-05-05", null],
-      ["2026-04-05", 9.1],
+      ["2026-05-05", 9.1],
+      ["2026-04-05", 0.4],
     ]);
-    expect(screen.queryByTestId("visible-curve")).toBeNull();
+    // The x-axis names the search's unit.
+    expect((curves[0] as { fitted_unit?: string }).fitted_unit).toBe("uM");
+    // Fifty curves can't carry a dashed line and a label each.
+    expect(opts).toMatchObject({ showCI: false, showMarker: false, showPlateaus: false });
+    expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
     // Each fit stays inspectable through the source picker.
     expect(screen.getByLabelText("Source curve · Potency")).toBeInTheDocument();
   });
 
   it("keeps the one source curve when no listed run carries a curve", () => {
     renderListed([null, null]);
-    expect(figureProps.find((p) => p.size === "full")).toBeUndefined();
+    expect(runPlot()).toBeUndefined();
     expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
   });
 });

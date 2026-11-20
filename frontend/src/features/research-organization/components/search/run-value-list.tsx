@@ -55,7 +55,7 @@ export function RunValueList({
   const dotted = runs.some((r) => r.curve_snapshot);
   return (
     <div className="flex h-full min-w-0 flex-col gap-1">
-      <ul className="min-h-0 flex-1 overflow-y-auto">
+      <ul className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
         {runs.map((r, i) => (
           <li
             key={`${r.run_id}:${r.curve_id}`}

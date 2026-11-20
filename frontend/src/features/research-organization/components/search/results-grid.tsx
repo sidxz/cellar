@@ -98,6 +98,9 @@ interface ResultsGridProps {
   selectionActions?: React.ReactNode;
 }
 
+/** A value column under List all runs: room for "< 0.005081" and its run date. */
+const LISTED_RUNS_WIDTH = 200;
+
 // ─── Row height by image size ───────────────────────────────────────────────
 
 const ROW_HEIGHTS: Record<string, number> = {
@@ -309,7 +312,7 @@ function buildReadoutColumn(
       : (catalogLabel ?? `${rdName}${headerSuffix}`),
     headerTooltip: `${rdName}${headerSuffix} · ${proto?.name ?? "Assay"}`,
     colId,
-    width: 112,
+    width: listsRuns(mode) ? LISTED_RUNS_WIDTH : 112,
     valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
@@ -389,7 +392,7 @@ export function buildDrcColumns(
     cols.push({
       headerName: `${rd?.name ?? "Curve"}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
       colId: columnId("value"),
-      width: 130,
+      width: listsRuns(aggregationMode) ? LISTED_RUNS_WIDTH : 130,
       valueGetter: (p) => {
         const av = p.data?.activity?.[colId];
         if (!av) return null;
@@ -413,7 +416,7 @@ export function buildDrcColumns(
         headerName: `${interceptLabel(spec)}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
         headerTooltip: `${rd?.name ?? "Endpoint"} · ${proto?.name ?? "Assay"}`,
         colId: columnId(`${spec.kind}:${spec.level}`),
-        width: 150,
+        width: listsRuns(aggregationMode) ? LISTED_RUNS_WIDTH : 150,
         valueGetter: (p) => {
           const av = p.data?.activity?.[colId];
           if (!av) return null;

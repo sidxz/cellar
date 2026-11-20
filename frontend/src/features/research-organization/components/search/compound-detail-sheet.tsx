@@ -3,9 +3,9 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
-import { DoseResponseFigure } from "@/features/screening-assay/components/dose-response-figure";
-import { percentYRange } from "@/features/screening-assay/lib/curve-frame";
+import { curveFrame, drawnPoints, percentYRange } from "@/features/screening-assay/lib/curve-frame";
 import { fitNoteLabel } from "@/features/screening-assay/lib/dose-response-display";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import type {
   CurveClass,
   CurveType,
@@ -48,7 +48,7 @@ import type {
 } from "../../types";
 import { ActiveInCell } from "./active-in-cell";
 import { AssayResult } from "./assay-result";
-import { DoseResponseOverlay, runOverlayCurves } from "./dose-response-cell";
+import { DoseResponseOverlay } from "./dose-response-cell";
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────
 
@@ -234,11 +234,34 @@ function SourceCurveCard({
         : null,
     [adapted],
   );
+  // List all runs: the large plot draws every listed run's curve, as the grid
+  // cell does (a split protocol's group overlay wins, as in the grid). Curve i
+  // takes overlayColor(i), the i-th dot in the value list: every fitted run
+  // carries a snapshot, so none drops out and shifts the colours. No legend,
+  // intercept lines or value labels — the value list beside it is the key, and
+  // fifty of each would bury the curves. Framed like the grid's thumbnails.
+  const listed = !overlay && listsRuns(mode) ? av : undefined;
+  const runPlot = useMemo(() => {
+    const snaps = (listed?.runs ?? []).flatMap((r) =>
+      r.curve_snapshot
+        ? [{ ...r.curve_snapshot, label: r.run_date, fitted_unit: listed?.unit ?? null }]
+        : [],
+    );
+    if (snaps.length === 0) return null;
+    const frame = curveFrame(
+      snaps.flatMap((snap) => drawnPoints(snap)),
+      { percent: isPercentNormalization(listed?.fitted_layer) },
+    );
+    return buildDoseResponsePlot(snaps, {
+      showCI: false,
+      showMarker: false,
+      showPlateaus: false,
+      yRange: frame.yRange,
+    });
+  }, [listed]);
   if (!curve || !adapted || !figure) return null;
   const aggregate = mode === "gmean" || mode === "mean";
-  // List all runs: the large plot draws every listed run's curve, as the grid
-  // cell does (a split protocol's group overlay wins, as in the grid).
-  const runCurves = !overlay && listsRuns(mode) ? runOverlayCurves(av) : null;
+  const plot = runPlot ?? figure;
   const capturedTotal = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
   const excludedCount = curve.excluded_points?.length ?? 0;
   return (
@@ -290,7 +313,7 @@ function SourceCurveCard({
           fit’s details.
         </p>
       )}
-      {runCurves && (
+      {runPlot && (
         <p className="text-xs leading-relaxed text-muted-foreground">
           Every listed run’s curve, coloured like its value. The source curve above opens one fit’s
           details.
@@ -318,7 +341,7 @@ function SourceCurveCard({
           aria-label={
             overlay
               ? `Dose–response curves for ${readoutName}, every group overlaid`
-              : runCurves
+              : runPlot
                 ? `Dose–response curves for ${readoutName}, every listed run overlaid`
                 : `Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`
           }
@@ -326,18 +349,17 @@ function SourceCurveCard({
         >
           {overlay ? (
             <DoseResponseOverlay entries={overlay} size="full" />
-          ) : runCurves ? (
-            <DoseResponseFigure curves={runCurves} size="full" unit={av?.unit ?? null} />
           ) : (
             <Plot
-              data={figure.traces}
+              data={plot.traces}
               layout={{
-                ...figure.layout,
+                ...plot.layout,
+                ...(runPlot ? { showlegend: false } : {}),
                 height: 300,
                 autosize: true,
                 margin: { l: 55, r: 15, t: 25, b: 50 },
               }}
-              config={{ ...figure.config, responsive: true }}
+              config={{ ...plot.config, responsive: true }}
               style={{ width: "100%", height: 300 }}
               useResizeHandler
             />
