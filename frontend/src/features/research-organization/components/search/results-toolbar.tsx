@@ -4,7 +4,7 @@ import { Button } from "@/shared/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import { BookmarkPlus, Columns2, Layers, ListPlus, Rows2, Rows3, Settings2 } from "lucide-react";
 import { useReportConfig } from "../../hooks/use-report-config";
-import { useAggregationMode } from "../../lib/use-aggregation-mode";
+import { SEARCH_AGGREGATION_MODES, useAggregationMode } from "../../lib/use-aggregation-mode";
 import type { PlotLayout, SearchDisplayPreset } from "../../types";
 import { AggregationControl } from "./aggregation-control";
 
@@ -133,6 +133,7 @@ export function ResultsViewControls({
         <AggregationControl
           mode={mode}
           onChange={setMode}
+          modes={SEARCH_AGGREGATION_MODES}
           disabled={scopeForcesSingleRun}
           busy={busy}
         />

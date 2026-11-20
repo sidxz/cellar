@@ -6,8 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 import type { SelectionRule } from "@/shared/lib/api/model";
 import type { SearchCriterion } from "../types";
 
-export type AggregationMode = "latest" | "gmean" | "mean" | "best_r2";
+/** `all` ("List all runs") is search-only: each cell lists every run, while
+ *  the headline, sorting and export follow the latest run. */
+export type AggregationMode = "latest" | "gmean" | "mean" | "best_r2" | "all";
 
+/** The rules that reduce a cell to one value — what SAR colouring offers. */
 export const AGGREGATION_MODES: readonly AggregationMode[] = [
   "latest",
   "gmean",
@@ -15,16 +18,24 @@ export const AGGREGATION_MODES: readonly AggregationMode[] = [
   "best_r2",
 ] as const;
 
+/** The search grid's options: the rules plus List all runs. */
+export const SEARCH_AGGREGATION_MODES: readonly AggregationMode[] = [
+  ...AGGREGATION_MODES,
+  "all",
+] as const;
+
 export const AGGREGATION_LABELS: Record<AggregationMode, string> = {
   latest: "Latest run",
   gmean: "Geometric mean",
   mean: "Arithmetic mean",
   best_r2: "Best fit (R²)",
+  all: "List all runs",
 };
 
 /** What each rule picks, shown under its label in the menu. */
 export const AGGREGATION_DESCRIPTIONS: Partial<Record<AggregationMode, string>> = {
   latest: "Newest run that isn't rejected.",
+  all: "Every run's value and curve, newest first.",
 };
 
 const URL_TO_MODE: Record<string, AggregationMode> = {
@@ -32,6 +43,7 @@ const URL_TO_MODE: Record<string, AggregationMode> = {
   gmean: "gmean",
   mean: "mean",
   best_r2: "best_r2",
+  all: "all",
 };
 
 const WIRE_TO_MODE: Record<string, AggregationMode> = {
@@ -39,6 +51,8 @@ const WIRE_TO_MODE: Record<string, AggregationMode> = {
   geometric_mean: "gmean",
   mean_across_runs: "mean",
   best_r_squared: "best_r2",
+  // Never sent to the server: only a stored search's `aggregation` holds it.
+  all_runs: "all",
 };
 
 const MODE_TO_WIRE: Record<AggregationMode, SelectionRule> = {
@@ -46,6 +60,7 @@ const MODE_TO_WIRE: Record<AggregationMode, SelectionRule> = {
   gmean: "geometric_mean" as SelectionRule,
   mean: "mean_across_runs" as SelectionRule,
   best_r2: "best_r_squared" as SelectionRule,
+  all: "latest_run" as SelectionRule,
 };
 
 export function isAggregationMode(value: string): value is AggregationMode {
@@ -67,6 +82,17 @@ export function wireToAggregationMode(wire: string): AggregationMode {
 
 export function aggregationModeToWire(mode: AggregationMode): SelectionRule {
   return MODE_TO_WIRE[mode];
+}
+
+/** True when each cell lists every run (the request's `list_runs`). */
+export function listsRuns(mode: AggregationMode): boolean {
+  return mode === "all";
+}
+
+/** The `aggregation` a saved or recent search stores inside its query: the
+ *  wire rule, except List all runs, which must reload as itself. */
+export function aggregationModeToStored(mode: AggregationMode): string {
+  return mode === "all" ? "all_runs" : MODE_TO_WIRE[mode];
 }
 
 /**

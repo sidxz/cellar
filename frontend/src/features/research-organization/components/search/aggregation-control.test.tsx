@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { SEARCH_AGGREGATION_MODES } from "../../lib/use-aggregation-mode";
 import { AggregationControl } from "./aggregation-control";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
@@ -38,6 +39,22 @@ describe("AggregationControl", () => {
     expect(screen.getByRole("combobox").textContent).toBe("Latest run");
     fireEvent.click(screen.getByRole("combobox"));
     expect(screen.getByText("Newest run that isn't rejected.")).toBeInTheDocument();
+  });
+
+  it("offers List all runs only where the host asks for it", () => {
+    const onChange = vi.fn();
+    const { unmount } = render(<AggregationControl mode="latest" onChange={onChange} />);
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.queryByText("List all runs")).toBeNull();
+    unmount();
+
+    render(
+      <AggregationControl mode="latest" onChange={onChange} modes={SEARCH_AGGREGATION_MODES} />,
+    );
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.getByText("Every run's value and curve, newest first.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("List all runs"));
+    expect(onChange).toHaveBeenCalledWith("all");
   });
 
   // The `disabled` prop swaps the dropdown for a static label (used when
