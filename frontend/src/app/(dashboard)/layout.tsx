@@ -6,6 +6,7 @@ import { RouteAccess } from "@/shared/components/layout/route-access";
 import { SidebarInset, SidebarProvider } from "@/shared/components/ui/sidebar";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { usePreferencesSync } from "@/shared/hooks/use-preferences-sync";
+import { rememberPlace } from "@/shared/lib/auth/return-after-login";
 import { usePreferencesStore } from "@/shared/lib/stores/preferences-store";
 import { useAuthz } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
@@ -34,6 +35,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     // (IdP token lost on reload) the AuthzProvider's `autoReauth` performs a
     // silent re-auth redirect — sending to /login here would pre-empt it.
     if (!isLoading && authState === "unauthenticated") {
+      // Sign-in comes back here, link parameters included.
+      rememberPlace(window.location.pathname + window.location.search);
       router.replace("/login");
     }
   }, [isLoading, authState, router]);

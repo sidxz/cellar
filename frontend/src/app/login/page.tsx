@@ -3,6 +3,7 @@
 import { HexLensLogo } from "@/shared/components/hex-lens-logo";
 import { LoginPlate } from "@/shared/components/login-plate/login-plate";
 import { useAppConfig } from "@/shared/lib/app-config";
+import { takePlace } from "@/shared/lib/auth/return-after-login";
 import { useAuthz } from "@duar-auth/nextjs";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
@@ -37,7 +38,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.replace("/");
+      router.replace(takePlace() ?? "/");
     }
   }, [isAuthenticated, router]);
 
