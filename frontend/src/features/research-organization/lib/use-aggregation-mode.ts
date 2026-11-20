@@ -171,11 +171,16 @@ export function useAggregationMode(): {
   mode: AggregationMode;
   setMode: (next: AggregationMode) => void;
 } {
-  // Reads on first render from Next's snapshot (SSR-safe) so the initial
-  // value matches the URL the page was loaded with.
+  // First value: the live URL in the browser, so a control that mounts after
+  // `setMode` rewrote it (the results toolbar, once a stored search's results
+  // arrive) starts on that mode; Next's snapshot only knows the loaded URL.
+  // On the server, the snapshot (the same URL the client hydrates with).
   const params = useSearchParams();
-  const initialMode = aggregationModeFromUrl(params.get("agg"));
-  const [mode, setModeState] = useState<AggregationMode>(initialMode);
+  const [mode, setModeState] = useState<AggregationMode>(() =>
+    typeof window === "undefined"
+      ? aggregationModeFromUrl(params.get("agg"))
+      : readModeFromWindow(),
+  );
 
   useEffect(() => {
     const listener = () => setModeState(readModeFromWindow());

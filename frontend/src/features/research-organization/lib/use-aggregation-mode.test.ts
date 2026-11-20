@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Next's snapshot of the URL the page loaded with: no `agg`.
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 import type { RunScope, SearchCriterion } from "../types";
 import {
   AGGREGATION_MODES,
@@ -10,6 +14,7 @@ import {
   computeScopeForcesSingleRun,
   isAggregationMode,
   listsRuns,
+  useAggregationMode,
   wireToAggregationMode,
 } from "./use-aggregation-mode";
 
@@ -181,5 +186,19 @@ describe("computeScopeForcesSingleRun", () => {
       } as SearchCriterion,
     ];
     expect(computeScopeForcesSingleRun(grouped)).toBe(false);
+  });
+});
+
+describe("useAggregationMode", () => {
+  afterEach(() => window.history.replaceState({}, "", "/"));
+
+  it("a control mounted after a stored search set the mode reads that mode", () => {
+    // A recent search sets the mode before the results toolbar exists.
+    const { result: page } = renderHook(() => useAggregationMode());
+    act(() => page.current.setMode("all"));
+
+    const { result: toolbar } = renderHook(() => useAggregationMode());
+
+    expect(toolbar.current.mode).toBe("all");
   });
 });
