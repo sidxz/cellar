@@ -2,6 +2,7 @@
 
 import { SetupChecklist } from "@/features/workspace-config/components/setup-checklist";
 import { PageHeader } from "@/shared/components/page-header";
+import { ReturnToBarFromUrl } from "@/shared/components/return-to-bar";
 import { Button } from "@/shared/components/ui/button";
 import {
   DropdownMenu,
@@ -33,6 +34,7 @@ export function ScreeningDashboard() {
 
   return (
     <div className="space-y-3">
+      <ReturnToBarFromUrl />
       <PageHeader title="Protocols" className="mb-3 flex-wrap gap-3">
         {(cddEnabled || canCreate) && (
           <DropdownMenu>

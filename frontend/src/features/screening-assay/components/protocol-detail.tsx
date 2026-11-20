@@ -4,6 +4,7 @@ import { VisualizeButton } from "@/features/visualization/components/visualize-b
 import { CascadeDeleteDialog } from "@/shared/components/cascade-delete-dialog";
 import { DetailShell } from "@/shared/components/detail-shell";
 import { DetailTabsContent, DetailTabsList } from "@/shared/components/detail-tabs";
+import { ReturnToBarFromUrl } from "@/shared/components/return-to-bar";
 import { Button } from "@/shared/components/ui/button";
 import {
   Dialog,
@@ -362,78 +363,81 @@ export function ProtocolDetail({ protocolId }: ProtocolDetailProps) {
         }}
       >
         {(protocol) => (
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
-            <DetailTabsList aria-label="Protocol sections">
-              <TabsTrigger value="overview">
-                <LayoutDashboard className="h-4 w-4" />
-                Overview
-              </TabsTrigger>
-              <TabsTrigger value="runs">
-                <FlaskConical className="h-4 w-4" />
-                Runs
-              </TabsTrigger>
-              <TabsTrigger value="results">
-                <Activity className="h-4 w-4" />
-                Results
-              </TabsTrigger>
-              <TabsTrigger value="setup">
-                <Settings2 className="h-4 w-4" />
-                Setup
-              </TabsTrigger>
-              <TabsTrigger value="files">
-                <Paperclip className="h-4 w-4" />
-                Files
-              </TabsTrigger>
-            </DetailTabsList>
+          <>
+            <ReturnToBarFromUrl protocolId={protocol.id} protocolCode={protocol.code} />
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="gap-4">
+              <DetailTabsList aria-label="Protocol sections">
+                <TabsTrigger value="overview">
+                  <LayoutDashboard className="h-4 w-4" />
+                  Overview
+                </TabsTrigger>
+                <TabsTrigger value="runs">
+                  <FlaskConical className="h-4 w-4" />
+                  Runs
+                </TabsTrigger>
+                <TabsTrigger value="results">
+                  <Activity className="h-4 w-4" />
+                  Results
+                </TabsTrigger>
+                <TabsTrigger value="setup">
+                  <Settings2 className="h-4 w-4" />
+                  Setup
+                </TabsTrigger>
+                <TabsTrigger value="files">
+                  <Paperclip className="h-4 w-4" />
+                  Files
+                </TabsTrigger>
+              </DetailTabsList>
 
-            <DetailTabsContent value="overview" activeValue={activeTab}>
-              <OverviewTab
-                protocol={protocol}
-                protocolId={protocolId}
-                onTabChange={setActiveTab}
-                onEditName={editName(protocol)}
-              />
-            </DetailTabsContent>
-            <DetailTabsContent value="runs" activeValue={activeTab}>
-              <RunsTab
-                protocol={protocol}
-                protocolId={protocolId}
-                onCompareCurves={(ids) => {
-                  setCurveRunIds(ids);
-                  openResultsView("curves");
-                }}
-              />
-            </DetailTabsContent>
-            <DetailTabsContent value="results" activeValue={activeTab}>
-              <Tabs value={activeResultsView} onValueChange={openResultsView} className="gap-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <TabsList aria-label="Protocol result view">
-                    <TabsTrigger value="activity">Compound activity</TabsTrigger>
-                    {hasCurves && <TabsTrigger value="curves">Compare traces</TabsTrigger>}
-                  </TabsList>
-                  <VisualizeButton protocolId={protocol.id} />
-                </div>
-                <DetailTabsContent value="activity" activeValue={activeResultsView}>
-                  <ActivityTab protocol={protocol} protocolId={protocolId} />
-                </DetailTabsContent>
-                {hasCurves && (
-                  <DetailTabsContent value="curves" activeValue={activeResultsView}>
-                    <CurvesTab
-                      protocolId={protocolId}
-                      runIds={curveRunIds}
-                      onRunIdsChange={setCurveRunIds}
-                    />
+              <DetailTabsContent value="overview" activeValue={activeTab}>
+                <OverviewTab
+                  protocol={protocol}
+                  protocolId={protocolId}
+                  onTabChange={setActiveTab}
+                  onEditName={editName(protocol)}
+                />
+              </DetailTabsContent>
+              <DetailTabsContent value="runs" activeValue={activeTab}>
+                <RunsTab
+                  protocol={protocol}
+                  protocolId={protocolId}
+                  onCompareCurves={(ids) => {
+                    setCurveRunIds(ids);
+                    openResultsView("curves");
+                  }}
+                />
+              </DetailTabsContent>
+              <DetailTabsContent value="results" activeValue={activeTab}>
+                <Tabs value={activeResultsView} onValueChange={openResultsView} className="gap-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <TabsList aria-label="Protocol result view">
+                      <TabsTrigger value="activity">Compound activity</TabsTrigger>
+                      {hasCurves && <TabsTrigger value="curves">Compare traces</TabsTrigger>}
+                    </TabsList>
+                    <VisualizeButton protocolId={protocol.id} />
+                  </div>
+                  <DetailTabsContent value="activity" activeValue={activeResultsView}>
+                    <ActivityTab protocol={protocol} protocolId={protocolId} />
                   </DetailTabsContent>
-                )}
-              </Tabs>
-            </DetailTabsContent>
-            <DetailTabsContent value="setup" activeValue={activeTab}>
-              <DesignTab protocol={protocol} protocolId={protocolId} />
-            </DetailTabsContent>
-            <DetailTabsContent value="files" activeValue={activeTab}>
-              <FilesTab protocolId={protocolId} />
-            </DetailTabsContent>
-          </Tabs>
+                  {hasCurves && (
+                    <DetailTabsContent value="curves" activeValue={activeResultsView}>
+                      <CurvesTab
+                        protocolId={protocolId}
+                        runIds={curveRunIds}
+                        onRunIdsChange={setCurveRunIds}
+                      />
+                    </DetailTabsContent>
+                  )}
+                </Tabs>
+              </DetailTabsContent>
+              <DetailTabsContent value="setup" activeValue={activeTab}>
+                <DesignTab protocol={protocol} protocolId={protocolId} />
+              </DetailTabsContent>
+              <DetailTabsContent value="files" activeValue={activeTab}>
+                <FilesTab protocolId={protocolId} />
+              </DetailTabsContent>
+            </Tabs>
+          </>
         )}
       </DetailShell>
 
