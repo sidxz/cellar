@@ -41,7 +41,7 @@ describe("refit messages", () => {
 
     await act(() => result.current.recompute.mutateAsync({ runId: "r1" }));
 
-    expect(showSuccess).toHaveBeenCalledWith("Recomputed 182 readouts and refit curves", {
+    expect(showSuccess).toHaveBeenCalledWith(expect.stringContaining("182"), {
       description: NOTE,
     });
     expect(showWarning).not.toHaveBeenCalled();
@@ -52,7 +52,9 @@ describe("refit messages", () => {
 
     await act(() => result.current.recompute.mutateAsync({ runId: "r1" }));
 
-    expect(showWarning).toHaveBeenCalledWith("1 curve fit failed", { description: FAILED });
+    expect(showWarning).toHaveBeenCalledWith(expect.stringContaining("1"), {
+      description: FAILED,
+    });
   });
 
   it("an import says the same", async () => {

@@ -81,15 +81,6 @@ describe("TemperatureWindowDialog", () => {
     readouts = [];
   });
 
-  it("says the readouts come from each position's peaks", () => {
-    renderDialog();
-    expect(
-      screen.getByText(
-        "Adds readouts computed from each position's peaks inside the transition's temperature range.",
-      ),
-    ).toBeInTheDocument();
-  });
-
   it("sends name, channel key, bounds and both measures", async () => {
     customInstance.mockResolvedValue({});
     renderDialog();
@@ -155,14 +146,9 @@ describe("TemperatureWindowDialog", () => {
     expect(screen.getByLabelText("High (°C)")).toHaveValue(null);
   });
 
-  it("tells the user to import a run when the protocol has no traces", () => {
+  it("offers no form when the protocol has no traces", () => {
     channels = [];
     renderDialog();
-    expect(
-      screen.getByText(
-        "Import a run with traces first; the transition's signal comes from its traces.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
   });
 

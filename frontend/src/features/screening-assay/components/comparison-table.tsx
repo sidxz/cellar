@@ -112,6 +112,7 @@ export function ComparisonTable({ rows }: ComparisonTableProps) {
                   "px-3 py-2 font-mono",
                   row.fitted_value === bestIC50 && "text-success font-semibold",
                 )}
+                data-best={row.fitted_value === bestIC50 || undefined}
               >
                 {potency(row).text}
               </td>

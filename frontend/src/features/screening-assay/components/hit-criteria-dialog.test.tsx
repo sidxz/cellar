@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HitCriterion, ReadoutDefinition } from "../types";
+import { DELTA_TM_HINT } from "./delta-tm-hint";
 import { HitCriteriaDialog, RunHitCriteriaDialog } from "./hit-criteria-dialog";
 
 // Radix Dialog/Select need pointer-event stubs in jsdom.
@@ -129,7 +130,7 @@ describe("outside operator", () => {
     );
     // two bound inputs, and the hint under the ΔTm criterion
     expect(screen.getAllByRole("spinbutton")).toHaveLength(2);
-    expect(screen.getByText(/Typical: outside −2 to 2 °C/)).toBeInTheDocument();
+    expect(screen.getByText(DELTA_TM_HINT)).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("combobox")[1]);
     expect(within(screen.getByRole("listbox")).getByText("outside")).toBeInTheDocument();
   });

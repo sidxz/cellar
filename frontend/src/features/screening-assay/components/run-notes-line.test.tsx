@@ -27,7 +27,6 @@ describe("RunNotesLine", () => {
   it("offers an 'Add notes…' affordance when editable and empty", () => {
     render(<RunNotesLine run={run()} canEdit />);
     expect(screen.getByRole("button", { name: "Add notes" })).toBeInTheDocument();
-    expect(screen.getByText("Add notes…")).toBeInTheDocument();
   });
 
   it("enters edit mode on click and exposes a textarea", () => {

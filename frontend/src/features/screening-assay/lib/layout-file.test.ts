@@ -3,7 +3,14 @@ import { describe, expect, it } from "vitest";
 
 import type { LayoutFile, LayoutFileRow } from "../types";
 import type { LabellingRow } from "./labelling-rows";
-import { applyLabelMatches, applyLayout, labelsToMatch, layoutTemplateCsv } from "./layout-file";
+import {
+  applyLabelMatches,
+  applyLayout,
+  filledMessage,
+  labelMatchMessage,
+  labelsToMatch,
+  layoutTemplateCsv,
+} from "./layout-file";
 
 const rows: LabellingRow[] = [
   {
@@ -454,4 +461,50 @@ describe("match from labels", () => {
     expect(out.rows[2].moleculeId).toBe("m9");
     expect(out.unmatched).toEqual([]);
   });
+});
+
+describe("filledMessage", () => {
+  it.each([
+    [1, "Save", "1 position "],
+    [3, "Import", "3 positions "],
+  ])("counts %i position(s) and names the %s button", (filled, button, count) => {
+    const text = filledMessage(filled, "layout.csv", button);
+    expect(text).toContain(count);
+    expect(text).toContain("layout.csv");
+    expect(text).toContain(button);
+  });
+});
+
+describe("labelMatchMessage", () => {
+  const twentyFive = Array.from({ length: 25 }, (_, i) => `U${i + 1}`);
+  it.each([
+    // matched, already, unmatched, tone, text has, text lacks, detail
+    [
+      2,
+      1,
+      ["DMSO", "CoA"],
+      "ok",
+      ["2 positions", "their labels", "1 was already", "Import"],
+      /No compound/,
+      "DMSO, CoA",
+    ],
+    [1, 2, [], "ok", ["1 position ", "its label", "2 were already"], /No compound/, null],
+    [2, 0, [], "ok", ["2 positions"], /already/, null],
+    [0, 2, ["DMSO"], "neutral", ["2 positions are already", "DMSO"], /No label matched/, null],
+    [0, 1, [], "neutral", ["1 position is already"], /No compound|No label matched/, null],
+    [0, 0, ["DMSO"], "warn", ["No label matched", "DMSO"], /already/, null],
+    [0, 0, [], "warn", ["No label matched"], /No compound/, null],
+    [0, 0, twentyFive, "warn", ["U20 and 5 more"], /U21/, null],
+    [1, 0, twentyFive, "ok", ["1 position "], /U21/, "U20 and 5 more"],
+  ] as const)(
+    "%i matched, %i already, unmatched %j",
+    (matched, alreadyMatched, unmatched, tone, has, lacks, detail) => {
+      const m = labelMatchMessage({ matched, alreadyMatched, unmatched, saveButton: "Import" });
+      expect(m.tone).toBe(tone);
+      for (const term of has) expect(m.text).toContain(term);
+      expect(m.text).not.toMatch(lacks);
+      if (detail === null) expect(m.detail).toBeNull();
+      else expect(m.detail).toContain(detail);
+    },
+  );
 });

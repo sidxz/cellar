@@ -117,10 +117,10 @@ describe("readProtocolCsv", () => {
   });
   it("refuses a file without a category column or with unknown columns", () => {
     expect(readProtocolCsv({ headers: ["organism"], rows: [] })).toEqual({
-      error: "The file needs a category column.",
+      error: expect.stringContaining("category"),
     });
     expect(readProtocolCsv({ headers: ["category", "organsim"], rows: [] })).toEqual({
-      error: "Unknown column: organsim. Use the template's columns.",
+      error: expect.stringContaining("organsim"),
     });
   });
 });

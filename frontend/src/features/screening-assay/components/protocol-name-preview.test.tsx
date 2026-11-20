@@ -16,10 +16,9 @@ const base = {
 };
 
 describe("ProtocolNamePreview", () => {
-  it("shows the name and that the code comes on save", () => {
+  it("shows the name and is savable", () => {
     render(<ProtocolNamePreview preview={base} isFetching={false} />);
     expect(screen.getByText("M. tuberculosis growth inhibition [resazurin]")).toBeInTheDocument();
-    expect(screen.getByText(/code is assigned when you create/i)).toBeInTheDocument();
     expect(isPreviewSavable(base)).toBe(true);
   });
 

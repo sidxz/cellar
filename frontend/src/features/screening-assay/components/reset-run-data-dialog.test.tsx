@@ -17,7 +17,7 @@ vi.mock("@/shared/lib/toast", () => ({
   showError: vi.fn(),
 }));
 
-import { ResetRunDataDialog } from "./reset-run-data-dialog";
+import { ResetRunDataDialog, resetDamageText, resetDoneText } from "./reset-run-data-dialog";
 
 function plateMap(kind: string, curves: boolean) {
   return {
@@ -27,15 +27,57 @@ function plateMap(kind: string, curves: boolean) {
   };
 }
 
-const out = (measured: number) => ({
-  plates_deleted: 1,
-  wells_deleted: 3,
-  readouts_deleted: 2,
-  curves_deleted: 0,
+const out = (n: number, measured: number) => ({
+  plates_deleted: n,
+  wells_deleted: n,
+  readouts_deleted: n,
+  curves_deleted: n,
   measured_curves_deleted: measured,
+  melting_steps_deleted: 0,
 });
 
-function confirm(plateCount = 1) {
+describe("resetDamageText", () => {
+  it.each([
+    // holder, measured curves, must contain, must not match
+    ["H1", false, ["the holder (H1)", "positions"], /plates|wells|traces/],
+    ["H1", true, ["the holder (H1)", "positions", "traces"], /plates|wells/],
+    [null, false, ["plates (2)", "wells"], /holder|positions|traces/],
+    [null, true, ["plates (2)", "wells", "traces"], /holder|positions/],
+  ] as const)("holder %s, measured curves %s", (holder, measured, has, hasNot) => {
+    const text = resetDamageText(holder, 2, measured);
+    for (const term of has) expect(text).toContain(term);
+    expect(text).not.toMatch(hasNot);
+  });
+});
+
+describe("resetDoneText", () => {
+  it.each([
+    // isHolder, counts, measured, must contain, must not match
+    [
+      true,
+      3,
+      12,
+      ["3 positions", "3 readouts", "3 dose-response curves", "12 traces"],
+      /plates|wells/,
+    ],
+    [
+      true,
+      1,
+      1,
+      ["1 position,", "1 readout,", "1 dose-response curve,", "1 trace "],
+      /plates|wells/,
+    ],
+    [true, 3, 0, ["3 positions"], /trace/],
+    [false, 3, 4, ["3 plates", "3 wells", "3 readouts", "3 curves", "4 traces"], /position/],
+    [false, 3, 0, ["3 plates", "3 wells"], /trace|position/],
+  ] as const)("holder %s, %i of each, %i traces", (isHolder, n, measured, has, hasNot) => {
+    const text = resetDoneText(out(n, measured), isHolder);
+    for (const term of has) expect(text).toContain(term);
+    expect(text).not.toMatch(hasNot);
+  });
+});
+
+function confirm(plateCount: number) {
   render(<ResetRunDataDialog runId="r1" open onOpenChange={vi.fn()} plateCount={plateCount} />);
   fireEvent.click(screen.getByRole("button", { name: /reset run data/i }));
 }
@@ -43,55 +85,19 @@ function confirm(plateCount = 1) {
 beforeEach(() => showSuccess.mockReset());
 
 describe("ResetRunDataDialog", () => {
-  it("speaks of the holder and its positions, and names measured curves, for a non-plate run", () => {
-    state.plateMap = plateMap("cassette", true);
-    state.out = out(12);
-    confirm(0);
-    const text = screen.getByRole("alertdialog").textContent ?? "";
-    expect(text).toContain("the holder (Holder of 3 positions) and its positions");
-    expect(text).toContain("traces");
-    expect(text).not.toMatch(/plates|wells/);
-    const toast = showSuccess.mock.calls[0][0] as string;
-    expect(toast).toBe(
-      "Reset run data — 3 positions, 2 readouts, 0 dose-response curves, 12 traces removed.",
-    );
-  });
-
-  it("keeps the plate wording for a plate run and adds measured curves only when there are some", () => {
-    state.plateMap = plateMap("plate", false);
-    state.out = out(0);
-    confirm(1);
-    const text = screen.getByRole("alertdialog").textContent ?? "";
-    expect(text).toContain(
-      "This will delete all plates (1), wells, readout data, dose-response curves, and QC metrics",
-    );
-    expect(showSuccess.mock.calls[0][0]).toBe(
-      "Reset run data — 1 plates, 3 wells, 2 readouts, 0 curves removed.",
-    );
-  });
-
-  it("names measured curves on a plate run that has them", () => {
-    state.plateMap = plateMap("plate", true);
-    state.out = out(4);
-    confirm(1);
-    expect(screen.getByRole("alertdialog").textContent).toContain(
-      "dose-response curves, traces, and QC metrics",
-    );
-    expect(showSuccess.mock.calls[0][0]).toContain("0 curves, 4 traces removed.");
-  });
-
-  it("counts one of each in the singular for a non-plate run", () => {
-    state.plateMap = plateMap("cassette", true);
-    state.out = {
-      plates_deleted: 1,
-      wells_deleted: 1,
-      readouts_deleted: 1,
-      curves_deleted: 1,
-      measured_curves_deleted: 1,
-    };
-    confirm(0);
-    expect(showSuccess.mock.calls[0][0]).toBe(
-      "Reset run data — 1 position, 1 readout, 1 dose-response curve, 1 trace removed.",
-    );
-  });
+  it.each([
+    ["cassette", true, "Holder of 3 positions", 0],
+    ["plate", false, null, 1],
+  ] as const)(
+    "a %s run with measured curves %s words the dialog and toast for its holder",
+    (kind, curves, holderLabel, plateCount) => {
+      state.plateMap = plateMap(kind, curves);
+      state.out = out(2, 5);
+      confirm(plateCount);
+      expect(screen.getByRole("alertdialog").textContent).toContain(
+        resetDamageText(holderLabel, plateCount, curves),
+      );
+      expect(showSuccess).toHaveBeenCalledWith(resetDoneText(out(2, 5), holderLabel !== null));
+    },
+  );
 });

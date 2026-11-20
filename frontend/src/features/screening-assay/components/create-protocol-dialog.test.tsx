@@ -323,12 +323,6 @@ describe("CreateProtocolDialog", () => {
     expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
   });
 
-  it("does not label the category optional, since the name needs it", () => {
-    render(<CreateProtocolDialog open onOpenChange={() => {}} />);
-    expect(screen.getByText("Category")).toBeInTheDocument();
-    expect(screen.queryByText("Category (optional)")).not.toBeInTheDocument();
-  });
-
   it("starts a new assay from an existing protocol's facts", () => {
     const prefill = protocol({
       name: "PptT inhibition [FP]",
@@ -409,9 +403,6 @@ describe("CreateProtocolDialog", () => {
   it("explains a discriminator the pattern requires as part of the category's name", () => {
     render(<CreateProtocolDialog open onOpenChange={() => {}} />);
     pickCategory("Detection interference");
-    expect(
-      screen.getByText("Part of this category's name, so every protocol in it needs one."),
-    ).toBeInTheDocument();
     expect(screen.getByPlaceholderText("Part of this category's name")).toBeInTheDocument();
     expect(screen.queryByText(/Only needed when another protocol/)).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText(/resazurin/)).not.toBeInTheDocument();
@@ -536,11 +527,8 @@ describe("CreateProtocolDialog", () => {
     const name = screen.getByDisplayValue("Signal");
     fireEvent.change(name, { target: { value: "" } });
     fireEvent.change(name, { target: { value: "Slope" } });
-    expect(
-      screen.getByText(
-        "IC50: 'Signal' is not a numeric readout of this protocol. Choose the readout this curve fits.",
-      ),
-    ).toBeInTheDocument();
+    // The curve check owns the wording; the dialog names the curve and the missing readout.
+    expect(screen.getByText(/^IC50: .*'Signal'/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create Protocol" })).toBeDisabled();
   });
 

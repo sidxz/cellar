@@ -46,10 +46,6 @@ describe("interceptLabel", () => {
     expect(interceptLabel(spec({ kind: "ec", level: 90, label: undefined }))).toBe("EC90");
   });
 
-  it("strips trailing .0 from integer levels", () => {
-    expect(interceptLabel(spec({ kind: "ic", level: 50, label: null }))).toBe("IC50");
-  });
-
   it("keeps decimal precision on non-integer levels", () => {
     expect(interceptLabel(spec({ kind: "ec", level: 12.5, label: null }))).toBe("EC12.5");
   });

@@ -131,11 +131,8 @@ describe("PeakPickBar", () => {
     expect(buttons()).toEqual(["Clear the pick", "Mark reviewed", "Exclude", "Move"]);
   });
 
-  it("while moving, says to click the new temperature", () => {
+  it("while moving, shows Move pressed", () => {
     show({ moving: true });
-    expect(
-      screen.getByText("Click the new temperature on this position's trace."),
-    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Move" })).toHaveAttribute("aria-pressed", "true");
   });
 

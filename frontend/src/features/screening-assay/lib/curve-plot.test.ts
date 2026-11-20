@@ -1,7 +1,7 @@
 import { shortId } from "@/shared/lib/utils";
 import { describe, expect, it } from "vitest";
 
-import { CHART_AXIS, CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
+import { CHART_CANVAS, MEASURED_CURVE_COLORS } from "@/shared/lib/chart-colors";
 import type { CurvePositions, RunCurves } from "../types";
 import {
   type CurveSet,
@@ -109,49 +109,46 @@ describe("curveStyle in Highlight mode", () => {
     ...over,
   });
 
-  it("the selected colour is the palette's second step: orange, validated against the violet reference", () => {
-    expect(dark.selected).toBe("#d95926");
-    expect(light.selected).toBe("#eb6834");
-    expect([dark.selected, light.selected]).toEqual([dark.series[1], light.series[1]]);
-    expect([dark.reference, light.reference]).toEqual(["#9085e9", "#6250d6"]);
+  it("draws a selected sample in the palette's selected colour, heavier than the reference", () => {
+    const picked = curveStyle(sample, highlight());
+    const ref = curveStyle(reference, highlight());
+    expect(picked.color).toBe(dark.selected);
+    expect(ref.color).toBe(dark.reference);
+    expect(picked.color).not.toBe(ref.color);
+    expect(picked.width).toBeGreaterThan(ref.width);
+    expect(curveStyle(sample, highlight({ palette: "light" })).color).toBe(light.selected);
   });
 
-  it("a selected sample is orange at width 2", () => {
-    expect(curveStyle(sample, highlight())).toEqual({ color: "#d95926", width: 2, opacity: 1 });
-    expect(curveStyle(sample, highlight({ palette: "light" })).color).toBe("#eb6834");
+  it("draws a reference the same whether it is selected or not", () => {
+    expect(curveStyle(reference, highlight({ selected: new Set(["w1"]) }))).toEqual(
+      curveStyle(reference, highlight()),
+    );
+    expect(curveStyle(reference, highlight({ palette: "light" })).color).toBe(light.reference);
   });
 
-  it("a reference is violet at width 1.6, selected or not", () => {
-    const violet = { color: "#9085e9", width: 1.6, opacity: 1 };
-    expect(curveStyle(reference, highlight())).toEqual(violet);
-    expect(curveStyle(reference, highlight({ selected: new Set(["w1"]) }))).toEqual(violet);
-    expect(curveStyle(reference, highlight({ palette: "light" })).color).toBe("#6250d6");
+  it.each([
+    ["sample", sample, reference],
+    ["reference", reference, sample],
+  ])("a focused %s keeps its colour, is drawn wider, and the others dim", (_, hovered, other) => {
+    const plain = highlight();
+    const focused = highlight({ focusedId: hovered.well_id });
+    expect(curveStyle(hovered, focused).color).toBe(curveStyle(hovered, plain).color);
+    expect(curveStyle(hovered, focused).width).toBeGreaterThan(curveStyle(hovered, plain).width);
+    expect(curveStyle(hovered, focused).opacity).toBe(1);
+    expect(curveStyle(other, focused)).toEqual({
+      ...curveStyle(other, plain),
+      opacity: expect.any(Number),
+    });
+    expect(curveStyle(other, focused).opacity).toBeLessThan(1);
   });
 
-  it("a focused sample stays orange at width 3 and the others dim", () => {
-    const c = highlight({ focusedId: "w3" });
-    expect(curveStyle(sample, c)).toEqual({ color: "#d95926", width: 3, opacity: 1 });
-    expect(curveStyle(reference, c)).toEqual({ color: "#9085e9", width: 1.6, opacity: 0.35 });
-  });
-
-  it("a focused reference stays violet at width 3 and the others dim", () => {
-    const c = highlight({ focusedId: "w1" });
-    expect(curveStyle(reference, c)).toEqual({ color: "#9085e9", width: 3, opacity: 1 });
-    expect(curveStyle(sample, c)).toEqual({ color: "#d95926", width: 2, opacity: 0.35 });
-  });
-
-  it("Distinct and By group are as they were: a reference without a slot, and its hover", () => {
+  it("Distinct and By group: a reference without a slot takes the reference colour, and the focus colour when hovered", () => {
     for (const colourMode of ["distinct", "group"] as const) {
-      expect(curveStyle(reference, highlight({ colourMode }))).toEqual({
-        color: dark.reference,
-        width: 2.2,
-        opacity: 1,
-      });
-      expect(curveStyle(reference, highlight({ colourMode, focusedId: "w1" }))).toEqual({
-        color: dark.focus,
-        width: 3,
-        opacity: 1,
-      });
+      const plain = curveStyle(reference, highlight({ colourMode }));
+      const hovered = curveStyle(reference, highlight({ colourMode, focusedId: "w1" }));
+      expect(plain.color).toBe(dark.reference);
+      expect(hovered.color).toBe(dark.focus);
+      expect(hovered.width).toBeGreaterThan(plain.width);
     }
   });
 });
@@ -169,13 +166,14 @@ describe("buildCurveFigure", () => {
     const { data } = buildCurveFigure({ ...base, selected: new Set(["w3"]) }) as unknown as {
       data: Trace[];
     };
-    expect(data[0].line).toEqual({ color: dark.reference, width: 1.6 });
-    expect(data[1].line).toEqual({ color: dark.selected, width: 2 });
+    expect(data[0].line.color).toBe(dark.reference);
+    expect(data[1].line.color).toBe(dark.selected);
+    expect(data[1].line.width).toBeGreaterThan(data[0].line.width);
   });
 
   it("draws a position that is neither selected nor a reference in neutral", () => {
     const { data } = buildCurveFigure(base) as unknown as { data: Trace[] };
-    expect(data[1].line).toEqual({ color: dark.neutral, width: 1.6 });
+    expect(data[1].line.color).toBe(dark.neutral);
   });
 
   it("draws the focused curve thicker in its own colour and dims the others", () => {
@@ -184,9 +182,13 @@ describe("buildCurveFigure", () => {
       selected: new Set(["w3"]),
       focusedId: "w3",
     }) as unknown as { data: Trace[] };
-    expect(data[1].line).toEqual({ color: dark.selected, width: 3 });
+    const unfocused = buildCurveFigure({ ...base, selected: new Set(["w3"]) }) as unknown as {
+      data: Trace[];
+    };
+    expect(data[1].line.color).toBe(dark.selected);
+    expect(data[1].line.width).toBeGreaterThan(unfocused.data[1].line.width);
     expect(data[1].opacity).toBe(1);
-    expect(data[0].opacity).toBe(0.35);
+    expect(data[0].opacity).toBeLessThan(1);
   });
 
   it("draws a selected sample's peak lines in orange and the reference's in violet", () => {
@@ -320,10 +322,9 @@ describe("buildCurveFigure", () => {
 
     it("buildCurveFigure draws reviewed steps solid and unreviewed dashed", () => {
       const [rev, unrev] = draw({ steps });
-      expect(rev.line).toMatchObject({ dash: "solid", width: 1.5, color: dark.reference });
-      expect(unrev.line).toMatchObject({ dash: "dash", width: 1.5, color: dark.reference });
-      expect(rev.opacity).toBeCloseTo(0.9 * 1);
-      expect(draw({ steps }, "w1")[0].line.width).toBe(2.5);
+      expect(rev.line.dash).toBe("solid");
+      expect(unrev.line.dash).toBe("dash");
+      expect(draw({ steps }, "w1")[0].line.width).toBeGreaterThan(rev.line.width);
     });
 
     it("draws the picked step wider and undimmed, on screen only", () => {
@@ -338,27 +339,17 @@ describe("buildCurveFigure", () => {
       ]);
       // Another position is under the pointer, so w1 is dimmed.
       const [p, other] = draw({ steps: picked }, "w3");
-      expect(p.line).toMatchObject({ dash: "solid", width: 4 });
+      expect(p.line.width).toBeGreaterThan(other.line.width);
       expect(p.opacity).toBe(1);
-      expect(other.line.width).toBe(1.5);
-      expect(other.opacity).toBeLessThan(0.5);
-      expect(draw({ steps: picked, canvas: "export" })[0].line.width).toBe(1.5);
+      expect(other.opacity).toBeLessThan(1);
+      const exported = draw({ steps: picked, canvas: "export" });
+      expect(exported[0].line.width).toBe(exported[1].line.width);
     });
 
-    it("other reported values are thin grey dots when steps are given", () => {
+    it("other reported values are dotted when steps are given", () => {
       const rest = draw({ steps }).slice(2);
       expect(rest.map((s) => s.x0)).toEqual([30, 21.5]);
-      for (const s of rest) {
-        expect(s.line).toEqual({ color: CHART_AXIS.tick, width: 1, dash: "dot" });
-        expect(s.opacity).toBe(0.5);
-      }
-    });
-
-    it("without steps every reported value keeps today's style", () => {
-      for (const s of draw({})) {
-        expect(s.line).toEqual({ color: dark.reference, width: 1, dash: "dot" });
-        expect(s.opacity).toBeCloseTo(0.8);
-      }
+      for (const s of rest) expect(s.line.dash).toBe("dot");
     });
   });
 

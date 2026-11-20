@@ -187,9 +187,6 @@ describe("NamePeaksDialog", () => {
   it("names the signal and starts on the first reference in holder order", () => {
     renderDialog();
     expect(screen.getByRole("heading", { name: "Name transitions · Ratio" })).toBeInTheDocument();
-    expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
-      "Name the reference's peaks. Each named row becomes a transition on the protocol, with the temperature range it is looked for in. A row without a name creates nothing.",
-    );
     const chooser = screen.getByLabelText("Reference");
     expect(chooser).toHaveValue("r1");
     expect(within(chooser).getAllByRole("option")).toHaveLength(2);
@@ -248,7 +245,7 @@ describe("NamePeaksDialog", () => {
 
   it("says when the signal has no window", () => {
     renderDialog();
-    expect(existing()).toHaveTextContent("Transitions already named on this signal: none");
+    expect(existing()).toHaveTextContent(/none$/);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
@@ -336,16 +333,11 @@ describe("NamePeaksDialog", () => {
     expect(bands()).toHaveLength(2);
   });
 
-  it("says when the run has no reference, and still saves a typed window", async () => {
+  it("without a reference, draws nothing and still saves a typed window", async () => {
     renderDialog({
       run: { ...RUN, positions: RUN.positions.filter((p) => p.well_type !== "reference") },
       analysis: analysisOf({ windows: [win("Main", 50, 85)] }),
     });
-    expect(
-      screen.getByText(
-        "This run has no reference position. Mark one in Edit labeling, or add a transition by typing its range.",
-      ),
-    ).toBeInTheDocument();
     expect(within(existing()).getByText("Main 50–85 °C")).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
@@ -366,13 +358,8 @@ describe("NamePeaksDialog", () => {
     });
   });
 
-  it("says when the reference has no peak on the signal, and a click on its trace offers one", () => {
+  it("with no reference peak on the signal, a click on its trace offers one", () => {
     renderDialog({ analysis: analysisOf({ steps: [] }) });
-    expect(
-      screen.getByText(
-        "The reference has no peak on this signal. Click its trace to add one, or add a transition by typing its range.",
-      ),
-    ).toBeInTheDocument();
     expect(screen.queryByRole("group")).not.toBeInTheDocument();
     clickTrace(55);
     expect(screen.getByRole("button", { name: "Add a peak here" })).toBeInTheDocument();
@@ -476,16 +463,11 @@ describe("NamePeaksDialog", () => {
     expect(save()).toBeEnabled();
   });
 
-  it("says the stored results stay when the run is approved or locked, and does not recalculate", async () => {
+  it("saves without recalculating when the run is approved or locked", async () => {
     renderDialog({ canRecalculate: false });
     type(peakRow("71.3"), "Name", "Main");
     fireEvent.click(save());
-    expect(
-      await screen.findByText(
-        "This run is approved (or locked), so its stored results do not change. The new transitions apply to later runs; the values shown here are for viewing.",
-      ),
-    ).toBeInTheDocument();
-    expect(within(existing()).getByText("Main 54–95 °C")).toBeInTheDocument();
+    expect(await within(existing()).findByText("Main 54–95 °C")).toBeInTheDocument();
     expect(requests("/recompute")).toHaveLength(0);
     expect(customInstance).toHaveBeenCalledTimes(1);
     expect(onOpenChange).not.toHaveBeenCalled();

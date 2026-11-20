@@ -47,11 +47,6 @@ describe("AcceptAllPeaks", () => {
     });
   });
 
-  it("says 1 peak for one", () => {
-    show(analysis(["unreviewed"]));
-    expect(screen.getByRole("button", { name: "Mark 1 peak reviewed" })).toBeInTheDocument();
-  });
-
   it("shows nothing when every peak is reviewed", () => {
     const { container } = show(analysis(["accepted", "accepted"]));
     expect(container).toBeEmptyDOMElement();

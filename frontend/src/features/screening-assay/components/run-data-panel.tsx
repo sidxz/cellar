@@ -165,7 +165,8 @@ function QcMetricsPanel({ qcMetrics }: QcMetricsPanelProps) {
 // ─── Run Data Panel ───────────────────────────────────────────────────────────
 
 /** The API's refusal for plate-shaped imports onto a run whose holder is not a plate. */
-const NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it.";
+export const NOT_A_PLATE =
+  "This run's holder is not a plate, so plate imports are not available for it.";
 /** A disabled menu item ignores the pointer, which would hide its title; keep hover on. */
 const HOVERABLE_WHEN_DISABLED = "data-[disabled]:pointer-events-auto";
 

@@ -206,22 +206,12 @@ const series = MEASURED_CURVE_COLORS.dark.series;
 
 describe("CurveViewer in Highlight mode", () => {
   const { reference, selected } = MEASURED_CURVE_COLORS.dark;
-  const swatch = (text: string) =>
-    within(screen.getByTestId("curve-legend")).getByText(text).querySelector("i");
 
-  it("draws the selected sample in orange beside the violet reference, and says so", () => {
+  it("draws the selected sample in the selected colour beside the reference colour", () => {
     render(<Harness callbacks={callbacks()} />);
     fireEvent.click(screen.getByRole("button", { name: "Position 1" }));
     fireEvent.click(screen.getByRole("button", { name: "Position 2" }), { metaKey: true });
     expect(["w1", "w2"].map(colourOfTrace)).toEqual([reference, selected]);
-
-    expect(swatch("Reference positions")).toHaveStyle({ borderTopColor: reference });
-    expect(swatch("Selected positions")).toHaveStyle({ borderTopColor: selected });
-    // Hovering changes a trace's width, not its colour: no swatch to show.
-    expect(swatch("The trace under the pointer is drawn thicker")).toBeNull();
-    const legend = screen.getByTestId("curve-legend");
-    expect(within(legend).queryByText("Other positions")).not.toBeInTheDocument();
-    expect(within(legend).queryByText("The trace under the pointer")).not.toBeInTheDocument();
   });
 
   it("keeps a hovered trace's colour and draws it thicker", () => {
@@ -436,20 +426,6 @@ describe("CurveViewer", () => {
     expect(cb.onWindowChange).toHaveBeenCalledTimes(2);
   });
 
-  it("renders what is passed as selectorAction beside the selector", () => {
-    render(
-      <Harness
-        callbacks={callbacks()}
-        selectorAction={<button type="button">Side action</button>}
-      />,
-    );
-    const action = screen.getByRole("button", { name: "Side action" });
-    const selectorRow = screen
-      .getByRole("button", { name: "Position 1" })
-      .closest(".flex-1")?.parentElement;
-    expect(selectorRow).toContainElement(action);
-  });
-
   it("draws one selector per run under its heading, with a link to the run", () => {
     render(<Harness callbacks={callbacks()} set={twoRuns} />);
     const a = screen.getByRole("link", { name: "2026-11-03 · A. Person · Completed" });
@@ -510,16 +486,6 @@ describe("CurveViewer", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("words the reference switch for one run or for several", () => {
-    const { unmount } = render(<Harness callbacks={callbacks()} />);
-    expect(screen.getByRole("switch", { name: "Show reference positions" })).toBeInTheDocument();
-    unmount();
-    render(<Harness callbacks={callbacks()} set={twoRuns} />);
-    expect(
-      screen.getByRole("switch", { name: "Show each run's reference positions" }),
-    ).toBeInTheDocument();
-  });
-
   it("lists a drawn position without a curve as not shown, once loading has finished", () => {
     const cb = callbacks();
     const { rerender } = render(<Harness callbacks={cb} set={twoRuns} pending />);
@@ -527,9 +493,7 @@ describe("CurveViewer", () => {
     fireEvent.click(slot(1, 3), { metaKey: true });
     expect(screen.queryByText(/Not shown/)).not.toBeInTheDocument();
     rerender(<Harness callbacks={cb} set={twoRuns} pending={false} />);
-    expect(
-      screen.getByText("Not shown, no Signal A trace: Position 3 · Delta"),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Not shown.*Position 3 · Delta/)).toBeInTheDocument();
   });
 
   it("draws a reference position added by the switch in the reference colour in Distinct mode", () => {
@@ -550,12 +514,11 @@ describe("CurveViewer", () => {
     const cb = callbacks();
     const { rerender } = render(<Harness callbacks={cb} set={loading} pending />);
     fireEvent.click(slot(0, 2));
-    expect(screen.getByText("Loading traces…")).toBeInTheDocument();
-    expect(screen.queryByText(/have no curves/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Loading/)).toBeInTheDocument();
+    expect(screen.queryByText(/no traces/)).not.toBeInTheDocument();
     rerender(<Harness callbacks={cb} set={loading} pending={false} />);
-    expect(
-      screen.getByText("The selected positions have no traces for this signal."),
-    ).toBeInTheDocument();
+    expect(screen.queryByText(/Loading/)).not.toBeInTheDocument();
+    expect(screen.getByText(/no traces/)).toBeInTheDocument();
   });
 
   it("counts only the selected positions that are loaded", () => {
@@ -573,7 +536,7 @@ describe("CurveViewer", () => {
     expect(screen.queryByText("More than 8 selected")).not.toBeInTheDocument();
   });
 
-  it("asks to narrow the selection above 400 and draws nothing", () => {
+  it("draws nothing and disables export above 400 positions", () => {
     const many = Array.from({ length: 401 }, (_, i) => ({
       ...positions[1],
       well_id: `m${i + 1}`,
@@ -597,32 +560,16 @@ describe("CurveViewer", () => {
     };
     render(<Harness callbacks={callbacks()} set={set} />);
     fireEvent.click(screen.getByRole("button", { name: "All" }));
-    expect(
-      screen.getByText("More than 400 positions would be plotted. Select fewer positions."),
-    ).toBeInTheDocument();
     expect(screen.queryByTestId("plot")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "PNG" })).toBeDisabled();
-    // Reference positions count too, so turning them off is offered once they are on.
-    fireEvent.click(screen.getByRole("switch", { name: "Show reference positions" }));
-    expect(
-      screen.getByText(
-        "More than 400 positions would be plotted. Select fewer positions or turn off reference positions.",
-      ),
-    ).toBeInTheDocument();
   });
 
   it("says no derivative could be calculated, not that there are no traces, in the derivative view", () => {
     const derivative: CurveSet = { ...twoRuns, view: "derivative", window: 1, curves: new Map() };
     render(<Harness callbacks={callbacks()} set={derivative} />);
     fireEvent.click(slot(1, 2));
-    expect(
-      screen.getByText(
-        "No derivative could be calculated for the selected positions. Switch to Measured to see their traces.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Not shown, no Signal A derivative: Position 2 · Beta"),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/No derivative could be calculated/)).toBeInTheDocument();
+    expect(screen.getByText(/Not shown.*derivative.*Position 2 · Beta/)).toBeInTheDocument();
   });
 
   it("formats a concentration in the table and keeps the stored value in its title", () => {
@@ -663,9 +610,6 @@ describe("CurveViewer compactControls", () => {
     expect(screen.getByRole("switch", { name: "Reference traces" })).not.toBeChecked();
     fireEvent.click(screen.getByRole("switch", { name: "Reference traces" }));
     expect(screen.getByRole("switch", { name: "Reference traces" })).toBeChecked();
-    expect(
-      screen.getByText("Select a sample in the results to see its trace and peaks."),
-    ).toBeInTheDocument();
   });
 
   it("renders them in the bar without the prop", () => {

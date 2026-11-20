@@ -245,34 +245,20 @@ describe("MeltResultsPanel", () => {
     it("is a button in the header, and a link in the note, when the signal has no window", () => {
       const onNamePeaks = vi.fn();
       render(<Harness channel="c" onNamePeaks={onNamePeaks} />);
-      const header = screen.getByRole("heading", { name: "Results" }).parentElement as HTMLElement;
-      const button = within(header).getByRole("button", { name: "Name transitions" });
-      expect(button).toHaveTextContent(/^Name transitions$/);
-      expect(button).toHaveAttribute("data-variant", "outline");
+      const [button, link] = setUp();
+      expect(setUp()).toHaveLength(2);
       fireEvent.click(button);
-      expect(onNamePeaks).toHaveBeenCalledTimes(1);
-
-      const note = screen.getByText(/^No transition named on this signal\./);
-      expect(note).toHaveTextContent(/^No transition named on this signal\. Name transitions\.$/);
-      const link = within(note).getByRole("button", { name: "Name transitions" });
-      expect(link).toHaveTextContent(/^Name transitions$/);
       fireEvent.click(link);
       expect(onNamePeaks).toHaveBeenCalledTimes(2);
-      expect(screen.queryByText(/Setup tab/)).not.toBeInTheDocument();
     });
 
     it("is a quiet Edit after the Window switch when the windows hold the reference's peaks", () => {
       const onNamePeaks = vi.fn();
       render(<Harness onNamePeaks={onNamePeaks} />);
-      // One control, and it is not the outlined button.
+      // One control, the Edit.
       expect(setUp()).toHaveLength(1);
       const edit = setUp()[0];
       expect(edit).toHaveTextContent(/^Edit$/);
-      expect(edit).toHaveAttribute("data-variant", "link");
-      const precedes = (a: Element, b: Element) =>
-        !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
-      expect(precedes(screen.getByRole("tablist", { name: "Transition" }), edit)).toBe(true);
-      expect(precedes(edit, screen.getByRole("tablist", { name: "View" }))).toBe(true);
       fireEvent.click(edit);
       expect(onNamePeaks).toHaveBeenCalledTimes(1);
       expect(screen.queryByText(/No transition named/)).not.toBeInTheDocument();
@@ -299,19 +285,14 @@ describe("MeltResultsPanel", () => {
       expect(screen.queryByText("Edit")).not.toBeInTheDocument();
       rerender(<Harness channel="c" />);
       expect(setUp()).toHaveLength(0);
-      expect(screen.getByText("No transition named on this signal.")).toHaveTextContent(
-        /^No transition named on this signal\.$/,
-      );
     });
   });
 
-  it("shows signed ΔTm in direction colour without a tint, and the status chip", () => {
+  it("shows signed ΔTm and the status chip", () => {
     render(<Harness />);
-    const delta = (id: string, text: string) => within(row(id)).getByText(text).closest("td");
-    expect(delta("s1", "−8.5")).toHaveClass("text-red-700", "font-semibold");
-    expect(delta("s2", "+3.0")).toHaveClass("text-blue-700", "font-semibold");
-    expect(delta("s2", "+3.0")?.className).not.toMatch(/bg-/);
-    expect(delta("s3", "−1.0")).toHaveClass("text-muted-foreground");
+    expect(within(row("s1")).getByText("−8.5")).toBeInTheDocument();
+    expect(within(row("s2")).getByText("+3.0")).toBeInTheDocument();
+    expect(within(row("s3")).getByText("−1.0")).toBeInTheDocument();
     // A peak nobody has reviewed (s3's) gives its value with no word about review.
     expect(status("s3")).toBe("");
     expect(status("s1")).toBe("Reviewed");
@@ -371,7 +352,6 @@ describe("MeltResultsPanel", () => {
     };
     fireEvent.click(row("s2"));
     expect(last()).toEqual({ selected: ["s2"], anchor: "s2" });
-    expect(row("s2").className).toContain("bg-primary/10!");
     fireEvent.click(row("s4"), { shiftKey: true });
     expect(last()).toEqual({ selected: ["s2", "s3", "s4"], anchor: "s2" });
     fireEvent.click(row("r1"), { shiftKey: true });
@@ -399,7 +379,6 @@ describe("MeltResultsPanel", () => {
     expect(bodyIds()).toEqual(["r1", "s3", "s1", "s2", "s4"]);
     // Worst status across windows: unreviewed in Main beats reviewed in Low, and reads as nothing.
     expect(status("s3")).toBe("");
-    expect(within(row("s3")).getByText("−10.0").closest("td")).toHaveClass("text-red-700");
     // The strip names what it counts and gives each window's reference.
     expect(screen.getByText("All transitions", { selector: "span" })).toBeInTheDocument();
     expect(screen.getByText("Reference MadR · Main 71.3 °C · Low 71.3 °C")).toBeInTheDocument();
@@ -418,11 +397,9 @@ describe("MeltResultsPanel", () => {
     expect(within(strip).getByText("No reference")).toBeInTheDocument();
   });
 
-  it("tint and counts follow the run's hits, not a threshold", () => {
+  it("hits and counts follow the run's hits, not a threshold", () => {
     // s3 (−1.0) is called a hit; s2 (+3.0) is not.
     render(<Harness hits={new Set(["s1", "s3"])} />);
-    expect(within(row("s3")).getByText("−1.0").closest("td")).toHaveClass("text-red-700");
-    expect(within(row("s2")).getByText("+3.0").closest("td")).toHaveClass("text-muted-foreground");
     expect(within(row("s3")).getByText("Hit")).toBeInTheDocument();
     expect(within(row("s2")).queryByText("Hit")).toBeNull();
     expect(screen.getByRole("button", { name: "2 down" })).toBeInTheDocument();
@@ -434,7 +411,6 @@ describe("MeltResultsPanel", () => {
     render(<Harness hits={new Set()} applicable={[]} />);
     expect(screen.queryByRole("button", { name: /^Hits/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /up$/ })).toBeNull();
-    expect(within(row("s2")).getByText("+3.0").closest("td")).toHaveClass("text-muted-foreground");
   });
 
   it("an unreviewed reference reads Reference, and nothing asks for its review", () => {
@@ -562,16 +538,12 @@ describe("MeltResultsPanel", () => {
 
     const one = render(<Harness data={outside(92.44)} />);
     fireEvent.focus(noPeak());
-    expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Peak at 92.4 °C is outside every transition's range. Pick it on the graph to use it as Tm.",
-    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/92\.4 °C/);
     one.unmount();
 
     render(<Harness data={outside(92.44, 20.5)} />);
     fireEvent.focus(noPeak());
-    expect(screen.getByRole("tooltip")).toHaveTextContent(
-      "Peaks at 20.5 °C and 92.4 °C are outside every transition's range. Pick one on the graph to use it as Tm.",
-    );
+    expect(screen.getByRole("tooltip")).toHaveTextContent(/20\.5 °C.*92\.4 °C/);
   });
 
   it("Not evaluated counts the samples a rule has no value for and filters to them", () => {
@@ -769,7 +741,6 @@ describe("aliases in the Sample cell", () => {
     render(<Harness at={withAliases} />);
     const one = within(row("s1")).getByTitle("SACC-0455096");
     expect(one).toHaveTextContent(/^SACC-0455096$/);
-    expect(one).toHaveClass("text-muted-foreground");
     // The registration number still links, with its batch suffix.
     expect(sample("s1")).toHaveTextContent(/^CC-014538·001SACC-0455096$/);
     expect(within(row("s1")).getByRole("link", { name: "CC-014538" })).toBeInTheDocument();

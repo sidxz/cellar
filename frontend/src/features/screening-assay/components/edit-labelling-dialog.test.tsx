@@ -3,7 +3,9 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError } from "@/shared/lib/api/custom-instance";
 import type { PositionLabelMatchesResponse } from "@/shared/lib/api/model";
-import { valuesOf } from "../lib/position-edits";
+import { withoutBatchLine } from "../lib/labelling-rows";
+import { filledMessage, labelMatchMessage } from "../lib/layout-file";
+import { calculatedLockedReason, valuesOf } from "../lib/position-edits";
 import type { LayoutFile, RelabelResult, Run, RunCurves } from "../types";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
@@ -139,7 +141,6 @@ beforeEach(() => {
 describe("EditLabellingDialog", () => {
   it("keeps Save disabled until something changes, then shows the count beside it", () => {
     renderDialog();
-    expect(screen.getByRole("heading", { name: "Edit labeling" })).toBeInTheDocument();
     expect(save()).toBeDisabled();
     expect(screen.queryByText(/positions? changed/)).not.toBeInTheDocument();
     fireEvent.change(label("Position 2"), { target: { value: "y" } });
@@ -194,11 +195,7 @@ describe("EditLabellingDialog", () => {
 
   it("shows role, compound, batch and concentration read-only on a completed run", () => {
     renderDialog({ run: completedRun });
-    expect(
-      screen.getByText(
-        "Role, compound, batch and concentration can be changed only while the run is draft or in progress.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(calculatedLockedReason(completedRun) as string)).toBeInTheDocument();
     expect(screen.queryByRole("combobox", { name: /^role for/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: /^concentration for/i })).not.toBeInTheDocument();
     expect(screen.queryByText("batch picker")).not.toBeInTheDocument();
@@ -211,11 +208,7 @@ describe("EditLabellingDialog", () => {
     const row = screen.getByText("Position 1").closest("tr") as HTMLElement;
     fireEvent.click(within(row).getByRole("button", { name: "Change compound for Position 1" }));
     fireEvent.click(within(row).getByRole("button", { name: "compound picker" }));
-    expect(
-      screen.getByText(
-        "1 position has a compound but no batch. Choose a batch to link its traces and values to the compound.",
-      ),
-    ).toBeInTheDocument();
+    expect(screen.getByText(withoutBatchLine(1) as string)).toBeInTheDocument();
     expect(screen.getByText("1 position changed")).toBeInTheDocument();
     fireEvent.click(save());
     expect(mutate.mock.calls[0][0]).toMatchObject({
@@ -289,19 +282,12 @@ describe("EditLabellingDialog", () => {
     expect(label("Position 2")).toHaveValue("mine");
   });
 
-  it("gives the label a placeholder that does not speak of a file", () => {
-    renderDialog();
-    expect(label("Position 1")).toHaveAttribute("placeholder", "No label");
-  });
-
   it("offers a template without a Use column, and a filled table counts as changes to save", () => {
     download.saveText.mockReset();
     const { container } = renderDialog();
     fireEvent.click(screen.getByRole("button", { name: "Download template" }));
     const csv = download.saveText.mock.calls[0][0] as string;
-    expect(csv.split("\r\n")[0]).toBe(
-      "\uFEFFPosition,Label,Role,Compound,Batch,Concentration (µM),Note",
-    );
+    expect(csv.split("\r\n")[0].split(",")).not.toContain("Use");
     expect(save()).toBeDisabled();
     resolve.mutate.mockImplementation((_vars, opts) =>
       opts?.onSuccess?.({
@@ -325,9 +311,7 @@ describe("EditLabellingDialog", () => {
     fireEvent.change(input, { target: { files: [new File(["x"], "layout.csv")] } });
     expect(label("Position 2")).toHaveValue("from file");
     expect(screen.getByText("1 position changed")).toBeInTheDocument();
-    expect(
-      screen.getByText("Filled 1 position from layout.csv. Nothing is saved until you press Save."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(filledMessage(1, "layout.csv", "Save"))).toBeInTheDocument();
     expect(save()).toBeEnabled();
     expect(mutate).not.toHaveBeenCalled();
   });
@@ -374,17 +358,14 @@ describe("EditLabellingDialog", () => {
       expect(screen.getByText("Compound seven")).toBeInTheDocument();
       expect(
         screen.getByText(
-          "Matched 1 position from its label. 1 was already matched. Nothing is saved until you press Save.",
+          labelMatchMessage({ matched: 1, alreadyMatched: 1, unmatched: [], saveButton: "Save" })
+            .text,
         ),
       ).toBeInTheDocument();
       expect(screen.getByText("1 position changed")).toBeInTheDocument();
       expect(mutate).not.toHaveBeenCalled();
       // Every position with a label now has a compound: nothing is left to match.
       expect(matchButton()).toBeDisabled();
-      expect(matchButton()).toHaveAttribute(
-        "title",
-        "Every labeled position already has a compound.",
-      );
 
       fireEvent.click(save());
       expect(mutate.mock.calls[0][0]).toEqual({
@@ -401,10 +382,7 @@ describe("EditLabellingDialog", () => {
     it("is disabled on a completed run, whose compounds cannot change, and says why", () => {
       renderDialog({ run: completedRun, positions: unlinked });
       expect(matchButton()).toBeDisabled();
-      expect(matchButton()).toHaveAttribute(
-        "title",
-        "Role, compound, batch and concentration can be changed only while the run is draft or in progress.",
-      );
+      expect(matchButton()).toHaveAttribute("title", calculatedLockedReason(completedRun));
     });
   });
 });

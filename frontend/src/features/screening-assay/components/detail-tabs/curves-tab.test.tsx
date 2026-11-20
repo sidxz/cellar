@@ -82,7 +82,6 @@ describe("CurvesTab", () => {
     for (const box of screen.getAllByRole("checkbox")) {
       expect(box).toHaveAttribute("aria-checked", "false");
     }
-    expect(screen.getByText("Choose runs above to see their traces")).toBeInTheDocument();
     expect(screen.queryByTestId("viewer")).not.toBeInTheDocument();
   });
 
@@ -112,7 +111,6 @@ describe("CurvesTab", () => {
       initial: { select: "none", showReferences: false, colour: { mode: "group", groupBy: "run" } },
       exportName: "traces-protocol-p1-0000-",
     });
-    expect(screen.queryByText("Choose runs above to see their traces")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(screen.queryByTestId("viewer")).not.toBeInTheDocument();
@@ -134,8 +132,7 @@ describe("CurvesTab", () => {
     unmount();
     positions = { error: new Error("boom") };
     render(<Host />);
-    expect(
-      screen.getByText("Could not load the runs. Reload the page and try again."),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Could not load/)).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   });
 });

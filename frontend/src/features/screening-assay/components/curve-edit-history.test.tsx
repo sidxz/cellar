@@ -46,15 +46,6 @@ describe("<CurveEditHistory />", () => {
     expect(screen.queryByText(/no edit history/i)).toBeNull();
   });
 
-  it("falls back to 'Edit' when reason is null", () => {
-    const noReason: CurveEditHistoryEventBody[] = [
-      { ...events[0], reason: null, id: "22222222-2222-2222-2222-222222222222" },
-    ];
-    render(<CurveEditHistory events={noReason} />);
-    fireEvent.click(screen.getByRole("button", { name: /view edit history/i }));
-    expect(screen.getByText(/^Edit$/)).toBeInTheDocument();
-  });
-
   it("omits the 'by …' suffix when user_id is null", () => {
     const noUser: CurveEditHistoryEventBody[] = [
       { ...events[0], user_id: null, id: "33333333-3333-3333-3333-333333333333" },

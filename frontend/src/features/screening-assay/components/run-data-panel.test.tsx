@@ -58,8 +58,9 @@ vi.mock("./run-details-panel", () => ({
   RunDetailsPanel: () => <div>Run details</div>,
 }));
 
+import { instrumentFileRefusal } from "../lib/instrument-labelling";
 import type { Run } from "../types";
-import { RunDataPanel } from "./run-data-panel";
+import { NOT_A_PLATE, RunDataPanel } from "./run-data-panel";
 
 const run = {
   id: "r1",
@@ -68,8 +69,6 @@ const run = {
   status: "in_progress",
   qc_metrics: null,
 } as unknown as Run;
-
-const NOT_A_PLATE = "This run's holder is not a plate, so plate imports are not available for it.";
 
 function openImportMenu() {
   fireEvent.keyDown(screen.getByRole("button", { name: /^import$/i }), { key: "Enter" });
@@ -293,14 +292,12 @@ describe("RunDataPanel holder awareness", () => {
   });
 
   it("says why the instrument file entry is disabled", () => {
-    render(<RunDataPanel run={{ ...run, status: "completed" } as Run} />);
+    const completed = { ...run, status: "completed" } as Run;
+    render(<RunDataPanel run={completed} />);
     openImportMenu();
     const entry = screen.getByRole("menuitem", { name: "Import Instrument File" });
     expect(entry).toHaveAttribute("data-disabled");
-    expect(entry).toHaveAttribute(
-      "title",
-      "Only draft or in-progress runs accept an instrument file.",
-    );
+    expect(entry).toHaveAttribute("title", instrumentFileRefusal(completed));
   });
 
   it("keeps imports disabled on locked runs", () => {

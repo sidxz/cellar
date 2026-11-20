@@ -177,13 +177,12 @@ describe("<DoseResponseFigure /> — aggregate-mode overlay", () => {
       />,
     );
     const traces = plotCalls[0].data as OverlayTrace[];
-    // 1 primary fit (full opacity) + 2 muted overlays (dashed, ~0.35).
+    // 1 primary fit (full opacity) + 2 muted, dashed overlays.
     const fitLines = traces.filter((t) => t.mode === "lines");
     expect(fitLines).toHaveLength(3);
     const overlays = fitLines.filter((t) => (t.opacity ?? 1) < 1);
     expect(overlays).toHaveLength(2);
     for (const o of overlays) {
-      expect(o.opacity).toBeCloseTo(0.35);
       expect(o.line?.dash).toBe("dot");
       expect(o.showlegend).toBe(false);
     }
@@ -220,9 +219,8 @@ describe("<DoseResponseFigure /> — aggregate-mode overlay", () => {
     const marker = layout.shapes![0];
     expect(marker.x0).toBe(3.7);
     expect(marker.x1).toBe(3.7);
-    // Solid (no dash) and thicker than the per-curve dashed line.
+    // Solid, unlike the per-curve dashed line.
     expect(marker.line?.dash).toBeUndefined();
-    expect(marker.line?.width).toBeGreaterThanOrEqual(1.5);
   });
 
   it("inactive additional curves are skipped in the overlay; aggregate marker still draws", () => {

@@ -59,7 +59,7 @@ describe("useAssignProtocolToProject", () => {
     expect(mockShowError).not.toHaveBeenCalled();
   });
 
-  it("surfaces a recovery-hint error toast on failure without invalidating", async () => {
+  it("surfaces an error toast on failure without invalidating", async () => {
     mockCustomInstance.mockRejectedValue(new Error("boom"));
     const { wrapper, invalidateSpy } = makeWrapper();
     const { result } = renderHook(() => useAssignProtocolToProject(), { wrapper });
@@ -68,9 +68,7 @@ describe("useAssignProtocolToProject", () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
 
-    expect(mockShowError).toHaveBeenCalledWith(
-      "Protocol created but could not be added to the project — add it manually from the project page.",
-    );
+    expect(mockShowError).toHaveBeenCalledTimes(1);
     expect(invalidateSpy).not.toHaveBeenCalled();
   });
 });

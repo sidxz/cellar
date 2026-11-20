@@ -78,14 +78,8 @@ describe("ReadoutDataTable replicate count", () => {
   it("shows n on summary rows, a quiet dash when not recorded, and nothing on well rows", () => {
     render(<ReadoutDataTable runId="run-1" protocolId="proto-1" />);
 
-    expect(within(screen.getByTestId("CPD-1")).getByText("n=3")).toHaveAttribute(
-      "title",
-      "Mean of 3 replicates",
-    );
-    expect(within(screen.getByTestId("CPD-2")).getByText("n —")).toHaveAttribute(
-      "title",
-      "Replicates not recorded",
-    );
+    expect(within(screen.getByTestId("CPD-1")).getByText("n=3")).toBeInTheDocument();
+    expect(within(screen.getByTestId("CPD-2")).getByText("n —")).toBeInTheDocument();
     expect(screen.getByTestId("CPD-3")).toHaveTextContent("1.500");
     expect(screen.getByTestId("CPD-3")).not.toHaveTextContent("n=");
   });

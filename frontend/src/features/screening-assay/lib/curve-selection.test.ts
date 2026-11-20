@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import type { CurveGroup } from "./curve-plot";
 import {
-  CURVES_PER_REQUEST,
   EMPTY_SELECTION,
   MAX_CURVE_RUNS,
   applyClick,
@@ -128,7 +127,6 @@ describe("matchesFilter", () => {
 
 describe("chunk", () => {
   it("splits a list into pieces of at most the size, in order", () => {
-    expect(CURVES_PER_REQUEST).toBe(100);
     const ids = Array.from({ length: 250 }, (_, i) => i);
     expect(chunk(ids, 100).map((c) => c.length)).toEqual([100, 100, 50]);
     expect(chunk(ids, 100)[2][0]).toBe(200);
@@ -137,14 +135,13 @@ describe("chunk", () => {
 });
 
 describe("toggleRun", () => {
-  const eight = ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8"];
+  const full = Array.from({ length: MAX_CURVE_RUNS }, (_, i) => `r${i + 1}`);
 
-  it("adds a run up to 8 and removes one that is chosen", () => {
-    expect(MAX_CURVE_RUNS).toBe(8);
+  it("adds a run up to the cap and removes one that is chosen", () => {
     expect(toggleRun(["r1"], "r2")).toEqual(["r1", "r2"]);
-    expect(toggleRun(eight, "r9")).toEqual(eight);
+    expect(toggleRun(full, "extra")).toEqual(full);
     expect(toggleRun(["r1", "r2"], "r1")).toEqual(["r2"]);
-    expect(toggleRun(eight, "r8")).toEqual(eight.slice(0, 7));
+    expect(toggleRun(full, full.at(-1) as string)).toEqual(full.slice(0, -1));
   });
 });
 

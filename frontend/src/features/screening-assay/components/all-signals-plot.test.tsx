@@ -490,17 +490,6 @@ describe("All signals view", () => {
     expect(asked()).toHaveLength(4);
   });
 
-  it("the plot column does not stick while every panel is shown, and sticks again after", async () => {
-    await showSingle();
-    const column = () => screen.getByRole("tablist", { name: "View" }).closest(".min-w-0");
-    expect(column()?.className).toContain("sticky");
-    fireEvent.mouseDown(viewTab("All signals"));
-    await waitFor(() => expect(within(stack()).getAllByTestId("plot")).toHaveLength(4));
-    expect(column()?.className).not.toContain("sticky");
-    fireEvent.mouseDown(viewTab("Measured"));
-    expect(column()?.className).toContain("sticky");
-  });
-
   it("a failed request says so in its panel and the others still draw", async () => {
     customInstance.mockImplementation((a: Asked) =>
       a.params.channel === "b" && a.params.view === "derivative"

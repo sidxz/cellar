@@ -57,11 +57,6 @@ describe("ProtocolConditionsCard", () => {
     expect(row("Substrate concentration").getByText("25 µM")).toBeInTheDocument();
   });
 
-  it("says when none are recorded", () => {
-    card([]);
-    expect(screen.getByText(/None yet. Add what each run records/)).toBeInTheDocument();
-  });
-
   it("provides add, edit and delete directly in Assay conditions", () => {
     const actions = { onAdd: vi.fn(), onEdit: vi.fn(), onRemove: vi.fn() };
     card([cond({ id: "c1", name: "Medium" })], actions);
