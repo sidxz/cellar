@@ -75,7 +75,7 @@ from cellar.interface.error_handlers import result_to_response
 from cellar.interface.pagination import (
     PaginatedResponse,
     clamp_limit,
-    parse_cursor,
+    parse_ts_cursor,
 )
 from cellar.interface.routes._campaign_dtos import HitCriterionDTO
 from cellar.interface.routes.batches import BatchResponse
@@ -732,7 +732,7 @@ async def list_molecules(
         lifecycle_stage=lifecycle_stage,
         structure_status=structure_status,
         search_term=q,
-        cursor_id=parse_cursor(cursor),
+        cursor=parse_ts_cursor(cursor),
         limit=effective_limit,
     )
     page = result_to_response(await use_case(query, auth=auth))

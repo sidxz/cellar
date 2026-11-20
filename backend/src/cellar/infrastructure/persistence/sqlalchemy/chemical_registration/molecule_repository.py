@@ -7,6 +7,7 @@ Search-side queries (substructure / similarity / structured query) live on
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
@@ -358,7 +359,7 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
         *,
         filters: dict[str, Any] | None = None,
         search_term: str | None = None,
-        cursor_id: uuid.UUID | None = None,
+        cursor: tuple[datetime, uuid.UUID] | None = None,
         limit: int | None = None,
         project_ids: list[uuid.UUID] | None = None,
     ) -> list[Molecule]:
@@ -423,11 +424,22 @@ class SQLAlchemyMoleculeRepository(SQLAlchemyRepository[Molecule, MoleculeModel]
             else:
                 stmt = stmt.where(MoleculeModel.id.in_(unscoped_subq))
 
-        # Deterministic ordering by PK for stable cursor pagination
-        stmt = stmt.order_by(MoleculeModel.id)
+        # Newest registered first; id breaks ties so the keyset cursor is stable.
+        # ponytail: sorts the workspace's active molecules per page (~20 ms at 61k);
+        # add an index on (workspace_id, created_at DESC, id DESC) if it grows a lot.
+        stmt = stmt.order_by(MoleculeModel.created_at.desc(), MoleculeModel.id.desc())
 
-        if cursor_id is not None:
-            stmt = stmt.where(MoleculeModel.id > cursor_id)
+        if cursor is not None:
+            cursor_created_at, cursor_id = cursor
+            stmt = stmt.where(
+                sa.or_(
+                    MoleculeModel.created_at < cursor_created_at,
+                    sa.and_(
+                        MoleculeModel.created_at == cursor_created_at,
+                        MoleculeModel.id < cursor_id,
+                    ),
+                )
+            )
 
         if limit is not None:
             stmt = stmt.limit(limit)

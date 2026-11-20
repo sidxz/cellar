@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
+from datetime import datetime
 
 from returns.result import Result, Success
 
 from cellar.application.auth import AuthContext, require_same_workspace, require_workspace_role
-from cellar.application.shared.pagination import PageResult
+from cellar.application.shared.pagination import PageResult, encode_ts_cursor
 from cellar.application.shared.query import Query
 from cellar.application.shared.unit_of_work import UnitOfWork
 from cellar.domain.chemical_registration.molecule import Molecule
@@ -23,7 +24,8 @@ class ListMoleculesQuery(Query):
     lifecycle_stage: str | None = None
     structure_status: str | None = None
     search_term: str | None = None
-    cursor_id: uuid.UUID | None = None
+    # Keyset cursor: (created_at, id) of the previous page's last molecule.
+    cursor: tuple[datetime, uuid.UUID] | None = None
     limit: int | None = None
 
 
@@ -54,7 +56,7 @@ class ListMolecules:
                 input.workspace_id,
                 filters=filters or None,
                 search_term=input.search_term,
-                cursor_id=input.cursor_id,
+                cursor=input.cursor,
                 limit=fetch_limit,
             )
 
@@ -62,6 +64,7 @@ class ListMolecules:
             next_cursor: str | None = None
             if effective_limit is not None and len(mols) > effective_limit:
                 mols = mols[:effective_limit]
-                next_cursor = str(mols[-1].id)
+                last = mols[-1]
+                next_cursor = encode_ts_cursor(last.created_at, last.id)
 
             return Success(PageResult(items=mols, next_cursor=next_cursor))
