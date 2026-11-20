@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Link2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Suspense } from "react";
 
@@ -28,12 +28,16 @@ export function ReturnToBar({ target, protocolId, protocolCode }: ReturnToBarPro
     : `Back to ${target.label}`;
   return (
     // Hard to miss on purpose: the way back is the reason the scientist came here.
-    <div className="flex flex-wrap items-center gap-3 rounded-md bg-foreground px-3 py-2 text-sm text-background shadow-sm">
-      <span className="font-medium">Opened from {target.label}</span>
+    // Message left, action right, like any app banner; wraps under the message when narrow.
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-lg bg-foreground px-4 py-2.5 text-sm text-background shadow-sm">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Link2 className="size-4 shrink-0 opacity-70" aria-hidden />
+        <span className="font-medium">Opened from {target.label}</span>
+      </div>
       <Button
         asChild
         size="sm"
-        className="bg-lime-400 font-semibold text-black shadow-[0_0_12px_rgba(163,230,53,0.6)] hover:bg-lime-300"
+        className="shrink-0 bg-lime-400 font-semibold text-black shadow-[0_0_12px_rgba(163,230,53,0.6)] hover:bg-lime-300"
       >
         <a href={returnHref(target, protocolId)}>
           <ArrowLeft className="size-4" /> {label}
