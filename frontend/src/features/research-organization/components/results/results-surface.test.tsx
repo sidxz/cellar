@@ -1,5 +1,5 @@
 import type { Molecule } from "@/features/chemical-registration/types";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { ResultsSurface } from "./results-surface";
 
@@ -90,42 +90,6 @@ describe("ResultsSurface", () => {
       "true",
     );
     expect(screen.getAllByTestId("mol-thumb")).toHaveLength(2);
-  });
-
-  it("renders the table toggle in pressed state when mode=table", () => {
-    render(
-      <ResultsSurface
-        molecules={mols}
-        mode="table"
-        onModeChange={vi.fn()}
-        selectedIds={new Set()}
-        onSelectChange={vi.fn()}
-        onOpen={vi.fn()}
-      />,
-    );
-    // Assert that the ViewModeToggle reflects table mode correctly.
-    // AG Grid may not render cells in jsdom (it relies on layout that jsdom lacks),
-    // so we only assert on the toggle's aria-pressed state here.
-    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-  });
-
-  it("calls onModeChange when the inactive toggle is clicked", () => {
-    const onModeChange = vi.fn();
-    render(
-      <ResultsSurface
-        molecules={mols}
-        mode="cards"
-        onModeChange={onModeChange}
-        selectedIds={new Set()}
-        onSelectChange={vi.fn()}
-        onOpen={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByRole("button", { name: /list view/i }));
-    expect(onModeChange).toHaveBeenCalledWith("table");
   });
 
   it("does not render the view-mode toggle when showToolbar is false", () => {

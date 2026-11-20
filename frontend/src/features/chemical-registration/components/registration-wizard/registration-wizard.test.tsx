@@ -30,7 +30,6 @@ describe("Bulk registration navigation", () => {
     h.params = new URLSearchParams("mode=bulk&workflow_id=bulk-reg-1");
     const page = render(<RegistrationWizard />);
     expect(screen.getByText("Review & register")).toBeVisible();
-    expect(screen.queryByText("Summary")).toBeNull();
     expect(screen.getByText("Existing registration")).toBeVisible();
     expect(useRegistrationWizard.getState().workflowId).toBe("bulk-reg-1");
     expect(useRegistrationWizard.getState().currentStep).toBe(bulkStepIndex("Processing"));

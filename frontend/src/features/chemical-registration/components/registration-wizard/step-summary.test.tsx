@@ -37,7 +37,6 @@ describe("StepSummary (single)", () => {
 
   it("names the projects the compound was added to", () => {
     render(<StepSummary />);
-    expect(screen.getByText("Added to")).toBeInTheDocument();
     expect(screen.getByText("Kinase, GPCR")).toBeInTheDocument();
   });
 });

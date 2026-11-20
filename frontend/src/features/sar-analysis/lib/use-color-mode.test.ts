@@ -40,8 +40,10 @@ describe("useColorMode", () => {
   it("switching back to default clears the color param", () => {
     const { result } = renderHook(() => useColorMode({ defaultMode: "cluster" }));
     act(() => result.current.setMode("scaffold"));
+    expect(new URL(window.location.href).searchParams.get("color")).toBe("scaffold");
     act(() => result.current.setMode("cluster"));
     expect(result.current.mode).toBe("cluster");
+    expect(new URL(window.location.href).searchParams.has("color")).toBe(false);
   });
 
   it("defaults to none when defaultMode is none", () => {

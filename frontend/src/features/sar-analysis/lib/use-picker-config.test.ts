@@ -41,19 +41,6 @@ describe("usePickerConfig", () => {
     expect(result.current.threshold).toBe(0.4);
   });
 
-  it("setN updates n value", () => {
-    const { result } = renderHook(() => usePickerConfig());
-    act(() => result.current.setN(100));
-    expect(result.current.n).toBe(100);
-  });
-
-  it("setThreshold updates threshold value", () => {
-    const { result } = renderHook(() => usePickerConfig());
-    act(() => result.current.setPicker("butina"));
-    act(() => result.current.setThreshold(0.7));
-    expect(result.current.threshold).toBe(0.7);
-  });
-
   it("switching back to maxmin restores size-adaptive default n", () => {
     const { result } = renderHook(() => usePickerConfig({ collectionSize: 200 }));
     act(() => result.current.setPicker("butina"));

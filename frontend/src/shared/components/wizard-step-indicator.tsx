@@ -33,7 +33,12 @@ export function WizardStepIndicator({ steps, current, className }: WizardStepInd
         const active = current === n;
         const done = current > n;
         return (
-          <div key={label} className="flex items-center gap-2">
+          <div
+            key={label}
+            className="flex items-center gap-2"
+            aria-current={active ? "step" : undefined}
+            data-state={done ? "complete" : active ? "active" : "upcoming"}
+          >
             <span
               className={cn(
                 "flex h-6 w-6 items-center justify-center rounded-full border text-[10px] font-medium",

@@ -1,6 +1,10 @@
+import { buildCollectionImportTemplate } from "@/features/research-organization/lib/parse-collection-import-csv";
+import { saveText } from "@/shared/lib/api/download";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { UploadStep } from "./upload-step";
+
+vi.mock("@/shared/lib/api/download", () => ({ saveText: vi.fn() }));
 
 describe("UploadStep", () => {
   it("invokes onParsed when a valid CSV is uploaded", async () => {
@@ -15,8 +19,12 @@ describe("UploadStep", () => {
     expect(onParsed).toHaveBeenCalled();
   });
 
-  it("renders a Download Template button", () => {
+  it("downloads the import template", () => {
     render(<UploadStep onParsed={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /download template/i })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /download template/i }));
+    expect(saveText).toHaveBeenCalledExactlyOnceWith(
+      buildCollectionImportTemplate(),
+      "collection-import-template.csv",
+    );
   });
 });

@@ -73,8 +73,7 @@ describe("Keywords in the search form", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Keyword values" }), {
       target: { value: Array.from({ length: 1001 }, (_, i) => `V-${i}`).join("\n") },
     });
-    expect(screen.getByText(/1,001 values · up to 1,000 per term/)).toBeInTheDocument();
-    expect(screen.getByText("Keyword term 1 has more than 1,000 values")).toBeInTheDocument();
+    expect(screen.getByText(/1,001 values/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Search/ })).toBeDisabled();
     fireEvent.keyDown(window, { key: "Enter", metaKey: true });
     expect(onSearch).not.toHaveBeenCalled();

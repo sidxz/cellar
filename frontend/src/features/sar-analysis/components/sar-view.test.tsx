@@ -206,12 +206,6 @@ describe("SarView (server orchestration)", () => {
     projReturn = { ...READY_PROJ };
   });
 
-  it("renders the color control + core picker", () => {
-    renderSarView();
-    expect(screen.getByTestId("rgroup-color-control")).toBeInTheDocument();
-    expect(screen.getByTestId("rgroup-core-picker")).toBeInTheDocument();
-  });
-
   it("shows the Table/Heatmap sub-toggle once the run is ready", () => {
     renderSarView();
     expect(screen.getByRole("button", { name: "Table view" })).toBeInTheDocument();

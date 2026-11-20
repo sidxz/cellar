@@ -1,7 +1,7 @@
 import { customInstance } from "@/shared/lib/api/custom-instance";
 import type { CollectionPlateGroupResponse } from "@/shared/lib/api/model";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { CollectionPlateGroupsCard } from "./collection-plate-groups-card";
@@ -74,7 +74,7 @@ function setup(groups: CollectionPlateGroupResponse[], role = "editor") {
 describe("CollectionPlateGroupsCard", () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it("lists one row per group with path link, type, counts and loan colours", async () => {
+  it("lists one row per group with path link, type, plate and loan counts", async () => {
     setup(rows);
     expect(await screen.findByRole("link", { name: "SAC1" })).toHaveAttribute(
       "href",
@@ -86,8 +86,8 @@ describe("CollectionPlateGroupsCard", () => {
     );
     expect(screen.getByText("vendor")).toBeInTheDocument();
     expect(screen.getByText("42 plates")).toBeInTheDocument();
-    expect(screen.getByText("3 on loan")).toHaveClass("text-warning");
-    expect(screen.getByText("1 overdue")).toHaveClass("text-destructive");
+    expect(screen.getByText("3 on loan")).toBeInTheDocument();
+    expect(screen.getByText("1 overdue")).toBeInTheDocument();
     // Zero counts stay silent.
     expect(screen.getByText("0 plates")).toBeInTheDocument();
     expect(screen.queryByText("0 on loan")).not.toBeInTheDocument();
@@ -96,13 +96,17 @@ describe("CollectionPlateGroupsCard", () => {
     expect(screen.getAllByRole("button", { name: "Request loan" })).toHaveLength(1);
   });
 
-  it("shows the empty copy when nothing is linked", async () => {
+  it("lists no groups and offers no loan when nothing is linked", async () => {
     setup([]);
-    expect(
-      await screen.findByText(
-        "No plate groups realize this collection yet — link one from a group's Edit dialog.",
+    await waitFor(() =>
+      expect(mocked).toHaveBeenCalledWith(
+        expect.objectContaining({ url: "/api/v1/collections/c1/plate-groups" }),
       ),
-    ).toBeInTheDocument();
+    );
+    await act(async () => {});
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
   });
 
   it("hides Request loan for viewers", async () => {

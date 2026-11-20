@@ -1,87 +1,38 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { ViewMode } from "../../lib/use-view-mode";
 import { ViewModeToggle } from "./view-mode-toggle";
 
+const SEGMENTS: [ViewMode, string][] = [
+  ["table", "List view"],
+  ["cards", "Grid view"],
+  ["scaffold-tree", "Scaffold view"],
+  ["clusters", "Cluster view"],
+  ["sar", "SAR view"],
+];
+
 describe("ViewModeToggle", () => {
-  it("highlights the currently-active mode via aria-pressed", () => {
-    render(<ViewModeToggle mode="cards" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+  it.each(SEGMENTS)("in %s mode presses only the %s segment", (mode, label) => {
+    render(<ViewModeToggle mode={mode} onChange={vi.fn()} />);
+    for (const [, other] of SEGMENTS) {
+      expect(screen.getByRole("button", { name: other })).toHaveAttribute(
+        "aria-pressed",
+        String(other === label),
+      );
+    }
   });
 
-  it("calls onChange with the new mode when the inactive button is clicked", () => {
+  it.each(SEGMENTS)("switches to %s from another mode", (mode, label) => {
     const onChange = vi.fn();
-    render(<ViewModeToggle mode="cards" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /list view/i }));
-    expect(onChange).toHaveBeenCalledWith("table");
+    render(<ViewModeToggle mode={mode === "cards" ? "table" : "cards"} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(mode);
   });
 
-  it("does NOT call onChange when the already-active button is clicked", () => {
+  it.each(SEGMENTS)("does not call onChange when %s is already active", (mode, label) => {
     const onChange = vi.fn();
-    render(<ViewModeToggle mode="cards" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /grid view/i }));
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("highlights tree segment via aria-pressed when mode=scaffold-tree", () => {
-    render(<ViewModeToggle mode="scaffold-tree" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /scaffold view/i })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(screen.getByRole("button", { name: /list view/i })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-  });
-
-  it("calls onChange with 'scaffold-tree' when tree segment is clicked from cards mode", () => {
-    const onChange = vi.fn();
-    render(<ViewModeToggle mode="cards" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /scaffold view/i }));
-    expect(onChange).toHaveBeenCalledWith("scaffold-tree");
-  });
-
-  it("does NOT call onChange when tree segment is clicked while already in scaffold-tree mode", () => {
-    const onChange = vi.fn();
-    render(<ViewModeToggle mode="scaffold-tree" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /scaffold view/i }));
-    expect(onChange).not.toHaveBeenCalled();
-  });
-
-  it("highlights SAR segment via aria-pressed when mode=sar", () => {
-    render(<ViewModeToggle mode="sar" onChange={vi.fn()} />);
-    expect(screen.getByRole("button", { name: /sar view/i })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: /grid view/i })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-  });
-
-  it("calls onChange with 'sar' when SAR segment is clicked from cards mode", () => {
-    const onChange = vi.fn();
-    render(<ViewModeToggle mode="cards" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /sar view/i }));
-    expect(onChange).toHaveBeenCalledWith("sar");
-  });
-
-  it("does NOT call onChange when SAR segment is clicked while already in sar mode", () => {
-    const onChange = vi.fn();
-    render(<ViewModeToggle mode="sar" onChange={onChange} />);
-    fireEvent.click(screen.getByRole("button", { name: /sar view/i }));
+    render(<ViewModeToggle mode={mode} onChange={onChange} />);
+    fireEvent.click(screen.getByRole("button", { name: label }));
     expect(onChange).not.toHaveBeenCalled();
   });
 });

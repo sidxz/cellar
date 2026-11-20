@@ -90,13 +90,16 @@ function setup(save?: (ids: string[]) => void) {
 }
 
 describe("compound comparison", () => {
-  it("calculates a ratio for an exact pair and explains a qualified pair", () => {
+  it("calculates a ratio for an exact pair and none for a qualified pair", () => {
     setup();
     fireEvent.change(screen.getByLabelText("Counter assay"), {
       target: { value: "drc:Counter:ic:50" },
     });
-    expect(screen.getByText("20.0×")).toBeInTheDocument();
-    expect(screen.getByText("Requires two positive, unqualified endpoints")).toBeInTheDocument();
+    const row = screen.getByRole("rowheader", { name: "Selectivity (fold)" }).closest("tr");
+    const [exact, qualified] = within(row as HTMLElement).getAllByRole("cell");
+    expect(exact).toHaveTextContent("20.0×");
+    expect(qualified).toHaveTextContent(/^—/);
+    expect(qualified).not.toHaveTextContent("×");
   });
   it("does not compare mismatched endpoint levels", () => {
     setup();
@@ -165,7 +168,7 @@ it("Curves on a protocol opens the curves of all compared compounds, once per pr
 });
 
 describe("compound comparison — split protocols", () => {
-  it("shows a split protocol's endpoints as unavailable instead of picking a group", () => {
+  it("does not offer a split protocol's endpoints for the selectivity pair", () => {
     render(
       <CompoundComparison
         molecules={molecules}
@@ -183,8 +186,12 @@ describe("compound comparison — split protocols", () => {
         onClose={() => {}}
       />,
     );
-    expect(
-      screen.getAllByText("Split by run/condition in search — compare runs in the grid").length,
-    ).toBeGreaterThan(0);
+    for (const assay of ["Target assay", "Counter assay"]) {
+      const offered = within(screen.getByLabelText(assay))
+        .getAllByRole("option")
+        .map((option) => option.getAttribute("value"))
+        .filter(Boolean);
+      expect(offered).toEqual(["drc:Counter:ic:50", "drc:Counter:ic:90"]);
+    }
   });
 });

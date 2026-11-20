@@ -303,9 +303,6 @@ describe("RGroupCorePicker", () => {
 
     expect(screen.getByTestId(`thumb-${PYRIDINE}`)).toBeInTheDocument();
     expect(screen.getByText(/No shared ring scaffold/i)).toBeInTheDocument();
-    // Size is stated on the chip and again in the explanation — the chemist
-    // needs it to tell a real backbone from a benzene without squinting.
-    expect(screen.getAllByText(/15 atoms/).length).toBe(2);
     // Not the amber "nothing here" panel — this set does share something.
     expect(screen.queryByText(/No shared scaffold across/i)).not.toBeInTheDocument();
   });

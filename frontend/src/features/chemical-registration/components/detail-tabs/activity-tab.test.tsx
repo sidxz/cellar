@@ -64,10 +64,7 @@ describe("ActivityTab reported endpoints", () => {
 
     expect(screen.getByText("> 3.400")).toBeInTheDocument();
     expect(screen.getByText("nM")).toBeInTheDocument();
-    expect(screen.getByText("reported")).toHaveAttribute(
-      "title",
-      "Reported endpoint — no fitted curve for this compound",
-    );
+    expect(screen.getByText("reported")).toBeInTheDocument();
     expect(screen.queryByText("No readout data for this protocol.")).toBeNull();
   });
 

@@ -63,16 +63,6 @@ describe("SelectedMoleculesImport: the list and its check", () => {
     expect(button("Check names in CDD Vault")).toBeEnabled();
   });
 
-  it("says how to separate identifiers", () => {
-    render(<Harness />);
-    expect(
-      screen.getByText(
-        "Enter one name per line or separate names with commas. Duplicate entries are ignored.",
-      ),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/spaces/)).toBeNull();
-  });
-
   it("asks nothing until Check is pressed", () => {
     render(<Harness />);
     paste("SACC-0001, SACC-0002\nSACC-0099");

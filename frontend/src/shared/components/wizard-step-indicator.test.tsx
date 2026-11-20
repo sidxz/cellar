@@ -22,13 +22,21 @@ describe("WizardStepIndicator", () => {
     }
   });
 
-  it("styles steps before the current one as completed and the current one as active", () => {
+  it("marks steps before the current one complete and the current one as the current step", () => {
     render(<WizardStepIndicator steps={steps} current={3} />);
-    // Step 1 and 2 done (green); step 3 active (primary); step 4 upcoming (muted).
-    expect(screen.getByText("1").className).toContain("border-green-500");
-    expect(screen.getByText("2").className).toContain("border-green-500");
-    expect(screen.getByText("3").className).toContain("border-primary");
-    expect(screen.getByText("4").className).toContain("border-muted");
+    const step = (label: string) => screen.getByText(label).closest("[data-state]");
+    expect(steps.map((label) => step(label)?.getAttribute("data-state"))).toEqual([
+      "complete",
+      "complete",
+      "active",
+      "upcoming",
+    ]);
+    expect(steps.map((label) => step(label)?.getAttribute("aria-current"))).toEqual([
+      null,
+      null,
+      "step",
+      null,
+    ]);
   });
 
   it("exposes a navigation landmark for the step strip", () => {

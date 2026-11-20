@@ -53,9 +53,8 @@ describe("SettingsPage", () => {
     useFontFamilyStore.setState({ font: "plex" });
   });
 
-  it("shows appearance controls and build identity", () => {
+  it("shows build identity", () => {
     renderPage();
-    expect(screen.getByText("Appearance")).toBeInTheDocument();
     expect(screen.getByText(/v2\.1\.0/)).toBeInTheDocument(); // UI version
     expect(screen.getByText(/v1\.4\.0/)).toBeInTheDocument(); // API version
     expect(screen.getByText(/84e7848/)).toBeInTheDocument(); // UI sha

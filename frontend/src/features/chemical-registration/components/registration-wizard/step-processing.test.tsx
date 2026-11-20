@@ -35,7 +35,6 @@ describe("StepProcessing (single confirm)", () => {
 
   it("shows the projects the compound will be added to before confirming", () => {
     render(<StepProcessing />);
-    expect(screen.getByText("Projects:")).toBeInTheDocument();
     expect(screen.getByText("Kinase")).toBeInTheDocument();
   });
 

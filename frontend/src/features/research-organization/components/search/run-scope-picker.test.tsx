@@ -46,17 +46,21 @@ vi.mock("@/shared/hooks/use-workspace-members", () => ({
 }));
 
 describe("RunScopePicker options", () => {
-  it("shows only the six run scope labels", () => {
-    render(<RunScopePicker protocolId="p1" value={undefined} onChange={vi.fn()} />);
+  it.each([
+    ["Any run", undefined],
+    ["Every run", { mode: "all" }],
+    ["Latest by run date", { mode: "latest" }],
+    ["Last N days", { mode: "past_n_days", days: 30 }],
+    ["Date range", { mode: "date_range" }],
+    ["Specific runs", { mode: "specific", run_ids: [] }],
+  ])("choosing %s emits its scope", (label, scope) => {
+    const onChange = vi.fn();
+    // Start from a different scope so the choice is a change.
+    const start = label === "Latest by run date" ? undefined : { mode: "latest" as const };
+    render(<RunScopePicker protocolId="p1" value={start} onChange={onChange} />);
     fireEvent.click(screen.getByRole("combobox"));
-    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
-      "Any run",
-      "Every run",
-      "Latest by run date",
-      "Last N days",
-      "Date range",
-      "Specific runs",
-    ]);
+    fireEvent.click(screen.getByRole("option", { name: label }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith(scope);
   });
 });
 

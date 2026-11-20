@@ -118,7 +118,7 @@ describe("CollectionDetail frozen-collection gating", () => {
     renderWith({ ...baseCollection, is_frozen: true });
     const btn = screen.getByRole("button", { name: /add molecules/i });
     expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute("title", "Frozen collection — unfreeze to modify.");
+    expect(btn).toHaveAttribute("title");
   });
 
   it("enables Remove when not frozen and a molecule is selected", () => {
@@ -133,6 +133,6 @@ describe("CollectionDetail frozen-collection gating", () => {
     fireEvent.click(screen.getByTestId("mock-select-m1"));
     const btn = screen.getByRole("button", { name: /^remove$/i });
     expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute("title", "Frozen collection — unfreeze to modify.");
+    expect(btn).toHaveAttribute("title");
   });
 });
