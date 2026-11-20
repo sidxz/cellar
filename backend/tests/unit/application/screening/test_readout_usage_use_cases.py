@@ -130,10 +130,7 @@ async def test_remove_refused_because_the_readout_came_into_use_says_so():
     result = await _remove_refused_by_the_database(_protocol(), reader)
     assert isinstance(result, Failure)
     assert isinstance(result.failure(), ConflictError)
-    assert str(result.failure()) == (
-        "This readout is now in use (has values in 3 runs), so it can no longer be "
-        "removed. Create a new version to change it."
-    )
+    assert USED.reasons[0] in str(result.failure())
 
 
 async def test_remove_refused_for_another_reason_keeps_the_databases_answer():

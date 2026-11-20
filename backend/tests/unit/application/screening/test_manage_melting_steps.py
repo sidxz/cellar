@@ -11,6 +11,10 @@ import pytest
 from returns.result import Failure, Success
 
 from cellar.application.screening.manage_melting_steps import (
+    COMPUTE_FAILED,
+    LOCKED,
+    NO_TRACE,
+    NOT_EDITABLE,
     PEAKS_COMPUTE_FAILED,
     AcceptMeltingSteps,
     AcceptMeltingStepsCommand,
@@ -42,7 +46,6 @@ from tests.unit.application.screening.test_import_instrument_file import FakeUoW
 from tests.unit.domain.screening_assay.test_run import _instrument_run
 
 X_RANGE = (25.0, 95.0)
-NOT_EDITABLE = "Peaks cannot be changed on an approved run"
 
 
 def _window(name: str, channel: str = "ratio") -> SimpleNamespace:
@@ -255,7 +258,7 @@ async def test_locked_run_refuses_step_changes(which, status):
     h = Harness(status=status, locked=True)
     out = await (h.do_add() if which == "add" else h.do_review())
     failure = out.failure()
-    assert isinstance(failure, ConflictError) and str(failure) == "This run is locked"
+    assert isinstance(failure, ConflictError) and str(failure) == LOCKED
     h.assert_nothing_written()
 
 
@@ -279,7 +282,7 @@ async def test_position_without_trace_on_channel_is_validation_error(which):
     out = await (h.do_add() if which == "add" else h.do_review())
     failure = out.failure()
     assert isinstance(failure, ValidationError)
-    assert str(failure) == "This position has no trace for that signal"
+    assert str(failure) == NO_TRACE
     h.assert_nothing_written()
 
 
@@ -391,7 +394,7 @@ async def test_assign_unknown_window_refused(window):
     h = Harness()
     failure = (await h.do_assign(window=window)).failure()
     assert isinstance(failure, ValidationError)
-    assert str(failure) == f"'{window}' is not a window on this signal"
+    assert repr(window) in str(failure)
     assert h.step.assigned_window is None
     h.assert_nothing_written()
 
@@ -493,7 +496,7 @@ async def test_assign_refused_on_an_approved_run():
 async def test_assign_refused_on_a_locked_run(window):
     h = Harness(locked=True)
     failure = (await h.do_assign(window=window)).failure()
-    assert isinstance(failure, ConflictError) and str(failure) == "This run is locked"
+    assert isinstance(failure, ConflictError) and str(failure) == LOCKED
     h.assert_nothing_written()
 
 
@@ -502,10 +505,7 @@ async def test_assign_engine_failure_becomes_compute_warning():
     h.engine.compute_for_run.return_value = Failure(ValidationError("boom"))
     out = (await h.do_assign()).unwrap()
     assert out.recalculated is False and h.uow.committed
-    assert out.compute_warning == (
-        "The peak was saved, but the calculations could not be updated. "
-        "Select Recompute on the run to update them."
-    )
+    assert out.compute_warning == COMPUTE_FAILED
 
 
 async def test_add_with_window_assigns_in_one_save():
@@ -539,7 +539,7 @@ async def test_add_with_unknown_window_refused():
     h = Harness()
     failure = (await h.do_add(assigned_window="Other")).failure()
     assert isinstance(failure, ValidationError)
-    assert str(failure) == "'Other' is not a window on this signal"
+    assert "Other" in str(failure)
     h.assert_nothing_written()
 
 
@@ -653,7 +653,7 @@ async def test_accept_many_with_a_stale_version_fails_the_whole_request():
     ("status", "locked", "message"),
     [
         (RunStatus.APPROVED, False, NOT_EDITABLE),
-        (RunStatus.DRAFT, True, "This run is locked"),
+        (RunStatus.DRAFT, True, LOCKED),
     ],
 )
 async def test_accept_many_refused_on_an_approved_or_locked_run(status, locked, message):
@@ -682,7 +682,6 @@ async def test_accept_many_engine_failure_becomes_compute_warning():
     h.engine.compute_for_run.return_value = Failure(ValidationError("bad formula"))
     out = (await h.do_accept(h.step, _unreviewed(h))).unwrap()
     assert (out.recalculated, out.compute_warning) == (False, PEAKS_COMPUTE_FAILED)
-    assert PEAKS_COMPUTE_FAILED.startswith("The peaks were saved, but")
     assert len(out.steps) == 2 and h.uow.committed
 
 

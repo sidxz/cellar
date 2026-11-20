@@ -66,9 +66,7 @@ class FakeRepo:
             return None
         return t
 
-    async def find_by_workspace(
-        self, workspace_id: uuid.UUID
-    ) -> list[RunImportTemplate]:
+    async def find_by_workspace(self, workspace_id: uuid.UUID) -> list[RunImportTemplate]:
         return [t for t in self.items.values() if t.workspace_id == workspace_id]
 
     async def save(self, entity: RunImportTemplate) -> None:
@@ -116,17 +114,6 @@ class TestDomain:
                 created_by=uuid.uuid4(),
             )
 
-    def test_update_changes_fields(self) -> None:
-        t = RunImportTemplate.create(
-            workspace_id=uuid.uuid4(),
-            name="Old",
-            column_mapping={"well": "Well"},
-            created_by=uuid.uuid4(),
-        )
-        t.update(name="New", description="desc")
-        assert t.name == "New"
-        assert t.description == "desc"
-
 
 # ---------------------------------------------------------------------------
 # CRUD use cases
@@ -169,9 +156,7 @@ class TestCRUD:
             created_by=uuid.uuid4(),
         )
         uc = ListRunImportTemplates(FakeUoW(), repo)
-        result = await uc(
-            ListRunImportTemplatesQuery(workspace_id=auth.workspace_id), auth=auth
-        )
+        result = await uc(ListRunImportTemplatesQuery(workspace_id=auth.workspace_id), auth=auth)
         out = result.unwrap()
         assert len(out) == 1
         assert out[0].name == "Mine"

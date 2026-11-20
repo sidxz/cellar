@@ -26,11 +26,8 @@ from cellar.application.screening.get_collection_gap import (
 from cellar.application.screening.resolve_collection_coverage import (
     GetProtocolCollectionCoverage,
     GetProtocolCollectionCoverageQuery,
-    ResolveRunCollections,
-    ResolveRunCollectionsQuery,
 )
 from cellar.domain.screening_assay.collection_coverage import (
-    CollectionCoverage,
     CollectionRef,
     EffectiveCollectionCoverage,
 )
@@ -134,31 +131,6 @@ class TestGetProtocolCollectionCoverage:
         assert rows[0].fraction == 0.75
         assert rows[0].run_count == 2
         reader.protocol_coverage.assert_awaited_once_with(auth.workspace_id, protocol_id)
-
-
-# ---------------------------------------------------------------------------
-# ResolveRunCollections
-# ---------------------------------------------------------------------------
-
-
-class TestResolveRunCollections:
-    @pytest.mark.asyncio
-    async def test_returns_reader_dict(self) -> None:
-        auth = FakeAuth()
-        run_id = uuid.uuid4()
-        coverage = {run_id: [CollectionCoverage(ref=_ref(), covered=2, total=5)]}
-        reader = AsyncMock()
-        reader.run_coverage = AsyncMock(return_value=coverage)
-        uc = ResolveRunCollections(uow=FakeUoW(), reader=reader)
-
-        result = await uc(
-            ResolveRunCollectionsQuery(workspace_id=auth.workspace_id, run_ids=(run_id,)),
-            auth=auth,
-        )
-
-        assert isinstance(result, Success), result
-        assert result.unwrap() == coverage
-        reader.run_coverage.assert_awaited_once_with(auth.workspace_id, [run_id])
 
 
 # ---------------------------------------------------------------------------

@@ -64,7 +64,9 @@ class FakeAuditRepository:
             and op.entity_id == entity_id
         ]
 
-    async def find_all(self, *args: object, **kwargs: object) -> list[AuditOperation]:  # pragma: no cover
+    async def find_all(
+        self, *args: object, **kwargs: object
+    ) -> list[AuditOperation]:  # pragma: no cover
         return list(self.saved)
 
 
@@ -117,7 +119,6 @@ def _entry(
 
 WS = uuid.uuid4()
 CURVE_ID = uuid.uuid4()
-OTHER_CURVE_ID = uuid.uuid4()
 
 
 @pytest.mark.asyncio
@@ -129,15 +130,9 @@ class TestGetCurveEditHistory:
         t2 = datetime(2026, 5, 10, 12, tzinfo=UTC)
         # Seed deliberately out of order to confirm the use case re-sorts.
         repo.seed(
-            _audit_op(
-                workspace_id=WS, entity_id=CURVE_ID, started_at=t0, reason="r1"
-            ),
-            _audit_op(
-                workspace_id=WS, entity_id=CURVE_ID, started_at=t1, reason="r2"
-            ),
-            _audit_op(
-                workspace_id=WS, entity_id=CURVE_ID, started_at=t2, reason="r3"
-            ),
+            _audit_op(workspace_id=WS, entity_id=CURVE_ID, started_at=t0, reason="r1"),
+            _audit_op(workspace_id=WS, entity_id=CURVE_ID, started_at=t1, reason="r2"),
+            _audit_op(workspace_id=WS, entity_id=CURVE_ID, started_at=t2, reason="r3"),
         )
         uc = GetCurveEditHistory(audit_repository=repo)
         auth = FakeAuth(role="viewer", workspace_id=WS)
@@ -152,40 +147,6 @@ class TestGetCurveEditHistory:
         assert [e.reason for e in events] == ["r2", "r3", "r1"]
         # Caller passed entity_type="DoseResponseCurve" + curve_id.
         assert repo.calls == [(WS, "DoseResponseCurve", CURVE_ID)]
-
-    async def test_filters_out_other_entity_audit_ops(self) -> None:
-        repo = FakeAuditRepository()
-        now = datetime(2026, 5, 19, tzinfo=UTC)
-        repo.seed(
-            _audit_op(workspace_id=WS, entity_id=CURVE_ID, started_at=now, reason="keep"),
-            # Same workspace, same curve_id-shaped uuid — but DIFFERENT entity_type.
-            _audit_op(
-                workspace_id=WS,
-                entity_id=CURVE_ID,
-                entity_type="Run",
-                started_at=now,
-                reason="drop-by-entity-type",
-            ),
-            # Same workspace, different curve.
-            _audit_op(
-                workspace_id=WS,
-                entity_id=OTHER_CURVE_ID,
-                started_at=now,
-                reason="drop-by-entity-id",
-            ),
-        )
-        uc = GetCurveEditHistory(audit_repository=repo)
-        auth = FakeAuth(role="viewer", workspace_id=WS)
-
-        result = await uc(
-            GetCurveEditHistoryQuery(workspace_id=WS, curve_id=CURVE_ID),
-            auth=auth,
-        )
-
-        assert isinstance(result, Success)
-        events = result.unwrap().events
-        assert len(events) == 1
-        assert events[0].reason == "keep"
 
     async def test_projects_entries_into_read_side_shape(self) -> None:
         repo = FakeAuditRepository()

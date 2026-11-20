@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from cellar.application.screening.bulk_create_readout_data import (
@@ -13,7 +14,6 @@ from cellar.application.screening.bulk_create_readout_data import (
 from cellar.domain.screening_assay.enums import ReadoutDataType
 from cellar.domain.screening_assay.melt_window import MeltMeasure, MeltReadoutConfig
 from cellar.domain.screening_assay.protocol import ReadoutDefinition
-from cellar.domain.shared.errors import ValidationError
 
 
 async def test_bulk_entry_refuses_melt_readout():
@@ -25,15 +25,32 @@ async def test_bulk_entry_refuses_melt_readout():
         unit="°C",
         melt_config=MeltReadoutConfig("Main", MeltMeasure.TM, "ratio", 50.0, 85.0),
     )
-    uc = BulkCreateReadoutData(AsyncMock(), AsyncMock(), AsyncMock(), AsyncMock())
-    cache = {run_id: {"definitions": [melt]}}
-    for item in (
-        ReadoutDataItem(run_id=run_id, readout_definition_id=melt.id),
-        ReadoutDataItem(run_id=run_id, readout_definition_name=melt.name),
-    ):
-        result = await uc._resolve_readout_definition_id(uuid.uuid4(), item, 0, cache)
-        assert isinstance(result.failure(), ValidationError)
-        assert "calculated or derived" in str(result.failure())
+    run_repo, protocol_repo = AsyncMock(), AsyncMock()
+    run_repo.find_by_id_in_workspace.return_value = SimpleNamespace(
+        wells=[], protocol_id=melt.protocol_id
+    )
+    protocol_repo.find_by_id_in_workspace.return_value = SimpleNamespace(
+        readout_definitions=[melt]
+    )
+    repo, uow = AsyncMock(), AsyncMock()
+    uow.commit.return_value = []
+    uc = BulkCreateReadoutData(
+        uow, repo, AsyncMock(), AsyncMock(), run_repo=run_repo, protocol_repo=protocol_repo
+    )
+    common = dict(run_id=run_id, molecule_id=uuid.uuid4(), value_numeric=60.0)
+    items = [
+        ReadoutDataItem(readout_definition_id=melt.id, **common),
+        ReadoutDataItem(readout_definition_name=melt.name, **common),
+    ]
+    result = await uc(
+        BulkCreateReadoutDataCommand(workspace_id=uuid.uuid4(), items=items),
+        auth=None,
+        require_batch=False,
+    )
+    outcome = result.unwrap()
+    assert (outcome.success_count, outcome.error_count) == (0, 2)
+    assert all(melt.name in e["error"] for e in outcome.errors)
+    repo.save_bulk.assert_not_called()
 
 
 async def test_well_rows_never_get_replicate_count():

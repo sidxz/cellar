@@ -298,10 +298,17 @@ class TestResetRunData:
     async def test_calls_dispatcher_after_commit(self) -> None:
         auth = FakeAuth()
         run = _make_run(auth.workspace_id)
-        uc, _, _, _, _, dispatcher = _build_uc(run)
+        uc, uow, _, _, _, dispatcher = _build_uc(run)
+        event = object()
+        uow.events_to_return = [event]
+        committed_at_dispatch: list[bool] = []
+        dispatcher.dispatch_all.side_effect = lambda _events: committed_at_dispatch.append(
+            uow.committed
+        )
         result = await uc(
             ResetRunDataCommand(workspace_id=auth.workspace_id, run_id=run.id),
             auth=auth,
         )
         assert isinstance(result, Success)
-        dispatcher.dispatch_all.assert_awaited_once()
+        dispatcher.dispatch_all.assert_awaited_once_with([event])
+        assert committed_at_dispatch == [True]

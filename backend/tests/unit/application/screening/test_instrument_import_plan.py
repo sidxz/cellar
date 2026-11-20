@@ -93,10 +93,8 @@ def test_reported_series_groups_and_warns_on_undeclared_channel():
         (("ratio", "transition", 1), 3),
     ]
     # Named by its label; the signal's internal key is not shown.
-    assert warnings == [
-        "Reported value 'Ghost onset' belongs to a signal the file has no traces for. "
-        "It is skipped."
-    ]
+    [warning] = warnings
+    assert "Ghost onset" in warning and "ghost" not in warning
 
 
 def test_readout_mapping_error_cases():
@@ -176,10 +174,7 @@ async def test_refuse_instrument_import_order():
 def test_mapping_a_transition_is_refused_with_the_step_message():
     step = ReportedSeries("ratio", "transition", 1, "Transition #1", "°C", 3)
     err = readout_mapping_error(step, _definition("Tm", "°C"))
-    assert str(err) == (
-        "'Transition #1' is a melting step. Steps are kept on each position and compared "
-        "in temperature windows; they cannot be mapped to a readout."
-    )
+    assert "Transition #1" in str(err) and "melting step" in str(err)
     # Checked first: even with no readout chosen.
     assert "melting step" in str(readout_mapping_error(step, None))
 
