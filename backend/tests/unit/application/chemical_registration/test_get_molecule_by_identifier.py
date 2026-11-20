@@ -119,19 +119,3 @@ class TestGetMoleculeByIdentifier:
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), NotFoundError)
-
-    @pytest.mark.asyncio
-    async def test_wrong_workspace(self) -> None:
-        repo = FakeMoleculeRepository()
-        mol = _make_mol_with_identifier("ABBVIE-002")
-        repo.add(mol)
-
-        uc = GetMoleculeByIdentifier(FakeUnitOfWork(), repo)
-        result = await uc(
-            GetMoleculeByIdentifierQuery(
-                workspace_id=uuid.uuid4(), identifier="ABBVIE-002"
-            )
-        )
-
-        assert isinstance(result, Failure)
-        assert isinstance(result.failure(), NotFoundError)

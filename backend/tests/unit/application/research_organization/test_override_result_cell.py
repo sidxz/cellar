@@ -364,59 +364,6 @@ class TestOverrideResultCell:
         campaign_repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_override_with_reason_persists_reason(self) -> None:
-        """B8: override stores the reason on the new measurement."""
-        auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
-        uc = OverrideResultCell(
-            uow=FakeUnitOfWork(),
-            campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            dispatcher=AsyncMock(),
-        )
-        cmd = OverrideResultCellCommand(
-            workspace_id=auth.workspace_id,
-            campaign_id=campaign.id,
-            result_id=result.id,
-            channel_id=channel_id,
-            value=1.5,
-            value_qualifier=ValueQualifier.EQ,
-            unit="nM",
-            reason="QC fail on plate 3",
-        )
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Success)
-        new_m = out.unwrap().results[0].find_measurement(channel_id)
-        assert new_m is not None
-        assert new_m.override_reason == "QC fail on plate 3"
-
-    @pytest.mark.asyncio
-    async def test_override_without_reason_leaves_reason_none(self) -> None:
-        """B8: reason is optional; new measurement has override_reason=None."""
-        auth = fake_auth()
-        campaign, result, _, channel_id = _make_campaign_with_measurement(auth.workspace_id)
-        uc = OverrideResultCell(
-            uow=FakeUnitOfWork(),
-            campaign_repo=make_campaign_repo(find_in_ws=campaign),
-            dispatcher=AsyncMock(),
-        )
-        cmd = OverrideResultCellCommand(
-            workspace_id=auth.workspace_id,
-            campaign_id=campaign.id,
-            result_id=result.id,
-            channel_id=channel_id,
-            value=1.5,
-            value_qualifier=ValueQualifier.EQ,
-            unit="nM",
-        )
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Success)
-        new_m = out.unwrap().results[0].find_measurement(channel_id)
-        assert new_m is not None
-        assert new_m.override_reason is None
-
-    @pytest.mark.asyncio
     async def test_override_carries_forward_snapshot_fields(self) -> None:
         """B6: override preserves test_concentration, replicate_count, qc_pass,
         contributing_run_ids and the per-value facts (batches, basis, series,

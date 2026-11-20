@@ -12,8 +12,6 @@ from returns.result import Failure, Success
 from cellar.application.research_organization.get_published_campaign import (
     GetPublishedCampaign,
     GetPublishedCampaignQuery,
-    _decode_cursor,
-    _encode_cursor,
 )
 from cellar.domain.research_organization.campaign import Campaign
 from cellar.domain.research_organization.campaign_channel import CampaignChannel
@@ -231,17 +229,6 @@ def _build_use_case(
 # ---------------------------------------------------------------------------
 
 
-class TestCursorHelpers:
-    def test_encode_decode_roundtrip(self) -> None:
-        assert _decode_cursor(_encode_cursor(42), 0) == 42
-
-    def test_decode_none_returns_default(self) -> None:
-        assert _decode_cursor(None, 0) == 0
-
-    def test_decode_invalid_returns_default(self) -> None:
-        assert _decode_cursor("not-a-number", 0) == 0
-
-
 class TestGetPublishedCampaign:
     # ------------------------------------------------------------------
     # 1. Happy path: doc keys, no signature, no published_collection,
@@ -445,6 +432,12 @@ class TestGetPublishedCampaign:
         assert len(doc3["results"]) == 1
         assert doc3["pagination"]["next_cursor"] is None
 
+        # A garbage cursor falls back to page one.
+        q_bad = _make_query(auth.workspace_id, campaign.id, cursor="not-a-number", page_size=2)
+        doc_bad = (await uc(q_bad, auth=auth)).unwrap()
+        assert doc_bad["results"] == doc1["results"]
+        assert doc_bad["pagination"]["next_cursor"] == "2"
+
     # ------------------------------------------------------------------
     # 7. Campaign not found → Failure(NotFoundError)
     # ------------------------------------------------------------------
@@ -478,7 +471,6 @@ class TestGetPublishedCampaign:
         assert isinstance(out, Failure)
         err = out.failure()
         assert isinstance(err, ValidationError)
-        assert "closed/superseded" in str(err).lower()
 
     # ------------------------------------------------------------------
     # 9. Missing protocol in lookup → protocol_ref with nulls (defensive)

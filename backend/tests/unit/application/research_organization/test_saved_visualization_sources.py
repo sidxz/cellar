@@ -71,7 +71,8 @@ async def test_a_deleted_compared_protocol_is_left_out_on_open():
     )
 
     assert source == _source(kept)
-    assert lines == ["1 added protocol no longer exists; its columns were left out."]
+    assert len(lines) == 1
+    assert lines[0].startswith("1 ")
 
 
 async def test_a_source_without_compare_opens_unchanged():

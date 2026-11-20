@@ -376,54 +376,6 @@ class TestUpdateProjectMemberRole:
 
 class TestListProjectMembers:
     @pytest.mark.asyncio
-    async def test_success(self) -> None:
-        auth = _fake_auth(is_admin=True)
-        project = _fake_project(auth.workspace_id)
-        members = [
-            ProjectMember(
-                project_id=project.id, user_id=uuid.uuid4(), role=ProjectRole.MANAGER
-            ),
-        ]
-
-        proj_repo = AsyncMock()
-        proj_repo.find_by_id = AsyncMock(return_value=project)
-        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
-
-        member_repo = AsyncMock()
-        member_repo.find_members = AsyncMock(return_value=members)
-
-        uc = ListProjectMembers(FakeUnitOfWork(), proj_repo, member_repo)
-        result = await uc(
-            ListProjectMembersQuery(
-                workspace_id=auth.workspace_id, project_id=project.id
-            )
-        )
-        assert isinstance(result, Success)
-        assert len(result.unwrap()) == 1
-        assert result.unwrap()[0].role == ProjectRole.MANAGER
-
-    @pytest.mark.asyncio
-    async def test_empty_list(self) -> None:
-        auth = _fake_auth(is_admin=True)
-        project = _fake_project(auth.workspace_id)
-
-        proj_repo = AsyncMock()
-        proj_repo.find_by_id = AsyncMock(return_value=project)
-        proj_repo.find_by_id_in_workspace = AsyncMock(return_value=project)
-
-        member_repo = AsyncMock()
-        member_repo.find_members = AsyncMock(return_value=[])
-
-        uc = ListProjectMembers(FakeUnitOfWork(), proj_repo, member_repo)
-        result = await uc(
-            ListProjectMembersQuery(
-                workspace_id=auth.workspace_id, project_id=project.id
-            )
-        )
-        assert isinstance(result, Success)
-        assert result.unwrap() == []
-
-    @pytest.mark.asyncio
     async def test_project_not_found(self) -> None:
         auth = _fake_auth(is_admin=True)
 

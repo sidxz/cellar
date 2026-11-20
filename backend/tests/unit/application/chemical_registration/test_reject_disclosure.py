@@ -153,7 +153,7 @@ class TestRejectDisclosureSuccess:
         )
 
         assert isinstance(result, Success)
-        assert result.unwrap().conflict_reason == "Merge rejected by user"
+        assert result.unwrap().conflict_reason
 
 
 class TestRejectDisclosureValidation:

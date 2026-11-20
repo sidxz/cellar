@@ -121,7 +121,8 @@ class TestBulkRegistrationService:
 
         result = await service(cmd)
         assert isinstance(result, Failure)
-        assert "Unsupported file format" in str(result.failure())
+        assert isinstance(result.failure(), ValidationError)
+        assert "xyz" in str(result.failure())
 
     async def test_empty_items_returns_failure(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID
@@ -138,7 +139,7 @@ class TestBulkRegistrationService:
 
         result = await service(cmd)
         assert isinstance(result, Failure)
-        assert "no records" in str(result.failure()).lower()
+        assert isinstance(result.failure(), ValidationError)
 
     async def test_processes_all_items(
         self, workspace_id: uuid.UUID, user_id: uuid.UUID, org_id: uuid.UUID

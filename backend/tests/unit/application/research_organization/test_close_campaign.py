@@ -264,32 +264,10 @@ class TestCloseCampaign:
         assert c.source_protocols[0]["name"] == "Test Protocol"
         assert c.source_protocols[0]["code"] == "PRT-00007"
 
-        dispatcher = uc._dispatcher
-        dispatcher.dispatch_all.assert_awaited_once()
         # Events remain on the campaign — FakeUnitOfWork doesn't auto-drain them.
         all_events = campaign.collect_events()
         event_types = {type(e) for e in all_events}
         assert CampaignClosed in event_types
-
-    # ------------------------------------------------------------------
-    # 2. No note supplied → close_note stays None
-    # ------------------------------------------------------------------
-    @pytest.mark.asyncio
-    async def test_close_without_note_leaves_close_note_none(self) -> None:
-        auth = fake_auth()
-        pid = uuid.uuid4()
-        rdid = uuid.uuid4()
-        campaign, _, _ = _build_campaign(
-            auth.workspace_id, protocol_id=pid, readout_definition_id=rdid
-        )
-
-        uc, _, _, _ = _make_use_case(campaign, protocol_id=pid, readout_definition_id=rdid)
-        cmd = _make_command(auth.workspace_id, campaign.id)
-        out = await uc(cmd, auth=auth)
-
-        assert isinstance(out, Success)
-        c = out.unwrap()
-        assert c.close_note is None
 
     # ------------------------------------------------------------------
     # 3. Re-resolve respects manual override

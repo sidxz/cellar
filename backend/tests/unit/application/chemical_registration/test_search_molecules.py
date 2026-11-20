@@ -241,27 +241,23 @@ class TestExactSearch:
 
 class TestSubstructureSearch:
     @pytest.mark.asyncio
-    async def test_substructure_returns_matches(self, _deps: dict) -> None:
+    async def test_substructure_dispatches_to_reader(self, _deps: dict) -> None:
         mol = _make_mol()
-        _deps["repo"].add(mol)
+        _deps["reader"].search_substructure = AsyncMock(return_value=[mol])
 
         query = SearchMoleculesQuery(
-            workspace_id=WS_ID, search_type="substructure", query="c1ccccc1"
+            workspace_id=WS_ID,
+            search_type="substructure",
+            query="  c1ccccc1  ",
+            query_kind="smarts",
         )
         result = await _deps["uc"](query)
 
         assert isinstance(result, Success)
-        assert len(result.unwrap()) == 1
-
-    @pytest.mark.asyncio
-    async def test_substructure_empty_results(self, _deps: dict) -> None:
-        query = SearchMoleculesQuery(
-            workspace_id=WS_ID, search_type="substructure", query="c1ccccc1"
+        assert result.unwrap() == [mol]
+        _deps["reader"].search_substructure.assert_awaited_once_with(
+            WS_ID, "c1ccccc1", kind="smarts"
         )
-        result = await _deps["uc"](query)
-
-        assert isinstance(result, Success)
-        assert result.unwrap() == []
 
 
 class TestSimilaritySearch:

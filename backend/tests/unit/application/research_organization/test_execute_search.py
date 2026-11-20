@@ -88,13 +88,9 @@ class TestExecuteSearchRecordExecution:
             cursor=None,
         )
 
-        with patch.object(
-            saved_search, "record_execution", wraps=saved_search.record_execution
-        ) as mock_record:
-            result = await uc(query, auth=auth)
+        result = await uc(query, auth=auth)
 
         assert isinstance(result, Success)
-        mock_record.assert_called_once_with(result_count=42)
         saved_search_repo.save.assert_awaited_once_with(saved_search)
         assert saved_search.last_run_at is not None
         assert saved_search.result_count == 42

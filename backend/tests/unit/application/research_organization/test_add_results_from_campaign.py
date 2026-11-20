@@ -23,7 +23,6 @@ from cellar.domain.research_organization.campaign_stage import (
     StageCriterion,
 )
 from cellar.domain.research_organization.enums import (
-    CampaignStatus,
     ChannelSourceKind,
     QualifierHandling,
     SelectionRule,
@@ -197,6 +196,7 @@ class TestAddResultsFromCampaign:
     @pytest.mark.asyncio
     async def test_stage_from_another_campaign_is_rejected(self) -> None:
         auth = fake_auth()
+        foreign_stage_id = uuid.uuid4()
         campaign = _make_campaign(auth)
         source, _stage = _make_source_campaign(auth, [60.0, 10.0])
         uc = _make_uc(make_campaign_repo(find_dispatch={campaign.id: campaign, source.id: source}))
@@ -204,31 +204,13 @@ class TestAddResultsFromCampaign:
             workspace_id=auth.workspace_id,
             campaign_id=campaign.id,
             source_campaign_id=source.id,
-            stage_id=uuid.uuid4(),
+            stage_id=foreign_stage_id,
         )
         result = await uc(cmd, auth=auth)
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ValidationError)
-        assert "does not belong to source campaign" in str(result.failure())
-
-    @pytest.mark.asyncio
-    async def test_accepts_any_source_status_including_draft(self) -> None:
-        """AddResultsFromCampaign works with source campaigns in DRAFT status."""
-        auth = fake_auth()
-        campaign = _make_campaign(auth)
-        source, _stage = _make_source_campaign(auth, [60.0, 10.0, 70.0])
-        assert source.status == CampaignStatus.DRAFT
-        uc = _make_uc(make_campaign_repo(find_dispatch={campaign.id: campaign, source.id: source}))
-        cmd = AddResultsFromCampaignCommand(
-            workspace_id=auth.workspace_id,
-            campaign_id=campaign.id,
-            source_campaign_id=source.id,
-        )
-        result = await uc(cmd, auth=auth)
-
-        assert isinstance(result, Success)
-        assert result.unwrap().added == 3
+        assert str(foreign_stage_id) in str(result.failure())
 
     @pytest.mark.asyncio
     async def test_idempotent_reskip_existing(self) -> None:

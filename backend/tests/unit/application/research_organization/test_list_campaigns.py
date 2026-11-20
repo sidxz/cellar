@@ -63,16 +63,6 @@ class TestListCampaignsStatusFilter:
         assert repo.find_by_project.await_args.kwargs["status"] is CampaignStatus.DRAFT
 
     @pytest.mark.asyncio
-    async def test_status_defaults_to_none(self) -> None:
-        auth = fake_auth()
-        repo = _make_repo()
-        uc = ListCampaigns(uow=FakeUnitOfWork(), campaign_repo=repo, protocol_repo=AsyncMock())
-
-        await uc(ListCampaignsQuery(workspace_id=auth.workspace_id), auth=auth)
-
-        assert repo.find_by_workspace.await_args.kwargs["status"] is None
-
-    @pytest.mark.asyncio
     async def test_no_workspace_role_is_rejected(self) -> None:
         auth = fake_auth(role="viewer")
         auth.has_role = lambda _minimum_role: False

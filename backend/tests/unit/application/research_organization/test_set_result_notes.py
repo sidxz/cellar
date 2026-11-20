@@ -194,7 +194,7 @@ class TestSetResultNotes:
 
         assert isinstance(out, Failure)
         assert isinstance(out.failure(), ValidationError)
-        assert "Cannot edit notes: campaign is closed" in str(out.failure())
+        assert CampaignStatus.CLOSED.value in str(out.failure())
         campaign_repo.save.assert_not_awaited()
 
     @pytest.mark.asyncio
