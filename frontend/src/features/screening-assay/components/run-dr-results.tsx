@@ -7,6 +7,17 @@ import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
 import { Button } from "@/shared/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/shared/components/ui/card";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/shared/components/ui/dropdown-menu";
 import { Input } from "@/shared/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import { ScrollArea } from "@/shared/components/ui/scroll-area";
@@ -14,9 +25,11 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/shared/component
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { GROUP_PALETTE } from "@/shared/lib/chart-colors";
 import { formatDate } from "@/shared/lib/format-date";
+import { cn } from "@/shared/lib/utils";
 
-import type { SelectionChangedEvent } from "ag-grid-community";
+import type { GridApi, IRowNode, SelectionChangedEvent } from "ag-grid-community";
 import {
+  ChartNoAxesCombined,
   Check,
   Eye,
   EyeOff,
@@ -27,8 +40,10 @@ import {
   Pencil,
   Search,
   Settings2,
+  SlidersHorizontal,
+  X,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useProtocol } from "../hooks/use-protocols";
 import { useSetRunHitCriteria } from "../hooks/use-runs";
 import { curveFrame, curveLayer } from "../lib/curve-frame";
@@ -40,9 +55,23 @@ import { CurveNavigator } from "./curve-navigator";
 import { criterionLabel } from "./detail-tabs/use-activity-tab";
 import { DoseResponseChart } from "./dose-response-chart";
 import { RunHitCriteriaDialog } from "./hit-criteria-dialog";
-import { buildColumnDefs } from "./run-dr-results-columns";
+import { RUN_DIAGNOSTIC_COLUMNS, buildColumnDefs } from "./run-dr-results-columns";
+import {
+  type RunCurveClassFilter,
+  type RunPotencyFilter,
+  matchesRunViewFilters,
+} from "./run-dr-results-filtering";
+import { RunCurveClassFilterMenu, RunPotencyFilterControl } from "./run-dr-results-filters";
 import { applyHitFilter, buildCompoundRows } from "./run-dr-results-transforms";
 import type { CompoundCurveRow } from "./run-dr-results-transforms";
+import {
+  displayDoseUnit,
+  isConvertibleDoseUnit,
+  normalizeDoseUnit,
+  useRunResultsView,
+} from "./run-dr-results-view";
+import { useRunResultsFocus } from "./use-run-results-focus";
+import "./run-dr-results.css";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -81,6 +110,27 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   // at every compound without altering the recorded decision or its provenance.
   const [showAll, setShowAll] = useState(false);
   const [quickFilter, setQuickFilter] = useState("");
+  const [classFilter, setClassFilter] = useState<RunCurveClassFilter[]>([]);
+  const [potencyFilter, setPotencyFilter] = useState<RunPotencyFilter | null>(null);
+  const hasViewFilters = classFilter.length > 0 || potencyFilter !== null;
+  const [view, setView] = useRunResultsView(run.protocol_id);
+  const gridApi = useRef<GridApi<CompoundCurveRow> | null>(null);
+  const [filteredCount, setFilteredCount] = useState<number | null>(null);
+  const [navigationRows, setNavigationRows] = useState<CompoundCurveRow[] | null>(null);
+  // Keep the grid mounted so focus mode retains its sort, filters, selection and scroll.
+  const {
+    expanded: focusResults,
+    setExpanded: setFocusResults,
+    resultsRef,
+    buttonRef: focusButtonRef,
+  } = useRunResultsFocus();
+  const comparisonRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (gridApi.current && !gridApi.current.isDestroyed()) {
+      gridApi.current.setColumnsVisible(RUN_DIAGNOSTIC_COLUMNS, view.diagnostics);
+    }
+  }, [view.diagnostics]);
 
   // Collection picker (bulk action on the checkbox selection)
   const [collectionDialogOpen, setCollectionDialogOpen] = useState(false);
@@ -97,6 +147,26 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
 
   // Build rows from curves (already enriched with reg#, smiles, synonyms).
   const allRows = useMemo(() => buildCompoundRows(curves), [curves]);
+  const commonUnit = useMemo(() => {
+    const units = new Set(allRows.map((row) => normalizeDoseUnit(row.fitted_unit)));
+    const unit = [...units][0];
+    return units.size === 1 && unit ? unit : null;
+  }, [allRows]);
+  const canConvertUnits = commonUnit != null && isConvertibleDoseUnit(commonUnit);
+  const displayUnit = canConvertUnits && view.unit !== "native" ? view.unit : commonUnit;
+  const matchesViewFilter = useCallback(
+    (node: IRowNode<CompoundCurveRow>) =>
+      !!node.data && matchesRunViewFilters(node.data, classFilter, potencyFilter),
+    [classFilter, potencyFilter],
+  );
+  useEffect(() => {
+    const api = gridApi.current;
+    if (api && !api.isDestroyed()) {
+      api.setGridOption("isExternalFilterPresent", () => hasViewFilters);
+      api.setGridOption("doesExternalFilterPass", matchesViewFilter);
+      api.onFilterChanged();
+    }
+  }, [hasViewFilters, matchesViewFilter]);
   // The true hit set (threshold applied) — drives the "N hits" count regardless
   // of the view-only bypass below.
   // This tab evaluates rules on dose-response readouts (and Curve Class); a
@@ -122,33 +192,47 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   // Rows the grid actually shows: the hit set when a threshold is active, unless
   // the screener has toggled the non-destructive "Show all" bypass.
   const displayedRows = hasThreshold && !showAll ? hitRows : allRows;
+  const navigableRows = navigationRows ?? displayedRows;
+  const updateGridView = useCallback((api: GridApi<CompoundCurveRow>) => {
+    gridApi.current = api;
+    const rows: CompoundCurveRow[] = [];
+    api.forEachNodeAfterFilterAndSort((node) => {
+      if (node.data) rows.push(node.data);
+    });
+    setFilteredCount(rows.length);
+    setNavigationRows((previous) =>
+      previous?.length === rows.length && previous.every((row, index) => row === rows[index])
+        ? previous
+        : rows,
+    );
+  }, []);
 
   // Curve navigation (prev/next of the currently viewed compound)
   const viewing = useMemo(
-    () => displayedRows.find((r) => r.molecule_id === viewingId) ?? null,
-    [displayedRows, viewingId],
+    () => navigableRows.find((r) => r.molecule_id === viewingId) ?? null,
+    [navigableRows, viewingId],
   );
   const selectedIndex = viewing
-    ? displayedRows.findIndex((r) => r.molecule_id === viewing.molecule_id)
+    ? navigableRows.findIndex((r) => r.molecule_id === viewing.molecule_id)
     : -1;
 
   const navigateTo = useCallback(
     (index: number) => {
-      const target = displayedRows[index];
+      const target = navigableRows[index];
       if (target) setViewingId(target.molecule_id);
     },
-    [displayedRows],
+    [navigableRows],
   );
 
   const handlePrev = useCallback(() => {
-    const newIdx = selectedIndex <= 0 ? displayedRows.length - 1 : selectedIndex - 1;
+    const newIdx = selectedIndex <= 0 ? navigableRows.length - 1 : selectedIndex - 1;
     navigateTo(newIdx);
-  }, [selectedIndex, displayedRows.length, navigateTo]);
+  }, [selectedIndex, navigableRows.length, navigateTo]);
 
   const handleNext = useCallback(() => {
-    const newIdx = selectedIndex >= displayedRows.length - 1 ? 0 : selectedIndex + 1;
+    const newIdx = selectedIndex >= navigableRows.length - 1 ? 0 : selectedIndex + 1;
     navigateTo(newIdx);
-  }, [selectedIndex, displayedRows.length, navigateTo]);
+  }, [selectedIndex, navigableRows.length, navigateTo]);
 
   // Column set is driven by the protocol's intercept specs — one column
   // per declared intercept (EC50, EC90, IC10, ...). When the protocol
@@ -181,8 +265,28 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
     [allRows, layerOf],
   );
   const columnDefs = useMemo(
-    () => buildColumnDefs(protocolIntercepts, frame),
-    [protocolIntercepts, frame],
+    () =>
+      buildColumnDefs(protocolIntercepts, frame, {
+        query: quickFilter,
+        compact: view.compact,
+        diagnostics: view.diagnostics,
+        unit: displayUnit,
+        onView: setViewingId,
+        expanded: focusResults,
+        onToggleFocus: () => setFocusResults((expanded) => !expanded),
+        focusButtonRef,
+      }),
+    [
+      protocolIntercepts,
+      frame,
+      quickFilter,
+      view.compact,
+      view.diagnostics,
+      displayUnit,
+      focusResults,
+      setFocusResults,
+      focusButtonRef,
+    ],
   );
 
   // Detail panel: curves for the viewed compound
@@ -209,42 +313,262 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
   }
 
   return (
-    <div className="space-y-2">
+    <section
+      ref={resultsRef}
+      aria-label="Dose-response results"
+      tabIndex={-1}
+      className={cn(
+        "min-w-0 space-y-2 outline-none",
+        focusResults &&
+          "fixed inset-0 z-40 flex flex-col gap-3 space-y-0 overflow-y-auto bg-background p-4 sm:p-6",
+      )}
+    >
+      {focusResults && (
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="text-lg font-semibold">Dose-response results</h2>
+          <span className="text-sm text-muted-foreground">{protocol?.name}</span>
+        </div>
+      )}
       {/* Keep the screening outcome and tools together, directly above the data. */}
       <div
         className="flex flex-wrap items-center gap-x-3 gap-y-2"
         aria-label="Compound results toolbar"
       >
-        <div className="flex items-center gap-2 text-sm tabular-nums">
-          {hasThreshold && (
-            <Badge variant="outline" className="border-success/40 text-success">
-              {hitRows.length} hit{hitRows.length !== 1 ? "s" : ""}
-            </Badge>
-          )}
-          <span className="text-muted-foreground">
-            {allRows.length} compound{allRows.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-        {selectedRows.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="text-muted-foreground">{selectedRows.length} selected</span>
-            <Button variant="outline" size="sm" onClick={() => setCollectionDialogOpen(true)}>
-              <FolderPlus className="size-4" />
-              Add to Collection
-            </Button>
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
+          <div className="flex shrink-0 items-center gap-2 text-sm tabular-nums">
+            {hasThreshold && (
+              <Badge variant="outline" className="border-success/40 text-success">
+                {hitRows.length} hit{hitRows.length !== 1 ? "s" : ""}
+              </Badge>
+            )}
+            <span className="font-medium text-foreground">
+              {quickFilter.trim() || hasThreshold || hasViewFilters
+                ? `${filteredCount ?? displayedRows.length} of ${allRows.length}`
+                : allRows.length}{" "}
+              compound{allRows.length !== 1 ? "s" : ""}
+            </span>
           </div>
-        )}
+          <span aria-hidden="true" className="hidden h-4 w-px bg-border sm:block" />
+          {/* The scientific decision stays visible; its provenance is available on demand. */}
+          {!isSet ? (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+              <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {recommendation.length > 0 ? (
+                <>
+                  <span className="font-medium">Protocol recommends</span>
+                  {recommendation.map((rule) => (
+                    <Badge
+                      key={JSON.stringify(rule)}
+                      variant="secondary"
+                      className="max-w-full whitespace-normal py-0.5 text-xs"
+                    >
+                      {criterionLabel(rule)}
+                    </Badge>
+                  ))}
+                  <span className="text-xs text-muted-foreground">Not yet applied</span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        setHitCriteria.mutate({
+                          runId: run.id,
+                          criteria: runRulesOf(recommendation, protocol?.readout_definitions ?? [])
+                            .kept,
+                        })
+                      }
+                      disabled={setHitCriteria.isPending || run.is_locked}
+                    >
+                      <Check className="size-4" /> Apply to this run
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setCriteriaDialogOpen(true)}
+                      disabled={run.is_locked}
+                    >
+                      <Settings2 className="size-4" /> Customize…
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="text-muted-foreground">Hit criteria not set</span>
+                  <Button
+                    className="h-7 px-2"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCriteriaDialogOpen(true)}
+                    disabled={run.is_locked}
+                  >
+                    <Settings2 className="size-3.5" /> Set criteria
+                  </Button>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-xs">
+              <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <span className="font-medium">Hit criteria</span>
+              {hasThreshold ? (
+                (runCriteria ?? []).map((rule) =>
+                  isOtherTabRule(rule) ? (
+                    <span key={JSON.stringify(rule)} className="text-sm text-muted-foreground">
+                      {criterionLabel(rule)} (evaluated on another tab)
+                    </span>
+                  ) : (
+                    <Badge
+                      key={JSON.stringify(rule)}
+                      variant="secondary"
+                      className="max-w-full whitespace-normal py-0.5 text-xs"
+                    >
+                      {criterionLabel(rule)}
+                    </Badge>
+                  ),
+                )
+              ) : (
+                <span className="text-muted-foreground">No threshold · all compounds</span>
+              )}
+              {run.hit_criteria_set_by && (
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8"
+                      aria-label="Hit criteria provenance"
+                    >
+                      <Info className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-72 text-sm" align="start">
+                    Set by <MemberName id={run.hit_criteria_set_by} />
+                    {run.hit_criteria_set_at ? ` on ${formatDate(run.hit_criteria_set_at)}` : ""}
+                  </PopoverContent>
+                </Popover>
+              )}
+              {hasThreshold && showAll && (
+                <span className="text-xs text-muted-foreground">
+                  Viewing all · criteria retained
+                </span>
+              )}
+              <Button
+                className="h-7 px-2"
+                variant="ghost"
+                size="sm"
+                onClick={() => setCriteriaDialogOpen(true)}
+                disabled={run.is_locked}
+              >
+                <Pencil className="size-4" /> Edit criteria
+              </Button>
+            </div>
+          )}
+        </div>
         <div className="ml-auto flex w-full flex-wrap items-center gap-2 sm:w-auto">
-          <div className="relative min-w-0 flex-1 sm:w-64 sm:flex-none">
+          <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
             <Search className="pointer-events-none absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
             <Input
               aria-label="Filter compounds"
               placeholder="Find compound, alias or batch…"
               value={quickFilter}
               onChange={(event) => setQuickFilter(event.target.value)}
-              className="h-8 pl-8"
+              className="h-8 pr-8 pl-8"
             />
+            {quickFilter && (
+              <button
+                type="button"
+                aria-label="Clear compound search"
+                onClick={() => setQuickFilter("")}
+                className="absolute right-2 top-2 rounded-sm text-muted-foreground hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <X className="size-4" />
+              </button>
+            )}
           </div>
+          <RunPotencyFilterControl
+            intercepts={protocolIntercepts}
+            unit={displayUnit}
+            value={potencyFilter}
+            onChange={setPotencyFilter}
+          />
+          <RunCurveClassFilterMenu
+            selected={classFilter}
+            onChange={setClassFilter}
+            hasUnclassified={allRows.some((row) => row.curve_class == null)}
+          />
+          {hasViewFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label="Clear view filters"
+              onClick={() => {
+                setClassFilter([]);
+                setPotencyFilter(null);
+              }}
+            >
+              <X className="size-3.5" />
+              Clear filters
+            </Button>
+          )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant={view.diagnostics ? "secondary" : "outline"}
+                size="sm"
+                aria-label="Table options"
+              >
+                <SlidersHorizontal className="size-4" />
+                View
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuLabel>Columns</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={view.diagnostics}
+                onCheckedChange={(checked) => setView({ ...view, diagnostics: checked })}
+              >
+                Fit diagnostics
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Row density</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={view.compact ? "compact" : "comfortable"}
+                onValueChange={(value) => setView({ ...view, compact: value === "compact" })}
+              >
+                <DropdownMenuRadioItem value="comfortable">Comfortable</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="compact">Compact</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              {canConvertUnits && commonUnit && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Potency display units</DropdownMenuLabel>
+                  <DropdownMenuRadioGroup
+                    value={view.unit}
+                    onValueChange={(value) => {
+                      if (value === "native" || value === "uM" || value === "nM") {
+                        setView({ ...view, unit: value });
+                      }
+                    }}
+                  >
+                    <DropdownMenuRadioItem value="native">
+                      Run units ({displayDoseUnit(commonUnit)})
+                    </DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="uM">µM</DropdownMenuRadioItem>
+                    <DropdownMenuRadioItem value="nM">nM</DropdownMenuRadioItem>
+                  </DropdownMenuRadioGroup>
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={() => {
+                  gridApi.current?.resetColumnState();
+                  gridApi.current?.setColumnsVisible(RUN_DIAGNOSTIC_COLUMNS, view.diagnostics);
+                }}
+              >
+                Reset table layout
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           {hasThreshold && (
             <Button
               variant={showAll ? "outline" : "secondary"}
@@ -259,135 +583,72 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
         </div>
       </div>
 
-      {/* The scientific decision stays visible; its provenance is available on demand. */}
-      {!isSet ? (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-dashed px-4 py-3 text-sm">
-          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-          {recommendation.length > 0 ? (
-            <>
-              <span className="font-medium">Protocol recommends</span>
-              {recommendation.map((rule, i) => (
-                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                <Badge key={i} variant="secondary" className="py-1 text-sm">
-                  {criterionLabel(rule)}
-                </Badge>
-              ))}
-              <span className="text-xs text-muted-foreground">Not yet applied</span>
-              <div className="ml-auto flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() =>
-                    setHitCriteria.mutate({
-                      runId: run.id,
-                      criteria: runRulesOf(recommendation, protocol?.readout_definitions ?? [])
-                        .kept,
-                    })
-                  }
-                  disabled={setHitCriteria.isPending || run.is_locked}
-                >
-                  <Check className="size-4" /> Apply to this run
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCriteriaDialogOpen(true)}
-                  disabled={run.is_locked}
-                >
-                  <Settings2 className="size-4" /> Customize…
-                </Button>
-              </div>
-            </>
-          ) : (
-            <>
-              <span className="text-muted-foreground">No hit criteria set for this run</span>
-              <Button
-                className="ml-auto"
-                variant="ghost"
-                size="sm"
-                onClick={() => setCriteriaDialogOpen(true)}
-                disabled={run.is_locked}
-              >
-                <Settings2 className="size-4" /> Set hit criteria
-              </Button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bg-muted/20 px-4 py-3 text-sm">
-          <Filter className="h-4 w-4 shrink-0 text-muted-foreground" />
-          <span className="font-medium">Hit criteria</span>
-          {hasThreshold ? (
-            (runCriteria ?? []).map((rule, i) =>
-              isOtherTabRule(rule) ? (
-                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                <span key={i} className="text-sm text-muted-foreground">
-                  {criterionLabel(rule)} (evaluated on another tab)
-                </span>
-              ) : (
-                // biome-ignore lint/suspicious/noArrayIndexKey: criteria have no stable id
-                <Badge key={i} variant="secondary" className="py-1 text-sm">
-                  {criterionLabel(rule)}
-                </Badge>
-              ),
-            )
-          ) : (
-            <span className="text-muted-foreground">No threshold · all compounds</span>
-          )}
-          {run.hit_criteria_set_by && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="size-8"
-                  aria-label="Hit criteria provenance"
-                >
-                  <Info className="h-4 w-4" />
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72 text-sm" align="start">
-                Set by <MemberName id={run.hit_criteria_set_by} />
-                {run.hit_criteria_set_at ? ` on ${formatDate(run.hit_criteria_set_at)}` : ""}
-              </PopoverContent>
-            </Popover>
-          )}
-          {hasThreshold && showAll && (
-            <span className="text-xs text-muted-foreground">Viewing all · criteria retained</span>
-          )}
+      {selectedRows.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-md border bg-accent/30 px-3 py-2 text-sm"
+          aria-label="Selected compounds"
+        >
+          <span className="mr-1 font-medium tabular-nums">{selectedRows.length} selected</span>
           <Button
-            className="ml-auto"
             variant="outline"
             size="sm"
-            onClick={() => setCriteriaDialogOpen(true)}
-            disabled={run.is_locked}
+            disabled={selectedRows.length < 2 || selectedRows.length > 5}
+            onClick={() =>
+              comparisonRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+            }
           >
-            <Pencil className="size-4" /> Edit criteria
+            <ChartNoAxesCombined className="size-4" /> Compare
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setCollectionDialogOpen(true)}>
+            <FolderPlus className="size-4" /> Add to Collection
+          </Button>
+          {selectedRows.length > 5 && (
+            <span className="text-xs text-muted-foreground">Compare up to 5 compounds</span>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto"
+            onClick={() => gridApi.current?.deselectAll()}
+          >
+            Clear selection
           </Button>
         </div>
       )}
 
-      {/* AG Grid */}
-      <DataGrid<CompoundCurveRow>
-        searchPlaceholder={false}
-        quickFilterText={quickFilter}
-        rowData={displayedRows}
-        columnDefs={columnDefs}
-        height="auto"
-        domLayout="autoHeight"
-        rowHeight={115}
-        onRowClick={(row) => setViewingId(row.molecule_id)}
-        enableMultiSelect
-        onSelectionChanged={handleSelectionChanged}
-        getRowId={(params) => params.data.molecule_id}
-        emptyState={
-          <EmptyState
-            icon={Filter}
-            title="No compounds match criteria"
-            description="Adjust or remove hit criteria to see more compounds."
-          />
-        }
-      />
+      {/* Rows grow with the page; the grid's own headers stay frozen while it scrolls. */}
+      <div className="run-dose-response-table" data-maximized={focusResults}>
+        <DataGrid<CompoundCurveRow>
+          searchPlaceholder={false}
+          suppressFilters
+          isExternalFilterPresent={() => hasViewFilters}
+          doesExternalFilterPass={matchesViewFilter}
+          quickFilterText={quickFilter}
+          rowData={displayedRows}
+          columnDefs={columnDefs}
+          height="auto"
+          domLayout="autoHeight"
+          rowHeight={view.compact ? 200 : 240}
+          headerHeight={44}
+          preferencesKey={`run-dose-response-v2-${run.protocol_id}`}
+          onFirstDataRendered={(event) => {
+            gridApi.current = event.api;
+            event.api.setColumnsVisible(RUN_DIAGNOSTIC_COLUMNS, view.diagnostics);
+            updateGridView(event.api);
+          }}
+          onModelUpdated={(event) => updateGridView(event.api)}
+          noRowsOverlayComponent={RunResultsEmptyOverlay}
+          noRowsOverlayComponentParams={{
+            hasSearch: quickFilter.trim().length > 0,
+            hasViewFilters,
+            criteriaEmpty: hasThreshold && !showAll && displayedRows.length === 0,
+          }}
+          onRowClick={(row) => setViewingId(row.molecule_id)}
+          enableMultiSelect
+          onSelectionChanged={handleSelectionChanged}
+          getRowId={(params) => params.data.molecule_id}
+        />
+      </div>
 
       {/* Detail sheet — driven by row click, independent from selection */}
       <Sheet
@@ -396,7 +657,10 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
           if (!open) setViewingId(null);
         }}
       >
-        <SheetContent side="right" className="w-[55vw] sm:max-w-[55vw] p-0 flex flex-col">
+        <SheetContent
+          side="right"
+          className="flex w-full flex-col p-0 sm:w-[min(820px,85vw)] sm:max-w-[min(820px,85vw)]"
+        >
           {viewing && (
             <>
               <SheetHeader className="px-4 pt-4 pb-2 pr-12 shrink-0 flex flex-row items-center justify-between">
@@ -411,7 +675,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
                 </div>
                 <CurveNavigator
                   currentIndex={selectedIndex}
-                  total={displayedRows.length}
+                  total={navigableRows.length}
                   onPrev={handlePrev}
                   onNext={handleNext}
                 />
@@ -440,7 +704,7 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
 
       {/* Multi-select comparison — 2-5 compounds */}
       {selectedRows.length >= 2 && selectedRows.length <= 5 && (
-        <Card>
+        <Card ref={comparisonRef}>
           <CardHeader>
             <CardTitle className="text-base">
               Comparison ({selectedRows.length} compounds)
@@ -487,6 +751,33 @@ export function RunDoseResponseResults({ run, curves, isLoading }: RunDoseRespon
         onOpenChange={setCollectionDialogOpen}
         moleculeIds={selectedRows.map((r) => r.molecule_id)}
       />
-    </div>
+    </section>
+  );
+}
+
+function RunResultsEmptyOverlay({
+  hasSearch,
+  criteriaEmpty,
+  hasViewFilters,
+}: { hasSearch: boolean; criteriaEmpty: boolean; hasViewFilters: boolean }) {
+  return (
+    <output className="block space-y-1 p-6 text-center">
+      <p className="text-sm font-medium">
+        {criteriaEmpty
+          ? "No compounds meet hit criteria"
+          : hasSearch
+            ? "No compounds match your search"
+            : "No compounds match these filters"}
+      </p>
+      <p className="text-xs text-muted-foreground">
+        {criteriaEmpty
+          ? "Adjust the hit criteria or show all compounds."
+          : hasSearch
+            ? "Try another identifier or clear the search."
+            : hasViewFilters
+              ? "Change the potency or curve class filters, or clear them to see more compounds."
+              : "Clear the filters to see more compounds."}
+      </p>
+    </output>
   );
 }

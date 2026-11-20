@@ -2,6 +2,7 @@
 
 import { ProtocolName } from "@/shared/components/entity-name";
 import { cn } from "@/shared/lib/utils";
+import Link from "next/link";
 import { usePlateMap } from "../hooks/use-plate-setup";
 import { classifyZPrime, worstZPrime } from "../lib/qc-metrics";
 import { PLATE_FORMAT_LABELS, type PlateFormat, type Run } from "../types";
@@ -55,12 +56,12 @@ export function RunSummaryCard({ run }: RunSummaryCardProps) {
       {/* Facts band */}
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
         <span className="text-muted-foreground">Protocol</span>
-        <a
+        <Link
           href={`/assays/protocols/${run.protocol_id}`}
           className="font-medium text-primary underline-offset-4 hover:underline"
         >
           <ProtocolName id={run.protocol_id} />
-        </a>
+        </Link>
         <Dot />
         <span className="tabular-nums">{run.run_date}</span>
         {holder ? (

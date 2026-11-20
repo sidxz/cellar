@@ -253,23 +253,32 @@ describe("MeltResultsGrid sorted by Position", () => {
 
   // The holder's order, both ways, with the rows given as text sorts them.
   it.each([
-    ["a cassette of 24", numbers(24).map((n) => `Capillary ${n}`)],
-    ["a plate", ["A", "B"].flatMap((r) => numbers(12).map((n) => `${r}${n}`))],
-  ])("orders %s as the holder is laid out, in both directions", async (_, labels) => {
-    drawGrid = true;
-    const [first, ...rest] = labels.map((label, i) => at(label, i));
-    // The first position is the reference: pinned, so never sorted.
-    const pinned = [{ ...first, wellType: "reference", isSample: false } as ResultRow];
-    show(["Main"], { rows: { pinned, body: rest.sort(asText) } });
-    await screen.findByText(labels[1]);
+    ["a cassette of 24", numbers(24).map((n) => `Capillary ${n}`), false],
+    ["a plate", ["A", "B"].flatMap((r) => numbers(12).map((n) => `${r}${n}`)), false],
+    ["a numbered holder with compact labels", numbers(24).map((n) => `Slot ${n}`), true],
+  ])(
+    "orders %s as the holder is laid out, in both directions",
+    async (_, labels, prioritizeShift) => {
+      drawGrid = true;
+      const [first, ...rest] = labels.map((label, i) => at(label, i));
+      // The first position is the reference: pinned, so never sorted.
+      const pinned = [{ ...first, wellType: "reference", isSample: false } as ResultRow];
+      const displayed = prioritizeShift ? labels.map((_, i) => `#${i + 1}`) : labels;
+      show(["Main"], { rows: { pinned, body: rest.sort(asText) }, prioritizeShift });
+      await screen.findByText(displayed[1]);
+      if (prioritizeShift) {
+        expect(screen.getByLabelText(labels[1])).toHaveTextContent(displayed[1]);
+        expect(screen.getByLabelText(labels[1])).toHaveAttribute("title", labels[1]);
+      }
 
-    sortByPosition();
-    await waitFor(() => expect(body()).toEqual(labels.slice(1)));
-    expect(shown(".ag-floating-top")).toEqual([labels[0]]);
-    sortByPosition();
-    await waitFor(() => expect(body()).toEqual(labels.slice(1).reverse()));
-    expect(shown(".ag-floating-top")).toEqual([labels[0]]);
-  });
+      sortByPosition();
+      await waitFor(() => expect(body()).toEqual(displayed.slice(1)));
+      expect(shown(".ag-floating-top")).toEqual([displayed[0]]);
+      sortByPosition();
+      await waitFor(() => expect(body()).toEqual(displayed.slice(1).reverse()));
+      expect(shown(".ag-floating-top")).toEqual([displayed[0]]);
+    },
+  );
 });
 
 describe("MeltResultsGrid without sample rows", () => {

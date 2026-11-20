@@ -342,8 +342,8 @@ export function RunDataPanel({ run, resultActions }: RunDataPanelProps) {
           {resultsLoading ? (
             <p className="py-12 text-center text-sm text-muted-foreground">Loading results…</p>
           ) : (
-            <Tabs value={activeResult} onValueChange={openResultView} className="gap-3">
-              <div className="flex flex-wrap items-center justify-between gap-3">
+            <Tabs value={activeResult} onValueChange={openResultView} className="gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <TabsList aria-label="Result view">
                   {hasDoseResponse && (
                     <TabsTrigger value="dose-response">Dose-response</TabsTrigger>

@@ -5,6 +5,7 @@ import { DataGrid } from "@/shared/components/data-grid/data-grid";
 import { EntityLink } from "@/shared/components/entity-link";
 import { MemberName } from "@/shared/components/entity-name";
 import { Badge } from "@/shared/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/shared/components/ui/popover";
 import {
   Tooltip,
   TooltipContent,
@@ -25,7 +26,7 @@ import type {
   RowClickedEvent,
 } from "ag-grid-community";
 import { Pin, TriangleAlert } from "lucide-react";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import type { SelectionState } from "../lib/curve-selection";
 import { type ApplicableRule, limitsFor } from "../lib/melt-hits";
 import {
@@ -44,6 +45,8 @@ type Col = ColDef<ResultRow> | ColGroupDef<ResultRow>;
 type Params = ICellRendererParams<ResultRow>;
 
 const ROW_HEIGHT = 36;
+const THERMAL_TEXT_ROW_HEIGHT = 68;
+const THERMAL_POSITION_WIDTH = 76;
 /** The box a structure is drawn in, directly under the Sample text: wider than
  *  tall, as most structures are drawn, so the drawing fills it. */
 const STRUCTURE = { width: 144, height: 72 };
@@ -159,7 +162,7 @@ function deltaTint(d: number, isHit: boolean, emphasize = false): string {
   return emphasize ? "font-semibold text-foreground" : "text-muted-foreground";
 }
 
-function SampleCell({ row }: { row: ResultRow }) {
+function SampleCell({ row, stacked = false }: { row: ResultRow; stacked?: boolean }) {
   const { registrationNumber, moleculeId, batchSuffix, smiles, label, aliases } = row.identity;
   if (registrationNumber) {
     const id = moleculeId ? (
@@ -172,31 +175,75 @@ function SampleCell({ row }: { row: ResultRow }) {
     ) : (
       <span className="text-sm">{registrationNumber}</span>
     );
+    const linkedId = smiles ? (
+      <Tooltip>
+        {/* EntityLink takes no trigger props or ref, so a span carries them. */}
+        <TooltipTrigger asChild>
+          <span className="inline-flex">{id}</span>
+        </TooltipTrigger>
+        <TooltipContent
+          side="right"
+          sideOffset={6}
+          collisionPadding={12}
+          className="border bg-popover p-1.5 text-popover-foreground shadow-lg"
+        >
+          <div className="rounded-sm bg-white p-1">
+            <StructureThumbnail smiles={smiles} size={160} />
+          </div>
+        </TooltipContent>
+      </Tooltip>
+    ) : (
+      id
+    );
+    if (stacked) {
+      return (
+        <div className="flex min-w-0 flex-col items-start gap-0.5 py-1.5 leading-tight">
+          <div className="max-w-full font-medium">{linkedId}</div>
+          {aliases.length > 0 && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  aria-label={`Show aliases for ${registrationNumber}`}
+                  className="flex max-w-full items-baseline gap-1 rounded-sm text-left text-xs text-foreground/80 hover:text-primary focus-visible:outline-2 focus-visible:outline-ring"
+                >
+                  <span className="truncate" title={aliases[0]}>
+                    {aliases[0]}
+                  </span>
+                  {aliases.length > 1 && (
+                    <span className="shrink-0 text-primary">+{aliases.length - 1}</span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" className="w-72 max-w-[calc(100vw-2rem)] space-y-3">
+                <p className="text-sm font-medium">{registrationNumber} · aliases</p>
+                <ul className="max-h-60 space-y-2 overflow-y-auto text-sm">
+                  {aliases.map((alias) => (
+                    <li key={alias} className="break-words select-text">
+                      {alias}
+                    </li>
+                  ))}
+                </ul>
+              </PopoverContent>
+            </Popover>
+          )}
+          {batchSuffix && (
+            <span
+              className="max-w-full truncate text-xs text-muted-foreground"
+              title={`Batch ${batchSuffix}`}
+            >
+              Batch {batchSuffix}
+            </span>
+          )}
+        </div>
+      );
+    }
     return (
       <span
         className="flex h-full items-center gap-1 truncate"
         title={[registrationNumber, batchSuffix && `·${batchSuffix}`].filter(Boolean).join("")}
       >
-        {smiles ? (
-          <Tooltip>
-            {/* EntityLink takes no trigger props or ref, so a span carries them. */}
-            <TooltipTrigger asChild>
-              <span className="inline-flex">{id}</span>
-            </TooltipTrigger>
-            <TooltipContent
-              side="right"
-              sideOffset={6}
-              collisionPadding={12}
-              className="border bg-popover p-1.5 text-popover-foreground shadow-lg"
-            >
-              <div className="rounded-sm bg-white p-1">
-                <StructureThumbnail smiles={smiles} size={160} />
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        ) : (
-          id
-        )}
+        {linkedId}
         {batchSuffix && <span className="text-xs text-muted-foreground">{`·${batchSuffix}`}</span>}
         {aliases.length > 0 && (
           // The first alias gives way to the rest of the cell; "+N" never does.
@@ -226,7 +273,13 @@ function SampleCell({ row }: { row: ResultRow }) {
       </span>
     );
   return (
-    <span className="flex items-baseline gap-1.5 truncate" title={text}>
+    <span
+      className={cn(
+        "flex gap-1.5",
+        stacked ? "min-w-0 flex-col gap-0.5 leading-tight" : "items-baseline truncate",
+      )}
+      title={text}
+    >
       <span className="truncate">{text}</span>
       <span className="text-xs">
         {(WELL_TYPE_LABELS[row.wellType as WellType] ?? row.wellType).toLowerCase()}
@@ -442,6 +495,21 @@ export function MeltResultsGrid({
 }) {
   const compare = windowNames.length > 1;
   const structureColumn = prioritizeShift && showStructures;
+  // A numbered holder repeats the same word in every row. Shorten it only
+  // when that prefix is shared; plate coordinates and mixed labels stay intact.
+  const positionPrefix = useMemo(() => {
+    if (!prioritizeShift) return null;
+    const positions = [...rows.pinned, ...rows.body].map((row) => row.position);
+    const prefix = positions[0]?.match(/^(.+?)\s+\d+$/)?.[1];
+    return prefix && positions.every((position) => position.match(/^(.+?)\s+\d+$/)?.[1] === prefix)
+      ? prefix
+      : null;
+  }, [prioritizeShift, rows]);
+  const shortPosition = useCallback(
+    (position: string) =>
+      positionPrefix ? `#${position.slice(positionPrefix.length).trim()}` : position,
+    [positionPrefix],
+  );
   const columnDefs = useMemo<Col[]>(() => {
     const identity: ColDef<ResultRow>[] = [
       {
@@ -468,7 +536,7 @@ export function MeltResultsGrid({
             <SampleWithStructure row={p.data} />
           ) : prioritizeShift ? (
             <div className="flex h-full items-center">
-              <SampleCell row={p.data} />
+              <SampleCell row={p.data} stacked />
             </div>
           ) : (
             <SampleCell row={p.data} />
@@ -477,10 +545,28 @@ export function MeltResultsGrid({
       {
         colId: "position",
         headerName: "Position",
-        width: WIDTH.position,
-        minWidth: prioritizeShift ? WIDTH.position : undefined,
-        cellRenderer: structureColumn
-          ? (p: Params) => <span className="flex h-full items-center">{p.data?.position}</span>
+        width: prioritizeShift && positionPrefix ? THERMAL_POSITION_WIDTH : WIDTH.position,
+        minWidth: prioritizeShift
+          ? positionPrefix
+            ? THERMAL_POSITION_WIDTH
+            : WIDTH.position
+          : undefined,
+        headerTooltip: positionPrefix
+          ? `${positionPrefix} number (full label on hover)`
+          : "Position in the holder",
+        getQuickFilterText: (p) =>
+          p.data ? `${p.data.position} ${shortPosition(p.data.position)}` : "",
+        cellRenderer: prioritizeShift
+          ? (p: Params) =>
+              p.data ? (
+                <span
+                  className="flex h-full items-center tabular-nums"
+                  title={p.data.position}
+                  aria-label={p.data.position}
+                >
+                  {shortPosition(p.data.position)}
+                </span>
+              ) : null
           : undefined,
         valueGetter: (p) => p.data?.position,
         // As the holder is laid out (Capillary 2 before 11, A2 before A10), not as text.
@@ -614,6 +700,8 @@ export function MeltResultsGrid({
     showStructures,
     prioritizeShift,
     structureColumn,
+    positionPrefix,
+    shortPosition,
   ]);
 
   // Rules, not getRowClass: AG Grid re-applies rules (adding and removing
@@ -671,7 +759,13 @@ export function MeltResultsGrid({
         onRowClicked={handleRowClicked}
         onCellKeyDown={handleCellKeyDown}
         suppressCellFocus={false}
-        rowHeight={structureColumn ? THERMAL_STRUCTURE_ROW_HEIGHT : ROW_HEIGHT}
+        rowHeight={
+          structureColumn
+            ? THERMAL_STRUCTURE_ROW_HEIGHT
+            : prioritizeShift
+              ? THERMAL_TEXT_ROW_HEIGHT
+              : ROW_HEIGHT
+        }
         groupHeaderHeight={GROUP_HEADER_HEIGHT}
         // As tall as its rows: the page scrolls, never the table.
         height="auto"

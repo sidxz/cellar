@@ -104,10 +104,16 @@ export function TableGrid(props: MockGridProps) {
   );
 }
 
-/** The grid row whose cell reads exactly `text`. */
+/** Find a row by its cell text or the full accessible label of a compact cell. */
 export function gridRow(text: string): HTMLTableRowElement {
   const row = [...document.querySelectorAll<HTMLTableRowElement>("tr[data-row-id]")].find((tr) =>
-    [...tr.cells].some((td) => td.textContent === text),
+    [...tr.cells].some(
+      (td) =>
+        td.textContent === text ||
+        [...td.querySelectorAll("[aria-label]")].some(
+          (element) => element.getAttribute("aria-label") === text,
+        ),
+    ),
   );
   if (!row) throw new Error(`no grid row with ${text}`);
   return row;

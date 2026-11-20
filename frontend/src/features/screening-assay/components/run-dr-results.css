@@ -1,0 +1,31 @@
+.run-dose-response-table {
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+/* Auto-height rows scroll with the page. Remove only the grid's outer clipping so
+   its real header (including sorting, selection and maximize) can remain sticky. */
+.run-dose-response-table .ag-root-wrapper,
+.run-dose-response-table .ag-root.ag-layout-auto-height {
+  overflow: visible;
+}
+
+.run-dose-response-table .ag-header {
+  position: sticky;
+  top: calc(2.75rem + 1px);
+  z-index: 21;
+  background: var(--muted);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.run-dose-response-table[data-maximized="true"] .ag-header {
+  top: 0;
+}
+
+/* Keep sideways scrolling reachable while a long table is on screen. */
+.run-dose-response-table .ag-body-horizontal-scroll {
+  position: sticky;
+  bottom: 0;
+  z-index: 21;
+  background: var(--background);
+}
