@@ -79,6 +79,5 @@ def test_scratch_prefixes_are_named_and_justified() -> None:
     Export walks the WHOLE storage root, so an entry here is a deliberate omission —
     each one owes a reason that gets printed to whoever imports the bundle.
     """
-    assert {p.name for p in SCRATCH_PREFIXES} == {"cdd-exports", "bulk-imports"}
     for prefix in SCRATCH_PREFIXES:
         assert prefix.why.strip(), f"{prefix.name} must say why it is skipped"

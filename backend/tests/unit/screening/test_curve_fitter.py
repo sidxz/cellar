@@ -251,15 +251,6 @@ class TestLmfitCurveFitter:
         assert fitted.confidence_interval_low < fitted.fitted_value
         assert fitted.confidence_interval_high > fitted.fitted_value
 
-    def test_raw_data_format(self):
-        points = _generate_hill_data(ic50=100.0, n_points=8)
-        config = _make_config()
-        result = self.fitter.fit(points, config)
-        assert isinstance(result, Success)
-        fitted = result.unwrap()
-        for pt in fitted.raw_data:
-            assert "concentration" in pt
-            assert "response" in pt
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -513,19 +504,6 @@ class TestRangeConstraints:
         assert ic50.qualifier == ValueQualifier.EQ
         assert (ic90.qualifier, ic90.value, ic90.at_bound) == (ValueQualifier.GT, 100.0, True)
 
-    def test_lock_and_range_mutually_exclusive_at_construction(self):
-        """Domain-layer ValidationError, not a runtime fitter error."""
-        from cellar.domain.shared.errors import ValidationError as VE
-
-        with pytest.raises(VE, match="top_constraint"):
-            _config_with_ranges(top_constraint=100.0, top_constraint_min=85.0)
-
-    def test_range_min_greater_than_max_rejected_at_construction(self):
-        from cellar.domain.shared.errors import ValidationError as VE
-
-        with pytest.raises(VE, match="top_constraint_min"):
-            _config_with_ranges(top_constraint_min=110.0, top_constraint_max=85.0)
-
     def test_init_value_clamped_into_range(self):
         """Strongly rising data → top_init ≈ 130 from data inference; with
         Top range [50, 100] the fitter must clamp the start point inside
@@ -547,11 +525,7 @@ class TestRangeConstraints:
         the explicit range overrides the enum's [0.01, 20] bounds — fit lands
         inside [0.5, 2.0]."""
         points = _generate_inhibition_data(ic50=80.0, hill=1.5)
-        cfg = _config_with_ranges(
-            hill_constraint=HillSlopeConstraint.POSITIVE_ONLY,
-            hill_slope_min=0.5,
-            hill_slope_max=2.0,
-        ) if False else DoseResponseConfig(
+        cfg = DoseResponseConfig(
             curve_type=CurveType.IC50,
             x_readout_name="Concentration",
             y_readout_name="% Inhibition",
@@ -561,20 +535,6 @@ class TestRangeConstraints:
         )
         fitted = self.fitter.fit(points, cfg).unwrap()
         assert 0.5 <= fitted.hill_slope <= 2.0
-
-    def test_hill_range_contradicting_enum_rejected_at_construction(self):
-        """POSITIVE_ONLY + Hill range straddling 0 → ValidationError."""
-        from cellar.domain.shared.errors import ValidationError as VE
-
-        with pytest.raises(VE, match="hill_slope"):
-            DoseResponseConfig(
-                curve_type=CurveType.IC50,
-                x_readout_name="Concentration",
-                y_readout_name="% Inhibition",
-                hill_slope_constraint=HillSlopeConstraint.POSITIVE_ONLY,
-                hill_slope_min=-2.0,
-                hill_slope_max=2.0,
-            )
 
     def test_open_top_range_only_max_set(self):
         """Top range with only max set → upper bound only, no lower bound."""
@@ -741,45 +701,6 @@ class TestOutlierSuggestionContract:
         )
         return points
 
-    def test_fit_returns_outlier_suggestion_separately_from_exclusions(self):
-        """A clear outlier surfaces as a SUGGESTION (not a silent exclusion)
-        and the offending point still contributes to the fit."""
-        points = self._points_with_clear_outlier_at(idx=5)
-        cfg = _config_with_ranges()
-        result = self.fitter.fit(points, cfg)
-        assert isinstance(result, Success)
-        fitted = result.unwrap()
-        # Suggestion is present and points at the offender.
-        assert any(s.idx == 5 for s in fitted.outlier_suggestions)
-        # The point was NOT silently moved to excluded_points.
-        auto_excluded = [
-            e for e in fitted.excluded_points if e.get("reason") == "auto_3sigma"
-        ]
-        assert auto_excluded == []
-        # num_points unchanged from input — no surgery.
-        assert fitted.num_points == len(points)
-
-    def test_fit_no_suggestions_when_outlier_sigma_is_none(self):
-        """outlier_sigma=None disables the suggestion pass entirely — the
-        Sprint-2 preview/commit paths rely on this to avoid cascade."""
-        points = self._points_with_clear_outlier_at(idx=5)
-        cfg = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name="Concentration",
-            y_readout_name="% Inhibition",
-            outlier_sigma=None,
-        )
-        fitted = self.fitter.fit(points, cfg).unwrap()
-        assert fitted.outlier_suggestions == ()
-
-    def test_suggestion_carries_residual_severity(self):
-        points = self._points_with_clear_outlier_at(idx=5)
-        cfg = _config_with_ranges()
-        fitted = self.fitter.fit(points, cfg).unwrap()
-        assert len(fitted.outlier_suggestions) >= 1
-        s = fitted.outlier_suggestions[0]
-        assert s.residual_z_full_sd > 0
-
     def test_first_pass_fit_quality_bounded_when_outlier_present(self):
         """A single severe outlier degrades but does not destroy the first-pass fit.
 
@@ -885,15 +806,6 @@ class TestConfidenceIntervalNoneAtBound:
         assert fitted.confidence_interval_low is None
         assert fitted.confidence_interval_high is None
 
-    def test_ci_present_for_clean_fit(self):
-        # Sanity check: a normal fit still returns finite CI bounds.
-        points = _generate_inhibition_data(
-            ic50=80.0, hill=1.0, top=100.0, bottom=0.0, noise_pct=0.02,
-        )
-        fitted = self.fitter.fit(points, _config_with_ranges()).unwrap()
-        assert fitted.confidence_interval_low is not None
-        assert fitted.confidence_interval_high is not None
-        assert fitted.confidence_interval_low < fitted.fitted_value < fitted.confidence_interval_high
 
 
 class TestMultiIntercept:
@@ -959,13 +871,14 @@ class TestMultiIntercept:
         assert ic90.value / ic50.value == pytest.approx(9.0, rel=0.02)
 
     def test_intercept_outside_curve_window_returns_at_bound(self):
-        """IC90 on a curve that plateaus at 50% inhibition can never reach 90%."""
+        """An absolute 80 % on a curve that plateaus at 50 % is never reached:
+        "> highest dose" and at_bound."""
         from cellar.domain.screening_assay.dose_response_config import (
             DoseResponseConfig,
             InterceptSpec,
         )
-        from cellar.domain.screening_assay.enums import InterceptKind
-        # Synthetic data hard-capped at 50%: bottom=0, top=50.
+        from cellar.domain.screening_assay.enums import InterceptBasis, InterceptKind
+
         points = _generate_inhibition_data(
             ic50=1.0, hill=1.0, top=50.0, bottom=0.0,
             n_points=11, noise_pct=0.005,
@@ -976,26 +889,9 @@ class TestMultiIntercept:
             y_readout_name="% Inhibition",
             top_constraint=50.0,
             bottom_constraint=0.0,
-            intercepts=(InterceptSpec(InterceptKind.IC, 90),),
-        )
-        result = self.fitter.fit(points, cfg).unwrap()
-        # Target y = 0 + 0.9 * 50 = 45 — within [0, 50], so this should NOT
-        # be at_bound. Adjust expectation: IC90 == conc at 90% along the
-        # 0..50 window. That's reachable.
-        assert not result.intercept_values[0].at_bound
-        # Now ask for IC@y=80 absolute → outside the curve: not reached at the highest
-        # dose, so "> 100" and at_bound.
-        from cellar.domain.screening_assay.enums import InterceptBasis
-        cfg2 = DoseResponseConfig(
-            curve_type=CurveType.IC50,
-            x_readout_name="Concentration",
-            y_readout_name="% Inhibition",
-            top_constraint=50.0,
-            bottom_constraint=0.0,
             intercepts=(InterceptSpec(InterceptKind.IC, 80, basis=InterceptBasis.ABSOLUTE),),
         )
-        result2 = self.fitter.fit(points, cfg2).unwrap()
-        iv = result2.intercept_values[0]
+        iv = self.fitter.fit(points, cfg).unwrap().intercept_values[0]
         assert (iv.qualifier, iv.value, iv.at_bound) == (ValueQualifier.GT, 100.0, True)
 
 

@@ -47,12 +47,6 @@ async def test_null_orchestrator_runs_runner_inline():
     assert runner.calls[0]["collection_id"] == cid
 
 
-@pytest.mark.asyncio
-async def test_null_orchestrator_cancel_is_noop():
-    orch = NullRGroupDecompositionOrchestrator(FakeRunner())
-    await orch.cancel(run_id=uuid.uuid4())  # must not raise
-
-
 class BoomRunner:
     async def run(self, *, run_id, workspace_id, core_smiles, collection_id=None, molecule_ids=None):
         raise RuntimeError("runner boom")

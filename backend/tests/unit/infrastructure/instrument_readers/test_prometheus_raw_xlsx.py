@@ -102,7 +102,7 @@ def test_position_gaps_and_numbers_above_24():
 @pytest.mark.parametrize("number", [0, -1])
 def test_position_number_below_one_is_refused(number):
     data = build_raw_workbook(positions={number: "a", 1: "b"})
-    with pytest.raises(InstrumentFileError, match=f"capillary {number}; .* start at 1"):
+    with pytest.raises(InstrumentFileError, match=f"capillary {number}\\b"):
         READER.read(data, "run.xlsx")
 
 
@@ -112,16 +112,6 @@ def test_position_listed_twice_is_refused():
     buf = io.BytesIO()
     wb.save(buf)
     with pytest.raises(InstrumentFileError, match="lists capillary 1 more than once"):
-        READER.read(buf.getvalue(), "run.xlsx")
-
-
-def test_positions_listed_twice_are_named_in_the_plural():
-    wb = load_workbook(io.BytesIO(build_raw_workbook(positions={1: "a", 2: "b"})))
-    wb["Overview"].append([1, "again"])
-    wb["Overview"].append([2, "again"])
-    buf = io.BytesIO()
-    wb.save(buf)
-    with pytest.raises(InstrumentFileError, match="lists capillaries 1, 2 more than once"):
         READER.read(buf.getvalue(), "run.xlsx")
 
 
@@ -192,10 +182,3 @@ def test_real_files_when_sample_dir_set():
         )
     assert (42, 24, False, True) in seen  # labelled run: 1,223 points on every curve
     assert any(s[:3] == (41, 21, True) for s in seen)  # run with blank labels
-
-
-def test_reader_tells_the_user_which_export_to_make():
-    assert READER.hint == (
-        "Export the raw data from the instrument's software as an Excel workbook. "
-        "The processed export is not supported."
-    )

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from lagom.exceptions import UnresolvableType
 
 from cellar.application.sar_analysis.build_scaffold_network import BuildScaffoldNetwork
 from cellar.application.sar_analysis.cancel_scaffold_tree_job import CancelScaffoldTreeJob
@@ -15,6 +16,9 @@ from cellar.application.sar_analysis.start_scaffold_tree_job import (
 )
 from cellar.infrastructure.di.container import create_container
 from cellar.infrastructure.persistence.settings import DatabaseSettings
+from cellar.infrastructure.persistence.sqlalchemy.sar_analysis.scaffold_tree_job_repository import (  # noqa: E501
+    SQLAlchemyScaffoldTreeJobRepository,
+)
 from cellar.infrastructure.rdkit.scaffold_network_builder import ScaffoldNetworkBuilder
 
 
@@ -29,15 +33,12 @@ class TestSarAnalysisWiring:
         self, test_settings: DatabaseSettings
     ) -> None:
         container = create_container(test_settings)
-        builder = container[ScaffoldNetworkBuilder]
-        assert builder is not None
-        # Singleton
         assert container[ScaffoldNetworkBuilder] is container[ScaffoldNetworkBuilder]
 
     def test_resolves_job_repository(self, test_settings: DatabaseSettings) -> None:
         container = create_container(test_settings)
         repo = container[ScaffoldTreeJobRepository]
-        assert repo is not None
+        assert isinstance(repo, SQLAlchemyScaffoldTreeJobRepository)
 
     def test_resolves_build_scaffold_network(
         self, test_settings: DatabaseSettings
@@ -93,17 +94,10 @@ class TestSarAnalysisWiring:
     ) -> None:
         monkeypatch.delenv("TEMPORAL_DISABLED", raising=False)
         container = create_container(test_settings)
-        # When Temporal is enabled at container-create time, _sar_analysis must
-        # not bind a Null orchestrator. The Temporal binding is supplied later
-        # by app.py's lifespan via TemporalScaffoldTreeOrchestrator override,
-        # mirroring the export pattern. Until that override fires there is no
-        # binding — resolving raises. We assert that the Null binding is NOT
-        # in place by checking the class name if any resolution happens.
-        try:
-            orch = container[ScaffoldTreeOrchestrator]
-        except Exception:
-            return  # Expected — no Temporal client yet at container build.
-        assert orch.__class__.__name__ != "NullScaffoldTreeOrchestrator"
+        # With Temporal enabled, _sar_analysis binds no orchestrator: app.py's
+        # lifespan supplies TemporalScaffoldTreeOrchestrator once the client is up.
+        with pytest.raises(UnresolvableType):
+            container[ScaffoldTreeOrchestrator]
 
     def test_decomposition_use_cases_resolve_with_temporal_disabled(
         self, test_settings: DatabaseSettings, monkeypatch: pytest.MonkeyPatch

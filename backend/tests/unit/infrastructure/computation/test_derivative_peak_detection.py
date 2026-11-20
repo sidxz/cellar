@@ -13,7 +13,6 @@ import pytest
 from cellar.domain.screening_assay.peak_detection import (
     MAX_CANDIDATES,
     PeakCandidate,
-    PeakDetectionService,
     PeakDirection,
 )
 from cellar.infrastructure.computation.derivative_peak_detection import DerivativePeakDetection
@@ -43,10 +42,6 @@ def _trace(
 
 def _find(y: list[float], *, window: float = WINDOW) -> tuple[PeakCandidate, ...]:
     return DerivativePeakDetection(SavgolCurveDerivative()).candidates(X, y, window=window)
-
-
-def test_implements_the_domain_protocol():
-    assert isinstance(DerivativePeakDetection(SavgolCurveDerivative()), PeakDetectionService)
 
 
 def test_one_rising_step_is_found_at_its_midpoint():

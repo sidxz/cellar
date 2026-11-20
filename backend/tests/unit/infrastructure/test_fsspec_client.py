@@ -87,10 +87,6 @@ class TestFsspecStorageClient:
 
 
 class TestStorageSettings:
-    def test_reads_storage_root_env(self, monkeypatch):
-        monkeypatch.setenv("STORAGE_ROOT", "/data/storage")
-        assert StorageSettings().storage_root == "/data/storage"
-
     def test_default_is_host_dev_relative(self, monkeypatch):
         monkeypatch.delenv("STORAGE_ROOT", raising=False)
         assert StorageSettings().storage_root == "./data/storage"

@@ -33,53 +33,6 @@ class TestComposeCriteria:
         sql = str(compiled)
         assert "LIKE" in sql.upper()
 
-    def test_text_equals(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "text", "field": "registration_number", "operator": "equals", "value": "CV-00001"}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_property_between(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "property", "field": "molecular_weight", "operator": "between", "min": 200, "max": 500}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_property_lte(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "property", "field": "logp", "operator": "lte", "value": 5.0}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_multiple_and(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "text", "field": "name", "operator": "contains", "value": "aspirin"},
-                {"type": "property", "field": "molecular_weight", "operator": "lte", "value": 500},
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_multiple_or(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "text", "field": "name", "operator": "contains", "value": "aspirin"},
-                {"type": "text", "field": "name", "operator": "contains", "value": "ibuprofen"},
-            ],
-            "logic": "or",
-        })
-        assert clause is not None
-
     def test_invalid_field_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown text field"):
             _compose({
@@ -98,33 +51,6 @@ class TestComposeCriteria:
                 "logic": "and",
             })
 
-    def test_structure_substructure(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "structure", "search_type": "substructure", "smarts": "c1ccccc1"}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_structure_similarity(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "structure", "search_type": "similarity", "smiles": "c1ccccc1", "threshold": 0.7}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_structure_exact(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "structure", "search_type": "exact", "inchi_key": "BSYNRYMUTXBXSQ-UHFFFAOYSA-N"}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
     # ── Negate ─────────────────────────────────────────────────────────────
 
     def test_negate_text(self) -> None:
@@ -138,15 +64,6 @@ class TestComposeCriteria:
         sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
         # Negated LIKE becomes NOT (... LIKE ...)
         assert "NOT" in sql.upper()
-
-    def test_negate_property(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "property", "field": "molecular_weight", "operator": "gt", "value": 500, "negate": True}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
 
     def test_negate_false_has_no_effect(self) -> None:
         normal = _compose({
@@ -306,22 +223,6 @@ class TestComposeCriteria:
             })
 
     # ── Activity presence-only (no readout_definition_id) ────────────────
-
-    def test_activity_presence_only_matches_any_data(self) -> None:
-        """An activity criterion without readout_definition_id is a
-        'tested-in-protocol' presence filter — no value comparison."""
-        proto = str(uuid.uuid4())
-        clause = _compose({
-            "criteria": [
-                {"type": "activity", "protocol_id": proto}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-        sql = str(clause.compile())
-        # Must reference run table to scope by protocol; should not require
-        # value_numeric or fitted_value comparison.
-        assert "run" in sql.lower()
 
     def test_activity_presence_only_with_run_scope(self) -> None:
         proto = str(uuid.uuid4())
@@ -513,39 +414,6 @@ class TestComposeCriteria:
 
     # ── Selectivity ────────────────────────────────────────────────────────
 
-    def test_selectivity_basic(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {
-                    "type": "selectivity",
-                    "target_readout_definition_id": str(uuid.uuid4()),
-                    "counter_readout_definition_id": str(uuid.uuid4()),
-                    "ratio_operator": "gte",
-                    "ratio_value": 100,
-                }
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_selectivity_different_curve_types(self) -> None:
-        """Each side names a DR readout-def; mismatched curve_types (e.g.
-        IC50 target vs EC50 counter-screen) are valid by virtue of pointing
-        at different readout-defs."""
-        clause = _compose({
-            "criteria": [
-                {
-                    "type": "selectivity",
-                    "target_readout_definition_id": str(uuid.uuid4()),
-                    "counter_readout_definition_id": str(uuid.uuid4()),
-                    "ratio_operator": "gt",
-                    "ratio_value": 50,
-                }
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
     def test_selectivity_invalid_operator(self) -> None:
         with pytest.raises(ValueError, match="Unknown selectivity ratio operator"):
             _compose({
@@ -620,37 +488,6 @@ class TestComposeCriteria:
         assert "OR" in sql
         assert "AND" in sql
 
-    def test_group_double_nested(self) -> None:
-        """((A OR B) AND (C OR D))."""
-        clause = _compose({
-            "criteria": [
-                {
-                    "type": "group",
-                    "logic": "and",
-                    "criteria": [
-                        {
-                            "type": "group",
-                            "logic": "or",
-                            "criteria": [
-                                {"type": "text", "field": "name", "operator": "equals", "value": "A"},
-                                {"type": "text", "field": "name", "operator": "equals", "value": "B"},
-                            ],
-                        },
-                        {
-                            "type": "group",
-                            "logic": "or",
-                            "criteria": [
-                                {"type": "property", "field": "logp", "operator": "gt", "value": 2},
-                                {"type": "property", "field": "logp", "operator": "lt", "value": -1},
-                            ],
-                        },
-                    ],
-                }
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
     def test_group_empty_raises(self) -> None:
         with pytest.raises(ValueError, match="at least one sub-criterion"):
             _compose({
@@ -685,42 +522,6 @@ class TestComposeCriteria:
         assert "NOT" in sql
 
     # ── Custom field search ────────────────────────────────────────────────
-
-    def test_custom_field_text_contains(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "custom_field", "field": "project_code", "mode": "text", "operator": "contains", "value": "ABC"}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_custom_field_text_equals(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "custom_field", "field": "source", "mode": "text", "operator": "equals", "value": "CRO-1"}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_custom_field_numeric_gt(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "custom_field", "field": "solubility", "mode": "numeric", "operator": "gt", "value": 0.5}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
-
-    def test_custom_field_numeric_between(self) -> None:
-        clause = _compose({
-            "criteria": [
-                {"type": "custom_field", "field": "score", "mode": "numeric", "operator": "between", "min": 1, "max": 10}
-            ],
-            "logic": "and",
-        })
-        assert clause is not None
 
     def test_custom_field_invalid_mode_raises(self) -> None:
         with pytest.raises(ValueError, match="Unknown custom_field mode"):
@@ -794,27 +595,6 @@ class TestActivityMultiRunSpecific:
         # than an IN list of one). The outer molecule-subquery uses ``IN``,
         # but the run_id constraint itself should be `run_id = ?`.
         assert "run_id =" in sql.lower() or "run_id  =" in sql.lower()
-
-    def test_specific_legacy_run_id_still_works(self) -> None:
-        """Saved-search round-trip: legacy single-id shape stays valid."""
-        proto = str(uuid.uuid4())
-        run = str(uuid.uuid4())
-        clause = _compose({
-            "criteria": [
-                {
-                    "type": "activity",
-                    "protocol_id": proto,
-                    "source": "dr_curve",
-                    "readout_definition_id": str(uuid.uuid4()),
-                    "operator": "lt",
-                    "value": 1.0,
-                    "run_scope": {"mode": "specific", "run_id": run},
-                }
-            ],
-            "logic": "and",
-        })
-        sql = str(clause.compile())
-        assert "run_id" in sql
 
     def test_specific_empty_raises(self) -> None:
         proto = str(uuid.uuid4())

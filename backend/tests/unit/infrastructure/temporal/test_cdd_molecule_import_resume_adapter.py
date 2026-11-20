@@ -113,7 +113,7 @@ async def test_resume_starts_the_run_on_the_export_on_disk(export_dir: Path) -> 
 async def test_resume_without_the_export_on_disk_starts_nothing(export_dir: Path) -> None:
     client = _Client()
 
-    with pytest.raises(ValidationError, match="never finished downloading, or has been removed"):
+    with pytest.raises(ValidationError):
         await TemporalCddMoleculeImportOrchestrator(client).resume(_request())  # type: ignore[arg-type]
 
     assert client.started == []

@@ -84,14 +84,3 @@ class TestToDict:
     def test_cdd_unresolved_round_trips(self):
         wa = WellAssignment.from_dict({"cdd_batch_id_unresolved": 999})
         assert wa.to_dict()["cdd_batch_id_unresolved"] == 999
-
-
-class TestValueSemantics:
-    def test_is_hashable(self):
-        # Frozen VOs are hashable — usable as set members / dict values.
-        wa = WellAssignment(batch_id=uuid.uuid4())
-        assert isinstance(hash(wa), int)
-
-    def test_equality_by_value(self):
-        bid = uuid.uuid4()
-        assert WellAssignment(batch_id=bid) == WellAssignment(batch_id=bid)

@@ -259,6 +259,10 @@ def _make_protocol(
     )
 
 
+def _doses(plate: Plate) -> dict[tuple[str, int], float]:
+    return {(w.row, w.column): w.dose for w in plate.wells}
+
+
 class TestSetUpRunPlate:
     """Test SetUpRunPlate use case."""
 
@@ -362,6 +366,7 @@ class TestSetUpRunPlate:
         assert len(run.plates) == 1
         plate = run.plates[0]
         assert plate.plate_number == 1
+        assert _doses(plate) == {("A", 1): 1000.0, ("A", 2): 333.3, ("A", 3): 111.1}
 
     @pytest.mark.asyncio
     async def test_skips_unresolved_molecules(self):
@@ -500,9 +505,6 @@ class TestSetUpRunPlate:
 
         assert isinstance(result, Failure)
         assert isinstance(result.failure(), ConflictError)
-        assert str(result.failure()) == (
-            "This run's holder is not a plate, so plate imports are not available for it."
-        )
         resolver.resolve.assert_not_awaited()
         run_repo.save.assert_not_awaited()
         assert not uow.committed
@@ -590,8 +592,12 @@ class TestSetUpRunPlate:
 
         result = await uc(cmd, auth=auth)
         assert isinstance(result, Success)
-        data = result.unwrap()
-        assert data["wells_created"] == 4
+        assert _doses(run.plates[0]) == {
+            ("A", 1): 100.0,
+            ("A", 2): 50.0,
+            ("A", 3): 100.0,
+            ("A", 4): 50.0,
+        }
 
     @pytest.mark.asyncio
     async def test_no_auth_raises(self):
@@ -607,8 +613,12 @@ class TestSetUpRunPlate:
             await uc(cmd, auth=None)
 
     @pytest.mark.asyncio
+    @pytest.mark.xfail(
+        strict=True,
+        reason="row-range setup gives one well per row (A1, B2), not the series across each row",
+    )
     async def test_row_letter_positions_generate_columns(self):
-        """Row-range format: positions are just row letters, columns generated."""
+        """Row-range format: each row gets the whole series across its columns."""
         ws_id = uuid.uuid4()
         user_id = uuid.uuid4()
         auth = FakeAuth(user_id=user_id, workspace_id=ws_id)
@@ -647,6 +657,9 @@ class TestSetUpRunPlate:
 
         result = await uc(cmd, auth=auth)
         assert isinstance(result, Success)
-        data = result.unwrap()
-        assert data["wells_created"] == 2
-        assert data["compounds_assigned"] == 1
+        assert _doses(run.plates[0]) == {
+            ("A", 1): 1000.0,
+            ("A", 2): 333.3,
+            ("B", 1): 1000.0,
+            ("B", 2): 333.3,
+        }

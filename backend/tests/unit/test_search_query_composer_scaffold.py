@@ -6,6 +6,9 @@ import uuid
 
 import pytest
 
+from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.models import (
+    MoleculeModel,
+)
 from cellar.infrastructure.persistence.sqlalchemy.chemical_registration.search_query_composer import (
     compose_criteria,
 )
@@ -29,12 +32,7 @@ class TestScaffoldClause:
             ],
             "logic": "and",
         })
-        assert clause is not None
-        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
-        assert "bemis_murcko_smiles" in sql
-        assert "=" in sql
-        # Canonicalized form of pyridine should appear (RDKit canonical SMILES)
-        assert "c1ccncc1" in sql or "c1cnccc1" in sql or "n1ccccc1" in sql
+        assert clause.compare(MoleculeModel.bemis_murcko_smiles == "c1ccncc1")
 
     def test_exact_match_canonicalizes_full_molecule_paste(self) -> None:
         """Pasting a full molecule should match against ITS scaffold."""
@@ -78,10 +76,7 @@ class TestScaffoldClause:
             ],
             "logic": "and",
         })
-        assert clause is not None
-        sql = str(clause.compile(compile_kwargs={"literal_binds": True}))
-        assert "bemis_murcko_smiles" in sql
-        assert "!=" in sql or "NOT" in sql.upper() or "<>" in sql
+        assert clause.compare(~(MoleculeModel.bemis_murcko_smiles == ""))
 
     def test_exact_match_without_scaffold_smiles_raises(self) -> None:
         with pytest.raises(ValueError):
