@@ -122,6 +122,9 @@ class RunSummary:
     curve_class: str | None
     r_squared: float | None
     intercept_values: list[dict[str, Any]]
+    # The run's drawable curve (``build_curve_snapshot``), only when search
+    # lists every run; None in the run history and for runs without a fit.
+    curve_snapshot: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

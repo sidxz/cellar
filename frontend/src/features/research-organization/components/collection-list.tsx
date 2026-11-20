@@ -119,7 +119,7 @@ export function CollectionList({ projectId }: CollectionListProps) {
     return (
       <div>
         <ErrorState
-          message="Failed to load collections. Is the backend running?"
+          message="Couldn’t load collections. Refresh the page to try again."
           details={error.message}
         />
       </div>

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 
+import { SEARCH_AGGREGATION_MODES } from "../../lib/use-aggregation-mode";
 import { AggregationControl } from "./aggregation-control";
 
 // Radix Select opens via a listbox portal that calls scrollIntoView +
@@ -29,15 +30,30 @@ describe("AggregationControl", () => {
     const onChange = vi.fn();
     render(<AggregationControl mode="latest" onChange={onChange} />);
     fireEvent.click(screen.getByRole("combobox"));
-    fireEvent.click(screen.getByText(/Best fit/));
+    fireEvent.click(screen.getByText("Highest R²"));
     expect(onChange).toHaveBeenCalledWith("best_r2");
   });
 
-  it("explains Latest run in the menu without putting it in the trigger", () => {
-    render(<AggregationControl mode="latest" onChange={vi.fn()} />);
-    expect(screen.getByRole("combobox").textContent).toBe("Latest run");
+  it("offers Show all runs only where the host asks for it", () => {
+    const onChange = vi.fn();
+    const { unmount } = render(<AggregationControl mode="latest" onChange={onChange} />);
     fireEvent.click(screen.getByRole("combobox"));
-    expect(screen.getByText("Newest run that isn't rejected.")).toBeInTheDocument();
+    expect(screen.queryByText("Show all runs")).toBeNull();
+    unmount();
+
+    render(
+      <AggregationControl mode="latest" onChange={onChange} modes={SEARCH_AGGREGATION_MODES} />,
+    );
+    fireEvent.click(screen.getByRole("combobox"));
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "Latest run",
+      "Geometric mean",
+      "Arithmetic mean",
+      "Highest R²",
+      "Show all runs",
+    ]);
+    fireEvent.click(screen.getByText("Show all runs"));
+    expect(onChange).toHaveBeenCalledWith("all");
   });
 
   // The `disabled` prop swaps the dropdown for a static label (used when

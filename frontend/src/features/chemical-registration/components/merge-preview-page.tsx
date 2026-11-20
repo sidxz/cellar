@@ -120,12 +120,7 @@ export function MergePreviewPage({ compoundId, disclosureId }: MergePreviewPageP
         {/* Source card */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              Source
-              <Badge variant="outline" className="text-xs font-normal">
-                will be absorbed
-              </Badge>
-            </CardTitle>
+            <CardTitle className="text-base">Merge from</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="font-mono text-sm font-semibold">{source?.registration_number}</div>
@@ -149,15 +144,7 @@ export function MergePreviewPage({ compoundId, disclosureId }: MergePreviewPageP
         {/* Target card */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-base">
-              Target
-              <Badge
-                variant="outline"
-                className="border-success/40 text-success text-xs font-normal"
-              >
-                survives
-              </Badge>
-            </CardTitle>
+            <CardTitle className="text-base">Merge into</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="font-mono text-sm font-semibold">{target?.registration_number}</div>
@@ -211,8 +198,8 @@ export function MergePreviewPage({ compoundId, disclosureId }: MergePreviewPageP
       {impact && impact.categories.length === 0 && (
         <Card>
           <CardContent className="py-6 text-center text-sm text-muted-foreground">
-            No data associated with the source compound. Merge will only tombstone the source
-            record.
+            No linked data to transfer. {source?.registration_number ?? compoundId} will be marked
+            as merged into {target?.registration_number ?? disclosure?.matched_molecule_id}.
           </CardContent>
         </Card>
       )}
@@ -283,7 +270,8 @@ export function MergePreviewPage({ compoundId, disclosureId }: MergePreviewPageP
 
         <div className="ml-auto text-xs text-muted-foreground">
           <AlertTriangle className="mr-1 inline h-3 w-3" />
-          Merging is irreversible. The source compound becomes a tombstone.
+          {source?.registration_number ?? compoundId} will be marked as merged into{" "}
+          {target?.registration_number ?? disclosure?.matched_molecule_id}. This cannot be undone.
         </div>
       </div>
     </div>

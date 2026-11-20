@@ -131,7 +131,7 @@ export function SaveViewDialog({
   const notes = details
     ? []
     : [
-        "Saves the plots, filters and level — never the data. Opening it loads current data.",
+        "Saves the plot settings, filters, and selected level. Reopening the view loads current data, so results may change.",
         filters.some((f) => f.kind === "rows") && "Filter to selection isn't saved.",
         derived.length > 0 && "Chemistry columns are computed again each time the view opens.",
         source.kind === "protocol" &&

@@ -20,7 +20,10 @@ from typing import Any
 
 from cellar.application.screening import _condense_raw_data
 from cellar.application.screening._response_scale import curve_fitted_layer
-from cellar.application.screening.curve_snapshot import build_aggregate_curve_snapshot
+from cellar.application.screening.curve_snapshot import (
+    build_aggregate_curve_snapshot,
+    build_curve_snapshot,
+)
 from cellar.application.screening.run_aggregation import (
     AggregateResult,
     ResolvedRun,
@@ -83,6 +86,8 @@ from cellar.domain.shared.units import is_concentration_unit
 # can accumulate dozens of runs on a single compound; the tooltip needs
 # enough context to be useful without exploding the search response.
 _MAX_RUNS_PAYLOAD: int = 10
+# "List all runs" in search: every run's value and curve, up to this many.
+_MAX_LISTED_RUNS: int = 50
 
 
 def serialize_intercept_values(
@@ -516,6 +521,7 @@ class MoleculeActivityService:
         qualifier_handling: QualifierHandling = QualifierHandling.INCLUDE_QUALIFIED,
         any_readout_groups: list[tuple[str, str | None]] | None = None,
         lean: bool = False,
+        list_runs: bool = False,
     ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
         """One cell per (molecule, planned column, group), keyed ``column.key(group)``.
 
@@ -526,6 +532,8 @@ class MoleculeActivityService:
         replicates (``combine_replicates``) and then the runs. Both go through
         ``run_aggregation`` with the column's effective rule. ``lean`` (sorting)
         skips the drawing payload: point arrays, run history, overlays.
+        ``list_runs`` ("List all runs") widens the run history to every run,
+        up to 50, each with its curve.
         """
         if not molecule_ids or not (plan.columns or plan.want_any):
             return {}
@@ -538,6 +546,7 @@ class MoleculeActivityService:
                 qualifier_handling=qualifier_handling,
                 any_readout_groups=any_readout_groups,
                 lean=lean,
+                list_runs=list_runs,
             )
         )
 
@@ -557,6 +566,7 @@ class MoleculeActivityService:
         qualifier_handling: QualifierHandling,
         any_readout_groups: list[tuple[str, str | None]] | None,
         lean: bool,
+        list_runs: bool = False,
     ) -> dict[uuid.UUID, dict[str, ActivityValue | AnyProtocolActivity]]:
         dr_by_scope: dict[RunScope, list[uuid.UUID]] = {}
         rd_by_scope: dict[RunScope, list[tuple[uuid.UUID, str | None]]] = {}
@@ -656,6 +666,7 @@ class MoleculeActivityService:
                             selection_rule=selection_rule,
                             qualifier_handling=qualifier_handling,
                             lean=lean,
+                            list_runs=list_runs,
                         )
                     else:
                         av = _single_point_cell(
@@ -667,6 +678,7 @@ class MoleculeActivityService:
                             selection_rule=selection_rule,
                             qualifier_handling=qualifier_handling,
                             lean=lean,
+                            list_runs=list_runs,
                         )
                     if av is not None:
                         cells[col.key(group)] = av
@@ -688,6 +700,7 @@ class MoleculeActivityService:
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
         lean: bool,
+        list_runs: bool = False,
     ) -> ActivityValue | None:
         """Fitted curves win (any class); reported endpoints only when the
         group has none — the campaign channel resolver's rule D1. An endpoint
@@ -701,12 +714,14 @@ class MoleculeActivityService:
                 selection_rule=selection_rule,
                 qualifier_handling=qualifier_handling,
                 lean=lean,
+                list_runs=list_runs,
             )
         return _single_point_cell(
             endpoints,
             selection_rule=selection_rule,
             qualifier_handling=qualifier_handling,
             lean=lean,
+            list_runs=list_runs,
             intercept_spec=intercept_spec,
         )
 
@@ -850,6 +865,7 @@ class MoleculeActivityService:
         selection_rule: SelectionRule,
         qualifier_handling: QualifierHandling,
         lean: bool = False,
+        list_runs: bool = False,
     ) -> ActivityValue | None:
         """Collapse N ResolvedRuns to one ActivityValue using the aggregator.
 
@@ -897,17 +913,14 @@ class MoleculeActivityService:
                 )
             )
 
-        # Build the per-run tooltip payload from the latest N (regardless of
-        # which selection rule won) — chemists want chronology, not "what
-        # the rule picked". Cap at 10 to keep the wire payload bounded.
+        # Per-run rows newest first (regardless of which selection rule won) —
+        # chemists want chronology, not "what the rule picked".
         runs_sorted = sorted(
             resolved_runs,
             key=lambda r: (r.run_date is not None, r.run_date),
             reverse=True,
         )
-        runs_payload = (
-            [] if lean else [_to_run_summary(r) for r in runs_sorted[:_MAX_RUNS_PAYLOAD]]
-        )
+        runs_payload = _run_summaries(runs_sorted, lean=lean, list_runs=list_runs)
 
         condensed = (
             _condense_raw_data(rep.curve_raw_data) if rep.curve_raw_data and not lean else None
@@ -1134,6 +1147,7 @@ def _single_point_cell(
     selection_rule: SelectionRule,
     qualifier_handling: QualifierHandling,
     lean: bool,
+    list_runs: bool = False,
     intercept_spec: dict[str, Any] | None = None,
 ) -> ActivityValue | None:
     """A cell from per-run replicate summaries (single-point readouts and
@@ -1177,7 +1191,7 @@ def _single_point_cell(
         data_point_count=sum(r.stats.eq_count + r.stats.gt_count + r.stats.lt_count for r in rows),
         run_count=len(runs),
         selection_rule=rule.value,
-        runs=None if lean else [_to_run_summary(r) for r in newest_first[:_MAX_RUNS_PAYLOAD]],
+        runs=_run_summaries(newest_first, lean=lean, list_runs=list_runs) or None,
         disagreement_flag=disagree,
         # An endpoint cell stands for its readout's primary intercept: the same
         # field a fitted cell's intercept columns, sorting and export read.
@@ -1198,7 +1212,22 @@ def _single_point_cell(
     )
 
 
-def _to_run_summary(run: ResolvedRun) -> RunSummary:
+def _run_summaries(
+    newest_first: list[ResolvedRun], *, lean: bool, list_runs: bool
+) -> list[RunSummary]:
+    """A cell's per-run rows: the latest 10 for the run history, or every run
+    up to 50 with its curve when search lists all runs. None when sorting."""
+    if lean:
+        return []
+    if list_runs:
+        return [
+            _to_run_summary(r, curve=build_curve_snapshot(r))
+            for r in newest_first[:_MAX_LISTED_RUNS]
+        ]
+    return [_to_run_summary(r) for r in newest_first[:_MAX_RUNS_PAYLOAD]]
+
+
+def _to_run_summary(run: ResolvedRun, curve: dict[str, Any] | None = None) -> RunSummary:
     """Adapt a ResolvedRun to its tooltip-payload shape.
 
     ``run_date`` on RunSummary is non-optional — defensive callers will
@@ -1214,6 +1243,7 @@ def _to_run_summary(run: ResolvedRun) -> RunSummary:
         curve_class=run.curve_class,
         r_squared=run.curve_r_squared,
         intercept_values=reported_intercept_values(run),
+        curve_snapshot=curve,
     )
 
 

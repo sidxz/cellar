@@ -99,11 +99,10 @@ export function PreviewAsPublishedDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileJson className="h-5 w-5" />
-            Preview as published
+            Preview DAIKON export
           </DialogTitle>
           <DialogDescription>
-            This is the DAIKON-shaped document that will be exported when this campaign is closed.
-            Reuses the same serializer used by the published endpoint.
+            This preview shows the document that will be exported when you close the campaign.
           </DialogDescription>
         </DialogHeader>
 

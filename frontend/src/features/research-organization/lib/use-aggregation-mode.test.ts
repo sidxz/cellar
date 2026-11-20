@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// Next's snapshot of the URL the page loaded with: no `agg`.
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
 import type { RunScope, SearchCriterion } from "../types";
 import {
   AGGREGATION_MODES,
+  SEARCH_AGGREGATION_MODES,
   aggregationModeFromUrl,
+  aggregationModeToStored,
   aggregationModeToUrl,
   aggregationModeToWire,
   computeScopeForcesSingleRun,
   isAggregationMode,
+  listsRuns,
+  useAggregationMode,
   wireToAggregationMode,
 } from "./use-aggregation-mode";
 
@@ -18,7 +26,7 @@ describe("AggregationMode helpers", () => {
   });
 
   it("URL <-> mode round-trip", () => {
-    for (const mode of AGGREGATION_MODES) {
+    for (const mode of SEARCH_AGGREGATION_MODES) {
       expect(aggregationModeFromUrl(aggregationModeToUrl(mode))).toBe(mode);
     }
   });
@@ -33,6 +41,22 @@ describe("AggregationMode helpers", () => {
     expect(aggregationModeToWire("gmean")).toBe("geometric_mean");
     expect(aggregationModeToWire("mean")).toBe("mean_across_runs");
     expect(aggregationModeToWire("best_r2")).toBe("best_r_squared");
+  });
+
+  it("Show all runs is search-only and asks the server for the latest run plus every run", () => {
+    expect(AGGREGATION_MODES).not.toContain("all");
+    expect(SEARCH_AGGREGATION_MODES).toEqual([...AGGREGATION_MODES, "all"]);
+    expect(aggregationModeToWire("all")).toBe("latest_run");
+    expect(listsRuns("all")).toBe(true);
+    expect(listsRuns("latest")).toBe(false);
+  });
+
+  it("a stored search keeps Show all runs apart from Latest run", () => {
+    expect(aggregationModeToStored("all")).toBe("all_runs");
+    expect(wireToAggregationMode(aggregationModeToStored("all"))).toBe("all");
+    for (const mode of AGGREGATION_MODES) {
+      expect(aggregationModeToStored(mode)).toBe(aggregationModeToWire(mode));
+    }
   });
 
   it("isAggregationMode narrows correctly", () => {
@@ -162,5 +186,19 @@ describe("computeScopeForcesSingleRun", () => {
       } as SearchCriterion,
     ];
     expect(computeScopeForcesSingleRun(grouped)).toBe(false);
+  });
+});
+
+describe("useAggregationMode", () => {
+  afterEach(() => window.history.replaceState({}, "", "/"));
+
+  it("a control mounted after a stored search set the mode reads that mode", () => {
+    // A recent search sets the mode before the results toolbar exists.
+    const { result: page } = renderHook(() => useAggregationMode());
+    act(() => page.current.setMode("all"));
+
+    const { result: toolbar } = renderHook(() => useAggregationMode());
+
+    expect(toolbar.current.mode).toBe("all");
   });
 });

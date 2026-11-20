@@ -122,18 +122,15 @@ export function CascadeDeleteDialog({
         <AlertDialogTrigger asChild>
           <Button variant="destructive" size="sm">
             <AlertTriangle className="mr-1 h-4 w-4" />
-            Force delete (cascade)
+            Review permanent deletion…
           </Button>
         </AlertDialogTrigger>
       )}
       <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
         <AlertDialogHeader>
-          <AlertDialogTitle>
-            Force delete {entityType}: {entityLabel}
-          </AlertDialogTitle>
+          <AlertDialogTitle>Review permanent deletion of {entityLabel}</AlertDialogTitle>
           <AlertDialogDescription>
-            Hard delete. All dependent rows will be removed or unlinked as shown. This cannot be
-            undone.
+            The records below will be deleted or unlinked as indicated. This cannot be undone.
           </AlertDialogDescription>
         </AlertDialogHeader>
 
@@ -146,9 +143,7 @@ export function CascadeDeleteDialog({
 
         {blockers.length > 0 && (
           <div id={blockersId} role="alert" className="space-y-1 text-sm">
-            <p className="font-semibold text-destructive">
-              Can't force delete while these still use it:
-            </p>
+            <p className="font-semibold text-destructive">These references prevent deletion:</p>
             <DeleteBlockerList items={blockers} />
             <p className="text-muted-foreground text-xs">
               Resolve them first, then open this dialog again.
@@ -193,7 +188,7 @@ export function CascadeDeleteDialog({
               void onConfirm();
             }}
           >
-            {m.isPending ? "Deleting…" : "Force delete"}
+            {m.isPending ? "Deleting…" : `Permanently delete ${entityLabel}`}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

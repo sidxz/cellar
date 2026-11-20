@@ -73,7 +73,9 @@ describe("CascadeDeleteDialog", () => {
 
     expect(screen.getByText(/closed or superseded campaigns citing this run/i)).toBeInTheDocument();
     expect(screen.getByText(/kinase panel/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Force delete" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Permanently delete Run 2026-09-15" }),
+    ).toBeDisabled();
     // M10: screen readers must be told the blocker list appeared.
     expect(screen.getByRole("alert")).toHaveTextContent(/kinase panel/i);
   });
@@ -88,7 +90,7 @@ describe("CascadeDeleteDialog", () => {
     confirmWith("Run 2026-09-15");
 
     expect(screen.getByText(/draft campaigns using this run/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Force delete" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Permanently delete Run 2026-09-15" })).toBeEnabled();
   });
 
   it("shows the blockers a refused delete returns and refreshes the preview", async () => {
@@ -102,10 +104,12 @@ describe("CascadeDeleteDialog", () => {
     renderDialog();
     confirmWith("Run 2026-09-15");
 
-    fireEvent.click(screen.getByRole("button", { name: "Force delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Permanently delete Run 2026-09-15" }));
 
     expect(await screen.findByText(/kinase panel/i)).toBeInTheDocument();
     expect(refetch).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Force delete" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Permanently delete Run 2026-09-15" }),
+    ).toBeDisabled();
   });
 });

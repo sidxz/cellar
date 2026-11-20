@@ -113,8 +113,8 @@ export function SummaryImportWizard({
         <DialogHeader>
           <DialogTitle>Import Summary Results</DialogTitle>
           <DialogDescription>
-            Upload a wide file of compound/batch ref + endpoint values (e.g. IC50, MIC, Notes). No
-            plate or well needed.
+            Include a compound or batch identifier and a separate column for each endpoint, such as
+            IC₅₀ or MIC. You can also include notes. Plate and well identifiers are optional.
           </DialogDescription>
         </DialogHeader>
 

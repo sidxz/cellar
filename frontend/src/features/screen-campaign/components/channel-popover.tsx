@@ -653,9 +653,8 @@ export function ChannelPopoverForm({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete readout "{existing.label}"?</AlertDialogTitle>
               <AlertDialogDescription>
-                This removes the readout and every measurement it produced across all results in
-                this campaign. You can re-add the same readout afterwards, but the new one will have
-                a fresh id — manual overrides on it will not carry over.
+                Removing this readout removes its measurements from all results in this campaign.
+                Adding it again will not restore its manual overrides.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

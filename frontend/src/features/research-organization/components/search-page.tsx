@@ -24,8 +24,10 @@ import {
 } from "../lib/protocol-column-id";
 import {
   AGGREGATION_LABELS,
+  aggregationModeToStored,
   aggregationModeToWire,
   computeScopeForcesSingleRun,
+  listsRuns,
   useAggregationMode,
   wireToAggregationMode,
 } from "../lib/use-aggregation-mode";
@@ -379,6 +381,7 @@ function SearchPageInner() {
           query,
           ...(backendCols.length ? { protocol_columns: backendCols } : {}),
           aggregation: aggregationModeToWire(mode),
+          list_runs: listsRuns(mode),
         },
         limit: SEARCH_PAGE_SIZE,
         cursor: options.cursor,
@@ -409,7 +412,7 @@ function SearchPageInner() {
               recordRecentSearch({
                 query: {
                   ...(query as unknown as Record<string, unknown>),
-                  aggregation: aggregationModeToWire(mode),
+                  aggregation: aggregationModeToStored(mode),
                 },
                 columns: { reportConfig: reportConfigRef.current, protocolColumns: columns },
                 result_count: data.total_count ?? null,

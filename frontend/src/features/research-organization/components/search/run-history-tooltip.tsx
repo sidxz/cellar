@@ -10,7 +10,8 @@ export interface RunHistoryTooltipProps {
   unit: string;
 }
 
-function findInterceptValue(
+/** A run's value for one intercept (its first when `ik` is null). */
+export function findInterceptValue(
   ivs:
     | Array<{
         spec: { kind: string; level?: number };

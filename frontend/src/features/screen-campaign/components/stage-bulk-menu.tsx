@@ -99,6 +99,11 @@ export function StageBulkMenu({
   if (readOnly || !selectedStageId) return null;
 
   const needsReason = pending === "promote" || pending === "demote";
+  const visibleScope = `${count} visible ${count === 1 ? "row" : "rows"}`;
+  const confirmationLabel =
+    pending === "clear"
+      ? `Clear overrides for ${visibleScope}`
+      : `${pending ? ACTION_LABEL[pending] : ""} ${visibleScope}`;
   const reasonOk = !needsReason || reason.trim().length > 0;
 
   function open(action: BulkAction) {
@@ -141,13 +146,11 @@ export function StageBulkMenu({
       <AlertDialog open={pending !== null} onOpenChange={(o) => !o && setPending(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>
-              {pending ? `${ACTION_LABEL[pending]} ${count} ${count === 1 ? "row" : "rows"}?` : ""}
-            </AlertDialogTitle>
+            <AlertDialogTitle>{pending && `${confirmationLabel}?`}</AlertDialogTitle>
             <AlertDialogDescription>
               {pending === "clear"
-                ? "This drops the manual override on every row currently visible in the grid, handing them back to the stage's own evaluation."
-                : "This forces the outcome on every row currently visible in the grid. Individual rows can still be changed afterwards — nothing is locked."}
+                ? "Clear manual overrides for the visible rows. The stage will determine their outcomes."
+                : `Set the outcome to ${pending === "promote" ? "hit" : "miss"} for the visible rows. You can change individual outcomes later.`}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -160,7 +163,11 @@ export function StageBulkMenu({
                 id="bulk-stage-reason"
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
-                placeholder="Why do these compounds belong in / out of this stage?"
+                placeholder={
+                  pending === "promote"
+                    ? "Reason for marking these compounds as hits"
+                    : "Reason for marking these compounds as misses"
+                }
                 rows={2}
                 className="text-sm"
               />
@@ -173,7 +180,7 @@ export function StageBulkMenu({
                 of the handler, which would discard an empty-reason attempt
                 instead of keeping the chemist in the form. */}
             <Button size="sm" disabled={!reasonOk} onClick={confirm}>
-              {pending ? `${ACTION_LABEL[pending]} ${count} ${count === 1 ? "row" : "rows"}` : ""}
+              {pending && confirmationLabel}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -133,6 +133,25 @@ async def test_unsplit_search_has_no_column_groups_and_plain_keys(client, ic50s)
     assert data["activity_data"][ic50s["mols"]["a"]][token]["value"] == pytest.approx(210.0)
 
 
+async def test_list_runs_gives_every_run_its_curve(client, ic50s):
+    token = f"drc:{ic50s['rd']}"
+    body = {"query": _protocol_query(ic50s["p"]), "protocol_columns": [token]}
+    listed = await _execute(client, {**body, "list_runs": True})
+    plain = await _execute(client, body)
+
+    cell = listed["activity_data"][ic50s["mols"]["a"]][token]
+    # Newest first, each run with its own curve; the headline stays the latest run.
+    assert [r["run_date"] for r in cell["runs"]] == ["2026-02-01", "2026-01-01"]
+    assert [r["curve_snapshot"]["fitted_value"] for r in cell["runs"]] == [
+        pytest.approx(210.0),
+        pytest.approx(30.0),
+    ]
+    assert cell["value"] == pytest.approx(210.0)
+    # Without the flag the run history carries no curves.
+    runs = plain["activity_data"][ic50s["mols"]["a"]][token]["runs"]
+    assert all(r["curve_snapshot"] is None for r in runs)
+
+
 # --- sorting ----------------------------------------------------------------------------
 
 

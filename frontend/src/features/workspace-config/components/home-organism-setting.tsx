@@ -51,8 +51,8 @@ export function HomeOrganismSetting({ current }: { current: Home[] }) {
         placeholder="e.g. Mycobacterium tuberculosis"
       />
       <p className="text-xs text-muted-foreground">
-        Targets from these organisms are named without them (PptT inhibition, not M. tuberculosis
-        PptT inhibition). Add each organism you study, such as a human counterscreen.
+        Generated protocol names omit the organism for targets from the organisms selected here. For
+        example, “M. tuberculosis PptT inhibition” becomes “PptT inhibition”.
       </p>
       <div>
         <Button

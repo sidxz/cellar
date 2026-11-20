@@ -1,6 +1,7 @@
 import type {
   AdditionalCurve,
   AggregateMarker,
+  CurveSnapshot,
 } from "@/features/screening-assay/components/dose-response-figure";
 import type { CurveClass, TargetRef } from "@/features/screening-assay/types";
 import type {
@@ -9,6 +10,7 @@ import type {
   ColumnGroupResponse,
   CreateCollectionBody,
   CurveDetailResponse,
+  ExecuteSearchBody,
   MembershipResultResponse,
   MoleculeReferenceBody,
   ProjectMemberResponse,
@@ -17,7 +19,6 @@ import type {
   ProtocolColumnGroupsResponse,
   SavedSearchResponse,
   SearchVisibility,
-  SelectionRule,
   UnresolvedMoleculeResponse,
 } from "@/shared/lib/api/model";
 // Re-export the generated enums under their domain names so call sites import
@@ -453,15 +454,9 @@ export interface SearchQuery {
 export type SortField = string;
 export type SortDir = "asc" | "desc";
 
-export interface ExecuteSearchInput {
-  query?: SearchQuery;
-  saved_search_id?: string;
-  protocol_columns?: string[];
-  /** Multi-run aggregation rule. Omitted -> BE default
-   *  (`latest_run`). Drives how `_intercept_scalar` collapses
-   *  per-(compound, intercept) rows across all in-scope runs. */
-  aggregation?: SelectionRule;
-}
+/** The generated request body with the query typed as the search form's own
+ *  criteria (the backend takes it as an untyped dict). */
+export type ExecuteSearchInput = Omit<ExecuteSearchBody, "query"> & { query?: SearchQuery };
 
 // ─── Multi-run aggregation context (BE shape — see Tasks 5-7) ──────────────
 
@@ -486,6 +481,9 @@ export interface RunSummary {
     /** Single-point runs: "=" | "<" | ">" | "nd". */
     qualifier?: string;
   }>;
+  /** The run's curve, sent only for "Show all runs" (`list_runs`); null for a
+   *  run without a fit. */
+  curve_snapshot?: CurveSnapshot | null;
 }
 
 export interface InterceptAggregate {

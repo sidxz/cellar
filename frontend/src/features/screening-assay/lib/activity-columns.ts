@@ -107,7 +107,7 @@ export function activityCatalog(
           colId: `${rd.name}::best`,
           readout: rd.name,
           kind: "intercept",
-          label: withUnit("Best", unit),
+          label: withUnit("Fitted value", unit),
           group: rd.name,
           defaultVisible: shownIf(true),
           empty,
@@ -205,6 +205,12 @@ export function visibleColumnIds(
 }
 
 type Direction = ReadoutDefInfo["best_direction"];
+
+export const selectionLabels: Record<Direction, string> = {
+  high: "Highest value",
+  low: "Lowest value",
+  magnitude: "Largest absolute value",
+};
 
 /** An AG Grid comparator that puts missing values last in either sort order
  *  and, for a shift, compares size in either direction. */

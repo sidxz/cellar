@@ -96,7 +96,7 @@ export function describeValue(
     if (used === 0 && censored > 0) {
       lines.push(
         value === null
-          ? "Censored both ways — no value"
+          ? "The curves give both upper and lower bounds. No single bound can summarize them."
           : censored === 1
             ? "The only curve is censored — showing its bound"
             : `All ${censored} curves censored — showing the tightest bound`,
@@ -146,7 +146,9 @@ export function describeValue(
           : `All ${censored} values censored — showing the tightest bound`,
       );
     } else {
-      lines.push("Censored both ways — no value");
+      lines.push(
+        "The measurements give both upper and lower bounds. No single bound can summarize them.",
+      );
     }
   }
   return { title: c.label, lines };

@@ -90,10 +90,7 @@ export function SynthesisRequestListPage() {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Synthesis Requests"
-        subtitle="Track and manage synthesis requests across the workspace."
-      >
+      <PageHeader title="Synthesis Requests">
         <Button onClick={() => setCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
           New Request

@@ -134,7 +134,7 @@ export function ProtocolGrid({
   if (error) {
     return (
       <ErrorState
-        message="Failed to load protocols. Is the backend running?"
+        message="Couldn’t load protocols. Refresh the page to try again."
         details={error.message}
       />
     );

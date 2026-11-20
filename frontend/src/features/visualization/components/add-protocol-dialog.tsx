@@ -63,7 +63,7 @@ export function AddProtocolDialog({
         <DialogHeader>
           <DialogTitle>Add a protocol</DialogTitle>
           <DialogDescription>
-            Its compound-level columns join this view by compound.
+            Adds columns for the selected protocol and matches results by compound.
           </DialogDescription>
         </DialogHeader>
         <Command className="rounded-md border">

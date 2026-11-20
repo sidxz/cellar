@@ -776,6 +776,58 @@ class TestEnrichMoleculesMultiRunAggregation:
         av = out[MOL_ID][col_spec]
         assert av.run_count == 15
         assert av.runs is not None and len(av.runs) == 10
+        # The run history alone carries no curves: those are for "List all runs".
+        assert all(r.curve_snapshot is None for r in av.runs)
+
+    # ─── "List all runs" ─────────────────────────────────────────────────
+
+    @staticmethod
+    async def _listed(seeds: list[tuple[date, float]], *, list_runs: bool):
+        curves, runs = _seed_runs(seeds)
+        service = _make_service(curve_repo=_curve_repo_for(curves), run_repo=_run_repo_for(runs))
+        col_spec = f"drc:{RD_ID}"
+        plan = await service.planner.plan_from_scopes(WS, [col_spec], {})
+        out = await service.enrich_plan(WS, [MOL_ID], plan, list_runs=list_runs)
+        return out[MOL_ID][col_spec]
+
+    @pytest.mark.asyncio
+    async def test_list_runs_lists_every_run_with_its_curve(self) -> None:
+        """Past the run-history cap of 10: every run, newest first, each with
+        its own curve so the plot can overlay them one colour per run."""
+        seeds = [(date(2025, 1 + (i % 12), 1 + (i // 12)), 0.5 + i * 0.01) for i in range(15)]
+
+        av = await self._listed(seeds, list_runs=True)
+
+        assert av.run_count == 15
+        assert av.runs is not None and len(av.runs) == 15
+        dates = [r.run_date for r in av.runs]
+        assert dates == sorted(dates, reverse=True)
+        by_date = dict(seeds)
+        for r in av.runs:
+            assert r.curve_snapshot is not None
+            assert r.curve_snapshot["fitted_value"] == by_date[r.run_date]
+            assert r.curve_snapshot["top"] == 100.0
+        # The headline (and so sorting) stays the newest run's value.
+        assert av.value == by_date[max(dates)]
+
+    @pytest.mark.asyncio
+    async def test_list_runs_caps_at_50(self) -> None:
+        seeds = [(date(2020 + i // 12, 1 + i % 12, 1), 1.0 + i) for i in range(55)]
+
+        av = await self._listed(seeds, list_runs=True)
+
+        assert av.run_count == 55
+        assert av.runs is not None and len(av.runs) == 50
+        assert av.runs[0].run_date == date(2024, 7, 1)
+
+    @pytest.mark.asyncio
+    async def test_without_list_runs_the_page_keeps_the_history_cap(self) -> None:
+        seeds = [(date(2025, 1 + (i % 12), 1 + (i // 12)), 0.5 + i * 0.01) for i in range(15)]
+
+        av = await self._listed(seeds, list_runs=False)
+
+        assert av.runs is not None and len(av.runs) == 10
+        assert all(r.curve_snapshot is None for r in av.runs)
 
     # ─── Aggregate-mode chart overlay ────────────────────────────────────
 

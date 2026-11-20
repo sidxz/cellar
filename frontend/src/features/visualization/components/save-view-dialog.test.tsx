@@ -128,7 +128,7 @@ describe("SaveViewDialog", () => {
     show();
     expect(
       screen.getByText(
-        "Saves the plots, filters and level — never the data. Opening it loads current data.",
+        "Saves the plot settings, filters, and selected level. Reopening the view loads current data, so results may change.",
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("Filter to selection isn't saved.")).toBeInTheDocument();
@@ -193,7 +193,7 @@ describe("SaveViewDialog", () => {
     vi.mocked(customInstance).mockResolvedValueOnce({ ...view, version: 4, name: "Renamed" });
     const { onOpenChange } = show({ mode: "details", view });
     expect(name()).toHaveValue("Plate drift");
-    expect(screen.queryByText(/never the data/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Reopening the view loads current data/)).not.toBeInTheDocument();
     fireEvent.change(name(), { target: { value: "Renamed" } });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 

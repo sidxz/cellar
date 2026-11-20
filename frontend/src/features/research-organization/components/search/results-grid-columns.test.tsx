@@ -5,7 +5,9 @@ import type {
   ReadoutDefinition,
 } from "@/features/screening-assay/types";
 import { MAX_OVERLAY_CURVES, overlayColor } from "@structflo/components/dose-response";
-import type { ColDef, ColGroupDef } from "ag-grid-community";
+import { render } from "@testing-library/react";
+import type { ColDef, ColGroupDef, ICellRendererParams } from "ag-grid-community";
+import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { hasOverlayablePlots } from "../../lib/protocol-column-id";
 import { buildDrcColumns, buildProtocolColumnGroups, resolveColumns } from "./results-grid";
@@ -131,10 +133,10 @@ describe("buildDrcColumns", () => {
       data_type: "dose_response",
       dose_response_config: drConfig([spec({ level: 50 }), spec({ level: 90, label: "EC90" })]),
     });
-    const cols = buildDrcColumns(`drc:${RD_DR_ID}`, proto([dr]), RD_DR_ID);
+    const cols = buildDrcColumns(`drc:${RD_DR_ID}`, { ...proto([dr]), dose_unit: "uM" }, RD_DR_ID);
     expect(cols).toHaveLength(3);
-    expect(cols[0].headerName).toBe("EC50");
-    expect(cols[1].headerName).toBe("EC90");
+    expect(cols[0].headerName).toBe("EC₅₀ (µM)");
+    expect(cols[1].headerName).toBe("EC₉₀ (µM)");
     expect(cols[2].headerName).toBe("Plot");
     expect(cols[0].colId).toBe(`drc:${RD_DR_ID}:ec:50`);
     expect(cols[1].colId).toBe(`drc:${RD_DR_ID}:ec:90`);
@@ -253,6 +255,50 @@ describe("buildProtocolColumnGroups — split protocols", () => {
       `drc:${RD_DR_ID}:ic:50@cond:1 mM`,
       `drc:${RD_DR_ID}:plot@overlay`,
     ]);
+  });
+
+  it("leaves the run dots out of an overlaid protocol: there its colours name the groups", () => {
+    const run = (i: number) => ({
+      run_id: `r${i}`,
+      run_date: `2026-0${i}-01`,
+      curve_id: `c${i}`,
+      curve_class: "full",
+      r_squared: 0.9,
+      intercept_values: [{ spec: { kind: "ic", level: 50 }, value: i, qualifier: "=" }],
+      curve_snapshot: { fitted_value: i, top: 100, bottom: 0, hill_slope: 1, raw_data: [] },
+    });
+    const row = {
+      activity: {
+        [`drc:${RD_DR_ID}@cond:1 mM`]: {
+          value: 2,
+          qualifier: null,
+          unit: "uM",
+          source: "dose_response",
+          run_count: 2,
+          selection_rule: "latest_run",
+          runs: [run(2), run(1)],
+        },
+      },
+    };
+    const dots = (layout?: "overlay") => {
+      const [group] = buildProtocolColumnGroups(
+        [`drc:${RD_DR_ID}`],
+        [protocol],
+        "all",
+        groups,
+        layout,
+      ) as ColGroupDef[];
+      const cell = leaves(group).find((c) => c.colId === `drc:${RD_DR_ID}:ic:50@cond:1 mM`);
+      const renderCell = cell?.cellRenderer as (p: ICellRendererParams) => ReactNode;
+      const { container, unmount } = render(
+        <div>{renderCell({ data: row } as unknown as ICellRendererParams)}</div>,
+      );
+      const count = container.querySelectorAll("[data-run-colour]").length;
+      unmount();
+      return count;
+    };
+    expect(dots()).toBe(2);
+    expect(dots("overlay")).toBe(0);
   });
 
   it("keeps side-by-side plots by default", () => {

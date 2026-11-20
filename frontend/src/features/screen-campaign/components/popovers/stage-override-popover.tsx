@@ -98,6 +98,8 @@ export function StageOverridePopover({
   const isManual = stage.kind === "manual";
   const current = (outcome?.outcome ?? "not_in_stage") as StageOutcome;
   const overridden = outcome?.overridden ?? false;
+  const canMarkMiss = current !== "miss" || overridden;
+  const canMarkHit = current !== "hit" || overridden;
   const reasonOk = reason.trim().length > 0;
 
   // Only the checks worth explaining — a passing check is why the row is
@@ -148,7 +150,13 @@ export function StageOverridePopover({
           id={`stage-reason-${result.id}`}
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          placeholder="Why does this compound belong in / out of this stage?"
+          placeholder={
+            canMarkHit && canMarkMiss
+              ? "Reason for changing this compound’s stage outcome"
+              : canMarkHit
+                ? "Reason for marking this compound as a hit"
+                : "Reason for marking this compound as a miss"
+          }
           rows={2}
           className="text-sm"
         />
@@ -167,7 +175,7 @@ export function StageOverridePopover({
             Clear override
           </Button>
         )}
-        {(current !== "miss" || overridden) && (
+        {canMarkMiss && (
           <Button
             variant="outline"
             size="sm"
@@ -177,7 +185,7 @@ export function StageOverridePopover({
             {isManual ? "Demote" : "Demote to miss"}
           </Button>
         )}
-        {(current !== "hit" || overridden) && (
+        {canMarkHit && (
           <Button size="sm" disabled={busy || !reasonOk} onClick={() => force("hit")}>
             {isManual ? "Promote" : "Promote to hit"}
           </Button>

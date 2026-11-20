@@ -3,8 +3,9 @@
 import type { Molecule } from "@/features/chemical-registration/types";
 import { LIFECYCLE_LABELS } from "@/features/chemical-registration/types";
 import { CompoundCurvesButton } from "@/features/screening-assay/components/compound-curves-dialog";
-import { percentYRange } from "@/features/screening-assay/lib/curve-frame";
+import { curveFrame, drawnPoints, percentYRange } from "@/features/screening-assay/lib/curve-frame";
 import { fitNoteLabel } from "@/features/screening-assay/lib/dose-response-display";
+import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
 import type {
   CurveClass,
   CurveType,
@@ -32,7 +33,11 @@ import { type ProtocolRunSet, focusedGroupKey, protocolRunSets } from "../../lib
 import { type ComparisonChannel, comparisonChannels } from "../../lib/comparison-channels";
 import { compoundRef, curvesTarget } from "../../lib/curves-target";
 import { canOverlaySplit, drcColId } from "../../lib/protocol-column-id";
-import { AGGREGATION_LABELS, type AggregationMode } from "../../lib/use-aggregation-mode";
+import {
+  AGGREGATION_LABELS,
+  type AggregationMode,
+  listsRuns,
+} from "../../lib/use-aggregation-mode";
 import { anyProtocolActivity } from "../../types";
 import type {
   ActivityValue,
@@ -229,8 +234,35 @@ function SourceCurveCard({
         : null,
     [adapted],
   );
+  // Show all runs: the large plot draws every listed run's curve, as the grid
+  // cell does (a split protocol's group overlay wins, as in the grid). Curve i
+  // takes overlayColor(i), the i-th dot in the value list: every fitted run
+  // carries a snapshot, so none drops out and shifts the colours. No intercept
+  // lines or value labels — fifty of each would bury the curves — and no legend
+  // while the value list beside it is the key (a split protocol has no list
+  // there, so it keeps the legend). Framed like the grid's thumbnails.
+  const listed = !overlay && listsRuns(mode) ? av : undefined;
+  const runPlot = useMemo(() => {
+    const snaps = (listed?.runs ?? []).flatMap((r) =>
+      r.curve_snapshot
+        ? [{ ...r.curve_snapshot, label: r.run_date, fitted_unit: listed?.unit ?? null }]
+        : [],
+    );
+    if (snaps.length === 0) return null;
+    const frame = curveFrame(
+      snaps.flatMap((snap) => drawnPoints(snap)),
+      { percent: isPercentNormalization(listed?.fitted_layer) },
+    );
+    return buildDoseResponsePlot(snaps, {
+      showCI: false,
+      showMarker: false,
+      showPlateaus: false,
+      yRange: frame.yRange,
+    });
+  }, [listed]);
   if (!curve || !adapted || !figure) return null;
   const aggregate = mode === "gmean" || mode === "mean";
+  const plot = runPlot ?? figure;
   const capturedTotal = (curve.raw_data?.length ?? 0) + (curve.excluded_points?.length ?? 0);
   const excludedCount = curve.excluded_points?.length ?? 0;
   return (
@@ -282,6 +314,14 @@ function SourceCurveCard({
           fit’s details.
         </p>
       )}
+      {runPlot && (
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {channels.length > 0
+            ? "Every listed run’s curve, coloured like its value."
+            : "Every listed run’s curve, named by run date in the legend."}{" "}
+          The source curve above opens one fit’s details.
+        </p>
+      )}
       {curve.fit_quality_warnings && curve.fit_quality_warnings.length > 0 && (
         <p className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-800 dark:text-amber-300">
           Fit quality:{" "}
@@ -304,7 +344,9 @@ function SourceCurveCard({
           aria-label={
             overlay
               ? `Dose–response curves for ${readoutName}, every group overlaid`
-              : `Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`
+              : runPlot
+                ? `Dose–response curves for ${readoutName}, every listed run overlaid`
+                : `Dose–response curve for ${readoutName}, source run ${curve.run_date ?? "date unavailable"}`
           }
           className="min-w-0 overflow-hidden rounded-lg border bg-background"
         >
@@ -312,14 +354,15 @@ function SourceCurveCard({
             <DoseResponseOverlay entries={overlay} size="full" />
           ) : (
             <Plot
-              data={figure.traces}
+              data={plot.traces}
               layout={{
-                ...figure.layout,
+                ...plot.layout,
+                ...(runPlot && channels.length > 0 ? { showlegend: false } : {}),
                 height: 300,
                 autosize: true,
                 margin: { l: 55, r: 15, t: 25, b: 50 },
               }}
-              config={{ ...figure.config, responsive: true }}
+              config={{ ...plot.config, responsive: true }}
               style={{ width: "100%", height: 300 }}
               useResizeHandler
             />

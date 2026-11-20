@@ -16,7 +16,11 @@ import type { Molecule } from "@/features/chemical-registration/types";
 import { activityCatalog } from "@/features/screening-assay/lib/activity-columns";
 import { curveLayer } from "@/features/screening-assay/lib/curve-frame";
 import { isPercentNormalization } from "@/features/screening-assay/lib/dose-response-math";
-import { interceptLabel } from "@/features/screening-assay/lib/intercept-label";
+import {
+  displayConcentrationUnit,
+  displayEndpoint,
+  interceptLabel,
+} from "@/features/screening-assay/lib/intercept-label";
 import { type Protocol, READOUT_NORMALIZATION_LABELS } from "@/features/screening-assay/types";
 import { StructureThumbnail } from "@/shared/components/chemistry";
 import { DataGrid } from "@/shared/components/data-grid/data-grid";
@@ -36,7 +40,7 @@ import {
   resolveColumns as resolveColumnsShared,
 } from "../../lib/protocol-column-id";
 import { serverSortToken } from "../../lib/search-sort";
-import type { AggregationMode } from "../../lib/use-aggregation-mode";
+import { type AggregationMode, listsRuns } from "../../lib/use-aggregation-mode";
 import {
   type ActivityValue,
   type ColumnGroup,
@@ -56,6 +60,7 @@ import {
   useCurveFramesFor,
 } from "./dose-response-cell";
 import { InterceptCell } from "./intercept-cell";
+import { RunValueList } from "./run-value-list";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +101,9 @@ interface ResultsGridProps {
   viewControls?: React.ReactNode;
   selectionActions?: React.ReactNode;
 }
+
+/** A value column under Show all runs: room for "< 0.005081" and its run date. */
+const LISTED_RUNS_WIDTH = 200;
 
 // ─── Row height by image size ───────────────────────────────────────────────
 
@@ -152,7 +160,7 @@ const PROPERTY_COLUMNS: Record<
     header: "TPSA",
     width: 80,
     digits: 1,
-    tooltip: "Topological polar surface area (Veber's rule — predicts permeability)",
+    tooltip: "Topological polar surface area (Å²)",
   },
   hbd: { header: "HBD", width: 70, tooltip: "Hydrogen-bond donors (Lipinski Rule of Five)" },
   hba: { header: "HBA", width: 70, tooltip: "Hydrogen-bond acceptors (Lipinski Rule of Five)" },
@@ -308,10 +316,21 @@ function buildReadoutColumn(
       : (catalogLabel ?? `${rdName}${headerSuffix}`),
     headerTooltip: `${rdName}${headerSuffix} · ${proto?.name ?? "Assay"}`,
     colId,
-    width: 112,
+    width: listsRuns(mode) ? LISTED_RUNS_WIDTH : 112,
     valueGetter: (p) => p.data?.activity?.[colId]?.value ?? null,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
+      if (av?.runs?.length && listsRuns(mode)) {
+        return (
+          <RunValueList
+            av={av}
+            interceptKey={null}
+            headerUnit={headerUnit}
+            mode={mode}
+            curves={rowCurves(proto, params.data)}
+          />
+        );
+      }
       if (av?.qualifier === "nd") {
         // Runs exist but none gave a reportable value — not "no data".
         return <span className="font-mono text-xs text-muted-foreground">ND</span>;
@@ -352,6 +371,9 @@ export function buildDrcColumns(
   visibleIntercepts?: ReadonlyArray<{ kind: string; level: number }> | null,
   aggregationMode: AggregationMode = "latest",
   groupKey = "",
+  /** Show all runs gives each fitted run its curve's colour; an overlaid split
+   *  protocol's colours name its groups instead, so its runs go uncoloured. */
+  colourRuns = true,
 ): ColDef<EnrichedMolecule>[] {
   // Cells read the group's activity key; grid column ids carry the group last.
   const colId = withGroup(token, groupKey);
@@ -375,9 +397,9 @@ export function buildDrcColumns(
     // a single anonymous value column so the grid still surfaces the
     // headline fitted_value.
     cols.push({
-      headerName: `${rd?.name ?? "Curve"}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
+      headerName: `${displayEndpoint(rd?.name ?? "Curve")}${proto?.dose_unit ? ` (${displayConcentrationUnit(proto.dose_unit)})` : ""}`,
       colId: columnId("value"),
-      width: 130,
+      width: 255,
       valueGetter: (p) => {
         const av = p.data?.activity?.[colId];
         if (!av) return null;
@@ -391,6 +413,7 @@ export function buildDrcColumns(
           mode={aggregationMode}
           curves={rowCurves(proto, params.data)}
           headerUnit={proto?.dose_unit}
+          colourRuns={colourRuns}
         />
       ),
     });
@@ -398,10 +421,10 @@ export function buildDrcColumns(
     intercepts.forEach((spec, idx) => {
       const isPrimary = idx === 0;
       cols.push({
-        headerName: `${interceptLabel(spec)}${proto?.dose_unit ? ` (${proto.dose_unit})` : ""}`,
+        headerName: `${displayEndpoint(interceptLabel(spec))}${proto?.dose_unit ? ` (${displayConcentrationUnit(proto.dose_unit)})` : ""}`,
         headerTooltip: `${rd?.name ?? "Endpoint"} · ${proto?.name ?? "Assay"}`,
         colId: columnId(`${spec.kind}:${spec.level}`),
-        width: 150,
+        width: 255,
         valueGetter: (p) => {
           const av = p.data?.activity?.[colId];
           if (!av) return null;
@@ -415,6 +438,7 @@ export function buildDrcColumns(
             mode={aggregationMode}
             curves={rowCurves(proto, params.data)}
             headerUnit={proto?.dose_unit}
+            colourRuns={colourRuns}
           />
         ),
       });
@@ -430,7 +454,14 @@ export function buildDrcColumns(
     filter: false,
     cellRenderer: (params: ICellRendererParams<EnrichedMolecule>) => {
       const av = params.data?.activity?.[colId];
-      return <DoseResponseCell value={av} frameKey={colId} percent={percent} />;
+      return (
+        <DoseResponseCell
+          value={av}
+          frameKey={colId}
+          percent={percent}
+          listRuns={listsRuns(aggregationMode)}
+        />
+      );
     },
   });
 
@@ -491,6 +522,7 @@ function buildProtocolChildren(
   aggregationMode: AggregationMode,
   groupKey: string,
   groupId: string,
+  colourRuns = true,
 ): (ColDef<EnrichedMolecule> | ColGroupDef<EnrichedMolecule>)[] {
   const catalog = new Map(
     activityCatalog(
@@ -558,7 +590,9 @@ function buildProtocolChildren(
   for (const { parentColId, visible } of drcByRdId.values()) {
     const rdId = parentColId.split(":")[1];
     activityKeys.push(withGroup(parentColId, groupKey));
-    curves.push(...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey));
+    curves.push(
+      ...buildDrcColumns(parentColId, proto, rdId, visible, aggregationMode, groupKey, colourRuns),
+    );
   }
 
   const leaves = quietWhenUntested([...readouts.map((r) => r.col), ...curves], activityKeys);
@@ -707,6 +741,7 @@ export function buildProtocolColumnGroups(
               aggregationMode,
               group.key,
               `p:${protoId}@${group.key}`,
+              !overlay,
             ).filter((c) => !overlay || "children" in c || !isPlotColumn(c.colId)),
           }));
     if (overlay) children.push(...buildOverlayPlotColumns(entries, proto, split));

@@ -9,6 +9,7 @@ import type { ReactNode } from "react";
 import {
   AGGREGATION_LABELS,
   type AggregationMode,
+  listsRuns,
   wireToAggregationMode,
 } from "../../lib/use-aggregation-mode";
 import type { ActivityValue, InterceptKey } from "../../types";
@@ -32,7 +33,8 @@ export function AssayEvidence({
   const rule = av.selection_rule
     ? AGGREGATION_LABELS[wireToAggregationMode(av.selection_rule)]
     : null;
-  const date = count === 1 ? av.runs?.[0]?.run_date : null;
+  // A lone run's date names it, unless the cell already lists it (Show all runs).
+  const date = count === 1 && !listsRuns(mode) ? av.runs?.[0]?.run_date : null;
   return (
     <Popover>
       <PopoverTrigger asChild>

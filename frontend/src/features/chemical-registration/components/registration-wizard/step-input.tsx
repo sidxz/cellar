@@ -158,8 +158,7 @@ function ModeSelection({ onSelect }: { onSelect: (mode: "single" | "bulk") => vo
         </CardHeader>
         <CardContent>
           <CardDescription className="text-center">
-            Enter compound details, draw a structure, and register one compound at a time with full
-            control over metadata.
+            Register one compound with a chemical structure or mark its structure as undisclosed.
           </CardDescription>
         </CardContent>
       </Card>

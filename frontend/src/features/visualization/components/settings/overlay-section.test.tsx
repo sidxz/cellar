@@ -183,7 +183,9 @@ describe("OverlaySection", () => {
     show(scatter({ x: "sel:dr:x:p|dr:y:p", y: "dr:x:p" }), crossProtocol);
     const folds = screen.getByRole("textbox", { name: "Selectivity folds" });
     expect(folds).toBeDisabled();
-    expect(folds).toHaveAccessibleDescription("Plot a p-potency from each protocol on X and Y");
+    expect(folds).toHaveAccessibleDescription(
+      "Choose a log potency such as pIC₅₀ for each axis. Use a different protocol on each axis.",
+    );
   });
 
   it("offers no selectivity folds for one protocol", () => {

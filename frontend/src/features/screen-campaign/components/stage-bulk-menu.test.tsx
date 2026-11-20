@@ -67,7 +67,9 @@ function act(label: string, reason?: string) {
   if (reason !== undefined) {
     fireEvent.change(screen.getByLabelText(/Reason/), { target: { value: reason } });
   }
-  const buttons = screen.getAllByRole("button", { name: new RegExp(`^${label} \\d+ rows?$`) });
+  const buttons = screen.getAllByRole("button", {
+    name: new RegExp(`^${label} \\d+ visible rows?$`),
+  });
   fireEvent.click(buttons[buttons.length - 1]);
 }
 
@@ -138,7 +140,7 @@ describe("StageBulkMenu", () => {
     // No reason field on the clear path — nothing is being asserted about
     // the rows, the override is simply dropped.
     expect(screen.queryByLabelText(/Reason/)).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: /^Clear overrides 1 row$/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Clear overrides for 1 visible row$/ }));
 
     expect(mutate).toHaveBeenCalledWith({
       campaignId: "c1",

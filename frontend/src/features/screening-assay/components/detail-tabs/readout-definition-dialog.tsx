@@ -592,7 +592,7 @@ function DoseResponseFields({ form, protocol, excludeId }: DoseResponseFieldsPro
         <summary className="cursor-pointer px-3 py-2 text-xs font-medium select-none">
           Classification thresholds
           <span className="ml-2 font-normal text-muted-foreground">
-            (advanced — defaults work for % readouts)
+            (defaults calibrated for percentage readouts)
           </span>
         </summary>
         <div className="space-y-3 px-3 pb-3 pt-1">

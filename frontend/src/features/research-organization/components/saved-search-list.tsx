@@ -83,7 +83,7 @@ function RowActions({ search, isAdmin, onRun, onEdit, onDelete, onAdminDeleted }
                 className="text-destructive focus:text-destructive"
               >
                 <AlertTriangle className="mr-2 h-4 w-4" />
-                Force delete…
+                Review permanent deletion…
               </DropdownMenuItem>
             </>
           )}
@@ -215,7 +215,7 @@ export function SavedSearchList({ projectId }: SavedSearchListProps) {
     return (
       <div>
         <ErrorState
-          message="Failed to load saved searches. Is the backend running?"
+          message="Couldn’t load saved searches. Refresh the page to try again."
           details={error.message}
         />
       </div>

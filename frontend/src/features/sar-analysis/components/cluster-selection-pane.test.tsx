@@ -21,7 +21,7 @@ const molecules: any[] = [
 describe("ClusterSelectionPane", () => {
   it("shows an empty hint when the basket is empty", () => {
     render(<ClusterSelectionPane allMolecules={molecules} basketIds={new Set()} />);
-    expect(screen.getByText(/basket is empty/i)).toBeInTheDocument();
+    expect(screen.getByText(/No compounds selected/i)).toBeInTheDocument();
     expect(screen.queryByTestId("card-grid")).not.toBeInTheDocument();
   });
 

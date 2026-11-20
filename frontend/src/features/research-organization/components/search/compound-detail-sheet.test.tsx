@@ -21,8 +21,12 @@ vi.mock("../../hooks/use-molecule-activity-detail", () => ({
 }));
 vi.mock("@/shared/components/chemistry", () => ({ StructureThumbnail: () => null }));
 vi.mock("@/shared/components/status-badge", () => ({ StatusBadge: () => null }));
+const plotProps = vi.hoisted(() => [] as Array<{ layout?: Record<string, unknown> }>);
 vi.mock("@/shared/lib/plotly", () => ({
-  Plot: () => <div data-testid="visible-curve">Dose–response plot</div>,
+  Plot: (props: { layout?: Record<string, unknown> }) => {
+    plotProps.push(props);
+    return <div data-testid="visible-curve">Dose–response plot</div>;
+  },
 }));
 const figureProps = vi.hoisted(() => [] as Array<Record<string, unknown>>);
 vi.mock("@/features/screening-assay/components/dose-response-figure", () => ({
@@ -126,6 +130,132 @@ function setup(
   return navigate;
 }
 
+describe("compound drawer under Show all runs", () => {
+  function renderListed(runCurves: Array<number | null>) {
+    const runs = runCurves.map((fitted_value, i) => ({
+      run_id: `run-${i}`,
+      run_date: `2026-0${6 - i}-05`,
+      curve_id: fitted_value === null ? null : `fit-${i}`,
+      curve_class: "full",
+      r_squared: 0.98,
+      intercept_values: [],
+      curve_snapshot:
+        fitted_value === null
+          ? null
+          : { fitted_value, top: 100, bottom: 0, hill_slope: 1, raw_data: [] },
+    }));
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [{ protocol_id: "proto", protocol_name: "Target assay", curves: [curve] }],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{ ...molecule, activity: { "drc:rd": { ...av, run_count: runs.length, runs } } }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="all"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+  }
+
+  beforeEach(() => {
+    plotArgs.length = 0;
+  });
+  const runPlot = () => plotArgs.find(([, opts]) => opts.showMarker === false);
+
+  it("draws every listed run's curve in the large plot, labelled by run date", () => {
+    renderListed([1.3, 9.1, 0.4]);
+    const call = runPlot();
+    expect(call).toBeTruthy();
+    const [curves, opts] = call as [
+      Array<{ label: string; fitted_value: number }>,
+      Record<string, unknown>,
+    ];
+    expect(curves.map((c) => [c.label, c.fitted_value])).toEqual([
+      ["2026-06-05", 1.3],
+      ["2026-05-05", 9.1],
+      ["2026-04-05", 0.4],
+    ]);
+    // The x-axis names the search's unit.
+    expect((curves[0] as { fitted_unit?: string }).fitted_unit).toBe("uM");
+    // Fifty curves can't carry a dashed line and a label each.
+    expect(opts).toMatchObject({ showCI: false, showMarker: false, showPlateaus: false });
+    expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
+    // Each fit stays inspectable through the source picker.
+    expect(screen.getByLabelText("Source curve · Potency")).toBeInTheDocument();
+    // The value list beside the plot is its key.
+    expect(plotProps.at(-1)?.layout?.showlegend).toBe(false);
+  });
+
+  it("keeps the legend for a split protocol, where no value list sits beside the plot", () => {
+    plotProps.length = 0;
+    const runs = [1.3, 9.1].map((fitted_value, i) => ({
+      run_id: `run-${i}`,
+      run_date: `2026-0${6 - i}-05`,
+      curve_id: `fit-${i}`,
+      curve_class: "full",
+      r_squared: 0.98,
+      intercept_values: [],
+      curve_snapshot: { fitted_value, top: 100, bottom: 0, hill_slope: 1, raw_data: [] },
+    }));
+    mocks.detail.mockReturnValue({
+      data: {
+        protocols: [
+          {
+            protocol_id: "proto",
+            protocol_name: "Target assay",
+            curves: [{ ...curve, run_id: "run-0" }],
+          },
+        ],
+      },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    });
+    render(
+      <CompoundDetailSheet
+        molecule={{
+          ...molecule,
+          activity: { "drc:rd@cond:1 mM": { ...av, run_ids: ["run-0"], run_count: 2, runs } },
+        }}
+        protocols={protocols}
+        protocolColumns={["drc:rd"]}
+        columnGroups={{
+          proto: {
+            split: { by: "condition", condition: "ATP" },
+            groups: [
+              { key: "cond:1 mM", label: "1 mM", run_ids: ["run-0"], run_count: 2, flags: [] },
+            ],
+          },
+        }}
+        visibleProtocolIds={["proto"]}
+        aggregationMode="all"
+        currentIndex={0}
+        totalCount={1}
+        onNavigate={vi.fn()}
+        onOpenChange={() => {}}
+      />,
+    );
+    expect(runPlot()).toBeTruthy();
+    expect(plotProps.at(-1)?.layout?.showlegend).not.toBe(false);
+  });
+
+  it("keeps the one source curve when no listed run carries a curve", () => {
+    renderListed([null, null]);
+    expect(runPlot()).toBeUndefined();
+    expect(screen.getByTestId("visible-curve")).toBeInTheDocument();
+  });
+});
+
 describe("compound drawer curve frame", () => {
   it("keeps the curve's fitted layer and draws a % curve on the 0–100 % frame", () => {
     plotArgs.length = 0;
@@ -157,8 +287,8 @@ describe("compound drawer evidence", () => {
       { ...av, value: 30, qualifier: "=", selection_rule: "geometric_mean" },
     );
     const reported = screen.getByRole("region", { name: "Reported search results" });
-    expect(within(reported).getByText("30.00 uM")).toBeInTheDocument();
-    expect(within(reported).queryByText("10.00 uM")).not.toBeInTheDocument();
+    expect(within(reported).getByText("30.00 µM")).toBeInTheDocument();
+    expect(within(reported).queryByText("10.00 µM")).not.toBeInTheDocument();
   });
   it("keeps ND as the reported result and labels the fitted scalar as diagnostics", async () => {
     setup();

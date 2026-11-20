@@ -24,7 +24,7 @@ import { useProjects } from "../../hooks/use-projects";
 import { useCreateSavedSearch, useUpdateSavedSearch } from "../../hooks/use-saved-searches";
 import {
   type AggregationMode,
-  aggregationModeToWire,
+  aggregationModeToStored,
   useAggregationMode,
 } from "../../lib/use-aggregation-mode";
 import type { ReportConfig, SavedSearch, SearchQuery, SearchVisibility } from "../../types";
@@ -96,7 +96,7 @@ export function SaveSearchDialog({
     // non-default mode is unambiguous after re-save.
     const queryWithAggregation = {
       ...(query as unknown as Record<string, unknown>),
-      aggregation: aggregationModeToWire(executedAggregation ?? aggregationMode),
+      aggregation: aggregationModeToStored(executedAggregation ?? aggregationMode),
     };
 
     if (isUpdate) {

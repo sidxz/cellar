@@ -2,7 +2,7 @@
 
 /**
  * The Ry × Rx grid of an R-group matrix: fragment structures on both axes, one button per
- * filled combination and a dashed "make?" cell for each empty one. Callers decide each
+ * filled combination and a dashed cell for each empty one. Callers decide each
  * cell's text, badge, shade and hover title.
  */
 
@@ -126,9 +126,9 @@ export function RGroupMatrixGrid({
                         "h-16 w-20 rounded border border-dashed border-muted-foreground/30 text-center align-middle text-muted-foreground/50",
                         GAP_CLASS,
                       )}
-                      title="No compound with this combination — make?"
+                      title="No compound in this set has this combination of substituents."
                     >
-                      <span className="text-[10px]">make?</span>
+                      <span className="text-[10px]">None in set</span>
                     </td>
                   );
                 }

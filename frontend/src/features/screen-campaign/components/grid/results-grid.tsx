@@ -338,7 +338,7 @@ export function StageGroupHeader({
           type="button"
           aria-pressed={showingEmpty}
           onClick={onToggleEmpty}
-          title="Columns with no values at this stage: not filled yet, or every value ND"
+          title="Columns with no reportable value at this stage. Entries are empty or marked ND (not determined)."
           className="shrink-0 rounded-full border px-1.5 text-[10px] font-normal leading-4 text-muted-foreground hover:border-primary/40 hover:text-foreground"
         >
           {showingEmpty ? `Hide ${emptyCount} ${columns}` : `+${emptyCount} ${columns}`}
@@ -398,10 +398,7 @@ export function NotDeterminedCell({ unresolvedReason }: { unresolvedReason?: str
   return (
     <span
       className={`font-mono text-muted-foreground ${reason ? "cursor-help" : ""}`}
-      title={
-        reason ??
-        "ND = Not Determined. The curve has no tested dose to quote or no such intercept, or no candidate is available for this cell. An inactive curve reads as a bound above its top dose."
-      }
+      title={reason ?? "ND = Not Determined. No reportable result is available for this cell."}
     >
       ND
     </span>

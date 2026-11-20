@@ -223,7 +223,8 @@ function BulkResults() {
       <div>
         <h2 className="text-lg font-semibold">Review merge decisions</h2>
         <p className="mt-1 text-sm text-foreground/70">
-          Checked candidates will be merged. Unchecked candidates will be rejected.
+          When you select <strong>Apply merge decisions</strong>, the selected pairs will be merged
+          and the remaining proposed matches will be rejected.
         </p>
       </div>
       {(mergeError || (outcomes?.error_count ?? 0) > 0) && (

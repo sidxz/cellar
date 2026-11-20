@@ -17,6 +17,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMergeMolecules } from "../../hooks/use-disclosures";
 import { useMolecule } from "../../hooks/use-molecules";
+import type { Molecule } from "../../types";
 
 interface AdminOperationsTabProps {
   moleculeId: string;
@@ -27,7 +28,8 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
   const { data: molecule } = useMolecule(moleculeId);
   const mergeMutation = useMergeMolecules(moleculeId);
 
-  const [targetId, setTargetId] = useState<string | null>(null);
+  const [target, setTarget] = useState<Molecule | null>(null);
+  const targetId = target?.id ?? null;
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +50,7 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
         reason: "manual_merge",
         notes: notes.trim() || null,
       });
-      setTargetId(null);
+      setTarget(null);
       setNotes("");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Merge failed";
@@ -62,7 +64,7 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
       {molecule && (
         <Card>
           <CardHeader>
-            <CardTitle>Hard Delete</CardTitle>
+            <CardTitle>Permanent deletion</CardTitle>
             <CardDescription>
               Permanently delete this compound and all its dependent data (batches, assay results,
               identifiers, relationships). Cannot be undone.
@@ -83,19 +85,24 @@ export function AdminOperationsTab({ moleculeId }: AdminOperationsTabProps) {
         <CardHeader>
           <CardTitle>Manual Merge</CardTitle>
           <CardDescription>
-            Merge this compound into another. All related data (batches, assay results, identifiers)
-            will be transferred to the target.
+            Select the compound that will receive the merged records.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
             <AlertTriangle className="mr-2 inline h-4 w-4" />
-            This action is irreversible. The source compound will become a tombstone.
+            {molecule?.registration_number ?? moleculeId} will be marked as merged into{" "}
+            {target?.registration_number ?? targetId ?? "the selected target compound"}. Its
+            batches, assay results, and identifiers will transfer to that compound. This cannot be
+            undone.
           </div>
 
           <div className="grid gap-2">
             <Label>Target Compound</Label>
-            <MoleculeSelector selectedId={targetId} onSelect={setTargetId} />
+            <MoleculeSelector
+              selectedId={targetId}
+              onSelect={(_, selected) => setTarget(selected ?? null)}
+            />
           </div>
 
           <div className="grid gap-2">

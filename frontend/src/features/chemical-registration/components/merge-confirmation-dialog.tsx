@@ -29,12 +29,13 @@ export function MergeConfirmationDialog({
 }: MergeConfirmationDialogProps) {
   const mergeMutation = useMergeMolecules(sourceMolecule.id);
 
-  const [targetId, setTargetId] = useState<string | null>(null);
+  const [target, setTarget] = useState<Molecule | null>(null);
+  const targetId = target?.id ?? null;
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const reset = () => {
-    setTargetId(null);
+    setTarget(null);
     setNotes("");
     setError(null);
   };
@@ -78,20 +79,24 @@ export function MergeConfirmationDialog({
           <DialogDescription>
             Merge{" "}
             <span className="font-mono font-semibold">{sourceMolecule.registration_number}</span> (
-            {sourceMolecule.name}) into another compound. All related data will be transferred to
-            the target compound.
+            {sourceMolecule.name}) into the selected target compound.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 py-4">
           <div className="rounded-md border border-destructive/50 bg-destructive/5 p-3 text-sm text-destructive">
-            This action is irreversible. The source compound will become a tombstone and all its
-            data (batches, assay results, identifiers) will be moved to the target compound.
+            {sourceMolecule.registration_number ?? sourceMolecule.id} will be marked as merged into{" "}
+            {target?.registration_number ?? targetId ?? "the selected target compound"}. Its
+            batches, assay results, and identifiers will transfer to that compound. This cannot be
+            undone.
           </div>
 
           <div className="grid gap-2">
             <Label>Target Compound</Label>
-            <MoleculeSelector selectedId={targetId} onSelect={setTargetId} />
+            <MoleculeSelector
+              selectedId={targetId}
+              onSelect={(_, selected) => setTarget(selected ?? null)}
+            />
           </div>
 
           <div className="grid gap-2">

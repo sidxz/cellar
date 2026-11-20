@@ -92,7 +92,9 @@ export function AdminDeleteButton({
           <AlertDialogTitle>
             Delete {entityType}: {entityLabel}
           </AlertDialogTitle>
-          <AlertDialogDescription>This is a hard delete. Audit-logged.</AlertDialogDescription>
+          <AlertDialogDescription>
+            This permanently deletes the record. The deletion is recorded in the audit log.
+          </AlertDialogDescription>
         </AlertDialogHeader>
 
         {blockers ? (

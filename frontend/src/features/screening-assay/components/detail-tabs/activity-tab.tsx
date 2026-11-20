@@ -16,7 +16,12 @@ import { Plot } from "@/shared/lib/plotly";
 import { shortId } from "@/shared/lib/utils";
 import { Filter, FlaskConical, FolderPlus, Hexagon, Settings2, Star } from "lucide-react";
 import { useMemo, useState } from "react";
-import { activityCatalog, defaultSortColumn, visibleColumnIds } from "../../lib/activity-columns";
+import {
+  activityCatalog,
+  defaultSortColumn,
+  selectionLabels,
+  visibleColumnIds,
+} from "../../lib/activity-columns";
 import { type CurveFrame, curveFrame, curveLayer } from "../../lib/curve-frame";
 import { COMPACT_DR_CHART } from "../../lib/dose-response-display";
 import { isPercentNormalization } from "../../lib/dose-response-math";
@@ -269,7 +274,9 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       },
       yaxis: {
         title: {
-          text: isDR ? "Response (%)" : `Best ${firstReadout?.name ?? "Value"}${unitSuffix}`,
+          text: isDR
+            ? "Response (%)"
+            : `${firstReadout?.name ?? "Readout"} · ${selectionLabels[firstReadout?.best_direction ?? "high"]}${unitSuffix}`,
         },
         gridcolor: CHART_AXIS.grid,
       },
@@ -315,9 +322,7 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
       {!hasCriteria ? (
         <Card className="border-dashed">
           <CardContent className="flex items-center justify-between gap-4 p-3">
-            <p className="text-sm text-muted-foreground">
-              No hit rule yet. Set one so your team knows which compounds qualify as hits.
-            </p>
+            <p className="text-sm text-muted-foreground">No hit criteria defined.</p>
             <Button size="sm" onClick={() => setCriteriaDialogOpen(true)}>
               <Settings2 className="mr-1.5 h-3.5 w-3.5" /> Set hit criteria
             </Button>
@@ -332,7 +337,10 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
               {criterionLabel(rule)}
             </Badge>
           ))}
-          <span className="text-xs text-muted-foreground">on each compound's best value</span>
+          <span className="text-xs text-muted-foreground">
+            Applied to each readout’s selected value or curve across completed and approved runs,
+            including when the table shows means.
+          </span>
           <Button variant="ghost" size="sm" onClick={() => setCriteriaDialogOpen(true)}>
             <Settings2 className="mr-1 h-3.5 w-3.5" /> Edit
           </Button>
@@ -348,8 +356,8 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
             options={[
               { value: "all", label: `All (${total})` },
               { value: "meets", label: `Meets criteria (${statusCounts.meets})` },
-              { value: "fails", label: `Doesn't meet (${statusCounts.fails})` },
-              { value: "no_data", label: `No data (${statusCounts.no_data})` },
+              { value: "fails", label: `Does not meet criteria (${statusCounts.fails})` },
+              { value: "no_data", label: `Insufficient data to assess (${statusCounts.no_data})` },
             ]}
             onChange={(v) => setStatusFilter(v as StatusFilter)}
           />
@@ -359,12 +367,14 @@ export function ActivityTab({ protocol, protocolId }: ActivityTabProps) {
           </span>
         )}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Summary across completed runs</span>
+          <span className="text-xs text-muted-foreground">
+            Summary across completed and approved runs
+          </span>
           <Segmented
             label="Summary"
             value={statistic}
             options={[
-              { value: "best", label: "Best" },
+              { value: "best", label: "Readout-specific selection" },
               { value: "mean", label: "Mean" },
             ]}
             onChange={(v) => setStatistic(v as Statistic)}

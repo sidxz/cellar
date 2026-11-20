@@ -386,12 +386,6 @@ export function MappingStep({
         <Checkbox id="save" checked={save} onCheckedChange={(v) => setSave(!!v)} />
         <Label htmlFor="save">Save this mapping as a workspace template</Label>
       </div>
-      {templates.length === 0 && !save && (
-        <p className="text-xs text-muted-foreground">
-          No saved templates yet. Tick the box above to save this mapping now and reuse it next
-          time.
-        </p>
-      )}
       {save && (
         <div className="space-y-1">
           <Input
@@ -407,7 +401,7 @@ export function MappingStep({
           )}
           {(!isDuplicateName || submitting) && (
             <p className="text-xs text-muted-foreground">
-              Saved as soon as you continue — independent of the import.
+              Selecting Continue saves the template, even if you cancel the import later.
             </p>
           )}
         </div>

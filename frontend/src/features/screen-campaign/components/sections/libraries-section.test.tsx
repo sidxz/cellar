@@ -140,9 +140,9 @@ describe("LibrariesSection", () => {
     expect(screen.getAllByText("0 hits / 0 tested")).toHaveLength(2);
   });
 
-  it("says nothing was screened when the campaign has no seed runs", () => {
+  it("explains the coverage calculation when the campaign has no source runs", () => {
     renderSection({ campaign: { ...campaign, seed_runs: [] } as CampaignResponse });
-    expect(screen.getByText(/not built from runs/i)).toBeInTheDocument();
+    expect(screen.getByText(/This campaign has no source runs/i)).toBeInTheDocument();
   });
 
   it("hides the picker on a closed campaign", () => {
@@ -153,6 +153,8 @@ describe("LibrariesSection", () => {
   it("invites the first library when none are linked", () => {
     coverage.mockReturnValue({ data: [], isLoading: false });
     renderSection();
-    expect(screen.getByText(/No libraries yet/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Add a library to see how many of its compounds were screened/i),
+    ).toBeInTheDocument();
   });
 });

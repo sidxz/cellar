@@ -127,8 +127,8 @@ describe("Activity grid", () => {
       value: [-2, 2],
     };
     show([rule]);
-    expect(within(row("CC-1")).getByText("Meets")).toBeInTheDocument();
-    expect(within(row("CC-2")).getByText("Doesn't meet")).toBeInTheDocument();
+    expect(within(row("CC-1")).getByText("Meets criteria")).toBeInTheDocument();
+    expect(within(row("CC-2")).getByText("Does not meet criteria")).toBeInTheDocument();
     fireEvent.mouseDown(screen.getByRole("tab", { name: "Meets criteria (1)" }));
     expect(row("CC-2")).toBeNull();
     expect(row("CC-1")).not.toBeNull();

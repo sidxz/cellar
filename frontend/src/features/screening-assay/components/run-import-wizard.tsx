@@ -573,9 +573,8 @@ function PreviewStep({
         <div>
           <span className="font-medium">Auto-create missing batches</span>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            When a row&apos;s batch identifier doesn&apos;t match any existing batch in Cellar AND
-            the compound resolves, create a placeholder batch automatically and capture the imported
-            identifier as an alias.
+            If the compound matches but its batch identifier is unknown, create a placeholder batch
+            and save the imported identifier as a batch alias.
           </p>
         </div>
       </label>

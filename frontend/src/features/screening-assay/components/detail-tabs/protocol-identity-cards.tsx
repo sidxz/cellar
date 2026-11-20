@@ -93,9 +93,8 @@ export function ProtocolIdentityCards({ protocol, protocolId }: ProtocolIdentity
         <CardHeader>
           <CardTitle>Targets</CardTitle>
           <CardDescription>
-            Biological targets for this protocol. Direct targets stay attached even when no run
-            references them; inherited targets come from this protocol&apos;s runs and prune
-            automatically when their last referencing run drops them.
+            Direct targets stay linked to the protocol. A target inherited from runs is removed from
+            this list when no run references it.
           </CardDescription>
           {correctable && (
             <p className="text-xs text-muted-foreground">

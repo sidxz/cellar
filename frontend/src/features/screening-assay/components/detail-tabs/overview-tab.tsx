@@ -61,7 +61,7 @@ const FLAG_TEXT: Record<string, string> = {
   needs_facts:
     "This protocol's name is missing a field its category needs. Complete Targets and Ontology Annotations below before publishing.",
   needs_discriminator:
-    "Other protocols share this name. Add a discriminator (the method, or a fixed condition) so each one reads differently.",
+    "These protocols share a name. Add the method or a fixed assay condition to distinguish them.",
   name_conflict:
     "A registry rename gave another protocol the exact same name. Change one of the discriminators.",
 };
