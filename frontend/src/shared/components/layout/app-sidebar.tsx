@@ -27,8 +27,12 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   return (
     <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
-        {/* Static brand block (docustore style) — workspace shown, not switchable */}
-        <div className="flex items-center gap-2 px-2 py-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+        <Link
+          href="/search"
+          aria-label="ChemCellar — default search"
+          title="Open default search"
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-sidebar-accent focus-visible:outline-2 focus-visible:outline-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+        >
           <div className="flex size-8 shrink-0 items-center justify-center">
             <HexLensLogo className="size-8" />
           </div>
@@ -43,7 +47,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               {user?.workspaceSlug ?? ""}
             </span>
           </div>
-        </div>
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <NavMain />
